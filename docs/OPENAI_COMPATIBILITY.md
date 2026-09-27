@@ -6,7 +6,7 @@ these surfaces separate when configuring clients:
 
 | Surface | Base URL | Purpose | Authority boundary |
 | --- | --- | --- | --- |
-| Standalone compatibility server | `http://127.0.0.1:8001/v1` | Local clients such as Open WebUI, SillyTavern, scripts, and SDK examples | Legacy/local compatibility layer; chat and transcription are currently placeholder implementations |
+| Standalone compatibility server | `http://127.0.0.1:8101/v1` | Local clients such as Open WebUI, SillyTavern, scripts, and SDK examples | Legacy/local compatibility layer; chat and transcription are currently placeholder implementations |
 | Agent model gateway | `http://127.0.0.1:8000/api/agent-model/v1` | Omnix agent-runtime model calls | Requires an existing durable run and exact run-bound model; budgets and provider selection are enforced by Omnix |
 | Upstream compatible provider | Configured provider URL, usually ending in `/v1` | LM Studio, llama.cpp, OpenRouter, Azure-compatible deployments, or another OpenAI-shaped service consumed by Omnix | Provider credentials and upstream policy remain external to Omnix |
 
@@ -27,7 +27,7 @@ the repository root with a loopback bind:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8001
+python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8101
 ```
 
 Or run the module's built-in entry point:
@@ -36,11 +36,21 @@ Or run the module's built-in entry point:
 python src/openai_api.py
 ```
 
-The built-in entry point listens on `0.0.0.0:8001`; use the Uvicorn command
-when the API should remain local to the workstation. The server currently has
-no authentication middleware and allows all CORS origins. Do not expose it to
-an untrusted network without placing it behind an authenticated reverse proxy
-and an explicit network policy.
+The built-in entry point listens on `127.0.0.1:8101`. Non-loopback binding requires
+both `OMNIX_BIND_HOST` and `OMNIX_ALLOW_LAN=true`. CORS origins are explicitly
+configured through `OMNIX_ALLOWED_ORIGINS`. Every route except `GET`/`HEAD /health`
+requires `X-Omnix-Service-Token`, including `/docs` and `/openapi.json`.
+Use the same `OMNIX_SERVICE_TOKEN` as the gateway and model services; the local
+launcher provisions it in protected storage. Standalone launches must receive
+the credential through their environment. Missing or invalid credentials return 401.
+
+All state-changing requests require a non-empty `X-Omnix-Client` header.
+Browser requests must also use an allowed `Origin`; the Host allow-list defaults
+to localhost, 127.0.0.1 and IPv6 loopback. These request guards do not grant
+authentication or capability authority.
+
+HTTP errors use `{"error":"<code>","request_id":"<id>"}` and omit provider
+tracebacks. `OMNIX_MAX_UPLOAD_BYTES` bounds streamed requests at 50 MiB by default.
 
 ### Endpoint reference
 
@@ -57,16 +67,18 @@ and an explicit network policy.
 
 The FastAPI-generated reference is also available while the server is running:
 
-- Swagger UI: `http://127.0.0.1:8001/docs`
-- OpenAPI JSON: `http://127.0.0.1:8001/openapi.json`
+- Swagger UI: `http://127.0.0.1:8101/docs`
+- OpenAPI JSON: `http://127.0.0.1:8101/openapi.json`
 
 ### Chat completion example
 
 The standalone API accepts the familiar chat-completions shape:
 
 ```bash
-curl http://127.0.0.1:8001/v1/chat/completions \
+curl http://127.0.0.1:8101/v1/chat/completions \
+  -H "X-Omnix-Service-Token: $OMNIX_SERVICE_TOKEN" \
   -H "Authorization: Bearer local-dev-only" \
+  -H "X-Omnix-Client: cli" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "mistral-7b-instruct-v0.2",
@@ -78,9 +90,8 @@ curl http://127.0.0.1:8001/v1/chat/completions \
   }'
 ```
 
-The standalone server does not currently validate the bearer token. The header
-is shown because many OpenAI-compatible clients send it automatically; it is
-not a substitute for deployment authentication.
+The standalone server validates the service credential. It does not use the
+OpenAI-style bearer token for that check; clients must send the service header.
 
 For streaming, set `"stream": true`. The response uses server-sent events with
 `data: ...` JSON chunks and a final `data: [DONE]` marker. The current stream is
@@ -98,10 +109,12 @@ Then point its base URL at the standalone server:
 
 ```python
 from openai import OpenAI
+import os
 
 client = OpenAI(
-    base_url="http://127.0.0.1:8001/v1",
+    base_url="http://127.0.0.1:8101/v1",
     api_key="local-dev-only",
+    default_headers={"X-Omnix-Client": "sdk", "X-Omnix-Service-Token": os.environ["OMNIX_SERVICE_TOKEN"]},
 )
 
 models = client.models.list()
@@ -120,8 +133,10 @@ The speech route follows the common JSON request shape and returns an audio
 stream. The selected voice must be available to the shared TTS provider:
 
 ```bash
-curl http://127.0.0.1:8001/v1/audio/speech \
+curl http://127.0.0.1:8101/v1/audio/speech \
+  -H "X-Omnix-Service-Token: $OMNIX_SERVICE_TOKEN" \
   -H "Authorization: Bearer local-dev-only" \
+  -H "X-Omnix-Client: cli" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "tts-1",
@@ -147,7 +162,7 @@ Pi/Codex-style model transports, not as a general public proxy.
 | Method | Path | Required headers | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/agent-model/v1/models` | `X-Omnix-Agent-Run-Id` | Return the one model bound to the durable agent run |
-| `POST` | `/api/agent-model/v1/chat/completions` | `X-Omnix-Agent-Run-Id`; optional `X-Omnix-Agent-Session-Id` | Run a model call within the existing run's provider, model, context, budget, and policy boundary |
+| `POST` | `/api/agent-model/v1/chat/completions` | `X-Omnix-Client`; `X-Omnix-Agent-Run-Id`; optional `X-Omnix-Agent-Session-Id` | Run a model call within the existing run's provider, model, context, budget, and policy boundary |
 
 The model endpoint returns an OpenAI-style `object: "list"` response. The
 returned model ID has the form `<provider_id>::<model_id>` and must be passed
@@ -166,6 +181,7 @@ Example completion request:
 curl http://127.0.0.1:8000/api/agent-model/v1/chat/completions \
   -H "X-Omnix-Agent-Run-Id: <durable-agent-run-id>" \
   -H "X-Omnix-Agent-Session-Id: <optional-session-id>" \
+  -H "X-Omnix-Client: cli" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "openai_compatible::local-model",
@@ -259,7 +275,7 @@ event types.
 
 ## Troubleshooting checklist
 
-1. Confirm the process and port: `8001` for the standalone server or `8000` for
+1. Confirm the process and port: `8101` for the standalone server or `8000` for
    the main gateway.
 2. Check `/health`, `/docs`, or `/openapi.json` on the standalone server.
 3. For the agent gateway, verify the run ID exists and call `/models` first.

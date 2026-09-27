@@ -34,6 +34,11 @@ def test_stage1_defaults_to_launcher_gateway() -> None:
     assert Stage1PrepareConfig().base_url == "http://127.0.0.1:8000"
 
 
+def test_rehearsal_http_session_sends_client_header() -> None:
+    gateway = HttpStage1Gateway("http://127.0.0.1:8000")
+    assert gateway.session.headers["X-Omnix-Client"] == "rehearsal"
+
+
 def test_websocket_url_uses_gateway_origin_and_scheme() -> None:
     assert (
         HttpStage1Gateway("http://127.0.0.1:8000")._websocket_url(TTS_PCM_WEBSOCKET_PATH)

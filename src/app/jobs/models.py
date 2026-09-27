@@ -166,11 +166,15 @@ class ClaimJobResponse(BaseModel):
 
 
 class CompleteJobRequest(BaseModel):
+    worker_id: str | None = Field(default=None, min_length=1)
+    lease_token: str | None = Field(default=None, min_length=1)
     output_refs: list[dict[str, Any]] = Field(default_factory=list)
     logs: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FailJobRequest(BaseModel):
+    worker_id: str | None = Field(default=None, min_length=1)
+    lease_token: str | None = Field(default=None, min_length=1)
     code: str = "job_failed"
     message: str
     retryable: bool = False

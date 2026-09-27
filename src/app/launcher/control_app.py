@@ -13,8 +13,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_manager
+from app.runtime.net import allowed_origins
+from app.security.request_guard import RequestGuardMiddleware
 
 app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
+app.add_middleware(
+    RequestGuardMiddleware,
+    allowed_origins=[*allowed_origins(), "http://localhost:5055", "http://127.0.0.1:5055"],
+)
 
 _DEFAULT_APP_OPEN_URL = "http://localhost:5173/"
 
@@ -252,7 +258,10 @@ _HTML = r"""
   }
 
   async function api(path, options) {
-    const response = await fetch(path, options || {});
+    const response = await fetch(path, {
+      ...(options || {}),
+      headers: { ...(options?.headers || {}), 'X-Omnix-Client': 'launcher' },
+    });
     if (!response.ok) {
       throw new Error(await response.text());
     }

@@ -25,8 +25,11 @@ const proposal: LiveAgentToolProposal = {
 };
 
 describe('LiveAgentToolProposalCard', () => {
-  it('requires an explicit click and sends the stable proposal id', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+  it('requires an explicit click and proposes, approves, then executes the server id', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ proposal_id: 'server-proposal', approval_required: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ proposal_id: 'server-proposal', decision: 'approved' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
       approval_decision: { executable: true, approval_required: true },
       execution_result: { state_changed: true, result_summary: 'Created calendar event.', output: {} },
       state_changed: true,
@@ -39,8 +42,12 @@ describe('LiveAgentToolProposalCard', () => {
 
     await waitFor(() => expect(screen.getByText('Created calendar event.')).toBeInTheDocument());
     const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-    expect(request.request.approved).toBe(true);
-    expect(request.request.proposal_id).toBe('proposal-1');
+    expect(request).toEqual({ tool_id: 'calendar', action_id: 'calendar.create_event', session_id: 'chat:1', input: proposal.input });
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      '/api/assistant/tools/proposals',
+      '/api/assistant/tools/proposals/server-proposal/approve',
+      '/api/assistant/tools/proposals/server-proposal/execute',
+    ]);
     vi.unstubAllGlobals();
   });
 

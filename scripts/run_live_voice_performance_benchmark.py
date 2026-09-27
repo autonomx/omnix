@@ -476,7 +476,7 @@ def main() -> int:
         try:
             _preflight(f"{args.app_url.rstrip('/')}/chatbot", "Omnix web app")
             authority = _preflight(
-                f"{args.stt_url.rstrip('/')}/authorityz?language=en&mode=test",
+                f"{args.app_url.rstrip('/')}/api/stt/authorityz?language=en&mode=test",
                 "Live STT authority gate",
                 json_required=True,
             )

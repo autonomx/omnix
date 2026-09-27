@@ -38,6 +38,7 @@ class HttpStage1Gateway:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.session = requests.Session()
+        self.session.headers.update({"X-Omnix-Client": "rehearsal"})
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"

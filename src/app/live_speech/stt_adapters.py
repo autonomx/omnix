@@ -14,6 +14,8 @@ from typing import Any
 
 import requests
 
+from app.security.service_token import service_headers
+
 from .stt import BufferedStreamingTranscriber, StreamingTranscriber, TranscriptUpdate
 
 
@@ -68,6 +70,7 @@ class ParakeetServiceTranscriber(StreamingTranscriber):
             f"{self.base_url.rstrip('/')}/transcribe",
             files={"file": ("utterance.wav", wav_bytes, "audio/wav")},
             timeout=self.timeout_seconds,
+            headers=service_headers(), allow_redirects=False,
         )
         response.raise_for_status()
         payload: dict[str, Any] = response.json()

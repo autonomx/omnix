@@ -17,7 +17,7 @@ from app.gateway.background_runtime import (
     BackgroundWorker,
     register_background_worker,
 )
-from app.jobs.models import JobRecord, JobStatus, ResourceClass
+from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus, ResourceClass
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.unit_of_work import unit_of_work
 
@@ -88,6 +88,18 @@ class _AuthorityBoundJobStore:
             work.rollback()
         if row is None:
             raise JobClaimConflict(f"Durable feature execution lease lost: {self._job_id}")
+
+    def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
+        self.require_execution_authority(job_id)
+        return self._store.complete_job(job_id, request.model_copy(update={
+            "worker_id": self._worker_id, "lease_token": self._lease_token,
+        }))
+
+    def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
+        self.require_execution_authority(job_id)
+        return self._store.fail_job(job_id, request.model_copy(update={
+            "worker_id": self._worker_id, "lease_token": self._lease_token,
+        }))
 
     def __getattr__(self, name: str) -> Any:
         value = getattr(self._store, name)

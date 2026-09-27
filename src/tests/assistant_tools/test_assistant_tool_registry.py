@@ -47,7 +47,7 @@ def test_backend_registry_safe_defaults_match_tool_risk():
 
 
 def test_assistant_tools_route_returns_backend_registry():
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.get("/api/assistant/tools")
 
     assert response.status_code == 200

@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .contracts import (
     AgentApproval,
@@ -37,6 +37,7 @@ from .local_workspace import (
     pick_local_workspace,
 )
 from .profiles import get_agent_profile, resolve_profile_capabilities
+from .request_policy import allowed_workspace_root, validate_request_policy
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
 
@@ -69,6 +70,15 @@ class StartAgentRunRequest(BaseModel):
     allowed_paths: list[str] = Field(default_factory=lambda: ["**"])
     forbidden_paths: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_profile_policy(self) -> StartAgentRunRequest:
+        validate_request_policy(
+            get_agent_profile(self.profile), approval_policy=self.approval_policy,
+            isolation_policy=self.isolation_policy, allowed_paths=self.allowed_paths,
+        )
+        self.allowed_paths = [value.replace("\\", "/") for value in self.allowed_paths]
+        return self
 
 
 class AgentCommandRequest(BaseModel):
@@ -112,6 +122,10 @@ def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
 def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
     try:
         profile = get_agent_profile(request.profile)
+        # Validate both paths: an allowed workspace cannot hide an arbitrary
+        # repository path later consumed by the worktree manager.
+        repository = allowed_workspace_root(request.repository) if request.repository else None
+        workspace_root = allowed_workspace_root(request.workspace_root) if request.workspace_root else None
         effective_task = request.objective or request.task
         evidence_decision = classify_evidence(effective_task, profile_id=request.profile)
         compiled = compile_task_authority(profile, effective_task, evidence_decision)
@@ -128,7 +142,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         )
     except (ValueError, EvidenceCompilationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    root = request.workspace_root or request.repository
+    root = workspace_root or repository
     if profile.requires_workspace and not root:
         raise HTTPException(status_code=422, detail="repository or workspace_root is required for this profile")
     limit_kwargs = {"limits": request.limits} if request.limits is not None else {}
@@ -153,7 +167,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         workspace=(
             WorkspaceSpec(
                 root=str(root),
-                repository=request.repository,
+                repository=repository,
                 base_ref=request.base_ref,
                 isolation_policy=request.isolation_policy,
                 allowed_paths=request.allowed_paths,

@@ -58,7 +58,8 @@ export type TtsServiceClient = {
 };
 
 export function createSttServiceClient(options: SpeechServiceClientOptions): SttServiceClient {
-  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const baseUrl = normalizeBaseUrl(options.baseUrl).split(/[?#]/)[0]
+    .replace(/\/(?:ws\/)?transcribe$/, '').replace(/\/+$/, '');
 
   return {
     transcribeAudio(request) {
@@ -90,7 +91,7 @@ export function createFetchSpeechServiceTransport(fetchImpl: typeof fetch = fetc
   return async function fetchSpeechServiceTransport<TResponse>(request: SpeechServiceTransportRequest): Promise<TResponse> {
     const response = await fetchImpl(request.url, {
       method: request.method,
-      headers: request.headers,
+      headers: { ...request.headers, 'X-Omnix-Client': 'web' },
       body: request.body,
     });
 

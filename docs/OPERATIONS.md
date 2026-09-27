@@ -12,6 +12,14 @@ Inspect the `runtime` object returned by `/api/diagnostics` for process role/cap
 
 If a worker dies, PostgreSQL releases its advisory lock. Another worker acquires ownership; expired job attempts are fenced. Chat owner loss produces one terminal recovery event and no duplicate assistant output. A canceled expired lease becomes terminal `canceled`. Use the [release gate commands and measurement profiles](testing/ARCHITECTURE_GATES.md) before rollout; scheduled CPU soak is separate from live GPU/provider certification.
 
+The HTTP worker protocol uses `POST /internal/jobs/claim` and `/internal/jobs/{job_id}/complete` or `/fail`, with `X-Omnix-Service-Token`. Finalization requires the `worker_id` and `lease_token` from that worker's original claim. Missing credentials return 422; an expired, changed or foreign lease returns 409. The retired `/api/jobs/claim`, `/api/jobs/{job_id}/complete` and `/fail` paths return 410 for the compatibility release. Browser job creation, reads and cancellation retain their public paths. Inline chat finalization remains governed by its gateway execution owner.
+
+Every model-service route except `GET`/`HEAD /health` requires `X-Omnix-Service-Token`, including read routes, docs and WebSocket handshakes. Gateway clients send the issued credential and reject redirects. Worker model-control jobs can target only the configured TTS/STT/image endpoints. HTTP errors use `{"error":"<code>","request_id":"<id>"}` without provider exception text or tracebacks. Correlate with `X-Request-ID` and the server logs.
+
+Configure remote/custom STT addresses with the serving process's `OMNIX_STT_URL`. Mutable provider settings cannot select an address for the private service credential; the retired loopback gateway settings still migrate to the local STT worker.
+
+`OMNIX_MAX_UPLOAD_BYTES` defaults to 50 MiB and counts the complete streamed request body, including multipart overhead. Oversized HTTP requests return 413; oversized WebSocket messages close with 1009. The existing STT segment duration/byte limits also apply. Browser STT uses `/api/stt/transcribe`, `/api/stt/authorityz` and `/api/stt/ws/transcribe` through the gateway. Set `VITE_ASSISTANT_STT_URL=/api/stt?authority=auto`; set the server's `OMNIX_STT_URL` to its worker address. Keep the service credential out of browser configuration.
+
 This guide is for running a local Omnix stack, diagnosing failures, and preserving recoverable state. It complements [SETUP.md](SETUP.md), which explains installation and configuration, and [ARCHITECTURE.md](ARCHITECTURE.md), which explains ownership and trust boundaries.
 
 The source tree defines current runtime behavior. The commands and endpoints below describe the supported local development topology documented in this repository as of 2026-09-12.
@@ -303,6 +311,16 @@ Hermes is optional and runs out of process. The sidecar may contribute planning,
 
 Follow HERMES_SIDECAR_SETUP.md to install and verify it. Keep Hermes disabled until the endpoint is reachable and the intended policy is understood.
 
+Tool execution uses a durable proposal flow. Submit the tool, action, input and session to `POST /api/assistant/tools/proposals`. If its response requires approval, the user confirms the exact action with `POST /api/assistant/tools/proposals/{proposal_id}/approve` (or rejects it with `/deny`). Execute it with `POST /api/assistant/tools/proposals/{proposal_id}/execute`. The server checks current policy, expiry and the stored input digest, then consumes the proposal and reserves its execution ledger in one PostgreSQL transaction before dispatch. A failed or interrupted execution cannot reuse that proposal.
+
+Public tool request envelopes reject `approved` and `approval_policy`. The browser uses the proposal flow after explicit confirmation. The legacy `/api/hermes/assistant/tools/execute` endpoint is internal, absent from the public OpenAPI schema, and requires both an existing proposal ID and `X-Omnix-Service-Token`. Configure `OMNIX_SERVICE_TOKEN` with at least 32 random bytes encoded URL-safe; missing or invalid service credentials fail closed.
+
+In local mode, the launcher creates the service token at first start and reuses it for child services. Windows stores an encrypted `service-token.dpapi` alongside the provider secret store; POSIX uses a mode-0600 file at `resources/data/secure/service-token`. Concurrent launchers publish one complete token atomically. A corrupt stored token or invalid explicit environment value fails startup instead of replacing the credential. Nonlocal authentication modes require an explicit service token. The web development process does not receive it. `scripts/run_omnix_gateway.py --check` does not create credentials.
+
+Workers claim and finalize through `/internal/jobs`, sending the service header and the original `worker_id` and `lease_token` returned by their claim. The retired public claim/complete/fail routes return 410. A stale or expired worker cannot finalize a successor's attempt. Public `/api/jobs` admission rejects foreground job types and execution-authority compatibility fields with 422; submit chat through its chat route and direct RPG turns through their turn route. Unleased chat requires its live gateway owner. RPG audit jobs require the original started foreground submission claim, scoped to the exact workspace, session, submission and job. Their canonical turn, job result and submission commit atomically.
+
+Agent request policies may only tighten profile ceilings for approval policy, writable paths and isolation. Repository and workspace paths must resolve under `OMNIX_AGENT_WORKSPACE_ROOTS` (platform path-list separator); defaults are the repository and `resources/agent_workspaces`. An explicitly empty setting permits no roots. Broker approval IDs are random and stay outside model-visible tool parameters and results.
+
 ## Trading safety
 
 Trading AI and Hermes research are research inputs. They do not automatically become order authority.
@@ -358,3 +376,33 @@ See also:
 - [DEVELOPMENT.md](DEVELOPMENT.md) for safe implementation and testing patterns.
 - [FEATURES.md](FEATURES.md) for workspace behavior.
 - [../SPEC.md](../SPEC.md) for target platform rules.
+
+## Listener policy
+
+Omnix-managed services default to loopback. Non-loopback binding requires both
+`OMNIX_BIND_HOST=<address>` and `OMNIX_ALLOW_LAN=true` and emits a startup warning.
+Use `OMNIX_BIND_HOST` instead of legacy per-service listener host variables.
+`OMNIX_ALLOWED_ORIGINS` is a comma-separated list of exact HTTP(S) origins;
+wildcards are rejected for credential-bearing CORS. The standalone compatibility
+API defaults to port `8101`, avoiding the API replica port `8001`.
+
+The request guard rejects untrusted Hosts with 421, and untrusted browser
+Origins or missing `X-Omnix-Client` on state-changing HTTP requests with 403.
+WebSockets with untrusted Origins close with policy code 1008. Add legitimate
+public hostnames to `OMNIX_ALLOWED_HOSTS` and browser origins to
+`OMNIX_ALLOWED_ORIGINS`. Command-line mutation requests must send
+`X-Omnix-Client: cli`. This header is a request guard, not authentication.
+
+## Agent request ceilings
+
+Public agent-run requests may tighten the selected profile's approval policy;
+`allow_automatic` is rejected when the profile default is `ask_sensitive`.
+Allowed file patterns must remain within the profile ceiling, and isolation
+cannot be lowered. Reviewer requests use immutable review snapshots.
+
+Both `repository` and `workspace_root` must resolve under operator-approved
+roots. `OMNIX_AGENT_WORKSPACE_ROOTS` is a path list separated by `;` on Windows
+or `:` on POSIX. The default roots are the repository and
+`resources/agent_workspaces`. Empty configuration denies every root. Relative
+configured roots are anchored to the repository; request roots must be absolute.
+Resolved symlinks and parent traversal are checked before a run starts.

@@ -4,9 +4,10 @@
 import uvicorn
 
 from app.production import app
+from app.runtime.net import bind_host
 
 
-HOST = "127.0.0.1"
+HOST = bind_host()
 PORT = 8000
 
 

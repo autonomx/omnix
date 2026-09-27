@@ -100,19 +100,41 @@ const implementationPlanSubmission = Type.Object(
   { additionalProperties: false },
 );
 
+function canonicalInput(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalInput).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object).sort().map(key => `${JSON.stringify(key)}:${canonicalInput(object[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function agentVisiblePayload(value: any): any {
+  if (Array.isArray(value)) return value.map(agentVisiblePayload);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => key !== "approval_id")
+      .map(([key, item]) => [key, agentVisiblePayload(item)]));
+  }
+  return value;
+}
+
 export default function (pi: ExtensionAPI) {
   const runId = process.env.OMNIX_AGENT_RUN_ID || "";
   const baseUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
   const allowed = new Set<string>(JSON.parse(process.env.OMNIX_AGENT_EXTERNAL_CAPABILITIES || "[]"));
   const localAllowed = new Set<string>(JSON.parse(process.env.OMNIX_AGENT_LOCAL_CAPABILITIES || "[]"));
   let usedManagedWorkspacePreview = false;
+  // Approval identities stay in trusted extension state, outside the model's
+  // parameters and results. The server binds each identity to this exact input.
+  const pendingApprovals = new Map<string, string>();
   if (!runId) return;
 
   const planningInspection = async (signal: AbortSignal): Promise<any | null> => {
     try {
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/inspect`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
         body: JSON.stringify({ queries: [], paths: [] }),
         signal,
       });
@@ -255,7 +277,7 @@ export default function (pi: ExtensionAPI) {
 
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/${encodeURIComponent(action)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
         body: JSON.stringify(
           action === "inspect"
             ? { queries: params.queries || [], paths: params.paths || [] }
@@ -271,6 +293,7 @@ export default function (pi: ExtensionAPI) {
       } catch {
         payload = { detail: `HTTP ${response.status}` };
       }
+      payload = agentVisiblePayload(payload);
       if (!response.ok) {
         return {
           content: [{ type: "text", text: `Omnix planning error: ${JSON.stringify(payload)}` }],
@@ -304,6 +327,7 @@ export default function (pi: ExtensionAPI) {
         const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/run-change-set`, { signal });
         let payload: any = {};
         try { payload = await response.json(); } catch { payload = { detail: `HTTP ${response.status}` }; }
+        payload = agentVisiblePayload(payload);
         if (!response.ok) {
           return { content: [{ type: "text", text: `Omnix change-set error: ${JSON.stringify(payload)}` }], details: { error: true, payload } };
         }
@@ -321,14 +345,13 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: "Use governed Omnix capabilities for external systems",
     promptGuidelines: [
       "Use omnix_capability only with capability IDs issued in the task authority.",
-      "If omnix_capability reports approval is required, do not claim the action happened; wait for approval and retry with the approval_id.",
+      "If omnix_capability reports approval is required, do not claim the action happened; wait for user approval in Omnix and retry the same capability and input.",
       "For local web/UI validation, call browser.open with input { workspace_preview: true, path: '/<route>' } instead of starting npm/vite through the shell. Omnix owns the exact-worktree preview lifecycle and automatically cleans it up after a passing deterministic browser assertion.",
       "After a managed workspace preview has been used, do not request browser.close for cleanup; Omnix owns cleanup and suppresses redundant close calls so they cannot create approval waits.",
     ],
     parameters: Type.Object({
       capability_id: Type.String(),
       input: Type.Optional(Type.Record(Type.String(), Type.Any())),
-      approval_id: Type.Optional(Type.String()),
     }),
     async execute(toolCallId, params, signal) {
       if (!allowed.has(params.capability_id)) {
@@ -345,15 +368,20 @@ export default function (pi: ExtensionAPI) {
           },
         };
       }
+      const approvalKey = canonicalInput({ capability_id: params.capability_id, input: params.input || {} });
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/capabilities/${params.capability_id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: params.input || {}, approval_id: params.approval_id, proposal_id: toolCallId }),
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+        body: JSON.stringify({ input: params.input || {}, approval_id: pendingApprovals.get(approvalKey), proposal_id: toolCallId }),
         signal,
       });
       const payload = await response.json();
-      if (!response.ok) return { content: [{ type: "text", text: `Omnix broker error: ${JSON.stringify(payload)}` }], details: { error: true, payload } };
-      if (payload.approval_required) return { content: [{ type: "text", text: `Approval required before ${params.capability_id}. approval_id=${payload.approval_id}` }], details: payload };
+      const visiblePayload = agentVisiblePayload(payload);
+      if (!response.ok) return { content: [{ type: "text", text: `Omnix broker error: ${JSON.stringify(visiblePayload)}` }], details: { error: true, payload: visiblePayload } };
+      if (payload.approval_required) {
+        if (typeof payload.approval_id === "string") pendingApprovals.set(approvalKey, payload.approval_id);
+        return { content: [{ type: "text", text: `Approval required before ${params.capability_id}. Ask the user to approve it in Omnix, then retry the same capability and input.` }], details: visiblePayload };
+      }
       if (
         params.capability_id === "browser.open"
         && params.input?.workspace_preview === true
@@ -361,7 +389,7 @@ export default function (pi: ExtensionAPI) {
       ) {
         usedManagedWorkspacePreview = true;
       }
-      return { content: [{ type: "text", text: JSON.stringify(payload.result) }], details: payload };
+      return { content: [{ type: "text", text: JSON.stringify(visiblePayload.result) }], details: visiblePayload };
     },
   });
 }

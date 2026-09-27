@@ -9,6 +9,13 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict
 
+from app.security.service_token import service_headers
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
 
 def _truthy(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
@@ -66,17 +73,22 @@ def _request_json(
     url: str,
     payload: Dict[str, Any] | None = None,
     timeout: float = 600.0,
+    *, authenticated: bool = False,
 ) -> Dict[str, Any]:
     method = method.strip().upper() or "GET"
     body = None
-    headers = {"Accept": "application/json"}
+    headers = {"Accept": "application/json", "X-Omnix-Client": "gateway"}
+    if authenticated:
+        headers.update(service_headers())
     if method != "GET":
         body = json.dumps(payload or {}).encode("utf-8")
         headers["Content-Type"] = "application/json"
 
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        open_request = (urllib.request.build_opener(_NoRedirect()).open
+                        if authenticated else urllib.request.urlopen)
+        with open_request(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
@@ -97,7 +109,7 @@ def request_image_service(
         raise RuntimeError("image_service_not_configured")
 
     try:
-        return _request_json(method, f"{base}{path}", payload, timeout)
+        return _request_json(method, f"{base}{path}", payload, timeout, authenticated=True)
     except RuntimeError as exc:
         message = str(exc)
         if message.startswith("http_"):

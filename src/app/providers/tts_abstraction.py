@@ -69,7 +69,7 @@ class OpenAITTSProvider(TTSProvider):
         if response_format:
             payload["response_format"] = response_format
 
-        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        headers: Dict[str, str] = {"Content-Type": "application/json", "X-Omnix-Client": "gateway"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 
@@ -99,7 +99,7 @@ class OpenAITTSProvider(TTSProvider):
         if response_format:
             payload["response_format"] = response_format
 
-        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        headers: Dict[str, str] = {"Content-Type": "application/json", "X-Omnix-Client": "gateway"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
 

@@ -14,7 +14,7 @@ from app.launcher.service_manager import (
 
 app = control_app.app
 IMAGE_SERVICE_URL = "http://127.0.0.1:5301"
-LIVE_STT_URL = "http://127.0.0.1:5201?language=en&authority=auto&endpoint_threshold=0.5"
+LIVE_STT_URL = "/api/stt?language=en&authority=auto&endpoint_threshold=0.5"
 
 
 def build_runtime_service_specs():

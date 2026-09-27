@@ -1,3 +1,7 @@
+# Archived notes from the invalid test runner
+
+The former root `run_tests.py` contained these design notes, not executable Python. Preserved during WP-1.4 runner retirement; these historical observations are not implementation evidence. Use `python -m pytest` from the repository root to run tests.
+
 ⚠️ CRITICAL GAPS (STILL NOT FULLY SOLVED)
 
 These are the ones that matter if you want to surpass Talemate, not just match it.

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+import secrets
+
+from app.security.service_token import service_headers
 import threading
 import time
 from types import SimpleNamespace
@@ -10,6 +14,11 @@ from app import image_service_app
 from app.image import lifecycle, service
 from app.image.models import ImageGenerationRequest
 from app.image.providers.base import ImageGenerationResult
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def _status(*, loaded: bool) -> dict:
@@ -42,7 +51,7 @@ def test_status_reports_unloaded_without_loading_provider(monkeypatch):
     )
     monkeypatch.setattr(image_service_app, "get_image_provider_cache_status", lambda: {"loaded_providers": []})
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.get("/provider/status")
 
     assert response.status_code == 200
@@ -60,12 +69,12 @@ def test_generate_requires_explicit_load(monkeypatch):
     monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: False)
     monkeypatch.setattr(image_service_app, "generate_image_local", lambda payload: generation_calls.append(payload))
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.post("/generate", json={"prompt": "castle", "width": 768, "height": 768})
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "model_unloaded"
-    assert response.json()["error"] == "image_model_not_loaded"
+    assert response.status_code == 503
+    assert response.json()["error"] == "model_unavailable"
+    assert set(response.json()) == {"error", "request_id"}
     assert generation_calls == []
 
 
@@ -100,7 +109,7 @@ def test_load_and_unload_routes_report_final_residency(monkeypatch):
         lambda: {"loaded_providers": ["flux_klein"] if loaded else []},
     )
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         load_response = client.post("/provider/load", json={"provider": "flux_klein"})
         status_response = client.get("/provider/status")
         unload_response = client.post("/provider/unload", json={"provider": "flux_klein"})
@@ -140,7 +149,7 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
         generate_image_local,
     )
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.post(
             "/generate",
             json={"prompt": "castle", "width": 768, "height": 768, "request_id": "job:test"},
@@ -156,7 +165,7 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
 
 
 def test_generation_progress_endpoint_reports_missing_request():
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.get("/generate/progress/job:missing")
 
     assert response.status_code == 200

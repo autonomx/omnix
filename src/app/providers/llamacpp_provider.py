@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 import requests
+from app.runtime.net import bind_host
 
 from .base import (
     BaseProvider,
@@ -67,6 +68,7 @@ class LlamaCppProvider(BaseProvider):
             return False
 
     def _start_server(self, model_path: str) -> Optional[int]:
+        host = bind_host()
         binary = self._find_server_binary()
         if not binary:
             raise ConnectionError("Llama.cpp server binary not found")
@@ -108,7 +110,7 @@ class LlamaCppProvider(BaseProvider):
                     "-ngl",
                     "99",
                     "--host",
-                    "0.0.0.0",
+                    host,
                     "--port",
                     str(port),
                 ],

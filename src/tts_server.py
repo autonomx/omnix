@@ -13,14 +13,17 @@ import wave
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from app.shared import VOICE_CLONES_DIR
+from app.runtime.net import bind_host
+from app.security.model_service import ModelServiceMiddleware
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 app = FastAPI(title="Omnix TTS Service", version="1.0")
+app.add_middleware(ModelServiceMiddleware)
 
 
 class TtsGenerateRequest(BaseModel):
@@ -78,15 +81,13 @@ def _provider_payload_fail(error: str, details: Dict[str, Any] | None = None) ->
 
 
 def _normalize_bind_host(host: str) -> str:
-    host = str(host or "").strip() or "127.0.0.1"
-    if host in {"0.0.0.0", "::"}:
-        return "127.0.0.1"
-    return host
+    return bind_host(str(host or "").strip() or None)
 
 
 def _can_bind_port(host: str, port: int) -> bool:
     bind_host = _normalize_bind_host(host)
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((bind_host, int(port)))
@@ -339,9 +340,11 @@ async def health() -> Dict[str, Any]:
     return {
         "ok": status["ok"],
         "provider": status["provider"],
-        "error": status["error"],
+        "error": "" if status["ok"] else "model_unavailable",
         "status": "ready" if status["ok"] else "not_ready",
-        "details": status["details"],
+        "details": {key: status["details"][key] for key in
+                    ("provider_class", "provider_name", "configured_model", "configured_device")
+                    if key in status["details"]},
     }
 
 
@@ -380,12 +383,7 @@ async def speakers() -> Dict[str, Any]:
             trace_id=trace_id,
             error=exc,
         )
-        return {
-            "success": False,
-            "provider": _TTS_PROVIDER_NAME,
-            "speakers": [],
-            "error": str(exc),
-        }
+        raise HTTPException(status_code=503, detail="model_unavailable") from exc
 
 
 @app.post("/api/tts/generate_audio")
@@ -481,7 +479,7 @@ async def generate_audio(request: TtsGenerateRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -579,8 +577,7 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
-                "traceback": traceback.format_exc(limit=12),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -624,6 +621,8 @@ async def voice_clone(request: TtsVoiceCloneRequest):
             error=result.get("error") if isinstance(result, dict) else None,
             **_voice_reference_snapshot(request.voice_id),
         )
+        if isinstance(result, dict) and not result.get("success", False):
+            return JSONResponse({}, status_code=503)
         return result
     except Exception as exc:
         voice_debug_log(
@@ -637,7 +636,7 @@ async def voice_clone(request: TtsVoiceCloneRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -647,7 +646,7 @@ async def voice_clone(request: TtsVoiceCloneRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    host = os.environ.get("OMNIX_TTS_HOST", "127.0.0.1")
+    host = bind_host()
     port = int(os.environ.get("OMNIX_TTS_PORT", "5101"))
     if not _preflight_tts_port(host, port):
         sys.exit(1)

@@ -157,7 +157,7 @@ python -m pytest -v --rootdir . -c pytest.ini -p reports.html_report
 ## 📊 Custom HTML Report
 =======
 # Run all tests
-python run_tests.py
+python -m pytest src/tests/ -v
 
 # Or use pytest directly
 python -m pytest src/tests/ -v
@@ -167,27 +167,22 @@ python -m pytest src/tests/ -v
 
 ```bash
 # Unit tests only
-python run_tests.py --type unit
 python -m pytest src/tests/unit/ -v
 
 # API tests (healthcheck + sanity + regression)
-python run_tests.py --type api
 python -m pytest src/tests/api/ -v
 
 # Healthcheck tests only
-python run_tests.py --type healthcheck
 python -m pytest src/tests/api/healthcheck/ -v
 
 # Integration tests
-python run_tests.py --type integration
 python -m pytest src/tests/integration/ -v
 
 # E2E tests (requires running server + browser)
-python run_tests.py --type e2e
 python -m pytest src/tests/e2e/ -v
 
 # OpenAI API tests
-python run_tests.py --type openai
+python -m pytest src/tests/integration/test_openai_integration.py -v
 ```
 
 ### Test Categories
@@ -340,7 +335,7 @@ When any browser test fails, a full-page screenshot is automatically captured an
 - Embedded inline (base64) in the HTML report
 =======
 ```bash
-python run_tests.py --coverage
+python -m pytest src/tests/ --cov=src --cov-report=html
 ```
 
 ## Writing New Tests

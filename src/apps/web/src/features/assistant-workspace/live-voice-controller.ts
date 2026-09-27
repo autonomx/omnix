@@ -43,6 +43,7 @@ import {
 import { liveVoiceVisualScales, smoothLiveVoiceLevel } from './live-voice-level';
 import { endpointFusionAction } from './live-voice-turn-coordinator';
 import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
+import type { SpeechLocation } from './stt-url';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -162,7 +163,7 @@ export class LiveSttSegmentTelemetryGate {
 
 export async function resolveLiveVoiceSttSelection(
   configuredUrl: string | undefined,
-  locationLike: Pick<Location, 'protocol' | 'hostname'>,
+  locationLike: SpeechLocation,
   fetchImpl: typeof fetch,
 ): Promise<AuthoritySelection> {
   if (configuredUrl?.trim()) {

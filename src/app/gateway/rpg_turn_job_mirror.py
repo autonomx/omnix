@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import threading
 import uuid
+from contextlib import ExitStack
 from contextvars import ContextVar
 from copy import deepcopy
 from functools import wraps
@@ -121,6 +122,7 @@ def _apply_turn_with_job_mirror(
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
     lock = _reserve_submission_lock(resolved_submission_id)
+    execution_scope = ExitStack()
     with rpg_pipeline_span(
         "turn.submission_lock_wait",
         fields={"submission_id": resolved_submission_id},
@@ -205,6 +207,16 @@ def _apply_turn_with_job_mirror(
             fence_span["replay"] = ownership_replay is not None
         if ownership_replay is not None:
             return ownership_replay
+        if hasattr(store, "database") and durable_claim is not None and durable_claim.claim_token:
+            from app.jobs.foreground_execution import ForegroundExecution, foreground_execution
+
+            execution_scope.enter_context(foreground_execution(ForegroundExecution(
+                workspace_id=store.context.workspace_id,
+                session_id=session_id,
+                submission_id=resolved_submission_id,
+                job_id=job.id,
+                claim_token=durable_claim.claim_token,
+            )))
         with rpg_pipeline_span("turn.foreground_record_running"):
             running = store.mark_running(job.id) or job
 
@@ -314,6 +326,7 @@ def _apply_turn_with_job_mirror(
             _complete_durable_claim(durable_store, durable_claim, durable_record)
         return result
     finally:
+        execution_scope.close()
         _release_submission_lock(resolved_submission_id, lock)
 
 

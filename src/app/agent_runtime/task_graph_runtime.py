@@ -46,13 +46,14 @@ _AGENT_NODE_KINDS = {"agent", "evidence_read", "synthesis"}
 def _default_capability_executor(
     session_id: str,
     request: AssistantToolRequest,
+    *, approved: bool = False,
 ) -> Any:
     # Keep assistant-tool adapters out of the Agent Runtime import graph. The
     # eager Hermes import formed a cycle through config_store -> registry ->
     # app.agent_runtime while persistence startup was importing Chat.
     from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 
-    return hermes_assistant_tool_execute_payload(session_id, request)
+    return hermes_assistant_tool_execute_payload(session_id, request, approved=approved)
 
 
 class PostgresTaskGraphRuntime:
@@ -937,7 +938,6 @@ class PostgresTaskGraphRuntime:
                 session_id=f"task-graph:{run_id}",
                 proposal_id=f"task-graph:{run_id}:{node.id}:{claimed.attempts}",
                 input={**inputs, **node.input_template},
-                approved=node.approval_policy == "allow_automatic",
             )
             try:
                 payload = self.capability_executor(f"task-graph:{run_id}", request)

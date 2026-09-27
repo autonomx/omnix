@@ -8,6 +8,7 @@ from app.rpg.narrative_engine import CanonicalNarrativeResponse
 from app.rpg.narrative_engine.serialization import canonical_response_from_dict
 
 from .database import PostgresDatabase, default_database
+from .execution_repositories import JobClaimConflict
 from .identity_service import bootstrap_local_tenant
 from .rpg_repository import canonical_json
 from .unit_of_work import unit_of_work
@@ -22,6 +23,9 @@ def persist_foreground_turn(
     event: dict[str, Any],
     submission_id: str,
     database: PostgresDatabase | None = None,
+    submission_claim_token: str | None = None,
+    worker_id: str | None = None,
+    lease_token: str | None = None,
 ) -> dict[str, Any]:
     """Commit campaign, turn, interaction, canon, job, and submission atomically."""
 
@@ -63,6 +67,8 @@ def persist_foreground_turn(
             (context.workspace_id, session_id, submission_id),
         ).fetchone()
         if submission is None:
+            if submission_claim_token:
+                raise JobClaimConflict("foreground submission claim no longer exists")
             claim = work.foreground_submissions.claim(
                 context,
                 session_id=session_id,
@@ -92,7 +98,9 @@ def persist_foreground_turn(
                 }
             if status != "claimed":
                 raise RuntimeError(f"foreground submission is not claimable: {status}")
-            claim_token = str(submission[1])
+            if not submission_claim_token or submission_claim_token != str(submission[1]):
+                raise JobClaimConflict("foreground submission requires the original claim token")
+            claim_token = submission_claim_token
             job_id = str(submission[2]) if submission[2] is not None else None
             if submission[4] is None:
                 if not work.foreground_submissions.start_execution(
@@ -142,18 +150,17 @@ def persist_foreground_turn(
             if job["status"] == "completed":
                 completed_job = job
             else:
-                lease_owner = str(job.get("lease_owner") or "")
-                lease_token = str(job.get("lease_token") or "")
                 metadata_value = job.get("metadata")
                 metadata = metadata_value if isinstance(metadata_value, dict) else {}
                 contract_value = metadata.get("compat_contract")
                 contract = contract_value if isinstance(contract_value, dict) else {}
                 compat_value = contract.get("compat")
                 compat = compat_value if isinstance(compat_value, dict) else {}
-                if compat.get("record_only") is True:
+                if job["job_type"] == "rpg.turn.foreground_record" and compat.get("record_only") is True:
                     completed_job = work.jobs.complete_record_only(
                         context,
                         job_id=job_id,
+                        submission_claim_token=claim_token,
                         output_refs=[
                             {
                                 "type": "rpg_turn_response",
@@ -167,13 +174,13 @@ def persist_foreground_turn(
                         ],
                         progress={"current": 1, "total": 1, "message": "completed"},
                     )
-                elif not lease_owner or not lease_token:
+                elif not worker_id or not lease_token:
                     raise RuntimeError(f"foreground RPG job has no active lease: {job_id}")
                 else:
                     completed_job = work.jobs.complete(
                         context,
                         job_id=job_id,
-                        worker_id=lease_owner,
+                        worker_id=worker_id,
                         lease_token=lease_token,
                         output_refs=[
                             {

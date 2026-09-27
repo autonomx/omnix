@@ -5,9 +5,12 @@ import asyncio
 import os
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+
+from app.persistence.capability_approval_repository import CapabilityApprovalConflict
+from app.security.service_token import require_service_token
 
 from .capability_dashboard import AssistantCapabilityDashboard, build_assistant_capability_dashboard
 from .config_store import AssistantToolsConfigPayload, load_assistant_tools_config, save_assistant_tools_config
@@ -20,11 +23,15 @@ from .connections import (
     save_assistant_tool_oauth_client,
 )
 from .gate import review_assistant_tool_request
-from .hermes_bridge import hermes_assistant_tool_execute_payload, hermes_assistant_tool_review_payload
+from .hermes_bridge import hermes_assistant_tool_review_payload
 from .hermes_payloads import HermesAssistantToolExecutePayload, HermesAssistantToolRequestEnvelope, HermesAssistantToolReviewPayload
 from .intent import AssistantToolIntent, detect_assistant_tool_intent
 from .ledger import AssistantToolLedgerPayload, load_assistant_tool_ledger
 from .models import AssistantToolRequest, AssistantToolReviewDecision
+from .proposals import (
+    AssistantToolProposalDecisionRequest, AssistantToolProposalPayload, AssistantToolProposalService,
+    ToolProposalNotAllowed, default_tool_proposal_service,
+)
 
 
 class AssistantToolIntentRequest(BaseModel):
@@ -44,6 +51,7 @@ _ASSISTANT_TOOL_ROUTE_NAMES = {
     "assistant_tool_github_callback_endpoint",
     "hermes_assistant_tool_review_endpoint",
     "hermes_assistant_tool_execute_endpoint",
+    "propose_assistant_tool_endpoint",
 }
 
 
@@ -66,6 +74,22 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     @app.post("/api/assistant/tools/review", response_model=AssistantToolReviewDecision, tags=["assistant-tools"])
     async def review_assistant_tool_endpoint(request: AssistantToolRequest) -> AssistantToolReviewDecision:
         return review_assistant_tool_request(request)
+
+    @app.post("/api/assistant/tools/proposals", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
+    def propose_assistant_tool_endpoint(request: AssistantToolRequest, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> AssistantToolProposalPayload:
+        return _proposal_operation(lambda: service.propose(request))
+
+    @app.post("/api/assistant/tools/proposals/{proposal_id}/approve", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
+    def approve_assistant_tool_endpoint(proposal_id: str, request: AssistantToolProposalDecisionRequest, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> AssistantToolProposalPayload:
+        return _proposal_operation(lambda: service.decide(proposal_id, approve=True, reason=request.reason))
+
+    @app.post("/api/assistant/tools/proposals/{proposal_id}/deny", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
+    def deny_assistant_tool_endpoint(proposal_id: str, request: AssistantToolProposalDecisionRequest, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> AssistantToolProposalPayload:
+        return _proposal_operation(lambda: service.decide(proposal_id, approve=False, reason=request.reason))
+
+    @app.post("/api/assistant/tools/proposals/{proposal_id}/execute", response_model=HermesAssistantToolExecutePayload, tags=["assistant-tools"])
+    def execute_assistant_tool_proposal_endpoint(proposal_id: str, request: AssistantToolRequest | None = None, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> HermesAssistantToolExecutePayload:
+        return _proposal_operation(lambda: service.execute(proposal_id, expected_request=request))
 
     @app.post("/api/assistant/tools/intent", response_model=AssistantToolIntent, tags=["assistant-tools"])
     async def assistant_tool_intent_endpoint(request: AssistantToolIntentRequest) -> AssistantToolIntent:
@@ -99,17 +123,30 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     async def hermes_assistant_tool_review_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolReviewPayload:
         return hermes_assistant_tool_review_payload(request.user_request, request.request)
 
-    @app.post("/api/hermes/assistant/tools/execute", response_model=HermesAssistantToolExecutePayload, tags=["hermes-assistant-tools"])
-    async def hermes_assistant_tool_execute_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolExecutePayload:
+    @app.post("/api/hermes/assistant/tools/execute", response_model=HermesAssistantToolExecutePayload, tags=["internal"], include_in_schema=False, dependencies=[Depends(require_service_token)])
+    async def hermes_assistant_tool_execute_endpoint(request: HermesAssistantToolRequestEnvelope, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> HermesAssistantToolExecutePayload:
         # Browser actions can navigate to the gateway itself. Keep the
         # synchronous adapter and ledger work off the event loop so that
         # browser.open cannot deadlock while waiting for this gateway to serve
         # the target page.
-        return await asyncio.to_thread(
-            hermes_assistant_tool_execute_payload,
-            request.user_request,
-            request.request,
-        )
+        if not request.request.proposal_id:
+            raise HTTPException(status_code=422, detail="proposal_id_required")
+        return await asyncio.to_thread(_proposal_operation, lambda: service.execute(
+            request.request.proposal_id, expected_request=request.request, user_request=request.user_request,
+        ))
+
+
+def _proposal_operation(operation):
+    try:
+        return operation()
+    except ToolProposalNotAllowed as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except CapabilityApprovalConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="proposal_not_found") from exc
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="invalid_tool_proposal") from exc
 
 
 def _assistant_tool_connection_redirect(result) -> RedirectResponse:

@@ -78,7 +78,7 @@ def _apply_kasa_reads(result, *, content: str, session_id: str) -> None:
     for call in result.tool_calls:
         if call.name not in KASA_READ_TOOLS:
             continue
-        request = kasa_request_from_tool_call(call, session_id=session_id, approved=False)
+        request = kasa_request_from_tool_call(call, session_id=session_id)
         if request is None:
             continue
         payload = hermes_assistant_tool_execute_payload(content, request)

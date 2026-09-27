@@ -21,7 +21,7 @@ const invocation = {
   workspaceId: 'workspace-1',
   sessionId: 'session-1',
   arguments: { query: 'omnix' },
-  approved: true,
+  approvalDecision: 'approved' as const,
   requestedAt: '2026-01-01T00:00:00.000Z',
 };
 
@@ -33,7 +33,7 @@ describe('capability contracts', () => {
 
   it('requires an enabled matching approved capability before execution', () => {
     expect(canInvokeCapability(definition, invocation)).toBe(true);
-    expect(canInvokeCapability(definition, { ...invocation, approved: false })).toBe(false);
+    expect(canInvokeCapability(definition, { ...invocation, approvalDecision: 'pending' })).toBe(false);
   });
 
   it('executes approved invocations and emits tool events', async () => {
@@ -53,7 +53,7 @@ describe('capability contracts', () => {
   });
 
   it('denies invocations that have not been approved', async () => {
-    const record = await executeCapabilityInvocation(definition, { ...invocation, approved: false }, {
+    const record = await executeCapabilityInvocation(definition, { ...invocation, approvalDecision: 'pending' }, {
       capabilityId: 'search',
       run: async () => {
         throw new Error('should not run');

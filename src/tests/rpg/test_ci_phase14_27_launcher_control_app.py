@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+import secrets
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -8,6 +11,12 @@ from app.launcher import control_app as launcher_control_app
 from app.launcher import service_manager as launcher_service_manager
 from app.launcher.control_app import app
 from app.launcher.service_manager import LauncherServiceManager, ServiceSpec, build_default_service_specs, reset_default_manager_for_tests
+
+
+@pytest.fixture(autouse=True)
+def service_token(monkeypatch):
+    # Process-launch tests never create or read an operator credential store.
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_default_service_specs_keep_optional_services_disabled_by_default(monkeypatch) -> None:
@@ -37,7 +46,8 @@ def test_default_service_specs_keep_optional_services_disabled_by_default(monkey
     assert by_id["gateway"].env["OMNIX_QWEN3_TTS_MODEL_DIR"] == expected_tts_model
     assert by_id["gateway"].ports == (8000,)
     assert by_id["web"].ports == (5173,)
-    assert by_id["web"].command[-2:] == ["run", "web:dev"]
+    assert by_id["web"].command[1:3] == ["run", "web:dev"]
+    assert by_id["web"].command[-3:] == ["--", "--host", "127.0.0.1"]
     assert by_id["tts"].ports == (5101,)
     assert by_id["stt"].ports == (5201,)
     assert by_id["image"].ports == (5301,)
@@ -127,7 +137,7 @@ def test_launcher_dashboard_lists_services_without_starting_processes() -> None:
     ])
     reset_default_manager_for_tests(manager)
     try:
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
         response = client.get("/api/services")
     finally:
         reset_default_manager_for_tests(None)
@@ -201,7 +211,30 @@ def test_managed_service_inherits_database_url_without_logging_it(monkeypatch) -
 
     assert result["ok"] is True
     assert captured_environment["OMNIX_DATABASE_URL"] == database_url
+    token = os.environ["OMNIX_SERVICE_TOKEN"]
+    assert captured_environment["OMNIX_SERVICE_TOKEN"] == token
     assert all(database_url not in line for line in manager.logs("gateway"))
+    assert all(token not in line for line in manager.logs("gateway"))
+
+
+def test_web_process_does_not_receive_service_token(monkeypatch):
+    environments = []
+
+    class FakeProcess:
+        pid = 12345
+        stdout = []
+        returncode = None
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(launcher_service_manager.subprocess, "Popen", lambda *args, **kwargs: environments.append(kwargs["env"]) or FakeProcess())
+    manager = LauncherServiceManager([
+        ServiceSpec(service_id="web", label="Web", command=["node", "-v"], cwd=Path(".")),
+    ])
+    monkeypatch.setattr(manager, "_ensure_gateway_ready", lambda: (True, {}))
+    assert manager.start("web")["ok"]
+    assert "OMNIX_SERVICE_TOKEN" not in environments[0]
 
 
 def test_previous_log_thread_cannot_overwrite_restarted_process_status() -> None:
@@ -236,7 +269,7 @@ def test_previous_log_thread_cannot_overwrite_restarted_process_status() -> None
 
 
 def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.get("/")
 
     assert response.status_code == 200
@@ -254,7 +287,7 @@ def test_launcher_dashboard_html_uses_safe_script_and_event_handlers() -> None:
 
 
 def test_launcher_dashboard_html_exposes_copy_logs_buttons() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.get("/")
 
     assert response.status_code == 200
@@ -269,7 +302,7 @@ def test_launcher_dashboard_html_exposes_copy_logs_buttons() -> None:
 
 
 def test_launcher_dashboard_favicon_is_no_content() -> None:
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.get("/favicon.ico")
 
     assert response.status_code == 204
@@ -282,7 +315,7 @@ def test_launcher_dashboard_logs_endpoint_returns_text_for_known_service() -> No
     reset_default_manager_for_tests(manager)
     try:
         manager._services["fake"].logs.extend(["line one", "line two"])
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
         response = client.get("/api/services/fake/logs?limit=10")
     finally:
         reset_default_manager_for_tests(None)
@@ -295,7 +328,7 @@ def test_launcher_dashboard_rejects_unknown_service() -> None:
     manager = LauncherServiceManager([])
     reset_default_manager_for_tests(manager)
     try:
-        client = TestClient(app)
+        client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
         response = client.post("/api/services/missing/start")
     finally:
         reset_default_manager_for_tests(None)
@@ -326,7 +359,7 @@ def test_launcher_dashboard_private_app_button_opens_private_browser(monkeypatch
 
     monkeypatch.setattr(launcher_control_app.subprocess, "Popen", fake_popen)
 
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.post("/api/open-app-private")
 
     assert response.status_code == 200

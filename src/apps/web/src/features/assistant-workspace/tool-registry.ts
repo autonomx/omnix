@@ -5,6 +5,7 @@ import {
   DEFAULT_GMAIL_TOOL_ACTIONS,
   type ToolAction,
 } from './tool-actions';
+import { executeToolProposal } from './tool-proposal-client';
 
 export type ToolCategory = 'communication' | 'development' | 'productivity' | 'local_system' | 'automation';
 
@@ -38,7 +39,7 @@ export type ToolExecutionRequest = {
   toolId: string;
   actionId: string;
   input?: Record<string, unknown>;
-  approved?: boolean;
+  confirm?: boolean;
 };
 
 export type ToolExecutionResult = {
@@ -138,27 +139,17 @@ export async function executeAssistantToolRequest(request: ToolExecutionRequest,
   if (typeof fetch !== 'function') {
     return { status: 'failed', error: 'Backend tool execution endpoint is unavailable.' };
   }
-  const response = await fetch('/api/hermes/assistant/tools/execute', {
-    body: JSON.stringify({
-      user_request: '',
-      request: {
-        tool_id: request.toolId,
-        action_id: request.actionId,
-        approved: request.approved ?? false,
-        input: request.input ?? {},
-      },
-    }),
-    headers: { 'Content-Type': 'application/json' },
-    method: 'POST',
-  });
-  if (!response.ok) {
-    return { status: 'failed', error: `Backend tool execution failed: ${response.status}` };
+  try {
+    const payload = await executeToolProposal({
+      tool_id: request.toolId, action_id: request.actionId, input: request.input ?? {},
+    }, request.confirm);
+    if (payload.execution_result.error) {
+      return { status: 'failed', error: payload.execution_result.error };
+    }
+    return { status: 'completed', output: payload.execution_result.output };
+  } catch (error) {
+    return { status: 'failed', error: error instanceof Error ? error.message : 'Backend tool execution failed.' };
   }
-  const payload = (await response.json()) as { execution_result?: { error?: string | null; output?: unknown } };
-  if (payload.execution_result?.error) {
-    return { status: 'failed', error: payload.execution_result.error };
-  }
-  return { status: 'completed', output: payload.execution_result?.output };
 }
 
 function createConnectionBackedTool(input: {

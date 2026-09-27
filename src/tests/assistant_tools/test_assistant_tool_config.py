@@ -65,7 +65,7 @@ def test_assistant_tool_config_routes_persist_payload(monkeypatch, tmp_path):
     credentials_path = tmp_path / "assistant_tool_credentials.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(credentials_path))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     initial = client.get("/api/assistant/tools/config")
     assert initial.status_code == 200
@@ -89,7 +89,7 @@ def test_assistant_tool_connect_route_reports_missing_google_oauth(monkeypatch, 
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/gmail")
 
@@ -107,7 +107,7 @@ def test_assistant_tool_connect_route_builds_google_auth_url(monkeypatch, tmp_pa
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/gmail")
 
@@ -128,7 +128,7 @@ def test_assistant_tool_oauth_client_route_saves_google_app_and_builds_auth_url(
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post(
         "/api/assistant/tools/connect/gmail/oauth-client",
@@ -147,7 +147,7 @@ def test_assistant_tool_google_callback_reports_missing_secret(monkeypatch, tmp_
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/connect/google/callback?code=abc&state=invalid", follow_redirects=False)
 
@@ -185,7 +185,7 @@ def test_assistant_tool_google_callback_saves_account_and_credentials(monkeypatc
 
     monkeypatch.setattr("app.assistant_tools.connections._post_form_json", fake_post_form_json)
     monkeypatch.setattr("app.assistant_tools.connections._get_bearer_json", fake_get_bearer_json)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     start = client.get("/api/assistant/tools/connect/gmail").json()
     state = parse_qs(urlparse(start["auth_url"]).query)["state"][0]
 

@@ -129,7 +129,10 @@ def test_last10_report_includes_handoff_debug_payload(tmp_path: Path) -> None:
     html = Path(written["summary"]["html_report_path"]).read_text(encoding="utf-8")
     assert "raw_intent_diagnostics" in transcript
     assert "response_selection_trace" in transcript
-    assert "Turn debug payloads" in html
+    assert "<h2>Turn response records</h2>" in html
+    assert "raw_intent_diagnostics" in html
+    assert "response_selection_trace" in html
+    assert "missing_dialogue_candidate" in html
 
 
 def test_last10_report_is_supported_by_inline_feature_dispatcher(tmp_path: Path, monkeypatch: Any) -> None:

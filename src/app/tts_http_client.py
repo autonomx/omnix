@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from app.security.service_token import service_headers
+
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 
@@ -54,7 +56,7 @@ def tts_speakers(timeout: float = 10.0) -> dict[str, Any]:
         log_path=voice_debug_log_path("backend"),
     )
     try:
-        response = requests.get(endpoint, timeout=timeout)
+        response = requests.get(endpoint, timeout=timeout, headers=service_headers(), allow_redirects=False)
         voice_debug_log(
             "backend",
             "tts_speakers_response",
@@ -126,7 +128,7 @@ def tts_generate_audio(
         log_path=voice_debug_log_path("backend"),
     )
     try:
-        response = requests.post(endpoint, json=payload, timeout=timeout)
+        response = requests.post(endpoint, json=payload, timeout=timeout, headers=service_headers(), allow_redirects=False)
         voice_debug_log(
             "backend",
             "tts_audio_response",
@@ -204,6 +206,7 @@ def tts_generate_stream_audio(
             endpoint,
             json=payload,
             timeout=timeout,
+            headers=service_headers(), allow_redirects=False,
         )
         content_type = (response.headers.get("content-type") or "").lower()
         voice_debug_log(
@@ -298,6 +301,7 @@ def tts_voice_clone(
         data=data,
         files=files,
         timeout=timeout,
+        headers=service_headers(), allow_redirects=False,
     )
     response.raise_for_status()
     return response.json()

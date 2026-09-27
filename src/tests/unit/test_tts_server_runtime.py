@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import pytest
+import secrets
+
+from app.security.service_token import service_headers
 import io
 import wave
 from typing import Any, Dict, Iterable, Tuple
 
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_initialize_tts_provider_passes_config(monkeypatch):
@@ -91,7 +100,7 @@ def test_generate_stream_audio_returns_chunks_on_success():
     try:
         tts_server._TTS_PROVIDER = FakeProvider()
         tts_server._TTS_PROVIDER_ERROR = ""
-        client = TestClient(tts_server.app)
+        client = TestClient(tts_server.app, base_url="http://127.0.0.1", headers=service_headers())
 
         response = client.post(
             "/api/tts/generate_stream_audio",
@@ -131,7 +140,7 @@ def test_generate_stream_audio_falls_back_to_wav_response():
     try:
         tts_server._TTS_PROVIDER = FakeProvider()
         tts_server._TTS_PROVIDER_ERROR = ""
-        client = TestClient(tts_server.app)
+        client = TestClient(tts_server.app, base_url="http://127.0.0.1", headers=service_headers())
 
         response = client.post(
             "/api/tts/generate_stream_audio",
@@ -162,7 +171,7 @@ def test_generate_stream_audio_surfaces_missing_sox_error():
     try:
         tts_server._TTS_PROVIDER = FakeProvider()
         tts_server._TTS_PROVIDER_ERROR = ""
-        client = TestClient(tts_server.app)
+        client = TestClient(tts_server.app, base_url="http://127.0.0.1", headers=service_headers())
 
         response = client.post(
             "/api/tts/generate_stream_audio",
@@ -178,10 +187,11 @@ def test_generate_stream_audio_surfaces_missing_sox_error():
 
     assert response.status_code == 500
     payload = response.json()
-    assert payload["success"] is False
-    assert payload["provider"] == "qwen3_tts"
-    assert "No module named 'sox'" in payload["error"]
-    assert "traceback" in payload
+    assert payload["error"] == "model_service_error"
+    assert set(payload) == {"error", "request_id"}
+    assert "sox" not in response.text
+    assert "Traceback" not in response.text
+    assert "traceback" not in payload
 
 
 def test_generate_audio_surfaces_missing_sox_error():
@@ -196,7 +206,7 @@ def test_generate_audio_surfaces_missing_sox_error():
     try:
         tts_server._TTS_PROVIDER = FakeProvider()
         tts_server._TTS_PROVIDER_ERROR = ""
-        client = TestClient(tts_server.app)
+        client = TestClient(tts_server.app, base_url="http://127.0.0.1", headers=service_headers())
 
         response = client.post(
             "/api/tts/generate_audio",
@@ -212,6 +222,7 @@ def test_generate_audio_surfaces_missing_sox_error():
 
     assert response.status_code == 500
     payload = response.json()
-    assert payload["success"] is False
-    assert payload["provider"] == "qwen3_tts"
-    assert "No module named 'sox'" in payload["error"]
+    assert payload["error"] == "model_service_error"
+    assert set(payload) == {"error", "request_id"}
+    assert "sox" not in response.text
+    assert "Traceback" not in response.text

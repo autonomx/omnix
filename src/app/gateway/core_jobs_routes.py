@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import logging
+
+from .internal_jobs_routes import register_internal_jobs_routes
+
 from .core_services import (
     CancelJobRequest,
-    ClaimJobRequest,
-    ClaimJobResponse,
-    CompleteJobRequest,
     CreateJobRequest,
-    FailJobRequest,
     HTTPException,
     Header,
     JobListResponse,
@@ -25,8 +25,14 @@ from .core_services import (
 
 
 def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
+    register_internal_jobs_routes(gateway, get_job_store=get_job_store)
     @gateway.post("/api/jobs", response_model=JobRecord, tags=["jobs"])
     def create_job(request: CreateJobRequest) -> JobRecord:
+        if request.type in {"chat.generate", "rpg.turn.foreground_record"} or (
+            {"record_only", "inline_execution", "execution_owner", "foreground_record", "direct_foreground_route"}
+            & request.compat.keys()
+        ):
+            raise HTTPException(status_code=422, detail="job_execution_authority_is_server_owned")
         return get_job_store().create_job(request)
 
     @gateway.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
@@ -71,25 +77,12 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
 
-    @gateway.post("/api/jobs/claim", response_model=ClaimJobResponse, tags=["jobs"])
-    def claim_job(request: ClaimJobRequest) -> ClaimJobResponse:
-        return get_job_store().claim_next(request)
-
-    @gateway.post(
-        "/api/jobs/{job_id}/complete", response_model=JobRecord, tags=["jobs"]
-    )
-    def complete_job(job_id: str, request: CompleteJobRequest) -> JobRecord:
-        job = get_job_store().complete_job(job_id, request)
-        if job is None:
-            raise HTTPException(status_code=404, detail="job_not_found")
-        return job
-
-    @gateway.post("/api/jobs/{job_id}/fail", response_model=JobRecord, tags=["jobs"])
-    def fail_job(job_id: str, request: FailJobRequest) -> JobRecord:
-        job = get_job_store().fail_job(job_id, request)
-        if job is None:
-            raise HTTPException(status_code=404, detail="job_not_found")
-        return job
+    @gateway.post("/api/jobs/claim", tags=["jobs"], deprecated=True)
+    @gateway.post("/api/jobs/{job_id}/complete", tags=["jobs"], deprecated=True)
+    @gateway.post("/api/jobs/{job_id}/fail", tags=["jobs"], deprecated=True)
+    def retired_worker_protocol(job_id: str | None = None):
+        logging.getLogger(__name__).warning("Retired public job worker endpoint requested")
+        raise HTTPException(status_code=410, detail="worker_protocol_moved_to_internal_jobs")
 
     @gateway.post("/api/jobs/{job_id}/cancel", response_model=JobRecord, tags=["jobs"])
     def cancel_job(job_id: str, request: CancelJobRequest) -> JobRecord:

@@ -21,6 +21,7 @@ export default function (pi: ExtensionAPI) {
     apiKey: "omnix-local",
     api: "openai-completions",
     headers: {
+      "X-Omnix-Client": "agent-runtime",
       "X-Omnix-Agent-Run-Id": runId,
       ...(sessionId ? { "X-Omnix-Agent-Session-Id": sessionId } : {}),
     },

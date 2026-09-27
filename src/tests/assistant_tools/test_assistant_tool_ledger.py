@@ -115,7 +115,7 @@ def test_ledger_route_returns_persisted_entries(monkeypatch, tmp_path):
         ),
         path,
     )
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/ledger")
 

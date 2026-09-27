@@ -6,7 +6,7 @@ from app.launcher.control_app import app
 
 
 def test_launcher_dashboard_preserves_log_scroll_state_during_refresh() -> None:
-    response = TestClient(app).get("/")
+    response = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}).get("/")
 
     assert response.status_code == 200
     text = response.text

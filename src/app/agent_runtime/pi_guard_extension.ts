@@ -343,7 +343,7 @@ async function currentApprovedPlanRevisionId(): Promise<string | null | undefine
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/check`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
     });
     let payload: any = {};
     try {
@@ -480,7 +480,7 @@ async function authorizePlanningOperation(
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/authorize`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
       body: JSON.stringify({
         tool_name: toolName,
         input,
@@ -526,7 +526,7 @@ async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<s
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/command-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
       body: JSON.stringify({
         command,
         cwd: typeof cwd === "string" ? cwd : workspace,
@@ -541,7 +541,7 @@ async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<s
     }
     if (response.ok && payload?.allowed === true) return null;
     if (response.ok && payload?.approval_required === true) {
-      return `Omnix approval required for this exact workspace command (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same command.`;
+      return "Omnix approval required for this exact workspace command. Ask the user to approve it in Omnix, then retry the same command.";
     }
     const detail = typeof payload?.detail === "string"
       ? payload.detail
@@ -557,7 +557,7 @@ async function authorizeWorkspaceTool(toolName: string, input: Record<string, un
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/workspace-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
       body: JSON.stringify({ tool_name: toolName, input, workspace_root: workspace }),
     });
     let payload: any = {};
@@ -568,7 +568,7 @@ async function authorizeWorkspaceTool(toolName: string, input: Record<string, un
     }
     if (response.ok && payload?.allowed === true) return null;
     if (response.ok && payload?.approval_required === true) {
-      return `Omnix approval required for this exact workspace ${toolName} action (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same action.`;
+      return `Omnix approval required for this exact workspace ${toolName} action. Ask the user to approve it in Omnix, then retry the same action.`;
     }
     const detail = typeof payload?.detail === "string"
       ? payload.detail
@@ -584,7 +584,7 @@ async function authorizeTool(toolName: string): Promise<string | null> {
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/budget/tool`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
       body: JSON.stringify({ tool_name: toolName }),
     });
     if (response.ok) return null;

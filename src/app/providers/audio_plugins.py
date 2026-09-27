@@ -19,6 +19,9 @@ from typing import Any, Dict, Iterator, List, Optional
 import numpy as np
 import requests
 
+from app.security.service_token import service_headers
+from app.runtime_config import get_runtime_config
+
 from .audio_base import (
     AudioProviderCapability,
     BaseSTTProvider,
@@ -34,13 +37,18 @@ LEGACY_PARAKEET_BASE_URLS = {"http://localhost:8000", "http://127.0.0.1:8000"}
 def _parakeet_base_url(config: Dict[str, Any]) -> str:
     """Resolve the dedicated STT service, migrating the retired gateway URL."""
     configured = str(config.get("base_url") or "").strip().rstrip("/")
-    environment_url = str(os.environ.get("OMNIX_STT_URL") or "").strip().rstrip("/")
-    base_url = environment_url or configured or DEFAULT_PARAKEET_BASE_URL
-    if base_url in LEGACY_PARAKEET_BASE_URLS:
-        return DEFAULT_PARAKEET_BASE_URL
-    if base_url.endswith("/transcribe"):
-        return base_url.removesuffix("/transcribe")
-    return base_url
+    endpoint = get_runtime_config().stt
+    if endpoint is not None:
+        return endpoint.url.removesuffix("/transcribe")
+    if configured.endswith("/transcribe"):
+        configured = configured.removesuffix("/transcribe")
+    if configured and configured not in {
+        *LEGACY_PARAKEET_BASE_URLS, DEFAULT_PARAKEET_BASE_URL, "http://localhost:5201",
+    }:
+        # Mutable provider settings cannot select an audience for the service secret.
+        # A remote/custom sidecar must be configured by the serving process owner.
+        raise RuntimeError("stt_service_endpoint_not_configured")
+    return DEFAULT_PARAKEET_BASE_URL
 
 
 class ParakeetSTT(BaseSTTProvider):
@@ -150,7 +158,8 @@ class ParakeetSTT(BaseSTTProvider):
                     data['language'] = language
                 data.update(kwargs)
                 
-                response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120)
+                response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
+                                         headers=service_headers(), allow_redirects=False)
             
             return self._parse_response(response)
             
@@ -191,7 +200,8 @@ class ParakeetSTT(BaseSTTProvider):
                     data.update(kwargs)
                     
                     print(f"[PARAKEET-PLUGIN] Sending audio to {base_url}/transcribe. Size: {len(audio_data)} bytes, {len(int16_data)} samples, {sample_rate}Hz")
-                    response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120)
+                    response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
+                                             headers=service_headers(), allow_redirects=False)
                     
                 return self._parse_response(response)
             finally:
@@ -223,7 +233,7 @@ class ParakeetSTT(BaseSTTProvider):
                 ws_url = base_url.replace("http://", "ws://").replace("https://", "wss://")
                 ws_url += "/ws/transcribe"
                 
-                ws = websocket.create_connection(ws_url, timeout=10)
+                ws = websocket.create_connection(ws_url, timeout=10, header=service_headers(), redirect_limit=0)
                 
                 # Send audio chunks
                 for chunk in audio_chunks:

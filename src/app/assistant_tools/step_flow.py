@@ -44,7 +44,7 @@ def create_assistant_tool_flow(*, flow_id: str, user_request: str, steps: list[A
 
 def approve_assistant_tool_step(flow: AssistantToolFlow, step_id: str) -> AssistantToolFlow:
     steps = [
-        step.model_copy(update={"status": "approved", "request": step.request.model_copy(update={"approved": True})}) if step.id == step_id else step
+        step.model_copy(update={"status": "approved"}) if step.id == step_id else step
         for step in flow.steps
     ]
     return create_assistant_tool_flow(flow_id=flow.id, user_request=flow.user_request, steps=steps)

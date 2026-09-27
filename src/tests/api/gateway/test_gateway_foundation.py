@@ -18,7 +18,7 @@ if str(SRC_DIR) not in sys.path:
 def _client() -> TestClient:
     from app.gateway.main import create_gateway_app
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    return TestClient(create_gateway_app(), raise_server_exceptions=False, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
 
 def test_gateway_health_is_provider_free() -> None:
@@ -209,7 +209,7 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
     )
     monitor = register_trading_strategy_monitor(app)
 
-    with TestClient(app):
+    with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}):
         assert monitor._task is not None
         assert not monitor._task.done()
 

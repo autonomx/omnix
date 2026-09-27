@@ -86,7 +86,6 @@ def test_kasa_write_adapter_reports_verified_before_and_after_state() -> None:
             tool_id="kasa",
             action_id="kasa.turn_on",
             input={"target": "Desk Plug"},
-            approved=True,
         ),
         adapter,
     )
@@ -127,8 +126,8 @@ def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch, tmp_pa
             action_id="kasa.turn_on",
             session_id="chat:1",
             input={"target": "Desk Plug"},
-            approved=True,
         ),
+        approved=True,
     )
 
     assert blocked.approval_decision.approval_required is True
@@ -150,7 +149,6 @@ def test_kasa_adapter_surfaces_verification_failure_without_state_change() -> No
             tool_id="kasa",
             action_id="kasa.turn_off",
             input={"target": "Desk Plug"},
-            approved=True,
         ),
         FailingAdapter(initial_on=True),
     )

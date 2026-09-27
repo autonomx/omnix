@@ -45,7 +45,10 @@ describe('assistant workspace tool registry', () => {
   });
 
   it('routes execution requests through the backend endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ proposal_id: 'server-proposal', approval_required: false }),
+    }).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ execution_result: { output: { messages: [] } } }),
     });
@@ -58,9 +61,10 @@ describe('assistant workspace tool registry', () => {
 
     expect(result.status).toBe('completed');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/hermes/assistant/tools/execute',
+      '/api/assistant/tools/proposals',
       expect.objectContaining({ method: 'POST' }),
     );
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/assistant/tools/proposals/server-proposal/execute', expect.objectContaining({ method: 'POST' }));
     vi.unstubAllGlobals();
   });
 });

@@ -8,10 +8,10 @@ import json
 import os
 import threading
 import uuid
-from typing import Any, Callable
+from typing import Any
 
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
-from app.assistant_tools.models import AssistantToolRequest
+from app.assistant_tools.models import AssistantToolExecutor, AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.outbox_repository import PostgresOutboxRepository
@@ -44,7 +44,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         self,
         database: PostgresDatabase | None = None,
         *,
-        capability_executor: Callable[[str, AssistantToolRequest], Any] = hermes_assistant_tool_execute_payload,
+        capability_executor: AssistantToolExecutor = hermes_assistant_tool_execute_payload,
     ) -> None:
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
@@ -793,9 +793,8 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             session_id=f"workflow:{run_id}",
             proposal_id=f"workflow:{run_id}:{step.id}",
             input=self._render_input(step.input_template, context),
-            approved=approved,
         )
-        payload = self.capability_executor(f"workflow:{run_id}", request)
+        payload = self.capability_executor(f"workflow:{run_id}", request, approved=approved)
         execution = payload.execution_result
         if execution.error:
             raise WorkflowRuntimeError(execution.error)

@@ -27,8 +27,8 @@ echo "Installing/updating requirements..."
 pip install -r requirements.txt
 
 # Start the OpenAI API server
-echo "Starting OpenAI Compatible API Server on port 8001..."
-echo "Access the API at: http://localhost:8001"
+echo "Starting OpenAI Compatible API Server on port 8101 by default..."
+echo "Access the API at: http://localhost:8101"
 echo "API endpoints:"
 echo "  - /v1/models (list models)"
 echo "  - /v1/audio/voices (list voices)"

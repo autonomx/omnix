@@ -102,9 +102,9 @@ def test_gmail_draft_request_runs_through_hermes_when_approved(monkeypatch, tmp_
         AssistantToolRequest(
             tool_id="gmail",
             action_id="gmail.create_draft",
-            approved=True,
             input={"to": "ada@example.com", "subject": "Follow-up", "body": "Thanks for the note."},
         ),
+        approved=True,
     )
 
     assert payload.approval_decision.approval_required is True
@@ -136,7 +136,7 @@ def test_gmail_review_route_keeps_delete_blocked_by_default(monkeypatch, tmp_pat
     config_path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
     save_assistant_tools_config(_connected_gmail_config(), config_path)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post(
         "/api/assistant/tools/review",

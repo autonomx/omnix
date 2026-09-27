@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import { gatewayRouting, resolveApiOrigins } from './gateway-routing';
+import { resolveListenerHost } from './listener-policy';
 
 function resolveRepositoryRoot(): string {
   try {
@@ -134,6 +135,13 @@ function resolveLiveVoiceCriticalDirtyFiles(): string {
 }
 
 export default defineConfig(({ command, mode }) => {
+  const hostArgs = process.argv.flatMap((arg, index, args) => (
+    arg === '--host' ? [args[index + 1] ?? ''] : arg.startsWith('--host=') ? [arg.slice(7)] : []
+  ));
+  const listenerHost = resolveListenerHost(process.env, hostArgs.at(-1));
+  if (command === 'serve' && !['localhost', '::1'].includes(listenerHost) && !listenerHost.startsWith('127.')) {
+    console.warn(`Omnix web listener explicitly exposed beyond loopback: ${listenerHost}`);
+  }
   const gitSha = resolveGitSha();
   const gatewayTarget = process.env.VITE_GATEWAY_ORIGIN?.trim()
     || process.env.OMNIX_E2E22_GATEWAY_URL?.trim()
@@ -145,7 +153,7 @@ export default defineConfig(({ command, mode }) => {
   process.env.VITE_BUILD_ID ??= `${command}-${mode}-${gitSha.slice(0, 12)}`;
   // The local 5201 service is now Nemotron transcript + Parakeet EOU. Auto
   // authority lets its dedicated EOU candidate end the turn immediately.
-  process.env.VITE_ASSISTANT_STT_URL ??= 'http://127.0.0.1:5201?authority=auto';
+  process.env.VITE_ASSISTANT_STT_URL ??= '/api/stt?authority=auto';
   return ({
   plugins: [
     routing.plugin,
@@ -173,10 +181,12 @@ export default defineConfig(({ command, mode }) => {
     },
   },
   server: {
+    host: listenerHost,
     port: 5173,
     proxy: routing.proxy,
   },
   preview: {
+    host: listenerHost,
     port: 4173,
     proxy: routing.proxy,
   },

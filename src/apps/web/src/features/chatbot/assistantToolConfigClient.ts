@@ -1,5 +1,7 @@
 import type { ApprovalPolicy } from '../assistant-workspace/tool-actions';
 import type { ToolConfig } from '../assistant-workspace/tool-registry';
+import { executeToolProposal } from '../assistant-workspace/tool-proposal-client';
+import type { components } from '../../api/generated/types';
 
 export type AssistantActionConfigRecord = {
   action_id: string;
@@ -79,11 +81,7 @@ export type LiveAgentToolProposal = {
   executes: false;
 };
 
-export type AssistantToolExecutionPayload = {
-  approval_decision: { executable: boolean; approval_required: boolean; reason?: string | null };
-  execution_result: { state_changed: boolean; result_summary: string; output: Record<string, unknown>; error?: string | null };
-  state_changed: boolean;
-};
+export type AssistantToolExecutionPayload = components['schemas']['HermesAssistantToolExecutePayload'];
 
 export type AssistantCapabilityStatus = {
   tool_id: string;
@@ -160,23 +158,10 @@ export async function executeLiveAgentToolProposal(
   input: Record<string, unknown>,
   sessionId?: string | null,
 ): Promise<AssistantToolExecutionPayload> {
-  return readJsonResponse<AssistantToolExecutionPayload>(
-    await fetch('/api/hermes/assistant/tools/execute', {
-      body: JSON.stringify({
-        user_request: String(input.query ?? ''),
-        request: {
-          tool_id: proposal.tool_id,
-          action_id: proposal.action_id,
-          session_id: sessionId ?? null,
-          proposal_id: proposal.proposal_id,
-          input,
-          approved: true,
-        },
-      }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    }),
-  );
+  return executeToolProposal({
+    tool_id: proposal.tool_id, action_id: proposal.action_id,
+    session_id: sessionId ?? null, input,
+  }, true);
 }
 
 export async function fetchAssistantCapabilityDashboard(): Promise<AssistantCapabilityDashboard> {

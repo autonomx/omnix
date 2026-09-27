@@ -22,7 +22,7 @@ def _json_request(url: str, *, method: str = "GET", payload: dict[str, Any] | No
         url,
         data=body,
         method=method,
-        headers={"Content-Type": "application/json"} if body is not None else {},
+        headers={"X-Omnix-Client": "cli", **({"Content-Type": "application/json"} if body is not None else {})},
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:

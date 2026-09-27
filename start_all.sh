@@ -18,6 +18,9 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Every child entrypoint validates public binding against OMNIX_ALLOW_LAN.
+export OMNIX_BIND_HOST="${OMNIX_BIND_HOST:-127.0.0.1}"
+
 if [ -x "$SCRIPT_DIR/.tools/npm-global/bin/agent-browser" ]; then
     export PATH="$SCRIPT_DIR/.tools/npm-global/bin:$PATH"
     export OMNIX_AGENT_BROWSER_COMMAND="$SCRIPT_DIR/.tools/npm-global/bin/agent-browser"

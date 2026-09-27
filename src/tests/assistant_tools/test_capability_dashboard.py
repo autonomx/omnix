@@ -45,7 +45,7 @@ def test_capability_dashboard_counts_enabled_tools_and_recent_errors():
 def test_capability_dashboard_route(monkeypatch, tmp_path):
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(tmp_path / "assistant_tools_config.json"))
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH", str(tmp_path / "assistant_tools_ledger.jsonl"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/assistant/tools/dashboard")
 

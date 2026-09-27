@@ -42,7 +42,8 @@ def test_flow_approval_marks_request_as_approved():
 
     assert approved.status == "ready"
     assert approved.steps[0].status == "approved"
-    assert approved.steps[0].request.approved is True
+    assert approved.steps[0].status == "approved"
+    assert "approved" not in approved.steps[0].request.model_dump()
 
 
 def test_flow_result_advances_to_next_step_and_summarizes():

@@ -258,7 +258,7 @@ npm run web:dev</code></pre></div>
 </tr></thead><tbody>
 <tr>
 <td>Standalone compatibility server</td>
-<td><code>http://127.0.0.1:8001/v1</code></td>
+<td><code>http://127.0.0.1:8101/v1</code></td>
 <td><code>GET /models</code>, <code>POST /chat/completions</code>, <code>POST /audio/speech</code>, <code>POST /audio/transcriptions</code>, voice routes</td>
 <td>Local-client compatibility server from <code>src/openai_api.py</code>; chat and transcription are currently placeholder implementations</td>
 </tr>
@@ -277,8 +277,8 @@ npm run web:dev</code></pre></div>
 </tbody></table></div>
 <p>Start the standalone local compatibility server when an external local client needs a conventional <code>/v1</code> base URL:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
-python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8001</code></pre></div>
-<p>The standalone API currently exposes <code>GET /health</code>, <code>GET /v1/models</code>, <code>POST /v1/chat/completions</code>, <code>GET /v1/audio/voices</code>, <code>GET /v1/audio/voices/{voice_id}</code>, <code>GET /v1/audio/voices/{voice_id}/preview</code>, <code>POST /v1/audio/speech</code>, and <code>POST /v1/audio/transcriptions</code>. Use <code>http://127.0.0.1:8001/docs</code> for its generated Swagger reference. It has no authentication middleware and allows all CORS origins, so keep it on loopback or protect it before exposing it to a network.</p>
+python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8101</code></pre></div>
+<p>The standalone API currently exposes <code>GET /health</code>, <code>GET /v1/models</code>, <code>POST /v1/chat/completions</code>, <code>GET /v1/audio/voices</code>, <code>GET /v1/audio/voices/{voice_id}</code>, <code>GET /v1/audio/voices/{voice_id}/preview</code>, <code>POST /v1/audio/speech</code>, and <code>POST /v1/audio/transcriptions</code>. Use <code>http://127.0.0.1:8101/docs</code> for its generated Swagger reference. It has no authentication middleware and allows all CORS origins, so keep it on loopback or protect it before exposing it to a network.</p>
 <p>The agent gateway is stricter. Discover the exact model bound to an existing durable run, then pass that model ID unchanged:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8000/api/agent-model/v1/models \
   -H &quot;X-Omnix-Agent-Run-Id: &lt;durable-agent-run-id&gt;&quot;</code></pre></div>
@@ -334,7 +334,7 @@ npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
 </tr>
 <tr>
 <td><code>scripts/start_openai_api.bat</code> / <code>scripts/start_openai_api.sh</code></td>
-<td>Start the standalone OpenAI-compatible API on port <code>8001</code></td>
+<td>Start the standalone OpenAI-compatible API on port <code>8101</code></td>
 </tr>
 <tr>
 <td><code>scripts/start_parakeet_stt.bat</code></td>

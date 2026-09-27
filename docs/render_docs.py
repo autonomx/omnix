@@ -185,7 +185,7 @@ def render_diagram(kind: str) -> str | None:
             """
 <div class="diagram diagram-steps diagram-compat" aria-label="OpenAI-compatible clients connect to standalone local compatibility, governed agent model, or upstream provider surfaces">
   <div class="diagram-step"><span>01</span><strong>Client</strong><small>SDK, curl, Open WebUI, or internal runtime</small></div>
-  <div class="diagram-step"><span>02</span><strong>Choose base URL</strong><small>8001 local API, 8000 agent gateway, or provider URL</small></div>
+  <div class="diagram-step"><span>02</span><strong>Choose base URL</strong><small>8101 local API, 8000 agent gateway, or provider URL</small></div>
   <div class="diagram-step"><span>03</span><strong>Normalize request</strong><small>Models, messages, tools, streaming, or speech</small></div>
   <div class="diagram-step"><span>04</span><strong>Enforce boundary</strong><small>Provider, run, budget, credentials, and policy</small></div>
   <div class="diagram-step"><span>05</span><strong>Stream or return</strong><small>JSON, SSE chunks, audio bytes, or typed error</small></div>

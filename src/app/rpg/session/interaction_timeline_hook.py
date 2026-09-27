@@ -112,7 +112,9 @@ def install_interaction_timeline_hook() -> None:
                     return result
 
                 if postgres_active:
+                    from app.jobs.foreground_execution import current_foreground_execution
                     from app.persistence.rpg_turn_service import persist_foreground_turn
+                    execution = current_foreground_execution()
                     result["session"] = session
                     with rpg_pipeline_span("turn.postgresql_commit") as transaction_span:
                         transaction = persist_foreground_turn(
@@ -122,6 +124,11 @@ def install_interaction_timeline_hook() -> None:
                             result=result,
                             event=event,
                             submission_id=submission_id,
+                            submission_claim_token=(
+                                execution.claim_token if execution is not None
+                                and execution.session_id == session_id
+                                and execution.submission_id == submission_id else None
+                            ),
                         )
                         transaction_span["interaction_id"] = event.get("interaction_id")
                         transaction_span["sequence"] = event.get("sequence")

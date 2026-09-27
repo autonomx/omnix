@@ -15,9 +15,9 @@ const SEGMENTED_TEST_PROVIDER = 'segmented-test-provider';
 
 describe('live voice websocket helpers', () => {
   it('builds the local transcription websocket URL from the browser location', () => {
-    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost' })).toBe('ws://127.0.0.1:5201/ws/transcribe');
-    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: '::1' })).toBe('ws://127.0.0.1:5201/ws/transcribe');
-    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'https:', hostname: 'omnix.local' })).toBe('wss://omnix.local:5201/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost:5173' })).toBe('ws://localhost:5173/api/stt/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'http:', hostname: '::1', host: '[::1]:8000' })).toBe('ws://[::1]:8000/api/stt/ws/transcribe');
+    expect(getDefaultStreamingSttWebSocketUrl({ protocol: 'https:', hostname: 'omnix.local' })).toBe('wss://omnix.local/api/stt/ws/transcribe');
   });
 
   it('builds the transcription websocket URL from the configured STT service', () => {

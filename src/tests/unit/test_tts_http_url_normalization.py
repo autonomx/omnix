@@ -1,8 +1,14 @@
 from types import SimpleNamespace
 import pytest
+import secrets
 
 from app.runtime_services import _normalize_base_url
 from app.tts_http_client import _tts_base_url, tts_generate_stream_audio
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_tts_endpoint_rejects_embedded_quotes_and_whitespace(monkeypatch):
@@ -24,6 +30,7 @@ def test_runtime_services_normalize_base_url():
 
 def test_tts_generate_stream_audio_normalizes_binary_wav(monkeypatch):
     def fake_post(*args, **kwargs):
+        assert kwargs["headers"]["X-Omnix-Client"] == "gateway"
         return SimpleNamespace(
             status_code=200,
             headers={"content-type": "audio/wav"},

@@ -41,6 +41,8 @@ def action_requires_approval(action: AssistantToolAction, approval_policy: Appro
         return False
     if policy == "always_ask":
         return True
+    if action.is_destructive or action.category == "delete":
+        return True
     if policy == "ask_sensitive":
         return action.category != "read" or action.risk_level != "low" or action.requires_confirmation or action.is_destructive
     return False
@@ -49,6 +51,7 @@ def action_requires_approval(action: AssistantToolAction, approval_policy: Appro
 def validate_assistant_tool_request(
     request: AssistantToolRequest,
     tools: Iterable[AssistantToolSpec],
+    *, approved: bool = False,
 ) -> AssistantToolValidationResult:
     """Validate a request against a registry snapshot before execution.
 
@@ -85,7 +88,7 @@ def validate_assistant_tool_request(
             state_changed=action.category in {"write", "delete", "execute"},
         )
 
-    policy = request.approval_policy or action.approval_policy
+    policy = action.approval_policy
     if policy == "disabled":
         return AssistantToolValidationResult(
             valid=False,
@@ -99,9 +102,9 @@ def validate_assistant_tool_request(
     approval_required = action_requires_approval(action, policy)
     return AssistantToolValidationResult(
         valid=True,
-        executable=not approval_required or request.approved,
+        executable=not approval_required or approved,
         approval_required=approval_required,
-        reason="approval_required" if approval_required and not request.approved else None,
+        reason="approval_required" if approval_required and not approved else None,
         tool_id=tool_id,
         action_id=action_id,
         risk_level=action.risk_level,

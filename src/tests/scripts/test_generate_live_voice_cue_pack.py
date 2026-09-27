@@ -10,6 +10,8 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import secrets
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "generate_live_voice_cue_pack.py"
@@ -62,7 +64,9 @@ def test_synthesize_via_server_posts_request_and_validates_wav(monkeypatch: pyte
         captured["timeout"] = timeout
         return FakeResponse(expected_wav, content_type="audio/wav")
 
-    monkeypatch.setattr(GENERATOR.urllib.request, "urlopen", fake_urlopen)
+    token = secrets.token_urlsafe(32)
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
+    monkeypatch.setattr(GENERATOR.urllib.request, "build_opener", lambda *_args: SimpleNamespace(open=fake_urlopen))
 
     wav_bytes, sample_rate, sample_count = GENERATOR.synthesize_via_server(
         "http://127.0.0.1:5101/",
@@ -76,6 +80,7 @@ def test_synthesize_via_server_posts_request_and_validates_wav(monkeypatch: pyte
     request = captured["request"]
     assert request.full_url == "http://127.0.0.1:5101/api/tts/generate_stream_audio"
     assert request.get_method() == "POST"
+    assert request.get_header("X-omnix-service-token") == token
     assert captured["timeout"] == 12.0
     assert json.loads(request.data.decode("utf-8")) == {
         "text": "Mhm.",

@@ -1909,6 +1909,58 @@
         "title": "AssistantToolOAuthClientPayload",
         "type": "object"
       },
+      "AssistantToolProposalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "AssistantToolProposalDecisionRequest",
+        "type": "object"
+      },
+      "AssistantToolProposalPayload": {
+        "properties": {
+          "approval_required": {
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "proposal_id": {
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/components/schemas/AssistantToolRequest"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "approval_required",
+          "decision",
+          "expires_at",
+          "request"
+        ],
+        "title": "AssistantToolProposalPayload",
+        "type": "object"
+      },
       "AssistantToolRegistryPayload": {
         "description": "Serializable backend mirror of assistant tools and actions.",
         "properties": {
@@ -1935,33 +1987,12 @@
         "type": "object"
       },
       "AssistantToolRequest": {
+        "additionalProperties": false,
         "description": "Canonical request envelope required before any tool action can run.",
         "properties": {
           "action_id": {
             "title": "Action Id",
             "type": "string"
-          },
-          "approval_policy": {
-            "anyOf": [
-              {
-                "enum": [
-                  "allow_automatic",
-                  "ask_sensitive",
-                  "always_ask",
-                  "disabled"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Approval Policy"
-          },
-          "approved": {
-            "default": false,
-            "title": "Approved",
-            "type": "boolean"
           },
           "input": {
             "additionalProperties": true,
@@ -6053,6 +6084,18 @@
       },
       "CompleteJobRequest": {
         "properties": {
+          "lease_token": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Token"
+          },
           "logs": {
             "items": {
               "additionalProperties": true,
@@ -6068,6 +6111,18 @@
             },
             "title": "Output Refs",
             "type": "array"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
           }
         },
         "title": "CompleteJobRequest",
@@ -7613,6 +7668,18 @@
             "title": "Details",
             "type": "object"
           },
+          "lease_token": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Token"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -7621,6 +7688,18 @@
             "default": false,
             "title": "Retryable",
             "type": "boolean"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
           }
         },
         "required": [
@@ -11640,6 +11719,7 @@
         "type": "object"
       },
       "HermesAssistantToolRequestEnvelope": {
+        "additionalProperties": false,
         "properties": {
           "request": {
             "$ref": "#/components/schemas/AssistantToolRequest"
@@ -31592,6 +31672,673 @@
         ]
       }
     },
+    "/api/assistant/research/status": {
+      "get": {
+        "operationId": "assistant_research_runtime_status_endpoint_api_assistant_research_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "default": "status-preview",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRuntimeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Research Runtime Status Endpoint"
+      }
+    },
+    "/api/assistant/tools": {
+      "get": {
+        "operationId": "assistant_tools_api_assistant_tools_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolRegistryPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Assistant Tools",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/config": {
+      "get": {
+        "operationId": "assistant_tools_config_api_assistant_tools_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolsConfigPayload-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Assistant Tools Config",
+        "tags": [
+          "assistant-tools"
+        ]
+      },
+      "post": {
+        "operationId": "save_assistant_tools_config_endpoint_api_assistant_tools_config_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolsConfigPayload-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolsConfigPayload-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Assistant Tools Config Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/connect/github/callback": {
+      "get": {
+        "operationId": "assistant_tool_github_callback_endpoint_api_assistant_tools_connect_github_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "github",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Github Callback Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/connect/google/callback": {
+      "get": {
+        "operationId": "assistant_tool_google_callback_endpoint_api_assistant_tools_connect_google_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "gmail",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Google Callback Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/connect/{tool_id}": {
+      "get": {
+        "operationId": "assistant_tool_connection_start_endpoint_api_assistant_tools_connect__tool_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolConnectionStartPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Connection Start Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/connect/{tool_id}/oauth-client": {
+      "post": {
+        "operationId": "assistant_tool_oauth_client_endpoint_api_assistant_tools_connect__tool_id__oauth_client_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tool_id",
+            "required": true,
+            "schema": {
+              "title": "Tool Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolOAuthClientPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolConnectionStartPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Oauth Client Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/dashboard": {
+      "get": {
+        "operationId": "assistant_tool_dashboard_endpoint_api_assistant_tools_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantCapabilityDashboard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Assistant Tool Dashboard Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/intent": {
+      "post": {
+        "operationId": "assistant_tool_intent_endpoint_api_assistant_tools_intent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolIntentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolIntent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Intent Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/ledger": {
+      "get": {
+        "operationId": "assistant_tool_ledger_endpoint_api_assistant_tools_ledger_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolLedgerPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Tool Ledger Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/proposals": {
+      "post": {
+        "operationId": "propose_assistant_tool_endpoint_api_assistant_tools_proposals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolProposalPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose Assistant Tool Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/proposals/{proposal_id}/approve": {
+      "post": {
+        "operationId": "approve_assistant_tool_endpoint_api_assistant_tools_proposals__proposal_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolProposalPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Assistant Tool Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/proposals/{proposal_id}/deny": {
+      "post": {
+        "operationId": "deny_assistant_tool_endpoint_api_assistant_tools_proposals__proposal_id__deny_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolProposalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolProposalPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deny Assistant Tool Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/proposals/{proposal_id}/execute": {
+      "post": {
+        "operationId": "execute_assistant_tool_proposal_endpoint_api_assistant_tools_proposals__proposal_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AssistantToolRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesAssistantToolExecutePayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Assistant Tool Proposal Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
+    "/api/assistant/tools/review": {
+      "post": {
+        "operationId": "review_assistant_tool_endpoint_api_assistant_tools_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantToolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantToolReviewDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Assistant Tool Endpoint",
+        "tags": [
+          "assistant-tools"
+        ]
+      }
+    },
     "/api/audiobook/models/current": {
       "get": {
         "operationId": "audiobook_model_api_audiobook_models_current_get",
@@ -34225,6 +34972,47 @@
         ]
       }
     },
+    "/api/hermes/assistant/tools/review": {
+      "post": {
+        "operationId": "hermes_assistant_tool_review_endpoint_api_hermes_assistant_tools_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HermesAssistantToolRequestEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HermesAssistantToolReviewPayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hermes Assistant Tool Review Endpoint",
+        "tags": [
+          "hermes-assistant-tools"
+        ]
+      }
+    },
     "/api/jobs": {
       "get": {
         "operationId": "list_jobs_api_jobs_get",
@@ -34321,24 +35109,31 @@
     },
     "/api/jobs/claim": {
       "post": {
-        "operationId": "claim_job_api_jobs_claim_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClaimJobRequest"
-              }
+        "deprecated": true,
+        "operationId": "retired_worker_protocol_api_jobs_claim_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
             }
-          },
-          "required": true
-        },
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClaimJobResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34354,7 +35149,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Claim Job",
+        "summary": "Retired Worker Protocol",
         "tags": [
           "jobs"
         ]
@@ -34507,35 +35302,31 @@
     },
     "/api/jobs/{job_id}/complete": {
       "post": {
-        "operationId": "complete_job_api_jobs__job_id__complete_post",
+        "deprecated": true,
+        "operationId": "retired_worker_protocol_api_jobs__job_id__complete_post",
         "parameters": [
           {
             "in": "path",
             "name": "job_id",
             "required": true,
             "schema": {
-              "title": "Job Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CompleteJobRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobRecord"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34551,7 +35342,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Complete Job",
+        "summary": "Retired Worker Protocol",
         "tags": [
           "jobs"
         ]
@@ -34559,35 +35350,31 @@
     },
     "/api/jobs/{job_id}/fail": {
       "post": {
-        "operationId": "fail_job_api_jobs__job_id__fail_post",
+        "deprecated": true,
+        "operationId": "retired_worker_protocol_api_jobs__job_id__fail_post",
         "parameters": [
           {
             "in": "path",
             "name": "job_id",
             "required": true,
             "schema": {
-              "title": "Job Id",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FailJobRequest"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/JobRecord"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"
@@ -34603,7 +35390,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Fail Job",
+        "summary": "Retired Worker Protocol",
         "tags": [
           "jobs"
         ]
@@ -36700,6 +37487,44 @@
         "summary": "Save Settings",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/stt/authorityz": {
+      "get": {
+        "operationId": "authority_api_stt_authorityz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Authority",
+        "tags": [
+          "speech"
+        ]
+      }
+    },
+    "/api/stt/transcribe": {
+      "post": {
+        "operationId": "transcribe_api_stt_transcribe_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Transcribe",
+        "tags": [
+          "speech"
         ]
       }
     },
@@ -42792,6 +43617,151 @@
         "summary": "Health",
         "tags": [
           "gateway"
+        ]
+      }
+    },
+    "/internal/jobs/claim": {
+      "post": {
+        "operationId": "claim_job_internal_jobs_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim Job",
+        "tags": [
+          "internal-jobs"
+        ]
+      }
+    },
+    "/internal/jobs/{job_id}/complete": {
+      "post": {
+        "operationId": "complete_job_internal_jobs__job_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Job",
+        "tags": [
+          "internal-jobs"
+        ]
+      }
+    },
+    "/internal/jobs/{job_id}/fail": {
+      "post": {
+        "operationId": "fail_job_internal_jobs__job_id__fail_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FailJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fail Job",
+        "tags": [
+          "internal-jobs"
         ]
       }
     }

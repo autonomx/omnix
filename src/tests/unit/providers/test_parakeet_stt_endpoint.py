@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import pytest
+import secrets
+
 from app.providers.audio_plugins import (
     DEFAULT_PARAKEET_BASE_URL,
     ParakeetSTT,
     _parakeet_base_url,
 )
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_legacy_gateway_url_migrates_to_dedicated_stt_service(monkeypatch) -> None:
@@ -33,7 +41,7 @@ def test_transcribe_posts_to_dedicated_parakeet_route(tmp_path, monkeypatch) -> 
             return {"success": True, "text": "A working transcript.", "segments": []}
 
     def fake_post(url: str, **kwargs):
-        del kwargs
+        assert kwargs["headers"]["X-Omnix-Client"] == "gateway"
         captured["url"] = url
         return _Response()
 
@@ -45,3 +53,10 @@ def test_transcribe_posts_to_dedicated_parakeet_route(tmp_path, monkeypatch) -> 
     assert captured["url"] == "http://127.0.0.1:5201/transcribe"
     assert result["success"] is True
     assert result["text"] == "A working transcript."
+
+
+def test_provider_setting_cannot_choose_a_service_credential_audience(monkeypatch):
+    monkeypatch.delenv("OMNIX_STT_URL", raising=False)
+    monkeypatch.setattr("app.providers.audio_plugins.requests.post", lambda *_args, **_kwargs: pytest.fail("untrusted target contacted"))
+    with pytest.raises(RuntimeError, match="stt_service_endpoint_not_configured"):
+        _parakeet_base_url({"base_url": "http://evil.test/transcribe"})

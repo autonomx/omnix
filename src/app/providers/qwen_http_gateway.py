@@ -9,6 +9,8 @@ import wave
 import numpy as np
 import requests
 
+from app.security.service_token import service_headers
+
 
 class QwenHttpGatewayProvider:
     provider_name = 'faster-qwen3-tts'
@@ -38,13 +40,15 @@ class QwenHttpGatewayProvider:
         return True
 
     def get_speakers(self):
-        response = requests.get(self.base_url + '/api/tts/speakers', timeout=10)
+        response = requests.get(self.base_url + '/api/tts/speakers', timeout=10,
+                                headers=service_headers(), allow_redirects=False)
         response.raise_for_status()
         return response.json().get('speakers', [])
 
     def generate_audio(self, text, speaker=None, language=None, **kwargs):
         response = requests.post(self.base_url + '/api/tts/generate_audio',
-            json={'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}, timeout=120)
+            json={'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}, timeout=120,
+            headers=service_headers(), allow_redirects=False)
         response.raise_for_status()
         result = response.json()
         if not result.get('success') or result.get('is_fallback'):
@@ -56,7 +60,8 @@ class QwenHttpGatewayProvider:
         allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens'}
         payload = {key: value for key, value in kwargs.items() if key in allowed and value is not None}
         payload.update(text=text, speaker=speaker or 'default', language=language or 'en')
-        response = requests.post(self.base_url + '/api/tts/generate_stream_audio', json=payload, timeout=120)
+        response = requests.post(self.base_url + '/api/tts/generate_stream_audio', json=payload, timeout=120,
+            headers=service_headers(), allow_redirects=False)
         response.raise_for_status()
         if 'application/json' in response.headers.get('content-type', ''):
             result = response.json()

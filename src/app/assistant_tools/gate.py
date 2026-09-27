@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from .config_store import AssistantToolsConfigPayload, default_assistant_tools_config, load_assistant_tools_config
 from .models import AssistantToolAction, AssistantToolReviewDecision, AssistantToolRequest, AssistantToolSpec, ApprovalPolicy
 from .registry import default_assistant_tools
-from .validation import is_valid_action_id, is_valid_tool_id
+from .validation import action_requires_approval, is_valid_action_id, is_valid_tool_id
 
 
 def review_assistant_tool_request(
@@ -14,6 +14,8 @@ def review_assistant_tool_request(
     *,
     config: AssistantToolsConfigPayload | None = None,
     tools: Iterable[AssistantToolSpec] | None = None,
+    approved: bool = False,
+    policy_floor: ApprovalPolicy | None = None,
 ) -> AssistantToolReviewDecision:
     """Review a tool request before execution.
 
@@ -45,7 +47,10 @@ def review_assistant_tool_request(
     base.update({"risk_level": action.risk_level, "state_changed": state_changed})
     tool_config = _tool_config(config_payload, tool_id)
     action_config = _action_config(config_payload, tool_id, action_id)
-    policy = request.approval_policy or (action_config.get("approval_policy") if action_config else None) or action.approval_policy
+    policy = (action_config.get("approval_policy") if action_config else None) or action.approval_policy
+    if policy_floor is not None:
+        strength = {"allow_automatic": 0, "ask_sensitive": 1, "always_ask": 2, "disabled": 3}
+        policy = max((policy, policy_floor), key=strength.__getitem__)
 
     if not action.enabled:
         return AssistantToolReviewDecision(**base, reason="action_disabled", result_summary="Blocked: action is disabled by registry.")
@@ -58,28 +63,16 @@ def review_assistant_tool_request(
     if action.requires_connection and tool_config.get("connection_status") != "connected":
         return AssistantToolReviewDecision(**base, reason="missing_connection", result_summary="Blocked: tool connection is not available.")
 
-    approval_required = _requires_approval(action, policy)
-    executable = not approval_required or request.approved
+    approval_required = action_requires_approval(action, policy)
+    executable = not approval_required or approved
     return AssistantToolReviewDecision(
         **base,
         allowed=True,
         executable=executable,
         approval_required=approval_required,
-        reason="approval_required" if approval_required and not request.approved else None,
+        reason="approval_required" if approval_required and not approved else None,
         result_summary=_summary(action, approval_required, executable),
     )
-
-
-def _requires_approval(action: AssistantToolAction, policy: ApprovalPolicy) -> bool:
-    if policy == "always_ask":
-        return True
-    if action.is_destructive or action.category == "delete":
-        return True
-    if policy == "ask_sensitive":
-        return action.category != "read" or action.risk_level != "low" or action.requires_confirmation
-    if action.category in {"write", "execute"} and policy != "allow_automatic":
-        return True
-    return False
 
 
 def _summary(action: AssistantToolAction, approval_required: bool, executable: bool) -> str:

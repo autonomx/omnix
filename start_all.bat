@@ -230,13 +230,17 @@ set "OMNIX_KASA_DEVICE_ALIAS=%OMNIX_KASA_DEVICE_ALIAS%"
 set "KASA_USERNAME=%KASA_USERNAME%"
 set "KASA_PASSWORD=%KASA_PASSWORD%"
 
+if not defined OMNIX_BIND_HOST set "OMNIX_BIND_HOST=127.0.0.1"
+"%RPG_FLUX_PYTHON%" -c "from app.runtime.net import bind_host; bind_host()"
+if errorlevel 1 exit /b 1
+
 REM The launcher normally auto-starts the gateway and web app. This watchdog
 REM retries the managed gateway, waits for API health, and then retries the web
 REM start so a slow first gateway boot cannot leave the web service stopped.
 start "Omnix Startup Check" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
+  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
 
-"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055 --lifespan on
+"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host "%OMNIX_BIND_HOST%" --port 5055 --lifespan on
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
 
 endlocal & exit /b %OMNIX_EXIT_CODE%

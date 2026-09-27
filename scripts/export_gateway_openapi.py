@@ -73,6 +73,20 @@ def _stabilize_equivalent_io_schemas(schema: dict[str, object]) -> None:
     schemas[output_name] = copy.deepcopy(value)
     del schemas[canonical_name]
 
+    canonical_ref = f"#/components/schemas/{canonical_name}"
+
+    def rewrite(value: object, *, request: bool = False) -> None:
+        if isinstance(value, list):
+            for item in value:
+                rewrite(item, request=request)
+        elif isinstance(value, dict):
+            if value.get("$ref") == canonical_ref:
+                value["$ref"] = f"#/components/schemas/{input_name if request else output_name}"
+            for key, item in value.items():
+                rewrite(item, request=request or key == "requestBody")
+
+    rewrite(schema)
+
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:

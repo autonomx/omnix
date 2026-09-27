@@ -38,7 +38,6 @@ def live_agent_tool_proposals(
             session_id=session_id,
             proposal_id=proposal_id,
             input=input_payload,
-            approved=False,
         )
         decision = review_assistant_tool_request(request)
         missing_fields = _missing_calendar_fields(action_id, input_payload)

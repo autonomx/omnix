@@ -81,4 +81,46 @@ describe('view API scope', () => {
     expect(rawFetch).toHaveBeenCalledTimes(1);
     expect(assistantWrapper).not.toHaveBeenCalled();
   });
+
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('adds the client header to same-origin %s', async (method) => {
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    await window.fetch('/api/chat/sessions', { method, headers: { 'X-Existing': 'preserved' } });
+    const init = delegate.mock.calls[0][1];
+    expect(new Headers(init?.headers).get('X-Omnix-Client')).toBe('web');
+    expect(new Headers(init?.headers).get('X-Existing')).toBe('preserved');
+  });
+
+  it('preserves Request headers and recognizes its method', async () => {
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    const request = new Request(`${window.location.origin}/api/chat/sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await window.fetch(request);
+    expect(delegate.mock.calls[0][0]).toBe(request);
+    const headers = new Headers(delegate.mock.calls[0][1]?.headers);
+    expect(headers.get('Content-Type')).toBe('application/json');
+    expect(headers.get('X-Omnix-Client')).toBe('web');
+  });
+
+  it('does not add headers to foreign-origin mutations or safe reads', async () => {
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    await window.fetch('https://external.example/api/chat/sessions', { method: 'POST' });
+    await window.fetch('/api/chat/sessions');
+    expect(new Headers(delegate.mock.calls[0][1]?.headers).has('X-Omnix-Client')).toBe(false);
+    expect(delegate.mock.calls[1][1]).toBeUndefined();
+  });
+
+  it('adds headers when trading bypasses assistant wrappers', async () => {
+    window.history.replaceState({}, '', '/trading');
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    installViewApiFirewall({ outermost: true });
+    await window.fetch('/api/trading/paper/accounts', { method: 'POST' });
+    expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-Client')).toBe('web');
+  });
 });

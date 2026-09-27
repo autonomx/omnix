@@ -24,10 +24,10 @@ class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapte
 
     def require_chat_execution_owner(self, job_id: str):
         current = self.get_job(job_id)
-        if current is None or not current.compat.get("execution_owner"):
+        if current is None or current.type != "chat.generate":
             return
         owner = getattr(self, "chat_execution_owner", None)
-        if owner is None or owner.node_id != current.compat["execution_owner"]:
+        if owner is None or owner.node_id != current.compat.get("execution_owner"):
             from .execution_repositories import JobClaimConflict
             raise JobClaimConflict("Chat execution belongs to a different gateway")
         with self.database.connection() as connection:

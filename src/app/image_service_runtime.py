@@ -5,8 +5,9 @@ import os
 import threading
 from typing import Any, Dict
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
+from app.security.model_service import ModelServiceMiddleware
 
 os.environ["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 
@@ -23,6 +24,7 @@ from app.image.providers.registry import get_image_provider_definition, list_ima
 from app.image.service import generate_image_local
 
 app = FastAPI(title="Omnix Image Service")
+app.add_middleware(ModelServiceMiddleware)
 
 _MODEL_OPERATION_LOCK = threading.Lock()
 _MODEL_OPERATION: Dict[str, str] = {"kind": "idle", "provider": ""}
@@ -257,7 +259,7 @@ async def provider_status(provider: str = ""):
 @app.post("/provider/download")
 async def provider_download(request: Request):
     if not is_image_generation_enabled():
-        return {"ok": False, "provider": "disabled", "loaded": False, "error": "image_generation_disabled"}
+        raise HTTPException(status_code=503, detail="model_unavailable")
     payload = await request.json()
     payload = payload if isinstance(payload, dict) else {}
     provider = _provider_name(payload.get("provider"))
@@ -268,15 +270,13 @@ async def provider_download(request: Request):
             result = await run_in_threadpool(download_image_model, provider, hf_token)
         else:
             result = await run_in_threadpool(download_image_model, provider)
+        if result.get("ok") is False:
+            raise HTTPException(status_code=500, detail="model_service_error")
         return {**result, "loaded": is_image_provider_loaded(provider), "status": image_model_status(provider)}
+    except HTTPException:
+        raise
     except Exception as exc:
-        return {
-            "ok": False,
-            "provider": provider,
-            "loaded": is_image_provider_loaded(provider),
-            "error": str(exc) or repr(exc),
-            "status": image_model_status(provider),
-        }
+        raise HTTPException(status_code=500, detail="model_service_error") from exc
     finally:
         hf_token = ""
         _set_model_operation("idle")
@@ -298,19 +298,7 @@ async def generate(request: Request):
             message="Image model is not loaded.",
             status="failed",
         )
-        return {
-            "ok": False,
-            "provider": provider,
-            "status": "model_unloaded",
-            "error": "image_model_not_loaded",
-            "asset_url": "",
-            "local_path": "",
-            "seed": payload.get("seed"),
-            "width": int(payload.get("width") or 0),
-            "height": int(payload.get("height") or 0),
-            "mime_type": "",
-            "metadata": {"model": _model_label(provider), "load_endpoint": "/provider/load"},
-        }
+        raise HTTPException(status_code=503, detail="model_unavailable")
 
     def report_progress(current: int, total: int, message: str = "Generating image") -> None:
         _set_generation_progress(
@@ -335,9 +323,11 @@ async def generate(request: Request):
         request_id,
         current=1,
         total=1,
-        message="Generation complete" if result.ok else (result.error or "Image generation failed"),
+        message="Generation complete" if result.ok else "Image generation failed",
         status="completed" if result.ok else "failed",
     )
+    if not result.ok:
+        raise HTTPException(status_code=500, detail="model_service_error")
     return _generation_response(result)
 
 
@@ -349,35 +339,26 @@ async def generate_progress(request_id: str):
 @app.post("/provider/load")
 async def provider_load(request: Request):
     if not is_image_generation_enabled():
-        return {"ok": False, "provider": "disabled", "loaded": False, "error": "image_generation_disabled"}
+        raise HTTPException(status_code=503, detail="model_unavailable")
     payload = await request.json()
     provider = _provider_name(payload.get("provider") if isinstance(payload, dict) else None)
     _set_model_operation("loading", provider)
     try:
         local_status = _local_model_status(provider)
         if not local_status.get("complete", True):
-            missing = ",".join(local_status.get("missing") or [])
-            return {
-                "ok": False,
-                "provider": provider,
-                "loaded": False,
-                "error": f"image_model_not_downloaded:{provider} missing={missing}",
-                "status": image_model_status(provider),
-            }
+            raise HTTPException(status_code=503, detail="model_unavailable")
         if not is_image_provider_loaded(provider):
             await run_in_threadpool(unload_all_image_providers)
             result = await run_in_threadpool(load_image_provider, provider)
         else:
             result = {"ok": True, "provider": provider, "loaded": True, "already_loaded": True}
+        if result.get("ok") is False:
+            raise HTTPException(status_code=500, detail="model_service_error")
         return {**result, "status": image_model_status(provider)}
+    except HTTPException:
+        raise
     except Exception as exc:
-        return {
-            "ok": False,
-            "provider": provider,
-            "loaded": False,
-            "error": str(exc) or repr(exc),
-            "status": image_model_status(provider),
-        }
+        raise HTTPException(status_code=500, detail="model_service_error") from exc
     finally:
         _set_model_operation("idle")
 
@@ -389,15 +370,13 @@ async def provider_unload(request: Request):
     _set_model_operation("unloading", provider)
     try:
         result = await run_in_threadpool(unload_image_provider, provider)
+        if result.get("ok") is False:
+            raise HTTPException(status_code=500, detail="model_service_error")
         return {**result, "status": image_model_status(provider)}
+    except HTTPException:
+        raise
     except Exception as exc:
-        return {
-            "ok": False,
-            "provider": provider,
-            "loaded": is_image_provider_loaded(provider),
-            "error": str(exc) or repr(exc),
-            "status": image_model_status(provider),
-        }
+        raise HTTPException(status_code=500, detail="model_service_error") from exc
     finally:
         _set_model_operation("idle")
 

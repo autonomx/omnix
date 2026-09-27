@@ -117,6 +117,7 @@ def test_production_rejects_legacy_backend(monkeypatch):
 def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     from pathlib import Path
     import runpy
+    import secrets
     import sys
     import uvicorn
     from app.persistence import startup
@@ -126,6 +127,9 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
 
     monkeypatch.setattr(startup, "bootstrap_status_payload", forbidden)
     calls = []
+    # Runtime launch inherits an explicit ephemeral token; never access the
+    # operator's protected credential store from this bootstrap unit test.
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
     monkeypatch.setattr(
         uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs))
     )
@@ -157,7 +161,8 @@ def test_production_application_composes_once_for_concurrent_requests(monkeypatc
     async def run():
         gateway = production.ProductionApplication()
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=gateway), base_url="http://test"
+            transport=httpx.ASGITransport(app=gateway), base_url="http://127.0.0.1",
+            headers={"X-Omnix-Client": "test"},
         ) as client:
             responses = await asyncio.gather(
                 client.get("/health"), client.get("/health")
@@ -251,7 +256,7 @@ def test_readiness_is_separate_from_liveness_and_redacts_errors():
         raise RuntimeError("postgresql://user:secret@private-host/db")
 
     gateway = create_gateway_app(readiness_check=probe)
-    client = TestClient(gateway)
+    client = TestClient(gateway, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/health").status_code == 200
     assert client.get("/ready").status_code == 503
     gateway.state.runtime_started = True
@@ -266,7 +271,7 @@ def test_ready_probe_reports_status_without_changing_health():
     payload = {"ready": True, "backend": "postgresql"}
     gateway = create_gateway_app(readiness_check=lambda: payload)
     gateway.state.runtime_started = True
-    client = TestClient(gateway)
+    client = TestClient(gateway, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/ready").json() == payload
     assert client.get("/ready").status_code == 200
     payload["ready"] = False
@@ -289,7 +294,8 @@ def test_job_read_does_not_block_health():
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=gateway), base_url="http://test"
+            transport=httpx.ASGITransport(app=gateway), base_url="http://127.0.0.1",
+            headers={"X-Omnix-Client": "test"},
         ) as client:
             job = asyncio.create_task(client.get("/api/jobs/missing"))
             try:

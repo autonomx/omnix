@@ -47,11 +47,12 @@ priority, input_payload, output_refs, progress, error, attempt_count,
 max_attempts, available_at, lease_owner, lease_token, lease_expires_at,
 cancel_requested_at, started_at, completed_at, created_at, updated_at, metadata
 """
-_INLINE_CHAT_OWNER_GUARD = """
+_FOREGROUND_OWNER_GUARD = """
+AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL
 AND (
-    job_type <> 'chat.generate'
-    OR metadata #>> '{compat_contract,compat,execution_owner}' IS NULL
-    OR EXISTS (
+    (job_type = 'chat.generate'
+     AND metadata #> '{compat_contract,compat,inline_execution}' = 'true'::jsonb
+     AND EXISTS (
         SELECT 1 FROM omnix_runtime_nodes AS execution_owner
          WHERE execution_owner.id = %s
            AND execution_owner.id = omnix_jobs.metadata #>> '{compat_contract,compat,execution_owner}'
@@ -59,7 +60,20 @@ AND (
            AND execution_owner.status IN ('active', 'draining')
            AND execution_owner.lease_expires_at > clock_timestamp()
            AND execution_owner.metadata ->> 'workspace_id' = omnix_jobs.workspace_id
-    )
+    ))
+    OR (job_type = 'rpg.turn.foreground_record'
+        AND module = 'rpg'
+        AND metadata #> '{compat_contract,compat,record_only}' = 'true'::jsonb
+        AND EXISTS (
+            SELECT 1 FROM omnix_rpg_foreground_submissions AS submission
+             WHERE submission.workspace_id = omnix_jobs.workspace_id
+               AND submission.job_id = omnix_jobs.id
+               AND submission.session_id = omnix_jobs.metadata #>> '{compat_contract,input_ref,session_id}'
+               AND submission.submission_id = omnix_jobs.input_payload ->> 'submission_id'
+               AND submission.claim_token = %s
+               AND submission.status = 'claimed'
+               AND submission.execution_started_at IS NOT NULL
+        ))
 )
 """
 
@@ -233,6 +247,7 @@ class PostgresJobRepository:
                    AND available_at <= CURRENT_TIMESTAMP
                    AND resource_class = ANY(%s)
                    AND attempt_count < max_attempts
+                   AND job_type <> 'rpg.turn.foreground_record'
                    AND NOT (
                        job_type = 'chat.generate'
                        AND COALESCE(metadata #>> '{{compat_contract,compat,inline_execution}}', 'false') = 'true'
@@ -394,6 +409,7 @@ class PostgresJobRepository:
         *,
         job_id: str,
         execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> dict[str, Any]:
         """Start a synchronously executed audit record without a worker lease."""
         row = self.connection.execute(
@@ -404,14 +420,10 @@ class PostgresJobRepository:
                    updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND status = 'queued'
-               AND (
-                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
-                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
-               )
-            {_INLINE_CHAT_OWNER_GUARD}
+            {_FOREGROUND_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
-            (job_id, context.workspace_id, execution_owner),
+            (job_id, context.workspace_id, execution_owner, submission_claim_token),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
@@ -427,6 +439,7 @@ class PostgresJobRepository:
         output_refs: list[dict[str, Any]] | list[str],
         progress: dict[str, Any] | None = None,
         execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> dict[str, Any]:
         """Complete a foreground audit record that is never worker-claimed."""
         row = self.connection.execute(
@@ -437,11 +450,7 @@ class PostgresJobRepository:
                    completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND status IN ('queued', 'running')
-               AND (
-                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
-                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
-               )
-            {_INLINE_CHAT_OWNER_GUARD}
+            {_FOREGROUND_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
             (
@@ -450,6 +459,7 @@ class PostgresJobRepository:
                 job_id,
                 context.workspace_id,
                 execution_owner,
+                submission_claim_token,
             ),
         ).fetchone()
         if row is None:
@@ -465,6 +475,7 @@ class PostgresJobRepository:
         job_id: str,
         error: dict[str, Any],
         execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> dict[str, Any]:
         """Fail a foreground audit record without scheduling worker retries."""
         row = self.connection.execute(
@@ -474,14 +485,10 @@ class PostgresJobRepository:
                    completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND status IN ('queued', 'running')
-               AND (
-                   metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
-                   OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
-               )
-            {_INLINE_CHAT_OWNER_GUARD}
+            {_FOREGROUND_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
-            (_json(error), job_id, context.workspace_id, execution_owner),
+            (_json(error), job_id, context.workspace_id, execution_owner, submission_claim_token),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job failure rejected: {job_id}")
@@ -514,7 +521,7 @@ class PostgresJobRepository:
              WHERE id = %s AND workspace_id = %s
                AND lease_owner = %s AND lease_token = %s
                AND status IN ('leased', 'running', 'cancel_requested')
-               AND lease_expires_at > CURRENT_TIMESTAMP
+               AND lease_expires_at > clock_timestamp()
             RETURNING {_JOB_COLUMNS}
             """,
             (
@@ -567,7 +574,7 @@ class PostgresJobRepository:
              WHERE id = %s AND workspace_id = %s
                AND lease_owner = %s AND lease_token = %s
                AND status IN ('leased', 'running', 'cancel_requested')
-               AND lease_expires_at > CURRENT_TIMESTAMP
+               AND lease_expires_at > clock_timestamp()
             RETURNING {_JOB_COLUMNS}
             """,
             (

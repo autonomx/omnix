@@ -69,9 +69,9 @@ def test_hermes_execute_payload_records_approved_gmail_state_change(monkeypatch,
             tool_id="gmail",
             action_id="gmail.create_draft",
             session_id="chat:1",
-            approved=True,
             input={"to": "ada@example.com", "subject": "Hello", "body": "Hi Ada"},
         ),
+        approved=True,
     )
 
     assert payload.approval_decision.executable is True
@@ -114,7 +114,6 @@ def test_approved_calendar_proposal_is_idempotent(monkeypatch, tmp_path):
         action_id="calendar.create_event",
         session_id="chat:1",
         proposal_id="proposal-once",
-        approved=True,
         input={
             "title": "Review",
             "start_time": "2026-07-10T09:00:00-07:00",
@@ -123,8 +122,8 @@ def test_approved_calendar_proposal_is_idempotent(monkeypatch, tmp_path):
         },
     )
 
-    first = hermes_assistant_tool_execute_payload("Create review", request)
-    second = hermes_assistant_tool_execute_payload("Create review", request)
+    first = hermes_assistant_tool_execute_payload("Create review", request, approved=True)
+    second = hermes_assistant_tool_execute_payload("Create review", request, approved=True)
 
     assert first.state_changed is True
     assert second.state_changed is False
@@ -160,7 +159,7 @@ def test_hermes_assistant_routes_are_separate_from_rpg_routes(monkeypatch, tmp_p
     path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
     save_assistant_tools_config(_connected_config("contacts"), path)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     review = client.post(
         "/api/hermes/assistant/tools/review",

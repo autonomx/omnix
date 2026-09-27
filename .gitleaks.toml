@@ -1,0 +1,105 @@
+title = "Omnix secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Verified SHA-256 checksum of migration 0066, not a credential"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)resources/architecture/migration-checksums\.json$''']
+regexTarget = "secret"
+regexes = ['''^b72e5f4add208a48009cbabb2ffa4eb4736c9a3984722a5a2f3d685873549a89$''']
+
+# Exact non-secret examples only. New credentials in these files still fail.
+[[allowlists]]
+description = "Documented local-only placeholder bearer token"
+targetRules = ["curl-auth-header"]
+condition = "AND"
+paths = ['''(?:^|/)docs/OPENAI_COMPATIBILITY\.md$''']
+regexTarget = "match"
+regexes = ['''Authorization: Bearer local-dev-only''']
+
+[[allowlists]]
+description = "Transformers import misidentified as an API key"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/app/image/flux_pipeline_compat\.py$''']
+regexTarget = "match"
+regexes = ['''AutoTokenizer, Qwen3ForCausalLM''']
+
+[[allowlists]]
+description = "Browser localStorage identifiers, not credentials"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/apps/web/src/features/assistant-workspace/(live-conversation-evaluation-controller|live-voice-calibration)\.ts$''']
+regexTarget = "secret"
+regexes = ['''^omnix\.live(?:Conversation\.evaluation|Voice\.calibration)\.v1$''']
+
+[[allowlists]]
+description = "RFC 6455 example WebSocket nonce in routing tests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/apps/web/src/test/gateway-routing\.test\.ts$''']
+regexTarget = "match"
+regexes = ['''Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==''']
+
+[[allowlists]]
+description = "Deterministic RPG test session identifiers"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/tests/rpg/test_n(?:1272_survival_autoplay_persistence|1276_survival_hunger_thirst_relief_coverage|12710_survival_promotion_cadence)\.py$''']
+regexTarget = "match"
+regexes = ['''(?:session_key|key)\s*=\s*"(?:test-n1273-accumulator|n1276-consume|n1278-thirst-priority|n12710-critical|n12710-streak|n12711-emergency-water|n12711-emergency-bounded)"''']
+
+[[allowlists]]
+description = "Explicit fake research credentials in regression tests"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/tests/unit/assistant_context/test_research_credentials\.py$''']
+regexTarget = "match"
+regexes = ['''api_key": "(?:brave-secret-1234|tavily-secret-5678)"''']
+
+[[allowlists]]
+description = "Explicit fake provider credential for masking regression"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(?:^|/)src/tests/unit/providers/test_providers\.py$''']
+regexTarget = "match"
+regexes = ['''api_key='longsecretkey123'\s*$''']
+
+[[rules]]
+id = "omnix-cerebras"
+description = "Cerebras API credential"
+regex = '''\bcsk-[A-Za-z0-9_-]{32,}\b'''
+keywords = ["csk-"]
+
+[[rules]]
+id = "omnix-openai"
+description = "OpenAI style API credential"
+regex = '''\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}\b'''
+keywords = ["sk-"]
+
+[[rules]]
+id = "omnix-openrouter"
+description = "OpenRouter API credential"
+regex = '''\bsk-or-v1-[A-Za-z0-9]{32,}\b'''
+keywords = ["sk-or-"]
+
+[[rules]]
+id = "omnix-huggingface"
+description = "Hugging Face access token"
+regex = '''\bhf_[A-Za-z0-9]{30,}\b'''
+keywords = ["hf_"]
+
+[[rules]]
+id = "omnix-github"
+description = "GitHub access token"
+regex = '''\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+
+[[rules]]
+id = "omnix-google-oauth"
+description = "Google OAuth client secret"
+regex = '''\bGOCSPX-[A-Za-z0-9_-]{28,}\b'''
+keywords = ["GOCSPX-"]

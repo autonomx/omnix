@@ -4,8 +4,14 @@ import wave
 
 import numpy as np
 import pytest
+import secrets
 
 from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_pcm16_wav_is_decoded_without_loading_a_gpu_model(monkeypatch):
@@ -25,6 +31,7 @@ def test_pcm16_wav_is_decoded_without_loading_a_gpu_model(monkeypatch):
     np.testing.assert_allclose(chunks[0][0][:2], [.25, -.25])
     assert chunks[0][1] == 24000
     assert calls[0][1]['json'] == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32}
+    assert calls[0][1]['headers']['X-Omnix-Client'] == 'gateway'
 
 
 def test_remote_synthesis_failure_has_no_synthetic_fallback(monkeypatch):

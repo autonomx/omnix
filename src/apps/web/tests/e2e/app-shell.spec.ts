@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  // Shell tests use fixtures. Never forward an unmocked call to an operator's gateway.
+  await page.route((url) => url.pathname.startsWith('/api/'), (route) => route.fulfill({
+    status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'unmocked_test_route' }),
+  }));
+  await page.route((url) => url.pathname === '/events' || url.pathname.startsWith('/events/'), (route) => route.abort());
+});
+
 const modules = [
   ['RPG', '/rpg'],
   ['Chatbot', '/chatbot'],
@@ -134,6 +142,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
   });
 
   await page.route('**/api/jobs/job%3Arelease-smoke/cancel', async (route) => {
+    expect(route.request().headers()['x-omnix-client']).toBe('web');
     jobStatus = 'canceled';
     await route.fulfill({
       contentType: 'application/json',

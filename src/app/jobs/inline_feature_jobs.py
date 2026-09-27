@@ -129,7 +129,7 @@ def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
 
     job_store.mark_running(job.id)
     try:
-        result = _render_job(job)
+        result = _render_job(job, job_store=job_store)
     except Exception as exc:  # pragma: no cover - route-level tests cover this path
         failed = job_store.fail_job(
             job.id,
@@ -168,7 +168,7 @@ def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
     return completed or job
 
 
-def _render_job(job: JobRecord) -> dict[str, Any]:
+def _render_job(job: JobRecord, *, job_store: Any) -> dict[str, Any]:
     payload = job.input_payload or {}
     provider_id = _text(payload.get("provider_id"))
     model_id = _text(payload.get("model_id"))

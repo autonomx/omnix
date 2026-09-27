@@ -16,7 +16,7 @@ from .ledger import (
     summarize_tool_input,
 )
 from .mcp_adapter import run_mcp_tool_request
-from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
+from .models import ApprovalPolicy, AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 from .repo_adapter import run_repository_tool_request
 from .research_adapter import run_research_tool_request
 from .result_context import tool_result_to_chat_context
@@ -95,9 +95,10 @@ def _run_assistant_tool_request(
 def hermes_assistant_tool_execute_payload(
     user_request: str,
     request: AssistantToolRequest,
+    *, approved: bool = False, policy_floor: ApprovalPolicy | None = None,
 ) -> HermesAssistantToolExecutePayload:
-    decision = review_assistant_tool_request(request)
-    existing = assistant_tool_execution_for_proposal(request.proposal_id or "") if request.approved else None
+    decision = review_assistant_tool_request(request, approved=approved, policy_floor=policy_floor)
+    existing = assistant_tool_execution_for_proposal(request.proposal_id or "") if approved else None
     if existing is not None:
         result = AssistantToolResult(
             tool_id=request.tool_id,
@@ -135,7 +136,7 @@ def hermes_assistant_tool_execute_payload(
             proposal_id=request.proposal_id,
             tool_id=request.tool_id,
             action_id=request.action_id,
-            approval_source="user" if request.approved else "policy",
+            approval_source="user" if approved else "policy",
             input_summary=summarize_tool_input(request.input),
             result_summary=result.result_summary,
             state_changed=result.state_changed,

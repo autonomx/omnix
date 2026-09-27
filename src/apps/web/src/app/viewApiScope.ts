@@ -109,6 +109,20 @@ function blockedApiResponse(pathname: string, moduleId: OmnixModuleId): Response
   });
 }
 
+function withClientHeader(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
+  const request = typeof Request !== 'undefined' && input instanceof Request ? input : undefined;
+  const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return init;
+  const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const url = new URL(rawUrl, window.location.href);
+  if (url.origin !== window.location.origin || !['/api', '/events', '/ready', '/health'].some(
+    (prefix) => pathMatchesPrefix(url.pathname, prefix),
+  )) return init;
+  const headers = new Headers(init?.headers ?? request?.headers);
+  headers.set('X-Omnix-Client', 'web');
+  return { ...init, headers };
+}
+
 export function installViewApiFirewall(options: { outermost?: boolean } = {}): void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
   const state = window as typeof window & Record<string, unknown>;
@@ -123,8 +137,9 @@ export function installViewApiFirewall(options: { outermost?: boolean } = {}): v
     const pathname = apiPath(input);
     const moduleId = activeViewModule();
     if (!isApiAllowedForView(pathname, moduleId)) return blockedApiResponse(pathname, moduleId);
-    if (options.outermost && moduleId === 'trading' && rootFetch) return rootFetch(input, init);
-    return delegate(input, init);
+    const guardedInit = withClientHeader(input, init);
+    if (options.outermost && moduleId === 'trading' && rootFetch) return rootFetch(input, guardedInit);
+    return delegate(input, guardedInit);
   };
 
   if (!options.outermost) {

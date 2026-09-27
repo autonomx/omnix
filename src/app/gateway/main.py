@@ -230,17 +230,19 @@ def create_gateway_app(
     gateway.state.runtime_metrics = RequestMetrics()
     gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)
     from .feature_registry import register_gateway_features
-    from .runtime_hooks import _LOCAL_BROWSER_ORIGINS
+    from app.runtime.net import allowed_origins
+    from app.security.request_guard import RequestGuardMiddleware
     from fastapi.middleware.cors import CORSMiddleware
 
     gateway.add_middleware(
         CORSMiddleware,
-        allow_origins=list(_LOCAL_BROWSER_ORIGINS),
+        allow_origins=allowed_origins(),
         allow_credentials=False,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
         max_age=86_400,
     )
+    gateway.add_middleware(RequestGuardMiddleware)
     register_gateway_features(gateway)
     _remove_hook_installed_assistant_context_routes(gateway)
     register_assistant_context_routes(
@@ -665,6 +667,8 @@ app = production_app
 if __name__ == "__main__":
     import uvicorn
 
-    host = os.environ.get("OMNIX_GATEWAY_HOST", DEFAULT_GATEWAY_HOST)
+    from app.runtime.net import bind_host
+
+    host = bind_host()
     port = int(os.environ.get("OMNIX_GATEWAY_PORT", str(DEFAULT_GATEWAY_PORT)))
     uvicorn.run("app.gateway.main:app", host=host, port=port, reload=False)

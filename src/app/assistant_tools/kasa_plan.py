@@ -31,7 +31,6 @@ def kasa_request_from_tool_call(
     call: ToolCall | dict[str, Any],
     *,
     session_id: str,
-    approved: bool = False,
 ) -> AssistantToolRequest | None:
     if isinstance(call, ToolCall):
         name = call.name
@@ -49,7 +48,6 @@ def kasa_request_from_tool_call(
         action_id=action_id,
         session_id=session_id,
         input=normalized_input,
-        approved=approved,
     )
 
 
@@ -57,7 +55,6 @@ def first_pending_kasa_write(
     mode_result: dict[str, Any],
     *,
     session_id: str,
-    approved: bool = False,
 ) -> AssistantToolRequest | None:
     calls = mode_result.get("tool_calls")
     if not isinstance(calls, list):
@@ -68,5 +65,5 @@ def first_pending_kasa_write(
         name = str(call.get("name") or call.get("tool") or "")
         if name not in KASA_WRITE_TOOLS:
             continue
-        return kasa_request_from_tool_call(call, session_id=session_id, approved=approved)
+        return kasa_request_from_tool_call(call, session_id=session_id)
     return None

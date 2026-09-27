@@ -460,13 +460,12 @@ def _review_with_run_policy(
     run_policy: str,
 ):
     """Apply run policy as an approval floor, never as a weakening override."""
-    base_request = request.model_copy(update={"approval_policy": None})
+    base_request = request
     base = review_assistant_tool_request(base_request)
     if not base.allowed or run_policy == "allow_automatic":
         return base_request, base
     if run_policy == "disabled":
-        disabled_request = request.model_copy(update={"approval_policy": "disabled"})
-        return disabled_request, review_assistant_tool_request(disabled_request)
+        return request, review_assistant_tool_request(request, policy_floor="disabled")
     # Governed browser actions already have explicit capability-level policy:
     # they are task-scoped, origin-restricted and executed through the bounded
     # browser adapter. The normal coding default (ask_sensitive) must not turn
@@ -482,9 +481,8 @@ def _review_with_run_policy(
     # that stronger decision rather than replacing it with a weaker run policy.
     if base.approval_required:
         return base_request, base
-    overlay_request = request.model_copy(update={"approval_policy": run_policy})
-    overlay = review_assistant_tool_request(overlay_request)
-    return overlay_request, overlay
+    overlay = review_assistant_tool_request(request, policy_floor=run_policy)
+    return request, overlay
 
 
 def _validate_execution_input(
@@ -570,28 +568,13 @@ def _workspace_approval(
     *,
     capability_id: str,
     request_payload: dict[str, Any],
-    approval_prefix: str,
 ) -> AgentApproval:
-    digest = hashlib.sha256(
-        json.dumps(
-            request_payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()[:32]
-    approval_id = f"{approval_prefix}-{digest}"
     with unit_of_work(service.database) as work:
         repository = PostgresAgentRunRepository(work.connection, service.context)
-        approval = repository.get_approval(snapshot.run_id, approval_id)
-        if approval is None:
-            approval = AgentApproval(
-                approval_id=approval_id,
-                run_id=snapshot.run_id,
-                capability_id=capability_id,
-                request_payload=request_payload,
-            )
-            repository.add_approval(approval)
+        approval = repository.workspace_approval(
+            snapshot.run_id, capability_id, request_payload,
+        )
+        if approval.state == "pending":
             current = repository.get_run(snapshot.run_id)
             if current is not None and current.status != "waiting_for_approval":
                 repository.update_state(
@@ -676,7 +659,6 @@ def authorize_agent_command(
         snapshot,
         capability_id="workspace.command",
         request_payload=request_payload,
-        approval_prefix="command",
     )
     return _authorization_response(approval)
 
@@ -735,7 +717,6 @@ def authorize_agent_workspace_tool(
         snapshot,
         capability_id=capability_id,
         request_payload=request_payload,
-        approval_prefix="tool",
     )
     return _authorization_response(approval)
 
@@ -905,7 +886,6 @@ def execute_agent_capability(
             session_id=snapshot.spec.session_id or f"agent:{run_id}",
             proposal_id=execution_key,
             input=request.input,
-            approved=approved,
         )
         tool_request, decision = _review_with_run_policy(
             tool_request,
@@ -979,7 +959,9 @@ def execute_agent_capability(
 
     payload = hermes_assistant_tool_execute_payload(
         f"agent:{run_id}",
-        tool_request.model_copy(update={"approved": approved or not decision.approval_required}),
+        tool_request,
+        approved=approved,
+        policy_floor=(snapshot.spec.approval_policy if tool_request.tool_id != "browser" else None),
     )
     result: AssistantToolResult = payload.execution_result
     result_payload = result.model_dump(mode="json")

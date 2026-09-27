@@ -13,6 +13,8 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from app.runtime.net import allowed_origins, bind_host
+from app.security.model_service import ModelServiceMiddleware
 
 from app.providers.nemotron_eou_live_websocket import (
     PROVIDER_NAME,
@@ -28,11 +30,12 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(ModelServiceMiddleware)
 install_nemotron_eou_websocket(app, manager=model_manager)
 
 
@@ -174,7 +177,7 @@ async def transcribe(
         text = await asyncio.to_thread(model_manager.transcribe_pcm16, pcm16)
         inference_ms = (time.perf_counter() - started) * 1000.0
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="model_service_error") from exc
     return {
         "success": bool(text),
         "text": text,
@@ -186,10 +189,11 @@ async def transcribe(
 
 
 def main() -> None:
+    host = bind_host()
     port = int(os.environ.get("OMNIX_STT_PORT", "5201"))
-    print(f"[STT] Starting {PROVIDER_NAME} on http://0.0.0.0:{port}")
+    print(f"[STT] Starting {PROVIDER_NAME} on http://{host}:{port}")
     print("[STT] Nemotron is authoritative transcript; Parakeet Realtime EOU is endpoint-only")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

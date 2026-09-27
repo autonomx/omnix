@@ -293,23 +293,37 @@ def test_record_only_job_transitions_without_worker_lease() -> None:
                     "module": "rpg",
                     "job_type": "rpg.turn.foreground_record",
                     "resource_class": "cpu",
-                    "input_payload": {"command": "ask Bran about business"},
+                    "input_payload": {"command": "ask Bran about business", "submission_id": "submit:record"},
                     "metadata": {
                         "compat_contract": {
+                            "input_ref": {"session_id": "rpg:test"},
                             "compat": {"record_only": True},
                             "logs": [],
                         }
                     },
                 },
             )
+            claim = work.foreground_submissions.claim(
+                context, session_id="rpg:test", submission_id="submit:record",
+            )
+            assert work.foreground_submissions.attach_job(
+                context, session_id="rpg:test", submission_id="submit:record",
+                claim_token=claim["claim_token"], job_id="job:foreground-record",
+            )
+            assert work.foreground_submissions.start_execution(
+                context, session_id="rpg:test", submission_id="submit:record",
+                claim_token=claim["claim_token"],
+            )
             running = work.jobs.mark_record_only_running(
                 context,
                 job_id="job:foreground-record",
+                submission_claim_token=claim["claim_token"],
             )
             completed = work.jobs.complete_record_only(
                 context,
                 job_id="job:foreground-record",
                 output_refs=[{"session_id": "rpg:test"}],
+                submission_claim_token=claim["claim_token"],
             )
             work.commit()
 

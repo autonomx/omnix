@@ -41,7 +41,6 @@ def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
 
 FEATURES = (
     GatewayFeature("app.assistant_tools.routes", "register_assistant_tool_routes"),
-    GatewayFeature("app.assistant_tools.openapi", "configure_assistant_tools_openapi"),
     GatewayFeature("app.gateway.rpg_turn_job_mirror", "_install_middleware"),
     GatewayFeature(
         "app.gateway.live_sse_transport", "_register_live_chat_sse_route_execution"
@@ -125,6 +124,7 @@ FEATURES = (
         "app.gateway.blocking_route_offload", "register_blocking_route_offload"
     ),
     GatewayFeature("app.gateway.tts_runtime_routes", "register_tts_runtime_routes"),
+    GatewayFeature("app.gateway.stt_proxy_routes", "register_stt_proxy_routes"),
     GatewayFeature("app.gateway.tts_pcm_websocket", "register_tts_pcm_websocket"),
     GatewayFeature(
         "app.gateway.tts_live_call_websocket", "register_tts_live_call_websocket"

@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from app.runtime.net import bind_host
+from app.security.service_credentials import initialize_service_token
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
@@ -228,6 +230,10 @@ class LauncherServiceManager:
                     }
             env = os.environ.copy()
             env.update(service.spec.env)
+            if service_id == "web":
+                env.pop("OMNIX_SERVICE_TOKEN", None)
+            else:
+                env["OMNIX_SERVICE_TOKEN"] = initialize_service_token()
             # Semantic v2 is the only typed-chat production router. Do not pass
             # the retired shadow/legacy-v1 switch to launcher-managed services,
             # even if it remains in a user's parent shell.
@@ -449,6 +455,7 @@ def _kill_processes_for_port(port: int) -> list[int]:
 
 def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     root = root or _repo_root()
+    host = bind_host()
     app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
     tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
     stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
@@ -462,6 +469,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         "1" if hermes_enabled else "0",
     )
     common = {
+        "OMNIX_BIND_HOST": host,
         "PYTHONPATH": str(root / "src"),
         "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
         "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
@@ -501,7 +509,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 "--app",
                 "app.gateway.runtime_app:app",
                 "--host",
-                "127.0.0.1",
+                host,
                 "--port",
                 "8000",
             ],
@@ -548,7 +556,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="web",
             label="Omnix Web App",
-            command=[_npm_command(), "run", "web:dev"],
+            command=[_npm_command(), "run", "web:dev", "--", "--host", host],
             cwd=root,
             env=dict(common),
             ports=(5173,),
@@ -572,7 +580,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
         ServiceSpec(
             service_id="image",
             label="Image Service",
-            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", "127.0.0.1", "--port", "5301"],
+            command=[app_python, "-m", "uvicorn", "app.image_service_app:app", "--host", host, "--port", "5301"],
             cwd=root,
             env={
                 **common,

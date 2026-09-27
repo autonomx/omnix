@@ -805,6 +805,41 @@ class PostgresAgentRunRepository:
         self.append_event(AgentEvent(run_id=approval.run_id, event_type="approval.requested", payload={"approval_id": approval.approval_id, "capability_id": approval.capability_id}))
         return approval
 
+    def workspace_approval(
+        self, run_id: str, capability_id: str, request_payload: dict[str, Any],
+    ) -> AgentApproval:
+        """Deduplicate an exact workspace action without deriving its approval ID.
+
+        The run row serializes concurrent proposals. The caller commits both the
+        approval and any run state change in the same transaction.
+        """
+        run = self.connection.execute(
+            """
+            SELECT run_id FROM omnix_agent_runs
+             WHERE workspace_id = %s AND run_id = %s FOR UPDATE
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if run is None:
+            raise KeyError(run_id)
+        row = self.connection.execute(
+            """
+            SELECT approval_id FROM omnix_agent_approvals
+             WHERE workspace_id = %s AND run_id = %s AND capability_id = %s
+               AND request_payload = %s::jsonb
+             ORDER BY created_at DESC, approval_id LIMIT 1
+            """,
+            (self.context.workspace_id, run_id, capability_id, _json(request_payload)),
+        ).fetchone()
+        if row is not None:
+            approval = self.get_approval(run_id, str(row[0]))
+            if approval is None:
+                raise AgentRunConcurrencyError("workspace approval disappeared")
+            return approval
+        return self.add_approval(AgentApproval(
+            run_id=run_id, capability_id=capability_id, request_payload=request_payload,
+        ))
+
     def get_approval(self, run_id: str, approval_id: str) -> AgentApproval | None:
         row = self.connection.execute(
             """

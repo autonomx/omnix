@@ -198,6 +198,7 @@ class PostgresJobStoreAdapter:
                 record = work.jobs.mark_record_only_running(
                     self.context, job_id=job_id,
                     execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                    submission_claim_token=self._foreground_claim_token(current),
                 )
                 work.commit()
             return self._record(record)
@@ -221,10 +222,10 @@ class PostgresJobStoreAdapter:
         if current is None:
             return None
         lease = getattr(current, "lease", None)
-        owner = self._lease_value(lease, "worker_id", "owner_id")
-        token = self._lease_value(lease, "lease_token", "token")
-        if not owner or not token:
-            if self._runs_without_worker_lease(current):
+        owner = request.worker_id
+        token = request.lease_token
+        if lease is None:
+            if not owner and not token and self._runs_without_worker_lease(current):
                 request_payload = request.model_dump(mode="json")
                 with unit_of_work(self.database) as work:
                     self._append_compat_logs(work, job_id, request_payload.get("logs") or [])
@@ -234,10 +235,13 @@ class PostgresJobStoreAdapter:
                         output_refs=request.output_refs,
                         progress={"current": 1, "total": 1, "message": "completed"},
                         execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                        submission_claim_token=self._foreground_claim_token(current),
                     )
                     work.commit()
                 return self._record(record)
             raise JobClaimConflict(f"job completion requires an active lease: {job_id}")
+        if not owner or not token:
+            raise JobClaimConflict(f"job completion requires caller lease credentials: {job_id}")
         request_payload = request.model_dump(mode="json")
         with unit_of_work(self.database) as work:
             self._append_compat_logs(work, job_id, request_payload.get("logs") or [])
@@ -257,10 +261,10 @@ class PostgresJobStoreAdapter:
         if current is None:
             return None
         lease = getattr(current, "lease", None)
-        owner = self._lease_value(lease, "worker_id", "owner_id")
-        token = self._lease_value(lease, "lease_token", "token")
-        if not owner or not token:
-            if self._runs_without_worker_lease(current):
+        owner = request.worker_id
+        token = request.lease_token
+        if lease is None:
+            if not owner and not token and self._runs_without_worker_lease(current):
                 payload = request.model_dump(mode="json")
                 error = {
                     "code": payload.get("code") or "job_failed",
@@ -275,10 +279,13 @@ class PostgresJobStoreAdapter:
                         job_id=job_id,
                         error=error,
                         execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                        submission_claim_token=self._foreground_claim_token(current),
                     )
                     work.commit()
                 return self._record(record)
             raise JobClaimConflict(f"job failure requires an active lease: {job_id}")
+        if not owner or not token:
+            raise JobClaimConflict(f"job failure requires caller lease credentials: {job_id}")
         payload = request.model_dump(mode="json")
         error = payload.get("error") or {
             "code": payload.get("code") or "job_failed",
@@ -505,7 +512,24 @@ class PostgresJobStoreAdapter:
 
     @staticmethod
     def _runs_without_worker_lease(job: JobRecord) -> bool:
-        return job.compat.get("record_only") is True or job.compat.get("inline_execution") is True
+        return (
+            job.type == "chat.generate" and job.compat.get("inline_execution") is True
+        ) or (
+            job.module == "rpg" and job.type == "rpg.turn.foreground_record"
+            and job.compat.get("record_only") is True
+        )
+
+    def _foreground_claim_token(self, job: JobRecord) -> str | None:
+        from app.jobs.foreground_execution import current_foreground_execution
+
+        execution = current_foreground_execution()
+        if execution is None:
+            return None
+        if (execution.workspace_id != self.context.workspace_id or execution.job_id != job.id
+                or execution.session_id != (job.input_ref or {}).get("session_id")
+                or execution.submission_id != (job.input_payload or {}).get("submission_id")):
+            raise JobClaimConflict("foreground execution belongs to another job")
+        return execution.claim_token
 
     @staticmethod
     def _json(value: Any) -> str:

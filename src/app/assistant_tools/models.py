@@ -6,9 +6,9 @@ validation layer stays pure and easy to test.
 """
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ToolActionCategory = Literal["read", "write", "delete", "execute"]
 ToolRiskLevel = Literal["low", "medium", "high"]
@@ -64,13 +64,17 @@ class AssistantToolRegistryPayload(BaseModel):
 class AssistantToolRequest(BaseModel):
     """Canonical request envelope required before any tool action can run."""
 
+    model_config = ConfigDict(extra="forbid")
+
     tool_id: str
     action_id: str
     session_id: str | None = None
     proposal_id: str | None = None
     input: dict[str, Any] = Field(default_factory=dict)
-    approval_policy: ApprovalPolicy | None = None
-    approved: bool = False
+
+
+class AssistantToolExecutor(Protocol):
+    def __call__(self, user_request: str, request: AssistantToolRequest, *, approved: bool = False) -> Any: ...
 
 
 class AssistantToolReviewDecision(BaseModel):

@@ -65,7 +65,8 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 proposal_message, request = governed_pending
                 payload = hermes_assistant_tool_execute_payload(
                     user_message.content,
-                    request.model_copy(update={"approved": True, "session_id": session.id}),
+                    request.model_copy(update={"session_id": session.id}),
+                    approved=True,
                 )
                 status = "executed" if payload.execution_result.error is None else "failed"
                 _mark_governed_proposal(
@@ -155,7 +156,8 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 proposal_message, request = pending
                 payload = hermes_assistant_tool_execute_payload(
                     user_message.content,
-                    request.model_copy(update={"approved": True, "session_id": session.id}),
+                    request.model_copy(update={"session_id": session.id}),
+                    approved=True,
                 )
                 status = "executed" if payload.execution_result.error is None else "failed"
                 _mark_kasa_proposal(
@@ -323,7 +325,6 @@ def _agent_events(
     pending = first_pending_kasa_write(
         payload,
         session_id=session_id,
-        approved=False,
     )
     read_executed = any(
         bool(row.get("executed"))

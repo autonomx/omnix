@@ -1,5 +1,4 @@
 """
-<<<<<<< HEAD
 JavaScript console error tests – migrated from test_js_console.py.
 
 Uses Playwright to load the application page and capture any JavaScript
@@ -8,7 +7,8 @@ console errors or uncaught page errors.
 
 from __future__ import annotations
 
-import pytest
+import asyncio
+from playwright.async_api import async_playwright
 from playwright.sync_api import Page
 
 
@@ -33,7 +33,7 @@ class TestJSConsoleErrors:
 
         all_errors = errors + page_errors
         assert len(all_errors) == 0, (
-            f"JavaScript errors detected:\n" + "\n".join(f"  • {e}" for e in all_errors)
+            "JavaScript errors detected:\n" + "\n".join(f"  • {e}" for e in all_errors)
         )
 
     def test_no_js_page_errors(self, page: Page):
@@ -45,7 +45,7 @@ class TestJSConsoleErrors:
         page.wait_for_timeout(5000)
 
         assert len(page_errors) == 0, (
-            f"Uncaught page errors:\n" + "\n".join(f"  • {e}" for e in page_errors)
+            "Uncaught page errors:\n" + "\n".join(f"  • {e}" for e in page_errors)
         )
 
     def test_no_js_warnings(self, page: Page):
@@ -61,13 +61,8 @@ class TestJSConsoleErrors:
             print(f"\n⚠️  Console warnings ({len(warnings)}):")
             for w in warnings[:10]:
                 print(f"    {w}")
-=======
-Test for JavaScript console errors on the Omnix frontend.
-Opens the page and captures all console errors.
-"""
 
-import asyncio
-from playwright.async_api import async_playwright
+
 
 BASE_URL = "http://localhost:5000"
 
@@ -147,4 +142,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
->>>>>>> cb63dc998e1562d350c6448678bc91ab0705136f

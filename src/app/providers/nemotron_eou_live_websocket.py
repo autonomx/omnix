@@ -319,8 +319,9 @@ def _schedule_stream_drain(
                     "segmentId": segment.segment_id,
                     "sequence": segment.sequence,
                     "retryable": False,
-                    "errorCode": type(exc).__name__,
-                    "error": str(exc),
+                    "errorCode": "model_service_error",
+                    "error": "model_service_error",
+                    "request_id": websocket.scope.get("state", {}).get("request_id") or uuid.uuid4().hex,
                 },
             )
         finally:
@@ -435,8 +436,9 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                                 "segmentId": segment_id,
                                 "sequence": sequence,
                                 "retryable": False,
-                                "errorCode": type(exc).__name__,
-                                "error": str(exc),
+                                "errorCode": "model_service_error",
+                                "error": "model_service_error",
+                                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
                             },
                         )
                         continue
@@ -669,8 +671,9 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                                 "segmentId": segment.segment_id,
                                 "sequence": segment.sequence,
                                 "retryable": False,
-                                "errorCode": type(exc).__name__,
-                                "error": str(exc),
+                                "errorCode": "model_service_error",
+                                "error": "model_service_error",
+                                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
                             },
                         )
                     finally:
@@ -682,7 +685,10 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
             return
         except Exception as exc:  # noqa: BLE001 - top-level websocket fault containment
             _metric("stt_hybrid_websocket_failed", error_type=type(exc).__name__, error=str(exc))
-            await _safe_send(websocket, send_lock, {"type": "error", "error": str(exc)})
+            await _safe_send(websocket, send_lock, {
+                "type": "error", "error": "model_service_error",
+                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
+            })
         finally:
             released = 0
             for segment_id, state in tuple(owned_segments.items()):

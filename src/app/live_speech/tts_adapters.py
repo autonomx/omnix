@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from app.security.service_token import service_headers
+
 from .tts import AudioDelta, DeterministicSpeechSynthesizer, StreamingSpeechSynthesizer
 
 
@@ -31,7 +33,8 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
             return []
         payload = {"text": clean, "voice": voice, "sample_rate": self.sample_rate}
         try:
-            response = requests.post(f"{self.base_url.rstrip('/')}/tts", json=payload, timeout=self.timeout_seconds)
+            response = requests.post(f"{self.base_url.rstrip('/')}/tts", json=payload, timeout=self.timeout_seconds,
+                                     headers=service_headers(), allow_redirects=False)
             response.raise_for_status()
             pcm = self._decode_response(response)
         except Exception:

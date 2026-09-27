@@ -10,7 +10,7 @@ import pytest
 import requests
 
 # Test configuration
-API_BASE_URL = "http://localhost:8001/v1"
+API_BASE_URL = "http://localhost:8101/v1"
 TIMEOUT = 30  # 30 second timeout for API calls
 
 
@@ -83,6 +83,7 @@ class TestOpenAIIntegration:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT
             )
             
@@ -122,6 +123,7 @@ class TestOpenAIIntegration:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT,
                 stream=True
             )
@@ -172,6 +174,7 @@ class TestOpenAIIntegration:
             response = requests.post(
                 f"{API_BASE_URL}/audio/speech",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT
             )
             
@@ -253,7 +256,7 @@ class TestOpenAIClientCompatibility:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
-                headers=headers,
+                headers={**headers, "X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT
             )
             
@@ -280,6 +283,7 @@ class TestOpenAIBehavior:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT
             )
             
@@ -308,6 +312,7 @@ class TestOpenAIBehavior:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT
             )
             
@@ -355,6 +360,7 @@ class TestOpenAIStreamingBehavior:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT,
                 stream=True
             )
@@ -406,6 +412,7 @@ class TestOpenAIStreamingBehavior:
             response = requests.post(
                 f"{API_BASE_URL}/chat/completions",
                 json=request_data,
+                headers={"X-Omnix-Client": "integration-test"},
                 timeout=TIMEOUT,
                 stream=True
             )

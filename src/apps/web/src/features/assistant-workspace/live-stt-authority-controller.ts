@@ -1,3 +1,5 @@
+import { speechOrigin, streamingSttUrl, type SpeechLocation } from './stt-url';
+
 export const LIVE_STT_SPECULATION_PARTIAL_EVENT = 'omnix:live-stt-speculation-partial';
 export const LIVE_STT_SPECULATION_CANDIDATE_EVENT = 'omnix:live-stt-speculation-candidate';
 export const LIVE_STT_SPECULATION_FINAL_EVENT = 'omnix:live-stt-speculation-final';
@@ -25,18 +27,19 @@ export type AuthoritySelection = {
 
 export async function resolveAuthoritySelection(
   configuredUrl: string,
-  locationLike: Pick<Location, 'protocol' | 'hostname'>,
+  locationLike: SpeechLocation,
   fetchImpl: typeof fetch,
 ): Promise<AuthoritySelection> {
   const configured = new URL(
     configuredUrl,
-    `${locationLike.protocol}//${locationLike.hostname}`,
+    speechOrigin(locationLike),
   );
   const mode = normalizeMode(configured.searchParams.get('authority'));
   const endpointThreshold = boundedProbability(
     configured.searchParams.get('endpoint_threshold'),
   );
-  const primaryUrl = toStreamingSttWebSocketUrl(configured);
+  const primary = streamingSttUrl(configured.toString(), locationLike);
+  const primaryUrl = primary.toString();
   if (mode === 'observational') {
     return {
       websocketUrl: primaryUrl,
@@ -49,7 +52,8 @@ export async function resolveAuthoritySelection(
   }
 
   const language = configured.searchParams.get('language')?.trim() || 'en';
-  const authorityUrl = new URL('/authorityz', configured);
+  const authorityUrl = new URL(primary);
+  authorityUrl.pathname = `${primary.pathname.slice(0, -'/ws/transcribe'.length)}/authorityz`;
   authorityUrl.protocol = authorityUrl.protocol === 'wss:'
     ? 'https:'
     : authorityUrl.protocol === 'ws:'
@@ -60,6 +64,7 @@ export async function resolveAuthoritySelection(
   authorityUrl.searchParams.set('mode', mode);
 
   let response: AuthorityResponse = {};
+  let probeSucceeded = false;
   let reasons: string[] = [];
   try {
     const authorityResponse = await fetchImpl(authorityUrl.toString(), {
@@ -68,6 +73,7 @@ export async function resolveAuthoritySelection(
       cache: 'no-store',
     });
     response = await authorityResponse.json() as AuthorityResponse;
+    probeSucceeded = authorityResponse.ok;
     if (!authorityResponse.ok) {
       reasons.push(`authority_http_${authorityResponse.status}`);
     }
@@ -77,7 +83,7 @@ export async function resolveAuthoritySelection(
     );
   }
   reasons = [...reasons, ...(response.reasons ?? [])];
-  if (response.eligible === true && response.ok !== false) {
+  if (probeSucceeded && response.eligible === true && response.ok !== false) {
     return {
       websocketUrl: primaryUrl,
       authorityEnabled: true,
@@ -95,12 +101,7 @@ export async function resolveAuthoritySelection(
     );
   }
   return {
-    websocketUrl: toStreamingSttWebSocketUrl(
-      new URL(
-        fallback,
-        `${locationLike.protocol}//${locationLike.hostname}`,
-      ),
-    ),
+    websocketUrl: streamingSttUrl(fallback, locationLike).toString(),
     authorityEnabled: false,
     mode,
     endpointThreshold,
@@ -115,26 +116,6 @@ export async function resolveAuthoritySelection(
  */
 export function initializeLiveSttAuthorityController(): () => void {
   return () => undefined;
-}
-
-function toStreamingSttWebSocketUrl(input: URL): string {
-  const url = new URL(input.toString());
-  const language = url.searchParams.get('language')?.trim();
-  url.protocol = url.protocol === 'https:' || url.protocol === 'wss:'
-    ? 'wss:'
-    : 'ws:';
-  const normalizedPath = url.pathname.replace(/\/+$/, '');
-  if (normalizedPath.endsWith('/ws/transcribe')) {
-    url.pathname = normalizedPath;
-  } else if (normalizedPath.endsWith('/transcribe')) {
-    url.pathname = `${normalizedPath.slice(0, -'/transcribe'.length)}/ws/transcribe`;
-  } else {
-    url.pathname = `${normalizedPath}/ws/transcribe`.replace(/\/{2,}/g, '/');
-  }
-  url.search = '';
-  if (language) url.searchParams.set('language', language);
-  url.hash = '';
-  return url.toString();
 }
 
 function normalizeMode(value: string | null): AuthorityMode {

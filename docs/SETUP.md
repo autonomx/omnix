@@ -12,6 +12,9 @@ The normal development launcher can run `python scripts/run_omnix_gateway.py --a
 | `OMNIX_GATEWAY_REQUIRED_WORKERS` | Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness. |
 | `OMNIX_GATEWAY_API_ORIGINS` | Up to eight distinct API origins, for diagnostics and local routing. |
 | `OMNIX_SOFTWARE_REVISION` | Build identifier in runtime diagnostics and durable node registration. |
+| `OMNIX_SERVICE_TOKEN` | Shared URL-safe service credential with at least 32 random bytes; the local launcher provisions protected storage when unset. Required on all non-health model-service routes and internal worker requests. |
+| `OMNIX_MAX_UPLOAD_BYTES` | Positive integer; streamed model-service request budget, default 52428800 bytes including multipart overhead. |
+| `VITE_ASSISTANT_STT_URL=/api/stt?authority=auto` | Browser speech routes through its gateway origin. The gateway sends the private credential to `OMNIX_STT_URL`. |
 
 Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
 
@@ -541,3 +544,25 @@ Omnix is designed local-first, but the same rules apply when services are split 
 - keep destructive tool actions behind explicit approval and scope controls.
 
 For the deeper component model, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Listener defaults
+
+Omnix-managed listeners bind to `127.0.0.1`. `OMNIX_BIND_HOST` selects the address;
+any non-loopback address also requires `OMNIX_ALLOW_LAN=true`. The launcher
+passes the validated address to gateway, web, STT, TTS and image services.
+Legacy `OMNIX_TTS_HOST` and `OMNIX_GATEWAY_HOST` listener settings are replaced
+by `OMNIX_BIND_HOST`. The standalone compatibility API uses port `8101`
+(`OMNIX_OPENAI_API_PORT` overrides it), leaving `8001` available for API replicas.
+
+For an explicitly exposed Vite listener, set `OMNIX_BIND_HOST=0.0.0.0` and
+`OMNIX_ALLOW_LAN=true` before running `npm --prefix src/apps/web run dev:lan`
+or `npm --prefix src/apps/web run preview:lan`. Add the browser's exact origin
+to `OMNIX_ALLOWED_ORIGINS` and hostname to `OMNIX_ALLOWED_HOSTS`. Allowed CORS
+origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards
+are rejected. Configure an authenticated ingress before exposing a deployment.
+
+The gateway, launcher and model services validate `Host` for every request.
+`OMNIX_ALLOWED_HOSTS` extends the default localhost and loopback allow-list.
+Every POST, PUT, PATCH and DELETE requires `X-Omnix-Client` (for example `web`,
+`gateway` or `cli`); browser mutation and WebSocket origins must be explicitly
+allowed. The web client and launcher UI add the header automatically.

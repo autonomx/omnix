@@ -19,10 +19,12 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import uvicorn
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from app.runtime.net import allowed_origins, bind_host
+from app.security.model_service import ModelServiceMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 import app.shared as shared
@@ -43,13 +45,14 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # TTS is handled via the audio provider system (e.g. faster-qwen3-tts)
+app.add_middleware(ModelServiceMiddleware)
 
 # Models available
 AVAILABLE_MODELS = [
@@ -207,9 +210,6 @@ async def get_voice_preview(voice_id: str):
 async def create_speech(request: SpeechRequest, background_tasks: BackgroundTasks):
     """Generate speech from text"""
     try:
-        # Generate unique ID for this request
-        speech_id = str(uuid.uuid4())
-        
         # Use the TTS provider system
         tts_provider = shared.get_tts_provider()
         if not tts_provider:
@@ -241,7 +241,7 @@ async def create_speech(request: SpeechRequest, background_tasks: BackgroundTask
     except Exception as e:
         logger.error(f"Error generating speech: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="model_service_error") from e
 
 @app.post("/v1/audio/transcriptions")
 async def create_transcription(request: TranscriptionRequest):
@@ -253,10 +253,10 @@ async def create_transcription(request: TranscriptionRequest):
         
     except Exception as e:
         logger.error(f"Error transcribing audio: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="model_service_error") from e
 
 @app.post("/v1/chat/completions")
-async def create_chat_completion(request: ChatRequest):
+async def create_chat_completion(request: ChatRequest, http_request: Request):
     """Create chat completion"""
     try:
         # Generate unique ID
@@ -266,12 +266,10 @@ async def create_chat_completion(request: ChatRequest):
         # For streaming responses
         if request.stream:
             return StreamingResponse(
-                generate_chat_stream(request, completion_id, created_time),
+                generate_chat_stream(request, completion_id, created_time,
+                                     request_id=http_request.state.request_id),
                 media_type="text/event-stream"
             )
-        
-        # For non-streaming responses
-        messages = [msg.dict() for msg in request.messages]
         
         # Here you would integrate with your LLM server
         # For now, return a placeholder response
@@ -296,9 +294,9 @@ async def create_chat_completion(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error creating chat completion: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="model_service_error") from e
 
-async def generate_chat_stream(request: ChatRequest, completion_id: str, created_time: int):
+async def generate_chat_stream(request: ChatRequest, completion_id: str, created_time: int, *, request_id: str):
     """Generate streaming chat completion"""
     try:
         # Placeholder for streaming implementation
@@ -325,7 +323,7 @@ async def generate_chat_stream(request: ChatRequest, completion_id: str, created
         
     except Exception as e:
         logger.error(f"Error generating chat stream: {e}")
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        yield f"data: {json.dumps({'error': 'model_service_error', 'request_id': request_id})}\n\n"
 
 @app.get("/health")
 async def health_check():
@@ -341,8 +339,8 @@ if __name__ == "__main__":
     # Start the OpenAI-compatible API server
     uvicorn.run(
         "openai_api:app",
-        host="0.0.0.0",
-        port=8001,
+        host=bind_host(),
+        port=int(os.environ.get("OMNIX_OPENAI_API_PORT", "8101")),
         reload=False,
         log_level="info"
     )

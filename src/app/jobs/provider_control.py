@@ -6,13 +6,19 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlparse
+from app.runtime_config import ServiceEndpoint, get_runtime_config
+from app.security.service_token import service_headers
 
 from .models import JobRecord
 from .residency import ModelResidencyHook, ModelResidencyRecord
 
 
 PostJson = Callable[[str, dict[str, Any], float], dict[str, Any]]
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def create_worker_model_control_hooks(
@@ -112,9 +118,16 @@ def _worker_endpoint(record: ModelResidencyRecord, job: JobRecord) -> str:
     endpoint = _safe_str(record.worker_endpoint or payload.get("worker_endpoint")).strip().rstrip("/")
     if not endpoint:
         raise RuntimeError("worker_model_control_endpoint_missing")
-    parsed = urlparse(endpoint)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise RuntimeError(f"worker_model_control_endpoint_invalid:{endpoint}")
+    try:
+        endpoint = ServiceEndpoint(endpoint).url
+    except ValueError as exc:
+        raise RuntimeError("worker_model_control_endpoint_invalid") from exc
+    config = get_runtime_config()
+    allowed = {configured.url if configured else f"http://127.0.0.1:{port}"
+               for configured, port in ((config.tts, 5101), (config.stt, 5201), (config.image, 5301))}
+    if endpoint not in allowed:
+        # Public job input and a residency record must never choose the credential audience.
+        raise RuntimeError("worker_model_control_endpoint_not_configured")
     return endpoint
 
 
@@ -142,11 +155,11 @@ def _post_json(url: str, payload: dict[str, Any], timeout_seconds: float) -> dic
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={"Content-Type": "application/json", "Accept": "application/json", **service_headers()},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=timeout_seconds) as response:
             raw = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")

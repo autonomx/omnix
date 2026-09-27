@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import uvicorn
 
 from main import HOST, PORT, app
+from app.runtime.net import bind_host
 
 
 def create_app():
@@ -23,8 +24,9 @@ def create_app():
 
 
 def _is_port_available(host: str, port: int) -> bool:
-    probe_host = "0.0.0.0" if host in {"0.0.0.0", "::"} else host
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    probe_host = bind_host(host)
+    family = socket.AF_INET6 if ":" in probe_host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((probe_host, int(port)))
@@ -120,6 +122,9 @@ if __name__ == "__main__":
     if not _try_clear_port(HOST, PORT):
         _print_port_conflict_help(HOST, PORT)
         raise SystemExit(1)
+
+    from app.security.service_credentials import initialize_service_token
+    initialize_service_token()
 
     print("\n" + "=" * 50)
     print("Omnix Web Gateway")

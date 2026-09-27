@@ -53,8 +53,9 @@ def test_gmail_send_requires_approval_before_execution():
         config=_connected_config("gmail"),
     )
     approved = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", approved=True),
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email"),
         config=_connected_config("gmail"),
+        approved=True,
     )
 
     assert pending.allowed is True
@@ -67,8 +68,9 @@ def test_gmail_send_requires_approval_before_execution():
 
 def test_gmail_delete_is_blocked_by_safe_default_action_config():
     decision = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.delete_email", approved=True),
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.delete_email"),
         config=_connected_config("gmail"),
+        approved=True,
     )
 
     assert decision.allowed is False
@@ -82,8 +84,9 @@ def test_calendar_create_requires_approval_and_delete_is_blocked_by_default():
         config=_connected_config("calendar"),
     )
     delete_decision = review_assistant_tool_request(
-        AssistantToolRequest(tool_id="calendar", action_id="calendar.delete_event", approved=True),
+        AssistantToolRequest(tool_id="calendar", action_id="calendar.delete_event"),
         config=_connected_config("calendar"),
+        approved=True,
     )
 
     assert create_decision.allowed is True
@@ -124,7 +127,7 @@ def test_review_route_uses_persisted_config(monkeypatch, tmp_path):
     path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
     save_assistant_tools_config(_connected_config("contacts"), path)
-    client = TestClient(create_gateway_app())
+    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post(
         "/api/assistant/tools/review",

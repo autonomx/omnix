@@ -258,6 +258,7 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND queued.resource_class = ANY(%s)
                    AND (%s::text[] IS NULL OR queued.job_type = ANY(%s))
                    AND queued.attempt_count < queued.max_attempts
+                   AND queued.job_type <> 'rpg.turn.foreground_record'
                    AND NOT (
                        queued.job_type = 'chat.generate'
                        AND COALESCE(queued.metadata #>> '{{compat_contract,compat,inline_execution}}', 'false') = 'true'

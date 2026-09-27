@@ -117,9 +117,12 @@ def test_workflow_versions_idempotency_and_stale_step_recovery() -> None:
         database.close()
 
 
-def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries() -> None:
+def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries(monkeypatch) -> None:
     database = _database()
     runtime = PostgresWorkflowRuntime(database)
+    # This test explicitly drives _supervise_once below. A second automatic
+    # supervisor must not claim its steps while arranging the recovery state.
+    monkeypatch.setattr(runtime, "_ensure_supervisor", lambda: None)
     suffix = uuid.uuid4().hex[:10]
     try:
         definition = WorkflowDefinition(

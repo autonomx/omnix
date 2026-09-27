@@ -20,7 +20,7 @@ def test_runtime_dashboard_uses_hybrid_stt(monkeypatch) -> None:
     assert by_id["gateway"].env["OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"] == "true"
     assert by_id["gateway"].env["OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS"] == "2"
     assert by_id["web"].env["VITE_ASSISTANT_STT_URL"].startswith(
-        "http://127.0.0.1:5201?"
+        "/api/stt?"
     )
     assert "authority=auto" in by_id["web"].env["VITE_ASSISTANT_STT_URL"]
     assert "endpoint_threshold=0.5" in by_id["web"].env["VITE_ASSISTANT_STT_URL"]

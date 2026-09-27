@@ -37,6 +37,20 @@ function deterministicNoise(length: number, seed: number): Float32Array {
 }
 
 describe('live latency PR3-PR5 rollout policies', () => {
+  it('keeps STT authority and WebSocket routes on the gateway origin and port', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, eligible: true }))) as unknown as typeof fetch;
+    const selected = await resolveAuthoritySelection('/api/stt?authority=auto&language=en',
+      { protocol: 'http:', hostname: 'localhost', host: 'localhost:5173' }, fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:5173/api/stt/authorityz?language=en&mode=auto', expect.any(Object));
+    expect(selected.websocketUrl).toBe('ws://localhost:5173/api/stt/ws/transcribe?language=en');
+    expect(selected.authorityEnabled).toBe(true);
+  });
+
+  it('does not enable authority from an error status with an eligible body', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, eligible: true }), { status: 503 })) as unknown as typeof fetch;
+    await expect(resolveAuthoritySelection('/api/stt?authority=auto', locationLike, fetchImpl)).rejects.toThrow('authority_http_503');
+  });
+
   it('selects authoritative Kyutai only after the pre-session gate passes', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       ok: true,
@@ -80,7 +94,7 @@ describe('live latency PR3-PR5 rollout policies', () => {
     expect(selected.authorityEnabled).toBe(false);
     expect(selected.fallbackUsed).toBe(false);
     expect(selected.reasons).toEqual(['default_parakeet']);
-    expect(selected.websocketUrl).toBe('ws://127.0.0.1:5201/ws/transcribe');
+    expect(selected.websocketUrl).toBe('ws://localhost/api/stt/ws/transcribe');
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 

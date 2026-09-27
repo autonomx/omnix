@@ -1,4 +1,5 @@
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from './live-accepted-final';
+import { streamingSttUrl, type SpeechLocation } from './stt-url';
 
 export type StreamingSttReady = {
   type: 'ready';
@@ -213,7 +214,6 @@ const DEFAULT_STT_CONFIG_VERSION = 'legacy-default';
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONNECT_DELAY_MS = 300;
 const DEFAULT_MAX_PENDING_CHUNKS = 250;
-const DEFAULT_STT_WEBSOCKET_PORT = '5201';
 const DEFAULT_HARD_SEGMENT_MS = 10_000;
 const DEFAULT_OVERLAP_MS = 300;
 const DEFAULT_MAX_FINAL_RESULT_AGE_MS = 8_000;
@@ -223,33 +223,10 @@ const CAP_AUTHORITATIVE_PREVIEW = 'authoritative_preview';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export function getDefaultStreamingSttWebSocketUrl(
-  locationLike: Pick<Location, 'protocol' | 'hostname'> = globalThis.location,
+  locationLike: SpeechLocation = globalThis.location,
   sttServiceUrl?: string,
 ): string {
-  if (sttServiceUrl?.trim()) return toStreamingSttWebSocketUrl(sttServiceUrl, locationLike);
-  const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-  const hostname = localServiceHostname(locationLike.hostname);
-  return `${wsProtocol}//${hostname}:${DEFAULT_STT_WEBSOCKET_PORT}/ws/transcribe`;
-}
-
-function localServiceHostname(hostname: string): string {
-  const normalized = hostname.trim().toLowerCase();
-  return normalized === 'localhost' || normalized === '::1' || normalized === '[::1]' ? '127.0.0.1' : hostname;
-}
-
-function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 'protocol' | 'hostname'>): string {
-  const baseUrl = `${locationLike.protocol}//${locationLike.hostname}`;
-  const url = new URL(value.trim(), baseUrl);
-  const language = url.searchParams.get('language')?.trim();
-  url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
-  const normalizedPath = url.pathname.replace(/\/+$/, '');
-  if (normalizedPath.endsWith('/ws/transcribe')) url.pathname = normalizedPath;
-  else if (normalizedPath.endsWith('/transcribe')) url.pathname = `${normalizedPath.slice(0, -'/transcribe'.length)}/ws/transcribe`;
-  else url.pathname = `${normalizedPath}/ws/transcribe`.replace(/\/{2,}/g, '/');
-  url.search = '';
-  if (language) url.searchParams.set('language', language);
-  url.hash = '';
-  return url.toString();
+  return streamingSttUrl(sttServiceUrl?.trim() || '/api/stt', locationLike).toString();
 }
 
 function dispatchSttDiagnostic(stage: string, detail: Record<string, unknown>): void {

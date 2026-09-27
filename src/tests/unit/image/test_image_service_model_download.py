@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+import secrets
+
+from app.security.service_token import service_headers
 import json
 import sys
 from pathlib import Path
@@ -10,6 +14,11 @@ from fastapi.testclient import TestClient
 from app import image_service_app
 from app.image import downloads as image_downloads
 from app.image.downloads import get_image_local_model_status
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_download_does_not_load_selected_model(monkeypatch):
@@ -43,7 +52,7 @@ def test_download_does_not_load_selected_model(monkeypatch):
         },
     )
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.post(
             "/provider/download",
             json={"provider": "krea2_turbo"},
@@ -80,7 +89,7 @@ def test_image_service_forwards_request_scoped_hf_token(monkeypatch):
         },
     )
 
-    with TestClient(image_service_app.app) as client:
+    with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
         response = client.post(
             "/provider/download",
             json={"provider": "krea2_turbo", "hf_token": "hf_request_token"},

@@ -30,6 +30,50 @@
       <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
       <article class="markdown-body">
         <h1 id="omnix-setup-guide">Omnix Setup Guide</h1>
+<h2 id="gateway-roles-and-deployment-inputs">Gateway roles and deployment inputs</h2>
+<p>The normal development launcher can run <code>python scripts/run_omnix_gateway.py --api-replicas 2</code>, supervising one worker and two API processes. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative <code>OMNIX_DATABASE_URL</code> and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Input</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><code>OMNIX_GATEWAY_BACKGROUND_ROLE=worker</code> or <code>api</code></td>
+<td>Worker owns singleton background execution; API serves requests under durable chat ownership. Default is worker.</td>
+</tr>
+<tr>
+<td><code>OMNIX_TTS_URL</code>, <code>OMNIX_STT_URL</code>, <code>OMNIX_IMAGE_URL</code></td>
+<td>HTTP(S) compute service endpoints without credentials/query/fragment. APIs use configured TTS remotely.</td>
+</tr>
+<tr>
+<td><code>OMNIX_GATEWAY_TTS_HTTP=1</code></td>
+<td>Worker also uses HTTP TTS; requires a TTS endpoint.</td>
+</tr>
+<tr>
+<td><code>OMNIX_GATEWAY_REQUIRED_WORKERS</code></td>
+<td>Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness.</td>
+</tr>
+<tr>
+<td><code>OMNIX_GATEWAY_API_ORIGINS</code></td>
+<td>Up to eight distinct API origins, for diagnostics and local routing.</td>
+</tr>
+<tr>
+<td><code>OMNIX_SOFTWARE_REVISION</code></td>
+<td>Build identifier in runtime diagnostics and durable node registration.</td>
+</tr>
+<tr>
+<td><code>OMNIX_SERVICE_TOKEN</code></td>
+<td>Shared URL-safe service credential with at least 32 random bytes; the local launcher provisions protected storage when unset. Required on all non-health model-service routes and internal worker requests.</td>
+</tr>
+<tr>
+<td><code>OMNIX_MAX_UPLOAD_BYTES</code></td>
+<td>Positive integer; streamed model-service request budget, default 52428800 bytes including multipart overhead.</td>
+</tr>
+<tr>
+<td><code>VITE_ASSISTANT_STT_URL=/api/stt?authority=auto</code></td>
+<td>Browser speech routes through its gateway origin. The gateway sends the private credential to <code>OMNIX_STT_URL</code>.</td>
+</tr>
+</tbody></table></div>
+<p>Optional explicit <code>OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME</code> and <code>OMNIX_GATEWAY_ALLOW_LOCAL_TTS</code> flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">the Nginx ingress example</a>; the Vite proxy is for local development. See <a href="OPERATIONS.html">operations</a> for readiness/recovery and <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a> for disposable test database and certification commands.</p>
 <p>This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.</p>
 <h2 id="1-prerequisites">1. Prerequisites</h2>
 <p>Install the tools needed for the parts of Omnix you intend to run.</p>
@@ -248,6 +292,7 @@ OMNIX_LAUNCHER_AUTO_START
 OMNIX_LAUNCHER_OPEN_BROWSER
 OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS
 OMNIX_BLOB_ROOT</code></pre></div>
+<p><code>OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS</code> defaults to 420 seconds. The launcher uses it for gateway readiness checks, and the Windows startup watchdog retries the web service after gateway health succeeds. Increase it for unusually slow first boots that import or warm large local runtime dependencies.</p>
 <h2 id="12-optional-kasa-tapo-smart-home-integration">12. Optional Kasa/Tapo smart-home integration</h2>
 <p>The Windows launcher defines local defaults for TP-Link Kasa discovery/control:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_KASA_ENABLED=1
@@ -339,6 +384,10 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <li>keep destructive tool actions behind explicit approval and scope controls.</li>
 </ul>
 <p>For the deeper component model, see <a href="ARCHITECTURE.html">ARCHITECTURE.html</a>.</p>
+<h2 id="listener-defaults">Listener defaults</h2>
+<p>Omnix-managed listeners bind to <code>127.0.0.1</code>. <code>OMNIX_BIND_HOST</code> selects the address; any non-loopback address also requires <code>OMNIX_ALLOW_LAN=true</code>. The launcher passes the validated address to gateway, web, STT, TTS and image services. Legacy <code>OMNIX_TTS_HOST</code> and <code>OMNIX_GATEWAY_HOST</code> listener settings are replaced by <code>OMNIX_BIND_HOST</code>. The standalone compatibility API uses port <code>8101</code> (<code>OMNIX_OPENAI_API_PORT</code> overrides it), leaving <code>8001</code> available for API replicas.</p>
+<p>For an explicitly exposed Vite listener, set <code>OMNIX_BIND_HOST=0.0.0.0</code> and <code>OMNIX_ALLOW_LAN=true</code> before running <code>npm --prefix src/apps/web run dev:lan</code> or <code>npm --prefix src/apps/web run preview:lan</code>. Add the browser&#x27;s exact origin to <code>OMNIX_ALLOWED_ORIGINS</code> and hostname to <code>OMNIX_ALLOWED_HOSTS</code>. Allowed CORS origins default to localhost and 127.0.0.1 on ports 5173 and 4173. Wildcards are rejected. Configure an authenticated ingress before exposing a deployment.</p>
+<p>The gateway, launcher and model services validate <code>Host</code> for every request. <code>OMNIX_ALLOWED_HOSTS</code> extends the default localhost and loopback allow-list. Every POST, PUT, PATCH and DELETE requires <code>X-Omnix-Client</code> (for example <code>web</code>, <code>gateway</code> or <code>cli</code>); browser mutation and WebSocket origins must be explicitly allowed. The web client and launcher UI add the header automatically.</p>
       </article>
     </main>
     <footer class="guide-footer">

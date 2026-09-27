@@ -40,11 +40,17 @@ class LocalJobExecutor:
             return None
 
         job = self.store.mark_running(claim.job.id) or claim.job
+        # Retain the credentials from this claim, never from a later row read.
+        credentials = {
+            "worker_id": self.worker_id,
+            "lease_token": claim.job.lease.token if claim.job.lease is not None else None,
+        }
         handler = self.handlers.get(job.type)
         if handler is None:
             return self.store.fail_job(
                 job.id,
                 FailJobRequest(
+                    **credentials,
                     code="job_handler_missing",
                     message=f"No local job handler is registered for {job.type}.",
                     retryable=False,
@@ -58,9 +64,9 @@ class LocalJobExecutor:
         except Exception as exc:
             return self.store.fail_job(
                 job.id,
-                FailJobRequest(code="job_handler_failed", message=str(exc), retryable=False),
+                FailJobRequest(**credentials, code="job_handler_failed", message=str(exc), retryable=False),
             )
 
         output_refs = list((result or {}).get("output_refs", []))
         logs = list((result or {}).get("logs", []))
-        return self.store.complete_job(job.id, CompleteJobRequest(output_refs=output_refs, logs=logs))
+        return self.store.complete_job(job.id, CompleteJobRequest(**credentials, output_refs=output_refs, logs=logs))
