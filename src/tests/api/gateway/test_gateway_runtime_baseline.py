@@ -51,7 +51,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app.gateway import main
     from app import live_voice_hardware_policy
     from app import assets, chat, jobs
-    from app.runtime_config import RuntimeConfig, GatewayRole, get_runtime_config
+    from app.runtime.config import RuntimeConfig, GatewayRole, get_runtime_config
 
     config = RuntimeConfig(gateway_role=GatewayRole.API)
     calls = []
