@@ -1,6 +1,8 @@
 """Structured local audit logging for automated trading and backtests."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import logging
 import os
@@ -33,7 +35,7 @@ _DEFAULT_BACKUP_COUNT = 20
 def trade_log_dir() -> Path:
     """Return the writable directory for local trade audit logs."""
 
-    override = os.environ.get("OMNIX_TRADE_LOG_DIR", "").strip()
+    override = environment().get("OMNIX_TRADE_LOG_DIR", "").strip()
     if override:
         return Path(override)
     return resources_root() / "logs" / "trade"
@@ -47,7 +49,7 @@ def trade_log_path(channel: TradeLogChannel) -> Path:
         if channel == "auto_trading"
         else "OMNIX_TRADE_BACKTEST_LOG_PATH"
     )
-    override = os.environ.get(override_name, "").strip()
+    override = environment().get(override_name, "").strip()
     if override:
         return Path(override)
     filename = "auto_trading.jsonl" if channel == "auto_trading" else "backtest.jsonl"
@@ -55,7 +57,7 @@ def trade_log_path(channel: TradeLogChannel) -> Path:
 
 
 def trade_audit_logging_enabled() -> bool:
-    return os.environ.get("OMNIX_TRADE_AUDIT_LOGGING", "1").strip().lower() in {
+    return environment().get("OMNIX_TRADE_AUDIT_LOGGING", "1").strip().lower() in {
         "1",
         "true",
         "yes",
