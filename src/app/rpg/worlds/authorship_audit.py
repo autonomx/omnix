@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_authorship_policy_signing import (
@@ -173,7 +173,7 @@ def audit_world_authorship(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -226,7 +226,7 @@ def remediate_world_authorship(
     if not blocked:
         return {**report, "remediation": {"status": "not_required", "topic_ids": []}}
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     audited_at = datetime.now(timezone.utc).isoformat()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
