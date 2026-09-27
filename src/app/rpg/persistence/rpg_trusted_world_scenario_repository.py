@@ -19,7 +19,7 @@ from app.rpg.worlds.generation_test_mode import deterministic_world_forge_test_m
 
 from .rpg_repository import canonical_json
 from .rpg_world_scenario_repository import PostgresRpgWorldScenarioRepository
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 def _hash(value: Mapping[str, Any]) -> str:

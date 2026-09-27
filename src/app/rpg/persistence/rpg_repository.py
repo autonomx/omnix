@@ -4,8 +4,8 @@ import hashlib
 import json
 from typing import Any
 
-from .errors import EntityNotFound, RevisionConflict
-from .tenant import TenantContext
+from app.persistence.errors import EntityNotFound, RevisionConflict
+from app.persistence.tenant import TenantContext
 
 
 MAX_COMPACT_TURN_RESPONSE_BYTES = 20_000

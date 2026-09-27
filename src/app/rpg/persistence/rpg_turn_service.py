@@ -7,11 +7,11 @@ from typing import Any
 from app.rpg.narrative_engine import CanonicalNarrativeResponse
 from app.rpg.narrative_engine.serialization import canonical_response_from_dict
 
-from .database import PostgresDatabase, default_database
-from .execution_repositories import JobClaimConflict
+from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.execution_repositories import JobClaimConflict
 from app.security.tenant_context import current_tenant
 from .rpg_repository import canonical_json
-from .unit_of_work import unit_of_work
+from app.persistence.unit_of_work import unit_of_work
 
 
 def persist_foreground_turn(
