@@ -9,7 +9,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import GridMapDefinition
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .contracts import ScenarioRevisionDocument
 from .map_blueprint_authoring import MapBlueprintDocument, reconcile_blueprint_scenarios
