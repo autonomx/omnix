@@ -12,7 +12,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
 
 
 pytestmark = pytest.mark.skipif(
