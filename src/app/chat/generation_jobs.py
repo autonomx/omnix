@@ -5,10 +5,12 @@ import logging
 import queue
 import threading
 from collections import defaultdict, deque
-from collections.abc import Callable
-from contextlib import contextmanager
+from collections.abc import Callable, MutableMapping
+from contextlib import contextmanager, nullcontext
+import time
 from dataclasses import dataclass
 from typing import Any
+from weakref import WeakValueDictionary
 
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
@@ -21,6 +23,7 @@ ContextBuilder = Callable[[], tuple[list[dict[str, Any]], dict[str, Any]]]
 CompletionHook = Callable[[Any, str, str, list[dict[str, Any]], dict[str, Any]], None]
 
 _CHAT_WORKER_COUNT = 4
+_CHAT_OUTSTANDING_LIMIT = 128
 _ACTIVE_JOB_STATUSES = {
     JobStatus.QUEUED,
     JobStatus.LEASED,
@@ -29,15 +32,20 @@ _ACTIVE_JOB_STATUSES = {
     JobStatus.RETRYING,
 }
 _registry_guard = threading.Lock()
-_submission_locks: dict[tuple[str, str], threading.RLock] = {}
-_job_commit_locks: dict[str, threading.RLock] = {}
+_submission_locks = WeakValueDictionary()
+_job_commit_locks = WeakValueDictionary()
 _job_cancel_events: dict[str, threading.Event] = {}
 _active_chat_providers: dict[str, Any] = {}
 _execution_registry_lock = threading.Lock()
+_provider_slots = threading.BoundedSemaphore(_CHAT_WORKER_COUNT)
 
 
 class _ChatGenerationInterrupted(Exception):
     """Internal signal used when a newer prompt supersedes this turn."""
+
+
+class ChatQueueFull(RuntimeError):
+    """Local execution capacity is exhausted; the accepted job remains observable."""
 
 
 @dataclass(frozen=True)
@@ -53,19 +61,32 @@ class _ChatGenerationWork:
 class _ChatGenerationDispatcher:
     """Bound local execution while preserving turn order within each session."""
 
-    def __init__(self, worker_count: int = _CHAT_WORKER_COUNT) -> None:
+    def __init__(self, worker_count: int = _CHAT_WORKER_COUNT,
+                 outstanding_limit: int = _CHAT_OUTSTANDING_LIMIT) -> None:
+        if worker_count < 1 or outstanding_limit < worker_count:
+            raise ValueError("outstanding limit must accommodate all Chat workers")
         self._worker_count = worker_count
+        self._outstanding_limit = outstanding_limit
+        self._outstanding = 0
         self._ready_sessions: queue.Queue[str] = queue.Queue()
         self._pending: dict[str, deque[_ChatGenerationWork]] = defaultdict(deque)
         self._scheduled: set[str] = set()
         self._lock = threading.Lock()
         self._started = False
+        self._closing = False
+        self._threads = []
+        self._active = {}
 
     def submit(self, work: _ChatGenerationWork) -> None:
         session_id = str((work.job.input_payload or {}).get("session_id") or "").strip()
         if not session_id:
             session_id = f"missing-session:{work.job.id}"
         with self._lock:
+            if self._closing:
+                raise ChatQueueFull('Chat execution is shutting down. Retry on an available gateway.')
+            if self._outstanding >= self._outstanding_limit:
+                raise ChatQueueFull("Chat execution queue is full. Retry when an active response finishes.")
+            self._outstanding += 1
             self._pending[session_id].append(work)
             if session_id not in self._scheduled:
                 self._scheduled.add(session_id)
@@ -73,20 +94,47 @@ class _ChatGenerationDispatcher:
             if not self._started:
                 self._started = True
                 for index in range(self._worker_count):
-                    threading.Thread(
+                    thread = threading.Thread(
                         target=self._worker,
                         name=f"omnix-chat-worker-{index + 1}",
                         daemon=True,
-                    ).start()
+                    )
+                    self._threads.append(thread)
+                    thread.start()
+
+    def close(self, timeout: float = 5):
+        with self._lock:
+            self._closing = True
+            works = list(self._active.values()) + [work for items in self._pending.values() for work in items]
+            self._outstanding -= sum(len(items) for items in self._pending.values())
+            self._pending.clear()
+            self._scheduled.clear()
+        for work in works:
+            try:
+                cancel_chat_generation_job(work.chat_store, work.job_store, work.job.id,
+                                           CancelJobRequest(reason='Gateway is shutting down.'))
+            except Exception:
+                logger.exception('Could not cancel Chat job during shutdown: %s', work.job.id)
+        for _ in self._threads:
+            self._ready_sessions.put(None)
+        deadline = time.monotonic() + timeout
+        for thread in self._threads:
+            thread.join(max(0, deadline - time.monotonic()))
+        return sum(thread.is_alive() for thread in self._threads)
 
     def _worker(self) -> None:
         while True:
             session_id = self._ready_sessions.get()
+            if session_id is None:
+                self._ready_sessions.task_done()
+                return
             work: _ChatGenerationWork | None = None
+            retry = False
             with self._lock:
                 pending = self._pending.get(session_id)
                 if pending:
                     work = pending.popleft()
+                    self._active[work.job.id] = work
             try:
                 if work is not None:
                     current = work.job_store.get_job(work.job.id)
@@ -99,11 +147,12 @@ class _ChatGenerationDispatcher:
                     }:
                         _drop_job_cancel_event(work.job.id)
                         continue
-                    started = (
-                        work.job_store.mark_running(work.job.id)
-                        if current.status == JobStatus.QUEUED
-                        else current
-                    )
+                    try_start = getattr(work.job_store, 'try_start_chat_job', work.job_store.mark_running)
+                    started = try_start(work.job.id) if current.status == JobStatus.QUEUED else current
+                    if started is None and current.status == JobStatus.QUEUED:
+                        retry = True
+                        time.sleep(.05)
+                        continue
                     if started is None or started.status in {
                         JobStatus.COMPLETED,
                         JobStatus.FAILED,
@@ -127,9 +176,15 @@ class _ChatGenerationDispatcher:
                     getattr(getattr(work, "job", None), "id", "unknown"),
                 )
             finally:
-                if work is not None:
+                if work is not None and not retry:
                     _drop_job_cancel_event(work.job.id)
                 with self._lock:
+                    if work is not None:
+                        self._active.pop(work.job.id, None)
+                        if retry and not self._closing:
+                            self._pending[session_id].appendleft(work)
+                        else:
+                            self._outstanding -= 1
                     pending = self._pending.get(session_id)
                     if pending:
                         self._ready_sessions.put(session_id)
@@ -142,7 +197,7 @@ class _ChatGenerationDispatcher:
 _dispatcher = _ChatGenerationDispatcher()
 
 
-def _registry_lock(registry: dict[Any, threading.RLock], key: Any) -> threading.RLock:
+def _registry_lock(registry: MutableMapping[Any, threading.RLock], key: Any) -> threading.RLock:
     with _registry_guard:
         return registry.setdefault(key, threading.RLock())
 
@@ -187,9 +242,14 @@ def _interrupt_active_chat_provider(job_id: str) -> bool:
 
 
 @contextmanager
-def chat_submission_lock(session_id: str, submission_id: str | None):
+def chat_submission_lock(session_id: str, submission_id: str | None, *, job_store=None, chat_store=None):
     """Serialize idempotent acceptance for one browser submission."""
 
+    durable = getattr(job_store, 'chat_transaction', None)
+    if callable(durable):
+        with durable(chat_store, session_id):
+            yield
+        return
     key = (session_id, submission_id or f"anonymous:{threading.get_ident()}")
     lock = _registry_lock(_submission_locks, key)
     with lock:
@@ -281,16 +341,23 @@ def start_chat_generation_job(
     # takes the work. This lets a newer prompt cancel a queued predecessor
     # without falsely presenting it as provider execution.
     _job_cancel_event(job.id, create=True)
-    _dispatcher.submit(
-        _ChatGenerationWork(
+    try:
+        dispatcher = getattr(job_store, 'chat_dispatcher', _dispatcher)
+        dispatcher.submit(_ChatGenerationWork(
             chat_store=chat_store,
             job_store=job_store,
             job=job,
             request=request,
             context_builder=context_builder,
             completion_hook=completion_hook,
-        )
-    )
+        ))
+    except ChatQueueFull as exc:
+        _drop_job_cancel_event(job.id)
+        payload = job.input_payload or {}
+        _fail_job(chat_store, job_store, job, exc,
+                  session_id=payload.get("session_id"), message_id=payload.get("message_id"),
+                  code="chat_queue_full")
+        return job_store.get_job(job.id) or job
     return job
 
 
@@ -301,6 +368,9 @@ def active_chat_generation_jobs(
 ) -> list[JobRecord]:
     """Return active Chat turns for one session in submission order."""
 
+    lookup = getattr(job_store, 'list_active_chat_jobs', None)
+    if callable(lookup):
+        return lookup(session_id)
     active = []
     for job in job_store.list_jobs(limit=500):
         if job.type != "chat.generate" or job.status not in _ACTIVE_JOB_STATUSES:
@@ -342,6 +412,18 @@ def cancel_chat_generation_job(
 ) -> JobRecord | None:
     """Cancel without racing the final transcript/job commit."""
 
+    durable = getattr(job_store, 'chat_transaction', None)
+    current = job_store.get_job(job_id)
+    session_id = str((current.input_payload or {}).get('session_id') or '') if current else ''
+    transaction = durable(chat_store, session_id) if callable(durable) and session_id else nullcontext()
+    # Match admission/completion: acquire the durable session lock before any
+    # process-local job lock to avoid opposite lock ordering during interruption.
+    with transaction:
+        return _cancel_chat_generation_job_locked(chat_store, job_store, job_id, request)
+
+
+def _cancel_chat_generation_job_locked(chat_store, job_store, job_id, request):
+
     with chat_job_commit_lock(job_id):
         current = job_store.get_job(job_id)
         if current is None:
@@ -353,17 +435,23 @@ def cancel_chat_generation_job(
             JobStatus.STALE,
         }:
             return current
-        event = _job_cancel_event(job_id, create=True)
-        if event is not None:
-            event.set()
         canceled = job_store.cancel_job(job_id, request) or current
-        if current.status in {
-            JobStatus.LEASED,
-            JobStatus.RUNNING,
-            JobStatus.WAITING,
-            JobStatus.RETRYING,
-        }:
-            _interrupt_active_chat_provider(job_id)
+        def signal():
+            event = _job_cancel_event(job_id, create=True)
+            if event is not None:
+                event.set()
+            if current.status in {
+                JobStatus.LEASED, JobStatus.RUNNING, JobStatus.WAITING, JobStatus.RETRYING,
+            }:
+                _interrupt_active_chat_provider(job_id)
+            else:
+                _drop_job_cancel_event(job_id)
+
+        if callable(getattr(job_store, 'chat_transaction', None)):
+            from app.persistence.transaction_binding import after_commit
+            after_commit(job_store.database, signal)
+        else:
+            signal()
         payload = current.input_payload or {}
         session_id = str(payload.get("session_id") or "").strip()
         message_id = str(payload.get("message_id") or "").strip()
@@ -376,7 +464,25 @@ def cancel_chat_generation_job(
 
 
 def recover_abandoned_chat_generation_jobs(chat_store: Any, job_store: Any) -> int:
-    """Fail process-local Chat jobs left non-terminal by an earlier gateway."""
+    """Recover abandoned Chat jobs while preserving work owned by live gateways."""
+
+    candidates = getattr(job_store, "iter_recoverable_chat_jobs", None)
+    transition = getattr(job_store, "recover_chat_job", None)
+    if callable(candidates) and callable(transition):
+        recovered = 0
+        for candidate in candidates():
+            job = transition(candidate.id)
+            if job is None:
+                continue
+            payload = job.input_payload or {}
+            if chat_store is not None and payload.get("session_id") and payload.get("message_id"):
+                marker = _mark_assistant_turn_canceled if job.status == JobStatus.CANCELED else _mark_assistant_turn_failed
+                try:
+                    marker(chat_store, payload["session_id"], payload["message_id"])
+                except Exception:
+                    logger.warning("Could not update recovered assistant turn for job %s", job.id, exc_info=True)
+            recovered += 1
+        return recovered
 
     list_jobs = getattr(job_store, "list_jobs", None)
     if not callable(list_jobs):
@@ -386,6 +492,7 @@ def recover_abandoned_chat_generation_jobs(chat_store: Any, job_store: Any) -> i
     for job in list_jobs(limit=500):
         if (
             job.type != "chat.generate"
+            or job.compat.get("execution_owner")
             or not job.compat.get("inline_execution")
             or job.status not in _ACTIVE_JOB_STATUSES | {JobStatus.CANCEL_REQUESTED}
         ):
@@ -442,6 +549,13 @@ def _generate_reply_with_interrupt(
 
     result: dict[str, Any] = {}
     completed = threading.Event()
+    provider_slots = _provider_slots
+    while not provider_slots.acquire(timeout=.1):
+        if _cancel_requested(job_store, job.id):
+            raise _ChatGenerationInterrupted()
+    if _cancel_requested(job_store, job.id):
+        provider_slots.release()
+        raise _ChatGenerationInterrupted()
 
     def invoke() -> None:
         try:
@@ -455,6 +569,7 @@ def _generate_reply_with_interrupt(
         except Exception as exc:
             result["error"] = exc
         finally:
+            provider_slots.release()
             completed.set()
 
     threading.Thread(
@@ -581,10 +696,15 @@ def _run_chat_generation_job(
         content = str(answer.get("content") or "").strip()
         metadata = dict(answer.get("metadata") or {})
         metadata["reply_to_message_id"] = message_id
-        with chat_job_commit_lock(job.id):
+        atomic_completion = getattr(job_store, 'chat_completion', None)
+        transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
+        with transaction, chat_job_commit_lock(job.id):
             if _cancel_requested(job_store, job.id):
                 _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
                 return
+            require_owner = getattr(job_store, "require_chat_execution_owner", None)
+            if callable(require_owner):
+                require_owner(job.id)
             _persist_routing_metadata(chat_store, session, user_message)
             if context_items:
                 metadata["context_sources"] = _context_source_summaries(context_items)
@@ -607,7 +727,8 @@ def _run_chat_generation_job(
                         context_diagnostics,
                     )
                 except Exception:
-                    _remove_assistant_reply(chat_store, session_id, message_id)
+                    if not callable(atomic_completion):
+                        _remove_assistant_reply(chat_store, session_id, message_id)
                     raise
             completed_job = job_store.complete_job(
                 job.id,
@@ -647,6 +768,7 @@ def _fail_job(
     *,
     session_id: str | None = None,
     message_id: str | None = None,
+    code: str = "chat_generation_failed",
 ) -> None:
     message = " ".join(str(error).split()).strip() or type(error).__name__
     current = job_store.get_job(job.id)
@@ -678,7 +800,7 @@ def _fail_job(
         job_store.fail_job(
             job.id,
             FailJobRequest(
-                code="chat_generation_failed",
+                code=code,
                 message=message[:500],
                 retryable=True,
                 details={
@@ -702,6 +824,9 @@ def _cancel_chat_turn(
     session_id: str,
     message_id: str,
 ) -> None:
+    current = job_store.get_job(job.id)
+    if current is None or current.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.STALE}:
+        return
     try:
         _patch_user_message_metadata(
             chat_store,
@@ -726,6 +851,9 @@ def _finalize_job_cancel(job_store: Any, job_id: str) -> None:
 def _cancel_requested(job_store: Any, job_id: str) -> bool:
     current = job_store.get_job(job_id)
     return current is None or current.status in {
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.STALE,
         JobStatus.CANCEL_REQUESTED,
         JobStatus.CANCELED,
     }

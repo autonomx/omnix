@@ -180,6 +180,14 @@ class PostgresDatabase:
 
     @contextmanager
     def connection(self) -> Iterator[Any]:
+        from .transaction_binding import shared_work
+        from .background_authority import require_background_owner
+
+        require_background_owner()
+        work = shared_work(self)
+        if work is not None:
+            yield work.connection
+            return
         self.open()
         assert self._pool is not None
         try:

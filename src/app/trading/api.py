@@ -204,7 +204,7 @@ def create_trading_router(
         return InstrumentSearchResponse(instruments=results)
 
     @router.get("/bars", response_model=BarsResponse)
-    async def bars(
+    def bars(
         instrument_id: str = Query(min_length=3, max_length=200),
         interval: str = Query(default="1m", max_length=16),
         limit: int = Query(default=500, ge=1, le=5_000),
@@ -224,7 +224,7 @@ def create_trading_router(
             ) from exc
 
     @router.get("/quotes", response_model=QuoteResponse)
-    async def quote(
+    def quote(
         instrument_id: str = Query(min_length=3, max_length=200),
         binding_id: str | None = Query(default=None, max_length=240),
     ) -> QuoteResponse:

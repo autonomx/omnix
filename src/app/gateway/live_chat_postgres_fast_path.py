@@ -29,12 +29,27 @@ from app.persistence.chat_runtime_compat import (
     PostgresChatSessionStore,
 )
 from app.persistence.unit_of_work import unit_of_work
+from app.persistence.transaction_binding import share_transaction, after_commit
 
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_postgres_fast_path_installed"
 _SESSION_LOCKS_GUARD = Lock()
 _SESSION_LOCKS: dict[str, tuple[RLock, int]] = {}
+
+
+@contextmanager
+def _durable_session_mutation(store, session_id):
+    adapter = store._repository
+    with unit_of_work(adapter.database) as work:
+        started = time.perf_counter()
+        work.connection.execute(
+            'SELECT id FROM omnix_chat_sessions WHERE id = %s AND workspace_id = %s FOR UPDATE',
+            (session_id, adapter.context.workspace_id),
+        )
+        with share_transaction(work):
+            yield (time.perf_counter() - started) * 1000
+        work.commit()
 
 
 @contextmanager
@@ -94,18 +109,16 @@ def _assistant_message_id(session_id: str, user_message_id: str) -> str:
 
 
 def _load_single_session(store: Any, session_id: str) -> ChatSession | None:
-    """Load only the requested session and its bounded transcript."""
+    """Load only the requested session, paging through its complete transcript."""
     adapter = store._repository
     with unit_of_work(adapter.database) as work:
         record = work.chats.get_session(adapter.context, session_id)
         if record is None:
             work.rollback()
             return None
-        messages = work.chats.list_messages(
-            adapter.context,
-            session_id,
-            limit=500,
-            after_position=-1,
+        loader = getattr(adapter, '_list_all_messages', None)
+        messages = loader(work, session_id) if callable(loader) else work.chats.list_messages(
+            adapter.context, session_id, limit=500, after_position=-1,
         )
         session = adapter._to_session(record, messages)
         work.rollback()
@@ -487,7 +500,7 @@ def _complete_streamed_reply_fast(
         if generation_status == "completed":
             stage = "post_turn_maintenance"
             maintenance_started = time.perf_counter()
-            self._run_post_turn_maintenance(completed, user_message_id)
+            after_commit(self._repository.database, lambda: self._run_post_turn_maintenance(completed, user_message_id))
             maintenance_ms = (time.perf_counter() - maintenance_started) * 1000.0
         else:
             maintenance_ms = 0.0
@@ -544,7 +557,7 @@ def install_live_chat_postgres_fast_path() -> None:
         request: SendChatMessageRequest,
         **kwargs: Any,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        with _live_session_mutation(session_id):
+        with _durable_session_mutation(self, session_id):
             return _begin_user_message_fast(self, session_id, request, **kwargs)
 
     @wraps(original_complete_streamed_reply)
@@ -555,7 +568,7 @@ def install_live_chat_postgres_fast_path() -> None:
         content: str,
         metadata: dict[str, Any],
     ) -> ChatSession | None:
-        with _live_session_mutation(session_id) as lock_wait_ms:
+        with _durable_session_mutation(self, session_id) as lock_wait_ms:
             return _complete_streamed_reply_fast(
                 self,
                 session_id,

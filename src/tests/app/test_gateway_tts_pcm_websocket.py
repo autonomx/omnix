@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import threading
 
 from fastapi.testclient import TestClient
 
@@ -81,7 +82,12 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
 
     provider = FakeTtsProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(tts_pcm_websocket, "get_tts_provider", lambda: provider)
+    resolver_threads = []
+    loop_threads = []
+    def resolve():
+        resolver_threads.append(threading.get_ident())
+        return provider
+    monkeypatch.setattr(tts_pcm_websocket, "get_tts_provider", resolve)
     monkeypatch.setattr(tts_pcm_websocket, "diagnostics_log_path", lambda: "/tmp/tts-streaming.log")
     monkeypatch.setattr(
         tts_pcm_websocket,
@@ -90,7 +96,7 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
             (stream_id, source, event, details)
         ),
     )
-    monkeypatch.setattr(tts_pcm_websocket, "begin_stream", lambda stream_id, **details: 1)
+    monkeypatch.setattr(tts_pcm_websocket, "begin_stream", lambda stream_id, **details: loop_threads.append(threading.get_ident()))
     monkeypatch.setattr(tts_pcm_websocket, "end_stream", lambda stream_id, **details: 0)
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     client = TestClient(app)
@@ -137,13 +143,14 @@ def test_tts_pcm_websocket_emits_correlated_binary_frames_and_diagnostics(monkey
     assert len(frame) == 4_800
     assert done == {"type": "done", "stream_id": "chat-test-stream-1", "partial": False}
     assert len(provider.calls) == 1
+    assert resolver_threads[0] != loop_threads[0]
     assert provider.calls[0]["text"] == "Hello from the websocket"
     assert provider.calls[0]["speaker"] == "Alex"
-    assert provider.calls[0]["chunk_size"] == 8
+    assert provider.calls[0]["chunk_size"] == 4
     assert provider.calls[0]["non_streaming_mode"] is False
     assert provider.calls[0]["parity_mode"] is False
     assert provider.calls[0]["repetition_penalty"] == 1.05
-    assert provider.calls[0]["max_new_tokens"] == 96
+    assert provider.calls[0]["max_new_tokens"] == estimate_chat_stream_max_new_tokens("Hello from the websocket")
 
     event_names = [event for _stream_id, _source, event, _details in logged_events]
     assert "request_received" in event_names

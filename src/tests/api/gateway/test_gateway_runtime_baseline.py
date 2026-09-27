@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 import threading
 from types import SimpleNamespace
 
@@ -44,6 +44,8 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
 
     calls = []
     stores = [SimpleNamespace() for _ in range(4)]
+    stores[0].database = object()
+    stores[0].context = SimpleNamespace(workspace_id="test-workspace")
     monkeypatch.setattr(jobs, "default_job_store", lambda: stores[0])
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
     monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
@@ -70,7 +72,9 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
             is kwargs["asset_store_factory"]()
             is stores[1]
         )
-        assert kwargs["readiness_check"] is production.production_readiness
+        assert callable(kwargs["readiness_check"])
+        assert callable(kwargs['runtime_lifecycle'])
+        assert kwargs['background_runtime'].database is stores[0].database
         return SimpleNamespace(state=SimpleNamespace())
 
     monkeypatch.setattr(main, "create_gateway_app", compose)
@@ -107,7 +111,8 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     monkeypatch.setattr(
         uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs))
     )
-    monkeypatch.setattr(sys, "argv", ["run_omnix_gateway.py", "--reload"])
+    monkeypatch.setattr(sys, "argv", ["run_omnix_gateway.py", "--reload", "--api-replicas", "0"])
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4] / "scripts"))
     launcher = runpy.run_path(
         str(Path(__file__).resolve().parents[4] / "scripts/run_omnix_gateway.py")
     )
@@ -150,8 +155,20 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
     from app.gateway import main
 
     calls = []
+    lifecycle = []
+
+    @asynccontextmanager
+    async def owner_lifespan():
+        lifecycle.append('register')
+        try:
+            yield
+        finally:
+            assert gateway.state.runtime_started is False
+            lifecycle.append('stop')
 
     def recover(chat_store, job_store):
+        assert lifecycle == ['register']
+        lifecycle.append('recover')
         calls.append(threading.get_ident())
         return 0
 
@@ -160,6 +177,7 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
         chat_store_factory=object,
         job_store_factory=object,
         readiness_check=lambda: {"ready": True},
+        runtime_lifecycle=owner_lifespan,
     )
     # Isolate lifecycle orchestration from real trading and provider workers.
     gateway.router.on_startup.clear()
@@ -172,6 +190,7 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
         assert gateway.state.runtime_started is False
 
     asyncio.run(run())
+    assert lifecycle == ['register', 'recover', 'stop']
 
 
 def test_bootstrap_failure_is_reported_as_failed_lifespan(monkeypatch):

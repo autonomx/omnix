@@ -17,10 +17,73 @@ jobs.max_attempts, jobs.available_at, jobs.lease_owner, jobs.lease_token,
 jobs.lease_expires_at, jobs.cancel_requested_at, jobs.started_at,
 jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata
 """
+_ACTIVE_CHAT_JOBS = """
+jobs.job_type = 'chat.generate'
+AND jobs.status IN ('queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested')
+AND jobs.metadata #>> '{compat_contract,compat,inline_execution}' = 'true'
+"""
+_NO_LIVE_CHAT_OWNER = """
+NOT EXISTS (
+    SELECT 1 FROM omnix_runtime_nodes AS owner
+     WHERE owner.id = jobs.metadata #>> '{compat_contract,compat,execution_owner}'
+       AND owner.node_type = 'gateway'
+       AND owner.metadata ->> 'workspace_id' = jobs.workspace_id
+       AND owner.status IN ('active', 'draining')
+       AND owner.lease_expires_at > clock_timestamp()
+)
+"""
 
 
 class PostgresJobRepository(_BaseJobRepository):
     """Job repository with explicitly qualified durable queue operations."""
+
+    def list_recoverable_chat_jobs(self, context: TenantContext, *, limit: int = 100,
+                                  after_created_at: str | None = None,
+                                  after_id: str | None = None) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            f"""SELECT {_QUALIFIED_JOB_COLUMNS} FROM omnix_jobs AS jobs
+                 WHERE jobs.workspace_id = %s AND {_ACTIVE_CHAT_JOBS}
+                   AND {_NO_LIVE_CHAT_OWNER}
+                   AND (%s::timestamptz IS NULL OR (jobs.created_at, jobs.id) > (%s::timestamptz, %s))
+                 ORDER BY jobs.created_at, jobs.id LIMIT %s""",
+            (context.workspace_id, after_created_at, after_created_at, after_id,
+             max(1, min(int(limit), 500))),
+        ).fetchall()
+        return [_job(row) for row in rows]
+
+    def recover_chat_job(self, context: TenantContext, *, job_id: str) -> dict[str, Any] | None:
+        """Recheck owner/status when transitioning, so only one recovery can win."""
+        error = {"code": "chat_generation_failed", "retryable": True,
+                 "message": "Gateway execution owner stopped or expired before Chat generation completed."}
+        row = self.connection.execute(
+            f"""UPDATE omnix_jobs AS jobs
+                   SET status = CASE WHEN jobs.status = 'cancel_requested' THEN 'canceled' ELSE 'failed' END,
+                       error = CASE WHEN jobs.status = 'cancel_requested' THEN NULL ELSE %s::jsonb END,
+                       lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
+                       completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP,
+                       metadata = CASE WHEN jobs.status = 'cancel_requested' THEN
+                           jsonb_set(jobs.metadata, '{{compat_contract,cancel}}',
+                               COALESCE(jobs.metadata #> '{{compat_contract,cancel}}', '{{}}'::jsonb) ||
+                               jsonb_build_object('requested', TRUE, 'acknowledged_at', CURRENT_TIMESTAMP), TRUE)
+                           ELSE jobs.metadata END
+                 WHERE jobs.id = %s AND jobs.workspace_id = %s
+                   AND {_ACTIVE_CHAT_JOBS} AND {_NO_LIVE_CHAT_OWNER}
+                 RETURNING {_QUALIFIED_JOB_COLUMNS}""",
+            (_json(error), job_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            return None
+        result = _job(row)
+        self.connection.execute(
+            "UPDATE omnix_job_attempts SET status = %s, completed_at = CURRENT_TIMESTAMP "
+            "WHERE job_id = %s AND status IN ('leased', 'running')",
+            (result["status"], job_id),
+        )
+        self._event(context, job_id, f"job.{result['status']}", {
+            "recovery": True,
+            "execution_owner": (result.get("metadata") or {}).get("compat_contract", {}).get("compat", {}).get("execution_owner"),
+        })
+        return result
 
     def cancel_active_job(
         self, context: TenantContext, *, job_id: str,
@@ -182,6 +245,10 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND queued.resource_class = ANY(%s)
                    AND (%s::text[] IS NULL OR queued.job_type = ANY(%s))
                    AND queued.attempt_count < queued.max_attempts
+                   AND NOT (
+                       queued.job_type = 'chat.generate'
+                       AND COALESCE(queued.metadata #>> '{{compat_contract,compat,inline_execution}}', 'false') = 'true'
+                   )
                    AND NOT (
                        queued.job_type = 'assistant.deep_research'
                        AND COALESCE(queued.input_payload ->> 'awaiting_plan_approval', 'false') = 'true'

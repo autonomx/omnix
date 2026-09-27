@@ -3,7 +3,10 @@ from fastapi.testclient import TestClient
 from app.assistant_tools import assistant_tool_registry_payload, default_assistant_tools
 from app.gateway.main import create_gateway_app
 
-EXPECTED_TOOLS = {"gmail", "calendar", "contacts", "github"}
+EXPECTED_TOOLS = {
+    "gmail", "calendar", "contacts", "research", "trading", "market",
+    "weather", "github", "browser", "home", "kasa",
+}
 EXPECTED_ACTIONS = {
     "gmail.read_email",
     "gmail.create_draft",

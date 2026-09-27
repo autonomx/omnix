@@ -10,6 +10,20 @@ _ORIGINAL_OPENAPI: Callable[[FastAPI], dict[str, Any]] | None = None
 _ORIGINAL_INIT: Callable[..., None] | None = None
 
 
+def configure_assistant_tools_openapi(app: FastAPI) -> None:
+    """Keep provisional routes out of this gateway's generated contract."""
+    original = app.openapi
+
+    def filtered():
+        schema = original()
+        for path in list(schema.get('paths', {})):
+            if path.startswith(_PROVISIONAL_PREFIXES):
+                schema['paths'].pop(path, None)
+        return schema
+
+    app.openapi = filtered
+
+
 def install_assistant_tools_openapi_filter() -> None:
     """Install provisional assistant route hooks.
 

@@ -660,6 +660,17 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
     
     settings = load_settings()
     provider = provider_name or settings.get('audio_provider_tts', 'faster-qwen3-tts')
+
+    if provider == 'faster-qwen3-tts' and os.environ.get('OMNIX_GATEWAY_TTS_HTTP') == '1':
+        from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+        endpoint = os.environ.get('OMNIX_TTS_URL', '').strip()
+        if not endpoint:
+            raise ValueError('Gateway HTTP TTS requires OMNIX_TTS_URL')
+        key = f'{provider}:http:{endpoint}'
+        if _tts_provider_instance is None or _tts_provider_name != key:
+            _tts_provider_instance = QwenHttpGatewayProvider(endpoint)
+            _tts_provider_name = key
+        return _tts_provider_instance
     
     # Check if we already have the correct provider cached
     if _tts_provider_instance is not None and _tts_provider_name == provider:

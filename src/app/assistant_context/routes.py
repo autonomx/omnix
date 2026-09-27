@@ -153,7 +153,7 @@ def register_assistant_context_routes(
         include_in_schema=False,
         name=_ROUTE_NAME,
     )
-    async def assistant_context_chat_message_endpoint(
+    def assistant_context_chat_message_endpoint(
         session_id: str,
         request: AssistantContextChatRequest,
     ) -> SendChatMessageResponse:
@@ -234,7 +234,7 @@ def register_assistant_context_routes(
             "research_release_warnings": decision.warnings,
         }
         job_store = job_store_factory()
-        with chat_submission_lock(session_id, send_request.user_turn_id):
+        with chat_submission_lock(session_id, send_request.user_turn_id, job_store=job_store, chat_store=chat_store):
             existing_job = find_chat_generation_job(
                 job_store,
                 session_id=session_id,

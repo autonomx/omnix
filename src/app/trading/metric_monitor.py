@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 from typing import Any
 
 from fastapi import FastAPI
@@ -65,6 +66,11 @@ class TradingMetricMonitor:
             },
         }
 
+    async def stop(self) -> None:
+        if self.service is not None:
+            await asyncio.to_thread(self.service.binance.liquidation_buffer.close)
+        self.started_symbols = ()
+
 
 def register_trading_metric_monitor(gateway: FastAPI) -> TradingMetricMonitor:
     existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
@@ -78,4 +84,5 @@ def register_trading_metric_monitor(gateway: FastAPI) -> TradingMetricMonitor:
             monitor.start()
 
     gateway.router.add_event_handler("startup", startup)
+    gateway.router.add_event_handler('shutdown', monitor.stop)
     return monitor

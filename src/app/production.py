@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import threading
 from dataclasses import dataclass
+from contextlib import asynccontextmanager
 from typing import Any
 
 
@@ -67,6 +69,10 @@ def create_production_app():
     from app.chat import default_chat_store
     from app.jobs import default_job_store, default_model_residency_store
     from app.gateway.main import create_gateway_app
+    from app.persistence.gateway_runtime import GatewayRuntimeOwner
+    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+    from app.chat.generation_jobs import _ChatGenerationDispatcher
+    from app.gateway.background_runtime import GatewayBackgroundRuntime
 
     services = GatewayRuntimeServices(
         jobs=default_job_store(),
@@ -74,29 +80,61 @@ def create_production_app():
         chat=default_chat_store(),
         model_residency=default_model_residency_store(),
     )
+    owner = GatewayRuntimeOwner(services.jobs.database, services.jobs.context.workspace_id)
+    services.jobs.chat_execution_owner = owner
+    dispatcher = _ChatGenerationDispatcher()
+    services.jobs.chat_dispatcher = dispatcher
+    background = GatewayBackgroundRuntime(services.jobs.database, services.jobs.context.workspace_id,
+                                           role=os.environ.get('OMNIX_GATEWAY_BACKGROUND_ROLE', 'worker'))
+    owner.recover = lambda: recover_abandoned_chat_generation_jobs(services.chat, services.jobs)
+
+    @asynccontextmanager
+    async def lifecycle():
+        async with owner.lifespan(), background.lifespan():
+            try:
+                yield
+            finally:
+                remaining = await asyncio.to_thread(dispatcher.close)
+                if remaining:
+                    logging.getLogger(__name__).warning(
+                        "Chat dispatcher shutdown deadline exceeded: %s workers", remaining
+                    )
+
+    def readiness():
+        payload = production_readiness()
+        payload["execution_owner_ready"] = owner.ready()
+        payload['background_role'] = background.role
+        payload['background_ready'] = background.ready()
+        payload["ready"] = payload["ready"] and payload["execution_owner_ready"] and payload['background_ready']
+        return payload
+
     gateway = create_gateway_app(
         job_store_factory=lambda: services.jobs,
         asset_store_factory=lambda: services.assets,
         chat_store_factory=lambda: services.chat,
         model_residency_store_factory=lambda: services.model_residency,
-        readiness_check=production_readiness,
+        readiness_check=readiness,
+        runtime_lifecycle=lifecycle,
+        background_runtime=background,
     )
     gateway.state.persistence_startup = status
     gateway.state.runtime_services = services
+    gateway.state.execution_owner = owner
     return gateway
 
 
 class ProductionApplication:
     """Import-safe ASGI entrypoint; initializes inside the serving process."""
 
-    def __init__(self):
+    def __init__(self, factory=None):
         self._application = None
         self._lock = threading.Lock()
+        self._factory = factory
 
     def _load(self):
         with self._lock:
             if self._application is None:
-                self._application = create_production_app()
+                self._application = (self._factory or create_production_app)()
             return self._application
 
     async def __call__(self, scope, receive, send):

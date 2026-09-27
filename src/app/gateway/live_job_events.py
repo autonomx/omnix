@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 from collections.abc import Callable
 from typing import Any
 
@@ -11,6 +10,7 @@ from fastapi import FastAPI, Header, Query
 from fastapi.responses import StreamingResponse
 
 from app.jobs import InMemoryJobStore, default_job_store
+from app.persistence.database import PostgresOperationError
 
 EVENT_STREAM_BATCH_LIMIT = 100
 EVENT_STREAM_POLL_SECONDS = 1.0
@@ -47,18 +47,9 @@ def latest_job_event_id(job_store: Any) -> int:
     if callable(latest):
         try:
             return max(0, int(latest()))
-        except (TypeError, ValueError, sqlite3.Error, OSError):
+        except (TypeError, ValueError, PostgresOperationError, OSError):
             return 0
-
-    connect = getattr(job_store, "_connect", None)
-    if not callable(connect):
-        return 0
-    try:
-        with connect() as conn:
-            row = conn.execute("SELECT COALESCE(MAX(id), 0) FROM job_events").fetchone()
-        return max(0, int(row[0] if row else 0))
-    except (TypeError, ValueError, sqlite3.Error, OSError):
-        return 0
+    return 0
 
 
 def live_event_start_id(
@@ -82,11 +73,11 @@ async def resilient_live_job_event_stream(job_store: Any, after_id: int = 0):
     yield _sse_comment("omnix-events-open")
     while True:
         try:
-            events = job_store.list_events(
+            events = await asyncio.to_thread(job_store.list_events,
                 after_id=last_event_id,
                 limit=EVENT_STREAM_BATCH_LIMIT,
             )
-        except (sqlite3.Error, OSError):
+        except (PostgresOperationError, OSError):
             yield _sse_comment("event-store-temporarily-unavailable")
             await asyncio.sleep(EVENT_STREAM_POLL_SECONDS)
             continue
@@ -131,8 +122,8 @@ def install_resilient_live_job_events(
         after_id: int | None = Query(default=None, ge=0),
         last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
-        store = get_job_store()
-        start_id = live_event_start_id(
+        store = await asyncio.to_thread(get_job_store)
+        start_id = await asyncio.to_thread(live_event_start_id,
             store,
             after_id=after_id,
             last_event_id=last_event_id,

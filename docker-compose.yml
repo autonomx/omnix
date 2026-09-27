@@ -14,6 +14,26 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       PYTHONPATH: /app/src
+      OMNIX_GATEWAY_BACKGROUND_ROLE: worker
+      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  omnix-api:
+    profiles: [replicas]
+    image: omnix:latest
+    build: .
+    expose:
+      - "8000"
+    volumes:
+      - ./resources:/app/resources
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/src
+      OMNIX_GATEWAY_BACKGROUND_ROLE: api
+      OMNIX_TTS_STARTUP_WARMUP: "0"
       OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
     depends_on:
       postgres:

@@ -35,10 +35,12 @@ _SUBMISSION_LOCKS: dict[str, _SubmissionLockEntry] = {}
 _SUBMISSION_LOCKS_GUARD = threading.RLock()
 
 
-def install_rpg_turn_job_mirror_hook() -> None:
+def install_rpg_turn_job_mirror_hook(*, constructor_hook: bool = True) -> None:
     """Install record-only job mirroring for the direct web turn route."""
 
     _install_apply_turn_wrapper()
+    if not constructor_hook:
+        return
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
 

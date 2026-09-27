@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 
+from .background_runtime import register_background_monitor
+
 _ROUTE_SENTINEL = "_omnix_trading_routes_registered"
 _HOOK_SENTINEL = "_omnix_trading_route_hook_installed"
 
@@ -81,34 +83,34 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_catalyst_router())
     gateway.include_router(create_trading_model_router())
     gateway.include_router(create_trading_market_data_router())
-    register_trading_metric_monitor(gateway)
-    register_trading_alert_monitor(gateway)
-    register_alpaca_iex_status_monitor(gateway)
+    register_background_monitor(gateway, register_trading_metric_monitor)
+    register_background_monitor(gateway, register_trading_alert_monitor)
+    register_background_monitor(gateway, register_alpaca_iex_status_monitor)
     # Capture Yahoo evidence independently before strategy evaluation. REST
     # recovery is then a repair path rather than the normal source of history.
-    register_trading_yahoo_acquisition_monitor(gateway)
+    register_background_monitor(gateway, register_trading_yahoo_acquisition_monitor)
     # IBKR streams are captured independently in zero-authority observation
     # mode until the explicit LIVE_DATA rollout gate is enabled.
-    register_trading_ibkr_market_data_monitor(gateway)
-    register_trading_paper_monitor(gateway)
-    register_prospective_gap_monitor(gateway)
-    register_trading_strategy_monitor(gateway)
+    register_background_monitor(gateway, register_trading_ibkr_market_data_monitor)
+    register_background_monitor(gateway, register_trading_paper_monitor)
+    register_background_monitor(gateway, register_prospective_gap_monitor)
+    register_background_monitor(gateway, register_trading_strategy_monitor)
     # Capture execution observations independently and ahead of the expensive AI
     # loops so shadow fills use the first causally valid post-decision quote.
-    register_trading_execution_observation_monitor(gateway)
-    register_trading_ai_shadow_monitor(gateway)
-    register_trading_ai_shadow_v2_monitor(gateway)
-    register_trading_ai_shadow_v3_monitor(gateway)
-    register_trading_strategy_deep_recovery_shadow_monitor(gateway)
-    register_trading_strategy_prospective_economic_monitor(gateway)
-    register_trading_solana_ai_monitor(gateway)
-    register_trading_strategy_universe_archive_monitor(gateway)
-    register_trading_strategy_v2_qualification_monitor(gateway)
-    register_trading_strategy_research_monitor(gateway)
-    register_trading_strategy_research_outcome_monitor(gateway)
-    register_trading_session_reconciliation_monitor(gateway)
-    register_interday_dynamic_discovery_monitor(gateway)
-    register_interday_learning_monitor(gateway)
+    register_background_monitor(gateway, register_trading_execution_observation_monitor)
+    register_background_monitor(gateway, register_trading_ai_shadow_monitor)
+    register_background_monitor(gateway, register_trading_ai_shadow_v2_monitor)
+    register_background_monitor(gateway, register_trading_ai_shadow_v3_monitor)
+    register_background_monitor(gateway, register_trading_strategy_deep_recovery_shadow_monitor)
+    register_background_monitor(gateway, register_trading_strategy_prospective_economic_monitor)
+    register_background_monitor(gateway, register_trading_solana_ai_monitor)
+    register_background_monitor(gateway, register_trading_strategy_universe_archive_monitor)
+    register_background_monitor(gateway, register_trading_strategy_v2_qualification_monitor)
+    register_background_monitor(gateway, register_trading_strategy_research_monitor)
+    register_background_monitor(gateway, register_trading_strategy_research_outcome_monitor)
+    register_background_monitor(gateway, register_trading_session_reconciliation_monitor)
+    register_background_monitor(gateway, register_interday_dynamic_discovery_monitor)
+    register_background_monitor(gateway, register_interday_learning_monitor)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
 

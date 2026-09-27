@@ -47,6 +47,21 @@ priority, input_payload, output_refs, progress, error, attempt_count,
 max_attempts, available_at, lease_owner, lease_token, lease_expires_at,
 cancel_requested_at, started_at, completed_at, created_at, updated_at, metadata
 """
+_INLINE_CHAT_OWNER_GUARD = """
+AND (
+    job_type <> 'chat.generate'
+    OR metadata #>> '{compat_contract,compat,execution_owner}' IS NULL
+    OR EXISTS (
+        SELECT 1 FROM omnix_runtime_nodes AS execution_owner
+         WHERE execution_owner.id = %s
+           AND execution_owner.id = omnix_jobs.metadata #>> '{compat_contract,compat,execution_owner}'
+           AND execution_owner.node_type = 'gateway'
+           AND execution_owner.status IN ('active', 'draining')
+           AND execution_owner.lease_expires_at > clock_timestamp()
+           AND execution_owner.metadata ->> 'workspace_id' = omnix_jobs.workspace_id
+    )
+)
+"""
 
 
 class JobClaimConflict(PersistenceError):
@@ -185,6 +200,10 @@ class PostgresJobRepository:
                    AND available_at <= CURRENT_TIMESTAMP
                    AND resource_class = ANY(%s)
                    AND attempt_count < max_attempts
+                   AND NOT (
+                       job_type = 'chat.generate'
+                       AND COALESCE(metadata #>> '{{compat_contract,compat,inline_execution}}', 'false') = 'true'
+                   )
                    AND NOT (
                        job_type = 'assistant.deep_research'
                        AND COALESCE(input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
@@ -341,6 +360,7 @@ class PostgresJobRepository:
         context: TenantContext,
         *,
         job_id: str,
+        execution_owner: str | None = None,
     ) -> dict[str, Any]:
         """Start a synchronously executed audit record without a worker lease."""
         row = self.connection.execute(
@@ -355,9 +375,10 @@ class PostgresJobRepository:
                    metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
                    OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
                )
+            {_INLINE_CHAT_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
-            (job_id, context.workspace_id),
+            (job_id, context.workspace_id, execution_owner),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
@@ -372,6 +393,7 @@ class PostgresJobRepository:
         job_id: str,
         output_refs: list[dict[str, Any]] | list[str],
         progress: dict[str, Any] | None = None,
+        execution_owner: str | None = None,
     ) -> dict[str, Any]:
         """Complete a foreground audit record that is never worker-claimed."""
         row = self.connection.execute(
@@ -386,6 +408,7 @@ class PostgresJobRepository:
                    metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
                    OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
                )
+            {_INLINE_CHAT_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
             (
@@ -393,6 +416,7 @@ class PostgresJobRepository:
                 _json(progress or {"current": 1, "total": 1, "message": "completed"}),
                 job_id,
                 context.workspace_id,
+                execution_owner,
             ),
         ).fetchone()
         if row is None:
@@ -407,6 +431,7 @@ class PostgresJobRepository:
         *,
         job_id: str,
         error: dict[str, Any],
+        execution_owner: str | None = None,
     ) -> dict[str, Any]:
         """Fail a foreground audit record without scheduling worker retries."""
         row = self.connection.execute(
@@ -420,9 +445,10 @@ class PostgresJobRepository:
                    metadata #>> '{{compat_contract,compat,record_only}}' = 'true'
                    OR metadata #>> '{{compat_contract,compat,inline_execution}}' = 'true'
                )
+            {_INLINE_CHAT_OWNER_GUARD}
             RETURNING {_JOB_COLUMNS}
             """,
-            (_json(error), job_id, context.workspace_id),
+            (_json(error), job_id, context.workspace_id, execution_owner),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job failure rejected: {job_id}")

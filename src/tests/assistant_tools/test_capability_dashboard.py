@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.assistant_tools.capability_dashboard import build_assistant_capability_dashboard
 from app.assistant_tools.config_store import AssistantToolConfigRecord, AssistantToolsConfigPayload, default_assistant_tools_config
 from app.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
+from app.assistant_tools.registry import default_assistant_tools
 from app.gateway.main import create_gateway_app
 
 
@@ -33,7 +34,8 @@ def test_capability_dashboard_counts_enabled_tools_and_recent_errors():
     )
 
     gmail = next(tool for tool in dashboard.tools if tool.tool_id == "gmail")
-    assert dashboard.total_tools == 4
+    assert dashboard.total_tools == len(default_assistant_tools())
+    assert {tool.tool_id for tool in dashboard.tools} == {tool.id for tool in default_assistant_tools()}
     assert dashboard.enabled_tools == 1
     assert dashboard.recent_execution_count == 2
     assert dashboard.recent_error_count == 1
@@ -48,5 +50,5 @@ def test_capability_dashboard_route(monkeypatch, tmp_path):
     response = client.get("/api/assistant/tools/dashboard")
 
     assert response.status_code == 200
-    assert response.json()["total_tools"] == 4
-    assert {tool["tool_id"] for tool in response.json()["tools"]} == {"gmail", "calendar", "contacts", "github"}
+    assert response.json()["total_tools"] == len(default_assistant_tools())
+    assert {tool["tool_id"] for tool in response.json()["tools"]} == {tool.id for tool in default_assistant_tools()}

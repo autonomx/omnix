@@ -45,9 +45,9 @@ def test_platform_openapi_covers_contract_hardening_surfaces() -> None:
 
 def test_gateway_diagnostics_reads_persisted_model_residency(tmp_path: Path) -> None:
     from app.gateway.main import create_gateway_app
-    from app.jobs import ModelResidencyRecord, SQLiteModelResidencyStore
+    from app.jobs import ModelResidencyRecord, InMemoryModelResidencyStore
 
-    store = SQLiteModelResidencyStore(tmp_path / "residency.sqlite")
+    store = InMemoryModelResidencyStore(tmp_path / "residency-test")
     store.upsert_record(
         ModelResidencyRecord(
             model_id="llm:local-chat",
@@ -75,9 +75,9 @@ def test_gateway_diagnostics_reads_persisted_model_residency(tmp_path: Path) -> 
 
 def test_gateway_model_residency_report_endpoint_updates_store(tmp_path: Path) -> None:
     from app.gateway.main import create_gateway_app
-    from app.jobs import SQLiteModelResidencyStore
+    from app.jobs import InMemoryModelResidencyStore
 
-    store = SQLiteModelResidencyStore(tmp_path / "residency.sqlite")
+    store = InMemoryModelResidencyStore(tmp_path / "residency-test")
     client = TestClient(
         create_gateway_app(model_residency_store_factory=lambda: store),
         raise_server_exceptions=False,
@@ -116,9 +116,9 @@ def test_gateway_model_residency_report_endpoint_updates_store(tmp_path: Path) -
 
 def test_gateway_provider_model_refresh_enqueues_shared_job(tmp_path: Path) -> None:
     from app.gateway.main import create_gateway_app
-    from app.jobs import SQLiteJobStore
+    from app.jobs import InMemoryJobStore
 
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs-test")
     client = TestClient(create_gateway_app(job_store_factory=lambda: store), raise_server_exceptions=False)
 
     response = client.post("/api/models/refresh", json={"scope": "models", "reason": "test-refresh", "priority": 4})
@@ -193,7 +193,7 @@ def test_gateway_settings_post_preserves_legacy_mutation_semantics() -> None:
 
     with (
         patch(
-            "app.shared.load_settings",
+            "app.platform.settings_control.load_settings",
             return_value={
                 "provider": "lmstudio",
                 "lmstudio": {"base_url": "http://localhost:1234"},
@@ -202,9 +202,9 @@ def test_gateway_settings_post_preserves_legacy_mutation_semantics() -> None:
                 "llamacpp": {},
             },
         ),
-        patch("app.shared.load_secrets", return_value={"api_keys": {}}),
-        patch("app.shared.save_settings", side_effect=lambda settings: saved_settings.update(settings)),
-        patch("app.shared.save_secrets", side_effect=lambda secrets: saved_secrets.update(secrets)),
+        patch("app.platform.settings_control.load_secrets", return_value={"api_keys": {}}),
+        patch("app.platform.settings_control.save_settings", side_effect=lambda settings: saved_settings.update(settings)),
+        patch("app.platform.settings_control.save_secrets", side_effect=lambda secrets: saved_secrets.update(secrets)),
     ):
         response = _client().post(
             "/api/settings",

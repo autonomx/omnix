@@ -5,6 +5,7 @@ import json
 import math
 import os
 import threading
+import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -552,6 +553,8 @@ class BinanceLiquidationBuffer:
         self.connect_factory = connect_factory
         self._events: dict[str, deque[LiquidationEvent]] = {}
         self._threads: dict[str, threading.Thread] = {}
+        self._runs = {}
+        self._stopping = threading.Event()
         self._lock = threading.RLock()
 
     @staticmethod
@@ -606,9 +609,39 @@ class BinanceLiquidationBuffer:
                 await asyncio.sleep(2)
 
     def _run(self, symbol: str) -> None:
-        asyncio.run(self._run_async(symbol))
+        async def run():
+            with self._lock:
+                if self._stopping.is_set():
+                    return
+                self._runs[symbol] = (asyncio.get_running_loop(), asyncio.current_task())
+            try:
+                await self._run_async(symbol)
+            except asyncio.CancelledError:
+                pass
+            finally:
+                with self._lock:
+                    self._runs.pop(symbol, None)
+        asyncio.run(run())
+
+    def close(self, timeout: float = 5) -> None:
+        self._stopping.set()
+        with self._lock:
+            runs, threads = list(self._runs.values()), list(self._threads.values())
+        for loop, task in runs:
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(task.cancel)
+        deadline = time.monotonic() + timeout
+        for thread in threads:
+            thread.join(max(0, deadline - time.monotonic()))
+        if any(thread.is_alive() for thread in threads):
+            raise RuntimeError('Liquidation collectors did not stop')
 
     def ensure_started(self, symbol: str) -> None:
+        if self._stopping.is_set() or os.environ.get('OMNIX_GATEWAY_BACKGROUND_ROLE') == 'api':
+            return
+        guard = getattr(self, 'start_guard', None)
+        if guard is not None:
+            guard()
         symbol = symbol.upper()
         with self._lock:
             thread = self._threads.get(symbol)

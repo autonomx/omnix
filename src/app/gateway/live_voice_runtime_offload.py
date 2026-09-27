@@ -20,6 +20,7 @@ _STATE_SENTINEL = "_omnix_live_voice_runtime_offload_registered"
 _DEFAULT_PROVIDER_REFRESH_SECONDS = 5.0
 _DEFAULT_DELIVERY_QUEUE_SIZE = 128
 _PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
+_PERSISTENCE_WORKER = None
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
@@ -65,7 +66,9 @@ class DeliveryPersistenceWorker:
 
     def enqueue(self, details: Mapping[str, Any]) -> None:
         payload = dict(details)
-        self._ensure_started()
+        if not self._ensure_started():
+            self._log("gateway-live-voice-runtime", "runtime", "delivery_persistence_stopped")
+            return
         try:
             self._queue.put_nowait(payload)
             return
@@ -106,16 +109,29 @@ class DeliveryPersistenceWorker:
         if thread is not None and thread.is_alive():
             thread.join(timeout)
 
-    def _ensure_started(self) -> None:
+    def start(self) -> None:
         with self._lock:
-            if self._thread is not None or self._stopped:
+            if not self._stopped:
                 return
+            if self._thread is not None and self._thread.is_alive():
+                raise RuntimeError("Previous delivery persistence worker is still stopping")
+            self._queue = queue.Queue(maxsize=self._queue.maxsize)
+            self._thread = None
+            self._stopped = False
+
+    def _ensure_started(self) -> bool:
+        with self._lock:
+            if self._stopped:
+                return False
+            if self._thread is not None:
+                return True
             self._thread = threading.Thread(
                 target=self._run,
                 name="omnix-live-voice-delivery",
                 daemon=True,
             )
             self._thread.start()
+            return True
 
     def _run(self) -> None:
         while True:
@@ -287,19 +303,43 @@ def get_cached_live_tts_provider(provider_name: str | None = None) -> Any:
     return resolver.get(provider_name)
 
 
-def install_live_voice_runtime_offload_hook() -> None:
+def register_live_voice_runtime_offload(gateway):
+    if getattr(gateway.state, _STATE_SENTINEL, False):
+        return
+    install_live_voice_runtime_offload_hook(constructor_hook=False)
+    setattr(gateway.state, _STATE_SENTINEL, True)
+    gateway.state.live_voice_delivery_persistence_worker = _PERSISTENCE_WORKER
+    gateway.state.live_voice_tts_provider_resolver = _PROVIDER_RESOLVER
+
+    async def startup():
+        _PERSISTENCE_WORKER.start()
+        _PROVIDER_RESOLVER.refresh_in_background()
+        _PROVIDER_RESOLVER.start()
+        stream_log('gateway-live-voice-runtime', 'runtime', 'live_voice_runtime_offload_started')
+
+    async def shutdown():
+        import asyncio
+        await asyncio.to_thread(_PROVIDER_RESOLVER.stop)
+        await asyncio.to_thread(_PERSISTENCE_WORKER.stop)
+
+    gateway.router.add_event_handler('startup', startup)
+    gateway.router.add_event_handler('shutdown', shutdown)
+
+
+def install_live_voice_runtime_offload_hook(*, constructor_hook: bool = True) -> None:
     """Install bounded persistence and provider warming before app creation."""
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
+    if constructor_hook and getattr(FastAPI, _HOOK_SENTINEL, False):
         return
 
     from . import live_voice_stream_diagnostics
 
-    persistence_worker = DeliveryPersistenceWorker(live_voice_stream_diagnostics._persist_delivery)
-    live_voice_stream_diagnostics._persist_delivery = persistence_worker.enqueue
-
-    global _PROVIDER_RESOLVER
-    provider_resolver = CachedTtsProviderResolver(shared.get_tts_provider)
-    _PROVIDER_RESOLVER = provider_resolver
+    global _PROVIDER_RESOLVER, _PERSISTENCE_WORKER
+    if _PERSISTENCE_WORKER is None:
+        _PERSISTENCE_WORKER = DeliveryPersistenceWorker(live_voice_stream_diagnostics._persist_delivery)
+        live_voice_stream_diagnostics._persist_delivery = _PERSISTENCE_WORKER.enqueue
+        _PROVIDER_RESOLVER = CachedTtsProviderResolver(shared.get_tts_provider)
+    if not constructor_hook:
+        return
 
     original_init = FastAPI.__init__
 
@@ -309,30 +349,8 @@ def install_live_voice_runtime_offload_hook() -> None:
         is_gateway = kwargs.get("title") == "Omnix Web Gateway"
         if not is_gateway and args:
             is_gateway = args[0] == "Omnix Web Gateway"
-        if not is_gateway or getattr(self.state, _STATE_SENTINEL, False):
-            return
-        setattr(self.state, _STATE_SENTINEL, True)
-        self.state.live_voice_delivery_persistence_worker = persistence_worker
-        self.state.live_voice_tts_provider_resolver = provider_resolver
-
-        async def startup() -> None:
-            # TTS is optional at gateway startup. Resolve it without delaying
-            # the HTTP listener; the first live-voice request can still wait
-            # for the provider if warming has not finished yet.
-            provider_resolver.refresh_in_background()
-            provider_resolver.start()
-            stream_log(
-                "gateway-live-voice-runtime",
-                "runtime",
-                "live_voice_runtime_offload_started",
-            )
-
-        async def shutdown() -> None:
-            provider_resolver.stop()
-            persistence_worker.stop()
-
-        self.router.add_event_handler("startup", startup)
-        self.router.add_event_handler("shutdown", shutdown)
+        if is_gateway:
+            register_live_voice_runtime_offload(self)
 
     FastAPI.__init__ = patched_init  # type: ignore[method-assign]
     setattr(FastAPI, _HOOK_SENTINEL, True)

@@ -15,10 +15,59 @@ from app.jobs.models import (
 )
 
 from .job_compat import PostgresJobStoreAdapter as _PostgresJobStoreAdapter
+from .unit_of_work import unit_of_work
+from .chat_execution import ChatExecutionTransactions
 
 
-class PostgresJobStoreAdapter(_PostgresJobStoreAdapter):
+class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapter):
     """Preserve the current JobStore API over PostgreSQL authority."""
+
+    def require_chat_execution_owner(self, job_id: str):
+        current = self.get_job(job_id)
+        if current is None or not current.compat.get("execution_owner"):
+            return
+        owner = getattr(self, "chat_execution_owner", None)
+        if owner is None or owner.node_id != current.compat["execution_owner"]:
+            from .execution_repositories import JobClaimConflict
+            raise JobClaimConflict("Chat execution belongs to a different gateway")
+        with self.database.connection() as connection:
+            owner.require_live(connection)
+
+    def iter_recoverable_chat_jobs(self, *, batch_size: int = 100):
+        cursor = None
+        while True:
+            with unit_of_work(self.database) as work:
+                records = work.jobs.list_recoverable_chat_jobs(
+                    self.context, limit=batch_size,
+                    after_created_at=cursor[0] if cursor else None,
+                    after_id=cursor[1] if cursor else None,
+                )
+                work.rollback()
+            if not records:
+                return
+            # Advance using immutable creation order even when recovery changes status.
+            cursor = (records[-1]["created_at"], records[-1]["id"])
+            for record in records:
+                yield self._record(record)
+
+    def recover_chat_job(self, job_id: str) -> JobRecord | None:
+        with unit_of_work(self.database) as work:
+            record = work.jobs.recover_chat_job(self.context, job_id=job_id)
+            if record is None:
+                work.rollback()
+                return None
+            payload = record.get("input_payload") or {}
+            metadata = {"generation_status": record["status"]}
+            if record["error"]:
+                metadata["generation_error"] = record["error"]["message"]
+            work.connection.execute(
+                "UPDATE omnix_chat_messages SET metadata = metadata || %s::jsonb "
+                "WHERE workspace_id = %s AND session_id = %s AND id = %s AND role = 'user'",
+                (self._json(metadata), self.context.workspace_id,
+                 payload.get("session_id"), payload.get("message_id")),
+            )
+            work.commit()
+        return self._record(record)
 
     def complete_job(
         self,
@@ -94,6 +143,14 @@ class PostgresJobStoreAdapter(_PostgresJobStoreAdapter):
             for stage in record.stages
         ]
         return self.update_job_stages(job_id, stages) or record
+
+    def latest_event_id(self) -> int:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM omnix_job_events WHERE workspace_id = %s",
+                (self.context.workspace_id,),
+            ).fetchone()
+        return int(row[0])
 
     def list_events(
         self,

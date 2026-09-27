@@ -60,6 +60,12 @@ class PostgresJobStoreAdapter:
             "cancel": {},
         }
         with unit_of_work(self.database) as work:
+            owner = getattr(self, "chat_execution_owner", None)
+            if request.type == "chat.generate" and owner is not None:
+                owner.require_live(work.connection)
+                metadata["compat_contract"]["compat"] = {
+                    **metadata["compat_contract"]["compat"], "execution_owner": owner.node_id,
+                }
             record = work.jobs.create_job(
                 self.context,
                 {
@@ -74,6 +80,14 @@ class PostgresJobStoreAdapter:
                     "metadata": metadata,
                 },
             )
+            if request.type == 'chat.generate':
+                # Admission can wait for another process's session lock. Order
+                # accepted jobs by insertion time, not transaction start time.
+                inserted = work.connection.execute(
+                    'UPDATE omnix_jobs SET created_at = clock_timestamp() WHERE id = %s RETURNING created_at',
+                    (record['id'],),
+                ).fetchone()
+                record['created_at'] = inserted[0].isoformat()
             work.commit()
         return self._record(record)
 
@@ -166,7 +180,10 @@ class PostgresJobStoreAdapter:
             return current
         if self._runs_without_worker_lease(current):
             with unit_of_work(self.database) as work:
-                record = work.jobs.mark_record_only_running(self.context, job_id=job_id)
+                record = work.jobs.mark_record_only_running(
+                    self.context, job_id=job_id,
+                    execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                )
                 work.commit()
             return self._record(record)
         lease = getattr(current, "lease", None)
@@ -201,6 +218,7 @@ class PostgresJobStoreAdapter:
                         job_id=job_id,
                         output_refs=request.output_refs,
                         progress={"current": 1, "total": 1, "message": "completed"},
+                        execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
                     )
                     work.commit()
                 return self._record(record)
@@ -241,6 +259,7 @@ class PostgresJobStoreAdapter:
                         self.context,
                         job_id=job_id,
                         error=error,
+                        execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
                     )
                     work.commit()
                 return self._record(record)
@@ -326,7 +345,10 @@ class PostgresJobStoreAdapter:
             metadata = dict(row[0] or {})
             contract = dict(metadata.get("compat_contract") or {})
             if compat is not None:
+                existing_owner = (contract.get("compat") or {}).get("execution_owner")
                 contract["compat"] = dict(compat)
+                if existing_owner:
+                    contract["compat"]["execution_owner"] = existing_owner
             metadata["compat_contract"] = contract
             updated = connection.execute(
                 """
@@ -403,6 +425,7 @@ class PostgresJobStoreAdapter:
                        updated_at = CURRENT_TIMESTAMP,
                        metadata = %s::jsonb
                  WHERE id = %s AND workspace_id = %s
+                   AND status NOT IN ('completed', 'failed', 'canceled', 'stale')
                 RETURNING id
                 """,
                 (self._json(metadata), job_id, self.context.workspace_id),

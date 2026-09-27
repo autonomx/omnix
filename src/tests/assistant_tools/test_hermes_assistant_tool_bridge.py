@@ -132,9 +132,13 @@ def test_approved_calendar_proposal_is_idempotent(monkeypatch, tmp_path):
 
 
 def test_hermes_execute_payload_dispatches_repository_adapter(monkeypatch, tmp_path):
+    from app.assistant_tools.repo_adapter import FakeRepositoryRuntimeAdapter
+
     path = tmp_path / "assistant_tools_config.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
     save_assistant_tools_config(_connected_config("github"), path)
+    adapter = FakeRepositoryRuntimeAdapter()
+    monkeypatch.setattr("app.assistant_tools.repo_adapter.get_repository_runtime_adapter", lambda: adapter)
 
     payload = hermes_assistant_tool_execute_payload(
         "Read repo status",

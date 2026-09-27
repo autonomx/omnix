@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import uuid
+import logging
 from types import TracebackType
 from typing import Any, Literal
 
@@ -111,6 +113,8 @@ class PostgresUnitOfWork:
         self._connection_context: Any | None = None
         self._transaction_scope_context: Any | None = None
         self._completed = False
+        self._after_commit = []
+        self._committed = False
 
     def __enter__(self) -> "PostgresUnitOfWork":
         if self.connection is not None:
@@ -184,11 +188,13 @@ class PostgresUnitOfWork:
         connection = self._require_connection()
         connection.commit()
         self._completed = True
+        self._committed = True
 
     def rollback(self) -> None:
         connection = self._require_connection()
         connection.rollback()
         self._completed = True
+        self._committed = False
 
     def __exit__(
         self,
@@ -212,6 +218,12 @@ class PostgresUnitOfWork:
                 transaction_context.__exit__(exc_type, exc, traceback)
             if context is not None:
                 context.__exit__(exc_type, exc, traceback)
+        if self._committed and exc_type is None:
+            for callback in self._after_commit:
+                try:
+                    callback()
+                except Exception:
+                    logging.getLogger(__name__).exception('Post-commit maintenance failed')
         return False
 
     def _require_connection(self) -> Any:
@@ -224,5 +236,46 @@ def unit_of_work(
     database: PostgresDatabase | None = None,
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
-) -> PostgresUnitOfWork:
-    return PostgresUnitOfWork(database, authority_operation=authority_operation)
+):
+    from .transaction_binding import shared_work
+
+    resolved = database or default_database()
+    parent = shared_work(resolved)
+    if parent is not None:
+        if parent.authority_operation != authority_operation:
+            raise RuntimeError('A shared transaction cannot change its authority operation')
+        return _JoinedUnitOfWork(parent)
+    return PostgresUnitOfWork(resolved, authority_operation=authority_operation)
+
+
+class _JoinedUnitOfWork:
+    """Nested repository operation: commit releases a savepoint, never the root."""
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.name = f'omnix_join_{uuid.uuid4().hex}'
+        self.completed = False
+
+    def __getattr__(self, name):
+        return getattr(self.parent, name)
+
+    def __enter__(self):
+        self.parent._require_connection().execute(f'SAVEPOINT {self.name}')
+        self.callback_count = len(self.parent._after_commit)
+        return self
+
+    def commit(self):
+        self.completed = True
+
+    def rollback(self):
+        self.parent._require_connection().execute(f'ROLLBACK TO SAVEPOINT {self.name}')
+        del self.parent._after_commit[self.callback_count:]
+        self.completed = True
+
+    def __exit__(self, exc_type, exc, traceback):
+        connection = self.parent._require_connection()
+        if exc_type is not None or not self.completed:
+            connection.execute(f'ROLLBACK TO SAVEPOINT {self.name}')
+            del self.parent._after_commit[self.callback_count:]
+        connection.execute(f'RELEASE SAVEPOINT {self.name}')
+        return False

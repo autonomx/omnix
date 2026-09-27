@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,6 +11,7 @@ from app.gateway.live_job_events import (
     resilient_live_job_event_stream,
 )
 from app.gateway.main import create_gateway_app
+from app.persistence.database import DatabaseUnavailableError
 
 
 @dataclass
@@ -34,7 +35,7 @@ class FakeStore:
     def list_events(self, after_id: int, limit: int):
         if self.fail_once:
             self.fail_once = False
-            raise sqlite3.OperationalError("disk I/O error")
+            raise DatabaseUnavailableError("connection unavailable")
         return [event for event in self.events if event.id > after_id][:limit]
 
 
@@ -46,7 +47,7 @@ def test_live_event_default_starts_at_current_tail() -> None:
     assert live_event_start_id(store, after_id=None, last_event_id="7") == 7
 
 
-def test_live_event_stream_survives_transient_sqlite_error(monkeypatch) -> None:
+def test_live_event_stream_survives_transient_postgres_error(monkeypatch) -> None:
     async def no_wait(_seconds: float) -> None:
         return None
 
@@ -65,6 +66,24 @@ def test_live_event_stream_survives_transient_sqlite_error(monkeypatch) -> None:
     assert chunks[1] == ": event-store-temporarily-unavailable\n\n"
     assert "event: job.updated" in chunks[2]
     assert "id: 1" in chunks[2]
+
+
+def test_event_reads_run_outside_the_event_loop() -> None:
+    threads = []
+    class Store(FakeStore):
+        def list_events(self, after_id, limit):
+            threads.append(threading.get_ident())
+            return super().list_events(after_id, limit)
+    async def collect():
+        loop_thread = threading.get_ident()
+        stream = resilient_live_job_event_stream(Store([FakeEvent(1)]))
+        try:
+            await anext(stream)
+            await anext(stream)
+            assert threads and threads[0] != loop_thread
+        finally:
+            await stream.aclose()
+    asyncio.run(collect())
 
 
 def test_runtime_installer_replaces_the_legacy_events_route() -> None:

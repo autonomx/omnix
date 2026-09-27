@@ -160,7 +160,7 @@ def register_tts_pcm_websocket(gateway: FastAPI) -> None:
                 await websocket.send_json({"type": "error", "message": "text_required"})
                 return
 
-            provider = get_tts_provider()
+            provider = await asyncio.to_thread(get_tts_provider)
             if provider is None:
                 stream_log(stream_id, "server", "request_rejected", reason="tts_provider_unavailable")
                 await websocket.send_json({"type": "error", "message": "tts_provider_unavailable"})

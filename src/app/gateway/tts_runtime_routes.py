@@ -33,8 +33,17 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
 
     gateway.router.add_event_handler("startup", startup)
 
+    async def shutdown() -> None:
+        task = getattr(gateway.state, "_omnix_tts_startup_warmup_task", None)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            gateway.state._omnix_tts_startup_warmup_task = None
+
+    gateway.router.add_event_handler("shutdown", shutdown)
+
     @gateway.get("/api/tts/runtime/status", include_in_schema=False)
-    async def status() -> dict[str, Any]:
+    def status() -> dict[str, Any]:
         try:
             return snapshot(get_tts_provider())
         except Exception:

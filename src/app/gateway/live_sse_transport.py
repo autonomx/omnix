@@ -364,7 +364,7 @@ def _patched_streaming_response_init(
     )
 
 
-def install_live_sse_transport_hook() -> None:
+def install_live_sse_transport_hook(*, constructor_hook: bool = True) -> None:
     """Install immediate SSE headers and route-scoped eager chat execution."""
 
     install_live_chat_assistant_turn_start_hook()
@@ -372,6 +372,9 @@ def install_live_sse_transport_hook() -> None:
     if not getattr(StreamingResponse, _HOOK_SENTINEL, False):
         StreamingResponse.__init__ = _patched_streaming_response_init
         setattr(StreamingResponse, _HOOK_SENTINEL, True)
+
+    if not constructor_hook:
+        return
 
     if getattr(FastAPI, _FASTAPI_HOOK_SENTINEL, False):
         return

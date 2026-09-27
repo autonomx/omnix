@@ -354,6 +354,7 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
         lambda stream_id, source, event, **details: events.append(event),
     )
     store = SimpleNamespace(
+        _repository=SimpleNamespace(database=object()),
         _run_post_turn_maintenance=lambda current, message_id: maintenance.append(
             message_id
         ),

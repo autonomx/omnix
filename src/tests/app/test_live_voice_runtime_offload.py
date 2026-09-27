@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from app.gateway.live_voice_runtime_offload import (
     CachedTtsProviderResolver,
     DeliveryPersistenceWorker,
+    register_live_voice_runtime_offload,
 )
 
 
@@ -160,6 +161,7 @@ def test_provider_monitor_refreshes_after_stream_becomes_idle() -> None:
 
 def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
     app = FastAPI(title="Omnix Web Gateway")
+    register_live_voice_runtime_offload(app)
     resolver = app.state.live_voice_tts_provider_resolver
     started = threading.Event()
     release = threading.Event()

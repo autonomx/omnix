@@ -415,6 +415,8 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(DesktopVisionClient, "describe", fake_describe)
+    monkeypatch.setenv("OMNIX_VISION_PROVIDER", "lmstudio")
+    monkeypatch.setenv("OMNIX_VISION_MODEL", "fixture:vision")
 
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Desktop"}).json()

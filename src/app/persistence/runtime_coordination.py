@@ -74,10 +74,10 @@ class PostgresRuntimeCoordinationRepository:
         row = self.connection.execute(
             """
             UPDATE omnix_runtime_nodes
-               SET heartbeat_at = CURRENT_TIMESTAMP,
-                   lease_expires_at = CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
+               SET heartbeat_at = clock_timestamp(),
+                   lease_expires_at = clock_timestamp() + (%s * INTERVAL '1 second')
              WHERE id = %s AND status IN ('active', 'draining')
-               AND lease_expires_at > CURRENT_TIMESTAMP
+               AND lease_expires_at > clock_timestamp()
             RETURNING id, node_type, status, capabilities, resource_classes,
                       software_version, heartbeat_at, lease_expires_at
             """,
