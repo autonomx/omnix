@@ -169,7 +169,7 @@ class FluxKleinImageProvider(BaseImageProvider):
         if os.path.isabs(download_dir):
             root = download_dir
         else:
-            from app.shared import MODELS_DIR
+            from app.runtime.paths import MODELS_DIR
 
             root = os.path.join(MODELS_DIR, download_dir)
 
