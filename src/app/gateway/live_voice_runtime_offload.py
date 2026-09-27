@@ -26,10 +26,7 @@ _PERSISTENCE_WORKER = None
 def _provider_refresh_enabled_for_process() -> bool:
     if os.environ.get("OMNIX_GATEWAY_BACKGROUND_ROLE") != "api":
         return True
-    return (
-        os.environ.get("OMNIX_GATEWAY_TTS_HTTP") == "1"
-        and bool(os.environ.get("OMNIX_TTS_URL", "").strip())
-    )
+    return bool(os.environ.get("OMNIX_TTS_URL", "").strip())
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
