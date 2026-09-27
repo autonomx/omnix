@@ -6,6 +6,8 @@ realtime protocol or service tests.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import wave
 from dataclasses import dataclass, field
@@ -79,9 +81,9 @@ class ParakeetServiceTranscriber(StreamingTranscriber):
 
 
 def create_transcriber_from_env() -> StreamingTranscriber:
-    provider = os.environ.get("LIVE_SPEECH_STT_PROVIDER", "fake").strip().lower()
+    provider = environment().get("LIVE_SPEECH_STT_PROVIDER", "fake").strip().lower()
     if provider in {"parakeet", "parakeet_http", "real"}:
-        return ParakeetServiceTranscriber(base_url=os.environ.get("LIVE_SPEECH_STT_URL", "http://127.0.0.1:8000"))
+        return ParakeetServiceTranscriber(base_url=environment().get("LIVE_SPEECH_STT_URL", "http://127.0.0.1:8000"))
     return BufferedStreamingTranscriber()
 
 
