@@ -1,6 +1,8 @@
 """Private credential storage for connected assistant tools."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -41,12 +43,12 @@ class AssistantToolOAuthClientsPayload(BaseModel):
 
 
 def assistant_tool_credentials_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH")
+    configured = environment().get("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH")
     return Path(configured) if configured else DEFAULT_CREDENTIALS_PATH
 
 
 def assistant_tool_oauth_clients_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH")
+    configured = environment().get("OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH")
     return Path(configured) if configured else DEFAULT_OAUTH_CLIENTS_PATH
 
 
