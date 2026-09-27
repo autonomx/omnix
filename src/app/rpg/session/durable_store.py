@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
-from app.runtime_paths import repo_root, rpg_sessions_root
+from app.runtime.paths import repo_root, rpg_sessions_root
 
 logger = logging.getLogger(__name__)
 _SESSION_DIR = rpg_sessions_root()
