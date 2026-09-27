@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.jobs import CancelJobRequest, SQLiteJobStore
-from app.jobs.research_inline import (
+from app.research.jobs import (
     DeepResearchWorkflowResult,
     execute_research_job,
     load_research_checkpoint,
