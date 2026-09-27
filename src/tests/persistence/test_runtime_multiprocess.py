@@ -13,7 +13,7 @@ def _gateway_process(url, workspace, role, control):
     from app.gateway.background_runtime import GatewayBackgroundRuntime, BackgroundOwnershipUnavailable
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.runtime_config import RuntimeConfig, install_runtime_config
+    from app.runtime.config import RuntimeConfig, install_runtime_config
 
     config = RuntimeConfig.from_environment({'OMNIX_GATEWAY_BACKGROUND_ROLE': role, 'OMNIX_TTS_URL': 'http://127.0.0.1:5101'})
     install_runtime_config(config)
