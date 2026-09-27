@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import (
@@ -370,7 +370,7 @@ def accept_world_generation_candidates(
 ) -> dict[str, Any]:
     """Accept candidates while keeping review decisions separate from validation evidence."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     overrides = dict(candidate_overrides or {})
     expected_hashes = dict(expected_candidate_hashes or {})
     reasons = {str(key): str(value) for key, value in dict(waiver_reasons or {}).items()}
