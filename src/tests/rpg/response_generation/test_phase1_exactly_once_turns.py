@@ -7,7 +7,7 @@ from typing import Any
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
 from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
 from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_provider_free_job_store_is_explicit_in_memory_double(tmp_path: Path) -> None:
