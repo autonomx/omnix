@@ -201,10 +201,10 @@ def _recover_interrupted_jobs(*, database: Any | None = None) -> dict[str, int]:
     """Discard orphans and recover jobs from durable provider/spool phase evidence."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         discarded = work.connection.execute(
             "DELETE FROM omnix_jobs AS job WHERE job.workspace_id = %s AND ("
@@ -252,10 +252,10 @@ def _recover_worker_database_interruption(
     """Release leases and extend persistence replay without extending content calls."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         rows = work.connection.execute(
             "SELECT id, job_type, attempt_count, max_attempts FROM omnix_jobs "
@@ -364,10 +364,10 @@ def run_world_generation_worker_once(
     """Claim and execute one world profile or topic job."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         job = work.jobs.claim_next(
             context,
