@@ -18,7 +18,7 @@ from app.chat import ChatMessage, ChatSessionStore, default_chat_store
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.lmstudio_provider import LMStudioProvider
-from app.shared import get_tts_provider
+from app.providers.service import get_tts_provider
 
 from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
