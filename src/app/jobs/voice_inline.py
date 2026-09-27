@@ -124,7 +124,6 @@ def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, An
     _upsert_legacy_voice_manifest(voice_id, profile_name, enriched_payload, clone_path)
 
     require_execution_authority(job_store, job.id)
-    require_execution_authority(job_store, job.id)
     asset = _upsert_asset(
         AssetRecord(
             id=f"voice-cloning:{voice_id}",
@@ -317,6 +316,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
         "audio_effects": payload.get("audio_effects") or [],
         **combined_metadata,
     }
+    require_execution_authority(job_store, job.id)
     asset = _upsert_asset(
         AssetRecord(
             id=f"audio:voice-studio-{_safe_segment(job.id)}",
