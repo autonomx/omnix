@@ -1,6 +1,8 @@
 """Global image configuration helpers."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Dict
 
@@ -29,7 +31,7 @@ def _truthy(value: Any) -> bool:
 def is_image_generation_enabled() -> bool:
     """Image generation is opt-in because local models can consume substantial VRAM."""
 
-    return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
+    return _truthy(environment().get("OMNIX_IMAGE_ENABLED", "0"))
 
 
 def get_image_settings() -> Dict[str, Any]:
