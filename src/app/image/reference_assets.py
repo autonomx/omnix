@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 REFERENCE_ASSET_MODULE = "image-reference"
 SUPPORTED_REFERENCE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
