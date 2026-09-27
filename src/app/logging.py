@@ -3,7 +3,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-from app.shared import LOGS_DIR
+from app.runtime.paths import LOGS_DIR
 
 
 def _get_log_file_path(log_name: str) -> str:
