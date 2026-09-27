@@ -17,7 +17,7 @@ from app.gateway.background_runtime import (
     BackgroundWorker,
     register_background_worker,
 )
-from app.jobs.models import FailJobRequest, JobRecord, JobStatus, ResourceClass
+from app.jobs.models import JobRecord, JobStatus, ResourceClass
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.unit_of_work import unit_of_work
 
@@ -283,7 +283,7 @@ class DurableFeatureJobWorker:
         except Exception as exc:
             self.failure_count += 1
             self.last_error = f"{type(exc).__name__}: {exc}"
-            self._record_unexpected_failure(job.id, exc)
+            self._record_unexpected_failure(job, exc)
         finally:
             renewal_stop.set()
             renewal.join(timeout=1.0)
@@ -304,30 +304,33 @@ class DurableFeatureJobWorker:
             except Exception:
                 return
 
-    def _record_unexpected_failure(self, job_id: str, exc: Exception) -> None:
+    def _record_unexpected_failure(self, job: JobRecord, exc: Exception) -> None:
+        lease = job.lease
+        if lease is None:
+            return
         try:
             self.authority.require_live()
-            current = self.store.get_job(job_id)
-            if current is None or current.status in {
-                JobStatus.COMPLETED,
-                JobStatus.FAILED,
-                JobStatus.CANCELED,
-                JobStatus.STALE,
-            }:
-                return
-            self.store.fail_job(
-                job_id,
-                FailJobRequest(
-                    code="durable_feature_execution_failed",
-                    message=type(exc).__name__,
-                    retryable=True,
-                    details={"job_type": current.type},
-                ),
-            )
+            with unit_of_work(self.store.database) as work:
+                work.jobs.fail(
+                    self.store.context,
+                    job_id=job.id,
+                    worker_id=lease.worker_id,
+                    lease_token=lease.token,
+                    error={
+                        "code": "durable_feature_execution_failed",
+                        "message": type(exc).__name__,
+                        "retryable": True,
+                        "details": {"job_type": job.type},
+                    },
+                )
+                work.commit()
+        except JobClaimConflict:
+            # A later claim owns the job. The stale executor must not mutate it.
+            return
         except Exception:
             # Lease expiry/recovery remains authoritative if this write cannot
             # be proven to belong to the current worker.
-            logger.exception("Could not persist durable feature worker failure: %s", job_id)
+            logger.exception("Could not persist durable feature worker failure: %s", job.id)
 
 
 def execute_durable_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
