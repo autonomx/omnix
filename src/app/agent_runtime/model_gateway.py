@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.providers.base import ChatMessage, ChatResponse
-from app.shared import get_provider
+from app.providers.service import get_provider
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .service import default_agent_run_service
