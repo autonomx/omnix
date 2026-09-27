@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -756,7 +756,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     database = default_database()
     ensure_postgresql_runtime_ready(database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     blobs = LocalBlobStore()
     worker_id = f"audiobook:ingest:{uuid4().hex}"
     while True:
