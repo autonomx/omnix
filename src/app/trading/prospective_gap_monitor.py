@@ -6,6 +6,8 @@ post-open confirmation and deterministic post-close finalization.
 
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from datetime import date, datetime, time, timedelta, timezone
@@ -26,11 +28,11 @@ _PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)
 
 
 def _flag(name: str, default: str) -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def prospective_gap_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR", "1")
 
