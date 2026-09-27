@@ -11,7 +11,7 @@ from app import shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
-from app.jobs.inline_feature_jobs import (
+from app.rpg.jobs.turn_executor import (
     INLINE_FEATURE_JOB_EXECUTOR_ENV,
     THREAD_EXECUTOR,
     _queue_deferred_rpg_turn_narration,
