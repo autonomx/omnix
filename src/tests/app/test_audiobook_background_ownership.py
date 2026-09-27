@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.audiobook import routes
 from app.gateway.background_runtime import BackgroundOwnershipUnavailable, GatewayBackgroundRuntime
-from app.runtime_config import GatewayRole, RuntimeConfig
+from app.runtime.config import GatewayRole, RuntimeConfig
 
 
 def test_api_audiobook_lifecycle_never_initializes_workers(monkeypatch):
