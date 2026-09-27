@@ -1,4 +1,4 @@
-from app.runtime_paths import (
+from app.runtime.paths import (
     generated_images_root,
     repo_root,
     resources_data_root,
