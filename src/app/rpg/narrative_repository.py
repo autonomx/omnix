@@ -1,6 +1,8 @@
 """Production persistence adapters for canonical RPG narrative responses."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from functools import lru_cache
 from threading import RLock
@@ -105,7 +107,7 @@ def _runtime_postgresql_active() -> bool:
 
 
 def _repository_mode(environ: dict[str, str] | None = None) -> str:
-    env = os.environ if environ is None else environ
+    env = environment() if environ is None else environ
     explicit = str(
         env.get("OMNIX_RPG_NARRATIVE_REPOSITORY")
         or env.get("OMNIX_RPG_PERSISTENCE_MODE")
