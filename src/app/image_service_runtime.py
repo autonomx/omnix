@@ -1,6 +1,8 @@
 """Standalone image service runtime with explicit multi-model lifecycle."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import threading
 from typing import Any, Dict
@@ -9,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 from app.security.model_service import ModelServiceMiddleware
 
-os.environ["OMNIX_IMAGE_SERVICE_MODE"] = "1"
+environment()["OMNIX_IMAGE_SERVICE_MODE"] = "1"
 
 from app.image.config import get_active_image_provider_name, is_image_generation_enabled
 from app.image.downloads import download_image_model, get_image_local_model_status
@@ -122,7 +124,7 @@ def image_model_status(provider: str | None = None) -> Dict[str, Any]:
         "minimum_torch": selected.get("minimum_torch", ""),
         "models": models,
         "cache": get_image_provider_cache_status(),
-        "explicit_load_required": _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")),
+        "explicit_load_required": _truthy(environment().get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")),
     }
 
 
@@ -200,11 +202,11 @@ async def startup_load_provider():
         print("[IMAGE SERVICE] Image generation disabled; models remain unloaded.")
         return
 
-    if not _truthy(os.environ.get("OMNIX_IMAGE_PRELOAD", "0")):
+    if not _truthy(environment().get("OMNIX_IMAGE_PRELOAD", "0")):
         print("[IMAGE SERVICE] Ready for on-demand loading; image models are not resident.")
         return
 
-    provider = os.environ.get("OMNIX_IMAGE_PROVIDER", "").strip() or None
+    provider = environment().get("OMNIX_IMAGE_PROVIDER", "").strip() or None
     try:
         print("[IMAGE SERVICE] Preloading image provider...")
         result = await run_in_threadpool(load_image_provider, provider)
@@ -212,7 +214,7 @@ async def startup_load_provider():
     except Exception as exc:
         print("[IMAGE SERVICE] Image provider preload failed:", repr(exc))
 
-    if not _truthy(os.environ.get("OMNIX_IMAGE_WARMUP", "0")):
+    if not _truthy(environment().get("OMNIX_IMAGE_WARMUP", "0")):
         return
 
     try:
@@ -245,7 +247,7 @@ async def health():
         "status": "ready",
         "service": "image",
         "enabled": is_image_generation_enabled(),
-        "provider_mode": os.environ.get("OMNIX_IMAGE_SERVICE_MODE", ""),
+        "provider_mode": environment().get("OMNIX_IMAGE_SERVICE_MODE", ""),
         "model": model,
         "details": {"model": model},
     }
@@ -289,7 +291,7 @@ async def generate(request: Request):
     request_id = _request_id(payload)
     provider = _provider_name(payload.get("provider") or get_active_image_provider_name())
     definition = _model_definition(provider)
-    explicit_load = _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1"))
+    explicit_load = _truthy(environment().get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1"))
     if explicit_load and definition.get("supports_local_model") and not is_image_provider_loaded(provider):
         _set_generation_progress(
             request_id,
