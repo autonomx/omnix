@@ -5,6 +5,8 @@ summary repository defined here; no SQLite schema remains.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import os
 import threading
@@ -58,7 +60,7 @@ def compaction_enabled() -> bool:
 
 def compaction_threshold() -> int:
     try:
-        return max(4, int(os.environ.get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
+        return max(4, int(environment().get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
     except ValueError:
         return DEFAULT_COMPACTION_THRESHOLD
 
