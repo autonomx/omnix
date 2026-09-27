@@ -264,7 +264,6 @@ class DurableFeatureJobWorker:
             name=f"omnix-feature-lease-{job.id[-8:]}",
             daemon=True,
         )
-        self.active_job_id = job.id
         renewal.start()
         try:
             authority_store = _AuthorityBoundJobStore(self.store, self.authority, job)
@@ -288,7 +287,6 @@ class DurableFeatureJobWorker:
         finally:
             renewal_stop.set()
             renewal.join(timeout=1.0)
-            self.active_job_id = None
 
     def _renew_loop(self, job_id: str, lease_token: str, stop: threading.Event) -> None:
         while not stop.wait(self.renewal_seconds):
