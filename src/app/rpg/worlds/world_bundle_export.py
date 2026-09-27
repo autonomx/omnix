@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .world_bundle import (
@@ -285,7 +285,7 @@ def export_world_bundle(
     database: Any | None = None,
     asset_store: SharedAssetStore | None = None,
 ) -> WorldBundleArchive:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         payload = _world_payload(work, context, world_id)
         work.rollback()
