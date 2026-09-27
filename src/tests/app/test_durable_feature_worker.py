@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import threading
 
 import pytest
 
@@ -72,3 +73,42 @@ def test_story_dispatch_uses_explicit_executor(monkeypatch):
         SimpleNamespace(type="story.generate"),
     )
     assert result is expected
+
+def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
+    from app.jobs.durable_feature_worker import DurableFeatureJobWorker
+
+    authority = _Authority(live=True)
+    worker = DurableFeatureJobWorker(
+        object(),
+        authority,
+        poll_seconds=0.01,
+        max_concurrency=2,
+    )
+    jobs = [SimpleNamespace(id="job:one"), SimpleNamespace(id="job:two")]
+    entered = threading.Event()
+    release = threading.Event()
+    count_lock = threading.Lock()
+    entered_count = 0
+
+    def claim():
+        return jobs.pop(0) if jobs else None
+
+    def execute(_job):
+        nonlocal entered_count
+        with count_lock:
+            entered_count += 1
+            if entered_count == 2:
+                entered.set()
+        assert release.wait(2)
+
+    monkeypatch.setattr(worker, "_claim_one", claim)
+    monkeypatch.setattr(worker, "_execute_claimed", execute)
+    try:
+        worker.start()
+        assert entered.wait(2)
+        assert set(worker.active_job_ids) == {"job:one", "job:two"}
+        assert worker.diagnostics()["max_concurrency"] == 2
+    finally:
+        release.set()
+        worker.stop()
+
