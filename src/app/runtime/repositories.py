@@ -22,20 +22,20 @@ def install_legacy_feature_repository_specs() -> None:
         PostgresProviderRepository,
         PostgresResearchReportRepository,
     )
-    from app.persistence.rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
-    from app.persistence.rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
-    from app.persistence.rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
-    from app.persistence.rpg_map_instance_repository import PostgresRpgMapInstanceRepository
-    from app.persistence.rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
-    from app.persistence.rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
-    from app.persistence.rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
-    from app.persistence.rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
-    from app.persistence.rpg_observer_repository import PostgresRpgObserverRepository
-    from app.persistence.rpg_repository import PostgresRpgRepository
-    from app.persistence.rpg_trusted_world_scenario_repository import PostgresTrustedRpgWorldScenarioRepository
-    from app.persistence.rpg_world_forge_repository import PostgresRpgWorldForgeRepository
-    from app.persistence.rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
-    from app.persistence.rpg_world_library_repository import PostgresRpgWorldLibraryRepository
+    from app.rpg.persistence.rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
+    from app.rpg.persistence.rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
+    from app.rpg.persistence.rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
+    from app.rpg.persistence.rpg_map_instance_repository import PostgresRpgMapInstanceRepository
+    from app.rpg.persistence.rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
+    from app.rpg.persistence.rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
+    from app.rpg.persistence.rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
+    from app.rpg.persistence.rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
+    from app.rpg.persistence.rpg_observer_repository import PostgresRpgObserverRepository
+    from app.rpg.persistence.rpg_repository import PostgresRpgRepository
+    from app.rpg.persistence.rpg_trusted_world_scenario_repository import PostgresTrustedRpgWorldScenarioRepository
+    from app.rpg.persistence.rpg_world_forge_repository import PostgresRpgWorldForgeRepository
+    from app.rpg.persistence.rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
+    from app.rpg.persistence.rpg_world_library_repository import PostgresRpgWorldLibraryRepository
 
     specs = (
         RepositorySpec(PostgresCharacterRepository, PostgresCharacterRepository, "characters"),
