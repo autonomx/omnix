@@ -23,6 +23,15 @@ _PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
 _PERSISTENCE_WORKER = None
 
 
+def _provider_refresh_enabled_for_process() -> bool:
+    if os.environ.get("OMNIX_GATEWAY_BACKGROUND_ROLE") != "api":
+        return True
+    return (
+        os.environ.get("OMNIX_GATEWAY_TTS_HTTP") == "1"
+        and bool(os.environ.get("OMNIX_TTS_URL", "").strip())
+    )
+
+
 def _env_float(name: str, default: float, *, minimum: float) -> float:
     try:
         value = float(os.environ.get(name, str(default)) or default)
@@ -313,6 +322,12 @@ def register_live_voice_runtime_offload(gateway):
 
     async def startup():
         _PERSISTENCE_WORKER.start()
+        if not _provider_refresh_enabled_for_process():
+            stream_log(
+                'gateway-live-voice-runtime', 'runtime',
+                'tts_provider_refresh_disabled_for_api_replica',
+            )
+            return
         _PROVIDER_RESOLVER.refresh_in_background()
         _PROVIDER_RESOLVER.start()
         stream_log('gateway-live-voice-runtime', 'runtime', 'live_voice_runtime_offload_started')
