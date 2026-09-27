@@ -16,7 +16,7 @@ if str(SRC_DIR) not in sys.path:
 def _client(tmp_path: Path) -> TestClient:
     from app.chat import ChatSessionStore
     from app.gateway.main import create_gateway_app
-    from app.jobs import InMemoryJobStore
+    from tests.support.in_memory_jobs import InMemoryJobStore
 
     return TestClient(
         create_gateway_app(
@@ -149,7 +149,7 @@ def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, mo
 def test_gateway_chat_queue_failure_marks_user_turn_failed(tmp_path: Path) -> None:
     from app.chat import ChatSessionStore
     from app.gateway.main import create_gateway_app
-    from app.jobs import InMemoryJobStore
+    from tests.support.in_memory_jobs import InMemoryJobStore
 
     class FailingJobStore(InMemoryJobStore):
         def create_job(self, request):
