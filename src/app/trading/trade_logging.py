@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Literal
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
 
 
 TradeLogChannel = Literal["auto_trading", "backtest"]
