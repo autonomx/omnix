@@ -15,7 +15,7 @@ from app.image.downloads import get_image_local_model_status
 from app.image.output_normalization import normalize_generated_image
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
 from app.image.providers.registry import get_image_provider_definition
-from app.runtime_paths import generated_images_root
+from app.runtime.paths import generated_images_root
 
 _PIPELINE_LOCK = threading.Lock()
 _GENERATE_LOCK = threading.Lock()
