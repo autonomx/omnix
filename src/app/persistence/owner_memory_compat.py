@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 from .database import PostgresDatabase, default_database
-from .identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from .owner_memory_candidates import OwnerMemoryCandidateMixin
 from .owner_memory_records import OwnerMemoryRecordMixin
 from .owner_memory_snapshots import OwnerMemorySnapshotMixin
-from .runtime import ensure_postgresql_runtime_ready
 
 
 class PostgresOwnerAwareMemoryRepository(
@@ -18,8 +17,7 @@ class PostgresOwnerAwareMemoryRepository(
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def delete_owner(
         self,
