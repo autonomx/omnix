@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
+from app.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
 from app.rpg.session.service import load_session, save_session
 
 CreationJobStatus = Literal["queued", "running", "completed", "failed"]
@@ -209,7 +209,7 @@ def create_new_game_session_with_progress(request: RpgNewGameRequest) -> dict[st
     persisted creation-job lookup can synthesize a completed job later.
     """
     timestamp = _utc_now()
-    result = create_new_game_session(request)
+    result = _create_new_game_session_base(request)
     session_id = str(result.get("session_id") or "")
     if result.get("ok") is not True:
         error = str(result.get("error") or "new_game_creation_failed")
