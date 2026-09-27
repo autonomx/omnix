@@ -14,7 +14,7 @@ from app.characters.avatar_viseme_generation import (
 )
 from app.characters.service import CharacterService
 from app.jobs import CompleteJobRequest, FailJobRequest
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _complete_image_job(
