@@ -838,8 +838,15 @@ def _build_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
     }
 
 
-def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
+def _create_new_game_session_base(request: RpgNewGameRequest) -> dict[str, Any]:
     return _save_created_session(_build_new_game_session(request))
+
+
+def create_new_game_session(request: RpgNewGameRequest) -> dict[str, Any]:
+    """Create a session with the progress envelope as the native contract."""
+    from .new_game_creation_progress import create_new_game_session_with_progress
+
+    return create_new_game_session_with_progress(request)
 
 
 def list_rpg_presets() -> dict[str, Any]:
