@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.platform import rpg_session_compat
+from app.rpg.api.compat import rpg_session_compat
 from app.rpg.session import item_detail, service
 
 
