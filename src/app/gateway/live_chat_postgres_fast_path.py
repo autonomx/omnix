@@ -24,7 +24,7 @@ from app.chat.memory_commands import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.chat.retention_policy import transcript_retention_allowed
 from app.chat.store import _context_source_summaries
-from app.persistence.chat_runtime_compat import (
+from app.chat.persistence.chat_runtime_compat import (
     PostgresCharacterChatSessionStore,
     PostgresChatSessionStore,
 )
