@@ -1,6 +1,8 @@
 """Central limits, privacy, and retention policy for web research."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -53,7 +55,7 @@ def expiry_iso(days: int, *, now: datetime | None = None) -> str:
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     try:
-        value = int(os.environ.get(name, str(default)))
+        value = int(environment().get(name, str(default)))
     except ValueError:
         value = default
     return max(minimum, min(maximum, value))
