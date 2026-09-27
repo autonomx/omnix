@@ -6,7 +6,7 @@ from pathlib import Path
 from app.image.models import ImageGenerationResponse
 from app.jobs import CreateJobRequest, ResourceClass, SQLiteJobStore
 from app.jobs.models import JobStage
-from app.jobs.image_inline import execute_image_job
+from app.image.jobs import execute_image_job
 
 
 class MemoryAssetStore:
