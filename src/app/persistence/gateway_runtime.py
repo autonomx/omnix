@@ -10,8 +10,8 @@ import uuid
 import time
 
 from .authority import AuthorityOperation, require_authority_operation
-from app.runtime_config import get_runtime_config
-from app.runtime_logging import runtime_transition
+from app.runtime.config import get_runtime_config
+from app.runtime.logging import runtime_transition
 from .runtime_coordination import (
     PostgresRuntimeCoordinationRepository,
     RuntimeNodeConflict,
