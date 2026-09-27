@@ -139,40 +139,67 @@ class PostgresJobRepository:
             f"""
             UPDATE omnix_jobs
                SET status = CASE
+                       WHEN status = 'cancel_requested' THEN 'canceled'
                        WHEN attempt_count < max_attempts THEN 'retrying'
                        ELSE 'failed'
                    END,
                    available_at = CASE
-                       WHEN attempt_count < max_attempts THEN CURRENT_TIMESTAMP
+                       WHEN status <> 'cancel_requested' AND attempt_count < max_attempts
+                           THEN CURRENT_TIMESTAMP
                        ELSE available_at
                    END,
-                   error = jsonb_build_object('code', 'lease_expired'),
+                   error = CASE
+                       WHEN status = 'cancel_requested' THEN NULL
+                       ELSE jsonb_build_object('code', 'lease_expired')
+                   END,
                    lease_owner = NULL,
                    lease_token = NULL,
                    lease_expires_at = NULL,
                    updated_at = CURRENT_TIMESTAMP,
                    completed_at = CASE
-                       WHEN attempt_count >= max_attempts THEN CURRENT_TIMESTAMP
+                       WHEN status = 'cancel_requested' OR attempt_count >= max_attempts
+                           THEN CURRENT_TIMESTAMP
                        ELSE completed_at
                    END
              WHERE workspace_id = %s
                AND (%s::text IS NULL OR id = %s)
                AND (%s::text IS NULL OR job_type = %s)
-               AND (%s::text IS NULL OR cancel_requested_at IS NULL)
                AND status IN ('leased', 'running', 'cancel_requested')
                AND lease_expires_at <= CURRENT_TIMESTAMP
             RETURNING {_JOB_COLUMNS}
             """,
-            (context.workspace_id, job_id, job_id, job_type, job_type, job_id),
+            (context.workspace_id, job_id, job_id, job_type, job_type),
         ).fetchall()
         results = [_job(row) for row in rows]
         for result in results:
+            self.connection.execute(
+                """
+                UPDATE omnix_job_attempts
+                   SET status = %s, completed_at = CURRENT_TIMESTAMP,
+                       error = %s::jsonb
+                 WHERE job_id = %s AND attempt = %s
+                   AND status IN ('leased', 'running')
+                """,
+                (
+                    result["status"],
+                    _json(result["error"]) if result["error"] is not None else None,
+                    result["id"],
+                    result["attempt_count"],
+                ),
+            )
             self._event(
                 context,
                 result["id"],
                 "job.lease_expired",
                 {"status": result["status"], "attempt": result["attempt_count"]},
             )
+            if result["status"] == "canceled":
+                self._event(
+                    context,
+                    result["id"],
+                    "job.canceled",
+                    {"attempt": result["attempt_count"], "reason": "lease_expired_after_cancel"},
+                )
             if result["status"] == "failed":
                 self.connection.execute(
                     """
