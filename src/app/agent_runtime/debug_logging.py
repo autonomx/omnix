@@ -24,7 +24,7 @@ import threading
 import traceback
 from typing import Any
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
 
 
 AGENT_DEBUG_ENABLED_ENV = "OMNIX_AGENT_DEBUG_LOGS"
