@@ -9,7 +9,7 @@ from app.rpg.narrative_engine.serialization import canonical_response_from_dict
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
-from .identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from .rpg_repository import canonical_json
 from .unit_of_work import unit_of_work
 
@@ -55,7 +55,7 @@ def persist_foreground_turn(
     )
 
     db = database or default_database()
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         submission = work.connection.execute(
             """
