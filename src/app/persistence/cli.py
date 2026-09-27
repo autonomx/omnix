@@ -11,7 +11,7 @@ from typing import Any, NoReturn, Sequence
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .blob_store import LocalBlobStore
-from .config import DatabaseSettings, database_settings
+from .config import DatabaseSettings, database_settings, migration_database_settings
 from .coordinated_recovery import CoordinatedRecoveryRepository
 from .cutover_state import PostgresCutoverStateRepository
 from .database import PostgresDatabase
@@ -106,7 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(description="Omnix PostgreSQL operations")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("health", help="Check PostgreSQL connectivity")
-    subparsers.add_parser("migrate", help="Apply pending migrations")
+    migrate = subparsers.add_parser("migrate", help="Apply pending migrations")
+    migrate.add_argument("--allow-out-of-order", action="store_true")
     subparsers.add_parser("status", help="Show migration state")
     subparsers.add_parser("verify", help="Require healthy PostgreSQL and zero migration drift")
 
@@ -275,14 +276,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     database: PostgresDatabase | None = None
     try:
         args = build_parser().parse_args(list(argv) if argv is not None else None)
-        settings = database_settings()
+        settings = (
+            migration_database_settings()
+            if args.command in {"migrate", "status", "verify"}
+            else database_settings()
+        )
         database = PostgresDatabase(settings)
         if args.command == "health":
             report = database.health()
             _render(report)
             return 0 if report.get("ok") is True else 1
         if args.command == "migrate":
-            report = apply_migrations(database)
+            report = apply_migrations(database, allow_out_of_order=args.allow_out_of_order)
             _render(report)
             return 0 if report.get("ok") is True else 1
         if args.command == "status":
