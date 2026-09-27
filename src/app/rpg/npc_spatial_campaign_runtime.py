@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_grid_contracts import GridMapDefinition
@@ -636,7 +636,7 @@ def advance_campaign_spatial_tick(
 ) -> dict[str, Any]:
     """Advance one serialized campaign-owned spatial simulation tick."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     default_policy = CampaignNpcSpatialPolicy()
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
