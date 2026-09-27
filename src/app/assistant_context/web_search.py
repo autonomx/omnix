@@ -1,6 +1,8 @@
 """Fresh web retrieval for assistant knowledge context."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import re
 from collections.abc import Callable
@@ -53,9 +55,9 @@ class WebSearchClient:
         client: httpx.Client | None = None,
         today: Callable[[], date] = date.today,
     ) -> None:
-        self.provider = (provider or os.environ.get("OMNIX_WEB_SEARCH_PROVIDER") or "duckduckgo").strip().lower()
-        self.api_key = api_key if api_key is not None else os.environ.get("OMNIX_WEB_SEARCH_API_KEY", "")
-        self.timeout_seconds = timeout_seconds or float(os.environ.get("OMNIX_WEB_SEARCH_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS))
+        self.provider = (provider or environment().get("OMNIX_WEB_SEARCH_PROVIDER") or "duckduckgo").strip().lower()
+        self.api_key = api_key if api_key is not None else environment().get("OMNIX_WEB_SEARCH_API_KEY", "")
+        self.timeout_seconds = timeout_seconds or float(environment().get("OMNIX_WEB_SEARCH_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS))
         self.client = client
         self.today = today
 
@@ -316,7 +318,7 @@ def _clean_duckduckgo_url(value: str) -> str:
 
 
 def _playwright_headless() -> bool:
-    value = os.environ.get("OMNIX_PLAYWRIGHT_SEARCH_HEADLESS", "1").strip().lower()
+    value = environment().get("OMNIX_PLAYWRIGHT_SEARCH_HEADLESS", "1").strip().lower()
     return value not in {"0", "false", "no", "off"}
 
 
