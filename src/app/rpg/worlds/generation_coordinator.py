@@ -269,10 +269,10 @@ def start_world_generation(
     if issues:
         raise ValueError("invalid_world_generation_graph:" + ",".join(issues))
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = tenant_context or bootstrap_local_tenant(db)
+    context = tenant_context or current_tenant()
     targets = generation_topic_ids(graph, target_topic_ids)
     scope_payload = {"topic_ids": list(targets), **dict(scope or {})}
     scope_hash = canonical_hash(
@@ -528,10 +528,10 @@ def _reconcile_world_generation_unlocked(
     database: Any | None = None,
 ) -> dict[str, Any]:
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
@@ -791,10 +791,10 @@ def execute_claimed_world_topic_job(
     topic_id = str(topic_payload.get("topic_id") or "")
     lease_token = str(job.get("lease_token") or "")
     job_id = str(job.get("id") or "")
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     try:
         existing_result: Mapping[str, Any] | None = None
         completed_existing_job: Mapping[str, Any] | None = None
