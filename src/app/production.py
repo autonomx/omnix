@@ -8,9 +8,9 @@ import threading
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 
-from app.runtime_config import RuntimeConfig, get_runtime_config, install_runtime_config
-from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
-from app.runtime_contracts import JobService, AssetService, ChatService, ModelResidencyService
+from app.runtime.config import RuntimeConfig, get_runtime_config, install_runtime_config
+from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
+from app.runtime.contracts import JobService, AssetService, ChatService, ModelResidencyService
 
 
 @dataclass(frozen=True, slots=True)
