@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -34,7 +34,7 @@ class AgentBudgetManager:
         context: TenantContext | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = context or bootstrap_local_tenant(self.database)
+        self.context = context or current_tenant()
 
     def usage(self, run_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
