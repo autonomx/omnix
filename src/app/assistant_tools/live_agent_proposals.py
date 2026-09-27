@@ -1,6 +1,8 @@
 """Translate proposal-only Live Agent output into governed assistant tool previews."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import os
@@ -63,7 +65,7 @@ def live_agent_tool_proposals(
 
 
 def live_agent_planner_context() -> dict[str, str]:
-    timezone_name = os.environ.get("OMNIX_TIMEZONE", "UTC").strip() or "UTC"
+    timezone_name = environment().get("OMNIX_TIMEZONE", "UTC").strip() or "UTC"
     return {
         "current_datetime": datetime.now().astimezone().isoformat(timespec="seconds"),
         "user_timezone": timezone_name,
@@ -83,7 +85,7 @@ def _normalize_calendar_input(user_request: str, action_id: str, value: object) 
     if action_id == "calendar.create_event":
         lower = user_request.lower()
         payload.setdefault("title", "Reminder" if "remind" in lower else "Meeting" if "meeting" in lower else "Calendar event")
-        payload.setdefault("timezone", os.environ.get("OMNIX_TIMEZONE", "UTC").strip() or "UTC")
+        payload.setdefault("timezone", environment().get("OMNIX_TIMEZONE", "UTC").strip() or "UTC")
         if "remind" in lower or "reminder" in lower:
             payload.setdefault("reminder_minutes", 0)
     return payload
