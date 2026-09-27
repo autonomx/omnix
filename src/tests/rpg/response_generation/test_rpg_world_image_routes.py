@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import app.gateway.image_workspace_routes as image_workspace_routes
 from app.gateway.rpg_world_image_routes import register_rpg_world_image_routes
 from app.jobs.image_contracts import ImageGenerateInput
-from app.jobs.image_inline import _store_image_asset
+from app.image.jobs import _store_image_asset
 from app.rpg.worlds import world_images
 
 
