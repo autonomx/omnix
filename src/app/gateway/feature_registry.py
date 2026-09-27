@@ -5,6 +5,7 @@ import logging
 from importlib import import_module
 from collections.abc import Callable
 
+from app.jobs.handlers import JobHandlerRegistry
 from app.runtime.background import register_background_worker
 from app.runtime.capabilities import RuntimeCapability
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
@@ -152,10 +153,15 @@ def _register_feature_modules(gateway) -> None:
     services = getattr(gateway.state, "runtime_services", None)
     registry = getattr(gateway.state, "background_registry", None)
     registered: list[str] = []
+    loaded_features = []
+    job_handlers = JobHandlerRegistry()
 
     for feature_id in enabled_feature_ids(config):
         feature = load_feature(feature_id)
         capabilities.require(*feature.requires)
+        loaded_features.append(feature)
+        for handler in feature.job_handlers:
+            job_handlers.register(handler)
         context = FeatureContext(
             feature_id=feature.id,
             config=None,
@@ -175,6 +181,8 @@ def _register_feature_modules(gateway) -> None:
         registered.append(feature.id)
 
     gateway.state.feature_modules = tuple(registered)
+    gateway.state.loaded_feature_modules = tuple(loaded_features)
+    gateway.state.job_handler_registry = job_handlers
 
 
 def register_gateway_features(gateway):
