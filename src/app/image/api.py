@@ -24,7 +24,7 @@ from app.image.settings_api import (
     get_image_settings_payload,
     update_image_settings_payload,
 )
-from app.shared import load_settings
+from app.config.access import load_settings
 
 router = APIRouter()
 
