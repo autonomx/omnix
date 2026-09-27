@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import MapDefinitionBinding, WorldReleaseDocument, WorldRevisionDocument
@@ -199,7 +199,7 @@ def materialize_deferred_location(
 ) -> dict[str, Any]:
     """Materialize one deferred slot without mutating or rebinding existing campaigns."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         existing = _existing_materialization(
             work,
