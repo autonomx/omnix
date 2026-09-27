@@ -20,8 +20,8 @@ def services(url, workspace_id):
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
-    from app.persistence.chat_compat import PostgresChatRepositoryAdapter
-    from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
+    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+    from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
     from app.persistence.repositories import PostgresIdentityRepository
     from app.gateway import _install_required_rpg_turn_hooks
     from app.gateway import live_chat_postgres_fast_path as fast
