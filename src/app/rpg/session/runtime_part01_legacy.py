@@ -348,20 +348,14 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
     except ImportError:
         pass
 
-    # Fallback: active provider object, but still fetched from central state.
+    # Fallback: use the process provider service directly.
     try:
-        from app.shared import get_active_provider  # type: ignore
-
-        provider = get_active_provider()
-    except Exception:
-        try:
-            from app.providers.service import get_provider  # type: ignore
-
-            provider = get_provider()
-        except Exception as exc:
-            raise RuntimeError(
-                f"combat_narration_active_provider_not_available:{type(exc).__name__}: {exc}"
-            )
+        from app.providers.service import get_provider  # type: ignore
+        provider = get_provider()
+    except Exception as exc:
+        raise RuntimeError(
+            f"combat_narration_active_provider_not_available:{type(exc).__name__}: {exc}"
+        ) from exc
 
     if provider is None:
         raise RuntimeError("combat_narration_active_provider_not_available")
