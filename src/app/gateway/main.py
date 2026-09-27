@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 from typing import Any
 
 from .core_services import (
@@ -676,5 +678,5 @@ if __name__ == "__main__":
     from app.runtime.net import bind_host
 
     host = bind_host()
-    port = int(os.environ.get("OMNIX_GATEWAY_PORT", str(DEFAULT_GATEWAY_PORT)))
+    port = int(environment().get("OMNIX_GATEWAY_PORT", str(DEFAULT_GATEWAY_PORT)))
     uvicorn.run("app.gateway.main:app", host=host, port=port, reload=False)
