@@ -429,16 +429,16 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
             }
         ]
         
-        # Add any custom voices from shared custom_voices
+        # Add custom voice-clone audio owned by the canonical asset directory.
         try:
-            from app import shared
-            for voice_id, voice_data in shared.custom_voices.items():
-                if voice_data.get("has_audio", False):
-                    speakers.append({
-                        "id": voice_id,
-                        "name": f"{voice_id} (Custom)",
-                        "language": voice_data.get("language", "en")
-                    })
+            from app.runtime.paths import VOICE_CLONES_DIR
+
+            for path in sorted(Path(VOICE_CLONES_DIR).glob("*.wav")):
+                speakers.append({
+                    "id": path.stem,
+                    "name": f"{path.stem} (Custom)",
+                    "language": "en",
+                })
         except Exception as e:
             logger.warning(f"Could not load custom voices: {e}")
         
