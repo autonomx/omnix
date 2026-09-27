@@ -1,6 +1,8 @@
 """Local backend-owned chat session history store."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import re
@@ -102,7 +104,7 @@ def _quick_research_uses_chat_lane(_content: str, research_mode: str | None) -> 
 
 
 def default_chat_store_path() -> Path:
-    override = os.environ.get("OMNIX_CHAT_STORE_PATH")
+    override = environment().get("OMNIX_CHAT_STORE_PATH")
     if override:
         return Path(override)
     return resources_data_root() / "omnix_chat_sessions.json"
