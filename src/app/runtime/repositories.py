@@ -10,11 +10,9 @@ from app.persistence.repository_registry import RepositorySpec, install_reposito
 
 
 def install_legacy_feature_repository_specs() -> None:
-    from app.persistence.conversation_repositories import (
-        PostgresCharacterRepository,
-        PostgresChatRepository,
-        PostgresMemoryRepository,
-    )
+    from app.characters.persistence.repository import PostgresCharacterRepository
+    from app.chat.persistence.repository import PostgresChatRepository
+    from app.assistant_memory.persistence.repository import PostgresMemoryRepository
     from app.persistence.module_repositories import (
         PostgresModuleRecordRepository,
         PostgresProjectionRepository,
