@@ -182,7 +182,7 @@ for variable in (
     assert not Path(os.environ[variable]).exists(), variable
 
 from app.chat.models import ChatMessage, ChatSession
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
 
 now = datetime.now(timezone.utc).isoformat()
 chat_repository = PostgresChatRepositoryAdapter()
@@ -206,7 +206,7 @@ assert len(loaded_chats) == 1
 assert loaded_chats[0].messages[0].content == "hello"
 
 from app.characters.models import CreateCharacterRequest
-from app.persistence.character_compat import PostgresCharacterRepositoryAdapter
+from app.characters.persistence.character_compat import PostgresCharacterRepositoryAdapter
 
 characters = PostgresCharacterRepositoryAdapter()
 created_character = characters.create(CreateCharacterRequest(
