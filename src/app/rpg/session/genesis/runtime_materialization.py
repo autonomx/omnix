@@ -14,7 +14,7 @@ from typing import Any, Literal, Mapping
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 
@@ -515,7 +515,7 @@ def materialize_runtime_lore(
     )
     campaign_id = _campaign_id(session_id, hydrated)
     db = database or default_database()
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         source_record = work.campaign_bibles.get(context, campaign_id)
         if source_record is None:
