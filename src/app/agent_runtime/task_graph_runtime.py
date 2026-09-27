@@ -10,7 +10,7 @@ from typing import Any, Callable
 
 from app.assistant_tools.models import AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import AgentRunCommand, AgentRunSpec, ModelRef
