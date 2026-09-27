@@ -1,252 +1,69 @@
-"""One explicitly assigned background worker process, with supervised hooks."""
-
+"""Gateway adapter for the feature-neutral background runtime."""
 from __future__ import annotations
 
-import asyncio
-from contextlib import asynccontextmanager
-from functools import wraps
-import hashlib
-import inspect
-import logging
-import threading
-import time
-from dataclasses import dataclass
-from collections.abc import Callable
-
-from app.persistence.authority import AuthorityOperation, require_authority_operation
-from app.persistence.background_authority import background_execution
-from app.runtime_config import RuntimeConfig, GatewayRole, get_runtime_config
-from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
-from app.runtime_logging import runtime_transition
-
-logger = logging.getLogger(__name__)
+from app.runtime.background import (
+    BackgroundOwnershipUnavailable,
+    BackgroundRegistry,
+    BackgroundWorker,
+    GatewayBackgroundRuntime,
+    register_background_worker as register_runtime_background_worker,
+)
+from app.runtime.capabilities import RuntimeCapability
 
 
-class BackgroundOwnershipUnavailable(RuntimeError):
-    pass
+class GatewayBackgroundRegistryAdapter(BackgroundRegistry):
+    """Adapt gateway state/lifecycle fallback to the neutral registry contract."""
 
+    def __init__(self, gateway):
+        self.gateway = gateway
 
-@dataclass(frozen=True, slots=True)
-class BackgroundWorker:
-    name: str
-    monitor: object
-    startup: tuple[Callable, ...]
-    shutdown: tuple[Callable, ...]
-    requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.OWN_BACKGROUND_RUNTIME})
+    def register_worker(self, worker: BackgroundWorker) -> None:
+        runtime = getattr(self.gateway.state, "background_runtime", None)
+        required = RuntimeCapability.OWN_BACKGROUND_RUNTIME
+        if required not in worker.requires:
+            raise ValueError("Background workers must declare background ownership")
 
-
-class GatewayBackgroundRuntime:
-    def __init__(
-        self,
-        database,
-        workspace_id: str,
-        *,
-        role: str | None = None,
-        config: RuntimeConfig | None = None,
-        poll_seconds: float = 2,
-    ):
-        if role is not None and config is not None and role != config.gateway_role:
-            raise ValueError("Background role contradicts runtime configuration")
-        self.config = config or (RuntimeConfig(gateway_role=GatewayRole(role)) if role is not None else get_runtime_config())
-        if poll_seconds <= 0:
-            raise ValueError(
-                "background role must be api or worker, with a positive supervision interval"
-            )
-        self.database = database
-        self.role = self.config.gateway_role.value
-        self.capabilities = RuntimeCapabilities.from_config(self.config)
-        self.poll_seconds = poll_seconds
-        digest = hashlib.sha256(
-            f"omnix:gateway-background:{workspace_id}".encode()
-        ).digest()
-        self.lock_key = int.from_bytes(digest[:8], "big", signed=True)
-        self.healthy = False
-        self.connection = None
-        self._connection_context = None
-        self._connection_lock = threading.Lock()
-        self._workers = []
-        self._started = []
-
-    def acquire(self):
-        if self.role == "api":
+        if runtime is not None:
+            register_runtime_background_worker(runtime, worker)
             return
-        self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
-        self._connection_context = self.database.connection()
-        connection = self._connection_context.__enter__()
-        try:
-            require_authority_operation(connection, AuthorityOperation.RUNTIME_MUTATION)
-            acquired = connection.execute(
-                "SELECT pg_try_advisory_lock(%s)", (self.lock_key,)
-            ).fetchone()[0]
-            connection.commit()
-            if not acquired:
+
+        capabilities = getattr(self.gateway.state, "runtime_capabilities", None)
+        if capabilities is not None:
+            def denied(*args, **kwargs):
                 raise BackgroundOwnershipUnavailable(
-                    "Another process owns background workers; use OMNIX_GATEWAY_BACKGROUND_ROLE=api for API replicas"
+                    "No live background owner is composed for this gateway"
                 )
-            self.connection = connection
-            self.healthy = True
-            runtime_transition(logger, component='background_owner', role=self.role, transition='acquired')
-        except BaseException:
-            self._connection_context.__exit__(*__import__("sys").exc_info())
-            self._connection_context = None
-            raise
 
-    def require_live(self):
-        if self.role != "worker" or not self.healthy or self.connection is None:
-            raise BackgroundOwnershipUnavailable(
-                "This gateway does not own background execution"
-            )
-        try:
-            with self._connection_lock:
-                self.connection.execute("SELECT 1").fetchone()
-                self.connection.commit()
-        except Exception as exc:
-            self.healthy = False
-            raise BackgroundOwnershipUnavailable(
-                "Background ownership connection was lost"
-            ) from exc
-
-    def ready(self):
-        if self.role == "api":
-            return True
-        self.require_live()
-        return True
-
-    def diagnostics(self):
-        return {"role": self.role, "owns_lock": self.connection is not None and self.healthy,
-                "lock_healthy": self.healthy,
-                "registered_workers": [worker[0] for worker in self._workers],
-                "started_workers": [worker[0] for worker in self._started]}
-
-    def register(self, name, monitor, startup, shutdown):
-        if any(worker[0] == name for worker in self._workers):
-            raise ValueError(f"Background worker already registered: {name}")
-        # Protect manual control endpoints as well as startup hooks.
-        original_start = getattr(monitor, "start", None)
-        if original_start is not None:
-
-            @wraps(original_start)
-            def start(*args, **kwargs):
-                with background_execution(self):
-                    result = original_start(*args, **kwargs)
-                    service = getattr(monitor, "service", None)
-                    buffer = getattr(
-                        getattr(service, "binance", None), "liquidation_buffer", None
-                    )
-                    if buffer is not None:
-                        buffer.start_guard = self.require_live
-                    return result
-
-            monitor.start = start
-        self._workers.append((name, startup, shutdown))
-
-    async def _call(self, callback):
-        result = callback()
-        if inspect.isawaitable(result):
-            await result
-
-    async def startup(self):
-        if self.role == "api":
+            if hasattr(worker.monitor, "start"):
+                worker.monitor.start = denied
             return
-        self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
-        if self._started:
-            raise RuntimeError("Background workers already started")
-        for worker in self._workers:
-            started = time.monotonic()
-            self._started.append(worker)
-            with background_execution(self):
-                for callback in worker[1]:
-                    await self._call(callback)
-            runtime_transition(logger, component=worker[0], role=self.role, transition='started', started_at=started)
 
-    async def shutdown(self):
-        failed = []
-        for name, _, callbacks in reversed(self._started):
-            started = time.monotonic()
-            for callback in reversed(callbacks):
-                try:
-                    await asyncio.wait_for(self._call(callback), timeout=10)
-                except Exception as exc:
-                    failed.append(name)
-                    runtime_transition(logger, component=name, role=self.role, transition='stop_failed',
-                                       started_at=started, error=exc, level='warning')
-            if name not in failed:
-                runtime_transition(logger, component=name, role=self.role, transition='stopped', started_at=started)
-        self._started.clear()
-        if failed:
-            raise RuntimeError(f"Background workers did not stop: {failed}")
+        from .feature_registry import FeatureLifecycle, register_feature_lifecycle
 
-    async def _supervise(self):
-        while True:
-            await asyncio.sleep(self.poll_seconds)
-            try:
-                await asyncio.to_thread(self.require_live)
-            except Exception as exc:
-                self.healthy = False
-                runtime_transition(logger, component='background_owner', role=self.role,
-                                   transition='authority_lost', error=exc, level='warning')
-                await self.shutdown()
-                return
-
-    def release(self):
-        self.healthy = False
-        context, self._connection_context = self._connection_context, None
-        connection, self.connection = self.connection, None
-        if context is not None:
-            try:
-                with self._connection_lock:
-                    if not connection.closed:
-                        connection.execute(
-                            "SELECT pg_advisory_unlock(%s)", (self.lock_key,)
-                        )
-                        connection.commit()
-            except Exception as exc:
-                runtime_transition(logger, component='background_owner', role=self.role,
-                                   transition='release_connection_lost', error=exc, level='warning')
-                connection.close()
-            finally:
-                try:
-                    context.__exit__(None, None, None)
-                except Exception as exc:
-                    runtime_transition(logger, component='background_owner', role=self.role,
-                                       transition='pool_return_failed', error=exc, level='warning')
-            runtime_transition(logger, component='background_owner', role=self.role, transition='released')
-
-    @asynccontextmanager
-    async def lifespan(self):
-        await asyncio.to_thread(self.acquire)
-        task = asyncio.create_task(self._supervise()) if self.role == "worker" else None
-        try:
-            yield
-        finally:
-            if task is not None:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-            try:
-                await self.shutdown()
-            finally:
-                await asyncio.to_thread(self.release)
+        register_feature_lifecycle(
+            self.gateway,
+            FeatureLifecycle(
+                worker.name,
+                worker.startup,
+                worker.shutdown,
+                worker.requires,
+            ),
+        )
 
 
-def register_background_worker(gateway, worker: BackgroundWorker):
-    """Declare ownership before installing hooks; never extract FastAPI events."""
-    runtime = getattr(gateway.state, "background_runtime", None)
-    required = RuntimeCapability.OWN_BACKGROUND_RUNTIME
-    if required not in worker.requires:
-        raise ValueError("Background workers must declare background ownership")
-    if runtime is not None:
-        # API processes retain control/read routes, with manual start guarded by
-        # runtime.require_live. Their worker descriptors never execute.
-        if runtime.role == "worker":
-            runtime.capabilities.require(*worker.requires)
-        runtime.register(worker.name, worker.monitor, worker.startup, worker.shutdown)
-        return
-    capabilities = getattr(gateway.state, "runtime_capabilities", None)
-    if capabilities is not None:
-        def denied(*args, **kwargs):
-            raise BackgroundOwnershipUnavailable("No live background owner is composed for this gateway")
-        if hasattr(worker.monitor, "start"):
-            worker.monitor.start = denied
-        return
-    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
-    register_feature_lifecycle(gateway, FeatureLifecycle(worker.name, worker.startup, worker.shutdown, worker.requires))
+def register_background_worker(gateway, worker: BackgroundWorker) -> None:
+    """Compatibility adapter for gateway-owned registration call sites."""
+    registry = getattr(gateway.state, "background_registry", None)
+    if registry is None:
+        registry = GatewayBackgroundRegistryAdapter(gateway)
+        gateway.state.background_registry = registry
+    register_runtime_background_worker(registry, worker)
+
+
+__all__ = [
+    "BackgroundOwnershipUnavailable",
+    "BackgroundWorker",
+    "GatewayBackgroundRegistryAdapter",
+    "GatewayBackgroundRuntime",
+    "register_background_worker",
+]
