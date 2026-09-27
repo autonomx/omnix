@@ -6,6 +6,7 @@ import asyncio
 import logging
 import threading
 from dataclasses import dataclass
+from typing import Any
 from contextlib import asynccontextmanager
 
 from app.runtime.config import RuntimeConfig, get_runtime_config, install_runtime_config
@@ -21,6 +22,9 @@ class GatewayRuntimeServices:
     assets: AssetService
     chat: ChatService
     model_residency: ModelResidencyService
+    database: Any
+    tenant: Any
+    settings: Any
 
 
 def production_readiness(config: RuntimeConfig | None = None) -> dict:
@@ -63,6 +67,17 @@ def create_production_app(config: RuntimeConfig | None = None):
     status = bootstrap_status_payload()
     if not status["ready"] or status["backend"] != "postgresql":
         raise RuntimeError("Production gateway requires ready PostgreSQL authority")
+
+    from app.persistence.database import default_database
+    from app.persistence.identity_service import ensure_local_identity
+    from app.security.tenant_context import TenantProvider, install_process_tenant
+    from app.config.settings_service import SettingsService
+
+    database = default_database()
+    tenant_context = ensure_local_identity(database)
+    install_process_tenant(tenant_context)
+    tenant_provider = TenantProvider()
+    settings_service = SettingsService(database, tenant_provider.current)
     from app.live_voice_hardware_policy import install_live_voice_hardware_policy
 
     install_live_voice_hardware_policy()
@@ -82,6 +97,9 @@ def create_production_app(config: RuntimeConfig | None = None):
         assets=default_asset_store(),
         chat=default_chat_store(),
         model_residency=default_model_residency_store(),
+        database=database,
+        tenant=tenant_provider,
+        settings=settings_service,
     )
     owner = GatewayRuntimeOwner(services.jobs.database, services.jobs.context.workspace_id, config=config)
     services.jobs.chat_execution_owner = owner
