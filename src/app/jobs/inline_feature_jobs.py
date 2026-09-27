@@ -112,6 +112,15 @@ def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
     return _execute_feature_job(job_store, job)
 
 
+def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
+    """Execute one already-owned feature job.
+
+    Production callers must claim a lease before entering this function. The
+    in-memory compatibility installer may still invoke it directly.
+    """
+    return _execute_feature_job(job_store, job)
+
+
 def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
     if job.type == RPG_LAST10_REPORT_JOB_TYPE:
         from .rpg_last10_report import execute_rpg_last10_report_job
