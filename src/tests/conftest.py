@@ -34,7 +34,7 @@ _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 @pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
     # Each test models a fresh process; production policy is immutable once bound.
-    from app import runtime_config
+    from app.runtime import config as runtime_config
     monkeypatch.setattr(runtime_config, "_process_config", None)
 
 # Add project roots to path for importing app modules
