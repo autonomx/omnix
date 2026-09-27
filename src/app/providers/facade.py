@@ -254,7 +254,7 @@ class ProviderFacade:
     def _live_chatgpt_codex_models() -> list[ModelSummary]:
         """Expose the authenticated Codex catalog, falling back inside the provider."""
         try:
-            from app.shared import get_provider
+            from app.providers.service import get_provider
 
             provider = get_provider("chatgpt_codex")
             if provider is None:
@@ -322,7 +322,7 @@ class ProviderFacade:
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_loader:
             return self._settings_loader()
-        from app.shared import load_settings
+        from app.config.access import load_settings
 
         return load_settings()
 
