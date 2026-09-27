@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 
@@ -60,7 +60,7 @@ def sync_encountered_npc_lore(
         }
     try:
         db = database or default_database()
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             if campaign is None:
