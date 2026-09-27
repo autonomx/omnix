@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.shared import get_tts_provider
+from app.providers.service import get_tts_provider
 
 _ROUTE_SENTINEL = "_omnix_tts_live_capabilities_registered"
 
