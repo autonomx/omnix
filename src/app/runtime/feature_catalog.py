@@ -8,11 +8,15 @@ from .features import FeatureModule
 
 FEATURE_CATALOG: dict[str, str] = {
     "audiobook": "app.audiobook.feature:FEATURE",
+    "assistant-tools": "app.assistant_tools.feature:FEATURE",
+    "agent-runtime": "app.agent_runtime.feature:FEATURE",
+    "chat": "app.chat.feature:FEATURE",
     "image": "app.image.feature:FEATURE",
     "voice": "app.voice.feature:FEATURE",
     "research": "app.research.feature:FEATURE",
     "story": "app.story.feature:FEATURE",
     "rpg": "app.rpg.feature:FEATURE",
+    "trading": "app.trading.feature:FEATURE",
 }
 
 
