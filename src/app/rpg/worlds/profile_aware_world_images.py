@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_jobs import canonical_hash
@@ -117,7 +117,7 @@ def read_world_image_targets(
     database: Any | None = None,
 ) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _base._upsert_targets(work, context, world_id, _desired_targets(detail))
@@ -143,7 +143,7 @@ def regenerate_world_image_prompts(
     )
     if not selected:
         raise ValueError("world_image_prompt_targets_required")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _base._upsert_targets(work, context, world_id, selected)
