@@ -8,7 +8,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.rpg_world_forge_service import approve_world_forge_proposal
+from app.rpg.persistence.rpg_world_forge_service import approve_world_forge_proposal
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.narrative_engine import WorldForgeProposal, audit_world_forge_proposal, CampaignBibleSnapshot
 
