@@ -57,7 +57,6 @@ from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
     FailJobRequest,
-    InMemoryJobStore,
     InMemoryModelResidencyStore,
     JobListResponse,
     JobRecord,
@@ -443,7 +442,7 @@ def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
     return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
 
 
-async def _live_job_event_stream(job_store: InMemoryJobStore, after_id: int = 0):
+async def _live_job_event_stream(job_store: Any, after_id: int = 0):
     last_event_id = max(0, after_id)
     seconds_until_heartbeat = 0.0
     yield _sse_comment("omnix-events-open")
@@ -508,7 +507,7 @@ __all__ = [
     "GatewayHealth",
     "HTTPException",
     "Header",
-    "InMemoryJobStore",
+    "Any",
     "InMemoryModelResidencyStore",
     "JSONResponse",
     "JobListResponse",
