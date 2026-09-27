@@ -8,6 +8,8 @@ explicit environment keys through the server policy.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import shutil
@@ -38,14 +40,14 @@ _MAX_OUTPUT_CHARS = 80_000
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     if value is None:
         return default
     return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def mcporter_command() -> str:
-    configured = os.environ.get("OMNIX_AGENT_MCPORTER_COMMAND", "").strip()
+    configured = environment().get("OMNIX_AGENT_MCPORTER_COMMAND", "").strip()
     if configured:
         return configured
     repo_root = Path(__file__).resolve().parents[3]
@@ -77,13 +79,13 @@ def mcp_runtime_available() -> bool:
 
 def _timeout_seconds() -> int:
     try:
-        return max(5, min(int(os.environ.get("OMNIX_AGENT_MCP_TIMEOUT_SECONDS", "60")), 300))
+        return max(5, min(int(environment().get("OMNIX_AGENT_MCP_TIMEOUT_SECONDS", "60")), 300))
     except ValueError:
         return 60
 
 
 def _minimal_environment(server: McpServerPolicy) -> dict[str, str]:
-    source = os.environ
+    source = environment()
     env = {key: source[key] for key in _SAFE_ENV_KEYS if source.get(key)}
     allowed = set(server.env_keys) | set(server.headers_from_env.values())
     for key in allowed:
