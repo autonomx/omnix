@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .models import AssetRecord, AssetType
 
