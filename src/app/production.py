@@ -129,6 +129,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         runtime_lifecycle=lifecycle,
         background_runtime=background,
         runtime_config=config,
+        runtime_services=services,
     )
     from app.jobs.durable_feature_worker import register_durable_feature_job_worker
 
