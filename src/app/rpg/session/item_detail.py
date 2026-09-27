@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_item_description_repository import (
     PostgresRpgItemDescriptionRepository,
 )
@@ -236,7 +236,7 @@ def _detail_payload(item_name: str, item: dict[str, Any] | None, *, summary: str
 @lru_cache(maxsize=1)
 def _description_database_context() -> tuple[Any, Any]:
     database = default_database()
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     return database, context
 
 
