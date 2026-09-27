@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
-from app.shared import remove_emojis
+from app.text import remove_emojis
 
 from .live_voice_execution_lane import (
     TtsLanePriority,
