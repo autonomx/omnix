@@ -88,6 +88,9 @@ class JobHandlerRegistry:
     def types(self) -> tuple[str, ...]:
         return tuple(sorted(self._handlers))
 
+    def resource_classes(self) -> tuple[str, ...]:
+        return tuple(sorted({spec.resource_class.value for spec in self._handlers.values()}))
+
     def validate_submission(self, request: CreateJobRequest) -> CreateJobRequest:
         spec = self.require(request.type)
         payload = spec.input_model.model_validate(request.input_payload or {})
