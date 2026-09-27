@@ -7,7 +7,7 @@ from typing import Any, Mapping
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.service import save_session
