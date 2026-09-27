@@ -6,7 +6,7 @@ from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
 from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
-from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 
@@ -157,6 +157,6 @@ def test_terminal_job_state_cannot_be_reopened_or_overwritten(tmp_path: Path) ->
 
 
 def test_record_only_type_is_not_an_inline_executable() -> None:
-    from app.jobs.inline_feature_jobs import INLINE_FEATURE_JOB_TYPES
+    from app.rpg.jobs.turn_executor import INLINE_FEATURE_JOB_TYPES
 
     assert RPG_FOREGROUND_RECORD_TYPE not in INLINE_FEATURE_JOB_TYPES
