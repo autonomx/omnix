@@ -1,6 +1,8 @@
 """Dedicated low-latency model and accepted-first TTS execution lane."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import threading
@@ -303,7 +305,7 @@ def _normalized(value: str | None) -> str | None:
 
 
 def _boolean_setting(name: str, fallback: bool = False) -> bool:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     if raw is None:
         return fallback
     return raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -316,7 +318,7 @@ def _env_int(
     minimum: int,
     maximum: int,
 ) -> int:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     try:
         value = int(raw) if raw is not None else default
     except (TypeError, ValueError):
@@ -325,16 +327,16 @@ def _env_int(
 
 
 def live_voice_execution_lane_config() -> LiveVoiceExecutionLaneConfig:
-    mode = (os.environ.get("OMNIX_LIVE_VOICE_EXECUTION_MODE") or "session").strip().lower()
+    mode = (environment().get("OMNIX_LIVE_VOICE_EXECUTION_MODE") or "session").strip().lower()
     if mode not in {"session", "dedicated"}:
         mode = "session"
     return LiveVoiceExecutionLaneConfig(
         mode=mode,
-        provider_id=_normalized(os.environ.get("OMNIX_LIVE_VOICE_PROVIDER_ID")),
-        model_id=_normalized(os.environ.get("OMNIX_LIVE_VOICE_MODEL_ID")),
+        provider_id=_normalized(environment().get("OMNIX_LIVE_VOICE_PROVIDER_ID")),
+        model_id=_normalized(environment().get("OMNIX_LIVE_VOICE_MODEL_ID")),
         dedicated_tts=_boolean_setting("OMNIX_LIVE_TTS_DEDICATED", False),
         tts_provider_name=_normalized(
-            os.environ.get("OMNIX_LIVE_TTS_PROVIDER_NAME")
+            environment().get("OMNIX_LIVE_TTS_PROVIDER_NAME")
         ),
     )
 
