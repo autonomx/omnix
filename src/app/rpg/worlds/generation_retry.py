@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 
@@ -236,7 +236,7 @@ def _pin_parent_run(
     *,
     database: Any | None,
 ) -> None:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     parent_run_id = str(parent_run["run_id"])
     parent_lineage = dict(parent_run.get("lineage") or {})
     root_run_id = str(parent_lineage.get("root_run_id") or parent_run_id)
@@ -275,7 +275,7 @@ def _record_stale_dependants(
     *,
     database: Any | None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         child = work.world_generation.get(context, child_run_id)
         if child is None:
@@ -302,7 +302,7 @@ def retry_failed_world_generation(
 ) -> dict[str, Any]:
     """Retry selected review outcomes plus required upstream dependencies."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         parent_run = work.world_generation.get(context, run_id)
         if parent_run is None:
@@ -494,7 +494,7 @@ def decide_world_generation_retry(
 
     if decision not in {"keep", "replace"}:
         raise ValueError(f"invalid_world_generation_retry_decision:{decision}")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
@@ -640,7 +640,7 @@ def continue_world_generation(
     kick_worker: bool = True,
     diagnostic_id: str | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         existing = work.world_generation.get(context, run_id)
         if existing is None:
