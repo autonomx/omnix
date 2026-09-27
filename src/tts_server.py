@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
-from app.shared import VOICE_CLONES_DIR
+from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
@@ -191,7 +191,7 @@ def _preflight_tts_port(host: str, port: int) -> bool:
 def _load_qwen3_provider() -> Any:
     """Load the dedicated TTS provider while keeping failures local."""
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
-    from app.shared import load_settings
+    from app.config.access import load_settings
 
     settings = load_settings() or {}
     provider_settings = dict(settings.get("faster-qwen3-tts") or {})
