@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Iterator
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
 
