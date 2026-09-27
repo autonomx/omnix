@@ -72,6 +72,7 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.persistence.identity_service import ensure_local_identity
     from app.security.tenant_context import TenantProvider, install_process_tenant
     from app.config.settings_service import SettingsService
+    from app.config.settings_registry import core_setting_specs
 
     from app.runtime.repositories import install_legacy_feature_repository_specs
 
@@ -80,7 +81,7 @@ def create_production_app(config: RuntimeConfig | None = None):
     tenant_context = ensure_local_identity(database)
     install_process_tenant(tenant_context)
     tenant_provider = TenantProvider()
-    settings_service = SettingsService(database, tenant_provider.current)
+    settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
     from app.live_voice_hardware_policy import install_live_voice_hardware_policy
 
     install_live_voice_hardware_policy()
