@@ -983,7 +983,7 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
                 
                 if audio_arrays and len(audio_arrays) > 0:
                     # Save the user's reference audio for future use
-                    from app.shared import VOICE_CLONES_DIR
+                    from app.runtime.paths import VOICE_CLONES_DIR
                     voice_clones_dir = VOICE_CLONES_DIR
                     os.makedirs(voice_clones_dir, exist_ok=True)
                     
@@ -1029,14 +1029,14 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
     
     def _get_voice_audio_path(self, voice_id: str) -> Optional[str]:
         """Get the path to a custom voice's audio file."""
-        from app.shared import VOICE_CLONES_DIR
+        from app.runtime.paths import VOICE_CLONES_DIR
         voice_clones_dir = VOICE_CLONES_DIR
         audio_path = os.path.join(voice_clones_dir, f"{voice_id}.wav")
         return audio_path if os.path.exists(audio_path) else None
     
     def _get_default_ref_audio(self) -> Optional[str]:
         """Get a default reference audio file for voice cloning."""
-        from app.shared import MODELS_DIR
+        from app.runtime.paths import MODELS_DIR
         # Try to find any available reference audio
         ref_audio_paths = [
             os.path.join(MODELS_DIR, 'tts', 'faster-qwen3-tts-main', 'ref_audio.wav'),
