@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 
 def test_rpg_turn_jobs_are_not_background_inline_jobs():
-    import app.jobs.inline_feature_jobs as inline_feature_jobs
+    import app.rpg.jobs.turn_executor as inline_feature_jobs
 
     assert "rpg.turn" in inline_feature_jobs.INLINE_FEATURE_JOB_TYPES
     assert "rpg.turn" not in inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES
@@ -17,7 +17,7 @@ def test_rpg_turn_jobs_are_not_background_inline_jobs():
 
 def test_foreground_rpg_turn_visible_text_has_fallback_text():
     import app.jobs  # noqa: F401
-    import app.jobs.inline_feature_jobs as inline_feature_jobs
+    import app.rpg.jobs.turn_executor as inline_feature_jobs
 
     result = {"player_input": "I ask Bran how he is doing"}
     visible = inline_feature_jobs._rpg_turn_visible_text(result)
@@ -29,7 +29,7 @@ def test_foreground_rpg_turn_visible_text_has_fallback_text():
 
 def test_foreground_social_turn_bypasses_provider_runtime():
     import app.jobs  # noqa: F401
-    import app.jobs.inline_feature_jobs as inline_feature_jobs
+    import app.rpg.jobs.turn_executor as inline_feature_jobs
 
     result = inline_feature_jobs._apply_authoritative_rpg_turn(
         "missing-session-is-ok-for-fast-social-turn",
