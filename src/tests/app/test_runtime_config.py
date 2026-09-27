@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from app import runtime_config as runtime
+from app.runtime import config as runtime
 from app.runtime.config import GatewayRole, RuntimeConfig, ServiceEndpoint
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability as Capability
 
