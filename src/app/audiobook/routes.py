@@ -6,14 +6,13 @@ import logging
 import os
 import threading
 from contextvars import copy_context
-from functools import wraps
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
 
 _LOG = logging.getLogger(__name__)
 _ROUTE_SENTINEL = "_omnix_audiobook_project_routes_registered"
-_HOOK_SENTINEL = "_omnix_audiobook_project_route_hook_installed"
 _SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$"
 _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
 _SERVICE_CONTEXT_LOCK = threading.Lock()
@@ -197,23 +195,21 @@ def _service_and_context() -> tuple["AudiobookService", Any]:
     return _SERVICE_CONTEXT
 
 
-def register_audiobook_routes(gateway: FastAPI) -> None:
-    if getattr(gateway.state, _ROUTE_SENTINEL, False):
-        return
-    setattr(gateway.state, _ROUTE_SENTINEL, True)
+def create_audiobook_router() -> APIRouter:
+    router = APIRouter()
 
-    @gateway.get("/api/audiobook/projects", tags=["audiobook"])
+    @router.get("/api/audiobook/projects", tags=["audiobook"])
     def list_projects(offset: int = Query(default=0, ge=0)) -> dict[str, object]:
         service, context = _service_and_context()
         return {"projects": service.list_projects(context, offset=offset)}
 
-    @gateway.get("/api/audiobook/voices", tags=["audiobook"])
+    @router.get("/api/audiobook/voices", tags=["audiobook"])
     def list_voices() -> dict[str, object]:
         from .service import AudiobookService
 
         return {"voices": AudiobookService.list_voices()}
 
-    @gateway.get("/api/audiobook/models/current", tags=["audiobook"])
+    @router.get("/api/audiobook/models/current", tags=["audiobook"])
     def audiobook_model() -> dict[str, object]:
         from .model_identity import current_model_identity
 
@@ -222,11 +218,11 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    @gateway.get("/api/audiobook/source-library", tags=["audiobook"])
+    @router.get("/api/audiobook/source-library", tags=["audiobook"])
     def source_library() -> dict[str, object]:
         return _source_library_files()
 
-    @gateway.post("/api/audiobook/projects", tags=["audiobook"])
+    @router.post("/api/audiobook/projects", tags=["audiobook"])
     def create_project(request: CreateAudiobookProject) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -234,7 +230,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.patch("/api/audiobook/projects/{project_id}", tags=["audiobook"])
+    @router.patch("/api/audiobook/projects/{project_id}", tags=["audiobook"])
     def update_project(project_id: str, request: UpdateAudiobookProject) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -244,7 +240,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.delete("/api/audiobook/projects/{project_id}", tags=["audiobook"], status_code=204)
+    @router.delete("/api/audiobook/projects/{project_id}", tags=["audiobook"], status_code=204)
     def delete_project(project_id: str) -> Response:
         service, context = _service_and_context()
         try:
@@ -253,7 +249,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
         return Response(status_code=204)
 
-    @gateway.delete("/api/audiobook/projects/{project_id}/assets/{asset_id}", tags=["audiobook"])
+    @router.delete("/api/audiobook/projects/{project_id}/assets/{asset_id}", tags=["audiobook"])
     def delete_asset(project_id: str, asset_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -263,7 +259,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
     def get_project(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -271,7 +267,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/chapters/{chapter_id}", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/chapters/{chapter_id}", tags=["audiobook"])
     def get_chapter(project_id: str, chapter_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -280,7 +276,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook chapter not found") from exc
 
-    @gateway.get(
+    @router.get(
         "/api/audiobook/projects/{project_id}/document-structure",
         tags=["audiobook"],
     )
@@ -297,7 +293,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 status_code=404, detail="audiobook project not found"
             ) from exc
 
-    @gateway.patch(
+    @router.patch(
         "/api/audiobook/projects/{project_id}/reading-policy",
         tags=["audiobook"],
     )
@@ -316,7 +312,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.post(
+    @router.post(
         "/api/audiobook/projects/{project_id}/document-overrides",
         tags=["audiobook"],
     )
@@ -335,7 +331,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
     async def upload_source(
         project_id: str, request: Request,
         source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
@@ -362,7 +358,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
     async def import_library_source(
         project_id: str, filename: str = Query(min_length=1),
         exclude_pages: str | None = Query(default=None, max_length=500),
@@ -395,7 +391,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/source/download", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/source/download", tags=["audiobook"])
     def download_source(project_id: str) -> StreamingResponse:
         service, context = _service_and_context()
         try:
@@ -421,7 +417,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             ),
         })
 
-    @gateway.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
     async def upload_cover(project_id: str, request: Request,
                            filename: str = Query(default="cover")) -> dict[str, str]:
         if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
@@ -439,7 +435,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
     def project_cover(project_id: str) -> Response:
         service, context = _service_and_context()
         try:
@@ -450,7 +446,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=409, detail="audiobook cover failed integrity verification") from exc
         return Response(content, media_type=mime)
 
-    @gateway.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
     def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -460,7 +456,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions", tags=["audiobook"])
     def exclude_span_text(project_id: str, span_id: str, body: ExcludeSpanText) -> dict[str, str]:
         service, context = _service_and_context()
         try:
@@ -470,7 +466,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
+    @router.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
     def restore_span_text(project_id: str, exclusion_id: str) -> dict[str, bool]:
         service, context = _service_and_context()
         try:
@@ -478,7 +474,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="speech exclusion not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
     def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -489,7 +485,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post(
+    @router.post(
         "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject",
         tags=["audiobook"],
     )
@@ -504,7 +500,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
     def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -517,7 +513,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
     def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -528,7 +524,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
     def resolve_issue(project_id: str, issue_id: str, request: ResolveReviewIssue) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -540,7 +536,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/spans/{span_id}/annotation", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/annotation", tags=["audiobook"])
     def revise_span(project_id: str, span_id: str, request: ReviseSpanAnnotation) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -551,7 +547,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="span or speaker not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
     def start_render(project_id: str, request: StartRender) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -561,7 +557,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel", tags=["audiobook"])
     def cancel_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -569,7 +565,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook job not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/pause", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/pause", tags=["audiobook"])
     def pause_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -579,7 +575,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/resume", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/resume", tags=["audiobook"])
     def resume_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -589,7 +585,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/render/pause", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/render/pause", tags=["audiobook"])
     def pause_audiobook_render_queue(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -597,7 +593,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/render/resume", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/render/resume", tags=["audiobook"])
     def resume_audiobook_render_queue(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -605,7 +601,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])
     def stop_audiobook_render_queue(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -613,7 +609,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
     def retry_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -623,7 +619,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/extract-quotes", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/extract-quotes", tags=["audiobook"], status_code=202)
     def extract_quotes(project_id: str, body: ClassificationRequest | None = None) -> dict[str, str]:
         service, context = _service_and_context()
         try:
@@ -636,7 +632,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
     def reclassify_audiobook(
         project_id: str, body: ClassificationRequest | None = None,
     ) -> dict[str, str]:
@@ -651,7 +647,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/classification-rules", tags=["audiobook"])
+    @router.post("/api/audiobook/projects/{project_id}/classification-rules", tags=["audiobook"])
     def save_classification_rules(project_id: str, body: ClassificationRequest) -> dict[str, str]:
         service, context = _service_and_context()
         try:
@@ -661,7 +657,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
     def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
         service, context = _service_and_context()
         try:
@@ -672,7 +668,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/previews/{job_id}/audio", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/previews/{job_id}/audio", tags=["audiobook"])
     def preview_audio(project_id: str, job_id: str) -> Response:
         service, context = _service_and_context()
         try:
@@ -682,7 +678,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="preview audio not found") from exc
         return Response(content, media_type="audio/wav")
 
-    @gateway.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
+    @router.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
     def start_export(project_id: str, request: StartExport) -> dict[str, str]:
         service, context = _service_and_context()
         try:
@@ -696,7 +692,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
     def list_exports(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -704,7 +700,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
     def download_export(project_id: str, export_id: str) -> StreamingResponse:
         service, context = _service_and_context()
         try:
@@ -723,7 +719,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             "Content-Disposition": f'attachment; filename="audiobook.{format}"',
         })
 
-    @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/report", tags=["audiobook"])
+    @router.get("/api/audiobook/projects/{project_id}/exports/{export_id}/report", tags=["audiobook"])
     def export_report(project_id: str, export_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
@@ -732,143 +728,146 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook export not found") from exc
 
-    stop = threading.Event()
-    thread: threading.Thread | None = None
-    render_thread: threading.Thread | None = None
-    preview_thread: threading.Thread | None = None
-
-    def worker_runtime() -> tuple[Any, Any] | None:
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                return _service_and_context()
-            except BackgroundOwnershipUnavailable:
-                return None
-            except Exception as exc:
-                worker_error("initialize_failed", exc)
-                stop.wait(5.0)
-        return None
-
-    def worker_error(transition: str, error: Exception) -> None:
-        runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
-                           transition=transition, error=error, level="warning")
-
-    def worker_loop() -> None:
-        from .assembly_service import run_assemble_once
-        from .export_service import run_export_once
-        from .worker import run_analyze_once, run_ingest_once
-
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = LocalBlobStore()
-        worker_id = f"audiobook:ingest:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                active = run_ingest_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    active = run_analyze_once(database, context, worker_id=worker_id)
-                if not active:
-                    active = run_assemble_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    active = run_export_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("ingest_poll_failed", exc)
-                stop.wait(5.0)
-
-    def start_worker() -> None:
-        nonlocal thread, render_thread, preview_thread
-        stop.clear()
-        thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
-        thread.start()
-        render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
-        render_thread.start()
-        preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
-        preview_thread.start()
-
-    def render_worker_loop() -> None:
-        from .render_service import run_render_once
-
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = LocalBlobStore()
-        worker_id = f"audiobook:render:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                if not run_render_once(database, blobs, context, worker_id=worker_id):
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("render_poll_failed", exc)
-                stop.wait(5.0)
-
-    def preview_worker_loop() -> None:
-        from .render_service import run_preview_once
-
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = LocalBlobStore()
-        worker_id = f"audiobook:preview:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                if not run_preview_once(database, blobs, context, worker_id=worker_id):
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("preview_poll_failed", exc)
-                stop.wait(5.0)
-
-    def stop_worker() -> None:
-        stop.set()
-        if thread is not None:
-            thread.join(timeout=2.0)
-        if render_thread is not None:
-            render_thread.join(timeout=2.0)
-        if preview_thread is not None:
-            preview_thread.join(timeout=2.0)
-        if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
-            raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
-
-    monitor = SimpleNamespace(start=start_worker)
-
-    async def startup() -> None:
-        await asyncio.to_thread(monitor.start)
-
-    async def shutdown() -> None:
-        await asyncio.to_thread(stop_worker)
-
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
-        name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
+    return router
 
 
-def install_audiobook_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
+def create_audiobook_background_worker() -> BackgroundWorker:
+stop = threading.Event()
+thread: threading.Thread | None = None
+render_thread: threading.Thread | None = None
+preview_thread: threading.Thread | None = None
+
+def worker_runtime() -> tuple[Any, Any] | None:
+    while not stop.is_set():
+        try:
+            require_background_owner()
+            return _service_and_context()
+        except BackgroundOwnershipUnavailable:
+            return None
+        except Exception as exc:
+            worker_error("initialize_failed", exc)
+            stop.wait(5.0)
+    return None
+
+def worker_error(transition: str, error: Exception) -> None:
+    runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
+                       transition=transition, error=error, level="warning")
+
+def worker_loop() -> None:
+    from .assembly_service import run_assemble_once
+    from .export_service import run_export_once
+    from .worker import run_analyze_once, run_ingest_once
+
+    runtime = worker_runtime()
+    if runtime is None:
         return
-    original_init: Callable[..., None] = FastAPI.__init__
+    service, context = runtime
+    database = service.database
+    blobs = LocalBlobStore()
+    worker_id = f"audiobook:ingest:{uuid4().hex}"
+    while not stop.is_set():
+        try:
+            require_background_owner()
+            active = run_ingest_once(database, blobs, context, worker_id=worker_id)
+            if not active:
+                active = run_analyze_once(database, context, worker_id=worker_id)
+            if not active:
+                active = run_assemble_once(database, blobs, context, worker_id=worker_id)
+            if not active:
+                active = run_export_once(database, blobs, context, worker_id=worker_id)
+            if not active:
+                stop.wait(1.0)
+        except BackgroundOwnershipUnavailable:
+            return
+        except Exception as exc:
+            worker_error("ingest_poll_failed", exc)
+            stop.wait(5.0)
 
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
-            register_audiobook_routes(self)
+def start_worker() -> None:
+    nonlocal thread, render_thread, preview_thread
+    stop.clear()
+    thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
+    thread.start()
+    render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
+    render_thread.start()
+    preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
+    preview_thread.start()
 
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)
+def render_worker_loop() -> None:
+    from .render_service import run_render_once
+
+    runtime = worker_runtime()
+    if runtime is None:
+        return
+    service, context = runtime
+    database = service.database
+    blobs = LocalBlobStore()
+    worker_id = f"audiobook:render:{uuid4().hex}"
+    while not stop.is_set():
+        try:
+            require_background_owner()
+            if not run_render_once(database, blobs, context, worker_id=worker_id):
+                stop.wait(1.0)
+        except BackgroundOwnershipUnavailable:
+            return
+        except Exception as exc:
+            worker_error("render_poll_failed", exc)
+            stop.wait(5.0)
+
+def preview_worker_loop() -> None:
+    from .render_service import run_preview_once
+
+    runtime = worker_runtime()
+    if runtime is None:
+        return
+    service, context = runtime
+    database = service.database
+    blobs = LocalBlobStore()
+    worker_id = f"audiobook:preview:{uuid4().hex}"
+    while not stop.is_set():
+        try:
+            require_background_owner()
+            if not run_preview_once(database, blobs, context, worker_id=worker_id):
+                stop.wait(1.0)
+        except BackgroundOwnershipUnavailable:
+            return
+        except Exception as exc:
+            worker_error("preview_poll_failed", exc)
+            stop.wait(5.0)
+
+def stop_worker() -> None:
+    stop.set()
+    if thread is not None:
+        thread.join(timeout=2.0)
+    if render_thread is not None:
+        render_thread.join(timeout=2.0)
+    if preview_thread is not None:
+        preview_thread.join(timeout=2.0)
+    if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
+        raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
+
+monitor = SimpleNamespace(start=start_worker)
+
+async def startup() -> None:
+    await asyncio.to_thread(monitor.start)
+
+async def shutdown() -> None:
+    await asyncio.to_thread(stop_worker)
+
+return BackgroundWorker(
+    name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+)
+
+def register_audiobook_routes(gateway: FastAPI) -> None:
+    """Compatibility wrapper; FeatureModule composition uses the factories directly."""
+    if getattr(gateway.state, _ROUTE_SENTINEL, False):
+        return
+    setattr(gateway.state, _ROUTE_SENTINEL, True)
+    gateway.include_router(create_audiobook_router())
+    registry = (
+        getattr(gateway.state, "background_registry", None)
+        or getattr(gateway.state, "background_runtime", None)
+    )
+    if registry is not None:
+        register_background_worker(registry, create_audiobook_background_worker())
+
