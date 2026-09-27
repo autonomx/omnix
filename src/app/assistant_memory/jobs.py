@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
-    InMemoryJobStore,
     JobRecord,
     ResourceClass,
     default_job_store,
@@ -87,7 +86,7 @@ def enqueue_memory_suggestion_job(
     session_id: str,
     user_message_id: str,
     *,
-    job_store: InMemoryJobStore | None = None,
+    job_store: Any | None = None,
 ) -> JobRecord | None:
     if not memory_suggestions_enabled():
         return None
@@ -118,7 +117,7 @@ def extract_memory_candidates(content: str) -> tuple[list[dict[str, Any]], list[
 def _complete_result(
     result: MemorySuggestionJobResult,
     *,
-    store: InMemoryJobStore,
+    store: Any,
 ) -> None:
     output_refs = [
         {"type": "memory_candidate", "id": candidate_id}
@@ -150,7 +149,7 @@ def process_memory_suggestion_job(
     *,
     chat_store: ChatSessionStore,
     memory_service: MemoryService | None = None,
-    job_store: InMemoryJobStore | None = None,
+    job_store: Any | None = None,
     proposal_provider: StructuredProposalProvider | None = None,
 ) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
