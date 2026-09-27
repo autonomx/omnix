@@ -13,8 +13,8 @@ from app.gateway.background_runtime import (
 )
 from app.gateway.feature_registry import FeatureLifecycle, register_feature_lifecycle
 from app.gateway.lifecycle import gateway_lifespan
-from app.runtime_config import RuntimeConfig, GatewayRole
-from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+from app.runtime.config import RuntimeConfig, GatewayRole
+from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 
 
 def application(config):
@@ -155,7 +155,7 @@ def test_compatibility_modules_are_allowlisted():
 def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
     import logging
     from app.platform.diagnostics import redact_diagnostics
-    from app.runtime_logging import runtime_transition
+    from app.runtime.logging import runtime_transition
     value = {'nested': [{'api_key': 'private', 'password': 'private',
                          'endpoint': 'postgresql://user:private@host/db'}]}
     assert 'private' not in json.dumps(redact_diagnostics(value))
