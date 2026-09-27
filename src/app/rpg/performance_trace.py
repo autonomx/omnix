@@ -1,6 +1,8 @@
 """End-to-end RPG request tracing with bounded structured stage metrics."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import sys
@@ -280,7 +282,7 @@ def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 20
 
 def slow_span_threshold_ms() -> float:
     try:
-        return max(0.0, float(os.getenv(_WARNING_THRESHOLD_ENV, str(_DEFAULT_WARNING_THRESHOLD_MS))))
+        return max(0.0, float(env_str(_WARNING_THRESHOLD_ENV, str(_DEFAULT_WARNING_THRESHOLD_MS))))
     except (TypeError, ValueError):
         return _DEFAULT_WARNING_THRESHOLD_MS
 
