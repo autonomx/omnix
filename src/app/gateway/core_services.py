@@ -325,11 +325,11 @@ def _chat_message_image_data_urls(metadata: object) -> list[str]:
 
 def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
     """Remove the local clone source and manifest entry so it cannot reappear."""
-    import app.shared as shared
+    from app.runtime.paths import VOICE_CLONES_DIR, VOICE_CLONES_FILE
     from app.assets.canonical_voice_clones import canonical_voice_clone_root
 
-    clone_dir = Path(str(shared.VOICE_CLONES_DIR)).resolve()
-    manifest_path = Path(str(shared.VOICE_CLONES_FILE)).resolve()
+    clone_dir = Path(str(VOICE_CLONES_DIR)).resolve()
+    manifest_path = Path(str(VOICE_CLONES_FILE)).resolve()
     metadata = dict(asset.metadata or {})
     identifiers = {
         str(value).strip().casefold()
