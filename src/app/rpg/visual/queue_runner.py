@@ -16,7 +16,7 @@ from app.rpg.visual.job_queue import (
 )
 from app.rpg.visual.providers import image_generation_enabled
 from app.rpg.visual.worker import process_pending_image_requests
-from app.runtime_paths import generated_images_root
+from app.runtime.paths import generated_images_root
 
 
 def _safe_str(value: Any) -> str:
