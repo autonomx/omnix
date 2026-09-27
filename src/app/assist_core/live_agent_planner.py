@@ -1,6 +1,8 @@
 """Proposal-only Hermes planner used by automatically routed live voice turns."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import asdict
 from typing import Any
@@ -49,7 +51,7 @@ def plan_live_agent_proposal(
     try:
         result = HermesSidecarClient(
             base_url=config.base_url,
-            api_key=os.environ.get("HERMES_API_KEY") or None,
+            api_key=environment().get("HERMES_API_KEY") or None,
             timeout=min(config.timeout_seconds, timeout_seconds),
         ).plan(request)
     except Exception as exc:
