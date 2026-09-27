@@ -23,7 +23,7 @@ from app.assistant_context.vision import (
 )
 from app.assistant_context.web_search import should_search_automatically
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
-from app.jobs import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 class FakeProvider:
