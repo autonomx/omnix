@@ -23,7 +23,7 @@ from app.rpg.story_packs.activation import (
     build_story_pack_activation_snapshot,
     deactivate_story_pack,
 )
-from app.shared import get_provider
+from app.providers.service import get_provider
 
 router = APIRouter(prefix="/api/rpg/story_authoring", tags=["rpg-story-authoring"])
 
