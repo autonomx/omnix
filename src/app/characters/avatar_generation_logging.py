@@ -1,6 +1,8 @@
 """Persistent diagnostics for Character avatar generation failures."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import logging
 import os
@@ -19,7 +21,7 @@ _HANDLER_MARKER = "_omnix_avatar_generation_log_path"
 def avatar_generation_log_path() -> Path:
     """Return the writable avatar-generation diagnostic log path."""
 
-    override = os.environ.get("OMNIX_AVATAR_GENERATION_LOG_PATH", "").strip()
+    override = environment().get("OMNIX_AVATAR_GENERATION_LOG_PATH", "").strip()
     if override:
         return Path(override)
     return resources_root() / "logs" / "avatar_generation.log"
