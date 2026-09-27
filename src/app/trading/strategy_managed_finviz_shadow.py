@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """Idempotent startup provisioning for the managed interday SHADOW profile."""
 
 import os
@@ -61,13 +63,13 @@ class ManagedFinvizShadowProvisionResult(BaseModel):
 
 
 def _flag(name: str, default: str) -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def managed_finviz_shadow_autoprovision_enabled() -> bool:
     """Production defaults on; legacy tests remain opt-in."""
 
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", "1")
 
@@ -93,7 +95,7 @@ def managed_finviz_shadow_document(account_id: str) -> TradingStrategyConfigDocu
 
 
 def _managed_initial_cash() -> Decimal:
-    raw = os.environ.get("OMNIX_TRADING_FINVIZ_SHADOW_INITIAL_CASH", "1000")
+    raw = environment().get("OMNIX_TRADING_FINVIZ_SHADOW_INITIAL_CASH", "1000")
     value = Decimal(raw)
     if value <= 0:
         raise ValueError("managed_finviz_shadow_initial_cash_must_be_positive")
@@ -101,7 +103,7 @@ def _managed_initial_cash() -> Decimal:
 
 
 def _resolve_account(paper_repository: TradingPaperRepository) -> str:
-    requested = os.environ.get("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", "").strip()
+    requested = environment().get("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", "").strip()
     managed_id = requested or MANAGED_FINVIZ_SHADOW_ACCOUNT_ID
     accounts = paper_repository.list_accounts(limit=500)
     by_id = {account.account_id: account for account in accounts}
