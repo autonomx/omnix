@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import test_results_root
+from app.runtime.paths import test_results_root
 
 
 def write_rpg_last10_report(payload: dict[str, Any], *, output_root: Path | None = None) -> dict[str, Any]:
