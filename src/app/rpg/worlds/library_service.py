@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_profile_generation import (
     ProfileResolution,
@@ -71,7 +71,7 @@ def read_world_library(
     database: Any | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         worlds = work.world_scenarios.list_worlds(context, limit=limit)
         scenarios = work.world_library.list_scenarios(context, limit=limit * 2)
@@ -112,7 +112,7 @@ def read_world_detail(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -165,7 +165,7 @@ def save_world_topic(
     status: str = "ready",
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         payload = dict(content)
@@ -236,7 +236,7 @@ def start_world_library_generation(
 ) -> dict[str, Any]:
     if strategy not in {"reuse_unchanged", "force"}:
         raise ValueError(f"invalid_generation_strategy:{strategy}")
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         topics = work.world_library.list_topics(context, world_id)
@@ -342,7 +342,7 @@ def read_world_generation(
     if reconcile:
         run = reconcile_world_generation(run_id, database=database)
     else:
-        context = bootstrap_local_tenant(_database(database))
+        context = current_tenant()
         with unit_of_work(database) as work:
             run = work.world_generation.get(context, run_id)
             work.rollback()
@@ -354,7 +354,7 @@ def read_world_generation(
             database=database,
             provider_route=str(settings.get("provider_route") or ""),
         )
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         topic_results = work.world_generation.list_topic_results(
             context,
@@ -369,7 +369,7 @@ def publish_world_library_generation(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
