@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 
 from app.security.tenant_context import current_tenant
-from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
 from app.rpg.session.service import archive_session, save_session
