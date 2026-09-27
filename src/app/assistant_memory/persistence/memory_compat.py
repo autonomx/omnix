@@ -11,10 +11,10 @@ from app.assistant_memory.models import (
 )
 from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
 
-from .database import PostgresDatabase, default_database
-from .errors import EntityNotFound, RevisionConflict
+from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.security.tenant_context import current_tenant
-from .unit_of_work import unit_of_work
+from app.persistence.unit_of_work import unit_of_work
 
 
 class PostgresMemoryRepositoryAdapter:

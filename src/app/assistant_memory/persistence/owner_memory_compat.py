@@ -1,7 +1,7 @@
 """PostgreSQL authority for owner-isolated assistant memory."""
 from __future__ import annotations
 
-from .database import PostgresDatabase, default_database
+from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 from .owner_memory_candidates import OwnerMemoryCandidateMixin
 from .owner_memory_records import OwnerMemoryRecordMixin
