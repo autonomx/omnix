@@ -69,15 +69,25 @@ class _AuthorityBoundJobStore:
         if target != self._job_id:
             raise JobClaimConflict("Durable feature executor cannot mutate another job")
         self._authority.require_live()
-        current = self._store.get_job(self._job_id)
-        lease = getattr(current, "lease", None) if current is not None else None
-        if (
-            current is None
-            or current.status not in {JobStatus.LEASED, JobStatus.RUNNING}
-            or lease is None
-            or lease.token != self._lease_token
-            or lease.worker_id != self._worker_id
-        ):
+        with unit_of_work(self._store.database) as work:
+            row = work.connection.execute(
+                """
+                SELECT 1
+                  FROM omnix_jobs
+                 WHERE id = %s AND workspace_id = %s
+                   AND status IN ('leased', 'running')
+                   AND lease_owner = %s AND lease_token = %s
+                   AND lease_expires_at > clock_timestamp()
+                """,
+                (
+                    self._job_id,
+                    self._store.context.workspace_id,
+                    self._worker_id,
+                    self._lease_token,
+                ),
+            ).fetchone()
+            work.rollback()
+        if row is None:
             raise JobClaimConflict(f"Durable feature execution lease lost: {self._job_id}")
 
     def __getattr__(self, name: str) -> Any:
