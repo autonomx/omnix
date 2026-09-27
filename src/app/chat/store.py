@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .concurrency import serialized_chat_mutation
 
