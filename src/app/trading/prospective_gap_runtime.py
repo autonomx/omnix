@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """End-to-end authority runtime for the prospective Top-10 gap experiment.
 
 The runtime owns machine-readable persistence and phase transitions. External
@@ -547,7 +549,7 @@ class ProspectiveGapRuntime:
     ) -> SchedulerPremarketHandoff | None:
         """Read the scheduler inbox from GitHub without mutating the working tree."""
 
-        if os.getenv(
+        if env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX",
             "1",
         ).strip().lower() not in {"1", "true", "yes", "on"}:
@@ -555,11 +557,11 @@ class ProspectiveGapRuntime:
         gh = shutil.which("gh")
         if not gh:
             raise RuntimeError("prospective_gap_remote_inbox_requires_github_cli")
-        repository = os.getenv(
+        repository = env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY",
             "autonomx/omnix",
         ).strip()
-        ref = os.getenv(
+        ref = env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF",
             "main",
         ).strip()
