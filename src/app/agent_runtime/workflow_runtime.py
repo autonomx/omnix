@@ -13,7 +13,7 @@ from typing import Any
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolExecutor, AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.unit_of_work import unit_of_work
 
