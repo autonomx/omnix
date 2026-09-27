@@ -4,11 +4,10 @@ from __future__ import annotations
 from typing import Any
 
 from .models import CreateJobRequest, JobRecord, JobStage, ResourceClass
-from .store import InMemoryJobStore
 
 
 def enqueue_image_job(
-    store: InMemoryJobStore,
+    store: Any,
     *,
     payload: dict[str, Any],
     owner_id: str | None = None,
