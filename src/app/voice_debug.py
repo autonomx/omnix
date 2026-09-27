@@ -7,6 +7,8 @@ recording synthesized text.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import itertools
 import json
@@ -46,7 +48,7 @@ def _safe_channel(channel: str) -> str:
 
 
 def _log_dir() -> Path:
-    configured = os.environ.get("OMNIX_VOICE_DEBUG_LOG_DIR", "").strip()
+    configured = environment().get("OMNIX_VOICE_DEBUG_LOG_DIR", "").strip()
     return Path(configured).expanduser() if configured else Path(LOGS_DIR)
 
 
@@ -93,7 +95,7 @@ def voice_debug_log(
     **details: Any,
 ) -> None:
     """Append one JSON diagnostic record without persisting speech content."""
-    if os.environ.get("OMNIX_VOICE_DEBUG_LOGGING", "1").strip().lower() in {"0", "false", "off", "no"}:
+    if environment().get("OMNIX_VOICE_DEBUG_LOGGING", "1").strip().lower() in {"0", "false", "off", "no"}:
         return
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
