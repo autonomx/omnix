@@ -1,6 +1,8 @@
 """Persisted server-enforced Chat memory settings and content-free diagnostics."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from pathlib import Path
@@ -87,19 +89,19 @@ class AssistantMemoryRuntimeStatus(BaseModel):
 
 
 def default_memory_settings_path() -> Path:
-    override = (os.environ.get("OMNIX_CHAT_MEMORY_SETTINGS_PATH") or "").strip()
+    override = (environment().get("OMNIX_CHAT_MEMORY_SETTINGS_PATH") or "").strip()
     return Path(override) if override else resources_data_root() / "omnix_chat_memory_settings.json"
 
 
 def _env_bool(name: str, fallback: bool) -> tuple[bool, bool]:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     if raw is None or not raw.strip():
         return fallback, False
     return raw.strip().lower() in {"1", "true", "yes", "on"}, True
 
 
 def _env_int(name: str, fallback: int, minimum: int, maximum: int) -> tuple[int, bool]:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     if raw is None or not raw.strip():
         return fallback, False
     try:
@@ -110,7 +112,7 @@ def _env_int(name: str, fallback: int, minimum: int, maximum: int) -> tuple[int,
 
 
 def _env_stage(fallback: CompanionRolloutStage) -> tuple[CompanionRolloutStage, bool]:
-    raw = (os.environ.get("OMNIX_COMPANION_ROLLOUT_STAGE") or "").strip()
+    raw = (environment().get("OMNIX_COMPANION_ROLLOUT_STAGE") or "").strip()
     if not raw:
         return fallback, False
     return (raw if raw in _COMPANION_STAGES else fallback), True  # type: ignore[return-value]
