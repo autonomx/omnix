@@ -46,14 +46,21 @@ export function resolveApiOrigins(worker: string, repositoryRoot: string, env = 
   });
 }
 
-export function canUseApi(req: Pick<IncomingMessage, 'url' | 'method' | 'headers'>): boolean {
+export function canUseApi(
+  req: Pick<IncomingMessage, 'url' | 'method' | 'headers'>,
+  speechOnApi = false,
+): boolean {
   if (req.headers['x-omnix-gateway-affinity'] === 'worker') return false;
   const path = (req.url ?? '').split('?')[0];
-  return CHAT.test(path) || SPEECH.has(path)
+  return CHAT.test(path) || (speechOnApi && SPEECH.has(path))
     || (['GET', 'HEAD'].includes(req.method ?? 'GET') && READS.test(path));
 }
 
-export function gatewayRouting(worker: string, replicas: string[]): {
+export function gatewayRouting(
+  worker: string,
+  replicas: string[],
+  env: Record<string, string | undefined> = process.env,
+): {
   plugin: Plugin; proxy: Record<string, ProxyOptions>;
 } {
   let cursor = 0;
@@ -83,9 +90,10 @@ export function gatewayRouting(worker: string, replicas: string[]): {
     proxy[`^${prefix}/`] = proxyOptions(origin(target), `api-${index + 1}`, prefix);
   });
   proxy['^/(?:api(?:/|$)|events(?:\\?|$)|health(?:\\?|$)|ready(?:\\?|$))'] = proxyOptions(origin(worker), 'worker');
+  const speechOnApi = Boolean(env.OMNIX_TTS_URL?.trim());
   const install = (server: Pick<ViteDevServer, 'middlewares' | 'httpServer' | 'config'>) => {
     const route = (req: IncomingMessage) => {
-      if (replicas.length && canUseApi(req)) {
+      if (replicas.length && canUseApi(req, speechOnApi)) {
         const index = cursor++ % replicas.length;
         req.url = `${PREFIX}${index}${req.url}`;
         return index;
