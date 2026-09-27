@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.assets import AssetRecord, AssetType, default_asset_store
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
 from .inline_execution_compat import mark_inline_execution, require_execution_authority
