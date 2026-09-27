@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
@@ -44,8 +46,8 @@ def _stored_credentials() -> dict[str, str]:
 
 def _api_key() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_KEY_ID")
-        or os.environ.get("APCA_API_KEY_ID")
+        environment().get("OMNIX_ALPACA_API_KEY_ID")
+        or environment().get("APCA_API_KEY_ID")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("api_key_id", "").strip()
@@ -53,8 +55,8 @@ def _api_key() -> str:
 
 def _api_secret() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_SECRET_KEY")
-        or os.environ.get("APCA_API_SECRET_KEY")
+        environment().get("OMNIX_ALPACA_API_SECRET_KEY")
+        or environment().get("APCA_API_SECRET_KEY")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("secret_key", "").strip()
@@ -151,7 +153,7 @@ class AlpacaIexExecutionProvider:
         self.session = self.runtime.session
         self.data_url = (
             data_url
-            or os.environ.get("OMNIX_ALPACA_DATA_URL")
+            or environment().get("OMNIX_ALPACA_DATA_URL")
             or ALPACA_DATA_URL
         ).rstrip("/")
         self.clock = clock or (lambda: datetime.now(timezone.utc))
