@@ -177,7 +177,7 @@ def _current_authoritative_tick(simulation_state: Dict[str, Any], runtime_state:
 
 def _get_llm_provider():
     try:
-        from app.shared import get_provider
+        from app.providers.service import get_provider
         return get_provider()
     except Exception:
         return None
