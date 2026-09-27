@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 GateStatus = Literal["pass", "fail", "insufficient"]
 RolloutStage = Literal["disabled", "shadow", "text", "speech"]
