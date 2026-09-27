@@ -1,6 +1,8 @@
 """Launcher composition for on-demand models and live voice services."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -36,13 +38,13 @@ def build_runtime_service_specs():
             )
             continue
         if spec.service_id == "gateway":
-            image_enabled = os.environ.get("OMNIX_IMAGE_ENABLED", "1").strip().lower() in {
+            image_enabled = environment().get("OMNIX_IMAGE_ENABLED", "1").strip().lower() in {
                 "1",
                 "true",
                 "yes",
                 "on",
             }
-            image_start = os.environ.get("OMNIX_START_IMAGE_SERVICE", "1").strip().lower() in {
+            image_start = environment().get("OMNIX_START_IMAGE_SERVICE", "1").strip().lower() in {
                 "1",
                 "true",
                 "yes",
@@ -56,11 +58,11 @@ def build_runtime_service_specs():
                         **spec.env,
                         "OMNIX_IMAGE_ENABLED": "1" if image_available else "0",
                         "OMNIX_IMAGE_URL": IMAGE_SERVICE_URL if image_available else "",
-                        "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES": os.environ.get(
+                        "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES": environment().get(
                             "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES",
                             "true",
                         ),
-                        "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS": os.environ.get(
+                        "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS": environment().get(
                             "OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS",
                             "2",
                         ),
@@ -74,15 +76,15 @@ def build_runtime_service_specs():
                     spec,
                     env={
                         **spec.env,
-                        "VITE_ASSISTANT_STT_URL": os.environ.get(
+                        "VITE_ASSISTANT_STT_URL": environment().get(
                             "VITE_ASSISTANT_STT_URL",
                             LIVE_STT_URL,
                         ),
-                        "VITE_LIVE_SPECULATION_ENABLED": os.environ.get(
+                        "VITE_LIVE_SPECULATION_ENABLED": environment().get(
                             "VITE_LIVE_SPECULATION_ENABLED",
                             "true",
                         ),
-                        "VITE_LIVE_TTS_ADAPTIVE_BUFFER": os.environ.get(
+                        "VITE_LIVE_TTS_ADAPTIVE_BUFFER": environment().get(
                             "VITE_LIVE_TTS_ADAPTIVE_BUFFER",
                             "true",
                         ),
@@ -102,9 +104,9 @@ def build_runtime_service_specs():
                         **spec.env,
                         "OMNIX_IMAGE_ENABLED": "1" if spec.enabled else "0",
                         "OMNIX_IMAGE_SERVICE_MODE": "1",
-                        "OMNIX_IMAGE_PRELOAD": os.environ.get("OMNIX_IMAGE_PRELOAD", "0"),
-                        "OMNIX_IMAGE_WARMUP": os.environ.get("OMNIX_IMAGE_WARMUP", "0"),
-                        "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD": os.environ.get(
+                        "OMNIX_IMAGE_PRELOAD": environment().get("OMNIX_IMAGE_PRELOAD", "0"),
+                        "OMNIX_IMAGE_WARMUP": environment().get("OMNIX_IMAGE_WARMUP", "0"),
+                        "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD": environment().get(
                             "OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD",
                             "1",
                         ),
