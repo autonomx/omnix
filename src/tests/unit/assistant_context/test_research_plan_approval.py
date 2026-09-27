@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.jobs import ClaimJobRequest, CreateJobRequest, JobStatus, ResourceClass
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_plan_approval_jobs_are_not_claimed_by_background_workers(tmp_path, monkeypatch) -> None:
