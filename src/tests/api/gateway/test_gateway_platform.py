@@ -116,7 +116,7 @@ def test_gateway_model_residency_report_endpoint_updates_store(tmp_path: Path) -
 
 def test_gateway_provider_model_refresh_enqueues_shared_job(tmp_path: Path) -> None:
     from app.gateway.main import create_gateway_app
-    from app.jobs import InMemoryJobStore
+    from tests.support.in_memory_jobs import InMemoryJobStore
 
     store = InMemoryJobStore(tmp_path / "jobs-test")
     client = TestClient(create_gateway_app(job_store_factory=lambda: store), raise_server_exceptions=False)
