@@ -30,7 +30,7 @@ jobs:
       - name: Install architecture test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install             pytest fastapi httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install             pytest fastapi uvicorn httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
       - name: Run architecture unit gate
         run: python scripts/run_architecture_gates.py --group unit
       - name: Verify production ingress is generated from shared policy
@@ -82,7 +82,7 @@ jobs:
       - name: Install durable runtime test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install             pytest fastapi httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install             pytest fastapi uvicorn httpx pydantic requests python-multipart pillow playwright numpy psutil             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
       - name: Run durable architecture gate
         run: python scripts/run_architecture_gates.py --group ${{ matrix.group }}
 
