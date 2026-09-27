@@ -24,8 +24,8 @@ from app.jobs.models import (
     ResourceClass,
     JobStatus,
 )
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
-from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
+from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
