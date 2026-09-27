@@ -131,6 +131,22 @@ export function normalizeChartBars(bars: readonly MarketBar[]): MarketBar[] {
     .map(([, value]) => value.bar);
 }
 
+/** Merge a stream update using the same epoch-second identity as chart series. */
+export function upsertChartBar(bars: readonly MarketBar[], bar: MarketBar): MarketBar[] {
+  const time = timestamp(bar.start_time);
+  let left = 0;
+  let right = bars.length;
+  while (left < right) {
+    const middle = Math.floor((left + right) / 2);
+    if (timestamp(bars[middle].start_time) < time) left = middle + 1;
+    else right = middle;
+  }
+  const existing = bars[left];
+  const sameTime = existing && timestamp(existing.start_time) === time;
+  if (sameTime && bar.ingestion_revision < existing.ingestion_revision) return [...bars];
+  return [...bars.slice(0, left), bar, ...bars.slice(left + (sameTime ? 1 : 0))];
+}
+
 function barCadenceMilliseconds(bars: readonly MarketBar[]): number | null {
   const intervals = bars
     .slice(1)

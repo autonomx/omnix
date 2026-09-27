@@ -6,7 +6,7 @@ import { TradingPositionOverlay } from './TradingPositionOverlay';
 import { TradingChartContextMenu } from './TradingChartContextMenu';
 import { TradingPriceScaleMenu, defaultTradingPriceScaleMenuState, type TradingPriceScaleMenuState } from './TradingPriceScaleMenu';
 import { tradingApi } from './tradingApi';
-import { DEFAULT_TRADING_RIGHT_OFFSET, normalizeChartBars, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
+import { DEFAULT_TRADING_RIGHT_OFFSET, normalizeChartBars, upsertChartBar, TRADING_CHART_TYPE_OPTIONS, TradingChartAdapter, type TradingChartType, type TradingComparisonData, type TradingIndicatorPaneGeometry, type TradingIndicatorSelection } from './chart/chartAdapter';
 import type { TradingChartSynchronization } from './chart/chartSynchronization';
 import { TradingDrawingOverlay, type ChartAlertPlacement } from './drawings/TradingDrawingOverlay';
 import './drawings/TradingDrawingOverlay.css';
@@ -982,12 +982,8 @@ export function TradingChartPanel({
         streamRevisionRef.current = ingestionRevision;
         const bar = normalizeStreamBar(message, resolved.provider, ingestionRevision);
         if (adapterRef.current?.updateBar(bar)) {
-          const index = barsRef.current.findIndex((item) => item.start_time === bar.start_time);
-          if (index >= 0) barsRef.current[index] = bar;
-          else barsRef.current = [...barsRef.current, bar];
-          const allIndex = allBarsRef.current.findIndex((item) => item.start_time === bar.start_time);
-          if (allIndex >= 0) allBarsRef.current[allIndex] = bar;
-          else allBarsRef.current = [...allBarsRef.current, bar];
+          barsRef.current = upsertChartBar(barsRef.current, bar);
+          allBarsRef.current = upsertChartBar(allBarsRef.current, bar);
           forceLiveRender((value) => value + 1);
           scheduleIndicators(bar.is_final ? 0 : 100);
         }

@@ -112,46 +112,50 @@ class _AppStubFinder(importlib.abc.MetaPathFinder):
         )
 
 
-sys.meta_path.insert(0, _AppStubFinder())
+from src.tests.import_isolation import AppImportIsolation
+
+_app_import_state = AppImportIsolation()
+with _app_import_state.activate():
+    sys.meta_path.insert(0, _AppStubFinder())
 
 
-def _load(mod_name: str, rel_path: str):
-    """Load a real module by file path, bypassing package __init__.py."""
-    sys.modules.pop(mod_name, None)
-    spec = importlib.util.spec_from_file_location(
-        mod_name, os.path.join(SRC_DIR, rel_path),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[mod_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    def _load(mod_name: str, rel_path: str):
+        """Load a real module by file path, bypassing package __init__.py."""
+        sys.modules.pop(mod_name, None)
+        spec = importlib.util.spec_from_file_location(
+            mod_name, os.path.join(SRC_DIR, rel_path),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        return mod
 
 
-# Load real modules (order matters: dependencies first)
-_npc_conv = _load("app.rpg.social.npc_conversations", "app/rpg/social/npc_conversations.py")
-_conv_settings = _load("app.rpg.social.conversation_settings", "app/rpg/social/conversation_settings.py")
-_conv_topics = _load("app.rpg.social.conversation_topics", "app/rpg/social/conversation_topics.py")
-_conv_participants = _load("app.rpg.social.conversation_participants", "app/rpg/social/conversation_participants.py")
-_conv_templates = _load("app.rpg.social.conversation_templates", "app/rpg/social/conversation_templates.py")
-_player_intv = _load("app.rpg.social.player_interventions", "app/rpg/social/player_interventions.py")
-_conv_present = _load("app.rpg.social.conversation_presentation", "app/rpg/social/conversation_presentation.py")
-# 4C modules must load before conversation_engine (direct import dependencies)
-_conv_beats = _load("app.rpg.social.conversation_beats", "app/rpg/social/conversation_beats.py")
-_conv_world_signals = _load("app.rpg.social.conversation_world_signals", "app/rpg/social/conversation_world_signals.py")
-_conv_pivots = _load("app.rpg.social.conversation_pivots", "app/rpg/social/conversation_pivots.py")
-_conv_scheduler = _load("app.rpg.social.conversation_scheduler", "app/rpg/social/conversation_scheduler.py")
-_conv_engine = _load("app.rpg.social.conversation_engine", "app/rpg/social/conversation_engine.py")
-_prompt_builder = _load("app.rpg.ai.conversation_prompt_builder", "app/rpg/ai/conversation_prompt_builder.py")
-_resp_parser = _load("app.rpg.ai.conversation_response_parser", "app/rpg/ai/conversation_response_parser.py")
-_gateway = _load("app.rpg.ai.conversation_gateway", "app/rpg/ai/conversation_gateway.py")
-_offscreen = _load("app.rpg.social.offscreen_conversations", "app/rpg/social/offscreen_conversations.py")
-_rumor = _load("app.rpg.social.rumor_from_conversations", "app/rpg/social/rumor_from_conversations.py")
-_faction = _load("app.rpg.social.faction_conversations", "app/rpg/social/faction_conversations.py")
-_crowd = _load("app.rpg.social.crowd_conversations", "app/rpg/social/crowd_conversations.py")
-_personality = _load("app.rpg.presentation.personality_state", "app/rpg/presentation/personality_state.py")
-_tick_diff = _load("app.rpg.analytics.tick_diff", "app/rpg/analytics/tick_diff.py")
-_timeline = _load("app.rpg.analytics.timeline", "app/rpg/analytics/timeline.py")
-_ambient = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
+    # Load real modules (order matters: dependencies first)
+    _npc_conv = _load("app.rpg.social.npc_conversations", "app/rpg/social/npc_conversations.py")
+    _conv_settings = _load("app.rpg.social.conversation_settings", "app/rpg/social/conversation_settings.py")
+    _conv_topics = _load("app.rpg.social.conversation_topics", "app/rpg/social/conversation_topics.py")
+    _conv_participants = _load("app.rpg.social.conversation_participants", "app/rpg/social/conversation_participants.py")
+    _conv_templates = _load("app.rpg.social.conversation_templates", "app/rpg/social/conversation_templates.py")
+    _player_intv = _load("app.rpg.social.player_interventions", "app/rpg/social/player_interventions.py")
+    _conv_present = _load("app.rpg.social.conversation_presentation", "app/rpg/social/conversation_presentation.py")
+    # 4C modules must load before conversation_engine (direct import dependencies)
+    _conv_beats = _load("app.rpg.social.conversation_beats", "app/rpg/social/conversation_beats.py")
+    _conv_world_signals = _load("app.rpg.social.conversation_world_signals", "app/rpg/social/conversation_world_signals.py")
+    _conv_pivots = _load("app.rpg.social.conversation_pivots", "app/rpg/social/conversation_pivots.py")
+    _conv_scheduler = _load("app.rpg.social.conversation_scheduler", "app/rpg/social/conversation_scheduler.py")
+    _conv_engine = _load("app.rpg.social.conversation_engine", "app/rpg/social/conversation_engine.py")
+    _prompt_builder = _load("app.rpg.ai.conversation_prompt_builder", "app/rpg/ai/conversation_prompt_builder.py")
+    _resp_parser = _load("app.rpg.ai.conversation_response_parser", "app/rpg/ai/conversation_response_parser.py")
+    _gateway = _load("app.rpg.ai.conversation_gateway", "app/rpg/ai/conversation_gateway.py")
+    _offscreen = _load("app.rpg.social.offscreen_conversations", "app/rpg/social/offscreen_conversations.py")
+    _rumor = _load("app.rpg.social.rumor_from_conversations", "app/rpg/social/rumor_from_conversations.py")
+    _faction = _load("app.rpg.social.faction_conversations", "app/rpg/social/faction_conversations.py")
+    _crowd = _load("app.rpg.social.crowd_conversations", "app/rpg/social/crowd_conversations.py")
+    _personality = _load("app.rpg.presentation.personality_state", "app/rpg/presentation/personality_state.py")
+    _tick_diff = _load("app.rpg.analytics.tick_diff", "app/rpg/analytics/tick_diff.py")
+    _timeline = _load("app.rpg.analytics.timeline", "app/rpg/analytics/timeline.py")
+    _ambient = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
 
 # ── Module-level aliases for tested functions ──────────────────────────────
 

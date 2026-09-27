@@ -131,7 +131,10 @@ class PostgresJobRepository:
         ).fetchall()
         return [_job(row) for row in rows]
 
-    def release_expired_leases(self, context: TenantContext) -> list[dict[str, Any]]:
+    def release_expired_leases(
+        self, context: TenantContext, *, job_id: str | None = None,
+        job_type: str | None = None,
+    ) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             f"""
             UPDATE omnix_jobs
@@ -153,11 +156,14 @@ class PostgresJobRepository:
                        ELSE completed_at
                    END
              WHERE workspace_id = %s
+               AND (%s::text IS NULL OR id = %s)
+               AND (%s::text IS NULL OR job_type = %s)
+               AND (%s::text IS NULL OR cancel_requested_at IS NULL)
                AND status IN ('leased', 'running', 'cancel_requested')
                AND lease_expires_at <= CURRENT_TIMESTAMP
             RETURNING {_JOB_COLUMNS}
             """,
-            (context.workspace_id,),
+            (context.workspace_id, job_id, job_id, job_type, job_type, job_id),
         ).fetchall()
         results = [_job(row) for row in rows]
         for result in results:

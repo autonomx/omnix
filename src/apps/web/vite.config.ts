@@ -159,6 +159,19 @@ export default defineConfig(({ command, mode }) => {
       plugins: [scalableTypographyPostcssPlugin()],
     },
   },
+  build: {
+    manifest: true,
+    rollupOptions: {
+      output: {
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          // The chart engine changes independently of Omnix's optional panels.
+          const path = id.replaceAll('\\', '/');
+          if (path.includes('/node_modules/lightweight-charts/') || path.includes('/node_modules/fancy-canvas/')) return 'trading-chart-engine';
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: routing.proxy,

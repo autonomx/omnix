@@ -1,17 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
-import { TradingReplayPanel } from './TradingReplayPanel';
-import { TradingScannerPanel } from './TradingScannerPanel';
-import { TradingStrategiesPanel } from './TradingStrategiesPanel';
 import { TradingSidePanel } from './TradingSidePanel';
 import { TradingSideRail } from './TradingSideRail';
 import type { TradingSideTab } from './TradingSidePanel';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
-import { TradingTerminalDock } from './TradingTerminalDock';
 import { TradingSymbolSearch, type TradingFormulaSearchPreview } from './TradingSymbolSearch';
 import { TradingAlertToastLayer } from './TradingAlertToastLayer';
 import { TradingDrawingTools } from './TradingDrawingTools';
@@ -55,6 +51,11 @@ import './TradingTypography.css';
 import './TradingToolFullscreen.css';
 import './TradingSessionTabs.css';
 import './TradingChartLayoutPicker.css';
+
+const TradingReplayPanel = lazy(() => import('./TradingReplayPanel').then((module) => ({ default: module.TradingReplayPanel })));
+const TradingScannerPanel = lazy(() => import('./TradingScannerPanel').then((module) => ({ default: module.TradingScannerPanel })));
+const TradingStrategiesPanel = lazy(() => import('./TradingStrategiesPanel').then((module) => ({ default: module.TradingStrategiesPanel })));
+const TradingTerminalDock = lazy(() => import('./TradingTerminalDock').then((module) => ({ default: module.TradingTerminalDock })));
 
 const gridOptions: Array<{ id: TradingLayout; label: string }> = [
   { id: 'auto', label: 'Auto grid' },
@@ -667,6 +668,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
             />
           </section>
           {workspaceHydrated && panels.bottom && !toolPanel ? (
+            <Suspense fallback={<p role="status">Loading trading terminal…</p>}>
             <TradingTerminalDock
               instrumentId={activeChart.instrumentId}
               bindingId={selectedBinding?.binding_id ?? activeChart.bindingId}
@@ -674,6 +676,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               onAccountChange={setPaperAccountId}
               onSelectAlert={navigateToAlert}
             />
+            </Suspense>
           ) : null}
           {toolPanel ? (
             <section className={`trading-tool-drawer${toolPanelFullscreen ? ' is-fullscreen' : ''}`} aria-label="Trading analysis tool">
@@ -691,11 +694,13 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 </div>
               </header>
               <div>
+                <Suspense fallback={<p role="status">Loading analysis tool…</p>}>
                 {toolPanel === 'scanner' ? <TradingScannerPanel instruments={instruments.data ?? []} /> : null}
                 {toolPanel === 'replay' ? (
                   <TradingReplayPanel instrumentId={activeChart.instrumentId} bindingId={selectedBinding?.binding_id ?? activeChart.bindingId} interval={activeChart.interval} />
                 ) : null}
                 {toolPanel === 'strategies' ? <TradingStrategiesPanel /> : null}
+                </Suspense>
               </div>
             </section>
           ) : null}

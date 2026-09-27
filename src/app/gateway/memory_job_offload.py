@@ -13,7 +13,6 @@ from app.assistant_memory.structured_provider import (
     default_structured_proposal_provider,
 )
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.jobs import FailJobRequest, default_job_store
 
 from .tts_stream_diagnostics import stream_log
 
@@ -22,17 +21,11 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="omnix-memory-p
 
 
 def _mark_failure(job_id: str, future: Future[Any]) -> None:
+    if future.cancelled():
+        return
     error = future.exception()
     if error is None:
         return
-    default_job_store().fail_job(
-        job_id,
-        FailJobRequest(
-            code="memory_suggestion_background_failed",
-            message=str(error)[:500] or "Memory suggestion job failed.",
-            retryable=True,
-        ),
-    )
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",

@@ -461,17 +461,8 @@ class ChatSessionStore(JsonChatSessionStore):
                 chat_store=self,
                 memory_service=self.memory_service_factory(),
             )
-        except Exception as exc:
-            from app.jobs import FailJobRequest, default_job_store
-
-            default_job_store().fail_job(
-                job.id,
-                FailJobRequest(
-                    code="memory_suggestion_inline_failed",
-                    message=str(exc)[:500] or "Memory suggestion job failed.",
-                    retryable=True,
-                ),
-            )
+        except Exception:
+            logger.exception("Memory suggestion processing failed: %s", job.id)
 
     def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
         """Run optional memory maintenance without changing chat delivery success."""

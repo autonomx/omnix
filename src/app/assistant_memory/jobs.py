@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.retention_policy import automatic_memory_derivation_allowed
 from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
@@ -94,6 +93,12 @@ def enqueue_memory_suggestion_job(
         return None
     store = job_store or default_job_store()
     key = suggestion_idempotency_key(session_id, user_message_id)
+    create_once = getattr(store, "create_job_once", None)
+    if callable(create_once):
+        return create_once(
+            create_memory_suggestion_job_request(session_id, user_message_id),
+            idempotency_key=key,
+        )
     for job in store.list_jobs():
         if job.type == MEMORY_SUGGEST_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
@@ -150,11 +155,31 @@ def process_memory_suggestion_job(
 ) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
         raise ValueError(f"unsupported memory job type: {job.type}")
+    from app.persistence.memory_job_execution import MemoryJobExecution
+
+    with MemoryJobExecution(job_store or default_job_store(), job) as execution:
+        if not execution.claimed:
+            return MemorySuggestionJobResult(
+                job_id=job.id, skipped_reasons=["job_not_claimable"],
+            )
+        return _process_claimed_memory_job(
+            execution.job, chat_store=chat_store, memory_service=memory_service,
+            proposal_provider=proposal_provider, execution=execution,
+        )
+
+
+def _process_claimed_memory_job(
+    job, *, chat_store, memory_service, proposal_provider, execution,
+) -> MemorySuggestionJobResult:
+    from app.chat.retention_policy import automatic_memory_derivation_allowed
+
     payload = MemorySuggestionJobInput.model_validate(job.input_payload or {})
     session = chat_store.get_session(payload.session_id)
     result = MemorySuggestionJobResult(job_id=job.id)
     settings = load_memory_runtime_settings()
     rollout = companion_rollout_policy(settings)
+    service = None
+    proposals = []
     if not rollout.review_candidates_enabled and not rollout.automatic_direct_assertions_enabled:
         result.skipped_reasons.append("rollout_stage_disabled")
     elif session is None:
@@ -185,6 +210,8 @@ def process_memory_suggestion_job(
                 proposal_provider=proposal_provider,
             )
             result.skipped_reasons.extend(skipped)
+    with execution.write_result(service):
+        if service is not None:
             for proposal in proposals:
                 action, entity = consolidate_structured_proposal(
                     service,
@@ -202,7 +229,7 @@ def process_memory_suggestion_job(
                 elif isinstance(entity, MemoryRecord):
                     result.record_ids.append(entity.id)
 
-    _complete_result(result, store=job_store or default_job_store())
+        _complete_result(result, store=execution)
     return result
 
 

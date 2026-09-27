@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import Page
 
+_ORIGINAL_PATH_WRITE_TEXT = Path.write_text
+
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SRC_DIR.parent
@@ -117,6 +119,31 @@ def pytest_collection_modifyitems(config, items):
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def isolate_historical_app_imports(request):
+    state = vars(request.module).get("_app_import_state")
+    if state is None:
+        yield
+    else:
+        with state.activate():
+            yield
+
+
+@pytest.fixture(autouse=True)
+def isolate_path_write_hooks():
+    """Keep historical RPG report hooks from leaking into unrelated tests.
+
+    Several report fragments replace Path.write_text at import time. Each test
+    installs the hook it exercises; stacking hooks across tests can recursively
+    generate other reports and stall the complete suite.
+    """
+    Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
+    try:
+        yield
+    finally:
+        Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
 
 @pytest.fixture(scope="session")
 def base_url(request):

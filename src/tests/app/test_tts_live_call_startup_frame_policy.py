@@ -65,6 +65,7 @@ def _patch_live_tts_test_runtime(monkeypatch, provider: Any) -> None:
 def test_gateway_import_installs_startup_frame_policy() -> None:
     from app.gateway import tts_live_call_websocket
 
+    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 3_840
     assert TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES == 3_840
     assert TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS == 160.0
@@ -84,7 +85,22 @@ def test_gateway_composition_binds_warmed_live_tts_provider() -> None:
     from app.gateway import tts_live_call_websocket
     from app.gateway.live_voice_runtime_offload import get_cached_live_tts_provider
 
+    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     assert tts_live_call_websocket.get_tts_provider is get_cached_live_tts_provider
+
+
+def test_gateway_composition_preserves_explicit_provider_injection(monkeypatch) -> None:
+    from app.gateway import tts_live_call_websocket
+
+    provider = BlockingAfterTwoStepQwenChunkProvider()
+    def lookup():
+        return provider
+
+    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lookup)
+    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    assert tts_live_call_websocket.get_tts_provider is lookup
+    assert tts_live_call_websocket.get_tts_provider() is provider
 
 
 def test_four_step_qwen_chunk_hands_off_two_160ms_frames_before_provider_resumes(monkeypatch) -> None:

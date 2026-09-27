@@ -85,30 +85,34 @@ class _AppStubFinder(importlib.abc.MetaPathFinder):
         )
 
 
-sys.meta_path.insert(0, _AppStubFinder())
+from src.tests.import_isolation import AppImportIsolation
+
+_app_import_state = AppImportIsolation()
+with _app_import_state.activate():
+    sys.meta_path.insert(0, _AppStubFinder())
 
 
-def _load(mod_name: str, rel_path: str):
-    """Load a real module by file path, bypassing package __init__.py."""
-    sys.modules.pop(mod_name, None)
-    spec = importlib.util.spec_from_file_location(
-        mod_name, os.path.join(SRC_DIR, rel_path),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[mod_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    def _load(mod_name: str, rel_path: str):
+        """Load a real module by file path, bypassing package __init__.py."""
+        sys.modules.pop(mod_name, None)
+        spec = importlib.util.spec_from_file_location(
+            mod_name, os.path.join(SRC_DIR, rel_path),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        return mod
 
 
-# Load real modules (order matters: dependencies first)
-_schema = _load("app.rpg.creator.schema", "app/rpg/creator/schema.py")
-_defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
-_validation = _load("app.rpg.creator.validation", "app/rpg/creator/validation.py")
-_npc_init = _load("app.rpg.ai.npc_initiative", "app/rpg/ai/npc_initiative.py")
-_wed = _load("app.rpg.world.world_event_director", "app/rpg/world/world_event_director.py")
-_amb_builder = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
-_amb_policy = _load("app.rpg.session.ambient_policy", "app/rpg/session/ambient_policy.py")
-_runtime = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
+    # Load real modules (order matters: dependencies first)
+    _schema = _load("app.rpg.creator.schema", "app/rpg/creator/schema.py")
+    _defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
+    _validation = _load("app.rpg.creator.validation", "app/rpg/creator/validation.py")
+    _npc_init = _load("app.rpg.ai.npc_initiative", "app/rpg/ai/npc_initiative.py")
+    _wed = _load("app.rpg.world.world_event_director", "app/rpg/world/world_event_director.py")
+    _amb_builder = _load("app.rpg.session.ambient_builder", "app/rpg/session/ambient_builder.py")
+    _amb_policy = _load("app.rpg.session.ambient_policy", "app/rpg/session/ambient_policy.py")
+    _runtime = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
 
 # ── Module-level aliases for tested functions ─────────────────────────────
 

@@ -95,39 +95,43 @@ class _AppStubFinder(importlib.abc.MetaPathFinder):
         return importlib.machinery.ModuleSpec(fullname, _StubLoader())
 
 
-sys.meta_path.insert(0, _AppStubFinder())
+from src.tests.import_isolation import AppImportIsolation
+
+_app_import_state = AppImportIsolation()
+with _app_import_state.activate():
+    sys.meta_path.insert(0, _AppStubFinder())
 
 
-def _load(dotted: str):
-    parts = dotted.split(".")
-    filename = parts[-1] + ".py"
-    path_parts = parts[:-1] + [filename]
-    filepath = os.path.join(SRC_DIR, *path_parts)
-    spec = importlib.util.spec_from_file_location(dotted, filepath)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[dotted] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    def _load(dotted: str):
+        parts = dotted.split(".")
+        filename = parts[-1] + ".py"
+        path_parts = parts[:-1] + [filename]
+        filepath = os.path.join(SRC_DIR, *path_parts)
+        spec = importlib.util.spec_from_file_location(dotted, filepath)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[dotted] = mod
+        spec.loader.exec_module(mod)
+        return mod
 
 
-# ---------------------------------------------------------------------------
-# Load all modules under test
-# Order matters: conversation_engine uses direct imports from beats, pivots,
-# signals, scheduler, settings — those must be loaded first.
-# ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # Load all modules under test
+    # Order matters: conversation_engine uses direct imports from beats, pivots,
+    # signals, scheduler, settings — those must be loaded first.
+    # ---------------------------------------------------------------------------
 
-npc_conversations = _load("app.rpg.social.npc_conversations")
-conversation_settings = _load("app.rpg.social.conversation_settings")
-conversation_topics = _load("app.rpg.social.conversation_topics")
-conversation_participants = _load("app.rpg.social.conversation_participants")
-conversation_templates = _load("app.rpg.social.conversation_templates")
-conversation_beats = _load("app.rpg.social.conversation_beats")
-conversation_world_signals = _load("app.rpg.social.conversation_world_signals")
-conversation_pivots = _load("app.rpg.social.conversation_pivots")
-conversation_scheduler = _load("app.rpg.social.conversation_scheduler")
-conversation_engine = _load("app.rpg.social.conversation_engine")
-narration_worker = _load("app.rpg.session.narration_worker")
-runtime = _load("app.rpg.session.runtime")
+    npc_conversations = _load("app.rpg.social.npc_conversations")
+    conversation_settings = _load("app.rpg.social.conversation_settings")
+    conversation_topics = _load("app.rpg.social.conversation_topics")
+    conversation_participants = _load("app.rpg.social.conversation_participants")
+    conversation_templates = _load("app.rpg.social.conversation_templates")
+    conversation_beats = _load("app.rpg.social.conversation_beats")
+    conversation_world_signals = _load("app.rpg.social.conversation_world_signals")
+    conversation_pivots = _load("app.rpg.social.conversation_pivots")
+    conversation_scheduler = _load("app.rpg.social.conversation_scheduler")
+    conversation_engine = _load("app.rpg.social.conversation_engine")
+    narration_worker = _load("app.rpg.session.narration_worker")
+    runtime = _load("app.rpg.session.runtime")
 
 
 # ---------------------------------------------------------------------------

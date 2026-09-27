@@ -1,20 +1,21 @@
-import { useState } from 'react';
-import { TradingAlertsPanel } from './TradingAlertsPanel';
+import { lazy, Suspense, useState } from 'react';
 import { TradingIndicatorPresets } from './TradingIndicatorPresets';
 import { TradingLayoutPanel } from './TradingLayoutPanel';
-import { TradingNewsPanel } from './TradingNewsPanel';
-import { TradingPaperPanel } from './TradingPaperPanel';
-import { TradingProspectiveEconomicPanel } from './TradingProspectiveEconomicPanel';
-import { TradingResearchPanel } from './TradingResearchPanel';
-import { TradingSymbolIntelligence } from './TradingSymbolIntelligence';
-import { TradingTradeJournal } from './TradingTradeJournal';
 import { TradingWatchlist } from './TradingWatchlist';
-import { TradingObjectPanel } from './TradingObjectPanel';
-import { TradingPinePanel } from './TradingPinePanel';
 import type { DrawingSnapMode } from './drawings/drawingCommands';
 import type { CoreIndicatorId, CoreIndicatorInstance } from './indicators/coreIndicators';
 import type { TradingLayout, TradingLinkState } from './tradingStore';
 import type { CanonicalInstrument, ProviderBinding, TradingAlert } from './tradingTypes';
+
+const TradingAlertsPanel = lazy(() => import('./TradingAlertsPanel').then((module) => ({ default: module.TradingAlertsPanel })));
+const TradingNewsPanel = lazy(() => import('./TradingNewsPanel').then((module) => ({ default: module.TradingNewsPanel })));
+const TradingPaperPanel = lazy(() => import('./TradingPaperPanel').then((module) => ({ default: module.TradingPaperPanel })));
+const TradingProspectiveEconomicPanel = lazy(() => import('./TradingProspectiveEconomicPanel').then((module) => ({ default: module.TradingProspectiveEconomicPanel })));
+const TradingResearchPanel = lazy(() => import('./TradingResearchPanel').then((module) => ({ default: module.TradingResearchPanel })));
+const TradingSymbolIntelligence = lazy(() => import('./TradingSymbolIntelligence').then((module) => ({ default: module.TradingSymbolIntelligence })));
+const TradingTradeJournal = lazy(() => import('./TradingTradeJournal').then((module) => ({ default: module.TradingTradeJournal })));
+const TradingObjectPanel = lazy(() => import('./TradingObjectPanel').then((module) => ({ default: module.TradingObjectPanel })));
+const TradingPinePanel = lazy(() => import('./TradingPinePanel').then((module) => ({ default: module.TradingPinePanel })));
 
 export type TradingSideTab = 'watchlist' | 'paper' | 'intelligence' | 'journal' | 'prospective' | 'indicators' | 'alerts' | 'news' | 'research' | 'layout' | 'objects' | 'pine';
 
@@ -101,6 +102,7 @@ export function TradingSidePanel({
   if (activeTab === 'objects') {
     return (
       <aside className="trading-side-panel trading-object-side-panel" aria-label="Trading object tree and data window">
+        <Suspense fallback={<p role="status">Loading object tree…</p>}>
         <TradingObjectPanel
           sessionId={sessionId}
           instruments={instruments}
@@ -111,17 +113,20 @@ export function TradingSidePanel({
           onSetIndicators={onSetIndicators}
           onOpenPineScript={onOpenPineScript}
         />
+        </Suspense>
       </aside>
     );
   }
   if (activeTab === 'pine') {
     return (
       <aside className="trading-side-panel trading-object-side-panel trading-pine-side-panel" aria-label="Pine Editor">
+        <Suspense fallback={<p role="status">Loading Pine Editor…</p>}>
         <TradingPinePanel
           indicators={indicators}
           activeIndicatorId={pineIndicatorId}
           onActiveIndicatorChange={onPineIndicatorChange}
         />
+        </Suspense>
       </aside>
     );
   }
@@ -150,6 +155,7 @@ export function TradingSidePanel({
         className={activeTab === 'watchlist' ? 'trading-side-panel-watchlist' : undefined}
         tabIndex={0}
       >
+        <Suspense fallback={<p role="status">Loading trading panel…</p>}>
         {activeTab === 'watchlist' ? (
           <TradingWatchlist
             instruments={instruments}
@@ -216,6 +222,7 @@ export function TradingSidePanel({
             onSetSnapMode={onSetSnapMode}
           />
         ) : null}
+        </Suspense>
       </section>
     </aside>
   );

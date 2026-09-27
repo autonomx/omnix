@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
+import { candlestickData, constrainZoomOutRange, drawingLogicalIndexForTime, drawingTimeForLogicalIndex, heikinAshiBars, lineData, normalizeChartBars, upsertChartBar, renkoBars, TRADING_CHART_TYPE_OPTIONS, volumeData } from './chartAdapter';
 import type { MarketBar } from '../tradingTypes';
 
 const bar: MarketBar = {
@@ -30,6 +30,20 @@ const secondBar: MarketBar = {
 };
 
 describe('Trading chart adapter normalization', () => {
+  it('merges equivalent ISO timestamps without duplicating indicator or replay bars', () => {
+    const update = { ...bar, start_time: '2026-08-05T12:00:00.000Z', close: '104', ingestion_revision: 2 };
+    const source = [bar, secondBar];
+    const result = upsertChartBar(source, update);
+    expect(result).toEqual([update, secondBar]);
+    expect(source).toEqual([bar, secondBar]);
+    expect(upsertChartBar(result, bar)).toEqual(result);
+  });
+
+  it('inserts an out-of-order stream bar in time order', () => {
+    expect(upsertChartBar([secondBar], bar)).toEqual([bar, secondBar]);
+    expect(upsertChartBar([], bar)).toEqual([bar]);
+  });
+
   it('exposes the complete TradingView-style chart type catalog', () => {
     expect(TRADING_CHART_TYPE_OPTIONS.map((option) => option.label)).toEqual([
       'Bars', 'Candles', 'Hollow candles', 'Volume candles', 'Line', 'Line with markers', 'Step line',

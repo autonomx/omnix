@@ -173,13 +173,10 @@ class TimelineGraph:
             parent_node = self.nodes[parent_id]
             parent_node.add_child(event_id)
 
-            # Remove child from roots if it was there
-            if event_id in self.roots:
-                self.roots.remove(event_id)
         else:
-            # No parent = root event
-            if event_id not in self.roots:
-                self.roots.append(event_id)
+            # The node dictionary above already proves this ID is new. Scanning
+            # every root here makes independent-event ingestion quadratic.
+            self.roots.append(event_id)
 
     def get_branch(self, leaf_event_id: str) -> List[str]:
         """Return the chain from root to the specified leaf event.

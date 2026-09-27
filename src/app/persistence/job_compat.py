@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 from typing import Any, TypeVar
 
 from app.jobs.models import (
@@ -49,10 +50,20 @@ class PostgresJobStoreAdapter:
         self.context = bootstrap_local_tenant(self.database)
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
+        return self._create_job(request)
+
+    def create_job_once(self, request: CreateJobRequest, *, idempotency_key: str) -> JobRecord:
+        identity = hashlib.sha256(
+            f"{self.context.workspace_id}\n{self.context.user_id}\n{request.module}\n{request.type}\n{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        return self._create_job(request, job_id=f"job:idempotent:{identity}")
+
+    def _create_job(self, request: CreateJobRequest, *, job_id: str | None = None) -> JobRecord:
         request_payload = request.model_dump(mode="json")
         stages = request.stages or []
         metadata = dict(request_payload.get("metadata") or {})
         metadata["compat_contract"] = {
+            "owner_id": request.owner_id,
             "stages": [stage.model_dump(mode="json") for stage in stages],
             "input_ref": request_payload.get("input_ref"),
             "compat": request_payload.get("compat") or {},
@@ -66,21 +77,25 @@ class PostgresJobStoreAdapter:
                 metadata["compat_contract"]["compat"] = {
                     **metadata["compat_contract"]["compat"], "execution_owner": owner.node_id,
                 }
-            record = work.jobs.create_job(
-                self.context,
-                {
-                    "id": request_payload.get("id") or self._new_job_id(),
-                    "owner_user_id": request_payload.get("owner_id") or self.context.user_id,
-                    "module": request.module,
-                    "job_type": request.type,
-                    "resource_class": self._enum_value(request.resource_class),
-                    "priority": request.priority,
-                    "input_payload": request.input_payload or {},
-                    "max_attempts": int(request_payload.get("max_attempts") or 3),
-                    "metadata": metadata,
-                },
-            )
-            if request.type == 'chat.generate':
+            payload = {
+                "id": job_id or request_payload.get("id") or self._new_job_id(),
+                # JobRecord.owner_id is a logical owner (for example a chat
+                # session). PostgreSQL ownership is the trusted principal.
+                "owner_user_id": self.context.user_id,
+                "module": request.module,
+                "job_type": request.type,
+                "resource_class": self._enum_value(request.resource_class),
+                "priority": request.priority,
+                "input_payload": request.input_payload or {},
+                "max_attempts": int(request_payload.get("max_attempts") or 3),
+                "metadata": metadata,
+            }
+            if job_id is None:
+                record = work.jobs.create_job(self.context, payload)
+                created = True
+            else:
+                record, created = work.jobs.create_job_once(self.context, payload, reconcile_queued=False)
+            if created and request.type == 'chat.generate':
                 # Admission can wait for another process's session lock. Order
                 # accepted jobs by insertion time, not transaction start time.
                 inserted = work.connection.execute(
@@ -568,7 +583,7 @@ class PostgresJobStoreAdapter:
             JobRecord,
             {
                 "id": value["id"],
-                "owner_id": value.get("owner_user_id"),
+                "owner_id": contract.get("owner_id") or value.get("owner_user_id"),
                 "module": value["module"],
                 "type": value["job_type"],
                 "job_type": value["job_type"],

@@ -151,6 +151,8 @@ class PostgresJobRepository(_BaseJobRepository):
         self,
         context: TenantContext,
         payload: dict[str, Any],
+        *,
+        reconcile_queued: bool = True,
     ) -> tuple[dict[str, Any], bool]:
         """Create one deterministic job identity or reconcile a stronger queued signal."""
 
@@ -185,6 +187,11 @@ class PostgresJobRepository(_BaseJobRepository):
             result = _job(row)
             self._event(context, result["id"], "job.created", {"status": "queued"})
             return result, True
+        if not reconcile_queued:
+            existing = self.get_job(context, str(payload["id"]))
+            if existing is None:
+                raise RuntimeError(f"deterministic_job_identity_conflict:{payload['id']}")
+            return existing, False
         updated = self.connection.execute(
             f"""
             UPDATE omnix_jobs AS jobs
@@ -228,8 +235,12 @@ class PostgresJobRepository(_BaseJobRepository):
         resource_classes: list[str],
         job_types: list[str] | None = None,
         lease_seconds: int = 30,
+        job_id: str | None = None,
     ) -> dict[str, Any] | None:
-        self.release_expired_leases(context)
+        self.release_expired_leases(
+            context, job_id=job_id,
+            job_type=job_types[0] if job_id and job_types and len(job_types) == 1 else None,
+        )
         if not resource_classes:
             return None
         lease_seconds = max(1, min(int(lease_seconds), 3600))
@@ -240,6 +251,8 @@ class PostgresJobRepository(_BaseJobRepository):
                 SELECT queued.id
                   FROM omnix_jobs AS queued
                  WHERE queued.workspace_id = %s
+                   AND (%s::text IS NULL OR queued.id = %s)
+                   AND queued.cancel_requested_at IS NULL
                    AND queued.status IN ('queued', 'retrying', 'waiting')
                    AND queued.available_at <= CURRENT_TIMESTAMP
                    AND queued.resource_class = ANY(%s)
@@ -272,6 +285,7 @@ class PostgresJobRepository(_BaseJobRepository):
             """,
             (
                 context.workspace_id,
+                job_id, job_id,
                 resource_classes,
                 job_types,
                 job_types,

@@ -82,6 +82,17 @@ def _signal_dir() -> Path:
     return default_blob_root() / "tts-priority"
 
 
+def _remove_signal(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except PermissionError as exc:
+        if getattr(exc, "winerror", None) not in (32, 33):
+            raise
+        # Windows denies deletion while a priority scanner has the file open.
+        # The generation lock is already released. A later scan can reap the
+        # unlocked marker; cleanup must not turn completed audio into HTTP 500.
+
+
 @contextmanager
 def _priority_signal(priority: TtsPriority) -> Iterator[None]:
     if priority == "offline":
@@ -101,7 +112,7 @@ def _priority_signal(priority: TtsPriority) -> Iterator[None]:
             finally:
                 _unlock(handle)
     finally:
-        path.unlink(missing_ok=True)
+        _remove_signal(path)
 
 
 def other_process_priority_pending() -> bool:
@@ -119,7 +130,7 @@ def other_process_priority_pending() -> bool:
                     if not _lock(handle, blocking=False):
                         return True
                     _unlock(handle)
-                path.unlink(missing_ok=True)  # crashed owner left an unlocked marker
+                _remove_signal(path)  # crashed owner left an unlocked marker
             except OSError:
                 return True
     return False

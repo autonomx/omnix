@@ -7,18 +7,18 @@
     "src/apps/web"
   ],
   "scripts": {
-    "web:dev": "npm --workspace @omnix/web run dev",
-    "web:build": "npm --workspace @omnix/web run build",
-    "web:dev:devtools": "npm --workspace @omnix/web run dev:devtools",
-    "web:devtools": "npm --workspace @omnix/web run devtools",
-    "web:preview": "npm --workspace @omnix/web run preview",
-    "web:test": "npm --workspace @omnix/web run test --",
-    "web:test:e2e": "npm --workspace @omnix/web run test:e2e --",
-    "web:typecheck": "npm --workspace @omnix/web run typecheck",
-    "test": "npm --workspace @omnix/web run test --",
-    "test:trading": "npm --workspace @omnix/web run test:trading --",
-    "build": "npm --workspace @omnix/web run build --",
-    "typecheck": "npm --workspace @omnix/web run typecheck --"
+    "web:dev": "node scripts/web_toolchain.mjs dev",
+    "web:build": "node scripts/web_toolchain.mjs build",
+    "web:dev:devtools": "node scripts/web_toolchain.mjs dev:devtools",
+    "web:devtools": "node scripts/web_toolchain.mjs devtools",
+    "web:preview": "node scripts/web_toolchain.mjs preview",
+    "web:test": "node scripts/web_toolchain.mjs test --",
+    "web:test:e2e": "node scripts/web_toolchain.mjs test:e2e --",
+    "web:typecheck": "node scripts/web_toolchain.mjs typecheck",
+    "test": "node scripts/web_toolchain.mjs test --",
+    "test:trading": "node scripts/web_toolchain.mjs test:trading --",
+    "build": "node scripts/web_toolchain.mjs build --",
+    "typecheck": "node scripts/web_toolchain.mjs typecheck --"
   },
   "dependencies": {},
   "devDependencies": {

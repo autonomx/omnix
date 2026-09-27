@@ -67,25 +67,29 @@ class _AppStubFinder(importlib.abc.MetaPathFinder):
         )
 
 
-sys.meta_path.insert(0, _AppStubFinder())
+from src.tests.import_isolation import AppImportIsolation
+
+_app_import_state = AppImportIsolation()
+with _app_import_state.activate():
+    sys.meta_path.insert(0, _AppStubFinder())
 
 
-def _load(mod_name: str, rel_path: str):
-    sys.modules.pop(mod_name, None)
-    spec = importlib.util.spec_from_file_location(
-        mod_name, os.path.join(SRC_DIR, rel_path),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[mod_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    def _load(mod_name: str, rel_path: str):
+        sys.modules.pop(mod_name, None)
+        spec = importlib.util.spec_from_file_location(
+            mod_name, os.path.join(SRC_DIR, rel_path),
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+        return mod
 
 
-_schema = _load("app.rpg.creator.schema", "app/rpg/creator/schema.py")
-_defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
-_validation = _load("app.rpg.creator.validation", "app/rpg/creator/validation.py")
-_rt = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
-_we = _load("app.rpg.analytics.world_events", "app/rpg/analytics/world_events.py")
+    _schema = _load("app.rpg.creator.schema", "app/rpg/creator/schema.py")
+    _defaults = _load("app.rpg.creator.defaults", "app/rpg/creator/defaults.py")
+    _validation = _load("app.rpg.creator.validation", "app/rpg/creator/validation.py")
+    _rt = _load("app.rpg.session.runtime", "app/rpg/session/runtime.py")
+    _we = _load("app.rpg.analytics.world_events", "app/rpg/analytics/world_events.py")
 
 _build_semantic_state_change_prompt_contract = _rt._build_semantic_state_change_prompt_contract
 build_incremental_world_event_rows = _we.build_incremental_world_event_rows

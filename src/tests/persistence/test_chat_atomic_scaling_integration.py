@@ -30,7 +30,7 @@ from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
-import test_chat_execution_ownership_integration as ownership
+from src.tests.persistence import test_chat_execution_ownership_integration as ownership
 
 pytestmark = ownership.pytestmark
 owned_store = ownership.owned_store
