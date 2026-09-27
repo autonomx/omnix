@@ -1,6 +1,8 @@
 """Inference and diagnostics support for low-latency Parakeet live STT."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import math
 import os
@@ -18,19 +20,19 @@ _WARMED = False
 
 
 def env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def env_float(name: str, default: float) -> float:
     try:
-        return float(os.environ.get(name, str(default)) or default)
+        return float(environment().get(name, str(default)) or default)
     except (TypeError, ValueError):
         return default
 
 
 def env_int(name: str, default: int, *, minimum: int = 0) -> int:
     try:
-        value = int(os.environ.get(name, str(default)) or default)
+        value = int(environment().get(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, value)
