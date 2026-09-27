@@ -143,7 +143,7 @@ def clear_live_speculation_session_cache() -> None:
 def _install_live_speculation_session_cache_hook() -> None:
     """Prime speculation snapshots from normal PostgreSQL chat operations."""
 
-    from app.persistence.chat_runtime_compat import (
+    from app.chat.persistence.chat_runtime_compat import (
         PostgresCharacterChatSessionStore,
         PostgresChatSessionStore,
     )
