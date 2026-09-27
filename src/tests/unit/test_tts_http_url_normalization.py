@@ -18,7 +18,7 @@ def test_tts_endpoint_rejects_embedded_quotes_and_whitespace(monkeypatch):
 
 
 def test_tts_endpoint_uses_bound_process_config(monkeypatch):
-    from app.runtime_config import RuntimeConfig, ServiceEndpoint, install_runtime_config
+    from app.runtime.config import RuntimeConfig, ServiceEndpoint, install_runtime_config
     install_runtime_config(RuntimeConfig(tts=ServiceEndpoint('http://localhost:5101/')))
     monkeypatch.setenv('OMNIX_TTS_URL', 'http://other:5201')
     assert _tts_base_url() == 'http://localhost:5101'
