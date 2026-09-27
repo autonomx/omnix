@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+
+import pytest
 from typing import Any
 
 from app.gateway import live_voice_execution_lane as execution_lane
@@ -245,3 +247,68 @@ def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> N
         if event == "tts_lane_ticket_acquired" and fields["priority"] == int(TtsLanePriority.ACCEPTED)
     )
     assert accepted_acquired["wait_ms"] >= 0
+
+def test_api_cannot_bypass_local_tts_capability_with_dedicated_lane(monkeypatch) -> None:
+    from app import runtime_config
+    from app.runtime_config import GatewayRole, RuntimeConfig
+
+    reset_live_voice_execution_lane_for_tests()
+    runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
+    monkeypatch.setenv("OMNIX_LIVE_TTS_DEDICATED", "true")
+    monkeypatch.setenv("OMNIX_LIVE_TTS_PROVIDER_NAME", "faster-qwen3-tts")
+    monkeypatch.setattr(
+        execution_lane,
+        "get_audio_registry",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("API attempted local TTS registry construction")
+        ),
+    )
+    try:
+        with pytest.raises(RuntimeError, match="lacks runtime capabilities"):
+            resolve_live_voice_tts_provider(object())
+    finally:
+        reset_live_voice_execution_lane_for_tests()
+
+
+def test_api_dedicated_qwen_uses_remote_runtime_endpoint(monkeypatch) -> None:
+    from app import runtime_config
+    from app.runtime_config import GatewayRole, RuntimeConfig, ServiceEndpoint
+    from app.providers import qwen_http_gateway
+
+    reset_live_voice_execution_lane_for_tests()
+    runtime_config.install_runtime_config(
+        RuntimeConfig(
+            gateway_role=GatewayRole.API,
+            tts=ServiceEndpoint("http://127.0.0.1:5101"),
+        )
+    )
+    monkeypatch.setenv("OMNIX_LIVE_TTS_DEDICATED", "true")
+    monkeypatch.setenv("OMNIX_LIVE_TTS_PROVIDER_NAME", "faster-qwen3-tts")
+
+    class Remote:
+        provider_name = "faster-qwen3-tts"
+
+        def __init__(self, base_url):
+            self.base_url = base_url
+
+        def start(self):
+            return {"running": True}
+
+        def stop(self):
+            return True
+
+    monkeypatch.setattr(qwen_http_gateway, "QwenHttpGatewayProvider", Remote)
+    monkeypatch.setattr(
+        execution_lane,
+        "get_audio_registry",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("API attempted local TTS registry construction")
+        ),
+    )
+    try:
+        provider, lane = resolve_live_voice_tts_provider(object())
+        assert lane == "dedicated"
+        assert provider.base_url == "http://127.0.0.1:5101"
+    finally:
+        reset_live_voice_execution_lane_for_tests()
+
