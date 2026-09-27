@@ -13,7 +13,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import certifi
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -435,7 +435,7 @@ def register_alpaca_iex_status_monitor(gateway: FastAPI) -> AlpacaIexStatusMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
     return monitor
