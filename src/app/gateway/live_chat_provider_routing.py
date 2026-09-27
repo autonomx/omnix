@@ -10,7 +10,7 @@ from typing import Any, Iterator
 from app.chat.models import SendChatMessageRequest
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _provider_key
-from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
+from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 
 from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
