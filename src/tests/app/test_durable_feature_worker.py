@@ -34,7 +34,8 @@ class _Store:
 
 def test_authority_bound_store_fences_mutations_but_allows_reads():
     authority = _Authority(live=False)
-    store = _AuthorityBoundJobStore(_Store(), authority)
+    job = SimpleNamespace(id="job:1", lease=None)
+    store = _AuthorityBoundJobStore(_Store(), authority, job)
 
     assert store.get_job("job:1") == "job:1"
     with pytest.raises(RuntimeError, match="authority lost"):
