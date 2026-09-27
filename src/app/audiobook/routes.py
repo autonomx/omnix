@@ -23,7 +23,7 @@ from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.runtime.paths import resources_data_root
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     BackgroundOwnershipUnavailable, BackgroundWorker, register_background_worker,
 )
 from app.persistence.background_authority import require_background_owner
@@ -854,7 +854,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     async def shutdown() -> None:
         await asyncio.to_thread(stop_worker)
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
 
