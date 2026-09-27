@@ -52,8 +52,15 @@ def bootstrap_local_tenant(
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
 ) -> TenantContext:
-    """Deprecated compatibility name; no longer performs schema bootstrap."""
-    return ensure_local_identity(database, authority_operation=authority_operation)
+    """Deprecated compatibility name; no longer performs schema bootstrap.
+
+    Compatibility callers also install the process-local tenant so deeper
+    domain services can consume current_tenant() without re-upserting identity.
+    """
+    context = ensure_local_identity(database, authority_operation=authority_operation)
+    from app.security.tenant_context import install_process_tenant
+    install_process_tenant(context)
+    return context
 
 
 def get_workspace(database: PostgresDatabase, context: TenantContext) -> dict[str, Any]:
