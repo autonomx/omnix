@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 _ROUTE_SENTINEL = "_omnix_live_voice_cue_assets_registered"
 _HOOK_SENTINEL = "_omnix_live_voice_cue_assets_hook_installed"
