@@ -1,6 +1,8 @@
 """Phase 12.12 — Local SD / ComfyUI image provider."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import time
@@ -102,7 +104,7 @@ def _default_prompt_graph(prompt: str, *, seed: int, width: int, height: int) ->
         "4": {
             "class_type": "CheckpointLoaderSimple",
             "inputs": {
-                "ckpt_name": os.getenv("COMFY_CHECKPOINT_NAME", "v1-5-pruned-emaonly.safetensors"),
+                "ckpt_name": env_str("COMFY_CHECKPOINT_NAME", "v1-5-pruned-emaonly.safetensors"),
             },
         },
         "5": {
@@ -158,17 +160,17 @@ class ComfyImageProvider(BaseImageProvider):
         kind: str,
         target_id: str,
     ) -> ImageGenerationResult:
-        base_url = _safe_str(os.getenv("COMFY_BASE_URL", _DEFAULT_COMFY_BASE_URL)).strip().rstrip("/")
-        timeout = _safe_int(os.getenv("COMFY_TIMEOUT_SEC"), _DEFAULT_TIMEOUT_SEC)
-        poll_interval = float(os.getenv("COMFY_POLL_INTERVAL_SEC", str(_DEFAULT_POLL_INTERVAL_SEC)))
-        max_polls = _safe_int(os.getenv("COMFY_MAX_POLLS"), _DEFAULT_MAX_POLLS)
+        base_url = _safe_str(env_str("COMFY_BASE_URL", _DEFAULT_COMFY_BASE_URL)).strip().rstrip("/")
+        timeout = _safe_int(env_str("COMFY_TIMEOUT_SEC"), _DEFAULT_TIMEOUT_SEC)
+        poll_interval = float(env_str("COMFY_POLL_INTERVAL_SEC", str(_DEFAULT_POLL_INTERVAL_SEC)))
+        max_polls = _safe_int(env_str("COMFY_MAX_POLLS"), _DEFAULT_MAX_POLLS)
 
         width = 768 if _safe_str(kind).strip() == "character_portrait" else 1024
         height = 1024 if _safe_str(kind).strip() == "character_portrait" else 768
         final_prompt = _build_prompt(prompt, kind=kind, style=style, target_id=target_id)
         final_seed = seed if isinstance(seed, int) else 0
 
-        graph_override = _safe_str(os.getenv("COMFY_PROMPT_GRAPH_JSON")).strip()
+        graph_override = _safe_str(env_str("COMFY_PROMPT_GRAPH_JSON")).strip()
         if graph_override:
             try:
                 workflow = json.loads(graph_override)
