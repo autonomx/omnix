@@ -24,8 +24,8 @@ _PERSISTENCE_WORKER = None
 
 
 def _provider_refresh_enabled_for_process(config=None) -> bool:
-    from app.runtime_config import get_runtime_config
-    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+    from app.runtime.config import get_runtime_config
+    from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
     capabilities = RuntimeCapabilities.from_config(config or get_runtime_config())
     return any(capabilities.allows(value) for value in (RuntimeCapability.RUN_LOCAL_TTS, RuntimeCapability.USE_REMOTE_TTS))
 
