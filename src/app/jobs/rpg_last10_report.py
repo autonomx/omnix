@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
+from .inline_execution_compat import require_execution_authority
 from .rpg_last10_report_artifacts import write_rpg_last10_report
 from .rpg_last10_report_debug import build_turn_debug_payload
 
@@ -89,6 +90,7 @@ def execute_rpg_last10_report_job(job_store: Any, job: JobRecord) -> JobRecord:
 
 def render_rpg_last10_report_job(job: JobRecord, *, job_store: Any | None = None) -> dict[str, Any]:
     payload = build_rpg_last10_report_payload(job, job_store=job_store)
+    require_execution_authority(job_store, job.id)
     written = write_rpg_last10_report(payload)
     summary = _dict_value(written.get("summary"))
     content = json.dumps(
