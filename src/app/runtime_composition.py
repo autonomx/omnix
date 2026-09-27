@@ -6,8 +6,8 @@ from functools import lru_cache
 @lru_cache(maxsize=1)
 def production_job_store():
     from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
-    from app.jobs.rpg_turn_job_guard import install_rpg_turn_job_guard
-    from app.jobs.rpg_debug_job_hook import install_rpg_debug_job_hook
+    from app.rpg.jobs.turn_job_guard import install_rpg_turn_job_guard
+    from app.rpg.jobs.debug_job_hook import install_rpg_debug_job_hook
 
     # Production feature work is claimed by the leased durable feature worker.
     # Keep only the non-execution RPG compatibility guards until those callers
