@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from app.shared import get_tts_provider
+from app.providers.service import get_tts_provider
 
 from .tts_runtime_state import (
     STATE,
