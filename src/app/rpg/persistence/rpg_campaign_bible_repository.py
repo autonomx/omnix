@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Mapping
 
-from .errors import EntityNotFound, RevisionConflict
+from app.persistence.errors import EntityNotFound, RevisionConflict
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class CampaignBibleRevisionConflict(RevisionConflict):

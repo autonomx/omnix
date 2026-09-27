@@ -17,7 +17,7 @@ from app.rpg.npc_evolution.profile_store import (
     _safe_str,
 )
 
-from .document_store import PostgresDocumentStore
+from app.persistence.document_store import PostgresDocumentStore
 
 
 def _now_iso() -> str:

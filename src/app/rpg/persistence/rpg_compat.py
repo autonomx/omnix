@@ -3,13 +3,13 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from .database import PostgresDatabase, default_database
-from .errors import RevisionConflict
-from .identity_service import bootstrap_local_tenant
+from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.errors import RevisionConflict
+from app.persistence.identity_service import bootstrap_local_tenant
 from .rpg_repository import canonical_json, state_hash
 from .rpg_session_save_policy import session_save_deferred
-from .runtime import ensure_postgresql_runtime_ready
-from .unit_of_work import unit_of_work
+from app.persistence.runtime import ensure_postgresql_runtime_ready
+from app.persistence.unit_of_work import unit_of_work
 
 
 def _database() -> PostgresDatabase:
