@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """Durable Yahoo evidence and same-feed relative-volume authority.
 
 Yahoo is useful free market evidence, but it is not represented as consolidated
@@ -34,10 +36,10 @@ _ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 def _default_root() -> Path:
-    configured = os.getenv("OMNIX_TRADING_YAHOO_EVIDENCE_DIR", "").strip()
+    configured = env_str("OMNIX_TRADING_YAHOO_EVIDENCE_DIR", "").strip()
     if configured:
         return Path(configured)
-    if os.getenv("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return Path(tempfile.gettempdir()) / f"omnix-yahoo-evidence-test-{os.getpid()}"
     return Path("resources/trading/yahoo_evidence")
 
