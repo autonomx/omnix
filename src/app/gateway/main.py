@@ -188,8 +188,8 @@ def create_gateway_app(
     background_runtime=None,
     runtime_config=None,
 ) -> FastAPI:
-    from app.runtime_config import get_runtime_config
-    from app.runtime_capabilities import RuntimeCapabilities
+    from app.runtime.config import get_runtime_config
+    from app.runtime.capabilities import RuntimeCapabilities
     runtime_config = runtime_config or get_runtime_config()
     _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
