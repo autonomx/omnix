@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "chat_pattern": "^/api/chat/sessions(?:/[^/]+(?:/(?:attachments|messages(?:/stream)?))?)?$",
+  "read_pattern": "^(?:/events|/api/jobs(?:/[^/]+)?|/api/trading/(?:bars|quotes))$",
+  "read_methods": ["GET", "HEAD"],
+  "speech_paths": ["/api/tts/stream/websocket", "/api/tts/stream/server-sent-events"],
+  "default_target": "worker",
+  "worker_affinity_header": "x-omnix-gateway-affinity"
+}
