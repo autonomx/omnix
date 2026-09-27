@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.persistence.rpg_world_generation_repository import _merge_persistent_progress
+from app.rpg.persistence.rpg_world_generation_repository import _merge_persistent_progress
 
 
 def test_reconciliation_preserves_unresolved_stale_topics() -> None:
