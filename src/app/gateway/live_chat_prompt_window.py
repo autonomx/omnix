@@ -11,6 +11,8 @@ its separate 12-message latency policy.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from collections.abc import Callable
 from functools import wraps
@@ -30,7 +32,7 @@ _MAX_RECENT_MESSAGE_LIMIT = 200
 
 
 def _boolean_setting(name: str, fallback: bool) -> bool:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     if raw is None or not raw.strip():
         return fallback
     return raw.strip().lower() in {"1", "true", "yes", "on"}
@@ -43,7 +45,7 @@ def _integer_setting(
     minimum: int,
     maximum: int,
 ) -> int:
-    raw = (os.environ.get(name) or "").strip()
+    raw = (environment().get(name) or "").strip()
     try:
         value = int(raw) if raw else fallback
     except ValueError:
