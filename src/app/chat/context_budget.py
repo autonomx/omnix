@@ -1,6 +1,8 @@
 """Deterministic token estimates and bounded prompt-section helpers."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -62,7 +64,7 @@ def trim_to_token_budget(text: str, max_tokens: int, *, marker: str = "\n[trunca
 
 def prompt_budget_from_env() -> PromptBudget:
     def integer(name: str, fallback: int) -> int:
-        value = (os.environ.get(name) or "").strip()
+        value = (environment().get(name) or "").strip()
         if not value:
             return fallback
         try:
