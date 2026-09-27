@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping
 
 from fastapi import FastAPI, HTTPException, Request
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.debug_logging import new_rpg_trace_id
 from app.rpg.worlds.generation_acceptance import (
@@ -82,7 +82,7 @@ def _previous_result_chain(
 def _run_with_results(
     run_id: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
-    context = bootstrap_local_tenant(None)
+    context = current_tenant()
     parent_result_maps: list[dict[str, dict[str, Any]]] = []
     with unit_of_work(None) as work:
         run = work.world_generation.get(context, run_id)
