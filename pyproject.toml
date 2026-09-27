@@ -66,3 +66,26 @@ select = ["F", "E9", "W6", "B006", "B008", "B017", "PLE", "UP006", "UP007"]
 "src/tests/unit/assistant_memory/test_companion_completion_acceptance.py" = ["I001"]
 "src/tests/unit/assistant_memory/test_companion_controls.py" = ["I001"]
 "src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py" = ["I001"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+pythonpath = ["src"]
+addopts = "-q --tb=short --strict-markers --import-mode=importlib"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+  "postgres: requires disposable PostgreSQL",
+  "multiprocess: requires multiple processes",
+  "gpu: requires a GPU/model runtime",
+  "live_provider: calls a live external/provider service",
+  "playwright: browser automation test",
+  "slow: long-running deterministic test",
+  "smoke: quick smoke test",
+  "api: API contract test",
+  "frontend: frontend-oriented Python test",
+  "js_analysis: static JavaScript analysis",
+  "e2e: end-to-end test",
+  "functional: functional test",
+  "live_codex: opt-in real ChatGPT-authenticated Codex test",
+]
