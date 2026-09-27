@@ -9,7 +9,7 @@ from contextlib import suppress
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker, register_background_worker
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import TradingMarketDataService, default_market_data_service
@@ -456,7 +456,7 @@ def register_trading_solana_ai_monitor(gateway: FastAPI) -> TradingSolanaAIMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
     return monitor
