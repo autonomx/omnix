@@ -36,6 +36,7 @@ class FeatureContext:
 
 RouterFactory = Callable[[FeatureContext], APIRouter]
 BackgroundWorkerFactory = Callable[[FeatureContext], BackgroundWorker]
+GatewayInstaller = Callable[[Any, FeatureContext], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +47,7 @@ class FeatureModule:
     depends_on: tuple[str, ...] = ()
     config_model: type[BaseModel] | None = None
     routers: tuple[RouterFactory, ...] = ()
+    installers: tuple[GatewayInstaller, ...] = ()
     internal_routers: tuple[RouterFactory, ...] = ()
     job_handlers: tuple[Any, ...] = ()
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()
