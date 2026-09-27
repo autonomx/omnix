@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from contextlib import suppress
@@ -31,18 +33,18 @@ _STATE_KEY = "_omnix_trading_execution_observation_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def execution_observation_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "3"))
+        value = float(environment().get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "3"))
     except ValueError:
         value = 3.0
     return max(0.25, value)
