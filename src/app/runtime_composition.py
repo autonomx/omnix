@@ -92,5 +92,5 @@ def production_summary_repository():
 
 
 def production_narrative_store(*args, **kwargs):
-    from app.persistence.rpg_feature_compat import PostgresNarrativeEventStore
+    from app.rpg.persistence.rpg_feature_compat import PostgresNarrativeEventStore
     return PostgresNarrativeEventStore(*args, **kwargs)
