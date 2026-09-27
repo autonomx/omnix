@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import html
 import os
 import shutil
@@ -26,7 +28,7 @@ _DEFAULT_APP_OPEN_URL = "http://localhost:5173/"
 
 
 def _launcher_auto_start_enabled() -> bool:
-    return os.environ.get("OMNIX_LAUNCHER_AUTO_START", "0").strip().lower() in {
+    return environment().get("OMNIX_LAUNCHER_AUTO_START", "0").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -63,8 +65,8 @@ app.router.add_event_handler("shutdown", _stop_managed_services_on_launcher_shut
 
 def _app_open_url() -> str:
     url = (
-        os.environ.get("OMNIX_APP_OPEN_URL")
-        or os.environ.get("OMNIX_APP_PRIVATE_URL")
+        environment().get("OMNIX_APP_OPEN_URL")
+        or environment().get("OMNIX_APP_PRIVATE_URL")
         or _DEFAULT_APP_OPEN_URL
     ).strip()
     parsed = urlparse(url)
@@ -75,7 +77,7 @@ def _app_open_url() -> str:
 
 def _candidate_browser_paths() -> list[str]:
     candidates: list[str] = []
-    configured = os.environ.get("OMNIX_PRIVATE_BROWSER") or os.environ.get("OMNIX_BROWSER_EXE")
+    configured = environment().get("OMNIX_PRIVATE_BROWSER") or environment().get("OMNIX_BROWSER_EXE")
     if configured:
         candidates.append(configured)
 
@@ -95,9 +97,9 @@ def _candidate_browser_paths() -> list[str]:
 
     if os.name == "nt":
         roots = [
-            os.environ.get("LOCALAPPDATA", ""),
-            os.environ.get("PROGRAMFILES", ""),
-            os.environ.get("PROGRAMFILES(X86)", ""),
+            environment().get("LOCALAPPDATA", ""),
+            environment().get("PROGRAMFILES", ""),
+            environment().get("PROGRAMFILES(X86)", ""),
         ]
         relative_paths = [
             ("Google", "Chrome", "Application", "chrome.exe"),
