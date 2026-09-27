@@ -135,6 +135,55 @@ def test_skip_locked_claims_distinct_jobs_and_completes() -> None:
         database.close()
 
 
+def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:durable-feature")
+            claimed = work.jobs.claim_next(
+                context,
+                worker_id="gateway-feature:a",
+                resource_classes=["gpu:image"],
+                job_types=["image.generate"],
+                lease_seconds=30,
+            )
+            assert claimed is not None
+            running = work.jobs.mark_running(
+                context,
+                job_id=claimed["id"],
+                worker_id="gateway-feature:a",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+        assert running["status"] == "running"
+
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = 'job:durable-feature'"
+            )
+
+        with unit_of_work(database) as work:
+            reclaimed = work.jobs.claim_next(
+                context,
+                worker_id="gateway-feature:b",
+                resource_classes=["gpu:image"],
+                job_types=["image.generate"],
+                lease_seconds=30,
+            )
+            work.commit()
+
+        assert reclaimed is not None
+        assert reclaimed["id"] == "job:durable-feature"
+        assert reclaimed["lease_token"] != claimed["lease_token"]
+        assert reclaimed["attempt_count"] == 2
+    finally:
+        database.close()
+
+
+
 def test_record_only_job_transitions_without_worker_lease() -> None:
     database = _database()
     try:
