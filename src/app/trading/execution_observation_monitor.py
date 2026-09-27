@@ -8,7 +8,7 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -214,7 +214,7 @@ def register_trading_execution_observation_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
     return monitor
