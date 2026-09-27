@@ -661,7 +661,7 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
     settings = load_settings()
     provider = provider_name or settings.get('audio_provider_tts', 'faster-qwen3-tts')
 
-    from app.runtime_config import get_runtime_config, GatewayRole
+    from app.runtime.config import get_runtime_config, GatewayRole
     config = get_runtime_config()
     endpoint = config.tts.url if config.tts else ''
     api_replica = config.gateway_role is GatewayRole.API
@@ -682,7 +682,7 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
             _tts_provider_name = key
         return _tts_provider_instance
 
-    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+    from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
     RuntimeCapabilities.from_config(config).require(RuntimeCapability.RUN_LOCAL_TTS)
     
     # Check if we already have the correct provider cached
