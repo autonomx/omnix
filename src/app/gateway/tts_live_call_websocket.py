@@ -14,9 +14,9 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from app import shared
+from app.providers import service as provider_service
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
-from app.shared import remove_emojis
+from app.text import remove_emojis
 
 from .live_voice_speculative_tts import resolve_live_call_tts_provider
 from .tts_stream_diagnostics import (
@@ -43,7 +43,7 @@ SPECULATIVE_STARTUP_BURST_FRAMES = 2
 # Explicit dependency seam retained for focused tests and alternate gateway
 # composition. Runtime lane selection still happens below; this is not a
 # process-wide provider monkey-patch.
-get_tts_provider = shared.get_tts_provider
+get_tts_provider = provider_service.get_tts_provider
 
 
 @dataclass(frozen=True)
