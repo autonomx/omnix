@@ -6,7 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.runtime_paths import rpg_npc_profiles_root
+from app.runtime.paths import rpg_npc_profiles_root
 
 PROFILE_VERSION = 1
 DEFAULT_PROFILE_ROOT: Path | None = None
