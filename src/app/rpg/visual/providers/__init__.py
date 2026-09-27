@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Tuple
 
-from app.shared import load_settings
+from app.config.access import load_settings
 
 from .base import BaseImageProvider, ImageGenerationResult
 from .disabled_provider import DisabledImageProvider
