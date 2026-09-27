@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class PostgresRpgWorldLibraryRepository:

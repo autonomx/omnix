@@ -8,8 +8,8 @@ from app.rpg.narrative_engine import (
     apply_world_forge_proposal,
 )
 
-from .errors import EntityNotFound
-from .tenant import TenantContext
+from app.persistence.errors import EntityNotFound
+from app.persistence.tenant import TenantContext
 
 
 def approve_world_forge_proposal(

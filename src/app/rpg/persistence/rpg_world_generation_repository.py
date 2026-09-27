@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from .errors import EntityNotFound
+from app.persistence.errors import EntityNotFound
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 _RUN_COLUMNS = """
