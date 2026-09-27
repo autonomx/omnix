@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
 MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
