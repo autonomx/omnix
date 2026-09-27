@@ -65,3 +65,5 @@ MODELS_DIR = str(resources_models_root())
 VOICE_CLONES_DIR = str(resources_root() / "voice_clones")
 LOGO_DIR = str(resources_root() / "logo")
 LOGS_DIR = str(resources_root() / "logs")
+
+VOICE_CLONES_FILE = str(resources_root() / "voice_clones" / "voice_clones.json")
