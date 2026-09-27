@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from app.runtime_paths import test_results_root
+from app.runtime.paths import test_results_root
 
 
 class ReportArtifact(BaseModel):
