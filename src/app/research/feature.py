@@ -12,9 +12,24 @@ def _execute(context: JobExecutionContext, job):
     return execute_research_job(context.job_store, job)
 
 
+
+from app.runtime.gateway_installer import install_registrars
+
+
+def _install_gateway(gateway, context):
+    install_registrars(
+        gateway,
+        context,
+        (
+            ("app.gateway.research_mode_routes", "register_research_mode_routes"),
+            ("app.research.credential_routes", "register_research_credential_routes"),
+        ),
+    )
+
 FEATURE = FeatureModule(
     id="research",
     title="Research",
+    installers=(_install_gateway,),
     job_handlers=(
         JobHandlerSpec(
             type="assistant.deep_research",
