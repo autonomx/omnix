@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.published_canon_projection import project_published_canon
@@ -168,7 +168,7 @@ def ensure_turn_scene_lore(
 
     try:
         db = database or default_database()
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             _campaign_exists(work, context, campaign_id, session)
             stored = work.campaign_bibles.get(context, campaign_id, for_update=True)
