@@ -70,7 +70,7 @@ def test_http_selection_requires_explicit_service_url(monkeypatch):
 
 def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatch):
     from app import shared
-    from app.runtime_config import RuntimeConfig, GatewayRole, install_runtime_config
+    from app.runtime.config import RuntimeConfig, GatewayRole, install_runtime_config
     install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'another-local-provider'})
     monkeypatch.setattr(shared, 'get_audio_registry', lambda: pytest.fail('API constructed a local provider'))
