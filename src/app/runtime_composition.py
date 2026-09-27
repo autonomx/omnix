@@ -32,13 +32,13 @@ def production_chat_store():
 
 @lru_cache(maxsize=1)
 def production_model_residency_store():
-    from app.persistence.execution_feature_compat import PostgresModelResidencyStore
+    from app.jobs.persistence.model_residency import PostgresModelResidencyStore
     return PostgresModelResidencyStore()
 
 
 @lru_cache(maxsize=1)
 def production_provider_refresh_store():
-    from app.persistence.execution_feature_compat import PostgresProviderModelRefreshStore
+    from app.providers.persistence.model_refresh import PostgresProviderModelRefreshStore
     return PostgresProviderModelRefreshStore()
 
 
@@ -76,13 +76,13 @@ def production_conversation_profile_store():
 
 @lru_cache(maxsize=1)
 def production_evaluation_store():
-    from app.persistence.document_feature_compat import PostgresLiveChatEvaluationStore
+    from app.chat.persistence.evaluation_store import PostgresLiveChatEvaluationStore
     return PostgresLiveChatEvaluationStore()
 
 
 @lru_cache(maxsize=1)
 def production_research_source_store():
-    from app.persistence.document_feature_compat import PostgresResearchSourceStore
+    from app.research.persistence.source_store import PostgresResearchSourceStore
     return PostgresResearchSourceStore()
 
 
