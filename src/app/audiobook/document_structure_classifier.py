@@ -6,7 +6,8 @@ from collections.abc import Callable
 from typing import Any
 
 from app.providers import ChatMessage
-from app.shared import get_provider, load_settings
+from app.providers.service import get_provider
+from app.config.access import load_settings
 
 
 DOCUMENT_STRUCTURE_CLASSIFIER_VERSION = "document-structure-classifier-v1"
