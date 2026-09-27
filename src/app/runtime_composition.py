@@ -53,12 +53,12 @@ def production_avatar_repository():
 
 
 def production_memory_repository():
-    from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
+    from app.assistant_memory.persistence.memory_compat import PostgresMemoryRepositoryAdapter
     return PostgresMemoryRepositoryAdapter()
 
 
 def production_owner_memory_repository():
-    from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
     return PostgresOwnerAwareMemoryRepository()
 
 
