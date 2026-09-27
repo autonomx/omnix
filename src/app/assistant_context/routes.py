@@ -21,7 +21,7 @@ from app.chat.generation_jobs import (
 from app.chat.research_citations import validate_completed_research_reply
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.research_release import apply_research_release_decision
-from app.jobs import CreateJobRequest, InMemoryJobStore, JobRecord, ResourceClass, default_job_store
+from app.jobs import CreateJobRequest, JobRecord, ResourceClass, default_job_store
 from app.jobs.research_inline import start_research_job
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
@@ -55,7 +55,7 @@ def register_assistant_context_routes(
     app: FastAPI,
     *,
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
-    job_store_factory: Callable[[], InMemoryJobStore] = default_job_store,
+    job_store_factory: Callable[[], Any] = default_job_store,
     context_service_factory: Callable[[], AssistantContextService] = default_assistant_context_service,
     policy_factory: Callable[[], ResearchPolicy] | None = None,
     settings_factory: Callable[[], ResearchRuntimeSettings] = load_research_runtime_settings,
@@ -483,7 +483,7 @@ def _begin_deep_research(
     request: AssistantContextChatRequest,
     *,
     chat_store: ChatSessionStore,
-    job_store: InMemoryJobStore,
+    job_store: Any,
     policy: ResearchPolicy,
     settings: ResearchRuntimeSettings,
     decision: ResearchReleaseDecision,
@@ -594,7 +594,7 @@ def _start_research_execution(job_store: Any, job: JobRecord) -> JobRecord:
 
 
 def _update_job_input(
-    job_store: InMemoryJobStore,
+    job_store: Any,
     job: JobRecord,
     input_payload: DeepResearchJobInput,
     *,
