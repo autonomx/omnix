@@ -1,6 +1,8 @@
 """Streaming text generation adapters for live speech."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from dataclasses import dataclass
@@ -42,7 +44,7 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
         }
         try:
             headers = {}
-            api_token = os.environ.get("LM_API_TOKEN", "").strip()
+            api_token = environment().get("LM_API_TOKEN", "").strip()
             if api_token:
                 headers["Authorization"] = f"Bearer {api_token}"
             with requests.post(
@@ -66,11 +68,11 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
 
 
 def create_text_generator_from_env() -> StreamingTextGenerator:
-    provider = os.environ.get("LIVE_SPEECH_LLM_PROVIDER", "fake").strip().lower()
+    provider = environment().get("LIVE_SPEECH_LLM_PROVIDER", "fake").strip().lower()
     if provider in {"openai", "openai_compatible", "lmstudio", "real"}:
         return OpenAICompatibleTextGenerator(
-            base_url=os.environ.get("LIVE_SPEECH_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
-            model=os.environ.get("LIVE_SPEECH_LLM_MODEL", "local-model"),
+            base_url=environment().get("LIVE_SPEECH_LLM_BASE_URL", "http://127.0.0.1:1234/v1"),
+            model=environment().get("LIVE_SPEECH_LLM_MODEL", "local-model"),
         )
     return EchoTextGenerator()
 
