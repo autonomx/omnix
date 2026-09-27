@@ -184,6 +184,64 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
 
 
 
+def test_stale_worker_cannot_fail_successor_attempt() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:stale-failure", max_attempts=3)
+            first = work.jobs.claim_next(
+                context,
+                worker_id="gateway-feature:a",
+                resource_classes=["gpu:image"],
+                job_types=["image.generate"],
+                lease_seconds=30,
+            )
+            assert first is not None
+            work.commit()
+
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = 'job:stale-failure'"
+            )
+
+        with unit_of_work(database) as work:
+            second = work.jobs.claim_next(
+                context,
+                worker_id="gateway-feature:b",
+                resource_classes=["gpu:image"],
+                job_types=["image.generate"],
+                lease_seconds=30,
+            )
+            assert second is not None
+            work.commit()
+
+        with unit_of_work(database) as work:
+            with pytest.raises(JobClaimConflict):
+                work.jobs.fail(
+                    context,
+                    job_id="job:stale-failure",
+                    worker_id="gateway-feature:a",
+                    lease_token=first["lease_token"],
+                    error={"code": "stale-worker-error"},
+                )
+            work.rollback()
+
+        with unit_of_work(database) as work:
+            current = work.jobs.get_job(context, "job:stale-failure")
+            work.rollback()
+        assert current is not None
+        assert current["status"] == "leased"
+        assert current["lease_owner"] == "gateway-feature:b"
+        assert current["lease_token"] == second["lease_token"]
+        assert current["error"] is None
+    finally:
+        database.close()
+
+
+
 def test_record_only_job_transitions_without_worker_lease() -> None:
     database = _database()
     try:
