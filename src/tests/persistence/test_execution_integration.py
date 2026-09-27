@@ -290,6 +290,72 @@ def test_cancel_queued_and_active_jobs() -> None:
         database.close()
 
 
+def test_expired_cancel_requested_job_becomes_terminal_canceled() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:cancel-expired")
+            claimed = work.jobs.claim_next(
+                context,
+                worker_id="worker:a",
+                resource_classes=["gpu:image"],
+                lease_seconds=30,
+            )
+            assert claimed is not None
+            canceled = work.jobs.request_cancel(context, claimed["id"])
+            assert canceled["status"] == "cancel_requested"
+            work.connection.execute(
+                "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = %s",
+                (claimed["id"],),
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            released = work.jobs.release_expired_leases(
+                context, job_id="job:cancel-expired", job_type="image.generate",
+            )
+            work.commit()
+
+        assert len(released) == 1
+        assert released[0]["status"] == "canceled"
+        assert released[0]["error"] is None
+        with database.connection() as connection:
+            job = connection.execute(
+                "SELECT status, lease_owner, lease_token, lease_expires_at, completed_at "
+                "FROM omnix_jobs WHERE id = 'job:cancel-expired'"
+            ).fetchone()
+            attempt = connection.execute(
+                "SELECT status, completed_at, error FROM omnix_job_attempts "
+                "WHERE job_id = 'job:cancel-expired' AND attempt = 1"
+            ).fetchone()
+            events = [
+                row[0] for row in connection.execute(
+                    "SELECT event_type FROM omnix_job_events "
+                    "WHERE job_id = 'job:cancel-expired' ORDER BY id"
+                ).fetchall()
+            ]
+        assert job[0] == "canceled"
+        assert job[1] is job[2] is job[3] is None
+        assert job[4] is not None
+        assert attempt[0] == "canceled"
+        assert attempt[1] is not None and attempt[2] is None
+        assert events[-2:] == ["job.lease_expired", "job.canceled"]
+
+        with unit_of_work(database) as work:
+            assert work.jobs.claim_next(
+                context,
+                worker_id="worker:b",
+                resource_classes=["gpu:image"],
+            ) is None
+            work.rollback()
+    finally:
+        database.close()
+
+
+
 def test_outbox_is_transactional_claimable_and_retryable() -> None:
     database = _database()
     try:
