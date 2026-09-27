@@ -13,7 +13,8 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from app.shared import get_tts_provider, remove_emojis
+from app.providers.service import get_tts_provider
+from app.text import remove_emojis
 
 from .tts_stream_diagnostics import (
     begin_stream,
