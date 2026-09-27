@@ -225,6 +225,8 @@ def create_gateway_app(
     gateway.state.background_runtime = background_runtime
     gateway.state.runtime_config = runtime_config
     gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(runtime_config)
+    from .background_runtime import GatewayBackgroundRegistryAdapter
+    gateway.state.background_registry = GatewayBackgroundRegistryAdapter(gateway)
     gateway.state.feature_lifecycles = []
     from app.platform.runtime_diagnostics import RequestMetrics, RuntimeRequestMiddleware
     gateway.state.runtime_metrics = RequestMetrics()
