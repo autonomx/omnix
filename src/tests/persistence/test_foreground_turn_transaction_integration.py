@@ -9,7 +9,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.rpg_turn_service import persist_foreground_turn
+from app.rpg.persistence.rpg_turn_service import persist_foreground_turn
 from app.persistence.unit_of_work import unit_of_work
 
 
