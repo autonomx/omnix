@@ -7,6 +7,8 @@ not require the heavyweight speech environment.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import tempfile
@@ -26,7 +28,7 @@ EOB_TOKEN = "<EOB>"
 
 def env_int(name: str, default: int) -> int:
     try:
-        return int(os.environ.get(name, str(default)).strip())
+        return int(environment().get(name, str(default)).strip())
     except (TypeError, ValueError):
         return default
 
@@ -110,7 +112,7 @@ def _normalize_streaming_hypotheses(hypotheses: Any) -> Any:
 
 
 def _select_device(torch_module: Any, env_name: str, fallback: str) -> str:
-    requested = os.environ.get(env_name, fallback).strip().lower()
+    requested = environment().get(env_name, fallback).strip().lower()
     if requested == "auto":
         return "cuda" if torch_module.cuda.is_available() else "cpu"
     if requested.startswith("cuda") and not torch_module.cuda.is_available():
@@ -281,11 +283,11 @@ class NemotronEouModelManager:
             import torch
             from nemo.collections.asr.models import ASRModel
 
-            fallback_device = os.environ.get("OMNIX_STT_DEVICE", "auto")
+            fallback_device = environment().get("OMNIX_STT_DEVICE", "auto")
             self.nemotron_device = _select_device(torch, "OMNIX_NEMOTRON_DEVICE", fallback_device)
             self.eou_device = _select_device(torch, "OMNIX_EOU_DEVICE", fallback_device)
-            nemotron_name = os.environ.get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME).strip()
-            eou_name = os.environ.get("OMNIX_EOU_MODEL", EOU_MODEL_NAME).strip()
+            nemotron_name = environment().get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME).strip()
+            eou_name = environment().get("OMNIX_EOU_MODEL", EOU_MODEL_NAME).strip()
             print(f"[STT] Loading authoritative Nemotron model {nemotron_name} on {self.nemotron_device}")
             self.nemotron_model = ASRModel.from_pretrained(model_name=nemotron_name)
             self.nemotron_model.to(self.nemotron_device)
@@ -305,8 +307,8 @@ class NemotronEouModelManager:
     def health_details(self) -> dict[str, Any]:
         return {
             "provider": "nemotron_parakeet_eou",
-            "authoritative_transcript_model": os.environ.get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME),
-            "endpoint_model": os.environ.get("OMNIX_EOU_MODEL", EOU_MODEL_NAME),
+            "authoritative_transcript_model": environment().get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME),
+            "endpoint_model": environment().get("OMNIX_EOU_MODEL", EOU_MODEL_NAME),
             "nemotron_device": self.nemotron_device,
             "eou_device": self.eou_device,
             "chunk_ms": self.feed_chunk_ms,
