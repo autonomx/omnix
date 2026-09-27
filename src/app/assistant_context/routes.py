@@ -132,17 +132,17 @@ def register_assistant_context_routes(
             except Exception as exc:
                 raise HTTPException(status_code=409, detail="deep research plan is invalid") from exc
             if not input_payload.awaiting_plan_approval:
-                return start_research_job(job_store, job)
+                return _start_research_execution(job_store, job)
             approved_input = input_payload.model_copy(update={"awaiting_plan_approval": False})
             updated = _update_job_input(
                 job_store,
                 job,
                 approved_input,
-                compat={**job.compat, "inline_execution": True},
+                compat=dict(job.compat),
             )
             if updated is None:
                 raise HTTPException(status_code=409, detail="deep research plan could not be started")
-            return start_research_job(job_store, updated)
+            return _start_research_execution(job_store, updated)
 
     if _ROUTE_NAME in route_names:
         return
@@ -582,6 +582,15 @@ def _with_research_plan(input_payload: DeepResearchJobInput) -> DeepResearchJobI
             "metadata": metadata,
         }
     )
+
+
+def _start_research_execution(job_store: Any, job: JobRecord) -> JobRecord:
+    """Release durable research to the PostgreSQL worker, preserving local test compatibility."""
+    from app.persistence.runtime import uses_postgresql_runtime
+
+    if uses_postgresql_runtime():
+        return job
+    return start_research_job(job_store, job)
 
 
 def _update_job_input(
