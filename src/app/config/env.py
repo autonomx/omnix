@@ -1,7 +1,7 @@
 """Typed environment access. This is the only package allowed to read os.environ."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 import os
 from threading import Lock
 from urllib.parse import urlsplit
@@ -10,7 +10,7 @@ _READ_LOCK = Lock()
 _READ_NAMES: set[str] = set()
 
 
-def environment() -> Mapping[str, str]:
+def environment() -> MutableMapping[str, str]:
     return os.environ
 
 
