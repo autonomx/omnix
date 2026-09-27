@@ -94,7 +94,7 @@ def main() -> int:
     args = build_parser().parse_args()
     pack = _legacy_pack(args.legacy_character_db, args.character_id)
 
-    from app.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
+    from app.characters.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
     from app.persistence.blob_store import LocalBlobStore
     from app.persistence.startup import bootstrap_postgresql_runtime
 
