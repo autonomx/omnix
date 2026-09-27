@@ -220,7 +220,7 @@ assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
 from app.assistant_memory.models import MemoryRecord
-from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
+from app.assistant_memory.persistence.memory_compat import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
 record = MemoryRecord(
