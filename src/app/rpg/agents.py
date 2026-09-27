@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 def _get_provider():
     """Get the active LLM provider."""
-    import app.shared as shared
-    return shared.get_provider()
+    from app.providers import service as provider_service
+    return provider_service.get_provider()
 
 
 def _call_llm(system_prompt: str, user_prompt: str, max_retries: int = 2) -> Optional[str]:
