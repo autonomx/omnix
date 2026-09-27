@@ -18,6 +18,8 @@ turn; users can still override the cache TTL explicitly.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from functools import wraps
 from typing import Any
@@ -58,8 +60,8 @@ def apply_live_voice_process_defaults() -> None:
     worker-start differences where the later function monkey-patch is not observed.
     """
 
-    os.environ.setdefault(_STATE_ENV, "true")
-    os.environ.setdefault(
+    environment().setdefault(_STATE_ENV, "true")
+    environment().setdefault(
         _LMSTUDIO_DISCOVERY_CACHE_ENV,
         _LMSTUDIO_DISCOVERY_CACHE_DEFAULT,
     )
@@ -141,7 +143,7 @@ def install_live_voice_hardware_policy() -> None:
 
     @wraps(original_stateful_enabled)
     def patched_stateful_enabled() -> bool:
-        raw = os.environ.get(_STATE_ENV)
+        raw = environment().get(_STATE_ENV)
         if raw is None:
             return True
         return stateful_live_responses_enabled(raw)
@@ -159,7 +161,7 @@ def install_live_voice_hardware_policy() -> None:
     ) -> Any:
         if should_defer_speculative_tts(
             provider,
-            os.environ.get(_ALLOW_SERIAL_TTS_SPECULATION_ENV),
+            environment().get(_ALLOW_SERIAL_TTS_SPECULATION_ENV),
         ):
             return _deferred_speculative_entry(
                 speculative_tts_runtime,
@@ -208,7 +210,7 @@ def install_live_voice_hardware_policy() -> None:
                 provider_class_compatible=class_compatible,
                 provider_request_capable=callable(getattr(provider, "_make_request", None)),
                 model_id=model_id,
-                model_discovery_cache_seconds=os.environ.get(
+                model_discovery_cache_seconds=environment().get(
                     _LMSTUDIO_DISCOVERY_CACHE_ENV
                 ),
             )
