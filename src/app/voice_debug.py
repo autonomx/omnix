@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.shared import LOGS_DIR
+from app.runtime.paths import LOGS_DIR
 
 VOICE_DEBUG_LOG_MAX_BYTES = 10_000_000
 VOICE_DEBUG_LOG_BACKUP_COUNT = 3
