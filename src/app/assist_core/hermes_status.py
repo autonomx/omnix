@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,14 +10,14 @@ from .hermes_client import HermesSidecarClient
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
+    raw = environment().get(name)
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _timeout() -> float:
-    raw = os.environ.get("HERMES_TIMEOUT_SECONDS", "45")
+    raw = environment().get("HERMES_TIMEOUT_SECONDS", "45")
     try:
         return max(1.0, float(raw))
     except ValueError:
@@ -45,8 +47,8 @@ class HermesStatus:
 def hermes_runtime_config() -> HermesRuntimeConfig:
     return HermesRuntimeConfig(
         enabled=_flag("HERMES_ENABLED", default=False),
-        base_url=os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642"),
-        api_key_configured=bool(os.environ.get("HERMES_API_KEY")),
+        base_url=environment().get("HERMES_BASE_URL", "http://127.0.0.1:8642"),
+        api_key_configured=bool(environment().get("HERMES_API_KEY")),
         timeout_seconds=_timeout(),
     )
 
@@ -63,7 +65,7 @@ def hermes_status() -> HermesStatus:
         )
     client = HermesSidecarClient(
         base_url=config.base_url,
-        api_key=os.environ.get("HERMES_API_KEY") or None,
+        api_key=environment().get("HERMES_API_KEY") or None,
         timeout=min(config.timeout_seconds, 8.0),
     )
     try:
