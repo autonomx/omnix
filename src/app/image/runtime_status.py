@@ -20,7 +20,7 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 
 
 def validate_global_flux_klein_runtime() -> Dict[str, Any]:
-    from app.shared import load_settings
+    from app.config.access import load_settings
     settings = load_settings()
     local_dir = resolve_flux_local_dir_from_settings(settings)
     local_status = get_flux_local_model_status(local_dir)
