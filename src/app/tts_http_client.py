@@ -20,7 +20,7 @@ def _normalize_base_url(value: str | None, default: str) -> str:
 
 
 def _tts_base_url() -> str:
-    from app.runtime_config import get_runtime_config
+    from app.runtime.config import get_runtime_config
     endpoint = get_runtime_config().tts
     return endpoint.url if endpoint else 'http://127.0.0.1:5101'
 
