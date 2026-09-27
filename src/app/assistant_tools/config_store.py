@@ -1,6 +1,8 @@
 """Persistent assistant tool configuration with safe defaults."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from pathlib import Path
@@ -36,7 +38,7 @@ class AssistantToolsConfigPayload(BaseModel):
 
 
 def assistant_tool_config_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH")
+    configured = environment().get("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH")
     return Path(configured) if configured else DEFAULT_CONFIG_PATH
 
 
@@ -180,14 +182,14 @@ def _default_account_label(tool_id: str) -> str | None:
     if tool_id not in {"kasa", "home"}:
         return None
     return (
-        os.environ.get("OMNIX_KASA_DEVICE_ALIAS", "").strip()
-        or os.environ.get("OMNIX_KASA_DEVICE_HOST", "").strip()
+        environment().get("OMNIX_KASA_DEVICE_ALIAS", "").strip()
+        or environment().get("OMNIX_KASA_DEVICE_HOST", "").strip()
         or "Local Kasa network"
     )
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
