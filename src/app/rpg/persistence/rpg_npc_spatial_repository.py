@@ -9,9 +9,9 @@ from app.rpg.npc_spatial_campaign_contracts import (
     CampaignNpcSpatialRoutine,
 )
 
-from .errors import EntityNotFound, RevisionConflict
+from app.persistence.errors import EntityNotFound, RevisionConflict
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class NpcSpatialRevisionConflict(RevisionConflict):

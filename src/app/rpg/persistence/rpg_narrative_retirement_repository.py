@@ -5,7 +5,7 @@ from typing import Any, Mapping
 from app.rpg.narrative_engine.publisher_guard import CANONICAL_PUBLISHER
 
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class NarrativeRetirementConflict(RuntimeError):

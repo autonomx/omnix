@@ -7,9 +7,9 @@ from app.rpg.map_observer_runtime import (
     ObserverMapObservedEvent,
 )
 
-from .errors import RevisionConflict
+from app.persistence.errors import RevisionConflict
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class ObserverKnowledgeRevisionConflict(RevisionConflict):

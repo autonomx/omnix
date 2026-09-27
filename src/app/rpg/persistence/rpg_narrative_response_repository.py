@@ -5,9 +5,9 @@ from typing import Any
 from app.rpg.narrative_engine import CanonicalNarrativeResponse
 from app.rpg.narrative_engine.serialization import canonical_response_from_dict
 
-from .errors import RevisionConflict
+from app.persistence.errors import RevisionConflict
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 class NarrativeResponsePersistenceConflict(RevisionConflict):
