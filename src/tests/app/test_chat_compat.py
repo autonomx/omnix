@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 from app.persistence import chat_compat
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
 
 
 def test_postgres_chat_adapter_paginates_full_message_history() -> None:
