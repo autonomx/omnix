@@ -35,6 +35,16 @@ def test_production_import_does_not_import_gateway_or_contact_database():
     assert result.returncode == 0, result.stderr
 
 
+def test_package_create_app_uses_production_composition(monkeypatch):
+    import app
+    from app import production
+
+    expected = object()
+    monkeypatch.setattr(production, "create_production_app", lambda: expected)
+    assert app.create_app() is expected
+
+
+
 def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app import production
     from app.persistence import startup
