@@ -17,7 +17,7 @@ from app.image.flux_pipeline_compat import (
     validate_flux_repo_runtime,
 )
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
-from app.runtime_paths import generated_images_root
+from app.runtime.paths import generated_images_root
 
 _PIPELINE_LOCK = threading.Lock()
 _GENERATE_LOCK = threading.Lock()
