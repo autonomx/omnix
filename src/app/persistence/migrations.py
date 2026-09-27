@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,27 +15,29 @@ CREATE TABLE IF NOT EXISTS omnix_schema_migrations (
     version TEXT PRIMARY KEY,
     checksum TEXT NOT NULL,
     applied_at TIMESTAMPTZ NOT NULL,
-    execution_ms DOUBLE PRECISION NOT NULL
+    execution_ms DOUBLE PRECISION NOT NULL,
+    phase TEXT NOT NULL DEFAULT 'contract',
+    transactional BOOLEAN NOT NULL DEFAULT TRUE
 )
 """
+_MIGRATION_HEADER = re.compile(
+    r"^--\s*omnix-migration:\s*phase=(expand|contract|data)\s+transactional=(true|false)\s*$",
+    re.IGNORECASE,
+)
 
-# Stable signed bigint derived from the ASCII identity "OMNIXPG". The lock is
-# transaction-scoped so a crashed migrator releases it automatically.
+# Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
-APPLICATION_SCHEMA_MIN = "0010_complete_legacy_migration"
-APPLICATION_SCHEMA_MAX = "9999_omnix_release_ceiling"
+SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
+SCHEMA_KNOWN = "0101_runtime_role_grants"
+APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
+APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
-# Compatibility aliases are only valid while the source file remains at its
-# restored canonical checksum; a future edit must fail closed again.
 _CANONICAL_MIGRATION_CHECKSUMS = {
     "0083_trading_evidence_execution_v3": (
         "44753b480f6fa7b74bbd52d1c5f5f2142e52e8b6a5f776ed7cd44900a2b20ca0"
     )
 }
 
-# 0083 was edited in place by four historical commits before the checksum
-# failure was reported. These are the exact checksums that could have been
-# recorded by a real database; arbitrary edits must still fail closed.
 _LEGACY_MIGRATION_CHECKSUMS: dict[str, frozenset[str]] = {
     "0083_trading_evidence_execution_v3": frozenset(
         {
@@ -64,6 +67,8 @@ class Migration:
     path: Path
     checksum: str
     sql: str
+    phase: str = "contract"
+    transactional: bool = True
 
 
 def _checksum_is_accepted(migration: Migration, checksum: str) -> bool:
@@ -80,17 +85,28 @@ def migration_root() -> Path:
     return Path(__file__).with_name("migrations")
 
 
+def _metadata(sql: str) -> tuple[str, bool]:
+    first = sql.splitlines()[0].strip() if sql.splitlines() else ""
+    match = _MIGRATION_HEADER.match(first)
+    if match is None:
+        return "contract", True
+    return match.group(1).lower(), match.group(2).lower() == "true"
+
+
 def discover_migrations(root: Path | None = None) -> list[Migration]:
     resolved = root or migration_root()
     migrations: list[Migration] = []
     for path in sorted(resolved.glob("*.sql")):
         sql = path.read_text(encoding="utf-8")
+        phase, transactional = _metadata(sql)
         migrations.append(
             Migration(
                 version=path.stem,
                 path=path,
                 checksum=hashlib.sha256(sql.encode("utf-8")).hexdigest(),
                 sql=sql,
+                phase=phase,
+                transactional=transactional,
             )
         )
     versions = [migration.version for migration in migrations]
@@ -99,16 +115,38 @@ def discover_migrations(root: Path | None = None) -> list[Migration]:
     return migrations
 
 
-def _acquire_migration_lock(connection: Any) -> None:
-    connection.execute(
-        "SELECT pg_advisory_xact_lock(%s)",
-        (MIGRATION_ADVISORY_LOCK_KEY,),
-    )
+def _has_metadata_columns(connection: Any) -> bool:
+    rows = connection.execute(
+        """
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = 'omnix_schema_migrations'
+           AND column_name IN ('phase', 'transactional')
+        """
+    ).fetchall()
+    return {str(row[0]) for row in rows} == {"phase", "transactional"}
 
 
 def _applied(connection: Any, *, initialize_table: bool = True) -> dict[str, dict[str, Any]]:
     if initialize_table:
         connection.execute(_MIGRATION_TABLE_SQL)
+        connection.commit()
+    if _has_metadata_columns(connection):
+        rows = connection.execute(
+            "SELECT version, checksum, applied_at, execution_ms, phase, transactional "
+            "FROM omnix_schema_migrations ORDER BY version"
+        ).fetchall()
+        return {
+            str(row[0]): {
+                "checksum": str(row[1]),
+                "applied_at": row[2].isoformat(),
+                "execution_ms": float(row[3]),
+                "phase": str(row[4] or "contract"),
+                "transactional": bool(row[5]),
+            }
+            for row in rows
+        }
     rows = connection.execute(
         "SELECT version, checksum, applied_at, execution_ms "
         "FROM omnix_schema_migrations ORDER BY version"
@@ -118,29 +156,50 @@ def _applied(connection: Any, *, initialize_table: bool = True) -> dict[str, dic
             "checksum": str(row[1]),
             "applied_at": row[2].isoformat(),
             "execution_ms": float(row[3]),
+            "phase": "contract",
+            "transactional": True,
         }
         for row in rows
     }
 
 
-def _schema_compatibility(
+def _compatibility(
     *,
-    applied_versions: list[str],
+    discovered: list[Migration],
+    applied: dict[str, dict[str, Any]],
     drift: list[str],
-    unknown: list[str],
+    pending: list[str],
 ) -> dict[str, Any]:
-    current = max(applied_versions) if applied_versions else None
-    compatible = (
-        current is not None
-        and APPLICATION_SCHEMA_MIN <= current <= APPLICATION_SCHEMA_MAX
-        and not drift
-        and not unknown
-    )
+    known = {migration.version: migration for migration in discovered}
+    unknown = sorted(set(applied) - set(known))
+    unknown_contract = [
+        version
+        for version in unknown
+        if str(applied[version].get("phase") or "contract") == "contract"
+    ]
+    unknown_compatible = [version for version in unknown if version not in unknown_contract]
+    current = max(applied) if applied else None
+
+    required_contracts = [
+        migration.version
+        for migration in discovered
+        if migration.phase == "contract" and migration.version <= SCHEMA_MIN_CONTRACT
+    ]
+    missing_required = [version for version in required_contracts if version not in applied]
+    compatible = not drift and not unknown_contract and not missing_required
+
     return {
         "current_schema": current,
-        "application_schema_min": APPLICATION_SCHEMA_MIN,
-        "application_schema_max": APPLICATION_SCHEMA_MAX,
+        "application_schema_min": SCHEMA_MIN_CONTRACT,
+        "application_schema_max": SCHEMA_KNOWN,
+        "schema_min_contract": SCHEMA_MIN_CONTRACT,
+        "schema_known": SCHEMA_KNOWN,
         "compatible": compatible,
+        "unknown_applied": unknown,
+        "unknown_contract": unknown_contract,
+        "unknown_compatible": unknown_compatible,
+        "missing_required": missing_required,
+        "pending": pending,
     }
 
 
@@ -152,7 +211,7 @@ def migration_status(
 ) -> dict[str, Any]:
     db = database or default_database()
     discovered = discover_migrations(root)
-    with db.transaction() as connection:
+    with db.connection() as connection:
         applied = _applied(connection, initialize_table=initialize_table)
     drift: list[str] = []
     pending: list[str] = []
@@ -163,20 +222,18 @@ def migration_status(
             pending.append(migration.version)
         elif not _checksum_is_accepted(migration, record["checksum"]):
             drift.append(migration.version)
-    unknown = sorted(set(applied) - known_versions)
-    applied_versions = sorted(applied)
-    compatibility = _schema_compatibility(
-        applied_versions=applied_versions,
+    compatibility = _compatibility(
+        discovered=discovered,
+        applied=applied,
         drift=drift,
-        unknown=unknown,
+        pending=pending,
     )
     return {
-        "ok": not drift and not unknown,
+        "ok": not drift and not compatibility["unknown_contract"],
         "discovered": [migration.version for migration in discovered],
-        "applied": applied_versions,
+        "applied": sorted(applied),
         "pending": pending,
         "checksum_drift": drift,
-        "unknown_applied": unknown,
         "records": applied,
         **compatibility,
     }
@@ -188,62 +245,144 @@ def assert_schema_compatible(status: dict[str, Any]) -> None:
     raise SchemaCompatibilityError(
         "PostgreSQL schema is incompatible with this Omnix release: "
         f"current={status.get('current_schema')!r}, "
-        f"supported={status.get('application_schema_min')!r}.."
-        f"{status.get('application_schema_max')!r}, "
-        f"pending={status.get('pending') or []}, "
-        f"unknown={status.get('unknown_applied') or []}"
+        f"required_contract={status.get('schema_min_contract')!r}, "
+        f"missing_required={status.get('missing_required') or []}, "
+        f"unknown_contract={status.get('unknown_contract') or []}, "
+        f"drift={status.get('checksum_drift') or []}"
     )
+
+
+def _record_migration(connection: Any, migration: Migration, elapsed_ms: float) -> None:
+    if _has_metadata_columns(connection):
+        connection.execute(
+            """
+            INSERT INTO omnix_schema_migrations
+                (version, checksum, applied_at, execution_ms, phase, transactional)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                migration.version,
+                migration.checksum,
+                datetime.now(timezone.utc),
+                elapsed_ms,
+                migration.phase,
+                migration.transactional,
+            ),
+        )
+    else:
+        connection.execute(
+            "INSERT INTO omnix_schema_migrations "
+            "(version, checksum, applied_at, execution_ms) VALUES (%s, %s, %s, %s)",
+            (
+                migration.version,
+                migration.checksum,
+                datetime.now(timezone.utc),
+                elapsed_ms,
+            ),
+        )
+
+
+def _assert_application_order(
+    migrations: list[Migration],
+    applied: dict[str, dict[str, Any]],
+    *,
+    allow_out_of_order: bool,
+) -> None:
+    if allow_out_of_order or not applied:
+        return
+    highest_applied = max(applied)
+    lower_pending = [
+        migration.version
+        for migration in migrations
+        if migration.version < highest_applied and migration.version not in applied
+    ]
+    if lower_pending:
+        raise MigrationDriftError(
+            "refusing out-of-order migrations below already-applied "
+            f"{highest_applied}: {lower_pending}"
+        )
 
 
 def apply_migrations(
     database: PostgresDatabase | None = None,
     *,
     root: Path | None = None,
+    allow_out_of_order: bool = False,
 ) -> dict[str, Any]:
+    """Apply migrations from an operator/release path, never a request transaction."""
     from time import perf_counter
-
-    db = database or default_database()
     from .transaction_binding import shared_work
 
+    db = database or default_database()
     if shared_work(db) is not None:
-        # Runtime constructors may be reached inside an atomic Chat operation.
-        # Verify the schema without acquiring the migration lock after domain
-        # locks; forward migration execution belongs outside that transaction.
-        status = migration_status(db, root=root, initialize_table=False)
-        assert_schema_compatible(status)
-        status['applied_now'] = []
-        return status
+        raise MigrationError("schema migrations cannot run inside a runtime transaction")
+
     migrations = discover_migrations(root)
     applied_now: list[str] = []
-    with db.transaction() as connection:
-        _acquire_migration_lock(connection)
-        applied = _applied(connection)
-        known_versions = {migration.version for migration in migrations}
-        unknown = sorted(set(applied) - known_versions)
-        if unknown:
-            raise MigrationDriftError(f"database contains unknown migrations: {unknown}")
-        for migration in migrations:
-            record = applied.get(migration.version)
-            if record is not None:
-                if not _checksum_is_accepted(migration, record["checksum"]):
-                    raise MigrationDriftError(
-                        f"migration checksum drift for {migration.version}"
-                    )
-                continue
-            started = perf_counter()
-            connection.execute(migration.sql, prepare=False)
-            elapsed_ms = (perf_counter() - started) * 1000.0
-            connection.execute(
-                "INSERT INTO omnix_schema_migrations "
-                "(version, checksum, applied_at, execution_ms) VALUES (%s, %s, %s, %s)",
-                (
-                    migration.version,
-                    migration.checksum,
-                    datetime.now(timezone.utc),
-                    elapsed_ms,
-                ),
+    with db.connection() as connection:
+        connection.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_ADVISORY_LOCK_KEY,))
+        connection.commit()
+        try:
+            applied = _applied(connection)
+            known_versions = {migration.version for migration in migrations}
+            unknown_contract = [
+                version
+                for version, record in applied.items()
+                if version not in known_versions
+                and str(record.get("phase") or "contract") == "contract"
+            ]
+            if unknown_contract:
+                raise MigrationDriftError(
+                    f"database contains unknown contract migrations: {unknown_contract}"
+                )
+            _assert_application_order(
+                migrations,
+                applied,
+                allow_out_of_order=allow_out_of_order,
             )
-            applied_now.append(migration.version)
+            for migration in migrations:
+                record = applied.get(migration.version)
+                if record is not None:
+                    if not _checksum_is_accepted(migration, record["checksum"]):
+                        raise MigrationDriftError(
+                            f"migration checksum drift for {migration.version}"
+                        )
+                    continue
+
+                started = perf_counter()
+                if migration.transactional:
+                    with connection.transaction():
+                        connection.execute(migration.sql, prepare=False)
+                        elapsed_ms = (perf_counter() - started) * 1000.0
+                        _record_migration(connection, migration, elapsed_ms)
+                else:
+                    statements = [part.strip() for part in migration.sql.split(";") if part.strip()]
+                    if len(statements) != 1:
+                        raise MigrationError(
+                            f"non-transactional migration {migration.version} must contain one statement"
+                        )
+                    previous = connection.autocommit
+                    connection.autocommit = True
+                    try:
+                        connection.execute(statements[0], prepare=False)
+                    finally:
+                        connection.autocommit = previous
+                    elapsed_ms = (perf_counter() - started) * 1000.0
+                    with connection.transaction():
+                        _record_migration(connection, migration, elapsed_ms)
+                applied_now.append(migration.version)
+                applied[migration.version] = {
+                    "checksum": migration.checksum,
+                    "phase": migration.phase,
+                    "transactional": migration.transactional,
+                }
+        finally:
+            try:
+                connection.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_ADVISORY_LOCK_KEY,))
+                connection.commit()
+            except Exception:
+                pass
+
     status = migration_status(db, root=root)
     status["applied_now"] = applied_now
     assert_schema_compatible(status)
