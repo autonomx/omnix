@@ -3,8 +3,8 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from app import runtime_config as runtime
-from app.runtime_config import GatewayRole, RuntimeConfig, ServiceEndpoint
-from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability as Capability
+from app.runtime.config import GatewayRole, RuntimeConfig, ServiceEndpoint
+from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability as Capability
 
 
 def test_defaults_and_explicit_config_are_immutable():
