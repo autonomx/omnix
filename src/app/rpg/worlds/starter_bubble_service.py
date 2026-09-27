@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import MapDefinitionBinding, WorldReleaseDocument, WorldRevisionDocument
@@ -93,7 +93,7 @@ def promote_starter_bubble(
 ) -> dict[str, Any]:
     """Publish a future revision with navigable placeholders and exact map pins."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         existing = _existing_promotion(
             work,
