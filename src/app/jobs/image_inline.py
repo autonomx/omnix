@@ -14,7 +14,7 @@ from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_s
 from app.jobs.models import JobStatus
 
 from .image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
-from .inline_execution_compat import mark_inline_execution
+from .inline_execution_compat import mark_inline_execution, require_execution_authority
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
 
 IMAGE_JOB_TYPE = "image.generate"
@@ -169,6 +169,7 @@ def execute_image_job(
         stage_id="store-asset",
     )
     try:
+        require_execution_authority(job_store, job.id)
         asset, output_ref = _store_image_asset(
             job,
             request,
