@@ -1,6 +1,8 @@
 """Repository abstraction and in-memory implementation for Chat history."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -36,7 +38,7 @@ class ChatImportState(BaseModel):
 
 
 def default_chat_db_path() -> Path:
-    override = (os.environ.get("OMNIX_CHAT_SQLITE_DB_PATH") or "").strip()
+    override = (environment().get("OMNIX_CHAT_SQLITE_DB_PATH") or "").strip()
     if override:
         return Path(override)
     return resources_data_root() / "omnix_chat.sqlite3"
