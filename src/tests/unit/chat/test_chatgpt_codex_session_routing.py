@@ -61,10 +61,10 @@ def _session() -> tuple[ChatSession, ChatMessage]:
 
 
 def test_non_streaming_codex_call_uses_exact_omnix_session_id(monkeypatch, tmp_path):
-    from app import shared
+    from app.providers import service as provider_service
 
     provider = _FakeCodexProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
     session, user_message = _session()
     store = ChatSessionStore(tmp_path / "chat.json")
 
@@ -82,10 +82,10 @@ def test_non_streaming_codex_call_uses_exact_omnix_session_id(monkeypatch, tmp_p
 
 
 def test_streaming_codex_call_uses_session_id_and_preserves_final_usage(monkeypatch, tmp_path):
-    from app import shared
+    from app.providers import service as provider_service
 
     provider = _FakeCodexProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
     session, user_message = _session()
     store = ChatSessionStore(tmp_path / "chat.json")
 
@@ -112,10 +112,10 @@ def test_streaming_codex_call_uses_session_id_and_preserves_final_usage(monkeypa
 
 
 def test_non_codex_provider_does_not_receive_codex_specific_conversation_kwarg(monkeypatch, tmp_path):
-    from app import shared
+    from app.providers import service as provider_service
 
     provider = _FakeCodexProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
     session, user_message = _session()
     store = ChatSessionStore(tmp_path / "chat.json")
 
