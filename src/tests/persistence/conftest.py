@@ -12,6 +12,31 @@ from app.trading.strategy_intraday_llm import IntradayLLMAnalyzer, IntradayLLMRe
 from app.trading.strategy_repository import TradingStrategyRepository
 
 
+@pytest.fixture(scope="session", autouse=True)
+def prepare_postgresql_test_runtime():
+    """Initialize the disposable PostgreSQL authority explicitly for this test estate."""
+    database_url = os.environ.get("OMNIX_TEST_DATABASE_URL")
+    if not database_url:
+        yield
+        return
+    from app.persistence.identity_service import ensure_local_identity
+    from app.persistence.runtime import ensure_postgresql_runtime_ready
+    from app.security.tenant_context import install_process_tenant
+
+    database = PostgresDatabase(DatabaseSettings(url=database_url))
+    try:
+        ensure_postgresql_runtime_ready(
+            database,
+            auto_initialize_fresh_install=True,
+            apply_schema_changes=False,
+        )
+        context = ensure_local_identity(database)
+        install_process_tenant(context)
+        yield
+    finally:
+        database.close()
+
+
 _E2E_TEST_NAME = "test_postgres_auto_paper_monitor_persists_order_fill_and_position"
 _E2E_STRATEGY_PREFIX = "sep3-postgres-e2e-"
 
