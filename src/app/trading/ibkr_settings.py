@@ -96,7 +96,7 @@ def load_ibkr_settings() -> tuple[IbkrSettings, str]:
 
     from app.settings.access import load_settings
 
-    document = load_settings()
+    document = load_settings(allow_defaults_without_service=True)
     section = document.get(_SETTINGS_SECTION)
     if isinstance(section, dict) and isinstance(section.get(_IBKR_KEY), dict):
         return settings_from_mapping(section[_IBKR_KEY]), "omnix_settings"
