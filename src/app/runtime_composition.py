@@ -64,14 +64,14 @@ def production_owner_memory_repository():
 
 @lru_cache(maxsize=1)
 def production_memory_settings_store():
-    from app.persistence.runtime_document_compat import postgres_assistant_memory_settings_store_class
-    return postgres_assistant_memory_settings_store_class()()
+    from app.assistant_memory.persistence.settings_store import PostgresAssistantMemorySettingsStore
+    return PostgresAssistantMemorySettingsStore()
 
 
 @lru_cache(maxsize=1)
 def production_conversation_profile_store():
-    from app.persistence.runtime_document_compat import default_postgres_live_conversation_profile_store
-    return default_postgres_live_conversation_profile_store()
+    from app.characters.persistence.live_profile_store import PostgresLiveConversationProfileStore
+    return PostgresLiveConversationProfileStore()
 
 
 @lru_cache(maxsize=1)
