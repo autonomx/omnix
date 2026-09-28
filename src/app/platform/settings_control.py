@@ -4,13 +4,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.config.access import (
+from app.settings.access import (
     current_settings_service,
     load_secrets,
     load_settings,
     save_secrets,
 )
-from app.config.settings_service import SettingRevisionConflict, SettingsPatch
+from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.providers.service import invalidate_provider_cache
 
 from .audio_cache import invalidate_changed_audio_caches
