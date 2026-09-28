@@ -12,7 +12,7 @@ from .blob_store import LocalBlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
 from .migrations import apply_migrations
-from .rpg_repository import canonical_json, state_hash
+from app.rpg.persistence.rpg_repository import canonical_json, state_hash
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
 
