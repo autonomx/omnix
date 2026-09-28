@@ -4,8 +4,7 @@ New production code should import the owning module directly:
 - settings/secrets: app.settings.access
 - providers/audio providers: app.providers.service
 - resource paths: app.runtime.paths
-- legacy session callback bridge: app.chat.legacy_session_state
-- image download state: app.image.download_state
+- legacy session callback bridge: app.conversation.legacy_sessions
 
 This module intentionally contains no provider registry, persistence adapter,
 settings document, or feature-specific execution logic.
@@ -16,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app.chat.legacy_session_state import (
+from app.conversation.legacy_sessions import (
     clear_legacy_session_callbacks,
     install_legacy_session_callbacks,
     load_sessions,
@@ -30,7 +29,6 @@ from app.settings.access import (
     save_settings,
 )
 from app.config.defaults import DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
-from app.image.download_state import downloads
 from app.providers.service import (
     get_global_system_prompt,
     get_provider,
@@ -60,7 +58,8 @@ SETTINGS_FILE = str(Path(DATA_DIR) / "settings.json")
 SECRETS_FILE = str(Path(DATA_DIR) / "secrets.json")
 SESSIONS_FILE = str(Path(DATA_DIR) / "sessions.json")
 
-# Deprecated mutable aliases. Image download state has a feature owner.
+# Deprecated mutable aliases retained only for compatibility imports.
+downloads: dict[str, Any] = {}
 llamacpp_server_downloads: dict[str, Any] = {}
 
 
