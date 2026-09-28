@@ -73,7 +73,7 @@ class PostgresTaskGraphRuntime:
         model_overrides: dict[str, ModelRef] | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
         self._agent_service = agent_service
         self.capability_executor = capability_executor or _default_capability_executor
         self.model_overrides = dict(model_overrides or {})
