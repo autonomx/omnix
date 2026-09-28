@@ -44,7 +44,16 @@ def repository_spec_by_alias(alias: str) -> RepositorySpec | None:
         return _SPECS_BY_ALIAS.get(alias)
 
 
-def clear_repository_specs_for_tests() -> None:
+def reset_repository_specs() -> None:
     with _LOCK:
         _SPECS_BY_TYPE.clear()
         _SPECS_BY_ALIAS.clear()
+
+
+def registered_repository_aliases() -> tuple[str, ...]:
+    with _LOCK:
+        return tuple(sorted(_SPECS_BY_ALIAS))
+
+
+def clear_repository_specs_for_tests() -> None:
+    reset_repository_specs()
