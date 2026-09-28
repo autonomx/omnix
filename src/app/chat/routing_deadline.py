@@ -36,9 +36,9 @@ def provider_turn_deadline(
     if not resolved_id:
         return None
     try:
-        from app import shared
+        from app.providers import service as provider_service
 
-        provider = shared.get_provider(resolved_id)
+        provider = provider_service.get_provider(resolved_id)
         configured = getattr(getattr(provider, "config", None), "timeout", None)
         timeout = float(configured)
     except (TypeError, ValueError, AttributeError):
