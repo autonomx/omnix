@@ -5,7 +5,7 @@ import hashlib
 import json
 from typing import Any, Optional
 
-from app.config.access import load_secrets, load_settings
+from app.settings.access import load_secrets, load_settings
 from app.config.defaults import DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
 from app.runtime.config import GatewayRole, get_runtime_config
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
