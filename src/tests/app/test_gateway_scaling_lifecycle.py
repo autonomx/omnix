@@ -215,7 +215,7 @@ def test_delivery_worker_restarts_explicitly_and_drops_post_shutdown_checkpoints
     assert received == [{"turn": "first"}, {"turn": "second"}]
 
 def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
     monkeypatch.delenv("OMNIX_GATEWAY_TTS_HTTP", raising=False)
@@ -231,7 +231,7 @@ def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
         lambda: pytest.fail("API replica attempted to construct local GPU TTS"),
     )
     with pytest.raises(RuntimeError, match="cannot construct the local GPU TTS"):
-        shared.get_tts_provider()
+        provider_service.get_tts_provider()
 
 
 def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypatch):
@@ -258,7 +258,7 @@ def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypa
     assert calls == []
 
 def test_api_replica_uses_shared_tts_url_without_local_registry(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
     from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
@@ -274,7 +274,7 @@ def test_api_replica_uses_shared_tts_url_without_local_registry(monkeypatch):
         shared, "get_audio_registry",
         lambda: pytest.fail("API replica attempted to construct local GPU TTS"),
     )
-    provider = shared.get_tts_provider()
+    provider = provider_service.get_tts_provider()
     assert isinstance(provider, QwenHttpGatewayProvider)
     assert provider.base_url == "http://127.0.0.1:5101"
 
