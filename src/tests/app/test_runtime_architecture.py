@@ -131,7 +131,7 @@ def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monke
     assert 'private' not in payload.model_dump_json()
 
 
-def test_only_legacy_export_can_import_sqlite_and_runtime_installer_cannot_patch_modules():
+def test_only_legacy_export_can_import_sqlite_and_runtime_installer_is_retired():
     import ast
     root = Path(__file__).resolve().parents[2] / 'app'
     sqlite_modules = []
@@ -141,8 +141,8 @@ def test_only_legacy_export_can_import_sqlite_and_runtime_installer_cannot_patch
                or isinstance(node, ast.ImportFrom) and node.module == 'sqlite3' for node in ast.walk(tree)):
             sqlite_modules.append(path.relative_to(root).as_posix())
     assert sqlite_modules == ['persistence/legacy_export.py']
-    installer = (root / 'persistence/runtime_install.py').read_text(encoding='utf-8')
-    assert 'sys.modules' not in installer and 'setattr(' not in installer and 'sqlite3.connect =' not in installer
+    assert not (root / 'persistence/runtime_install.py').exists()
+    assert not (root / 'persistence/runtime_document_compat.py').exists()
 
 
 def test_compatibility_modules_are_allowlisted():
