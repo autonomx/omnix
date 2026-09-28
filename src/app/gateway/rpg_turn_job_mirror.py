@@ -16,7 +16,7 @@ from app.gateway.rpg_foreground_turn_record import (
     FOREGROUND_TURN_RECORD_VERSION,
     build_foreground_turn_record,
 )
-from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
 
