@@ -76,7 +76,7 @@ def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
     offenders: list[str] = []
     for path in persistence_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if path.name in {"runtime_install.py", "legacy_export.py"}:
+        if path.name == "legacy_export.py":
             continue
         if "import sqlite3" in text or "from sqlite3" in text:
             offenders.append(path.relative_to(ROOT).as_posix())
@@ -87,16 +87,13 @@ def test_application_startup_is_explicit_and_postgresql_only() -> None:
     startup = (APP_ROOT / "persistence" / "startup.py").read_text(encoding="utf-8")
     launcher = (ROOT / "scripts" / "run_omnix_gateway.py").read_text(encoding="utf-8")
     usercustomize = (ROOT / "src" / "usercustomize.py").read_text(encoding="utf-8")
-    installer = (APP_ROOT / "persistence" / "runtime_install.py").read_text(encoding="utf-8")
-
     assert PersistenceMode.POSTGRESQL.value == "postgresql"
     assert "bootstrap_postgresql_runtime" in startup
-    assert "install_postgresql_runtime_adapters" in startup
+    assert "install_postgresql_runtime_adapters" not in startup
+    assert not (APP_ROOT / "persistence" / "runtime_install.py").exists()
     assert "bootstrap_status_payload" in launcher
     assert 'parser.add_argument("--app"' in launcher
     assert "install_legacy_authority_block" not in usercustomize
-    assert "sqlite3.connect =" not in installer
-    assert "voice_inline._upsert_legacy_voice_manifest =" not in installer
     assert "if uses_postgresql_runtime():" in (APP_ROOT / 'jobs/voice_inline.py').read_text(encoding='utf-8')
     assert "with open(VOICE_CLONES_FILE, 'w')" not in (APP_ROOT / "shared.py").read_text(
         encoding="utf-8"
