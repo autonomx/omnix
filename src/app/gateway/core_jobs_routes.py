@@ -36,7 +36,11 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
         registry = getattr(gateway.state, "job_handler_registry", None)
         if registry is not None and registry.get(request.type) is not None:
             request = registry.validate_submission(request)
-        return get_job_store().create_job(request)
+        job_store = get_job_store()
+        idempotency_key = str((request.compat or {}).get("idempotency_key") or "").strip()
+        if idempotency_key and hasattr(job_store, "create_job_once"):
+            return job_store.create_job_once(request, idempotency_key=idempotency_key)
+        return job_store.create_job(request)
 
     @gateway.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
     def list_jobs(
