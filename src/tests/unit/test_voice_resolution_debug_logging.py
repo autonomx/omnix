@@ -69,8 +69,21 @@ def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, mo
         def json() -> dict[str, Any]:
             return {"success": False, "error": "debug-only"}
 
-    def fake_post(url: str, *, json: dict[str, Any], timeout: float) -> FakeResponse:
-        captured.update({"url": url, "json": json, "timeout": timeout})
+    def fake_post(
+        url: str,
+        *,
+        json: dict[str, Any],
+        timeout: float,
+        headers: dict[str, str] | None = None,
+        allow_redirects: bool = True,
+    ) -> FakeResponse:
+        captured.update({
+            "url": url,
+            "json": json,
+            "timeout": timeout,
+            "headers": headers,
+            "allow_redirects": allow_redirects,
+        })
         return FakeResponse()
 
     monkeypatch.setattr(tts_http_client.requests, "post", fake_post)
@@ -80,3 +93,5 @@ def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, mo
     assert captured["json"]["speaker"] == "Inigo"
     assert captured["json"]["trace_id"].startswith("tts-stream:")
     assert captured["json"]["text"] == "hello"
+    assert captured["headers"]
+    assert captured["allow_redirects"] is False

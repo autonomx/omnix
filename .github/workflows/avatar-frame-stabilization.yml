@@ -7,7 +7,7 @@ on:
       - "src/app/characters/avatar_viseme_generation.py"
       - "src/app/characters/live2d_avatar.py"
       - "src/app/assistant_context/__init__.py"
-      - "src/app/jobs/image_inline.py"
+      - "src/app/image/jobs.py"
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "src/tests/unit/characters/test_live2d_avatar_api.py"
@@ -62,7 +62,7 @@ jobs:
             src/tests/unit/characters/test_avatar_viseme_generation.py \
             src/tests/unit/characters/test_live2d_avatar_api.py
       - name: Compile image-job integration
-        run: python -m py_compile src/app/jobs/image_inline.py
+        run: python -m py_compile src/app/image/jobs.py
       - name: Verify avatar backend behavior
         run: >-
           pytest -q

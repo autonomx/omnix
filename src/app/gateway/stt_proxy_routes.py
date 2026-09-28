@@ -10,19 +10,13 @@ import httpx
 from fastapi import APIRouter, Request, WebSocket
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
-from websockets.legacy.client import Connect
 
-from app.runtime_config import get_runtime_config
+from app.runtime.config import get_runtime_config
 from app.security.model_service import max_upload_bytes
 from app.security.service_token import service_headers
 
 _MAX_RESPONSE_BYTES = 512 * 1024
 
-
-class _ServiceConnect(Connect):
-    def handle_redirect(self, uri: str) -> None:
-        # Even a same-origin redirect changes the configured credential audience.
-        raise SecurityError("model_service_redirect_rejected")
 
 
 def _stt_base_url() -> str:
@@ -115,6 +109,12 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
 
 async def _proxy_websocket(socket: WebSocket) -> None:
     from websockets.exceptions import ConnectionClosed, SecurityError
+    from websockets.legacy.client import Connect
+
+    class ServiceConnect(Connect):
+        def handle_redirect(self, uri: str) -> None:
+            # Even a same-origin redirect changes the configured credential audience.
+            raise SecurityError("model_service_redirect_rejected")
     try:
         query = _query(socket)
         headers = service_headers()
@@ -130,7 +130,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
     try:
         # legacy Connect is supported by the repository's websockets>=12 floor,
         # does not use system proxies, and has an explicit redirect rejection.
-        async with _ServiceConnect(uri, extra_headers=headers, compression=None,
+        async with ServiceConnect(uri, extra_headers=headers, compression=None,
                                    max_size=limit, max_queue=8, open_timeout=10,
                                    close_timeout=2) as upstream:
             await socket.accept()

@@ -30,7 +30,7 @@ _PERSONALITY_PROMPTS = {
 
 
 def load_effective_profile() -> SettingsProfile:
-    return load_settings_profile(load_settings())
+    return load_settings_profile(load_settings(allow_defaults_without_service=True))
 
 
 def _text(value: Any) -> str:
