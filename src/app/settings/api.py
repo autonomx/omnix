@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.platform.settings import SettingsPayload, SettingsSaveResponse
+from .models import SettingsPayload, SettingsSaveResponse
 
 from .registry import CORE_SETTING_SPECS
 from .service import SettingsPatch, SettingsService
