@@ -8,7 +8,7 @@ from typing import Any, Dict
 
 from app.image.providers.registry import is_supported_image_provider
 from app.runtime.paths import MODELS_DIR
-from app.config.access import load_settings
+from app.settings.access import load_settings
 
 DEFAULT_MODEL_DIR = os.path.join(MODELS_DIR, "image")
 
