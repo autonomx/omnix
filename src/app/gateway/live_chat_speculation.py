@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app import shared
+from app.providers.service import get_provider
 from app.chat import (
     ChatMessage,
     ChatSessionStore,
@@ -467,7 +467,7 @@ def _generate_side_effect_free(
     *,
     cancel_event: threading.Event | None = None,
 ) -> Iterator[str]:
-    provider = shared.get_provider(_provider_key(speculation.provider_id))
+    provider = get_provider(_provider_key(speculation.provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
     user_message = ChatMessage(
