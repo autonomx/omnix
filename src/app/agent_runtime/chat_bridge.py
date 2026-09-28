@@ -7,6 +7,10 @@ explicit /agent and per-turn Quick/Deep research commands take precedence.
 """
 from __future__ import annotations
 
+from app.config.env import env_str
+
+from app.providers.service import get_provider
+
 from dataclasses import dataclass
 import hashlib
 import json
@@ -311,9 +315,7 @@ def _resolve_agent_model_route(
             model = selected_model
     if provider and not model:
         try:
-            from app import shared
-
-            configured_provider = shared.get_provider(provider)
+            configured_provider = get_provider(provider)
             model = str(
                 getattr(getattr(configured_provider, "config", None), "model", "")
                 or ""
@@ -327,14 +329,13 @@ def _resolve_agent_model_route(
 
 def _agent_reasoning_effort(provider_id: str | None = None) -> str:
     """Return the selected reasoning level for Chat-created Pi runs."""
-    configured = os.environ.get("OMNIX_AGENT_REASONING_EFFORT", "").strip()
+    configured = env_str("OMNIX_AGENT_REASONING_EFFORT", "").strip()
     if configured:
         return _DEFAULT_AGENT_REASONING_EFFORT if configured.casefold() in {"off", "disabled"} else configured
     provider_key = str(provider_id or "").strip().removeprefix("llm:")
     if provider_key:
         try:
-            from app import shared
-            provider = shared.get_provider(provider_key)
+            provider = get_provider(provider_key)
             value = str(getattr(provider, "reasoning_effort", "") or "").strip()
             if not value:
                 config = getattr(provider, "config", None)
@@ -1994,14 +1995,13 @@ def _task_graph_result(
             base_ref="HEAD",
         )
     else:
-        repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
+        repository = env_str("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
         if repository:
             workspace = WorkspaceSpec(
                 root=repository,
                 repository=repository,
-                base_ref=os.environ.get(
-                    "OMNIX_AGENT_DEFAULT_BASE_REF",
-                    "HEAD",
+                base_ref=env_str(
+                    "OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD",
                 ).strip() or "HEAD",
             )
 
@@ -2009,12 +2009,12 @@ def _task_graph_result(
         str(
             provider_id
             or getattr(session, "provider_id", None)
-            or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
+            or env_str("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
         ).strip(),
         str(
             model_id
             or getattr(session, "model_id", None)
-            or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
+            or env_str("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
         ).strip(),
     )
     if not resolved_provider or not resolved_model:
@@ -2369,7 +2369,7 @@ def _agent_result(
             },
         )
 
-    repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
+    repository = env_str("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
     selected_repository: str | None = None
     if profile.requires_workspace and selected_workspace:
         try:
@@ -2400,12 +2400,12 @@ def _agent_result(
         str(
             provider_id
             or getattr(session, "provider_id", None)
-            or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
+            or env_str("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
         ).strip(),
         str(
             model_id
             or getattr(session, "model_id", None)
-            or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
+            or env_str("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
         ).strip(),
     )
     if not resolved_provider or not resolved_model:
@@ -2505,7 +2505,7 @@ def _agent_result(
             workspace = WorkspaceSpec(
                 root=repository,
                 repository=repository,
-                base_ref=os.environ.get("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
+                base_ref=env_str("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
             )
     spec = AgentRunSpec(
         session_id=str(session.id),
