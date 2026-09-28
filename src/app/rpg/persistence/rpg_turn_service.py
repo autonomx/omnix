@@ -42,7 +42,7 @@ def persist_foreground_turn(
     interaction_record_id = _campaign_record_id("interaction", session_id, state_revision)
     canonical_narrative = _canonical_narrative_response(result, session_id=session_id)
 
-    from app.gateway.rpg_foreground_turn_record import build_foreground_turn_record
+    from app.rpg.foreground_turn_record import build_foreground_turn_record
 
     response_source = dict(result)
     response_source["submission_id"] = submission_id
