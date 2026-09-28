@@ -38,6 +38,10 @@ def load_sessions() -> dict[str, Any]:
     with _lock:
         loader = _load
         if loader is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.chat.persistence.legacy_sessions import load_legacy_chat_sessions
+                return dict(load_legacy_chat_sessions() or {})
             return dict(_sessions)
     return dict(loader() or {})
 
@@ -48,6 +52,11 @@ def save_sessions(sessions: dict[str, Any]) -> None:
     with _lock:
         saver = _save
         if saver is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.chat.persistence.legacy_sessions import save_legacy_chat_sessions
+                save_legacy_chat_sessions(payload)
+                return
             _sessions = payload
             return
     saver(payload)
@@ -59,6 +68,12 @@ def update_sessions(mutator: Callable[[dict[str, Any]], _T]) -> _T:
         updater = _update
         if updater is not None:
             current, result = updater(mutator)
+            _sessions = dict(current or {})
+            return result
+        from app.persistence.runtime import uses_postgresql_runtime
+        if uses_postgresql_runtime():
+            from app.chat.persistence.legacy_sessions import mutate_legacy_chat_sessions
+            current, result = mutate_legacy_chat_sessions(mutator)
             _sessions = dict(current or {})
             return result
         current = load_sessions()
