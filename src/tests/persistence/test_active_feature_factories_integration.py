@@ -296,7 +296,7 @@ assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacte
 
 from app.jobs import default_job_store
 default_job_store()
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 assert getattr(PostgresJobStoreAdapter, "_omnix_inline_feature_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_voice_studio_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_image_jobs_installed", False) is False
