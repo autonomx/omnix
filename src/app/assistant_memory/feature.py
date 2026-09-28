@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureContext, FeatureModule
+from app.assistant_memory.persistence.repository import PostgresMemoryRepository
 
 from .routes import register_assistant_memory_routes
 
@@ -22,4 +24,5 @@ FEATURE = FeatureModule(
     title="Assistant Memory",
     depends_on=("chat",),
     routers=(_router,),
+    repositories=(RepositorySpec(PostgresMemoryRepository, PostgresMemoryRepository, "memories"),),
 )
