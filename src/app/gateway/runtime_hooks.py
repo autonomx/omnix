@@ -143,7 +143,10 @@ def initialize_gateway_runtime_hooks():
     install_live_chat_lmstudio_diagnostics_hook()
     install_memory_job_offload_hook()
     install_live_voice_runtime_offload_hook(constructor_hook=False)
-    if _tts_live_call_websocket.get_tts_provider is _tts_live_call_websocket.shared.get_tts_provider:
+    if (
+        _tts_live_call_websocket.get_tts_provider
+        is _tts_live_call_websocket.provider_service.get_tts_provider
+    ):
         # Preserve the explicit dependency seam used by alternate compositions.
         _tts_live_call_websocket.get_tts_provider = get_cached_live_tts_provider
     install_tts_live_call_pcm_diagnostics_hook()
