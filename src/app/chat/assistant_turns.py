@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -10,6 +9,8 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from app.config.env import env_str
 
 from app.runtime.paths import resources_data_root
 
@@ -48,7 +49,7 @@ def _utcnow() -> str:
 
 
 def default_assistant_turn_store_path() -> Path:
-    override = os.environ.get("OMNIX_ASSISTANT_TURN_STORE_PATH")
+    override = env_str("OMNIX_ASSISTANT_TURN_STORE_PATH", "")
     return Path(override) if override else resources_data_root() / "assistant_turns.json"
 
 
@@ -299,8 +300,8 @@ def default_assistant_turn_coordinator() -> AssistantTurnCoordinator:
         if _default_coordinator is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.persistence.runtime_document_compat import postgres_assistant_turn_coordinator_class
-                _default_coordinator = postgres_assistant_turn_coordinator_class()()
+                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+                _default_coordinator = PostgresAssistantTurnCoordinator()
             else:
                 _default_coordinator = AssistantTurnCoordinator()
     return _default_coordinator
