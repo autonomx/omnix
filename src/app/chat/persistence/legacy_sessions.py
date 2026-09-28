@@ -69,7 +69,7 @@ def mutate_legacy_chat_sessions(
 
 
 def install_postgresql_legacy_session_callbacks() -> None:
-    from app.chat.legacy_session_state import install_legacy_session_callbacks
+    from app.conversation.legacy_sessions import install_legacy_session_callbacks
 
     install_legacy_session_callbacks(
         load_callback=load_legacy_chat_sessions,
