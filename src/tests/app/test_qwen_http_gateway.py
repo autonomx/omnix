@@ -7,6 +7,7 @@ import pytest
 import secrets
 
 from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+from app.providers import service as shared
 
 
 @pytest.fixture(autouse=True)
