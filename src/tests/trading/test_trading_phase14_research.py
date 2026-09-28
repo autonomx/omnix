@@ -248,6 +248,7 @@ def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
         "process_observation",
     ):
         assert forbidden not in source
-    assert "from app import shared" in source
+    assert "from app import shared" not in source
+    assert "app.providers" in source
     gateway = Path("src/app/gateway/trading_routes.py").read_text()
     assert "create_trading_research_router" in gateway
