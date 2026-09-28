@@ -241,7 +241,7 @@ def inspect_wav(wav_bytes: bytes) -> tuple[int, int]:
 def load_in_process_provider() -> Any:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from app.shared import get_tts_provider
+    from app.providers.service import get_tts_provider
 
     provider = get_tts_provider()
     if provider is None or not hasattr(provider, "generate_audio_stream"):
