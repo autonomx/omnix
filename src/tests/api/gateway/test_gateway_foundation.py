@@ -207,6 +207,9 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
             get_job_store=lambda: object(),
         )
     )
+    from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
+
+    app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
     monitor = register_trading_strategy_monitor(app)
 
     with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}):
