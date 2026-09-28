@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app import shared
+from app.providers.service import get_tts_provider
 
 from .tts_stream_diagnostics import active_streams_snapshot, stream_log
 
@@ -319,7 +319,7 @@ def get_cached_live_tts_provider(provider_name: str | None = None) -> Any:
     """Return the warmed shared provider without coupling to the websocket module."""
     resolver = _PROVIDER_RESOLVER
     if resolver is None:
-        return shared.get_tts_provider(provider_name)
+        return get_tts_provider(provider_name)
     return resolver.get(provider_name)
 
 
@@ -364,7 +364,7 @@ def install_live_voice_runtime_offload_hook(*, constructor_hook: bool = True) ->
     if _PERSISTENCE_WORKER is None:
         _PERSISTENCE_WORKER = DeliveryPersistenceWorker(live_voice_stream_diagnostics._persist_delivery)
         live_voice_stream_diagnostics._persist_delivery = _PERSISTENCE_WORKER.enqueue
-        _PROVIDER_RESOLVER = CachedTtsProviderResolver(shared.get_tts_provider)
+        _PROVIDER_RESOLVER = CachedTtsProviderResolver(get_tts_provider)
     if not constructor_hook:
         return
 
