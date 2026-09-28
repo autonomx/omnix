@@ -9,6 +9,7 @@ from app.settings.access import (
     load_secrets,
     load_settings,
     save_secrets,
+    save_settings,
 )
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.providers.service import invalidate_provider_cache
