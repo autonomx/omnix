@@ -108,12 +108,14 @@ class DurableFeatureJobWorker:
         authority: Any,
         registry: JobHandlerRegistry,
         *,
+        services: Any = None,
         poll_seconds: float = 0.25,
         max_concurrency: int = 4,
     ) -> None:
         self.store = store
         self.authority = authority
         self.registry = registry
+        self.services = services
         self.poll_seconds = max(0.05, float(poll_seconds))
         self.max_concurrency = max(1, min(int(max_concurrency), 16))
         self.worker_id = f"gateway-feature:{uuid.uuid4().hex}"
@@ -350,7 +352,7 @@ def execute_durable_feature_job(
             ),
         )
         return failed or job
-    return registry.execute(JobExecutionContext(job_store=job_store), job)
+    return registry.execute(JobExecutionContext(job_store=job_store, services=getattr(job_store, "runtime_services", None)), job)
 
 
 def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeatureJobWorker:
@@ -360,7 +362,9 @@ def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeat
         raise RuntimeError("Durable feature worker requires composed background runtime")
     if registry is None:
         raise RuntimeError("Durable feature worker requires composed job handlers")
-    worker = DurableFeatureJobWorker(store, runtime, registry)
+    services = getattr(gateway.state, "runtime_services", None)
+    setattr(store, "runtime_services", services)
+    worker = DurableFeatureJobWorker(store, runtime, registry, services=services)
     register_background_worker(
         gateway.state.background_registry,
         BackgroundWorker(
