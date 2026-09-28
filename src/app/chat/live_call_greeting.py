@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
-from app import shared
+from app.providers import service as provider_service
 from app.providers import ChatMessage as ProviderMessage
 
 from .models import ChatMessage, ChatSession
@@ -66,7 +66,7 @@ def stream_live_call_greeting_chunks(
 
     resolved_provider_id = provider_id or session.provider_id
     resolved_model_id = model_id or session.model_id
-    provider = shared.get_provider(_provider_key(resolved_provider_id))
+    provider = provider_service.get_provider(_provider_key(resolved_provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
