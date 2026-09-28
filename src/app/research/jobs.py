@@ -134,26 +134,6 @@ class _IdentityBoundQuickSearch:
         return self.service.search(query, max_results, identity=self.identity)
 
 
-def install_research_job_execution(sqlite_job_store_cls: Any) -> None:
-    """Patch job creation once so Deep Research runs after the route returns."""
-
-    if getattr(sqlite_job_store_cls, "_omnix_research_jobs_installed", False):
-        return
-    original_create_job = sqlite_job_store_cls.create_job
-
-    def create_job_with_research_execution(self: Any, request: Any) -> JobRecord:
-        awaiting_approval = _awaiting_plan_approval(request)
-        if request.type == RESEARCH_JOB_TYPE and _executor_enabled() and not awaiting_approval:
-            request = mark_inline_execution(request)
-        job = original_create_job(self, request)
-        if job.type == RESEARCH_JOB_TYPE and _executor_enabled() and not awaiting_approval:
-            start_research_job(self, job)
-        return job
-
-    sqlite_job_store_cls.create_job = create_job_with_research_execution
-    sqlite_job_store_cls._omnix_research_jobs_installed = True
-
-
 def execute_research_job(
     job_store: Any,
     job: JobRecord,
