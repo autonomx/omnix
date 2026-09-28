@@ -13,7 +13,8 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from app import shared
+from app.config.access import load_settings
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSessionStore, default_chat_store
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
@@ -111,7 +112,7 @@ def clear_live_call_prewarm_state() -> None:
 def _configured_live_route() -> tuple[str | None, str | None, str]:
     """Resolve the live route from current Settings, not stale session metadata."""
 
-    settings = shared.load_settings()
+    settings = load_settings()
     provider_id = str(settings.get("provider") or "lmstudio").strip() or "lmstudio"
     provider_name = _provider_key(provider_id)
     model_id = None
@@ -350,7 +351,7 @@ def _warm_llm(
         if provider_id is not None
         else getattr(session, "model_id", None)
     )
-    provider = shared.get_provider(_provider_key(selected_provider_id))
+    provider = provider_service.get_provider(_provider_key(selected_provider_id))
     if provider is None or not hasattr(provider, "chat_completion"):
         return _WarmResult(
             status="unavailable",
