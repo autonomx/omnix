@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from .cutover import PostgresLegacyImporter
-from .rpg_repository import canonical_json, state_hash
+from app.rpg.persistence.rpg_repository import canonical_json, state_hash
 from .tenant import TenantContext
 
 
