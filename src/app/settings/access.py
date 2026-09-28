@@ -45,7 +45,7 @@ def current_settings_service() -> SettingsService:
     return service
 
 
-def load_settings(*, allow_defaults_without_service: bool = True) -> dict[str, Any]:
+def load_settings(*, allow_defaults_without_service: bool = False) -> dict[str, Any]:
     with _LOCK:
         service = _SERVICE
     if service is None:
