@@ -155,10 +155,10 @@ class ResearchPlanner:
         )
 
     def _provider_plan(self, request: ResearchPlanningRequest) -> ResearchPlan:
-        from app import shared
+        from app.providers import service as provider_service
         from app.providers import ChatMessage
 
-        provider = shared.get_provider(_provider_key(self.provider_id))
+        provider = provider_service.get_provider(_provider_key(self.provider_id))
         if provider is None:
             raise RuntimeError("research_planner_provider_unavailable")
         messages = [
