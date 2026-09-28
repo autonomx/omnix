@@ -170,9 +170,13 @@ def execute_research_job(
         return _fail(job_store, job, "research_invalid_request", str(exc), retryable=False)
 
     if chat_store is None:
-        from app.chat import default_chat_store
-
-        chat_store = default_chat_store()
+        return _fail(
+            job_store,
+            job,
+            "research_chat_service_unavailable",
+            "Research execution requires the composed Chat service",
+            retryable=True,
+        )
     if workflow_fn is None:
         resume = load_research_checkpoint(job_store, job.id)
 
