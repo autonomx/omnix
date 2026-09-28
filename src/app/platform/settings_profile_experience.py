@@ -3,8 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.research import ResearchMode
-
+ResearchMode = Literal["disabled", "quick", "deep"]
 ResearchProvider = Literal["duckduckgo", "brave", "tavily", "playwright"]
 
 
