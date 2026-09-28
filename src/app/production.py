@@ -109,12 +109,20 @@ def create_production_app(config: RuntimeConfig | None = None):
     dispatcher = _ChatGenerationDispatcher()
     capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
     services.jobs.chat_dispatcher = dispatcher
+    from app.persistence.authority import AuthorityOperation, require_authority_operation
+    from app.persistence.background_authority import background_execution
+
+    def background_authority_check(connection) -> None:
+        require_authority_operation(connection, AuthorityOperation.RUNTIME_MUTATION)
+
     background = GatewayBackgroundRuntime(
-        services.jobs.database, services.jobs.context.workspace_id, config=config,
+        services.jobs.database,
+        services.jobs.context.workspace_id,
+        config=config,
+        authority_check=background_authority_check,
+        execution_scope=background_execution,
     )
     if capabilities.allows(RuntimeCapability.RUN_RECOVERY):
-        from app.persistence.background_authority import background_execution
-
         def recover():
             with background_execution(background):
                 return recover_abandoned_chat_generation_jobs(services.chat, services.jobs)
