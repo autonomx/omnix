@@ -92,9 +92,9 @@ def _strip_json_fence(value: str) -> str:
 
 
 def _default_provider():
-    from app import shared
+    from app.providers.service import get_provider
 
-    return shared.get_provider()
+    return get_provider()
 
 
 def _usage_int(usage: Any, *keys: str) -> int | None:
