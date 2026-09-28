@@ -5,6 +5,8 @@ from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import ResourceClass
 from app.runtime.features import FeatureModule
 
+from .persistence.feature_repositories import RPG_REPOSITORY_SPECS
+
 from .jobs.handlers import (
     RpgReportJobInput,
     RpgTurnJobInput,
@@ -56,6 +58,7 @@ FEATURE = FeatureModule(
     id="rpg",
     title="RPG",
     installers=(_install_gateway,),
+    repositories=RPG_REPOSITORY_SPECS,
     job_handlers=(
         JobHandlerSpec(
             type="rpg.turn",
