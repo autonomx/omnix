@@ -12,9 +12,16 @@ from .blob_store import LocalBlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
 from .migrations import apply_migrations
-from app.rpg.persistence.rpg_repository import canonical_json, state_hash
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def state_hash(state: dict[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(state).encode("utf-8")).hexdigest()
 
 
 LEGACY_BUNDLE_FORMAT = "omnix_legacy_bundle_v1"
