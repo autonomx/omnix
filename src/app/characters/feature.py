@@ -1,6 +1,8 @@
 """Characters feature declaration."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from typing import Any
 
@@ -15,6 +17,8 @@ from .avatar_generation_api import register_character_avatar_generation_routes
 from .avatar_viseme_api import register_character_avatar_viseme_routes
 from .live2d_avatar import register_character_live2d_avatar_routes
 from .live_conversation_rendering import register_live_conversation_rendering_routes
+
+logger = logging.getLogger(__name__)
 
 
 def _router(context: FeatureContext) -> APIRouter:
@@ -75,6 +79,7 @@ def _avatar_generation_completed(job: Any) -> None:
         CharacterAvatarGenerationService().list(character_id)
         CharacterVisemeGenerationService().reconcile_character(character_id)
     except Exception:
+        logger.debug("Avatar generation completion reconciliation failed", exc_info=True)
         return
 
 
