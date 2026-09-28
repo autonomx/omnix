@@ -7,6 +7,7 @@ from app.runtime.features import FeatureModule
 
 from .persistence.feature_repositories import RPG_REPOSITORY_SPECS
 
+from .jobs.turn_job_guard import rpg_turn_submission_policy
 from .jobs.handlers import (
     RpgReportJobInput,
     RpgTurnJobInput,
@@ -66,6 +67,7 @@ FEATURE = FeatureModule(
             input_model=RpgTurnJobInput,
             resource_class=ResourceClass.GPU_LLM,
             timeout_seconds=900,
+            submission_policy=rpg_turn_submission_policy,
         ),
         JobHandlerSpec(
             type="rpg.report.last10",
