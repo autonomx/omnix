@@ -1405,9 +1405,9 @@ def build_production_world_forge_generator(
                     },
                 )
             elif settings_routed:
-                from app import shared
+                from app.providers.service import get_provider as get_runtime_provider
 
-                provider = shared.get_provider(provider_id)
+                provider = get_runtime_provider(provider_id)
             else:
                 provider = get_provider(
                     provider_id,
