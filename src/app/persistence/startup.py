@@ -21,7 +21,15 @@ def bootstrap_postgresql_runtime(
     """
 
     db = database or default_database()
-    return ensure_postgresql_runtime_ready(db)
+    status = ensure_postgresql_runtime_ready(
+        db,
+        auto_initialize_fresh_install=True,
+        apply_schema_changes=False,
+    )
+    from .identity_service import ensure_local_identity
+
+    ensure_local_identity(db)
+    return status
 
 
 def bootstrap_status_payload(
