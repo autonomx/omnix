@@ -1,9 +1,8 @@
 """Launcher composition for on-demand models and live voice services."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 from dataclasses import replace
 from pathlib import Path
 
