@@ -138,7 +138,7 @@ def _claim_chat_process(url, workspace, user, session, control):
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
-    from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.repositories import PostgresIdentityRepository
     database = PostgresDatabase(DatabaseSettings(url=url))
     store = PostgresJobStoreAdapter(database)
