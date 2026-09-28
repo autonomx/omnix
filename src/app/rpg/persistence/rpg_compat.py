@@ -5,21 +5,19 @@ from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from .rpg_repository import canonical_json, state_hash
 from .rpg_session_save_policy import session_save_deferred
-from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.persistence.unit_of_work import unit_of_work
 
 
 def _database() -> PostgresDatabase:
-    database = default_database()
-    ensure_postgresql_runtime_ready(database)
-    return database
+    return default_database()
 
 
 def _context(database: PostgresDatabase):
-    return bootstrap_local_tenant(database)
+    del database
+    return current_tenant()
 
 
 def _campaign_id(session: dict[str, Any]) -> str:
