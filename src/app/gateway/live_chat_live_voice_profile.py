@@ -109,7 +109,7 @@ def _build_live_voice_prompt(
     user_message: Any,
     context_items: list[dict[str, Any]] | None,
 ):
-    from app import shared
+    from app.providers.service import get_global_system_prompt
 
     approved_memory, memory_diagnostics = resolve_prompt_memory(
         session,
@@ -127,7 +127,7 @@ def _build_live_voice_prompt(
     assembly = build_prompt_assembly(
         session,
         user_message,
-        global_system_prompt=shared.get_global_system_prompt(),
+        global_system_prompt=get_global_system_prompt(),
         context_items=merged_context,
         approved_memory=approved_memory,
         retrieved_history=[],
