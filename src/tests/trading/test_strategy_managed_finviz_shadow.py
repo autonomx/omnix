@@ -19,6 +19,23 @@ from app.trading.strategy_monitor import register_trading_strategy_monitor
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
+
+
+class RecordingBackgroundRegistry:
+    def __init__(self) -> None:
+        self.workers = []
+
+    def register_worker(self, worker) -> None:
+        self.workers.append(worker)
+
+
+def _app_with_background_registry():
+    app = FastAPI()
+    registry = RecordingBackgroundRegistry()
+    app.state.background_registry = registry
+    return app, registry
+
+
 class FakePaperRepository:
     def __init__(self, *, accounts=None) -> None:
         self.accounts = list(accounts or [])
@@ -331,7 +348,7 @@ def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
 
 
 def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
-    app = FastAPI()
+    app, registry = _app_with_background_registry()
     monitor = register_trading_strategy_monitor(app)
     strategy_repo = object()
     paper_repo = object()
@@ -365,7 +382,7 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
         fake_provision,
     )
 
-    startup = app.router.on_startup[-1]
+    startup = registry.workers[-1].startup[0]
     asyncio.run(startup())
 
     assert calls == [(strategy_repo, paper_repo)]
