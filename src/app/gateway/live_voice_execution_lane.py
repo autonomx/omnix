@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
-from app import shared
+from app.config.access import load_settings
 from app.providers.audio_registry import get_audio_registry
 
 from .tts_stream_diagnostics import stream_log
@@ -379,7 +379,7 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
         ):
             return _DEDICATED_TTS_PROVIDER, "dedicated"
 
-    settings = shared.load_settings()
+    settings = load_settings()
     provider_settings = dict(settings.get(provider_name, {}) or {})
     from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
     from app.runtime.config import get_runtime_config
