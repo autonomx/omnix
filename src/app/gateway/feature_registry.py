@@ -8,6 +8,7 @@ from app.persistence.shared_repository_specs import shared_repository_specs
 from app.runtime.background import register_background_worker
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
+from app.runtime.hooks import install_runtime_hooks
 
 
 def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
@@ -41,6 +42,7 @@ def _register_feature_modules(gateway) -> None:
         feature = load_feature(feature_id)
         capabilities.require(*feature.requires)
         loaded_features.append(feature)
+        install_runtime_hooks(feature.hooks)
         for handler in feature.job_handlers:
             job_handlers.register(handler)
         if feature.repositories:
