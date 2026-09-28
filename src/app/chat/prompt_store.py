@@ -1,6 +1,8 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
 
+from app.providers.service import get_global_system_prompt, get_provider
+
 import logging
 import os
 import threading
@@ -253,8 +255,6 @@ class ChatSessionStore(JsonChatSessionStore):
     ) -> PromptAssembly:
         """Build the canonical Chat context once for provider or Agent routing."""
 
-        from app import shared
-
         approved_memory, memory_diagnostics = resolve_prompt_memory(
             session,
             memory_service_factory=self.memory_service_factory,
@@ -302,7 +302,7 @@ class ChatSessionStore(JsonChatSessionStore):
         assembly = build_prompt_assembly(
             session,
             user_message,
-            global_system_prompt=shared.get_global_system_prompt(),
+            global_system_prompt=get_global_system_prompt(),
             context_items=context_items or [],
             approved_memory=approved_memory,
             retrieved_history=history_result.items if history_result is not None else [],
@@ -592,9 +592,7 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             return agent_provider_boundary_reply(user_message)
 
-        from app import shared
-
-        provider = shared.get_provider(_provider_key(provider_id))
+        provider = get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
@@ -692,9 +690,7 @@ class ChatSessionStore(JsonChatSessionStore):
             existing_deadline_at=routing_deadline_at,
         )
 
-        from app import shared
-
-        provider = shared.get_provider(_provider_key(provider_id))
+        provider = get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
         assembly, rendered = self.build_provider_prompt(
