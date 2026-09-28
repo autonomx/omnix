@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.config.access import load_settings
+from app.settings.access import load_settings
 
 from .settings_profile_models import SettingsProfile
 from .settings_profile_repository import load_settings_profile
