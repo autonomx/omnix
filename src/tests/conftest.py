@@ -34,8 +34,65 @@ _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 @pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
     # Each test models a fresh process; production policy is immutable once bound.
+    from copy import deepcopy
+
     from app.runtime import config as runtime_config
+    from app.security import tenant_context as tenant_runtime
+    from app.settings import access as settings_access
+    from app.settings.registry import core_setting_specs
+
     monkeypatch.setattr(runtime_config, "_process_config", None)
+
+    class _TestSettingsService:
+        def __init__(self):
+            self.specs = {spec.key: spec for spec in core_setting_specs()}
+            self.values = {spec.key: deepcopy(spec.default) for spec in core_setting_specs()}
+            self.revisions = {spec.key: 0 for spec in core_setting_specs()}
+
+        def get(self, key):
+            if key not in self.specs:
+                return None
+            return {
+                "key": key,
+                "value": deepcopy(self.values[key]),
+                "revision": self.revisions[key],
+                "updated_by": None,
+                "updated_at": None,
+            }
+
+        def set(self, key, value, *, expected_revision=None):
+            if key not in self.specs:
+                raise KeyError(key)
+            current = self.revisions[key]
+            if expected_revision not in (None, current):
+                from app.settings.service import SettingRevisionConflict
+                raise SettingRevisionConflict(f"revision conflict for setting {key}")
+            self.values[key] = deepcopy(value)
+            self.revisions[key] = current + 1
+            return self.get(key)
+
+        def patch(self, patch):
+            return {
+                key: self.set(key, value, expected_revision=patch.revisions.get(key))
+                for key, value in patch.values.items()
+            }
+
+        def subscribe(self, key, callback):
+            return lambda: None
+
+    tenant_runtime.reset_process_tenant_for_tests()
+    tenant_runtime.install_process_tenant(tenant_runtime.local_tenant_context())
+
+    test_service = _TestSettingsService()
+    settings_access.reset_settings_service_for_tests()
+    # Tests that exercise production composition may replace this service.
+    monkeypatch.setattr(settings_access, "_SERVICE", test_service)
+
+    try:
+        yield
+    finally:
+        tenant_runtime.reset_process_tenant_for_tests()
+        settings_access.reset_settings_service_for_tests()
 
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
