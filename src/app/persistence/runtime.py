@@ -143,6 +143,12 @@ def ensure_postgresql_runtime_ready(
     except PostgresAuthorityError as exc:
         raise PersistenceReadinessError(str(exc)) from exc
     cutover_mode = policy.mode
+
+    # Local identity bootstrap is a startup DML concern, not a schema migration
+    # and not request-path work. Seed it once after authority is writable.
+    from .identity_service import ensure_local_identity
+    ensure_local_identity(db)
+
     with db.connection() as connection:
         runtime = connection.execute(
             """
