@@ -27,7 +27,7 @@ def measure(url: str, samples: int) -> dict:
     )
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.repositories import PostgresIdentityRepository
 
     database = PostgresDatabase(DatabaseSettings(url=url))
