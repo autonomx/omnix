@@ -227,7 +227,7 @@ class AgentRunService:
     ) -> None:
         configure_agent_debug_logging()
         self.database = database or default_database()
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
         self.blob_store = blob_store or LocalBlobStore()
         self.runtime = PiAgentRuntime(
