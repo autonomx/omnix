@@ -195,12 +195,8 @@ def create_gateway_app(
 ) -> FastAPI:
     from app.runtime.config import get_runtime_config
     from app.runtime.capabilities import RuntimeCapabilities
-    from app.security.tenant_context import install_process_tenant, local_tenant_context
 
     runtime_config = runtime_config or get_runtime_config()
-    # Local-first Phase-2 context is installed exactly once per process. The
-    # production bootstrap verifies/persists the same identity before serving.
-    install_process_tenant(local_tenant_context())
     _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
     get_provider_facade = provider_facade_factory or default_provider_facade
