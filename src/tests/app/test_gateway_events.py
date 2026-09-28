@@ -154,7 +154,7 @@ def test_chat_session_delete_endpoint_removes_session(tmp_path):
 
 
 def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeypatch, tmp_path):
-    from app import shared
+    from app.providers import service as provider_service
 
     class CompletionOrderingStore(ChatSessionStore):
         completion_persisted = False
@@ -188,7 +188,7 @@ def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeyp
             },
         )()
     )
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_name=None: FakeChatProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda _provider_name=None: FakeChatProvider())
 
     app = create_gateway_app(
         job_store_factory=lambda: FakeJobStore([]),
