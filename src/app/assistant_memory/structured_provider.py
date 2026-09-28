@@ -154,12 +154,12 @@ def default_structured_proposal_provider() -> StructuredProposalProvider | None:
     if mode in {"disabled", "deterministic", "fallback", "test", "off"}:
         return None
     try:
-        from app import shared
+        from app.providers import service as provider_service
 
         provider_name = (
             environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or ""
         ).strip()
-        provider = shared.get_provider(provider_name or None)
+        provider = provider_service.get_provider(provider_name or None)
         if provider is None:
             return None
         model = (
