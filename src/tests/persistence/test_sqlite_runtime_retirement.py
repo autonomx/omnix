@@ -94,10 +94,9 @@ def test_application_startup_is_explicit_and_postgresql_only() -> None:
     assert "bootstrap_status_payload" in launcher
     assert 'parser.add_argument("--app"' in launcher
     assert "install_legacy_authority_block" not in usercustomize
-    assert "if uses_postgresql_runtime():" in (APP_ROOT / 'jobs/voice_inline.py').read_text(encoding='utf-8')
-    assert "with open(VOICE_CLONES_FILE, 'w')" not in (APP_ROOT / "shared.py").read_text(
-        encoding="utf-8"
-    )
+    assert not (APP_ROOT / "jobs" / "voice_inline.py").exists()
+    assert (APP_ROOT / "voice" / "jobs.py").exists()
+    assert not (APP_ROOT / "shared.py").exists()
 
 
 def test_heuristic_import_blocker_is_disabled() -> None:
