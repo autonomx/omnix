@@ -538,9 +538,9 @@ def _resolve_chat_provider(session: ChatSession, request: SendChatMessageRequest
     if not provider_id:
         return None
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        return shared.get_provider(provider_id)
+        return get_provider(provider_id)
     except Exception:
         logger.warning("Could not resolve Chat provider for active cancellation", exc_info=True)
         return None
