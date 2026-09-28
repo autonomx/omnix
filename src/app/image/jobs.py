@@ -25,25 +25,6 @@ IMAGE_GENERATION_CONCURRENCY = 2
 _IMAGE_GENERATION_SLOTS = threading.BoundedSemaphore(IMAGE_GENERATION_CONCURRENCY)
 
 
-def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
-    """Patch job creation once so image jobs execute off the request thread."""
-
-    if getattr(sqlite_job_store_cls, "_omnix_image_jobs_installed", False):
-        return
-    original_create_job = sqlite_job_store_cls.create_job
-
-    def create_job_with_image_execution(self: Any, request: Any) -> JobRecord:
-        if request.type == IMAGE_JOB_TYPE and _executor_enabled():
-            request = mark_inline_execution(request)
-        job = original_create_job(self, request)
-        if job.type == IMAGE_JOB_TYPE and _executor_enabled():
-            _start_image_job(self, job)
-        return job
-
-    sqlite_job_store_cls.create_job = create_job_with_image_execution
-    sqlite_job_store_cls._omnix_image_jobs_installed = True
-
-
 def _executor_enabled() -> bool:
     return environment().get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {
         "0",
