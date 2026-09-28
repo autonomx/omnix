@@ -1,7 +1,6 @@
 """Background execution and shared asset persistence for image jobs."""
 from __future__ import annotations
 
-import os
 import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -9,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
+
+from app.config.env import environment
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.jobs.models import JobStatus
@@ -44,7 +45,7 @@ def install_image_job_execution(sqlite_job_store_cls: Any) -> None:
 
 
 def _executor_enabled() -> bool:
-    return os.environ.get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {
+    return environment().get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {
         "0",
         "false",
         "off",
