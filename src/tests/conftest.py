@@ -85,7 +85,13 @@ def isolated_runtime_configuration(monkeypatch):
 
     test_service = _TestSettingsService()
     settings_access.reset_settings_service_for_tests()
-    # Tests that exercise production composition may replace this service.
+
+    def _install_test_settings_service(service):
+        # Production composition tests are allowed to replace the provider-free
+        # fake exactly as a fresh process would install its real service.
+        settings_access._SERVICE = service
+
+    monkeypatch.setattr(settings_access, "install_settings_service", _install_test_settings_service)
     monkeypatch.setattr(settings_access, "_SERVICE", test_service)
 
     try:
