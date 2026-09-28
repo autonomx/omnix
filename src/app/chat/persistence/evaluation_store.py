@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.gateway.live_chat_evaluation_store import LiveChatEvaluationStore
+from app.chat.evaluation_store import LiveChatEvaluationStore
 from app.persistence.document_store import PostgresDocumentStore
 
 
