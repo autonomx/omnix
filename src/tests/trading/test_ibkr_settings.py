@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+from copy import deepcopy
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,11 +10,25 @@ from app.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
 from app.trading.providers.ibkr_runtime import IbkrRuntime
 
 
-def test_saved_ibkr_settings_are_durable_and_drive_default_runtime(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+def _install_settings_double(monkeypatch):
+    from app.settings import access
 
-    settings_file = tmp_path / "settings.json"
-    monkeypatch.setattr(shared, "SETTINGS_FILE", str(settings_file))
+    state: dict = {}
+
+    def load_settings(*, allow_defaults_without_service=False):
+        del allow_defaults_without_service
+        return deepcopy(state)
+
+    def save_settings(payload):
+        state.clear()
+        state.update(deepcopy(payload))
+
+    monkeypatch.setattr(access, "load_settings", load_settings)
+    monkeypatch.setattr(access, "save_settings", save_settings)
+    return state
+
+
+def _clear_ibkr_environment(monkeypatch) -> None:
     for name in (
         "OMNIX_IBKR_ENABLED",
         "OMNIX_IBKR_MONITOR",
@@ -25,6 +39,11 @@ def test_saved_ibkr_settings_are_durable_and_drive_default_runtime(tmp_path, mon
         "OMNIX_IBKR_RECOVERY_AUTHORITY",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+def test_saved_ibkr_settings_are_durable_and_drive_default_runtime(monkeypatch) -> None:
+    state = _install_settings_double(monkeypatch)
+    _clear_ibkr_environment(monkeypatch)
 
     saved = save_ibkr_settings(
         {
@@ -39,7 +58,7 @@ def test_saved_ibkr_settings_are_durable_and_drive_default_runtime(tmp_path, mon
     assert saved.enabled is True
     assert saved.host == "192.168.1.50"
     assert load_ibkr_settings()[1] == "omnix_settings"
-    assert json.loads(settings_file.read_text(encoding="utf-8"))["trading_market_data"]["ibkr"] == {
+    assert state["trading_market_data"]["ibkr"] == {
         "enabled": True,
         "monitor_enabled": False,
         "host": "192.168.1.50",
@@ -61,10 +80,8 @@ def test_saved_ibkr_settings_are_durable_and_drive_default_runtime(tmp_path, mon
     assert diagnostics["recovery_authority_enabled"] is False
 
 
-def test_saved_settings_override_legacy_environment_configuration(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
-
-    monkeypatch.setattr(shared, "SETTINGS_FILE", str(tmp_path / "settings.json"))
+def test_saved_settings_override_legacy_environment_configuration(monkeypatch) -> None:
+    _install_settings_double(monkeypatch)
     monkeypatch.setenv("OMNIX_IBKR_ENABLED", "1")
     monkeypatch.setenv("OMNIX_IBKR_HOST", "environment-host")
     save_ibkr_settings({"enabled": False, "host": "omnix-host"})
@@ -76,10 +93,10 @@ def test_saved_settings_override_legacy_environment_configuration(tmp_path, monk
     assert settings.host == "omnix-host"
 
 
-def test_ibkr_settings_endpoint_returns_status_and_persists_update(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+def test_ibkr_settings_endpoint_returns_status_and_persists_update(monkeypatch) -> None:
+    state = _install_settings_double(monkeypatch)
+    _clear_ibkr_environment(monkeypatch)
 
-    monkeypatch.setattr(shared, "SETTINGS_FILE", str(tmp_path / "settings.json"))
     app = FastAPI()
     app.include_router(create_trading_market_data_router())
     client = TestClient(app)
@@ -100,6 +117,7 @@ def test_ibkr_settings_endpoint_returns_status_and_persists_update(tmp_path, mon
     assert payload["settings"]["enabled"] is True
     assert payload["settings"]["port"] == 4001
     assert payload["settings"]["client_id"] == 94
+    assert state["trading_market_data"]["ibkr"]["client_id"] == 94
     expected_status = (
         "disconnected"
         if payload["official_ibapi_available"]
