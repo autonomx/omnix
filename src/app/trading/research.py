@@ -90,9 +90,9 @@ MarketServiceFactory = Callable[[], TradingMarketDataService]
 
 
 def default_research_provider() -> Any:
-    from app import shared
+    from app.providers import service as provider_service
 
-    getter = getattr(shared, "get_provider", None)
+    getter = getattr(provider_service, "get_provider", None)
     if not callable(getter):
         raise RuntimeError("omnix_provider_registry_unavailable")
     provider = getter()
