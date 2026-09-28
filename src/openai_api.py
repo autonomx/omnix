@@ -27,7 +27,8 @@ from app.runtime.net import allowed_origins, bind_host
 from app.security.model_service import ModelServiceMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-import app.shared as shared
+from app.providers.service import get_tts_provider
+from app.runtime.paths import VOICE_CLONES_DIR
 
 # Configure logging
 logging.basicConfig(
@@ -134,14 +135,17 @@ def load_voices():
     """Load available voices from custom voice clones"""
     voices = []
     try:
-        # Get voices from custom voice clones
-        for vid, vdata in shared.custom_voices.items():
-            voice_name = vid.replace('_', ' ').title()
+        # Get voices from canonical voice-clone assets.
+        from pathlib import Path
+
+        for wav_file in sorted(Path(VOICE_CLONES_DIR).glob("*.wav")):
+            vid = wav_file.stem
+            voice_name = vid.replace("_", " ").title()
             voices.append(Voice(
                 voice_id=vid,
                 name=voice_name,
                 category="custom",
-                preview_url=f"/api/v1/audio/voices/{vid}/preview"
+                preview_url=f"/api/v1/audio/voices/{vid}/preview",
             ))
         
         # Add some standard voices for compatibility
@@ -211,7 +215,7 @@ async def create_speech(request: SpeechRequest, background_tasks: BackgroundTask
     """Generate speech from text"""
     try:
         # Use the TTS provider system
-        tts_provider = shared.get_tts_provider()
+        tts_provider = get_tts_provider()
         if not tts_provider:
             raise HTTPException(status_code=503, detail="TTS provider not available")
         
@@ -330,7 +334,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "tts_available": shared.get_tts_provider() is not None,
+        "tts_available": get_tts_provider() is not None,
         "stt_available": False,  # STT not integrated in this API
         "timestamp": datetime.now().isoformat()
     }
