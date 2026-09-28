@@ -1,83 +1,16 @@
-"""Legacy session callback bridge retained only for compatibility tests/importers."""
-from __future__ import annotations
+"""Compatibility exports for the neutral legacy-session bridge."""
+from app.conversation.legacy_sessions import (
+    clear_legacy_session_callbacks,
+    install_legacy_session_callbacks,
+    load_sessions,
+    save_sessions,
+    update_sessions,
+)
 
-from threading import RLock
-from typing import Any, Callable, TypeVar
-
-_T = TypeVar("_T")
-_lock = RLock()
-_load: Callable[[], dict[str, Any]] | None = None
-_save: Callable[[dict[str, Any]], None] | None = None
-_update: Callable[[Callable[[dict[str, Any]], _T]], tuple[dict[str, Any], _T]] | None = None
-_sessions: dict[str, Any] = {}
-
-
-def install_legacy_session_callbacks(
-    *,
-    load_callback: Callable[[], dict[str, Any]],
-    save_callback: Callable[[dict[str, Any]], None],
-    update_callback: Callable[[Callable[[dict[str, Any]], _T]], tuple[dict[str, Any], _T]] | None = None,
-) -> None:
-    global _load, _save, _update
-    with _lock:
-        _load = load_callback
-        _save = save_callback
-        _update = update_callback
-
-
-def clear_legacy_session_callbacks() -> None:
-    global _load, _save, _update, _sessions
-    with _lock:
-        _load = None
-        _save = None
-        _update = None
-        _sessions = {}
-
-
-def load_sessions() -> dict[str, Any]:
-    with _lock:
-        loader = _load
-        if loader is None:
-            from app.persistence.runtime import uses_postgresql_runtime
-            if uses_postgresql_runtime():
-                from app.chat.persistence.legacy_sessions import load_legacy_chat_sessions
-                return dict(load_legacy_chat_sessions() or {})
-            return dict(_sessions)
-    return dict(loader() or {})
-
-
-def save_sessions(sessions: dict[str, Any]) -> None:
-    global _sessions
-    payload = dict(sessions or {})
-    with _lock:
-        saver = _save
-        if saver is None:
-            from app.persistence.runtime import uses_postgresql_runtime
-            if uses_postgresql_runtime():
-                from app.chat.persistence.legacy_sessions import save_legacy_chat_sessions
-                save_legacy_chat_sessions(payload)
-                return
-            _sessions = payload
-            return
-    saver(payload)
-
-
-def update_sessions(mutator: Callable[[dict[str, Any]], _T]) -> _T:
-    global _sessions
-    with _lock:
-        updater = _update
-        if updater is not None:
-            current, result = updater(mutator)
-            _sessions = dict(current or {})
-            return result
-        from app.persistence.runtime import uses_postgresql_runtime
-        if uses_postgresql_runtime():
-            from app.chat.persistence.legacy_sessions import mutate_legacy_chat_sessions
-            current, result = mutate_legacy_chat_sessions(mutator)
-            _sessions = dict(current or {})
-            return result
-        current = load_sessions()
-        result = mutator(current)
-        save_sessions(current)
-        _sessions = dict(current)
-        return result
+__all__ = [
+    "clear_legacy_session_callbacks",
+    "install_legacy_session_callbacks",
+    "load_sessions",
+    "save_sessions",
+    "update_sessions",
+]
