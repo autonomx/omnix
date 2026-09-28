@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
-from app.config.access import load_settings
+from app.settings.access import load_settings
 
 WARMUP_STREAM_ID = "tts-runtime-warmup"
 STARTUP_WARMUP_ENV = "OMNIX_TTS_STARTUP_WARMUP"
