@@ -1,10 +1,9 @@
 """Persisted server-enforced Chat memory settings and content-free diagnostics."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
-import os
 from pathlib import Path
 from typing import Literal
 
