@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
+from app.config.env import environment
+
 from pydantic import BaseModel, Field
 
 from .contracts import RESEARCH_JOB_MODULE, RESEARCH_JOB_TYPE
@@ -85,9 +87,6 @@ def _job_models() -> tuple[type[Any], type[Any], Any]:
 
 
 # Feature-owned execution implementation (migrated from app.jobs).
-from __future__ import annotations
-
-import os
 import threading
 from collections.abc import Callable
 from dataclasses import replace
@@ -423,7 +422,7 @@ def start_research_job(job_store: Any, job: JobRecord) -> JobRecord:
 
 
 def _executor_enabled() -> bool:
-    return os.environ.get(RESEARCH_EXECUTOR_ENV, "1").strip().lower() not in {
+    return environment().get(RESEARCH_EXECUTOR_ENV, "1").strip().lower() not in {
         "0", "false", "off", "disabled"
     }
 
