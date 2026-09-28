@@ -175,7 +175,7 @@ def test_dedicated_provider_lane_clones_foreground_provider(monkeypatch):
             return replacement
 
     registry = Registry()
-    monkeypatch.setattr(reliability.shared, "get_provider", lambda: foreground)
+    monkeypatch.setattr(reliability, "get_provider", lambda: foreground)
     monkeypatch.setattr(reliability, "get_registry", lambda: registry)
 
     first = reliability.get_trading_research_provider()
