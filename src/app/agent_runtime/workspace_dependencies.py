@@ -178,13 +178,13 @@ def prepare_project_dependencies(*, repository: str | Path, worktree: str | Path
         command.append("--prefer-offline")
     else:
         command.append("--package-lock=false")
-    environment = normalize_windows_process_environment(environment())
-    environment["CI"] = "1"
+    process_environment = normalize_windows_process_environment(environment())
+    process_environment["CI"] = "1"
     try:
         completed = subprocess.run(
             command,
             cwd=worktree_root,
-            env=environment,
+            env=process_environment,
             capture_output=True,
             text=True,
             encoding="utf-8",
