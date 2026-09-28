@@ -399,7 +399,7 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
 
 
 def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
-    app = FastAPI()
+    app, registry = _app_with_background_registry()
     monitor = register_trading_strategy_monitor(app)
     monitor.strategy_repository_factory = lambda: object()
     monitor.paper_repository_factory = lambda: object()
@@ -424,7 +424,7 @@ def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> No
         fail_provision,
     )
 
-    startup = app.router.on_startup[-1]
+    startup = registry.workers[-1].startup[0]
     asyncio.run(startup())
 
     assert monitor.managed_finviz_shadow_provision is None
