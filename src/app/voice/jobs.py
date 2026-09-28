@@ -197,10 +197,10 @@ def _reference_transcript(payload: dict[str, Any], clone_path: Path) -> tuple[st
     if not bool(payload.get("generate_transcript")):
         return "", "", ""
 
-    import app.shared as shared
+    from app.providers.service import get_stt_provider
 
     requested_provider = _text(payload.get("stt_provider_id"))
-    provider = shared.get_stt_provider(requested_provider or None)
+    provider = get_stt_provider(requested_provider or None)
     if provider is None:
         raise ValueError(
             "The configured STT provider is unavailable; enter a reference transcript "
@@ -348,9 +348,9 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
 
 def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     try:
-        import app.shared as shared
+        from app.providers.service import get_tts_provider
 
-        provider = shared.get_tts_provider("faster-qwen3-tts")
+        provider = get_tts_provider("faster-qwen3-tts")
         if provider is None:
             raise RuntimeError("Configured TTS provider is unavailable")
         result = provider.generate_audio(
