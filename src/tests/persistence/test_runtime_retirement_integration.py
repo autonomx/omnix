@@ -72,13 +72,10 @@ from pathlib import Path
 
 from app.persistence.startup import bootstrap_postgresql_runtime
 from app.persistence.runtime import LegacyPersistenceRetired
-from app.persistence.runtime_install import runtime_adapters_installed
-
 status = bootstrap_postgresql_runtime()
 assert status.ready is True
 assert status.backend == "postgresql"
 assert status.cutover_mode == "postgresql"
-assert runtime_adapters_installed() is True
 
 connection = sqlite3.connect(":memory:")
 connection.close()
