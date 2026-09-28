@@ -6,7 +6,6 @@ import json
 from typing import Any
 
 from .cutover import PostgresLegacyImporter
-from app.rpg.persistence.rpg_repository import canonical_json, state_hash
 from .tenant import TenantContext
 
 
@@ -366,4 +365,12 @@ class CompletePostgresLegacyImporter(PostgresLegacyImporter):
                 engine_version,
                 schema_version,
             ),
-        )
+        )def canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def state_hash(state: dict[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(state).encode("utf-8")).hexdigest()
+
+
+
