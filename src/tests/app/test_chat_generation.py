@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app import shared
+from app.providers import service as shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
@@ -479,7 +479,7 @@ def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
 
 
 def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
-    from app.persistence import chat_runtime_compat
+    from app.chat.persistence import chat_runtime_compat
 
     repository = object()
     monkeypatch.setattr(
