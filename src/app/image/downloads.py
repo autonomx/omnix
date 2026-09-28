@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List
 
 from app.image.providers.registry import get_image_provider_definition
 from app.runtime.paths import MODELS_DIR
-from app.config.access import load_settings, save_settings
+from app.settings.access import load_settings, save_settings
 
 
 def _safe_str(value: Any) -> str:
