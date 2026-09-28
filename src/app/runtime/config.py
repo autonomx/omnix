@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-import os
 from urllib.parse import urlsplit
 
 
@@ -95,7 +94,7 @@ class RuntimeConfig:
 
     @classmethod
     def from_environment(cls, env: Mapping[str, str] | None = None) -> RuntimeConfig:
-        env = os.environ if env is None else env
+        env = {} if env is None else env
 
         def flag(name: str, default: bool) -> bool:
             value = env.get(name)
