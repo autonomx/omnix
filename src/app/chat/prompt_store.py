@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from app.providers.service import get_global_system_prompt, get_provider
 
+from app.providers.service import get_global_system_prompt, get_provider
+
 import logging
 import os
 import threading
