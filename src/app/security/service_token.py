@@ -2,15 +2,16 @@
 from __future__ import annotations
 
 import hmac
-import os
 import re
 
 from fastapi import HTTPException, Request
 
+from app.config.env import env_str
+
 
 def valid_service_token(supplied: list[str]) -> bool:
     """Accept exactly one credential against the currently issued environment token."""
-    expected = os.environ.get("OMNIX_SERVICE_TOKEN", "")
+    expected = env_str("OMNIX_SERVICE_TOKEN", "") or ""
     return bool(
         re.fullmatch(r"[A-Za-z0-9_-]{43,}", expected)
         and len(supplied) == 1
@@ -20,7 +21,7 @@ def valid_service_token(supplied: list[str]) -> bool:
 
 def service_headers() -> dict[str, str]:
     """Headers for an Omnix sidecar only; callers must disable redirects."""
-    token = os.environ.get("OMNIX_SERVICE_TOKEN", "")
+    token = env_str("OMNIX_SERVICE_TOKEN", "") or ""
     if not valid_service_token([token]):
         raise RuntimeError("service_credential_unavailable")
     return {"X-Omnix-Client": "gateway", "X-Omnix-Service-Token": token}
