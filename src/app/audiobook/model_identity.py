@@ -5,7 +5,7 @@ import hashlib
 from functools import lru_cache
 from pathlib import Path
 
-from app.config.access import load_settings
+from app.settings.access import load_settings
 
 
 _MODEL_SUFFIXES = {".safetensors", ".json", ".txt", ".model"}
