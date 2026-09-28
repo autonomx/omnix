@@ -137,7 +137,7 @@ def test_exact_workspace_prompt_starts_durable_agent_before_chat_provider(
             provider_calls.append(kwargs)
             raise AssertionError("Agent-routed turn reached the ordinary Chat provider")
 
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
 
     monkeypatch.setattr(
         chat_bridge,
@@ -145,7 +145,7 @@ def test_exact_workspace_prompt_starts_durable_agent_before_chat_provider(
         lambda **_kwargs: parser,
     )
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: _Provider())
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: _Provider())
     monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
     # A stale inherited value must have no effect now that legacy v1 is gone.
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "shadow")
@@ -205,12 +205,12 @@ def test_normalized_codex_provider_and_quick_research_start_exact_workspace_agen
     monkeypatch,
     tmp_path,
 ) -> None:
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
 
     service = _DurableRecordingService()
     provider = _SemanticCodexProvider()
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: provider)
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: provider)
     monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
     monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
@@ -269,11 +269,11 @@ def test_lmstudio_optimized_stream_cannot_bypass_agent_boundary(monkeypatch, tmp
             provider_calls.append(kwargs)
             raise AssertionError("LM Studio optimized Chat stream bypassed Agent routing")
 
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
 
     monkeypatch.setattr(chat_bridge, "default_semantic_task_parser", lambda **_kwargs: parser)
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: _LmStudioProvider())
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: _LmStudioProvider())
     monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
 
     store = ChatSessionStore(tmp_path / "lmstudio-boundary-chat.json")
@@ -321,14 +321,14 @@ def test_semantic_required_quick_research_turn_fails_closed_without_parser(
             provider_calls.append(kwargs)
             raise AssertionError("unclassified turn reached ordinary Chat")
 
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
 
     monkeypatch.setattr(
         chat_bridge,
         "default_semantic_task_parser",
         lambda **_kwargs: None,
     )
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: _Provider())
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: _Provider())
 
     store = ChatSessionStore(tmp_path / "missing-parser-chat.json")
     session = store.create_session(
@@ -373,9 +373,9 @@ def test_agent_route_marker_fails_closed_at_provider_boundary(monkeypatch, tmp_p
             provider_calls.append(kwargs)
             return []
 
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
 
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: _Provider())
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: _Provider())
     store = ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Boundary"))
     turn = store.begin_user_message(
@@ -422,10 +422,10 @@ def test_direct_json_store_cannot_bypass_agent_provider_boundary(monkeypatch, tm
             provider_calls.append(kwargs)
             raise AssertionError("direct JSON store bypassed Agent routing")
 
-    import app.shared as shared
+    import app.chat.prompt_store as prompt_store
     from app.chat.store import ChatSessionStore as LegacyJsonStore
 
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: _Provider())
+    monkeypatch.setattr(prompt_store, "get_provider", lambda _provider_id: _Provider())
     store = LegacyJsonStore(tmp_path / "legacy-chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Legacy boundary"))
     turn = store.begin_user_message(
