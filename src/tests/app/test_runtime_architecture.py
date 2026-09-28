@@ -20,7 +20,8 @@ from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 def application(config):
     return SimpleNamespace(state=SimpleNamespace(
         runtime_config=config, runtime_capabilities=RuntimeCapabilities.from_config(config),
-        feature_lifecycles=[], runtime_started=False,
+        feature_lifecycles=[], runtime_started=False, runtime_services=None,
+        background_registry=None,
     ), router=SimpleNamespace(on_startup=[], on_shutdown=[]))
 
 
@@ -32,15 +33,31 @@ def test_api_rejects_worker_only_feature_lifecycle():
 
 
 def test_gateway_rejects_undeclared_startup_hooks_before_api_can_run_them(monkeypatch):
-    from app.gateway import feature_registry
+    from app.runtime import gateway_installer
+    from app.runtime.features import FeatureContext
+
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
+
     def registrar(gateway):
         gateway.router.on_startup.append(lambda: pytest.fail('undeclared worker startup ran'))
-    monkeypatch.setattr(feature_registry, 'FEATURES', (feature_registry.GatewayFeature('test.feature', 'register'),))
-    monkeypatch.setattr(feature_registry, 'import_module', lambda _: SimpleNamespace(register=registrar))
-    with pytest.raises(RuntimeError, match='must declare lifecycle callbacks'):
-        feature_registry.register_gateway_features(app)
-    assert not getattr(app.state, 'features_registered', False)
+
+    monkeypatch.setattr(
+        gateway_installer,
+        'import_module',
+        lambda _: SimpleNamespace(register=registrar),
+    )
+    context = FeatureContext(
+        feature_id='test',
+        config=None,
+        runtime=app.state.runtime_config,
+        capabilities=app.state.runtime_capabilities,
+        services=None,
+        logger=__import__('logging').getLogger('test.feature'),
+    )
+    with pytest.raises(RuntimeError, match='must use FeatureLifecycle or BackgroundWorker'):
+        gateway_installer.install_registrars(
+            app, context, (('test.feature', 'register'),)
+        )
 
 
 def test_api_lifespan_never_runs_recovery_or_worker_hooks():
@@ -168,7 +185,7 @@ def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
 
 
 def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
-    from app import runtime_config
+    from app.runtime import config as runtime_config
     from app.rpg.session.genesis import async_coordinator as genesis
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
