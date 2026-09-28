@@ -1,7 +1,7 @@
 """Compatibility facade for historically shared Omnix helpers.
 
 New production code should import the owning module directly:
-- settings/secrets: app.config.access
+- settings/secrets: app.settings.access
 - providers/audio providers: app.providers.service
 - resource paths: app.runtime.paths
 - legacy session callback bridge: app.chat.legacy_session_state
@@ -23,7 +23,7 @@ from app.chat.legacy_session_state import (
     save_sessions,
     update_sessions,
 )
-from app.config.access import (
+from app.settings.access import (
     load_secrets,
     load_settings,
     save_secrets,
