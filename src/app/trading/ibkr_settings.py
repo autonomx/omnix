@@ -94,7 +94,7 @@ def load_ibkr_settings() -> tuple[IbkrSettings, str]:
     saves the new Settings page.
     """
 
-    from app.config.access import load_settings
+    from app.settings.access import load_settings
 
     document = load_settings()
     section = document.get(_SETTINGS_SECTION)
@@ -118,7 +118,7 @@ def load_ibkr_settings() -> tuple[IbkrSettings, str]:
 def save_ibkr_settings(patch: dict[str, Any]) -> IbkrSettings:
     """Persist a validated IBKR settings patch in the shared settings document."""
 
-    from app.config.access import load_settings, save_settings
+    from app.settings.access import load_settings, save_settings
 
     settings = load_settings()
     section = settings.get(_SETTINGS_SECTION)
