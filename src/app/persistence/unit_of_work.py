@@ -8,7 +8,6 @@ from typing import Any, Hashable, Literal
 
 from .authority import (
     AuthorityOperation,
-    initialize_fresh_install_authority,
     require_authority_operation,
 )
 from .asset_repository import (
@@ -29,8 +28,6 @@ from .repositories import (
     PostgresIdempotencyRepository,
     PostgresIdentityRepository,
 )
-from app.config.env import env_str
-
 from .repository_registry import repository_spec, repository_spec_by_alias
 from .transaction_policy import transaction_scope
 
@@ -75,20 +72,6 @@ class PostgresUnitOfWork:
         self._connection_context = self.database.connection()
         self.connection = self._connection_context.__enter__()
         try:
-            if self.authority_operation == AuthorityOperation.RUNTIME_MUTATION:
-                schema_row = self.connection.execute(
-                    "SELECT version FROM omnix_schema_migrations ORDER BY version DESC LIMIT 1"
-                ).fetchone()
-                initialize_fresh_install_authority(
-                    self.connection,
-                    software_revision=(
-                        env_str("OMNIX_SOFTWARE_REVISION", "fresh-install-unversioned")
-                        or "fresh-install-unversioned"
-                    ).strip(),
-                    schema_version=(
-                        str(schema_row[0]) if schema_row is not None else "unknown-schema"
-                    ),
-                )
             require_authority_operation(self.connection, self.authority_operation)
         except BaseException:
             context, self._connection_context = self._connection_context, None
