@@ -1,5 +1,7 @@
 """Chat and realtime feature declaration."""
+from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
+from app.chat.persistence.repository import PostgresChatRepository
 from app.runtime.gateway_installer import install_registrars
 
 
@@ -24,4 +26,5 @@ FEATURE = FeatureModule(
     id="chat",
     title="Chat and Realtime",
     installers=(_install_gateway,),
+    repositories=(RepositorySpec(PostgresChatRepository, PostgresChatRepository, "chats"),),
 )
