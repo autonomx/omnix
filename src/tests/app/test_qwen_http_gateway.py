@@ -43,7 +43,7 @@ def test_remote_synthesis_failure_has_no_synthetic_fallback(monkeypatch):
 
 
 def test_gateway_http_selection_does_not_construct_local_provider(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
     monkeypatch.setenv('OMNIX_GATEWAY_TTS_HTTP', '1')
     monkeypatch.setenv('OMNIX_TTS_URL', 'http://127.0.0.1:5101')
     monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'faster-qwen3-tts'})
@@ -52,24 +52,24 @@ def test_gateway_http_selection_does_not_construct_local_provider(monkeypatch):
     def forbidden():
         raise AssertionError('Local registry must not initialize for the shared GPU service')
     monkeypatch.setattr(shared, 'get_audio_registry', forbidden)
-    first = shared.get_tts_provider()
+    first = provider_service.get_tts_provider()
     assert isinstance(first, QwenHttpGatewayProvider)
-    assert shared.get_tts_provider() is first
+    assert provider_service.get_tts_provider() is first
     monkeypatch.setenv('OMNIX_TTS_URL', 'http://127.0.0.1:5102')
-    assert shared.get_tts_provider() is not first
+    assert provider_service.get_tts_provider() is not first
 
 
 def test_http_selection_requires_explicit_service_url(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
     monkeypatch.setenv('OMNIX_GATEWAY_TTS_HTTP', '1')
     monkeypatch.delenv('OMNIX_TTS_URL', raising=False)
     monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'faster-qwen3-tts'})
     with pytest.raises(ValueError, match='OMNIX_TTS_URL'):
-        shared.get_tts_provider()
+        provider_service.get_tts_provider()
 
 
 def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
     from app.runtime.config import RuntimeConfig, GatewayRole, install_runtime_config
     install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'another-local-provider'})
@@ -77,7 +77,7 @@ def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatc
     monkeypatch.setattr(shared, '_tts_provider_instance', object())
     monkeypatch.setattr(shared, '_tts_provider_name', 'another-local-provider')
     with pytest.raises(RuntimeError, match='run_local_tts'):
-        shared.get_tts_provider()
+        provider_service.get_tts_provider()
 
 
 def test_runtime_status_reports_the_remote_gpu_service(monkeypatch):
