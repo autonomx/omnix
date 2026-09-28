@@ -22,27 +22,6 @@ DEFAULT_TURN_LIMIT = 10
 MAX_TURN_LIMIT = 100
 
 
-def install_rpg_last10_report_inline_job() -> None:
-    """Register the last-ten-turn report as an inline local feature job."""
-
-    from . import inline_feature_jobs as inline_jobs
-
-    if getattr(inline_jobs, "_omnix_rpg_last10_report_installed", False):
-        return
-
-    inline_jobs.INLINE_FEATURE_JOB_TYPES.add(RPG_LAST10_REPORT_JOB_TYPE)
-    inline_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES.add(RPG_LAST10_REPORT_JOB_TYPE)
-    base_execute_feature_job = inline_jobs._execute_feature_job
-
-    def execute_feature_job_with_last10_report(job_store: Any, job: JobRecord) -> JobRecord:
-        if job.type == RPG_LAST10_REPORT_JOB_TYPE:
-            return execute_rpg_last10_report_job(job_store, job)
-        return base_execute_feature_job(job_store, job)
-
-    inline_jobs._execute_feature_job = execute_feature_job_with_last10_report
-    inline_jobs._omnix_rpg_last10_report_installed = True
-
-
 def execute_rpg_last10_report_job(job_store: Any, job: JobRecord) -> JobRecord:
     """Execute and complete a last-ten-turn report job."""
 
