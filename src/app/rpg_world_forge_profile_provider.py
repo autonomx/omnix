@@ -402,9 +402,9 @@ def build_genre_profile_generator_from_settings(
     )
     provider = None
     try:
-        from app import shared
+        from app.providers import service as provider_service
 
-        provider = shared.get_provider(provider_id)
+        provider = provider_service.get_provider(provider_id)
     except Exception:
         provider = None
     if provider is None:
