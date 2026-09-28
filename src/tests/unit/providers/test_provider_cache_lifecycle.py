@@ -3,24 +3,24 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import app.shared as shared
+import app.providers.service as provider_service
 from app.providers import ProviderConfig
 
 
 def test_invalidate_provider_cache_closes_cached_process_provider():
     closed: list[bool] = []
     provider = SimpleNamespace(close=lambda: closed.append(True))
-    previous = dict(shared._PROVIDER_CACHE)
+    previous = dict(provider_service._PROVIDER_CACHE)
     try:
-        shared._PROVIDER_CACHE["key"] = "chatgpt_codex|cached"
-        shared._PROVIDER_CACHE["instance"] = provider
+        provider_service._PROVIDER_CACHE["key"] = "chatgpt_codex|cached"
+        provider_service._PROVIDER_CACHE["instance"] = provider
 
-        shared.invalidate_provider_cache()
+        provider_service.invalidate_provider_cache()
 
         assert closed == [True]
-        assert shared._PROVIDER_CACHE == {"key": None, "instance": None}
+        assert provider_service._PROVIDER_CACHE == {"key": None, "instance": None}
     finally:
-        shared._PROVIDER_CACHE.update(previous)
+        provider_service._PROVIDER_CACHE.update(previous)
 
 
 def test_provider_cache_key_tracks_codex_transport_options():
@@ -45,7 +45,7 @@ def test_provider_cache_key_tracks_codex_transport_options():
         },
     )
 
-    assert shared._build_provider_cache_key("chatgpt_codex", medium) != shared._build_provider_cache_key(
+    assert provider_service._cache_key("chatgpt_codex", medium) != provider_service._cache_key(
         "chatgpt_codex",
         high,
     )
@@ -62,7 +62,7 @@ def test_shared_factory_builds_codex_from_typed_profile(monkeypatch):
             return provider
 
     monkeypatch.setattr(
-        shared,
+        provider_service,
         "load_settings",
         lambda: {
             "provider": "chatgpt_codex",
@@ -79,12 +79,12 @@ def test_shared_factory_builds_codex_from_typed_profile(monkeypatch):
             },
         },
     )
-    monkeypatch.setattr(shared, "load_secrets", lambda: {"api_keys": {}})
-    monkeypatch.setattr(shared, "get_registry", lambda: Registry())
-    previous = dict(shared._PROVIDER_CACHE)
-    shared._PROVIDER_CACHE.update({"key": None, "instance": None})
+    monkeypatch.setattr(provider_service, "load_secrets", lambda: {"api_keys": {}})
+    monkeypatch.setattr(provider_service, "get_registry", lambda: Registry())
+    previous = dict(provider_service._PROVIDER_CACHE)
+    provider_service._PROVIDER_CACHE.update({"key": None, "instance": None})
     try:
-        assert shared.get_provider("chatgpt_codex") is provider
+        assert provider_service.get_provider("chatgpt_codex") is provider
         config = captured["config"]
         assert captured["name"] == "chatgpt_codex"
         assert isinstance(config, ProviderConfig)
@@ -97,5 +97,5 @@ def test_shared_factory_builds_codex_from_typed_profile(monkeypatch):
             "transport": "app_server",
         }
     finally:
-        shared.invalidate_provider_cache()
-        shared._PROVIDER_CACHE.update(previous)
+        provider_service.invalidate_provider_cache()
+        provider_service._PROVIDER_CACHE.update(previous)
