@@ -57,7 +57,7 @@ def _is_codex_model_ref(value: str | None) -> bool:
 
 def _settings_profile() -> dict[str, Any]:
     try:
-        from app.config.access import load_settings
+        from app.settings.access import load_settings
 
         settings = load_settings()
     except Exception:
