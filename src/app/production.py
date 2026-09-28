@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 from contextlib import asynccontextmanager
 
+from app.config.env import environment
+
 from app.runtime.config import RuntimeConfig, get_runtime_config, install_runtime_config
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from app.runtime.contracts import JobService, AssetService, ChatService, ModelResidencyService
@@ -59,7 +61,7 @@ def production_readiness(config: RuntimeConfig | None = None) -> dict:
 
 
 def create_production_app(config: RuntimeConfig | None = None):
-    config = config or get_runtime_config()
+    config = config or RuntimeConfig.from_environment(environment())
     install_runtime_config(config)
     capabilities = RuntimeCapabilities.from_config(config)
     from app.persistence.startup import bootstrap_status_payload
