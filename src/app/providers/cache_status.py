@@ -207,7 +207,7 @@ class ProviderModelCacheStatusService:
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_loader:
             return self._settings_loader()
-        from app.config.access import load_settings
+        from app.settings.access import load_settings
 
         return load_settings()
 
