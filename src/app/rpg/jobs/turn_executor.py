@@ -1,132 +1,30 @@
 """Inline local-first execution for feature jobs submitted directly by the web UI."""
 from __future__ import annotations
 
-import os
 import re
-import subprocess
-import sys
-import threading
 from copy import deepcopy
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
-from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
-
-RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
-
-INLINE_FEATURE_JOB_TYPES = {"story.generate", "podcast.generate", "rpg.turn", RPG_LAST10_REPORT_JOB_TYPE}
-BACKGROUND_INLINE_FEATURE_JOB_TYPES = {"rpg.turn", RPG_LAST10_REPORT_JOB_TYPE}
-INLINE_FEATURE_JOB_EXECUTOR_ENV = "OMNIX_INLINE_FEATURE_JOB_EXECUTOR"
-THREAD_EXECUTOR = "thread"
-
-
-def install_inline_feature_job_execution(job_store_cls: Any) -> None:
-    """Patch the active job store once with local-first feature execution.
-
-    The shared job queue remains worker-compatible. This wrapper only handles the
-    feature jobs that the React UI creates directly and that otherwise have no
-    local worker attached in the current gateway runtime.
-    """
-
-    if getattr(job_store_cls, "_omnix_inline_feature_jobs_installed", False):
-        return
-
-    original_create_job: Callable[..., JobRecord] = job_store_cls.create_job
-
-    def create_job_with_inline_execution(self: Any, request: Any) -> JobRecord:
-        if request.type in INLINE_FEATURE_JOB_TYPES:
-            request = mark_inline_execution(request)
-        job = original_create_job(self, request)
-        if job.type not in INLINE_FEATURE_JOB_TYPES:
-            return job
-        if job.type in BACKGROUND_INLINE_FEATURE_JOB_TYPES:
-            _start_background_feature_job(self, job)
-            return job
-        return _execute_feature_job(self, job)
-
-    job_store_cls.create_job = create_job_with_inline_execution
-    job_store_cls._omnix_inline_feature_jobs_installed = True
-
-
-def _start_background_feature_job(job_store: Any, job: JobRecord) -> None:
-    if _background_executor_mode() == THREAD_EXECUTOR:
-        _start_background_feature_job_thread(job_store, job)
-        return
-
-    db_path = getattr(job_store, "db_path", None)
-    if db_path is None:
-        _start_background_feature_job_thread(job_store, job)
-        return
-
-    try:
-        _start_background_feature_job_process(str(db_path), job.id)
-    except Exception as exc:  # pragma: no cover - defensive launch failure path
-        job_store.fail_job(
-            job.id,
-            FailJobRequest(
-                code="inline_job_worker_launch_failed",
-                message=str(exc) or "Inline feature job worker could not be started",
-                retryable=True,
-                details={"job_type": job.type, "module": job.module},
-            ),
-        )
-
-
-def _start_background_feature_job_thread(job_store: Any, job: JobRecord) -> None:
-    thread = threading.Thread(
-        target=_execute_feature_job,
-        args=(job_store, job),
-        name=f"omnix-inline-{job.type}-{job.id.removeprefix('job:')[:8]}",
-        daemon=True,
-    )
-    thread.start()
-
-
-def _start_background_feature_job_process(db_path: str, job_id: str) -> None:
-    src_root = Path(__file__).resolve().parents[2]
-    repo_root = src_root.parent
-    env = os.environ.copy()
-    env["PYTHONPATH"] = _prepend_pythonpath(str(src_root), env.get("PYTHONPATH"))
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    subprocess.Popen(
-        [sys.executable, "-m", "app.jobs.inline_feature_job_worker", db_path, job_id],
-        cwd=str(repo_root),
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        close_fds=True,
-        creationflags=creationflags,
-    )
-
-
-def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
-    from app.jobs.store import InMemoryJobStore, default_job_store
-    from app.persistence.runtime import uses_postgresql_runtime
-
-    job_store = default_job_store() if uses_postgresql_runtime() else InMemoryJobStore(db_path)
-    job = job_store.get_job(job_id)
-    if job is None:
-        raise RuntimeError(f"Inline feature job not found: {job_id}")
-    return _execute_feature_job(job_store, job)
-
+from app.jobs.inline_execution_compat import require_execution_authority
 
 def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
-    """Execute one already-owned feature job.
-
-    Production callers must claim a lease before entering this function. The
-    in-memory compatibility installer may still invoke it directly.
-    """
+    """Execute one leased RPG turn through the feature-owned handler."""
+    if job.type != "rpg.turn":
+        failed = job_store.fail_job(
+            job.id,
+            FailJobRequest(
+                code="unsupported_rpg_job_type",
+                message=f"Unsupported RPG job type: {job.type}",
+                retryable=False,
+                details={"job_type": job.type},
+            ),
+        )
+        return failed or job
     return _execute_feature_job(job_store, job)
 
 
 def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
-    if job.type == RPG_LAST10_REPORT_JOB_TYPE:
-        from .last10_report import execute_rpg_last10_report_job
-
-        return execute_rpg_last10_report_job(job_store, job)
-
     job_store.mark_running(job.id)
     try:
         result = _render_job(job, job_store=job_store)
@@ -173,73 +71,6 @@ def _render_job(job: JobRecord, *, job_store: Any) -> dict[str, Any]:
     provider_id = _text(payload.get("provider_id"))
     model_id = _text(payload.get("model_id"))
 
-    if job.type == "story.generate":
-        requested_title = _text(payload.get("title"))
-        generate_title = _bool(payload.get("generate_title")) or requested_title is None
-        premise = _require_text(payload.get("premise"), "Story premise is required")
-        action = _text(payload.get("action")) or "draft"
-        interaction_mode = _text(payload.get("interaction_mode")) or "writing"
-        source_text = _text(payload.get("source_text"))
-        user_response = _text(payload.get("user_response"))
-        prompt_lines = [
-            "Write a polished long-form story draft.",
-            (
-                "Generate an evocative, concise title for this story. Start the response with a "
-                "level-1 Markdown heading containing only the generated title."
-            )
-            if generate_title
-            else f"Title: {requested_title}",
-            f"Premise: {premise}",
-            f"Action: {action}",
-            f"Interaction mode: {interaction_mode}",
-        ]
-        if source_text:
-            prompt_lines.extend(["Story context:", source_text])
-        if user_response and user_response not in (source_text or ""):
-            prompt_lines.extend(["Player response:", user_response])
-        prompt_lines.append(
-            "Return Markdown with the generated title as the first line, then the story text."
-            if generate_title
-            else "Return the story text only."
-        )
-        prompt = "\n".join(prompt_lines)
-        content, resolved_model = _call_chat_provider(prompt, provider_id=provider_id, model_id=model_id)
-        title = requested_title or _extract_markdown_title(content) or "Untitled story"
-        return {
-            "artifact_type": "story",
-            "title": title,
-            "content": content,
-            "log_message": "Story generated by local provider",
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "resolved_model": resolved_model,
-        }
-
-    if job.type == "podcast.generate":
-        title = _text(payload.get("title")) or "Untitled episode"
-        brief = _require_text(payload.get("brief"), "Podcast brief is required")
-        speakers = payload.get("speakers") or ["Host", "Guest"]
-        if not isinstance(speakers, list):
-            speakers = ["Host", "Guest"]
-        speaker_line = ", ".join(str(speaker) for speaker in speakers if str(speaker).strip()) or "Host, Guest"
-        prompt = (
-            "Write a podcast episode script.\n"
-            f"Title: {title}\n"
-            f"Speakers: {speaker_line}\n"
-            f"Brief: {brief}\n"
-            "Return a production-ready script with speaker labels."
-        )
-        content, resolved_model = _call_chat_provider(prompt, provider_id=provider_id, model_id=model_id)
-        return {
-            "artifact_type": "podcast_script",
-            "title": title,
-            "content": content,
-            "log_message": "Podcast script generated by local provider",
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "resolved_model": resolved_model,
-        }
-
     if job.type == "rpg.turn":
         command = _require_text(payload.get("command"), "RPG command is required")
         require_execution_authority(job_store, job.id)
@@ -280,7 +111,7 @@ def _render_job(job: JobRecord, *, job_store: Any) -> dict[str, Any]:
             "resolved_model": resolved_model,
         }
 
-    raise RuntimeError(f"Unsupported inline job type: {job.type}")
+    raise RuntimeError(f"Unsupported RPG job type: {job.type}")
 
 
 def _with_rpg_turn_command_context(result: dict[str, Any], command: str) -> dict[str, Any]:
@@ -664,25 +495,22 @@ def _normalize_dialogue_quotes(line: str) -> str:
 
 
 def _call_chat_provider(prompt: str, *, provider_id: str | None, model_id: str | None) -> tuple[str, str | None]:
-    from app import shared  # type: ignore[import-untyped]
-    from app.providers import ChatMessage as ProviderMessage  # type: ignore[import-untyped]
+    from app.providers import ChatMessage
+    from app.providers.facade import ProviderFacade
 
-    provider_name = _provider_key(provider_id)
-    provider = shared.get_provider(provider_name)
-    if provider is None:
-        raise RuntimeError("LLM provider is not available")
-
-    messages = [
-        ProviderMessage(role="system", content=shared.get_global_system_prompt()),
-        ProviderMessage(role="user", content=prompt),
-    ]
-    model_name = _model_key(model_id)
-    response = provider.chat_completion(messages=messages, model=model_name, stream=False)
+    response = ProviderFacade().chat_completion(
+        messages=[
+            ChatMessage(role="system", content="You are a helpful AI assistant."),
+            ChatMessage(role="user", content=prompt),
+        ],
+        provider=_provider_key(provider_id),
+        model=_model_key(model_id),
+        stream=False,
+    )
     content = (getattr(response, "content", "") or "").strip()
     if not content:
         raise RuntimeError("LLM response was empty")
-    resolved_model = getattr(response, "model", None) or model_name
-    return content, resolved_model
+    return content, getattr(response, "model", None) or _model_key(model_id)
 
 
 def _provider_key(value: str | None) -> str | None:
@@ -717,23 +545,6 @@ def _list_value(value: object) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _bool(value: object) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _extract_markdown_title(content: str) -> str | None:
-    for line in content.splitlines():
-        text = line.strip()
-        if text.startswith("# "):
-            title = text.removeprefix("# ").strip()
-            return title or None
-    return None
-
-
 def _require_text(value: object, message: str) -> str:
     text = _text(value)
     if not text:
@@ -741,14 +552,3 @@ def _require_text(value: object, message: str) -> str:
     return text
 
 
-def _background_executor_mode() -> str:
-    return os.environ.get(INLINE_FEATURE_JOB_EXECUTOR_ENV, "").strip().lower()
-
-
-def _prepend_pythonpath(path: str, current: str | None) -> str:
-    if not current:
-        return path
-    entries = current.split(os.pathsep)
-    if path in entries:
-        return current
-    return os.pathsep.join([path, current])
