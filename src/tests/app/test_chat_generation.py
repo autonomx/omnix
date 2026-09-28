@@ -12,11 +12,10 @@ from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessage
 from app.gateway.main import create_gateway_app
 from tests.support.in_memory_jobs import InMemoryJobStore
 from app.rpg.jobs.turn_executor import (
-    INLINE_FEATURE_JOB_EXECUTOR_ENV,
-    THREAD_EXECUTOR,
     _queue_deferred_rpg_turn_narration,
     _rpg_turn_visible_text,
 )
+from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
 
 
@@ -496,13 +495,28 @@ def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
 
 
 def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):
-    monkeypatch.setenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, THREAD_EXECUTOR)
     provider = FakeProvider(provider_content)
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
     return TestClient(app), provider, store
+
+
+def _run_feature_job(client, store, job_id: str, *, background: bool = False):
+    job = store.get_job(job_id)
+    assert job is not None
+    registry = client.app.state.job_handler_registry
+
+    def execute():
+        registry.execute(JobExecutionContext(job_store=store), job)
+
+    if background:
+        thread = threading.Thread(target=execute, daemon=True)
+        thread.start()
+        return thread
+    execute()
+    return store.get_job(job_id)
 
 
 def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
@@ -525,10 +539,13 @@ def test_story_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["type"] == "story"
-    assert payload["output_refs"][0]["title"] == "Lantern Road"
-    assert payload["output_refs"][0]["content"] == "Hello from the provider."
+    assert payload["status"] == "queued"
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["type"] == "story"
+    assert completed.output_refs[0]["title"] == "Lantern Road"
+    assert completed.output_refs[0]["content"] == "Hello from the provider."
     assert provider.calls[0]["model"] == "test-model"
     assert "long-form story draft" in provider.calls[0]["prompt"]
 
@@ -560,9 +577,12 @@ def test_story_jobs_with_empty_title_generate_title(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["title"] == "Lantern Road"
-    assert payload["output_refs"][0]["content"].startswith("# Lantern Road")
+    assert payload["status"] == "queued"
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["title"] == "Lantern Road"
+    assert completed.output_refs[0]["content"].startswith("# Lantern Road")
     assert "Generate an evocative, concise title" in provider.calls[0]["prompt"]
     assert "Story context:" in provider.calls[0]["prompt"]
     assert "Player response: I follow the road." in provider.calls[0]["prompt"]
@@ -589,9 +609,12 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
 
     payload = response.json()
     assert response.status_code == 200
-    assert payload["status"] == "completed"
-    assert payload["output_refs"][0]["type"] == "podcast_script"
-    assert payload["output_refs"][0]["title"] == "Market Watch"
+    assert payload["status"] == "queued"
+    completed = _run_feature_job(client, _store, payload["id"])
+    assert completed is not None
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.output_refs[0]["type"] == "podcast_script"
+    assert completed.output_refs[0]["title"] == "Market Watch"
     assert "podcast episode script" in provider.calls[0]["prompt"]
 
 
@@ -617,6 +640,7 @@ def test_rpg_turn_jobs_execute_in_background_and_complete(monkeypatch, tmp_path)
     assert response.status_code == 200
     assert payload["status"] == "queued"
     assert payload["output_refs"] == []
+    _run_feature_job(client, store, payload["id"], background=True)
     completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
     assert completed.output_refs[0]["type"] == "rpg_turn_response"
     assert completed.output_refs[0]["title"] == "look around"
@@ -679,6 +703,7 @@ def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
         },
     )
 
+    _run_feature_job(client, store, response.json()["id"], background=True)
     completed = _wait_for_job_status(store, response.json()["id"], {JobStatus.COMPLETED})
     assert applied == [
         (
@@ -698,7 +723,6 @@ def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):
 
 
 def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path):
-    monkeypatch.setenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, THREAD_EXECUTOR)
     provider = BlockingProvider()
     monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
@@ -725,6 +749,7 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
     assert response.status_code == 200
     assert payload["status"] == "queued"
     assert payload["output_refs"] == []
+    worker = _run_feature_job(client, store, payload["id"], background=True)
     try:
         assert provider.entered.wait(timeout=1)
         running = _wait_for_job_status(store, payload["id"], {JobStatus.RUNNING})
@@ -733,11 +758,11 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
         provider.release.set()
 
     completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
+    worker.join(timeout=1)
     assert completed.output_refs[0]["content"] == "Delayed RPG response."
 
 
-def test_rpg_turn_jobs_spawn_detached_worker_process_by_default(monkeypatch, tmp_path):
-    monkeypatch.delenv(INLINE_FEATURE_JOB_EXECUTOR_ENV, raising=False)
+def test_rpg_turn_submission_does_not_spawn_detached_worker_process(monkeypatch, tmp_path):
     launched: list[dict[str, object]] = []
 
     class FakePopen:
@@ -746,28 +771,22 @@ def test_rpg_turn_jobs_spawn_detached_worker_process_by_default(monkeypatch, tmp
 
     monkeypatch.setattr(subprocess, "Popen", FakePopen)
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    app = create_gateway_app(job_store_factory=lambda: store)
+    client = TestClient(app)
 
-    job = store.create_job(
-        CreateJobRequest(
-            module="rpg",
-            type="rpg.turn",
-            resource_class=ResourceClass.GPU_LLM,
-            input_payload={"command": "look around"},
-        )
+    response = client.post(
+        "/api/jobs",
+        json={
+            "module": "rpg",
+            "type": "rpg.turn",
+            "resource_class": "gpu:llm",
+            "input_payload": {"command": "look around"},
+        },
     )
 
-    assert job.status == JobStatus.QUEUED
-    assert launched
-    command = launched[0]["command"]
-    assert isinstance(command, list)
-    assert command[-3:] == ["app.jobs.inline_feature_job_worker", str(tmp_path / "jobs.sqlite"), job.id]
-    assert launched[0]["kwargs"]["stdin"] == subprocess.DEVNULL
-    assert launched[0]["kwargs"]["stdout"] == subprocess.DEVNULL
-    assert launched[0]["kwargs"]["stderr"] == subprocess.DEVNULL
-    stored_job = store.get_job(job.id)
-    assert stored_job is not None
-    assert stored_job.status == JobStatus.QUEUED
-
+    assert response.status_code == 200
+    assert response.json()["status"] == "queued"
+    assert launched == []
 
 def test_unsupported_jobs_still_use_queue_path(monkeypatch, tmp_path):
     client, _provider, _store = _gateway_client(tmp_path, monkeypatch)
