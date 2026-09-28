@@ -5,6 +5,8 @@ capabilities, evidence source classes, trust policy, or approval policy.
 """
 from __future__ import annotations
 
+from app.config.env import env_str
+
 from collections import OrderedDict
 import hashlib
 import inspect
@@ -15,6 +17,7 @@ import threading
 import time
 from typing import Any, Protocol
 
+from app.providers.service import get_provider
 from app.providers.base import BaseProvider, ChatMessage
 from app.providers.structured import (
     StructuredContract,
@@ -201,12 +204,12 @@ def _model_key(value: str | None) -> str | None:
 
 def _cache_enabled() -> bool:
     return str(
-        os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "1") or "1"
+        env_str("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "1") or "1"
     ).strip().casefold() not in {"0", "false", "off", "no"}
 
 
 def _cache_size() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_CACHE_SIZE", "256") or "256")
+    raw = str(env_str("OMNIX_AGENT_SEMANTIC_TASK_CACHE_SIZE", "256") or "256")
     try:
         return max(0, min(int(raw), 4096))
     except ValueError:
@@ -214,7 +217,7 @@ def _cache_size() -> int:
 
 
 def _cache_ttl_seconds() -> float:
-    raw = str(os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_CACHE_TTL_SECONDS", "300") or "300")
+    raw = str(env_str("OMNIX_AGENT_SEMANTIC_TASK_CACHE_TTL_SECONDS", "300") or "300")
     try:
         return max(0.0, min(float(raw), 3600.0))
     except ValueError:
@@ -456,14 +459,14 @@ def default_semantic_task_parser(
     model_id: str | None,
 ) -> SemanticTaskParser | None:
     mode = str(
-        os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
+        env_str("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
         or "auto"
     ).strip().casefold()
     if mode in {"off", "disabled", "deterministic", "fallback", "test"}:
         return None
 
     override_provider = str(
-        os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", "") or ""
+        env_str("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", "") or ""
     ).strip()
     raw_provider = override_provider or str(provider_id or "").strip()
     provider_name = _provider_key(raw_provider)
@@ -473,14 +476,12 @@ def default_semantic_task_parser(
     # provider-neutral: any registered BaseProvider can use the shared structured-
     # output gateway, which negotiates JSON schema/object/text modes per adapter.
     try:
-        from app import shared
-
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
         model = (
             str(
-                os.environ.get(
+                env_str(
                     "OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODEL", ""
                 )
                 or ""
@@ -489,9 +490,8 @@ def default_semantic_task_parser(
             or str(getattr(getattr(provider, "config", None), "model", "") or "").strip()
             or None
         )
-        raw_timeout = os.environ.get(
-            "OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS",
-            "",
+        raw_timeout = env_str(
+            "OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS", "",
         )
         timeout = None
         if str(raw_timeout or "").strip():
