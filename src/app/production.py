@@ -74,9 +74,6 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.settings.service import SettingsService
     from app.settings.registry import core_setting_specs
 
-    from app.runtime.repositories import install_legacy_feature_repository_specs
-
-    install_legacy_feature_repository_specs()
     database = default_database()
     tenant_context = ensure_local_identity(database)
     install_process_tenant(tenant_context)
