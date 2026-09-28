@@ -33,17 +33,13 @@ def _stop(instance: Any) -> None:
 def invalidate_changed_audio_caches(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, bool]:
     """Clear cached providers whose effective configuration changed."""
 
-    from app import shared
+    from app.providers.service import invalidate_audio_provider_cache
 
     tts_changed = _fingerprint(before, "tts") != _fingerprint(after, "tts")
     stt_changed = _fingerprint(before, "stt") != _fingerprint(after, "stt")
 
     if tts_changed:
-        _stop(getattr(shared, "_tts_provider_instance", None))
-        shared._tts_provider_instance = None
-        shared._tts_provider_name = None
+        invalidate_audio_provider_cache("tts")
     if stt_changed:
-        _stop(getattr(shared, "_stt_provider_instance", None))
-        shared._stt_provider_instance = None
-        shared._stt_provider_name = None
+        invalidate_audio_provider_cache("stt")
     return tts_changed, stt_changed
