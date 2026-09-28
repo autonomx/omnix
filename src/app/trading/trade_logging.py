@@ -1,7 +1,7 @@
 """Structured local audit logging for automated trading and backtests."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
 import logging
