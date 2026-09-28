@@ -9,7 +9,6 @@ from __future__ import annotations
 from app.config.env import env_str
 
 import json
-import os
 import re
 from collections.abc import Mapping
 from typing import Any, Literal, Protocol
