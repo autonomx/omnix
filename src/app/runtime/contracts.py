@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from app.assets.models import AssetRecord, AssetListResponse
-    from app.chat.models import ChatSession, ChatSessionListResponse, CreateChatSessionRequest
     from app.jobs.models import CreateJobRequest, JobRecord
     from app.jobs.residency import ModelResidencyRecord
     from app.persistence.database import PostgresDatabase
@@ -32,9 +31,9 @@ class AssetService(Protocol):
 
 
 class ChatService(Protocol):
-    def list_sessions(self) -> ChatSessionListResponse: ...
-    def create_session(self, request: CreateChatSessionRequest) -> ChatSession: ...
-    def get_session(self, session_id: str) -> ChatSession | None: ...
+    def list_sessions(self) -> Any: ...
+    def create_session(self, request: Any) -> Any: ...
+    def get_session(self, session_id: str) -> Any | None: ...
 
 
 class ModelResidencyService(Protocol):
