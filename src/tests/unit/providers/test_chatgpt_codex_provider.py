@@ -216,7 +216,7 @@ def test_cancel_active_request_terminates_live_app_server():
 
 def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkeypatch):
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.config.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "providerConfigs": {
