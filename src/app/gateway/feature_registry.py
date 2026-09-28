@@ -4,7 +4,7 @@ import logging
 
 from app.jobs.handlers import JobHandlerRegistry
 from app.persistence.repository_registry import install_repository_specs, reset_repository_specs
-from app.runtime.repositories import shared_repository_specs
+from app.persistence.shared_repository_specs import shared_repository_specs
 from app.runtime.background import register_background_worker
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
