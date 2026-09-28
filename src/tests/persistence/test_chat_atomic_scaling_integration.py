@@ -27,7 +27,7 @@ from app.jobs.models import (
 from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
 from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
 from src.tests.persistence import test_chat_execution_ownership_integration as ownership
