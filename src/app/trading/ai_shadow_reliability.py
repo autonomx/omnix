@@ -20,7 +20,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app import shared
+from app.providers.service import get_provider
 from app.providers import ChatMessage, ConnectionError as ProviderConnectionError, get_registry
 from app.providers.structured.contracts import StructuredMode
 from app.providers.structured.schema_projection import project_provider_schema
@@ -109,7 +109,7 @@ def get_trading_research_provider():
     """Return a provider instance isolated from foreground Chat/Agent traffic."""
 
     global _PROVIDER_INSTANCE, _PROVIDER_KEY
-    foreground = shared.get_provider()
+    foreground = get_provider()
     if foreground is None:
         return None
     key = _provider_key(foreground)
