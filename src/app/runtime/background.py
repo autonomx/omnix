@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from functools import wraps
 import hashlib
 import inspect
@@ -12,9 +12,8 @@ import threading
 import time
 from dataclasses import dataclass
 from collections.abc import Callable
+from typing import Any, ContextManager
 
-from app.persistence.authority import AuthorityOperation, require_authority_operation
-from app.persistence.background_authority import background_execution
 from .config import RuntimeConfig, GatewayRole, get_runtime_config
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .logging import runtime_transition
@@ -44,6 +43,8 @@ class GatewayBackgroundRuntime:
         role: str | None = None,
         config: RuntimeConfig | None = None,
         poll_seconds: float = 2,
+        authority_check: Callable[[Any], None] | None = None,
+        execution_scope: Callable[[Any], ContextManager[Any]] | None = None,
     ):
         if role is not None and config is not None and role != config.gateway_role:
             raise ValueError("Background role contradicts runtime configuration")
@@ -56,6 +57,8 @@ class GatewayBackgroundRuntime:
         self.role = self.config.gateway_role.value
         self.capabilities = RuntimeCapabilities.from_config(self.config)
         self.poll_seconds = poll_seconds
+        self._authority_check = authority_check or (lambda _connection: None)
+        self._execution_scope = execution_scope or (lambda _owner: nullcontext())
         digest = hashlib.sha256(
             f"omnix:gateway-background:{workspace_id}".encode()
         ).digest()
@@ -74,7 +77,7 @@ class GatewayBackgroundRuntime:
         self._connection_context = self.database.connection()
         connection = self._connection_context.__enter__()
         try:
-            require_authority_operation(connection, AuthorityOperation.RUNTIME_MUTATION)
+            self._authority_check(connection)
             acquired = connection.execute(
                 "SELECT pg_try_advisory_lock(%s)", (self.lock_key,)
             ).fetchone()[0]
@@ -127,7 +130,7 @@ class GatewayBackgroundRuntime:
 
             @wraps(original_start)
             def start(*args, **kwargs):
-                with background_execution(self):
+                with self._execution_scope(self):
                     result = original_start(*args, **kwargs)
                     service = getattr(monitor, "service", None)
                     buffer = getattr(
@@ -154,7 +157,7 @@ class GatewayBackgroundRuntime:
         for worker in self._workers:
             started = time.monotonic()
             self._started.append(worker)
-            with background_execution(self):
+            with self._execution_scope(self):
                 for callback in worker[1]:
                     await self._call(callback)
             runtime_transition(logger, component=worker[0], role=self.role, transition='started', started_at=started)
