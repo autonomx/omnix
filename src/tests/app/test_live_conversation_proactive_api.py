@@ -7,6 +7,23 @@ from fastapi.testclient import TestClient
 
 from app.characters import api as character_api
 from app.gateway.main import create_gateway_app
+from app.chat.character_store import InMemoryChatSessionStore
+from app.persistence.runtime import reset_persistence_mode_cache
+from tests.support.in_memory_jobs import InMemoryJobStore
+
+
+def _client(monkeypatch) -> TestClient:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
+    chat_store = InMemoryChatSessionStore()
+    job_store = InMemoryJobStore()
+    return TestClient(
+        create_gateway_app(
+            chat_store_factory=lambda: chat_store,
+            job_store_factory=lambda: job_store,
+        )
+    )
 
 
 def _create_session(client: TestClient) -> str:
@@ -22,7 +39,7 @@ def test_proactive_stream_is_transient_until_delivery_commit(
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", str(tmp_path / "profiles.json"))
-    client = TestClient(create_gateway_app())
+    client = _client(monkeypatch)
     session_id = _create_session(client)
 
     def fake_proactive_stream(_store, session, **kwargs):
