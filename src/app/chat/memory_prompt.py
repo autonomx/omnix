@@ -32,11 +32,8 @@ def _memory_v2_runtime(
 ) -> Any | None:
     if runtime_factory is not None:
         return runtime_factory()
-    try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-    except ImportError:
-        return None
-    if not runtime_adapters_installed():
+    from app.persistence.runtime import uses_postgresql_runtime
+    if not uses_postgresql_runtime():
         return None
     from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
 
