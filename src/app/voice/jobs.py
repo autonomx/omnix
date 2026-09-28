@@ -28,25 +28,6 @@ VOICE_STUDIO_JOB_TYPES = {
 DEFAULT_UNTAGGED_SPEAKER = "Narrator"
 
 
-def install_voice_studio_job_execution(sqlite_job_store_cls: Any) -> None:
-    """Patch ``SQLiteJobStore.create_job`` so Voice Studio jobs execute locally."""
-    if getattr(sqlite_job_store_cls, "_omnix_voice_studio_jobs_installed", False):
-        return
-
-    original_create_job = sqlite_job_store_cls.create_job
-
-    def create_job_with_voice_studio_execution(self: Any, request: CreateJobRequest) -> JobRecord:
-        if request.type in VOICE_STUDIO_JOB_TYPES:
-            request = mark_inline_execution(request)
-        job = original_create_job(self, request)
-        if job.type not in VOICE_STUDIO_JOB_TYPES:
-            return job
-        return execute_voice_studio_job(self, job)
-
-    sqlite_job_store_cls.create_job = create_job_with_voice_studio_execution
-    sqlite_job_store_cls._omnix_voice_studio_jobs_installed = True
-
-
 def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
     """Run a Voice Studio job synchronously and persist generated assets."""
     job_store.mark_running(job.id)
