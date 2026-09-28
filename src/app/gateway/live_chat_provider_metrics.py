@@ -117,9 +117,9 @@ def _last_whitespace_cut(text: str, *, minimum: int, maximum: int) -> int | None
 
 
 def _resolve_provider(provider_id: str | None) -> Any:
-    from app import shared
+    from app.providers.service import get_provider
 
-    return shared.get_provider(_provider_key(provider_id))
+    return get_provider(_provider_key(provider_id))
 
 
 def _is_lmstudio_provider(provider: Any) -> bool:
