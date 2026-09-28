@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.jobs.models import JobStatus
+from app.runtime.hooks import invoke_runtime_hook
 
 from app.jobs.image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
 from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
@@ -206,31 +207,8 @@ def execute_image_job(
             ],
         ),
     )
-    _advance_character_avatar_generation(job)
+    invoke_runtime_hook("image.character_avatar.completed", job)
     return completed or job
-
-
-def _advance_character_avatar_generation(job: JobRecord) -> None:
-    if job.module != "character-avatar":
-        return
-    character_id = str(
-        (job.input_payload or {}).get("metadata", {}).get("character_id") or ""
-    ).strip()
-    if not character_id:
-        return
-    try:
-        from app.characters.avatar_generation_service import (
-            CharacterAvatarGenerationService,
-        )
-        from app.characters.avatar_viseme_generation import (
-            CharacterVisemeGenerationService,
-        )
-
-        CharacterAvatarGenerationService().list(character_id)
-        CharacterVisemeGenerationService().reconcile_character(character_id)
-    except Exception:
-        # The durable batch remains recoverable through its GET/list reconciliation path.
-        return
 
 
 def _store_image_asset(
@@ -324,32 +302,16 @@ def _stabilize_character_avatar_frame(
     request_metadata: dict[str, Any],
     store: SharedAssetStore,
 ) -> dict[str, Any]:
-    if job.module != "character-avatar" or not request.reference_asset_ids:
-        return {}
-    variant = str(
-        request_metadata.get("avatar_viseme")
-        or request_metadata.get("avatar_variant")
-        or request_metadata.get("avatar_viseme_base")
-        or ""
-    ).strip()
-    if not variant:
-        return {}
-
-    from app.characters.avatar_frame_stabilization import (
-        stabilize_generated_avatar_frame,
-    )
-
-    mouth_anchor = request_metadata.get("avatar_mouth_anchor")
-    return stabilize_generated_avatar_frame(
+    value = invoke_runtime_hook(
+        "image.character_avatar.stabilize",
+        job,
+        request,
         storage_path,
-        reference_asset_id=request.reference_asset_ids[0],
-        variant=variant,
-        store=store,
-        mouth_anchor=mouth_anchor if isinstance(mouth_anchor, dict) else None,
-        articulation_percent=request_metadata.get(
-            "avatar_viseme_articulation_percent"
-        ),
+        request_metadata,
+        store,
+        default={},
     )
+    return value if isinstance(value, dict) else {}
 
 
 def _update_progress(
