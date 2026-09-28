@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from typing import Any
 
 from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureContext, FeatureModule
+from app.runtime.hooks import RuntimeHookSpec
 from app.characters.persistence.repository import PostgresCharacterRepository
 
 from .api import register_character_routes
@@ -29,10 +31,61 @@ def _router(context: FeatureContext) -> APIRouter:
     return router
 
 
+def _stabilize_avatar_frame(
+    job: Any,
+    request: Any,
+    storage_path: str,
+    request_metadata: dict[str, Any],
+    store: Any,
+) -> dict[str, Any]:
+    if getattr(job, "module", "") != "character-avatar" or not getattr(request, "reference_asset_ids", None):
+        return {}
+    variant = str(
+        request_metadata.get("avatar_viseme")
+        or request_metadata.get("avatar_variant")
+        or request_metadata.get("avatar_viseme_base")
+        or ""
+    ).strip()
+    if not variant:
+        return {}
+    from .avatar_frame_stabilization import stabilize_generated_avatar_frame
+
+    mouth_anchor = request_metadata.get("avatar_mouth_anchor")
+    return stabilize_generated_avatar_frame(
+        storage_path,
+        reference_asset_id=request.reference_asset_ids[0],
+        variant=variant,
+        store=store,
+        mouth_anchor=mouth_anchor if isinstance(mouth_anchor, dict) else None,
+        articulation_percent=request_metadata.get("avatar_viseme_articulation_percent"),
+    )
+
+
+def _avatar_generation_completed(job: Any) -> None:
+    if getattr(job, "module", "") != "character-avatar":
+        return
+    payload = getattr(job, "input_payload", None) or {}
+    character_id = str((payload.get("metadata") or {}).get("character_id") or "").strip()
+    if not character_id:
+        return
+    try:
+        from .avatar_generation_service import CharacterAvatarGenerationService
+        from .avatar_viseme_generation import CharacterVisemeGenerationService
+
+        CharacterAvatarGenerationService().list(character_id)
+        CharacterVisemeGenerationService().reconcile_character(character_id)
+    except Exception:
+        return
+
+
 FEATURE = FeatureModule(
     id="characters",
     title="Characters",
     depends_on=("chat", "assistant-memory", "companion-activity"),
     routers=(_router,),
     repositories=(RepositorySpec(PostgresCharacterRepository, PostgresCharacterRepository, "characters"),),
+    hooks=(
+        RuntimeHookSpec("image.character_avatar.stabilize", _stabilize_avatar_frame),
+        RuntimeHookSpec("image.character_avatar.completed", _avatar_generation_completed),
+    ),
 )
