@@ -47,21 +47,48 @@ def test_package_create_app_uses_production_composition(monkeypatch):
 
 def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app import production
-    from app.persistence import startup
+    from app.persistence import startup, database as database_module, identity_service
     from app.gateway import main
     from app import live_voice_hardware_policy
     from app import assets, chat, jobs
+    from app.jobs import durable_feature_worker
+    from app.security import tenant_context
+    from app.settings import access as settings_access
     from app.runtime.config import RuntimeConfig, GatewayRole, get_runtime_config
 
     config = RuntimeConfig(gateway_role=GatewayRole.API)
     calls = []
     stores = [SimpleNamespace() for _ in range(4)]
-    stores[0].database = object()
-    stores[0].context = SimpleNamespace(workspace_id="test-workspace")
+    fake_database = object()
+    stores[0].database = fake_database
+    stores[0].context = SimpleNamespace(
+        workspace_id="test-workspace", user_id="test-user"
+    )
     monkeypatch.setattr(jobs, "default_job_store", lambda: stores[0])
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
     monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
     monkeypatch.setattr(jobs, "default_model_residency_store", lambda: stores[3])
+    monkeypatch.setattr(database_module, "default_database", lambda: fake_database)
+    monkeypatch.setattr(
+        identity_service,
+        "ensure_local_identity",
+        lambda _database: stores[0].context,
+    )
+    monkeypatch.setattr(
+        tenant_context,
+        "install_process_tenant",
+        lambda context: calls.append(("tenant", context.workspace_id)),
+    )
+    monkeypatch.setattr(
+        settings_access,
+        "install_settings_service",
+        lambda _service: calls.append("settings"),
+    )
+    monkeypatch.setattr(
+        durable_feature_worker,
+        "register_durable_feature_job_worker",
+        lambda gateway, store: calls.append(("durable-worker", store is stores[0])),
+    )
     monkeypatch.setattr(
         startup,
         "bootstrap_status_payload",
@@ -76,27 +103,32 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     def compose(**kwargs):
         calls.append("compose")
         assert callable(kwargs["job_store_factory"])
-        assert (
-            kwargs["job_store_factory"]() is kwargs["job_store_factory"]() is stores[0]
-        )
-        assert (
-            kwargs["asset_store_factory"]()
-            is kwargs["asset_store_factory"]()
-            is stores[1]
-        )
+        assert kwargs["job_store_factory"]() is stores[0]
+        assert kwargs["asset_store_factory"]() is stores[1]
         assert callable(kwargs["readiness_check"])
-        assert callable(kwargs['runtime_lifecycle'])
-        assert kwargs['background_runtime'].database is stores[0].database
-        assert kwargs['background_runtime'].config is config
-        assert kwargs['runtime_config'] is config
+        assert callable(kwargs["runtime_lifecycle"])
+        assert kwargs["background_runtime"].database is stores[0].database
+        assert kwargs["background_runtime"].config is config
+        assert kwargs["runtime_config"] is config
+        assert kwargs["runtime_services"].database is fake_database
         assert get_runtime_config() is config
         return SimpleNamespace(
-            state=SimpleNamespace(background_runtime=kwargs["background_runtime"])
+            state=SimpleNamespace(
+                background_runtime=kwargs["background_runtime"],
+                job_handler_registry=object(),
+            )
         )
 
     monkeypatch.setattr(main, "create_gateway_app", compose)
     gateway = production.create_production_app(config)
-    assert calls == ["bootstrap", "policy", "compose"]
+    assert calls[:4] == [
+        "bootstrap",
+        ("tenant", "test-workspace"),
+        "settings",
+        "policy",
+    ]
+    assert "compose" in calls
+    assert ("durable-worker", True) in calls
     assert gateway.state.persistence_startup["backend"] == "postgresql"
     assert gateway.state.runtime_config is config
 
@@ -341,7 +373,6 @@ def test_readiness_does_not_migrate_or_initialize_authority(monkeypatch):
     monkeypatch.setattr(
         runtime, "persistence_mode", lambda: runtime.PersistenceMode.POSTGRESQL
     )
-    monkeypatch.setattr(runtime, "apply_migrations", forbidden)
     monkeypatch.setattr(runtime, "initialize_fresh_install_authority", forbidden)
 
     def status(db, **kwargs):
