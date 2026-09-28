@@ -5,10 +5,9 @@ summary repository defined here; no SQLite schema remains.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import hashlib
-import os
 import threading
 from copy import deepcopy
 from pathlib import Path
