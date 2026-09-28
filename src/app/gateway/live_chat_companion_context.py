@@ -103,7 +103,7 @@ def _build_companion_prompt(
     user_message: Any,
     context_items: list[dict[str, Any]] | None,
 ):
-    from app import shared
+    from app.providers.service import get_global_system_prompt
 
     budget = live_profile._live_voice_prompt_budget()
     memory_service_factory = _lazy_memory_service_factory(self.memory_service_factory)
@@ -173,7 +173,7 @@ def _build_companion_prompt(
     assembly = build_prompt_assembly(
         session,
         user_message,
-        global_system_prompt=shared.get_global_system_prompt(),
+        global_system_prompt=get_global_system_prompt(),
         context_items=context_items or [],
         approved_memory=packet.prompt_memory,
         retrieved_history=[],
