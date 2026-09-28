@@ -52,6 +52,7 @@ def test_tts_reference_snapshot_exposes_exact_and_fallback_paths(tmp_path: Path,
 
 def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_VOICE_DEBUG_LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", "t" * 43)
     captured: dict[str, Any] = {}
 
     class FakeResponse:
