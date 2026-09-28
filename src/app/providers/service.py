@@ -140,6 +140,33 @@ def get_global_system_prompt() -> str:
     return str(load_settings().get("global_system_prompt") or DEFAULT_SYSTEM_PROMPT)
 
 
+def invalidate_audio_provider_cache(kind: str | None = None) -> None:
+    """Stop and clear cached TTS/STT providers owned by this service."""
+    global _tts_provider_instance, _tts_provider_name
+    global _stt_provider_instance, _stt_provider_name
+
+    if kind in (None, "tts"):
+        instance = _tts_provider_instance
+        _tts_provider_instance = None
+        _tts_provider_name = None
+        stop = getattr(instance, "stop", None)
+        if callable(stop):
+            try:
+                stop()
+            except Exception:
+                pass
+    if kind in (None, "stt"):
+        instance = _stt_provider_instance
+        _stt_provider_instance = None
+        _stt_provider_name = None
+        stop = getattr(instance, "stop", None)
+        if callable(stop):
+            try:
+                stop()
+            except Exception:
+                pass
+
+
 def get_tts_provider(provider_name: str | None = None) -> Any:
     global _tts_provider_instance, _tts_provider_name
     settings = load_settings()
