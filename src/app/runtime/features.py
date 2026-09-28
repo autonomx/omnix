@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from .background import BackgroundWorker
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .config import RuntimeConfig
+from .hooks import RuntimeHookSpec
 
 if TYPE_CHECKING:
     from app.runtime.contracts import AssetService, ChatService, JobService, ModelResidencyService
@@ -53,6 +54,7 @@ class FeatureModule:
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()
     scheduled_tasks: tuple[Any, ...] = ()
     repositories: tuple[Any, ...] = ()
+    hooks: tuple[RuntimeHookSpec, ...] = ()
     outbox_consumers: tuple[Any, ...] = ()
     settings: tuple[Any, ...] = ()
     permissions: tuple[Any, ...] = ()
