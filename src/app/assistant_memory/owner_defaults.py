@@ -52,11 +52,8 @@ def reset_default_memory_service() -> None:
 def _runtime_repository_factory() -> RepositoryFactory | None:
     """Resolve PostgreSQL lazily only after the runtime adapter boundary is active."""
 
-    try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-    except ImportError:
-        return None
-    if not runtime_adapters_installed():
+    from app.persistence.runtime import uses_postgresql_runtime
+    if not uses_postgresql_runtime():
         return None
     from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
 
