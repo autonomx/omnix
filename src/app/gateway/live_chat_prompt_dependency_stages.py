@@ -14,17 +14,17 @@ indefinitely.
 from __future__ import annotations
 
 import copy
-import os
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
-from pathlib import Path
 from typing import Any
 
-from app import shared
+from app.config.env import environment, env_str
+from app.providers import service as provider_service
+from app.settings.access import current_settings_service
 from app.assistant_memory import settings as memory_settings_module
 from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
@@ -101,24 +101,14 @@ def _clone(value: Any) -> Any:
     return copy.deepcopy(value)
 
 
-def _path_signature(path: Path) -> tuple[str, int, int]:
-    try:
-        stat = path.stat()
-        return str(path), int(stat.st_mtime_ns), int(stat.st_size)
-    except FileNotFoundError:
-        return str(path), 0, 0
-    except OSError:
-        return str(path), -1, -1
-
-
 def _settings_cache_key() -> tuple[Any, ...]:
     path = memory_settings_module.default_memory_settings_path()
-    environment = tuple((name, os.environ.get(name)) for name in _SETTINGS_ENV_NAMES)
-    return (*_path_signature(path), environment)
+    environment_values = tuple((name, environment().get(name)) for name in _SETTINGS_ENV_NAMES)
+    return (str(path), environment_values)
 
 
 def _global_prompt_override_ttl_seconds() -> float:
-    raw = os.environ.get("OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS")
+    raw = env_str("OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS", None)
     try:
         return max(0.0, float(raw or _DEFAULT_OVERRIDE_PROMPT_TTL_SECONDS))
     except (TypeError, ValueError):
@@ -126,10 +116,11 @@ def _global_prompt_override_ttl_seconds() -> float:
 
 
 def _global_prompt_cache_key() -> tuple[Any, ...]:
-    override = getattr(shared, "_settings_load_override", None)
-    if override is None:
-        return ("file", *_path_signature(Path(shared.SETTINGS_FILE)))
-    return ("override", id(override), _GLOBAL_PROMPT_OVERRIDE_REVISION)
+    try:
+        service = current_settings_service()
+    except RuntimeError:
+        return ("defaults", _GLOBAL_PROMPT_OVERRIDE_REVISION)
+    return ("service", id(service), _GLOBAL_PROMPT_OVERRIDE_REVISION)
 
 
 def _global_prompt_cache_entry_valid(
@@ -137,8 +128,6 @@ def _global_prompt_cache_entry_valid(
     cached_at: float,
     now: float,
 ) -> bool:
-    if key and key[0] == "file":
-        return True
     return (now - cached_at) <= _global_prompt_override_ttl_seconds()
 
 
@@ -213,12 +202,6 @@ def _invalidate_global_prompt_cache() -> None:
     with _CACHE_LOCK:
         _GLOBAL_PROMPT_OVERRIDE_REVISION += 1
         _GLOBAL_SYSTEM_PROMPT_CACHE.clear()
-
-
-def _save_settings_and_invalidate(*args: Any, **kwargs: Any) -> Any:
-    result = _ORIGINAL_SAVE_SETTINGS(*args, **kwargs)
-    _invalidate_global_prompt_cache()
-    return result
 
 
 def _cached_compaction_enabled() -> bool:
@@ -321,8 +304,14 @@ def _install_dependency_wrappers() -> None:
         "diagnostics_ms",
         companion_context.record_companion_diagnostics,
     )
-    shared.get_global_system_prompt = _get_global_system_prompt_cached
-    shared.save_settings = _save_settings_and_invalidate
+    provider_service.get_global_system_prompt = _get_global_system_prompt_cached
+    try:
+        current_settings_service().subscribe(
+            "global_system_prompt",
+            lambda _key, _value: _invalidate_global_prompt_cache(),
+        )
+    except RuntimeError:
+        pass
 
 
 def _install_builder_breakdown() -> None:
@@ -385,8 +374,7 @@ def install_live_chat_prompt_dependency_stage_hook() -> None:
 
 
 _ORIGINAL_LOAD_MEMORY_SETTINGS = companion_context.load_memory_runtime_settings
-_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT = shared.get_global_system_prompt
-_ORIGINAL_SAVE_SETTINGS = shared.save_settings
+_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT = provider_service.get_global_system_prompt
 
 
 __all__ = ["install_live_chat_prompt_dependency_stage_hook"]
