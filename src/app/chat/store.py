@@ -1,7 +1,7 @@
 """Local backend-owned chat session history store."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
 import os
@@ -365,11 +365,10 @@ class ChatSessionStore:
         if boundary_events is not None:
             yield from boundary_events
             return
-
-        from app import shared
         from app.providers.structured.errors import ProviderTimeout
 
         provider_name = _provider_key(provider_id)
+        from app.providers.service import get_provider
         provider = get_provider(provider_name)
         if provider is None:
             raise RuntimeError("Chat provider is not available")
