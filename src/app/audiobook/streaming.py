@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 
-from app.voice.jobs import _generate_audio_bytes, _voice_stem
+from app.providers.tts_service import generate_audio_bytes, voice_stem
 
 from .audio_text import split_sentences
 
@@ -122,14 +122,14 @@ def _sentence_segments_from_start_message(message: dict[str, Any]) -> list[dict[
 def _resolve_voice_for_speaker(speaker: str, merged_map: dict[str, str], default_voices: dict[str, Any]) -> str:
     mapped = merged_map.get(speaker.casefold().strip())
     if mapped:
-        return _voice_stem(mapped) or mapped
+        return voice_stem(mapped) or mapped
     default_voice = default_voices.get("narrator") or default_voices.get("male") or default_voices.get("female") or "Narrator"
     default_text = _clean_text(default_voice)
-    return _voice_stem(default_text) or default_text or "Narrator"
+    return voice_stem(default_text) or default_text or "Narrator"
 
 
 def _generate_segment_pcm_chunks(text: str, voice: str) -> list[bytes]:
-    wav_bytes, _metadata = _generate_audio_bytes(text, speaker=voice or "Narrator", payload={"language": "en"})
+    wav_bytes, _metadata = generate_audio_bytes(text, speaker=voice or "Narrator", payload={"language": "en"})
     return _wav_bytes_to_pcm_chunks(wav_bytes)
 
 
