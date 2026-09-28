@@ -49,7 +49,6 @@ def _install_gateway(gateway, context):
             ("app.gateway.rpg_observer_routes", "register_rpg_observer_routes"),
             ("app.gateway.rpg_tactical_spatial_routes", "register_rpg_tactical_spatial_routes"),
             ("app.gateway.rpg_session_routes", "register_rpg_session_routes"),
-            ("app.gateway.hermes_routes", "register_hermes_routes"),
         ),
     )
 
