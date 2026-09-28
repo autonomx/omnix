@@ -17,6 +17,7 @@ from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.prompt_store import route_typed_stream_boundary
 from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from app.chat.store import _model_key, _provider_key
+from app.providers.service import get_provider
 
 from .tts_stream_diagnostics import stream_log
 
@@ -177,12 +178,11 @@ def _stream_low_latency_reply(
     context_items: list[dict[str, Any]] | None,
     routing_deadline_at: float | None = None,
 ) -> Iterator[dict[str, Any]]:
-    from app import shared
     from app.providers import ChatMessage as ProviderMessage
 
     started = time.perf_counter()
     provider_name = _provider_key(provider_id)
-    provider = shared.get_provider(provider_name)
+    provider = get_provider(provider_name)
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
