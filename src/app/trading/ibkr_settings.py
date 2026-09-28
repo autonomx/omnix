@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 """Durable, non-secret IBKR connection settings.
 
