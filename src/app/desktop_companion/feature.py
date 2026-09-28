@@ -8,9 +8,12 @@ from app.runtime.features import FeatureContext, FeatureModule
 from .routes import register_desktop_companion_routes
 
 
-def _router(_context: FeatureContext) -> APIRouter:
+def _router(context: FeatureContext) -> APIRouter:
     router = APIRouter()
-    register_desktop_companion_routes(router)  # type: ignore[arg-type]
+    kwargs = {}
+    if context.services is not None and getattr(context.services, "chat", None) is not None:
+        kwargs["chat_store_factory"] = lambda: context.services.chat
+    register_desktop_companion_routes(router, **kwargs)  # type: ignore[arg-type]
     return router
 
 
