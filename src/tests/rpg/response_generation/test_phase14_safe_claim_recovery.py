@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
-from app.jobs.rpg_foreground_submission_store import RpgForegroundSubmissionStore
+from app.rpg.jobs.foreground_submission_store import RpgForegroundSubmissionStore
 from tests.support.in_memory_jobs import InMemoryJobStore
 
 
