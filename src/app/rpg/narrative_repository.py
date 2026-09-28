@@ -98,10 +98,9 @@ class PostgresNarrativeResponseRepositoryAdapter:
 
 
 def _runtime_postgresql_active() -> bool:
+    from app.persistence.runtime import uses_postgresql_runtime
     try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-
-        return runtime_adapters_installed()
+        return uses_postgresql_runtime()
     except Exception:
         return False
 
