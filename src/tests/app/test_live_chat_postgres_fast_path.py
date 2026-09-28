@@ -7,7 +7,7 @@ from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.gateway import live_chat_postgres_fast_path as fast_path
-from app.persistence import chat_runtime_compat
+from app.chat.persistence import chat_runtime_compat
 
 
 NOW = "2026-07-18T00:00:00+00:00"
