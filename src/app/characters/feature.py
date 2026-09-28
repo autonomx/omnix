@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureContext, FeatureModule
+from app.characters.persistence.repository import PostgresCharacterRepository
 
 from .api import register_character_routes
 from .avatar_api import register_character_avatar_routes
@@ -32,4 +34,5 @@ FEATURE = FeatureModule(
     title="Characters",
     depends_on=("chat", "assistant-memory", "companion-activity"),
     routers=(_router,),
+    repositories=(RepositorySpec(PostgresCharacterRepository, PostgresCharacterRepository, "characters"),),
 )
