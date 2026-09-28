@@ -5,7 +5,7 @@ from functools import lru_cache
 
 @lru_cache(maxsize=1)
 def production_job_store():
-    from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.rpg.jobs.turn_job_guard import install_rpg_turn_job_guard
     from app.rpg.jobs.debug_job_hook import install_rpg_debug_job_hook
 
