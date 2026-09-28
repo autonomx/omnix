@@ -1,7 +1,7 @@
 """Inference and diagnostics support for low-latency Parakeet live STT."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
 import math
