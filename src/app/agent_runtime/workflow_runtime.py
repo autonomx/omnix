@@ -47,7 +47,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         capability_executor: AssistantToolExecutor = hermes_assistant_tool_execute_payload,
     ) -> None:
         self.database = database or default_database()
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
         self.capability_executor = capability_executor
         self.worker_id = f"workflow:{os.getpid()}:{uuid.uuid4().hex[:12]}"
         self._supervisor_started = False
