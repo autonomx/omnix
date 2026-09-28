@@ -69,9 +69,9 @@ def resolve_effective_provider_id(provider_id: str | None) -> str | None:
         if _DEFAULT_PROVIDER_ID is not None:
             return _DEFAULT_PROVIDER_ID
 
-    from app import shared
+    from app.settings.access import load_settings
 
-    configured = _normalized(shared.load_settings().get("provider")) or "lmstudio"
+    configured = _normalized(load_settings().get("provider")) or "lmstudio"
     with _ROUTE_LOCK:
         _DEFAULT_PROVIDER_ID = configured
     return configured
@@ -80,10 +80,10 @@ def resolve_effective_provider_id(provider_id: str | None) -> str | None:
 def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
     """Return the concrete provider ID and the provider instance it resolves to."""
 
-    from app import shared
+    from app.providers.service import get_provider
 
     effective_provider_id = resolve_effective_provider_id(provider_id)
-    provider = shared.get_provider(_provider_key(effective_provider_id))
+    provider = get_provider(_provider_key(effective_provider_id))
     return effective_provider_id, provider
 
 
