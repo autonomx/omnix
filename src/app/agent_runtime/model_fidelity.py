@@ -14,9 +14,9 @@ _DISABLED = {"", "none", "off", "disabled"}
 
 def _provider_reasoning_effort(provider_id: str) -> str | None:
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        provider = shared.get_provider(str(provider_id or "").removeprefix("llm:"))
+        provider = get_provider(str(provider_id or "").removeprefix("llm:"))
         config = getattr(provider, "config", None)
         extra = getattr(config, "extra_params", None)
         if isinstance(extra, dict):
