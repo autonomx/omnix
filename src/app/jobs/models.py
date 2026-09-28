@@ -155,6 +155,7 @@ class CreateJobRequest(BaseModel):
 class ClaimJobRequest(BaseModel):
     worker_id: str
     resource_classes: list[ResourceClass] = Field(default_factory=list)
+    job_types: list[str] = Field(default_factory=list)
     lease_seconds: int = Field(default=30, ge=1, le=3600)
     cpu_limit: int = Field(default=2, ge=1, le=64)
 
