@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -8,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from .database import PostgresDatabase, default_database
+
+logger = logging.getLogger(__name__)
 
 
 _MIGRATION_TABLE_SQL = """
@@ -381,7 +384,7 @@ def apply_migrations(
                 connection.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_ADVISORY_LOCK_KEY,))
                 connection.commit()
             except Exception:
-                pass
+                logger.debug("Could not release migration advisory lock", exc_info=True)
 
     status = migration_status(db, root=root)
     status["applied_now"] = applied_now
