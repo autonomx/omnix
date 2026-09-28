@@ -3,6 +3,8 @@
 import logging
 
 from app.jobs.handlers import JobHandlerRegistry
+from app.persistence.repository_registry import install_repository_specs, reset_repository_specs
+from app.runtime.repositories import shared_repository_specs
 from app.runtime.background import register_background_worker
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
@@ -32,6 +34,8 @@ def _register_feature_modules(gateway) -> None:
     registered: list[str] = []
     loaded_features = []
     job_handlers = JobHandlerRegistry()
+    reset_repository_specs()
+    install_repository_specs(shared_repository_specs())
 
     for feature_id in enabled_feature_ids(config):
         feature = load_feature(feature_id)
@@ -39,6 +43,8 @@ def _register_feature_modules(gateway) -> None:
         loaded_features.append(feature)
         for handler in feature.job_handlers:
             job_handlers.register(handler)
+        if feature.repositories:
+            install_repository_specs(tuple(feature.repositories))
         context = FeatureContext(
             feature_id=feature.id,
             config=None,
