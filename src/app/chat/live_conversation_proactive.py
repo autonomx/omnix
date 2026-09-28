@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app import shared
+from app.providers.service import get_provider
 from app.providers import ChatMessage as ProviderMessage
 
 from .models import ChatMessage, ChatSession
@@ -166,7 +166,7 @@ def stream_proactive_turn_chunks(
 
     resolved_provider_id = provider_id or session.provider_id
     resolved_model_id = model_id or session.model_id
-    provider = shared.get_provider(_provider_key(resolved_provider_id))
+    provider = get_provider(_provider_key(resolved_provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 
