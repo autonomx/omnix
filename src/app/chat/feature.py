@@ -4,6 +4,10 @@ from app.runtime.gateway_installer import install_registrars
 
 
 def _install_gateway(gateway, context):
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.chat.persistence.legacy_sessions import install_postgresql_legacy_session_callbacks
+        install_postgresql_legacy_session_callbacks()
     install_registrars(
         gateway,
         context,
