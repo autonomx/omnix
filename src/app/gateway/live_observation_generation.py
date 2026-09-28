@@ -8,7 +8,7 @@ from typing import Any, Callable, Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app import shared
+from app.providers.service import get_provider
 from app.providers import ChatMessage
 
 from .live_material_context import live_material_store
@@ -79,7 +79,7 @@ def _generate_observation(
     request: LiveObservationGenerationRequest,
     material_content: str,
 ) -> str:
-    provider = shared.get_provider()
+    provider = get_provider()
     if provider is None or not hasattr(provider, "chat_completion"):
         raise RuntimeError("llm_provider_unavailable")
     maximum_words = max(8, min(55, round(request.preferred_maximum_speech_ms / 330)))
