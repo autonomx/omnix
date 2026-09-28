@@ -18,9 +18,8 @@ turn; users can still override the cache TTL explicitly.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 from functools import wraps
 from typing import Any
 
