@@ -7,7 +7,7 @@ from typing import Any
 
 from app.providers import ChatMessage
 from app.providers.service import get_provider
-from app.config.access import load_settings
+from app.settings.access import load_settings
 
 
 _SYSTEM = (
