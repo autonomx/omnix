@@ -109,6 +109,8 @@ jobs:
           python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
           npm install
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
       - name: Compile Agent Runtime and Chat context modules
         run: |
           python -m compileall -q src/app/agent_runtime
