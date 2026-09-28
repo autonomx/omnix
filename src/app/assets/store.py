@@ -291,13 +291,10 @@ class SharedAssetStore:
 
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
         """Expose voice clone profiles from metadata or recover them from audio files."""
-        try:
-            import app.shared as shared
-        except Exception:
-            return []
+        from app.runtime.paths import VOICE_CLONES_DIR, VOICE_CLONES_FILE
 
-        manifest_path = Path(getattr(shared, "VOICE_CLONES_FILE", ""))
-        clones_dir = Path(getattr(shared, "VOICE_CLONES_DIR", manifest_path.parent))
+        manifest_path = Path(VOICE_CLONES_FILE)
+        clones_dir = Path(VOICE_CLONES_DIR)
         raw: Any = {}
         if manifest_path.is_file():
             try:
