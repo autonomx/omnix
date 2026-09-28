@@ -11,7 +11,8 @@ from .jobs import DeepResearchJobInput, execute_research_job
 
 
 def _execute(context: JobExecutionContext, job):
-    return execute_research_job(context.job_store, job)
+    chat_store = getattr(context.services, "chat", None) if context.services is not None else None
+    return execute_research_job(context.job_store, job, chat_store=chat_store)
 
 
 
