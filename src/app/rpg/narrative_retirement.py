@@ -1,6 +1,8 @@
 """Durable retirement telemetry for the single canonical RPG publisher."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import os
 from functools import lru_cache
 from threading import RLock
@@ -139,16 +141,15 @@ class PostgresNarrativeRetirementRepositoryAdapter:
 
 
 def _runtime_postgresql_active() -> bool:
+    from app.persistence.runtime import uses_postgresql_runtime
     try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-
-        return runtime_adapters_installed()
+        return uses_postgresql_runtime()
     except Exception:
         return False
 
 
 def _repository_mode(environ: Mapping[str, str] | None = None) -> str:
-    env = os.environ if environ is None else environ
+    env = environment() if environ is None else environ
     explicit = str(
         env.get("OMNIX_RPG_NARRATIVE_RETIREMENT_REPOSITORY")
         or env.get("OMNIX_RPG_NARRATIVE_REPOSITORY")
