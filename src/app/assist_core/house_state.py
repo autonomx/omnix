@@ -22,7 +22,7 @@ DEFAULT_HOUSE_STATE = {
 
 
 def assist_data_root() -> Path:
-    base = Path(getattr(shared, "DATA_DIR", "resources/data")) if shared else Path("resources/data")
+    base = Path(DATA_DIR)
     path = base / "assist_core"
     path.mkdir(parents=True, exist_ok=True)
     return path
