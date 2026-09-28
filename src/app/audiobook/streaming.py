@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
 
-from app.jobs.voice_inline import _generate_audio_bytes, _voice_stem
+from app.voice.jobs import _generate_audio_bytes, _voice_stem
 
 from .audio_text import split_sentences
 
