@@ -89,7 +89,7 @@ def test_dedicated_tts_reuses_started_provider_without_reloading_settings(monkey
         settings_calls += 1
         return {"faster-qwen3-tts": {"device": "cuda"}}
 
-    monkeypatch.setattr(execution_lane.shared, "load_settings", load_settings)
+    monkeypatch.setattr(execution_lane, "load_settings", load_settings)
     monkeypatch.setattr(execution_lane, "get_audio_registry", lambda: registry)
 
     try:
@@ -271,7 +271,7 @@ def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatc
 
 
 def test_api_dedicated_qwen_uses_remote_runtime_endpoint(monkeypatch) -> None:
-    from app import runtime_config
+    from app.runtime import config as runtime_config
     from app.runtime.config import GatewayRole, RuntimeConfig, ServiceEndpoint
     from app.providers import qwen_http_gateway
 
