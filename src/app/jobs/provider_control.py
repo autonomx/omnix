@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from typing import Any
-from app.runtime_config import ServiceEndpoint, get_runtime_config
+from app.runtime.config import ServiceEndpoint, get_runtime_config
 from app.security.service_token import service_headers
 
 from .models import JobRecord
