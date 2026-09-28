@@ -75,9 +75,9 @@ def _auto_detect_lmstudio_route() -> tuple[str, str]:
     """Return the currently loaded LM Studio LLM, without persisting a setting."""
 
     try:
-        from app import shared
+        from app.settings.access import load_settings
 
-        settings = shared.load_settings()
+        settings = load_settings()
         base_url = str(
             dict(settings.get("lmstudio") or {}).get("base_url")
             or "http://localhost:1234"
@@ -237,9 +237,9 @@ def build_world_forge_generator_from_settings(
     )
     provider = None
     try:
-        from app import shared
+        from app.providers.service import get_provider as get_runtime_provider
 
-        provider = shared.get_provider(provider_id)
+        provider = get_runtime_provider(provider_id)
     except Exception:
         provider = None
     if provider is None:
