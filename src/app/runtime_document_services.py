@@ -51,32 +51,33 @@ class DocumentServices:
 
 @lru_cache(maxsize=1)
 def production_document_services() -> DocumentServices:
-    from app.persistence import configuration_compat
-    from app.persistence import image_asset_compat
-    from app.persistence import rpg_compat
-    from app.persistence import rpg_feature_compat
-    from app.persistence import runtime_document_compat
+    from app.assistant_tools.persistence import configuration
+    from app.assistant_tools.persistence import runtime_documents as assistant_tool_documents
+    from app.assist_core.persistence import house_state as assist_house_state
+    from app.image.persistence import asset_compat as image_asset_compat
+    from app.rpg.persistence import rpg_compat
+    from app.rpg.persistence import rpg_feature_compat
     return DocumentServices(
         list_session_summaries=rpg_compat.list_session_summaries_from_postgres,
-        load_house_state=runtime_document_compat.load_assist_house_state,
-        save_house_state=runtime_document_compat.save_assist_house_state,
-        append_assistant_tool_ledger_entry=runtime_document_compat.append_assistant_tool_ledger_entry_postgres,
-        load_assistant_tool_ledger=runtime_document_compat.load_assistant_tool_ledger_postgres,
-        load_assistant_tool_credentials=runtime_document_compat.load_empty_assistant_tool_credentials,
-        load_assistant_tool_oauth_clients=runtime_document_compat.load_empty_assistant_tool_oauth_clients,
-        save_assistant_tool_credentials=runtime_document_compat.unavailable_assistant_tool_secret,
-        save_assistant_tool_oauth_clients=runtime_document_compat.unavailable_assistant_tool_secret,
-        credential_for_tool=runtime_document_compat.no_assistant_tool_credential,
-        oauth_client_for_provider=runtime_document_compat.no_assistant_tool_credential,
-        upsert_tool_credential=runtime_document_compat.unavailable_assistant_tool_secret,
-        upsert_oauth_client=runtime_document_compat.unavailable_assistant_tool_secret,
-        delete_tool_credential=runtime_document_compat.no_assistant_tool_credential,
-        read_pending=configuration_compat.read_assist_pending,
-        write_pending=configuration_compat.write_assist_pending,
-        add_pending=configuration_compat.add_assist_pending,
-        append_log=configuration_compat.append_assist_action_log,
-        load_assistant_tools_config=configuration_compat.load_assistant_tools_config,
-        save_assistant_tools_config=configuration_compat.save_assistant_tools_config,
+        load_house_state=assist_house_state.load_house_state_postgres,
+        save_house_state=assist_house_state.save_house_state_postgres,
+        append_assistant_tool_ledger_entry=assistant_tool_documents.append_assistant_tool_ledger_entry_postgres,
+        load_assistant_tool_ledger=assistant_tool_documents.load_assistant_tool_ledger_postgres,
+        load_assistant_tool_credentials=assistant_tool_documents.load_empty_assistant_tool_credentials,
+        load_assistant_tool_oauth_clients=assistant_tool_documents.load_empty_assistant_tool_oauth_clients,
+        save_assistant_tool_credentials=assistant_tool_documents.unavailable_assistant_tool_secret,
+        save_assistant_tool_oauth_clients=assistant_tool_documents.unavailable_assistant_tool_secret,
+        credential_for_tool=assistant_tool_documents.no_assistant_tool_credential,
+        oauth_client_for_provider=assistant_tool_documents.no_assistant_tool_credential,
+        upsert_tool_credential=assistant_tool_documents.unavailable_assistant_tool_secret,
+        upsert_oauth_client=assistant_tool_documents.unavailable_assistant_tool_secret,
+        delete_tool_credential=assistant_tool_documents.no_assistant_tool_credential,
+        read_pending=configuration.read_assist_pending,
+        write_pending=configuration.write_assist_pending,
+        add_pending=configuration.add_assist_pending,
+        append_log=configuration.append_assist_action_log,
+        load_assistant_tools_config=configuration.load_assistant_tools_config,
+        save_assistant_tools_config=configuration.save_assistant_tools_config,
         save_image_asset_bytes=image_asset_compat.save_image_asset_bytes_postgres,
         register_image_asset_file=image_asset_compat.register_image_asset_file_postgres,
         get_image_asset_manifest=image_asset_compat.get_image_asset_manifest_postgres,
