@@ -370,7 +370,7 @@ class ChatSessionStore:
         from app.providers.structured.errors import ProviderTimeout
 
         provider_name = _provider_key(provider_id)
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None:
             raise RuntimeError("Chat provider is not available")
 
@@ -643,10 +643,10 @@ class ChatSessionStore:
 
             return agent_provider_boundary_reply(user_message)
 
-        from app import shared
+        from app.providers.service import get_provider
 
         provider_name = _provider_key(provider_id)
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None:
             raise RuntimeError("Chat provider is not available")
 
@@ -698,12 +698,12 @@ class ChatSessionStore:
         user_message: ChatMessage,
         context_items: list[dict[str, Any]],
     ):
-        from app import shared
         from app.providers import ChatMessage as ProviderMessage
+        from app.providers.service import get_global_system_prompt
 
         messages = []
         if not any(message.role == "system" for message in session.messages):
-            messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
+            messages.append(ProviderMessage(role="system", content=get_global_system_prompt()))
         for message in session.messages:
             if message.id == user_message.id:
                 continue
