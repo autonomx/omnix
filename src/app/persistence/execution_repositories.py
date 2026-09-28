@@ -4,6 +4,8 @@ import json
 import uuid
 from typing import Any
 
+from app.jobs.errors import JobClaimConflict
+
 from .errors import EntityNotFound, PersistenceError
 from .tenant import TenantContext
 
@@ -77,9 +79,6 @@ AND (
 )
 """
 
-
-class JobClaimConflict(PersistenceError):
-    pass
 
 
 class PostgresJobRepository:
