@@ -205,8 +205,8 @@ def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
 def default_memory_settings_store():
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_composition import production_memory_settings_store
-        return production_memory_settings_store()
+        from app.assistant_memory.persistence.settings_store import PostgresAssistantMemorySettingsStore
+        return PostgresAssistantMemorySettingsStore()
     return AssistantMemorySettingsStore()
 
 
