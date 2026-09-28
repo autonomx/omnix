@@ -16,7 +16,7 @@ from app.jobs.models import (
 
 from .job_compat import PostgresJobStoreAdapter as _PostgresJobStoreAdapter
 from .unit_of_work import unit_of_work
-from .chat_execution import ChatExecutionTransactions
+from app.chat.persistence.chat_execution import ChatExecutionTransactions
 
 
 class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapter):
