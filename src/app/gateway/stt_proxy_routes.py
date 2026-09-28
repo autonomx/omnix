@@ -10,7 +10,6 @@ import httpx
 from fastapi import APIRouter, Request, WebSocket
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
-from websockets.exceptions import ConnectionClosed, SecurityError
 from websockets.legacy.client import Connect
 
 from app.runtime_config import get_runtime_config
@@ -115,6 +114,7 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
 
 
 async def _proxy_websocket(socket: WebSocket) -> None:
+    from websockets.exceptions import ConnectionClosed, SecurityError
     try:
         query = _query(socket)
         headers = service_headers()
