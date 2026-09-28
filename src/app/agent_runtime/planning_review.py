@@ -625,9 +625,9 @@ def default_plan_semantic_reviewer(
     if not provider_name:
         return None
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
         return ProviderPlanSemanticReviewer(
