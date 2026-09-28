@@ -117,7 +117,7 @@ def _apply_turn_with_job_mirror(
     **kwargs: Any,
 ) -> dict[str, Any]:
     from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobStatus, ResourceClass
-    from app.jobs.rpg_foreground_submission_store import submission_store_for_job_store
+    from app.rpg.jobs.foreground_submission_store import submission_store_for_job_store
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
