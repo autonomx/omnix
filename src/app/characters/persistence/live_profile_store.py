@@ -1,0 +1,43 @@
+"""PostgreSQL-backed Live Conversation profiles."""
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+from typing import Any
+
+from app.characters.live_conversation_profile import (
+    LiveConversationProfile,
+    LiveConversationProfileEnvelope,
+    LiveConversationProfileStore,
+)
+from app.persistence.document_store import PostgresDocumentStore
+
+
+class PostgresLiveConversationProfileStore(LiveConversationProfileStore):
+    def __init__(self, path: Path | None = None) -> None:
+        if path is not None:
+            raise RuntimeError("file-backed live-conversation profiles are retired")
+        self.path = Path("postgresql:/live-conversation-profiles")
+        self._lock = threading.RLock()
+        self._documents = PostgresDocumentStore()
+
+    def _read(self) -> dict[str, Any]:
+        payload = self._documents.read(
+            module="live-chat",
+            record_type="conversation-profiles",
+            default=None,
+        )
+        if not isinstance(payload, dict):
+            return {"format_version": 1, "defaults": {}, "sessions": {}}
+        result = dict(payload)
+        result.setdefault("format_version", 1)
+        result.setdefault("defaults", {})
+        result.setdefault("sessions", {})
+        return result
+
+    def _write(self, payload: dict[str, Any]) -> None:
+        self._documents.write(
+            dict(payload),
+            module="live-chat",
+            record_type="conversation-profiles",
+        )
