@@ -832,10 +832,10 @@ def test_persistent_agent_mode_uses_semantic_weather_evidence(monkeypatch) -> No
 
 
 def test_unknown_test_provider_keeps_local_matrix_llm_free(monkeypatch) -> None:
-    import app.shared as shared
+    import app.agent_runtime.semantic_classifier as semantic_classifier
 
     monkeypatch.setattr(
-        shared,
+        semantic_classifier,
         "get_provider",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("unknown test provider must not resolve a live LLM")
@@ -849,7 +849,7 @@ def test_unknown_test_provider_keeps_local_matrix_llm_free(monkeypatch) -> None:
 
 
 def test_namespaced_ui_provider_identity_resolves_semantic_classifier(monkeypatch) -> None:
-    import app.shared as shared
+    import app.agent_runtime.semantic_classifier as semantic_classifier
 
     provider = _ContractFakeProvider(
         {
@@ -874,7 +874,7 @@ def test_namespaced_ui_provider_identity_resolves_semantic_classifier(monkeypatc
     )
     requested = []
     monkeypatch.setattr(
-        shared,
+        semantic_classifier,
         "get_provider",
         lambda provider_name=None: requested.append(provider_name) or provider,
     )
