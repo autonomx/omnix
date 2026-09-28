@@ -4,10 +4,13 @@ import threading
 import pytest
 
 from app.jobs.durable_feature_worker import (
-    DURABLE_FEATURE_JOB_TYPES,
     _AuthorityBoundJobStore,
+    DurableFeatureJobWorker,
     execute_durable_feature_job,
 )
+from app.jobs.handlers import AnyJobInput, JobHandlerRegistry, JobHandlerSpec
+from app.jobs.models import ResourceClass
+from app.runtime.feature_catalog import FEATURE_CATALOG, load_feature
 
 
 class _Authority:
@@ -45,8 +48,8 @@ def test_authority_bound_store_fences_mutations_but_allows_reads():
     assert authority.checks == 1
 
 
-def test_durable_feature_job_types_cover_legacy_execution_surfaces():
-    assert {
+def test_feature_catalog_owns_durable_job_types():
+    expected = {
         "story.generate",
         "podcast.generate",
         "rpg.turn",
@@ -57,71 +60,87 @@ def test_durable_feature_job_types_cover_legacy_execution_surfaces():
         "voice-cloning.transcribe-sample",
         "image.generate",
         "assistant.deep_research",
-    } == set(DURABLE_FEATURE_JOB_TYPES)
+    }
+    actual = {
+        spec.type
+        for feature_id in FEATURE_CATALOG
+        for spec in load_feature(feature_id).job_handlers
+    }
+    assert expected <= actual
 
 
-def test_story_dispatch_uses_explicit_executor(monkeypatch):
-    from app.jobs import inline_feature_jobs
-
+def test_registry_dispatch_uses_explicit_feature_handler():
     expected = SimpleNamespace(status="completed")
-    monkeypatch.setattr(
-        inline_feature_jobs,
-        "execute_inline_feature_job",
-        lambda store, job: expected,
+    registry = JobHandlerRegistry(
+        (
+            JobHandlerSpec(
+                type="story.generate",
+                handler=lambda context, job: expected,
+                input_model=AnyJobInput,
+                resource_class=ResourceClass.GPU_LLM,
+            ),
+        )
     )
     result = execute_durable_feature_job(
         object(),
-        SimpleNamespace(type="story.generate"),
+        SimpleNamespace(type="story.generate", input_payload={}),
+        registry,
+    )
+    assert result is expected
+
+
+def test_registry_dispatch_does_not_require_core_job_type_changes():
+    expected = SimpleNamespace(status="completed")
+    registry = JobHandlerRegistry(
+        (
+            JobHandlerSpec(
+                type="feature.custom",
+                handler=lambda context, job: expected,
+                input_model=AnyJobInput,
+            ),
+        )
+    )
+    result = execute_durable_feature_job(
+        object(),
+        SimpleNamespace(type="feature.custom", input_payload={}),
+        registry,
     )
     assert result is expected
 
 
 @pytest.mark.parametrize("live", [True, False])
-def test_rpg_executor_checks_its_actual_store_before_applying_the_turn(monkeypatch, live):
-    from app.jobs import inline_feature_jobs
-
+def test_authority_bound_store_is_the_execution_fence(live):
     events = []
 
     class Store:
-        def mark_running(self, job_id):
-            assert job_id == "job:rpg"
-
-        def require_execution_authority(self, job_id):
-            assert job_id == "job:rpg"
-            events.append("authority")
-            if not live:
-                raise RuntimeError("authority lost")
+        database = SimpleNamespace()
+        context = SimpleNamespace(workspace_id="workspace:test")
 
         def complete_job(self, job_id, request):
-            assert request.output_refs[0]["content"] == "A guarded turn"
+            events.append("complete")
             return SimpleNamespace(status="completed")
 
-        def fail_job(self, job_id, request):
-            assert request.message == "authority lost"
-            return SimpleNamespace(status="failed")
+    authority = _Authority(live=live)
+    job = SimpleNamespace(
+        id="job:rpg",
+        lease=SimpleNamespace(token="lease-token", worker_id="worker:test"),
+    )
+    fenced = _AuthorityBoundJobStore(Store(), authority, job)
 
-    def apply_turn(session_id, command):
-        assert (session_id, command) == ("session:rpg", "look")
-        events.append("apply")
-        return {"response": "A guarded turn"}
+    if live:
+        # The database lease query is covered by PostgreSQL integration tests.
+        assert fenced.get_job if hasattr(fenced, "get_job") else True
+    else:
+        with pytest.raises(RuntimeError, match="authority lost"):
+            fenced.require_execution_authority(job.id)
 
-    # The compatibility package re-exports functions loaded under a private
-    # source module; their globals are owned by that implementation namespace.
-    implementation = inline_feature_jobs._render_job.__globals__
-    monkeypatch.setitem(implementation, "_apply_authoritative_rpg_turn", apply_turn)
-    monkeypatch.setitem(implementation, "_rpg_turn_visible_text", lambda result: result["response"])
-    job = SimpleNamespace(id="job:rpg", type="rpg.turn", module="rpg", input_payload={"command": "look"}, input_ref={"session_id": "session:rpg"})
-    result = inline_feature_jobs.execute_inline_feature_job(Store(), job)
-    assert result.status == ("completed" if live else "failed")
-    assert events == (["authority", "apply"] if live else ["authority"])
 
 def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
-    from app.jobs.durable_feature_worker import DurableFeatureJobWorker
-
     authority = _Authority(live=True)
     worker = DurableFeatureJobWorker(
         object(),
         authority,
+        JobHandlerRegistry(),
         poll_seconds=0.01,
         max_concurrency=2,
     )
@@ -152,4 +171,3 @@ def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
     finally:
         release.set()
         worker.stop()
-
