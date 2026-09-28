@@ -9,7 +9,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
-from app.persistence.runtime_document_compat import (
+from app.chat.persistence.legacy_sessions import (
     load_legacy_chat_sessions,
     mutate_legacy_chat_sessions,
 )
