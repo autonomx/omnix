@@ -47,7 +47,7 @@ jobs:
       - name: Compile hardening modules
         run: |
           python -m py_compile \
-            src/main.py src/app/production.py src/app/shared.py \
+            src/main.py src/app/production.py \
             src/app/audiobook/document_structure.py \
             src/app/audiobook/document_structure_classifier.py \
             src/app/audiobook/document_structure_repository.py
