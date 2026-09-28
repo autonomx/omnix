@@ -91,7 +91,7 @@ def uses_postgresql_runtime() -> bool:
 def ensure_postgresql_runtime_ready(
     database: PostgresDatabase | None = None,
     *,
-    auto_initialize_fresh_install: bool = False,
+    auto_initialize_fresh_install: bool = True,
     apply_schema_changes: bool = False,
 ) -> RuntimePersistenceStatus:
     mode = persistence_mode()
