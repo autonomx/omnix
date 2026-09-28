@@ -1,10 +1,9 @@
 """Dedicated low-latency model and accepted-first TTS execution lane."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
-import os
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -12,7 +11,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
-from app.config.access import load_settings
+from app.settings.access import load_settings
 from app.providers.audio_registry import get_audio_registry
 
 from .tts_stream_diagnostics import stream_log
