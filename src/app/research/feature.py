@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import ResourceClass
+from app.persistence.module_repositories import PostgresResearchReportRepository
+from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
 
 from .jobs import DeepResearchJobInput, execute_research_job
@@ -30,6 +32,9 @@ FEATURE = FeatureModule(
     id="research",
     title="Research",
     installers=(_install_gateway,),
+    repositories=(
+        RepositorySpec(PostgresResearchReportRepository, PostgresResearchReportRepository, "research_reports"),
+    ),
     job_handlers=(
         JobHandlerSpec(
             type="assistant.deep_research",
