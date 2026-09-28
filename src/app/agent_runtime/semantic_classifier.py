@@ -6,6 +6,8 @@ but Omnix still compiles and validates all authority deterministically.
 """
 from __future__ import annotations
 
+from app.config.env import env_str
+
 import json
 import os
 import re
@@ -14,6 +16,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.providers.service import get_provider
 from app.providers.base import BaseProvider, ChatMessage
 from app.providers.structured import (
     StructuredContract,
@@ -753,11 +756,11 @@ def default_semantic_intent_classifier(
     overrides while defaulting to the active typed-chat provider/model.
     """
 
-    mode = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE", "auto") or "auto").strip().casefold()
+    mode = str(env_str("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE", "auto") or "auto").strip().casefold()
     if mode in {"off", "disabled", "deterministic", "fallback", "test"}:
         return None
 
-    override_provider = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "") or "").strip()
+    override_provider = str(env_str("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "") or "").strip()
     raw_provider = override_provider or str(provider_id or "").strip()
     # Browser Chat stores persist provider identities as llm:<provider>. Requiring
     # that canonical namespace for automatic resolution keeps legacy/unit-test
@@ -773,20 +776,18 @@ def default_semantic_intent_classifier(
         return None
 
     try:
-        from app import shared
-
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
         model = (
-            str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL", "") or "").strip()
+            str(env_str("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL", "") or "").strip()
             or _model_key(model_id)
             or str(getattr(getattr(provider, "config", None), "model", "") or "").strip()
             or None
         )
         try:
             timeout = float(
-                os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_TIMEOUT_SECONDS", "6")
+                env_str("OMNIX_AGENT_SEMANTIC_CLASSIFIER_TIMEOUT_SECONDS", "6")
             )
         except ValueError:
             timeout = 6.0
@@ -892,7 +893,7 @@ def semantic_profile_id(
 
 
 def semantic_confidence_threshold() -> float:
-    raw = str(os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MIN_CONFIDENCE", "0.60") or "0.60")
+    raw = str(env_str("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MIN_CONFIDENCE", "0.60") or "0.60")
     try:
         return max(0.0, min(float(raw), 1.0))
     except ValueError:
