@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 """Idempotent startup provisioning for the managed interday SHADOW profile."""
 
-import os
 from decimal import Decimal
 from typing import Literal
 
