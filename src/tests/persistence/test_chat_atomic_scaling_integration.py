@@ -147,14 +147,14 @@ def test_runtime_schema_verification_does_not_acquire_migration_lock_in_chat_tra
 
 
 def test_independent_turn_records_are_atomic_with_chat_transaction(runtime, monkeypatch):
-    from app.persistence import runtime_document_compat as compat
+    from app.chat.persistence import assistant_turn_store
     from app.persistence.document_store import PostgresDocumentStore
 
     database, store, _ = runtime
     documents = PostgresDocumentStore(database)
     documents.context = store.context
-    monkeypatch.setattr(compat, 'PostgresDocumentStore', lambda: documents)
-    coordinator_type = compat.postgres_assistant_turn_coordinator_class()
+    monkeypatch.setattr(assistant_turn_store, 'PostgresDocumentStore', lambda: documents)
+    coordinator_type = assistant_turn_store.PostgresAssistantTurnCoordinator
     first, second = coordinator_type(), coordinator_type()
     one = first.start(session_id='chat:1', user_message_id='msg:1', user_turn_id='turn:1')
     two = second.start(session_id='chat:2', user_message_id='msg:2', user_turn_id='turn:2')
