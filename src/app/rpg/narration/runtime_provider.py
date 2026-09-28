@@ -13,11 +13,9 @@ def get_runtime_llm_provider() -> Any:
     Keep this tiny and defensive so tests can monkeypatch it easily.
     """
     try:
-        from app import shared  # type: ignore
+        from app.providers.service import get_provider
 
-        getter = getattr(shared, "get_provider", None)
-        if callable(getter):
-            return getter()
+        return get_provider()
     except Exception:
         return None
     return None
