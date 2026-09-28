@@ -91,8 +91,8 @@ jobs:
             src/app/gateway/tts_live_call_websocket.py \
             src/app/gateway/tts_stream_contract.py \
             src/app/gateway/tts_stream_diagnostics.py \
-            src/app/persistence/chat_compat.py \
-            src/app/persistence/chat_runtime_compat.py \
+            src/app/chat/persistence/chat_compat.py \
+            src/app/chat/persistence/chat_runtime_compat.py \
             src/app/providers/lmstudio_provider.py \
             src/app/providers/stt_live_runtime_support.py \
             src/app/providers/stt_live_websocket.py \
