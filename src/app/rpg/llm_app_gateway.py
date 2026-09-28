@@ -335,7 +335,7 @@ def build_app_llm_gateway() -> Optional[AppLLMGateway]:
         logger.debug("RPG LLM gateway created using centralized app provider")
         global_system_prompt = ""
         try:
-            global_system_prompt = shared.get_global_system_prompt() or ""
+            global_system_prompt = provider_service.get_global_system_prompt() or ""
         except Exception:
             logger.debug("No global system prompt available", exc_info=True)
         return AppLLMGateway(
