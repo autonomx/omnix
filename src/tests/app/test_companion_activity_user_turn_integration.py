@@ -10,9 +10,13 @@ from app.chat import (
 )
 from app.desktop_companion import chat_activity
 from app.gateway import companion_activity_user_turn as user_turn_hook
+from app.persistence.runtime import reset_persistence_mode_cache
 
 
 def _configure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
