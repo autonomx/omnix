@@ -15,7 +15,7 @@ from app.jobs import CompleteJobRequest, CreateJobRequest, JobStatus, ResourceCl
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
 
 pytestmark = pytest.mark.skipif(
