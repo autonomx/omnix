@@ -16,6 +16,7 @@ from app.providers.service import get_tts_provider
 from app.observability.tts_stream_diagnostics import active_streams_snapshot, stream_log
 
 _STATE_SENTINEL = "_omnix_live_voice_runtime_offload_registered"
+_HOOK_SENTINEL = "_omnix_live_voice_runtime_offload_hook_installed"
 _DEFAULT_PROVIDER_REFRESH_SECONDS = 5.0
 _DEFAULT_DELIVERY_QUEUE_SIZE = 128
 _PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None

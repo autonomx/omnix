@@ -87,16 +87,6 @@ class PostgresLifecycleRepository:
             )
             deleted["runtime_failure_evidence"] = self._delete_with_policy(
                 record_type="runtime_failure_evidence",
-                sql="""
-                    DELETE FROM omnix_runtime_failure_evidence
-                     WHERE id IN (
-                         SELECT id
-                           FROM omnix_runtime_failure_evidence
-                          WHERE created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                          ORDER BY created_at, id
-                          LIMIT %s
-                     )
-                """,
                 batch_size=resolved_batch,
             )
             after = self.capacity_report()

@@ -54,13 +54,27 @@ def _reset(database: PostgresDatabase) -> None:
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'legacy_preflight', import_run_id = NULL,
+               SET mode = 'legacy_preflight', authority_state = 'legacy_preflight',
+                   import_run_id = NULL,
                    source_hash = NULL, activated_at = NULL,
                    rollback_recorded_at = NULL, metadata = '{}'::jsonb,
                    updated_at = CURRENT_TIMESTAMP
              WHERE singleton = TRUE
             """
         )
+
+
+def _restore_runtime_authority() -> None:
+    database = _database()
+    try:
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_persistence_cutover "
+                "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+                "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+            )
+    finally:
+        database.close()
 
 
 _RUNTIME_SCRIPT = r'''
@@ -344,7 +358,11 @@ print("runtime-postgresql-cutover-ok")
 '''
 
 
-def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_path: Path) -> None:
+def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
+    request.addfinalizer(_restore_runtime_authority)
     database = _database()
     try:
         _reset(database)

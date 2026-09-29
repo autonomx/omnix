@@ -77,6 +77,7 @@ def test_blueprint_reconciliation_and_publication_provenance() -> None:
     database = _database()
     try:
         _reset(database)
+        ensure_local_identity(database)
         world_id = "world:blueprint-editor"
         map_id = "map:harbor"
         create_world_project(

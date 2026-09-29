@@ -33,6 +33,12 @@ def test_database_generates_unique_event_keys_for_atomic_direct_writers() -> Non
     database = _database()
     try:
         apply_migrations(database)
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_persistence_cutover "
+                "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+                "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+            )
         context = ensure_local_identity(database)
         with database.transaction() as connection:
             connection.execute(

@@ -2625,7 +2625,12 @@
         "outbox_events",
         "runtime_failure_evidence"
       ],
-      "retention_policies_executed": [],
+      "retention_policies_executed": [
+        "outbox_consumer_inbox",
+        "outbox_dead_letters",
+        "outbox_events",
+        "runtime_failure_evidence"
+      ],
       "tenant_tables": [
         {
           "rls_enabled": false,
@@ -3330,14 +3335,14 @@
       "reason": "no relay consumer registration or outbox claimant in production source"
     }
   },
-  "measured_at": "2026-09-29T11:12:07.042657+00:00",
+  "measured_at": "2026-09-29T12:02:54.319704+00:00",
   "metrics": {
     "boot_imported_modules": 2577,
     "collection_errors": 0,
     "outbox_consumer_coverage_pct": 0,
-    "retention_policies_executed_pct": 0.0,
+    "retention_policies_executed_pct": 66.666667,
     "rls_coverage_pct": 0.0
   },
   "schema_version": 1,
-  "source_digest": "87f64f5d36dd37176ea531a9a6d75c08fb6f71e7abcae5051f521c2a99f7d2c4"
+  "source_digest": "f86d6e836cc3b1b1519c475709bc5adec7d98aa2ee840f00f505d427fdff5363"
 }

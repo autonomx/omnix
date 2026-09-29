@@ -42,6 +42,18 @@ async def measure(samples: int, delay_ms: float) -> dict:
     async with httpx.AsyncClient(
         transport=transport, base_url="http://127.0.0.1"
     ) as client:
+        # Prime the synchronous worker pool and request paths outside the timed
+        # samples. The first to_thread call otherwise measures thread creation
+        # and runner scheduling rather than gateway responsiveness under load.
+        warmup = await client.get("/api/jobs/missing")
+        assert warmup.status_code == 404
+        assert (await client.get("/health")).status_code == 200
+        warmup_stream = resilient_live_job_event_stream(store)
+        await anext(warmup_stream)
+        warmup_poll = asyncio.create_task(anext(warmup_stream))
+        await warmup_poll
+        await warmup_stream.aclose()
+
         for _ in range(samples):
             busy = asyncio.create_task(client.get("/api/jobs/missing"))
             started = time.perf_counter()

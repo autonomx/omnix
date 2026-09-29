@@ -8,8 +8,7 @@ import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass, field
-from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError

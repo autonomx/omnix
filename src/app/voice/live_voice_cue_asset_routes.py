@@ -4,9 +4,8 @@ from app.config.env import env_str as _env_str
 
 import hashlib
 import re
-from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response

@@ -40,6 +40,11 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_outbox_events, omnix_workspace_memberships, omnix_workspaces, "
             "omnix_users CASCADE"
         )
+        connection.execute(
+            "UPDATE omnix_persistence_cutover "
+            "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+            "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+        )
 
 
 def test_ordering_key_claims_one_unpublished_event_at_a_time() -> None:

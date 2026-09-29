@@ -1104,9 +1104,7 @@ def update_world_image_target(
 
 
 def approved_world_asset_bindings(
-    work: Any,
-    context: Any,
-    world_id: str,
+    work: Any, context: Any, world_id: str
 ) -> dict[str, Any]:
     rows = work.connection.execute(
         "SELECT target_id, target_type, entity_id, role, source_content_hash, "

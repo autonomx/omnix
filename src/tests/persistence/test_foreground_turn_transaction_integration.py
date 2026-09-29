@@ -52,6 +52,11 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
+        connection.execute(
+            "UPDATE omnix_persistence_cutover "
+            "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+            "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+        )
 
 
 def _initial_session(campaign_id: str) -> dict:
@@ -377,6 +382,9 @@ def test_foreground_mirror_carries_original_claim_through_atomic_turn_and_replay
     campaign_id, submission_id = "campaign:mirrored", "submission:mirrored"
     try:
         _reset(database)
+        from app.persistence.startup import bootstrap_postgresql_runtime
+
+        bootstrap_postgresql_runtime(database)
         store = PostgresJobStoreAdapter(database)
         monkeypatch.setattr(stores, "default_job_store", lambda: store)
         with unit_of_work(database) as work:

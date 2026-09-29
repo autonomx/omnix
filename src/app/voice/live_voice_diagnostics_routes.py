@@ -1,8 +1,7 @@
 """Browser diagnostics ingestion for live-call streaming."""
 from __future__ import annotations
 
-from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
