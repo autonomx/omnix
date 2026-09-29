@@ -68,8 +68,11 @@ def persistence_mode() -> PersistenceMode:
     return mode
 
 
+_PERSISTENCE_MODE_CACHE_CLEAR = persistence_mode.cache_clear
+
+
 def reset_persistence_mode_cache() -> None:
-    persistence_mode.cache_clear()
+    _PERSISTENCE_MODE_CACHE_CLEAR()
 
 
 def require_legacy_persistence(*, purpose: str) -> None:
