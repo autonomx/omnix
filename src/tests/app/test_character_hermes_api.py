@@ -12,7 +12,11 @@ def _client(tmp_path: Path, monkeypatch) -> TestClient:
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
     monkeypatch.setenv("OMNIX_ASSISTANT_MEMORY_DB_PATH", str(tmp_path / "memory.sqlite3"))
     monkeypatch.setenv("OMNIX_CHARACTER_HERMES_MEMORY_DIR", str(tmp_path / "hermes-characters"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
     created = client.post(
         "/api/characters",
         json={

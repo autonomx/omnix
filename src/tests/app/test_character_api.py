@@ -10,6 +10,14 @@ from app.chat.repository import InMemoryChatRepository
 from app.gateway.main import create_gateway_app
 
 
+def _client() -> TestClient:
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://localhost:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
+
+
 def _create_maya(client: TestClient) -> None:
     response = client.post(
         "/api/characters",
@@ -27,7 +35,7 @@ def _create_maya(client: TestClient) -> None:
 
 def test_character_management_api_is_durable_and_versioned(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
 
     created = client.get("/api/characters/maya").json()
@@ -44,13 +52,13 @@ def test_character_management_api_is_durable_and_versioned(tmp_path: Path, monke
     assert client.patch("/api/characters/maya", json={"expected_version": 1, "description": "Stale update"}).status_code == 409
     assert [item["version"] for item in client.get("/api/characters/maya/versions").json()["versions"]] == [2, 1]
 
-    restarted = TestClient(create_gateway_app())
+    restarted = _client()
     assert restarted.get("/api/characters/maya").json()["active_version"] == 2
 
 
 def test_character_archive_is_non_destructive(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
 
     archived = client.delete("/api/characters/maya")
@@ -85,7 +93,7 @@ def test_character_api_rejects_non_voice_asset_link(tmp_path: Path, monkeypatch)
     )
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_ASSETS_MANIFEST_PATH", str(asset_manifest))
-    client = TestClient(create_gateway_app())
+    client = _client()
     response = client.post(
         "/api/characters",
         json={
@@ -103,7 +111,7 @@ def test_character_mode_session_uses_server_profile_greeting_and_memory_off(tmp_
     monkeypatch.delenv("OMNIX_CHARACTER_MEMORY_ENABLED", raising=False)
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
 
     created = client.post(
@@ -145,7 +153,7 @@ def test_voice_only_system_mode_never_activates_character(tmp_path: Path, monkey
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
 
     created = client.post(
@@ -161,7 +169,7 @@ def test_session_can_switch_between_system_and_character_mode(tmp_path: Path, mo
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
     session_id = client.post("/api/chat/sessions", json={"title": "Switch test"}).json()["id"]
 
@@ -187,7 +195,7 @@ def test_character_session_persists_shared_read_only_policy(tmp_path: Path, monk
     monkeypatch.setenv("OMNIX_CHARACTER_SHARED_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     _create_maya(client)
     updated = client.patch(
         "/api/characters/maya",

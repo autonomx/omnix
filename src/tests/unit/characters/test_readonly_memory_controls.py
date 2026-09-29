@@ -142,7 +142,11 @@ def test_read_only_management_routes_reject_mutations_but_setup_session_can_seed
             write_memory=True,
         )
     )
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
 
     blocked = client.post(
         "/api/assistant/memory",

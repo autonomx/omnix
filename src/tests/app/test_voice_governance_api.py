@@ -27,7 +27,11 @@ def _client(tmp_path: Path, monkeypatch) -> TestClient:
     monkeypatch.setenv("OMNIX_ASSETS_MANIFEST_PATH", str(manifest))
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    return TestClient(create_gateway_app())
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://localhost:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
 
 
 def test_governance_api_automatically_authorizes_cloned_voice_for_character_link(tmp_path: Path, monkeypatch) -> None:
