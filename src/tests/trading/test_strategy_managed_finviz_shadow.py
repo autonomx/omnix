@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -15,25 +16,28 @@ from app.trading.strategy_managed_finviz_shadow import (
     managed_finviz_shadow_config,
     provision_managed_finviz_shadow_strategy,
 )
-from app.trading.strategy_monitor import register_trading_strategy_monitor
+from app.runtime.capabilities import RuntimeCapabilities
+from app.runtime.config import RuntimeConfig
+from app.runtime.features import FeatureContext
+from app.trading.strategy_monitor import create_trading_strategy_monitor_worker
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
 
 
-class RecordingBackgroundRegistry:
-    def __init__(self) -> None:
-        self.workers = []
-
-    def register_worker(self, worker) -> None:
-        self.workers.append(worker)
-
-
-def _app_with_background_registry():
-    app = FastAPI()
-    registry = RecordingBackgroundRegistry()
-    app.state.background_registry = registry
-    return app, registry
+def _strategy_monitor_worker(app):
+    config = RuntimeConfig()
+    return create_trading_strategy_monitor_worker(
+        FeatureContext(
+            feature_id="trading",
+            config=None,
+            runtime=config,
+            capabilities=RuntimeCapabilities.from_config(config),
+            services=None,
+            logger=logging.getLogger("tests.trading"),
+            runtime_state=app.state,
+        )
+    )
 
 
 class FakePaperRepository:
@@ -348,8 +352,10 @@ def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
 
 
 def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
-    app, registry = _app_with_background_registry()
-    monitor = register_trading_strategy_monitor(app)
+    app = FastAPI()
+    worker = _strategy_monitor_worker(app)
+    assert worker is not None
+    monitor = worker.monitor
     strategy_repo = object()
     paper_repo = object()
     monitor.strategy_repository_factory = lambda: strategy_repo
@@ -382,7 +388,7 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
         fake_provision,
     )
 
-    startup = registry.workers[-1].startup[0]
+    startup = worker.startup[0]
     asyncio.run(startup())
 
     assert calls == [(strategy_repo, paper_repo)]
@@ -399,8 +405,10 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
 
 
 def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
-    app, registry = _app_with_background_registry()
-    monitor = register_trading_strategy_monitor(app)
+    app = FastAPI()
+    worker = _strategy_monitor_worker(app)
+    assert worker is not None
+    monitor = worker.monitor
     monitor.strategy_repository_factory = lambda: object()
     monitor.paper_repository_factory = lambda: object()
 
@@ -424,7 +432,7 @@ def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> No
         fail_provision,
     )
 
-    startup = registry.workers[-1].startup[0]
+    startup = worker.startup[0]
     asyncio.run(startup())
 
     assert monitor.managed_finviz_shadow_provision is None

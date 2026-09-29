@@ -2,7 +2,7 @@ import struct
 
 import pytest
 
-from app.gateway.tts_stream_contract import (
+from app.conversation.tts_stream_contract import (
     CHAT_STREAM_MAX_CODEC_CHUNK_STEPS,
     CHAT_STREAM_MIN_NEW_TOKENS,
     STREAM_MAX_INITIAL_SILENCE_MS,

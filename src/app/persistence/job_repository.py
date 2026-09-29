@@ -206,14 +206,17 @@ class PostgresJobRepository(_BaseJobRepository):
                           FILTER (WHERE status = 'queued'), 0),
                       count(*) FILTER (WHERE lease_expires_at < clock_timestamp())
                  FROM omnix_jobs WHERE workspace_id = %s
-                GROUP BY resource_class, status""",
+                GROUP BY resource_class, status
+                LIMIT 100""",
             (context.workspace_id,),
         ).fetchall()
         events = self.connection.execute(
             """SELECT event_type, count(*) FROM omnix_job_events
                 WHERE workspace_id = %s
                   AND created_at > clock_timestamp() - INTERVAL '60 seconds'
-                GROUP BY event_type""",
+                GROUP BY event_type
+                ORDER BY count(*) DESC, event_type
+                LIMIT 100""",
             (context.workspace_id,),
         ).fetchall()
         session_owners = self.connection.execute(
@@ -221,10 +224,16 @@ class PostgresJobRepository(_BaseJobRepository):
                 WHERE workspace_id = %s AND job_type = 'chat.generate' AND status = 'running'""",
             (context.workspace_id,),
         ).fetchone()[0]
+        dead_letters = self.connection.execute(
+            """SELECT count(*) FROM omnix_dead_letters
+                WHERE workspace_id = %s AND resolved_at IS NULL""",
+            (context.workspace_id,),
+        ).fetchone()[0]
         return {
             "groups": groups,
             "events": events,
             "session_owners": session_owners,
+            "dead_letter_count": dead_letters,
         }
 
     def set_cancel_compat(

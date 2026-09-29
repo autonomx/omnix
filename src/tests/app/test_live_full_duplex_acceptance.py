@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_live_call_startup_frame_policy import (
+from app.voice.tts_live_call_startup_frame_policy import (
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
 )
 
@@ -74,7 +74,7 @@ def _item_request(output_id: str, generation_epoch: int, output_order: int) -> d
 
 
 def test_item_cancellation_preserves_unrelated_persistent_tts_output(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.voice import tts_live_call_websocket
 
     provider = FakeTtsProvider()
     monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)

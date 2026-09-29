@@ -22,7 +22,7 @@ def test_relative_codex_path_resolves_before_subprocess_cwd_changes(monkeypatch,
 
 def test_registry_preserves_explicit_codex_provider_config(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.config.access.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "providerConfigs": {

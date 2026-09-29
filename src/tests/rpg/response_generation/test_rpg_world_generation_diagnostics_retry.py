@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 import app.rpg.worlds.generation_retry as generation_retry_module
-from app.gateway.rpg_world_library_routes import _raise_generation_error
+from app.rpg.api.feature_routes.rpg_world_library_routes import _raise_generation_error
 from app.persistence.config import DatabaseConfigurationError
 from app.persistence.database import DatabaseUnavailableError
 from app.rpg.session.genesis.world_forge_contract import (

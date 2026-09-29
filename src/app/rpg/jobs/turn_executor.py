@@ -298,7 +298,7 @@ def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
         first_call = _format_rpg_turn_first_call_visible_response(source, restatement_source)
         if first_call:
             return first_call
-        structured = _format_rpg_turn_narration(source)
+        structured = _format_rpg_turn_narration(source, restatement_source)
         if structured:
             return structured
 
@@ -439,7 +439,10 @@ def _rpg_turn_restatement_source(*sources: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def _format_rpg_turn_narration(source: dict[str, Any]) -> str | None:
+def _format_rpg_turn_narration(
+    source: dict[str, Any],
+    restatement_source: dict[str, Any] | None = None,
+) -> str | None:
     narration_json = _dict_value(source.get("narration_json"))
     if not narration_json:
         return None
@@ -451,7 +454,8 @@ def _format_rpg_turn_narration(source: dict[str, Any]) -> str | None:
     if _is_non_npc_speaker(speaker):
         speaker = ""
         line = ""
-    if _is_player_restatement(line, source) or _is_player_restatement(narration, source):
+    context = _rpg_turn_restatement_source(source, restatement_source or {})
+    if _is_player_restatement(line, context) or _is_player_restatement(narration, context):
         return None
     parts = [narration] if narration else []
     if line and speaker:
@@ -501,14 +505,14 @@ def _normalize_dialogue_quotes(line: str) -> str:
 
 def _call_chat_provider(prompt: str, *, provider_id: str | None, model_id: str | None) -> tuple[str, str | None]:
     from app.providers import ChatMessage
-    from app.providers.facade import ProviderFacade
+    from app.providers.service import chat_completion
 
-    response = ProviderFacade().chat_completion(
+    response = chat_completion(
         messages=[
             ChatMessage(role="system", content="You are a helpful AI assistant."),
             ChatMessage(role="user", content=prompt),
         ],
-        provider=_provider_key(provider_id),
+        provider_name=_provider_key(provider_id),
         model=_model_key(model_id),
         stream=False,
     )

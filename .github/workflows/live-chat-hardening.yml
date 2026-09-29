@@ -77,14 +77,14 @@ jobs:
             src/app/gateway/live_chat_provider_metrics.py \
             src/app/gateway/live_chat_provider_routing.py \
             src/app/gateway/live_chat_stream_retry.py \
-            src/app/gateway/live_material_context.py \
+            src/app/chat/live_material_context.py \
             src/app/chat/live_observation_generation.py \
             src/app/gateway/live_voice_cue_asset_routes.py \
             src/app/gateway/live_voice_runtime_offload.py \
             src/app/gateway/live_voice_release_gate.py \
             src/app/gateway/live_chat_release_gate.py \
             src/app/gateway/live_chat_release_aggregation.py \
-            src/app/gateway/live_chat_evaluation_store.py \
+            src/app/chat/evaluation_store.py \
             src/app/gateway/live_chat_evaluation_routes.py \
             src/app/gateway/live_voice_diagnostics_routes.py \
             src/app/gateway/memory_job_offload.py \

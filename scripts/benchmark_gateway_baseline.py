@@ -18,7 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 async def measure(samples: int, delay_ms: float) -> dict:
     started = time.perf_counter()
-    from app.gateway.main import _live_job_event_stream, create_gateway_app
+    from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
+    from app.gateway.main import create_gateway_app
     import httpx
 
     import_ms = (time.perf_counter() - started) * 1000
@@ -39,7 +40,7 @@ async def measure(samples: int, delay_ms: float) -> dict:
     transport = httpx.ASGITransport(app=gateway)
     health_ms, stream_lag_ms = [], []
     async with httpx.AsyncClient(
-        transport=transport, base_url="http://benchmark"
+        transport=transport, base_url="http://127.0.0.1"
     ) as client:
         for _ in range(samples):
             busy = asyncio.create_task(client.get("/api/jobs/missing"))
@@ -49,7 +50,7 @@ async def measure(samples: int, delay_ms: float) -> dict:
             assert response.status_code == 200
             health_ms.append((time.perf_counter() - started) * 1000)
             assert (await busy).status_code == 404
-            stream = _live_job_event_stream(store)
+            stream = resilient_live_job_event_stream(store)
             await anext(stream)
             poll = asyncio.create_task(anext(stream))
             started = time.perf_counter()

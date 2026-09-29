@@ -1,6 +1,7 @@
+from tests.support.routers import include_router_registrar
 from fastapi import FastAPI
 
-from app.gateway.rpg_world_routes import register_rpg_world_routes
+from app.rpg.api.feature_routes.rpg_world_routes import register_rpg_world_routes
 from app.rpg.worlds.map_blueprint_authoring import (
     MapBlueprintDocument,
     generated_location_blueprint_documents,
@@ -15,7 +16,7 @@ from app.rpg.worlds.contracts import MapInitializationOperation
 
 def test_world_routes_register_map_blueprint_authoring_endpoints() -> None:
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     paths = {route.path for route in app.routes}
 
     assert "/api/rpg/worlds/{world_id}/map-blueprints" in paths

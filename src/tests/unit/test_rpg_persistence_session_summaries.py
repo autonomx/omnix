@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.persistence import rpg_compat
+from app.rpg.persistence import rpg_compat
 
 
 def _session(session_id: str, title: str) -> dict:

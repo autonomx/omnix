@@ -176,6 +176,13 @@ if /I "%~1"=="--database-credential-injected-check" (
     endlocal
     exit /b 0
 )
+echo [POSTGRES] Applying pending schema migrations before starting services...
+"%RPG_FLUX_PYTHON%" -m app.persistence migrate
+if errorlevel 1 (
+    echo ERROR: PostgreSQL migrations failed. Omnix services were not started.
+    pause
+    exit /b 1
+)
 if /I "%OMNIX_KASA_ENABLED%"=="1" (
     "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
     if errorlevel 1 (

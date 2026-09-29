@@ -13,7 +13,6 @@ from app.chat import ChatSessionStore, default_chat_store
 from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 from app.jobs import (
     InMemoryModelResidencyStore,
-    default_job_store,
     default_model_residency_store,
 )
 from app.providers.facade import ProviderFacade, default_provider_facade
@@ -52,7 +51,15 @@ def create_gateway_app(
 
     runtime_config = runtime_config or get_runtime_config()
     _install_required_rpg_turn_hooks()
-    get_job_store = job_store_factory or default_job_store
+    if job_store_factory is None:
+        from app.runtime_composition import production_job_store
+
+        get_job_store = production_job_store
+    else:
+        get_job_store = job_store_factory
+    from app.jobs.store import install_default_job_store_factory
+
+    install_default_job_store_factory(get_job_store)
     get_provider_facade = provider_facade_factory or default_provider_facade
     get_asset_store = asset_store_factory or default_asset_store
     get_chat_store = chat_store_factory or default_chat_store
@@ -82,8 +89,8 @@ def create_gateway_app(
         summary="Thin local-first gateway foundation for the Omnix web app redesign.",
         lifespan=gateway_lifespan,
     )
-    from .rpg_debug_routes import install_rpg_debug_middleware
-    from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_middleware
+    from app.rpg.api.feature_routes import install_rpg_debug_middleware
+    from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_middleware
 
     install_rpg_debug_middleware(gateway)
     install_rpg_turn_job_mirror_middleware(gateway)
@@ -114,7 +121,7 @@ def create_gateway_app(
     from app.platform.runtime_diagnostics import RequestMetrics, RuntimeRequestMiddleware
 
     gateway.state.runtime_metrics = RequestMetrics()
-    from app.gateway.tts_stream_diagnostics import runtime_stream_snapshot
+    from app.observability.tts_stream_diagnostics import runtime_stream_snapshot
 
     gateway.state.tts_stream_snapshot = runtime_stream_snapshot
     gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)

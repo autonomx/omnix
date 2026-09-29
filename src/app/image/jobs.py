@@ -9,39 +9,70 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.config.env import environment
-
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.jobs.models import JobStatus
 from app.runtime.hooks import invoke_runtime_hook
 
-from app.jobs.image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
 from app.jobs.inline_execution_compat import require_execution_authority
-from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.models import (
+    CompleteJobRequest,
+    CreateJobRequest,
+    FailJobRequest,
+    JobRecord,
+    JobStage,
+    ResourceClass,
+)
+
+from app.image.job_contracts import (
+    ImageGenerateInput,
+    ImageOutputRef,
+    image_title_from_prompt,
+)
 
 IMAGE_JOB_TYPE = "image.generate"
-IMAGE_EXECUTOR_ENV = "OMNIX_INLINE_IMAGE_JOB_EXECUTOR"
 IMAGE_GENERATION_CONCURRENCY = 2
 _IMAGE_GENERATION_SLOTS = threading.BoundedSemaphore(IMAGE_GENERATION_CONCURRENCY)
 
 
-def _executor_enabled() -> bool:
-    return environment().get(IMAGE_EXECUTOR_ENV, "1").strip().lower() not in {
-        "0",
-        "false",
-        "off",
-        "disabled",
-    }
-
-
-def _start_image_job(job_store: Any, job: JobRecord) -> None:
-    thread = threading.Thread(
-        target=execute_image_job,
-        args=(job_store, job),
-        name=f"omnix-image-{job.id.removeprefix('job:')[:8]}",
-        daemon=True,
+def enqueue_image_job(
+    store: Any,
+    *,
+    payload: dict[str, Any],
+    owner_id: str | None = None,
+    priority: int = 0,
+    idempotency_key: str | None = None,
+) -> JobRecord:
+    """Submit image generation through the durable shared job store."""
+    request = CreateJobRequest(
+        owner_id=owner_id,
+        module="image-generation",
+        type=IMAGE_JOB_TYPE,
+        resource_class=ResourceClass.GPU_IMAGE,
+        priority=priority,
+        stages=[
+            JobStage(
+                id="generate-image",
+                label="Generate image",
+                resource_class=ResourceClass.GPU_IMAGE,
+            ),
+            JobStage(
+                id="store-asset",
+                label="Store image asset",
+                resource_class=ResourceClass.CPU,
+            ),
+        ],
+        input_payload=payload,
+        compat={
+            "legacy_system": "src/app/image/job_queue.py",
+            "legacy_queue_bypassed": True,
+        },
     )
-    thread.start()
+    if idempotency_key is None:
+        return store.create_job(request)
+    create_once = getattr(store, "create_job_once", None)
+    if not callable(create_once):
+        raise TypeError("image job store must support idempotent submission")
+    return create_once(request, idempotency_key=idempotency_key)
 
 
 def execute_image_job(

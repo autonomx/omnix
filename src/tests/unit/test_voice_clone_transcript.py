@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.providers import service as provider_service
-from app.jobs import voice_inline
+from app.voice import jobs as voice_inline
 
 
 class _FakeSttProvider:
@@ -27,7 +27,7 @@ def test_clone_job_generates_and_persists_stt_reference_transcript(tmp_path, mon
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(voice_inline, "_voice_clone_dir", lambda: tmp_path)
-    monkeypatch.setattr(shared, "get_stt_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_stt_provider", lambda provider_name=None: provider)
     monkeypatch.setattr(voice_inline, "_upsert_asset", lambda asset: captured.setdefault("asset", asset))
     monkeypatch.setattr(
         voice_inline,
@@ -66,7 +66,7 @@ def test_manual_reference_transcript_takes_precedence_over_stt(tmp_path, monkeyp
 
     monkeypatch.setattr(voice_inline, "_voice_clone_dir", lambda: tmp_path)
     monkeypatch.setattr(
-        shared,
+        provider_service,
         "get_stt_provider",
         lambda provider_name=None: (_ for _ in ()).throw(AssertionError("STT should not be loaded")),
     )
@@ -98,7 +98,7 @@ def test_manual_reference_transcript_takes_precedence_over_stt(tmp_path, monkeyp
 
 def test_transcribe_sample_job_returns_transcript_without_creating_clone(tmp_path, monkeypatch) -> None:
     provider = _FakeSttProvider()
-    monkeypatch.setattr(shared, "get_stt_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_stt_provider", lambda provider_name=None: provider)
 
     job = SimpleNamespace(
         id="job:preview-transcript",

@@ -1,6 +1,7 @@
 """Voice/TTS feature declaration."""
 from __future__ import annotations
 
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
@@ -8,7 +9,6 @@ from app.jobs.models import CreateJobRequest, ResourceClass
 from app.platform.effective_defaults import apply_job_defaults
 from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
 from app.runtime.features import FeatureModule
-from app.runtime.router_composition import compose_registrar_router
 
 from .jobs import execute_voice_studio_job
 
@@ -32,21 +32,32 @@ def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
 
 
 def _voice_router(context):
-    return compose_registrar_router(
-        (
-            ("app.gateway.live_voice_runtime_offload", "register_live_voice_runtime_offload"),
-            ("app.gateway.live_voice_diagnostics_routes", "register_live_voice_diagnostics_routes"),
-            ("app.gateway.live_voice_cue_asset_routes", "register_live_voice_cue_asset_routes"),
-            ("app.gateway.tts_runtime_routes", "register_tts_runtime_routes"),
-            ("app.gateway.stt_proxy_routes", "register_stt_proxy_routes"),
-            ("app.gateway.tts_pcm_websocket", "register_tts_pcm_websocket"),
-            ("app.gateway.tts_live_call_websocket", "register_tts_live_call_websocket"),
-            ("app.gateway.live_voice_speculative_tts", "register_live_voice_execution_lane_routes"),
-            ("app.gateway.voice_job_summary_routes", "register_voice_job_summary_routes"),
-            ("app.gateway.voice_library_routes", "register_voice_library_route"),
-        ),
-        state=context.runtime_state,
-    )
+    from .live_voice_cue_asset_routes import register_live_voice_cue_asset_routes
+    from .live_voice_diagnostics_routes import register_live_voice_diagnostics_routes
+    from .live_voice_runtime_offload import register_live_voice_runtime_offload
+    from .live_voice_speculative_tts import register_live_voice_execution_lane_routes
+    from .stt_proxy_routes import register_stt_proxy_routes
+    from .tts_live_call_websocket import register_tts_live_call_websocket
+    from .tts_live_capabilities import register_tts_live_capability_routes
+    from .tts_pcm_websocket import register_tts_pcm_websocket
+    from .tts_runtime_routes import register_tts_runtime_routes
+    from .voice_job_summary_routes import register_voice_job_summary_routes
+    from .voice_library_routes import register_voice_library_route
+
+    router = APIRouter()
+    state = context.runtime_state
+    register_live_voice_runtime_offload(router, state)
+    register_live_voice_diagnostics_routes(router, state)
+    register_live_voice_cue_asset_routes(router, state)
+    register_tts_runtime_routes(router, state)
+    register_stt_proxy_routes(router, state)
+    register_tts_pcm_websocket(router, state)
+    register_tts_live_call_websocket(router, state)
+    register_live_voice_execution_lane_routes(router, state)
+    register_tts_live_capability_routes(router, state)
+    register_voice_job_summary_routes(router, state)
+    register_voice_library_route(router, state)
+    return router
 
 FEATURE = FeatureModule(
     id="voice",

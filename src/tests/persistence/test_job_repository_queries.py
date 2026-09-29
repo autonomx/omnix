@@ -73,6 +73,24 @@ def test_query_jobs_rejects_untrusted_ordering() -> None:
         repository.query_jobs(_context(), order_by="created_at; DROP TABLE omnix_jobs")
 
 
+def test_diagnostic_snapshot_bounds_grouped_results() -> None:
+    connection = RecordingConnection(row=(0,))
+    repository = PostgresJobRepository(connection)
+
+    snapshot = repository.diagnostic_snapshot(_context())
+
+    assert snapshot == {
+        "groups": [],
+        "events": [],
+        "session_owners": 0,
+        "dead_letter_count": 0,
+    }
+    assert len(connection.calls) == 4
+    assert "GROUP BY resource_class, status\n                LIMIT 100" in connection.calls[0][0]
+    assert "ORDER BY count(*) DESC, event_type\n                LIMIT 100" in connection.calls[1][0]
+    assert "FROM omnix_dead_letters" in connection.calls[3][0]
+
+
 def test_patch_job_builds_scoped_metadata_and_status_mutation() -> None:
     connection = RecordingConnection()
     repository = PostgresJobRepository(connection)

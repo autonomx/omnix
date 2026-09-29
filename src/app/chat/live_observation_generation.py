@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.service import get_provider
 from app.providers import ChatMessage
-from app.runtime.router_composition import APIRouterHost
 
 from .live_material_context import live_material_store
 
@@ -106,11 +105,10 @@ def _generate_observation(
     return _extract_text(response)
 
 
-def create_live_observation_generation_router(state: Any = None) -> APIRouter:
+def create_live_observation_generation_router() -> APIRouter:
     router = APIRouter()
-    host = APIRouterHost(router, state=state)
 
-    @host.post(
+    @router.post(
         LIVE_OBSERVATION_PATH,
         response_model=LiveObservationGenerationResponse,
     )

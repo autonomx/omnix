@@ -29,8 +29,8 @@ def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> 
         lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion),
     )
     app = FastAPI()
-    app.include_router(create_live_material_context_router(app.state))
-    app.include_router(create_live_observation_generation_router(app.state))
+    app.include_router(create_live_material_context_router())
+    app.include_router(create_live_observation_generation_router())
     client = TestClient(app, raise_server_exceptions=False)
     appended = client.post(
         f"/api/chat/sessions/{session_id}/live/material",
@@ -101,8 +101,8 @@ def test_live_observation_generation_rejects_stale_context(monkeypatch) -> None:
         ),
     )
     app = FastAPI()
-    app.include_router(create_live_material_context_router(app.state))
-    app.include_router(create_live_observation_generation_router(app.state))
+    app.include_router(create_live_material_context_router())
+    app.include_router(create_live_observation_generation_router())
     client = TestClient(app, raise_server_exceptions=False)
     appended = client.post(
         f"/api/chat/sessions/{session_id}/live/material",

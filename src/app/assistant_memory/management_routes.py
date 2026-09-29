@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
-from app.conversation.contracts import ChatSessionReader
+from app.conversation.contracts import TranscriptReader
 
 from .controls import (
     MemoryExportResponse,
@@ -54,12 +54,12 @@ def _translate_memory_error(exc: Exception) -> HTTPException:
 
 
 def register_memory_management_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
-    chat_store_factory: Callable[[], ChatSessionReader],
+    chat_store_factory: Callable[[], TranscriptReader],
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
 ) -> None:
-    names = {getattr(route, "name", "") for route in app.routes}
+    names = {getattr(route, "name", "") for route in router.routes}
 
     def read_context(session_id: str):
         store = chat_store_factory()
@@ -78,7 +78,7 @@ def register_memory_management_routes(
 
     if "assistant_memory_list_endpoint" not in names:
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory",
             response_model=MemoryListResponse,
             name="assistant_memory_list_endpoint",
@@ -107,7 +107,7 @@ def register_memory_management_routes(
                 raise _not_found("chat session not found")
             return result
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory",
             response_model=MemoryRecord,
             name="assistant_memory_create_endpoint",
@@ -127,7 +127,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/archived",
             response_model=MemoryListResponse,
             name="assistant_memory_archived_endpoint",
@@ -158,7 +158,7 @@ def register_memory_management_routes(
             records.sort(key=lambda item: (item.scope, item.category, item.id))
             return MemoryListResponse(records=records, total=len(records), session_id=session_id)
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/recent-automatic",
             response_model=RecentAutomaticMemoryResponse,
             name="assistant_memory_recent_automatic_endpoint",
@@ -179,7 +179,7 @@ def register_memory_management_routes(
                 ),
             )
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/usage",
             response_model=MemoryUsageResponse,
             name="assistant_memory_usage_endpoint",
@@ -188,7 +188,7 @@ def register_memory_management_routes(
             read_context(session_id)
             return memory_usage_snapshot(session_id)
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/export",
             response_model=MemoryExportResponse,
             name="assistant_memory_export_endpoint",
@@ -197,7 +197,7 @@ def register_memory_management_routes(
             _, _, context = read_context(session_id)
             return export_owner_memory(memory_service_factory(), context)
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/reset",
             response_model=MemoryResetResponse,
             name="assistant_memory_reset_endpoint",
@@ -209,7 +209,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/candidates/pending",
             response_model=MemoryCandidateListResponse,
             name="assistant_memory_candidates_endpoint",
@@ -228,7 +228,7 @@ def register_memory_management_routes(
                 raise _not_found("chat session not found")
             return result
 
-        @app.get(
+        @router.get(
             "/api/assistant/memory/{memory_id}",
             response_model=MemoryRecord,
             name="assistant_memory_read_endpoint",
@@ -247,7 +247,7 @@ def register_memory_management_routes(
                 raise _not_found("memory record not found")
             return record
 
-        @app.patch(
+        @router.patch(
             "/api/assistant/memory/{memory_id}",
             response_model=MemoryRecord,
             name="assistant_memory_update_endpoint",
@@ -267,7 +267,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.delete(
+        @router.delete(
             "/api/assistant/memory/{memory_id}",
             response_model=ForgetMemoryResponse,
             name="assistant_memory_forget_endpoint",
@@ -288,7 +288,7 @@ def register_memory_management_routes(
                 raise _translate_memory_error(exc) from exc
             return ForgetMemoryResponse(memory_id=memory_id)
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/pin",
             response_model=MemoryRecord,
             name="assistant_memory_pin_endpoint",
@@ -308,7 +308,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/unpin",
             response_model=MemoryRecord,
             name="assistant_memory_unpin_endpoint",
@@ -328,7 +328,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/move",
             response_model=MemoryRecord,
             name="assistant_memory_move_endpoint",
@@ -348,7 +348,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/archive",
             response_model=MemoryRecord,
             name="assistant_memory_archive_endpoint",
@@ -369,7 +369,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/restore",
             response_model=MemoryRecord,
             name="assistant_memory_restore_endpoint",
@@ -390,7 +390,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/{memory_id}/undo",
             response_model=ForgetMemoryResponse,
             name="assistant_memory_undo_endpoint",
@@ -413,7 +413,7 @@ def register_memory_management_routes(
                 raise _translate_memory_error(exc) from exc
             return ForgetMemoryResponse(memory_id=memory_id)
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/candidates/{candidate_id}/approve",
             response_model=MemoryRecord,
             name="assistant_memory_candidate_approve_endpoint",
@@ -432,7 +432,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.post(
+        @router.post(
             "/api/assistant/memory/candidates/{candidate_id}/reject",
             response_model=MemoryCandidate,
             name="assistant_memory_candidate_reject_endpoint",
@@ -460,7 +460,7 @@ def register_memory_management_routes(
             except Exception as exc:
                 raise _translate_memory_error(exc) from exc
 
-        @app.delete(
+        @router.delete(
             "/api/assistant/memory/candidates/{candidate_id}",
             response_model=ForgetCandidateResponse,
             name="assistant_memory_candidate_forget_endpoint",

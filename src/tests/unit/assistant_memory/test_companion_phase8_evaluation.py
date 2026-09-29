@@ -254,7 +254,9 @@ def test_observability_is_content_free_and_metrics_route_is_hidden() -> None:
     response = client.get("/api/assistant/memory/metrics")
     assert response.status_code == 200
     assert response.json()["turns"] == 1
-    assert "/api/assistant/memory/metrics" not in client.get("/openapi.json").json()["paths"]
+    schema = client.get("/openapi.json").json()
+    assert "/api/assistant/memory/metrics" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory/metrics"]
 
 
 def test_high_volume_temporal_ranking_stays_bounded() -> None:

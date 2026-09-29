@@ -20,9 +20,9 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution_observation_plane import (
     ExecutionObservationPlane,
@@ -2412,12 +2412,13 @@ class TradingAIShadowMonitor:
         }
 
 
-def register_trading_ai_shadow_monitor(gateway: FastAPI) -> TradingAIShadowMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ai_shadow_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingAIShadowMonitor):
-        return existing
+        return None
     monitor = TradingAIShadowMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if ai_shadow_monitor_enabled():
@@ -2426,14 +2427,13 @@ def register_trading_ai_shadow_monitor(gateway: FastAPI) -> TradingAIShadowMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingAIShadowMonitor",
     "ai_shadow_monitor_enabled",
-    "register_trading_ai_shadow_monitor",
+    "create_trading_ai_shadow_monitor_worker",
 ]

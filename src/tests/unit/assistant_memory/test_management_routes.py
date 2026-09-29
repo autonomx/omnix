@@ -286,10 +286,12 @@ def test_character_candidate_listing_uses_active_owner(tmp_path):
     assert isolated.candidates == []
 
 
-def test_management_routes_are_hidden_from_generated_openapi(tmp_path):
+def test_browser_memory_routes_are_typed_in_generated_openapi(tmp_path):
     client, _, _, session, _ = setup_client(tmp_path)
     schema = client.get("/openapi.json").json()
 
-    assert "/api/assistant/memory" not in schema["paths"]
-    assert "/api/chat/sessions/{session_id}/memory" not in schema["paths"]
+    assert "/api/assistant/memory" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory"]
+    assert "/api/chat/sessions/{session_id}/memory" in schema["paths"]
+    assert "get" in schema["paths"]["/api/chat/sessions/{session_id}/memory"]
     assert client.get("/api/assistant/memory", params={"session_id": session.id}).status_code == 200

@@ -31,7 +31,7 @@ def production_chat_store():
     from app.chat.live_agent_store import install_live_agent_store_hooks
     from app.assistant_memory import default_memory_service
     from app.assistant_memory.settings import load_memory_runtime_settings
-    from app.gateway.live_chat_postgres_fast_path import FastPathPostgresCharacterChatSessionStore
+    from app.chat.live_chat_postgres_fast_path import FastPathPostgresCharacterChatSessionStore
 
     install_live_agent_store_hooks(
         FastPathPostgresCharacterChatSessionStore,

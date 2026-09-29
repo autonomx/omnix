@@ -28,9 +28,9 @@ _MAX_DEPTH = 7
 _LOGGER_NAMES = (
     "app.rpg",
     "app.gateway.rpg",
-    "app.gateway.rpg_session_routes",
+    "app.rpg.api.feature_routes.rpg_session_routes",
     "app.gateway.rpg_direct_turn_routes",
-    "app.gateway.rpg_turn_job_mirror",
+    "app.rpg.jobs.turn_job_mirror",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (

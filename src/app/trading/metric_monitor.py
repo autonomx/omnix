@@ -6,9 +6,9 @@ import os
 import asyncio
 from typing import Any
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .catalog import INSTRUMENTS, bindings_for_instrument
 from .metric_data import TradingMetricDataService, default_metric_data_service
@@ -76,18 +76,18 @@ class TradingMetricMonitor:
         self.started_symbols = ()
 
 
-def register_trading_metric_monitor(gateway: FastAPI) -> TradingMetricMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_metric_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingMetricMonitor):
-        return existing
+        return None
     monitor = TradingMetricMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
+    setattr(state, _MONITOR_STATE_KEY, monitor)
 
     async def startup() -> None:
         if trading_liquidation_collector_enabled():
             monitor.start()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(monitor.stop,),
-    ))
-    return monitor
+    )

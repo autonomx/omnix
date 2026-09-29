@@ -8,37 +8,37 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import tts_live_call_websocket as _tts_live_call_websocket
-from .live_chat_companion_context import install_live_chat_companion_context_hook
-from .live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
-from .live_chat_lmstudio_diagnostics import (
+from app.voice import tts_live_call_websocket as _tts_live_call_websocket
+from app.gateway.hooks.live_chat_companion_context import install_live_chat_companion_context_hook
+from app.chat.live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
+from app.chat.live_chat_lmstudio_diagnostics import (
     install_live_chat_lmstudio_diagnostics_hook,
 )
-from .live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
-from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
-from .live_chat_prompt_cache import install_live_chat_prompt_cache_hook
-from .live_chat_prompt_dependency_stages import (
+from app.chat.live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
+from app.chat.live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
+from app.gateway.hooks.live_chat_prompt_cache import install_live_chat_prompt_cache_hook
+from app.gateway.hooks.live_chat_prompt_dependency_stages import (
     install_live_chat_prompt_dependency_stage_hook,
 )
-from .live_chat_prompt_window import install_live_chat_prompt_window_hook
-from .live_chat_provider_metrics import install_live_chat_provider_metrics_hook
-from .live_chat_provider_routing import install_live_chat_provider_routing_hook
-from .live_chat_stream_retry import install_live_chat_stream_retry_hook
+from app.chat.live_chat_prompt_window import install_live_chat_prompt_window_hook
+from app.chat.live_chat_provider_metrics import install_live_chat_provider_metrics_hook
+from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
+from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_sse_transport import install_live_sse_transport_hook
-from .live_voice_runtime_offload import (
+from app.voice.live_voice_runtime_offload import (
     get_cached_live_tts_provider,
     install_live_voice_runtime_offload_hook,
 )
-from .live_voice_spoken_style import install_live_voice_spoken_style_hook
-from .lmstudio_loaded_model_resolution import (
+from app.chat.live_voice_spoken_style import install_live_voice_spoken_style_hook
+from app.chat.lmstudio_loaded_model_resolution import (
     install_lmstudio_loaded_model_resolution_hook,
 )
 from .memory_job_offload import install_memory_job_offload_hook
-from .rpg_turn_job_mirror import install_rpg_turn_job_mirror_hook
-from .tts_live_call_pcm_diagnostics import (
+from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_hook
+from app.voice.tts_live_call_pcm_diagnostics import (
     install_tts_live_call_pcm_diagnostics_hook,
 )
-from .tts_live_call_startup_frame_policy import (
+from app.voice.tts_live_call_startup_frame_policy import (
     install_tts_live_call_startup_frame_policy,
 )
 
@@ -118,12 +118,17 @@ def _install_required_rpg_turn_hooks() -> None:
         False,
     ):
         raise RuntimeError("RPG interaction lifecycle runtime hook failed to install")
-    install_rpg_turn_job_mirror_hook(constructor_hook=False)
+    install_rpg_turn_job_mirror_hook()
 
 
 def initialize_gateway_runtime_hooks():
     from .companion_activity_user_turn import install_companion_activity_user_turn_hook
+    from app.chat.delivery_sync import persist_live_voice_delivery
+    from app.voice.live_voice_stream_diagnostics import (
+        configure_delivery_checkpoint_recorder,
+    )
 
+    configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     install_companion_activity_user_turn_hook()
     install_live_sse_transport_hook(constructor_hook=False)
     install_live_chat_low_latency_stream_hook()

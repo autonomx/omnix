@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.gateway.live_chat_release_gate import (
+from app.chat.live_chat_release_gate import (
     DEFAULT_LIVE_CHAT_METRIC_POLICIES,
     REQUIRED_LIVE_CHAT_SCENARIOS,
     LiveChatEvidenceMetadata,
@@ -129,7 +129,11 @@ def test_phase9_gate_never_passes_missing_hardware_scenarios() -> None:
 
 def test_phase9_route_rejects_transcript_or_audio_payload_fields() -> None:
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "pytest"},
+    )
     payload = {
         "metadata": _metadata().model_dump(mode="json"),
         "events": [{
@@ -149,7 +153,11 @@ def test_phase9_route_rejects_transcript_or_audio_payload_fields() -> None:
 
 def test_phase9_route_evaluates_reproducible_runtime_evidence() -> None:
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "pytest"},
+    )
 
     response = client.post(
         "/api/tts/live-call/diagnostics/release-gate/v2/evaluate",

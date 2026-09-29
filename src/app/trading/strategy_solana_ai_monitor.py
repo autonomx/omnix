@@ -8,8 +8,9 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
-from app.runtime.background import BackgroundWorker, register_background_worker
+from fastapi import APIRouter, HTTPException, Query, Request
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import TradingMarketDataService, default_market_data_service
@@ -442,12 +443,13 @@ class TradingSolanaAIMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_solana_ai_monitor(gateway: FastAPI) -> TradingSolanaAIMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_solana_ai_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingSolanaAIMonitor):
-        return existing
+        return None
     monitor = TradingSolanaAIMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if solana_ai_monitor_enabled():
@@ -456,10 +458,9 @@ def register_trading_solana_ai_monitor(gateway: FastAPI) -> TradingSolanaAIMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 def create_trading_solana_ai_control_router() -> APIRouter:
@@ -522,6 +523,6 @@ __all__ = [
     "SolanaAIStrategyRecord",
     "TradingSolanaAIMonitor",
     "create_trading_solana_ai_control_router",
-    "register_trading_solana_ai_monitor",
+    "create_trading_solana_ai_monitor_worker",
     "solana_ai_monitor_enabled",
 ]

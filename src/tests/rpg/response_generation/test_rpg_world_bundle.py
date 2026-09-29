@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 import io
 import json
@@ -7,7 +8,7 @@ import zipfile
 import pytest
 from fastapi import FastAPI
 
-from app.gateway.rpg_world_bundle_routes import register_rpg_world_bundle_routes
+from app.rpg.api.feature_routes.rpg_world_bundle_routes import register_rpg_world_bundle_routes
 from app.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
@@ -267,13 +268,13 @@ def test_world_bundle_rejects_unsafe_asset_path_and_bad_checksum() -> None:
         parse_world_bundle_archive(output.getvalue())
 
 
-def test_world_bundle_routes_are_hidden_and_registered_once() -> None:
+def test_world_bundle_routes_are_in_openapi_and_registered_once() -> None:
     app = FastAPI()
-    register_rpg_world_bundle_routes(app)
-    register_rpg_world_bundle_routes(app)
+    include_router_registrar(app, register_rpg_world_bundle_routes)
+    include_router_registrar(app, register_rpg_world_bundle_routes)
 
     paths = [getattr(route, "path", "") for route in app.routes]
     assert paths.count("/api/rpg/worlds/{world_id}/export") == 1
     assert paths.count("/api/rpg/worlds/import") == 1
-    assert "/api/rpg/worlds/{world_id}/export" not in app.openapi()["paths"]
-    assert "/api/rpg/worlds/import" not in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/export" in app.openapi()["paths"]
+    assert "/api/rpg/worlds/import" in app.openapi()["paths"]

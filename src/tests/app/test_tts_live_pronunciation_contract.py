@@ -1,4 +1,4 @@
-from app.gateway.tts_stream_contract import (
+from app.conversation.tts_stream_contract import (
     TtsPronunciationEntry,
     TtsStreamRequest,
     apply_pronunciation_lexicon,

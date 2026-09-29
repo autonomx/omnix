@@ -254,9 +254,9 @@ def _run(turns: int, *, session_id: str) -> tuple[str, dict[str, Any]]:
 
 
 def main() -> int:
-    from app.security.tenant_context import install_process_tenant, local_tenant_context
+    from app.persistence.startup import bootstrap_postgresql_runtime
 
-    install_process_tenant(local_tenant_context())
+    bootstrap_postgresql_runtime()
     parser = argparse.ArgumentParser(
         description="Run canonical public apply_turn endurance and replay checks."
     )

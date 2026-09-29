@@ -6,7 +6,7 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
-from app.gateway.audiobook_streaming import AUDIOBOOK_SAMPLE_RATE
+from app.audiobook.streaming import AUDIOBOOK_SAMPLE_RATE
 from app.gateway.main import create_gateway_app
 
 
@@ -26,15 +26,21 @@ def _test_wav() -> bytes:
 
 
 def test_audiobook_websocket_streams_pcm(monkeypatch) -> None:
-    from app.gateway import audiobook_streaming
+    from app.audiobook import streaming as audiobook_streaming
 
     def fake_generate_audio_bytes(text: str, *, speaker: str, payload: dict):
         return _test_wav(), {"sample_rate": AUDIOBOOK_SAMPLE_RATE, "speaker": speaker, "text": text}
 
-    monkeypatch.setattr(audiobook_streaming, "_generate_audio_bytes", fake_generate_audio_bytes)
-    client = TestClient(create_gateway_app())
+    monkeypatch.setattr(audiobook_streaming, "generate_audio_bytes", fake_generate_audio_bytes)
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "test"},
+    )
 
-    with client.websocket_connect("/ws/audiobook") as websocket:
+    with client.websocket_connect(
+        "/ws/audiobook", headers={"Host": "localhost"}
+    ) as websocket:
         websocket.send_json(
             {
                 "type": "start",
@@ -54,7 +60,7 @@ def test_audiobook_websocket_streams_pcm(monkeypatch) -> None:
 
 
 def test_story_audio_keeps_abbreviations_and_quoted_dialogue_together() -> None:
-    from app.gateway.audiobook_streaming import _sentence_segments_from_start_message
+    from app.audiobook.streaming import _sentence_segments_from_start_message
 
     segments = _sentence_segments_from_start_message({
         "text": 'Dr. Vale waited. "Follow me." she said. The door opened.',

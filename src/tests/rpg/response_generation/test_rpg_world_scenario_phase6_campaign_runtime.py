@@ -1,8 +1,9 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 
-from app.gateway.rpg_npc_spatial_routes import register_rpg_npc_spatial_routes
+from app.rpg.api.feature_routes.rpg_npc_spatial_routes import register_rpg_npc_spatial_routes
 from app.rpg.map_grid_contracts import (
     GridActorPlacement,
     GridMapDefinition,
@@ -119,7 +120,7 @@ def test_routine_emits_deterministic_cross_map_goal_and_routes_are_hidden() -> N
     assert goal.goal_type == "transition_via_portal"
 
     app = FastAPI()
-    register_rpg_npc_spatial_routes(app)
+    include_router_registrar(app, register_rpg_npc_spatial_routes)
     paths = {route.path for route in app.routes}
     expected = {
         "/api/rpg/campaigns/{campaign_id}/spatial-goals",
@@ -129,4 +130,4 @@ def test_routine_emits_deterministic_cross_map_goal_and_routes_are_hidden() -> N
         "/api/rpg/campaigns/{campaign_id}/spatial-state",
     }
     assert expected <= paths
-    assert expected.isdisjoint(app.openapi()["paths"])
+    assert expected <= app.openapi()["paths"].keys()

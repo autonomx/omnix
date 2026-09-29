@@ -24,7 +24,6 @@ from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _runtime(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     character_repository = CharacterRepository(tmp_path / "characters.sqlite3")
     assets = SharedAssetStore(tmp_path / "assets.json")
     character_service = CharacterService(character_repository, asset_store_factory=lambda: assets)

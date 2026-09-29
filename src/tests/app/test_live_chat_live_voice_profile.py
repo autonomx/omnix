@@ -7,9 +7,10 @@ from typing import Any, Iterator
 import pytest
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.gateway import live_chat_live_voice_profile as profile
+from app.chat import live_chat_live_voice_profile as profile
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import LMStudioProvider, ProviderConfig
+from app.providers import service as provider_service
 
 
 def _session_with_long_history() -> tuple[ChatSession, ChatMessage]:
@@ -61,7 +62,7 @@ def test_browser_live_turn_marker_derives_existing_request_ids() -> None:
 
 def test_live_voice_prompt_bounds_history_and_skips_cross_session_recall(monkeypatch) -> None:
     session, current = _session_with_long_history()
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         profile,
         "resolve_prompt_memory",

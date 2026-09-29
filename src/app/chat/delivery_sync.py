@@ -1,6 +1,9 @@
 """Synchronize durable live delivery checkpoints into stored chat metadata."""
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from .assistant_turns import AssistantTurnRecord
 
 
@@ -40,6 +43,40 @@ def sync_delivery_metadata(record: AssistantTurnRecord) -> bool:
             store._save_sessions(sessions)
         return changed
     return False
+
+
+def persist_live_voice_delivery(details: Mapping[str, Any]) -> None:
+    """Persist one voice checkpoint through the chat-owned turn coordinator."""
+    turn_id = str(details.get("assistant_turn_id") or "").strip()
+    if not turn_id:
+        return
+
+    from .assistant_turns import default_assistant_turn_coordinator
+
+    active_index = details.get("audio_interrupted_phrase_index")
+    record = default_assistant_turn_coordinator().record_delivery(
+        turn_id,
+        generated_phrase_count=_count(details.get("generated_phrase_count")),
+        audio_delivered_phrase_count=_count(details.get("audio_delivered_phrase_count")),
+        audio_interrupted_phrase_index=(
+            _count(active_index) if active_index is not None else None
+        ),
+        audio_played_samples=_count(details.get("audio_played_samples")),
+        visual_delivered_text_end=_count(details.get("visual_delivered_text_end")),
+        context_delivered_text_end=_count(details.get("context_delivered_text_end")),
+        delivery_policy="reveal_as_spoken",
+    )
+    if record is not None:
+        sync_delivery_metadata(record)
+
+
+def _count(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _metadata(record: AssistantTurnRecord) -> dict[str, object]:

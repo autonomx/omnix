@@ -10,7 +10,6 @@ from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     jobs_path = tmp_path / "jobs.sqlite"
     manifest_path = tmp_path / "assets" / "manifest.json"
     jobs = InMemoryJobStore(jobs_path)

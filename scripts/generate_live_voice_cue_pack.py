@@ -259,7 +259,7 @@ def synthesize_in_process(
 ) -> tuple[bytes, int]:
     if str(SRC_ROOT) not in sys.path:
         sys.path.insert(0, str(SRC_ROOT))
-    from app.gateway.tts_stream_contract import audio_chunk_to_pcm16_bytes
+    from app.conversation.tts_stream_contract import audio_chunk_to_pcm16_bytes
 
     chunks: list[bytes] = []
     sample_rate = 0

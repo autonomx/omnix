@@ -51,19 +51,9 @@ class GatewayBackgroundRegistryAdapter(BackgroundRegistry):
         )
 
 
-def register_background_worker(gateway, worker: BackgroundWorker) -> None:
-    """Compatibility adapter for gateway-owned registration call sites."""
-    registry = getattr(gateway.state, "background_registry", None)
-    if registry is None:
-        registry = GatewayBackgroundRegistryAdapter(gateway)
-        gateway.state.background_registry = registry
-    register_runtime_background_worker(registry, worker)
-
-
 __all__ = [
     "BackgroundOwnershipUnavailable",
     "BackgroundWorker",
     "GatewayBackgroundRegistryAdapter",
     "GatewayBackgroundRuntime",
-    "register_background_worker",
 ]

@@ -1,12 +1,14 @@
 """Lazy catalog for features migrated to the FeatureModule contract."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from importlib import import_module
+from types import MappingProxyType
 
 from .config import RuntimeConfig
 from .features import FeatureModule
 
-FEATURE_CATALOG: dict[str, str] = {
+FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
     "audiobook": "app.audiobook.feature:FEATURE",
     "assistant-tools": "app.assistant_tools.feature:FEATURE",
     "agent-runtime": "app.agent_runtime.feature:FEATURE",
@@ -15,7 +17,7 @@ FEATURE_CATALOG: dict[str, str] = {
     "assistant-memory": "app.assistant_memory.feature:FEATURE",
     "companion-activity": "app.companion_activity.feature:FEATURE",
     "characters": "app.characters.feature:FEATURE",
-    "character-interactions": "app.gateway.character_interactions_feature:FEATURE",
+    "character-interactions": "app.character_interactions.feature:FEATURE",
     "desktop-companion": "app.desktop_companion.feature:FEATURE",
     "hermes": "app.assist_core.feature:FEATURE",
     "image": "app.image.feature:FEATURE",
@@ -24,7 +26,7 @@ FEATURE_CATALOG: dict[str, str] = {
     "story": "app.story.feature:FEATURE",
     "rpg": "app.rpg.feature:FEATURE",
     "trading": "app.trading.feature:FEATURE",
-}
+})
 
 
 def load_feature(feature_id: str) -> FeatureModule:

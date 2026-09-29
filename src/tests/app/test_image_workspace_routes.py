@@ -14,7 +14,6 @@ from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     jobs.create_job(
         CreateJobRequest(
@@ -105,7 +104,6 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
 
 
 def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     image_file = tmp_path / "generated.png"
     image_file.write_bytes(b"png")
     assets = SharedAssetStore(tmp_path / "assets.json")
@@ -153,7 +151,6 @@ def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) 
 
 
 def test_image_workspace_jobs_prunes_deleted_image_result_jobs(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     job = jobs.create_job(
         CreateJobRequest(

@@ -101,10 +101,6 @@ check_untyped_defs = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["app.*"]
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = [
   "app.runtime.config",
   "app.runtime.capabilities",
@@ -116,7 +112,3 @@ module = [
 ignore_errors = false
 disallow_untyped_defs = true
 no_implicit_optional = true
-
-[[tool.mypy.overrides]]
-module = ["app.runtime.background", "app.runtime.logging"]
-ignore_errors = true

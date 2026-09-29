@@ -17,9 +17,9 @@ from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution import assess_execution_observation, execution_observation_from_quote
 from .execution_observation_plane import (
@@ -454,14 +454,13 @@ class TradingIbkrMarketDataMonitor:
             pass
 
 
-def register_trading_ibkr_market_data_monitor(
-    gateway: FastAPI,
-) -> TradingIbkrMarketDataMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ibkr_market_data_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingIbkrMarketDataMonitor):
-        return existing
+        return None
     monitor = TradingIbkrMarketDataMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if ibkr_market_data_monitor_enabled():
@@ -470,14 +469,13 @@ def register_trading_ibkr_market_data_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingIbkrMarketDataMonitor",
     "ibkr_market_data_monitor_enabled",
-    "register_trading_ibkr_market_data_monitor",
+    "create_trading_ibkr_market_data_monitor_worker",
 ]

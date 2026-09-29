@@ -13,9 +13,9 @@ import os
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
 from .us_equity_calendar import early_close_time, regular_holidays
@@ -144,14 +144,15 @@ class ProspectiveGapMonitor:
         return self._task is not None and not self._task.done()
 
 
-def register_prospective_gap_monitor(gateway: FastAPI) -> ProspectiveGapMonitor | None:
+def create_prospective_gap_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
     if not prospective_gap_monitor_enabled():
         return None
-    existing = getattr(gateway.state, _STATE_KEY, None)
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, ProspectiveGapMonitor):
-        return existing
+        return None
     monitor = ProspectiveGapMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         monitor.start()
@@ -159,14 +160,13 @@ def register_prospective_gap_monitor(gateway: FastAPI) -> ProspectiveGapMonitor 
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "ProspectiveGapMonitor",
     "prospective_gap_monitor_enabled",
-    "register_prospective_gap_monitor",
+    "create_prospective_gap_monitor_worker",
 ]

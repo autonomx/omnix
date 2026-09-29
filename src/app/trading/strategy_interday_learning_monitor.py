@@ -6,9 +6,9 @@ from contextlib import suppress
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import AttributionEvent, INTERDAY_TRADING_STRATEGY_ID
@@ -268,12 +268,13 @@ class InterdayLearningMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_interday_learning_monitor(gateway: FastAPI) -> InterdayLearningMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_interday_learning_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, InterdayLearningMonitor):
-        return existing
+        return None
     monitor = InterdayLearningMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if interday_learning_monitor_enabled():
@@ -282,15 +283,14 @@ def register_interday_learning_monitor(gateway: FastAPI) -> InterdayLearningMoni
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "InterdayLearningMonitor",
     "interday_learning_monitor_enabled",
-    "register_interday_learning_monitor",
+    "create_interday_learning_monitor_worker",
     "run_interday_learning_once",
 ]

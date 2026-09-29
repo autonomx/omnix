@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.gateway.rpg_foreground_turn_record import (
+from app.rpg.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_MAX_BYTES,
     build_foreground_turn_record,
 )
@@ -160,7 +160,7 @@ def test_repository_response_identity_mismatch_fails_closed() -> None:
 
 
 def test_gateway_hydrates_replay_before_single_canonical_presenter() -> None:
-    source = (ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(
+    source = (ROOT / "src/app/rpg/api/turn_pipeline.py").read_text(
         encoding="utf-8"
     )
     hydration = source.index("hydrate_canonical_narrative_replay(")

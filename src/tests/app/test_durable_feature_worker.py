@@ -8,8 +8,8 @@ from app.worker_runtime.durable_feature_worker import (
     DurableFeatureJobWorker,
     execute_durable_feature_job,
 )
-from app.jobs.handlers import AnyJobInput, JobHandlerRegistry, JobHandlerSpec
-from app.jobs.models import ResourceClass
+from app.jobs.handlers import AnyJobInput, Backoff, JobHandlerRegistry, JobHandlerSpec
+from app.jobs.models import FailJobRequest, ResourceClass
 from app.runtime.feature_catalog import FEATURE_CATALOG, load_feature
 
 
@@ -106,6 +106,78 @@ def test_registry_dispatch_does_not_require_core_job_type_changes():
         registry,
     )
     assert result is expected
+
+
+def test_registry_rejects_duplicate_job_handler_types():
+    spec = JobHandlerSpec(type="feature.duplicate", handler=lambda context, job: job)
+
+    with pytest.raises(ValueError, match="duplicate job handler type"):
+        JobHandlerRegistry((spec, spec))
+
+
+def test_registry_validates_feature_input_at_submission():
+    from pydantic import BaseModel, ValidationError
+
+    from app.jobs.models import CreateJobRequest
+
+    class Input(BaseModel):
+        count: int
+
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(
+            type="feature.validated",
+            handler=lambda context, job: job,
+            input_model=Input,
+        ),
+    ))
+    request = CreateJobRequest(
+        module="feature",
+        type="feature.validated",
+        resource_class=ResourceClass.CPU,
+        input_payload={"count": "invalid"},
+    )
+
+    with pytest.raises(ValidationError):
+        registry.validate_submission(request)
+
+
+def test_registered_backoff_is_applied_to_retryable_feature_failure():
+    failures = []
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(
+            type="feature.retry",
+            handler=lambda context, job: context.job_store.fail_job(
+                job.id,
+                FailJobRequest(
+                    code="temporary",
+                    message="retry me",
+                    retryable=True,
+                ),
+            ),
+            retry_backoff=Backoff(
+                base_seconds=2,
+                factor=2,
+                max_seconds=20,
+                jitter=0,
+            ),
+        ),
+    ))
+
+    class Store:
+        def fail_job(self, job_id, request):
+            failures.append((job_id, request))
+            return SimpleNamespace(status="retrying")
+
+    job = SimpleNamespace(
+        id="job:retry",
+        type="feature.retry",
+        input_payload={},
+        _attempt_count=3,
+    )
+    result = execute_durable_feature_job(Store(), job, registry)
+
+    assert result.status == "retrying"
+    assert failures[0][1].retry_delay_seconds == 8
 
 
 def test_unknown_durable_type_fails_nonretryably_with_lease_credentials():

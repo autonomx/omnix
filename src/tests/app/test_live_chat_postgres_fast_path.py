@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.gateway import live_chat_postgres_fast_path as fast_path
+from app.chat import live_chat_postgres_fast_path as fast_path
 from app.chat.persistence import chat_runtime_compat
 
 

@@ -6,8 +6,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-from app.gateway.rpg_foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
-from app.gateway.rpg_turn_job_mirror import (
+from app.rpg.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
+from app.rpg.jobs.turn_job_mirror import (
     _apply_turn_with_job_mirror,
     _submission_lock_count,
 )
@@ -180,7 +180,7 @@ def test_unique_submission_locks_do_not_accumulate(monkeypatch: Any, tmp_path: P
 
 
 def test_source_no_longer_writes_synthetic_or_raw_turn_graphs() -> None:
-    source = Path("src/app/gateway/rpg_turn_job_mirror.py").read_text(encoding="utf-8")
+    source = Path("src/app/rpg/jobs/turn_job_mirror.py").read_text(encoding="utf-8")
 
     assert "synthetic_job_mirror" not in source
     assert "raw_turn_result" not in source

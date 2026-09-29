@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import logging
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -178,7 +179,13 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
     from app.gateway import main as gateway_main
     from app.gateway import app_factory as gateway_app_factory
     from app.trading import strategy_monitor as monitor_module
-    from app.trading.strategy_monitor import TradingStrategyMonitor, register_trading_strategy_monitor
+    from app.runtime.capabilities import RuntimeCapabilities
+    from app.runtime.config import RuntimeConfig
+    from app.runtime.features import FeatureContext
+    from app.trading.strategy_monitor import (
+        TradingStrategyMonitor,
+        create_trading_strategy_monitor_worker,
+    )
 
     monkeypatch.setattr(
         gateway_app_factory,
@@ -209,9 +216,24 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
         )
     )
     from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
+    from app.runtime.background import register_background_worker
 
     app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
-    monitor = register_trading_strategy_monitor(app)
+    config = RuntimeConfig()
+    worker = create_trading_strategy_monitor_worker(
+        FeatureContext(
+            feature_id="trading",
+            config=None,
+            runtime=config,
+            capabilities=RuntimeCapabilities.from_config(config),
+            services=None,
+            logger=logging.getLogger("tests.trading"),
+            runtime_state=app.state,
+        )
+    )
+    assert worker is not None
+    monitor = worker.monitor
+    register_background_worker(app.state.background_registry, worker)
 
     with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}):
         assert monitor._task is not None

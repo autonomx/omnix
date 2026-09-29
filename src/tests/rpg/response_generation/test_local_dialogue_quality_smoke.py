@@ -1,11 +1,12 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from copy import deepcopy
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_session_routes import register_rpg_session_routes
+from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from app.rpg.dialogue_quality_benchmark import (
     build_deterministic_benchmark_response,
     default_dialogue_benchmark_cases,
@@ -147,7 +148,7 @@ def test_fixture_route_requires_loopback_opt_in(monkeypatch) -> None:
         },
     )
     app = FastAPI()
-    register_rpg_session_routes(app)
+    include_router_registrar(app, register_rpg_session_routes)
     client = TestClient(app)
     payload = {"case_id": "business", "run_id": "run-3"}
 

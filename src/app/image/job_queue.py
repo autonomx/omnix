@@ -1,20 +1,32 @@
 """Legacy image queue compatibility facade over durable shared jobs."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import datetime
+from typing import Any
 
 
-def enqueue_image_job(payload: Dict[str, Any]) -> Dict[str, Any]:
+def enqueue_image_job(
+    payload: dict[str, Any],
+    *,
+    owner_id: str | None = None,
+    priority: int = 0,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
     """Submit a legacy image request through the authoritative shared job store."""
-    from app.jobs.adapters import enqueue_image_job as enqueue_shared_image_job
+    from app.image.jobs import enqueue_image_job as enqueue_image_feature_job
     from app.jobs.store import default_job_store
 
-    job = enqueue_shared_image_job(default_job_store(), payload=dict(payload or {}))
+    job = enqueue_image_feature_job(
+        default_job_store(),
+        payload=dict(payload or {}),
+        owner_id=owner_id,
+        priority=priority,
+        idempotency_key=idempotency_key,
+    )
     return _legacy_job_view(job)
 
 
-def claim_next_image_job() -> Dict[str, Any] | None:
+def claim_next_image_job() -> dict[str, Any] | None:
     from app.jobs.models import ClaimJobRequest, ResourceClass
     from app.jobs.store import default_job_store
 
@@ -30,17 +42,33 @@ def claim_next_image_job() -> Dict[str, Any] | None:
     return _legacy_job_view(response.job)
 
 
-def complete_image_job(job_id: str, lease_token: str, result: Dict[str, Any]):
-    from app.jobs.models import CompleteJobRequest
+def complete_image_job(job_id: str, lease_token: str, result: dict[str, Any]):
+    from app.jobs.models import CompleteJobRequest, FailJobRequest
     from app.jobs.store import default_job_store
 
     store = default_job_store()
     job = store.get_job(job_id)
     if not _lease_matches(job, lease_token):
         return None
+    lease = job.lease
+    error = str((result or {}).get("error") or "").strip()
+    if error:
+        failed = store.fail_job(
+            job_id,
+            FailJobRequest(
+                worker_id=lease.worker_id,
+                lease_token=lease_token,
+                code="legacy_image_job_failed",
+                message=error,
+                retryable=False,
+            ),
+        )
+        return _legacy_job_view(failed) if failed else None
     completed = store.complete_job(
         job_id,
         CompleteJobRequest(
+            worker_id=lease.worker_id,
+            lease_token=lease_token,
             output_refs=_legacy_output_refs(result),
             logs=[{"level": "info", "message": "Legacy image worker completed shared job"}],
         ),
@@ -68,25 +96,27 @@ def fail_image_job(job_id: str, lease_token: str, error: str):
     return _legacy_job_view(failed) if failed else None
 
 
-def release_image_job(job_id: str, token: str):
-    """Release a legacy lease without restoring an in-memory shadow queue."""
-    from app.jobs.models import JobStatus
+def release_image_job(job_id: str, token: str, *, reason: str = ""):
+    """Release a legacy lease through the shared job protocol."""
+    from app.jobs.models import ReleaseJobRequest
     from app.jobs.store import default_job_store
 
     store = default_job_store()
     job = store.get_job(job_id)
     if not _lease_matches(job, token):
         return None
-    job.status = JobStatus.QUEUED
-    job.lease = None
-    job.updated_at = datetime.now(timezone.utc).isoformat()
-    with store._connect() as conn:  # noqa: RLF001 - compatibility facade
-        store._update_job(conn, job)  # noqa: SLF001
-        store._append_event(conn, job.id, "job.updated", job.model_dump(mode="json"))  # noqa: SLF001
-    return _legacy_job_view(job)
+    released = store.release_job(
+        job_id,
+        ReleaseJobRequest(
+            worker_id=job.lease.worker_id,
+            lease_token=token,
+            reason=reason,
+        ),
+    )
+    return _legacy_job_view(released) if released else None
 
 
-def list_image_jobs() -> List[Dict[str, Any]]:
+def list_image_jobs() -> list[dict[str, Any]]:
     from app.jobs.store import default_job_store
 
     return [
@@ -100,7 +130,7 @@ def _lease_matches(job: Any, token: str) -> bool:
     return bool(job is not None and job.lease is not None and job.lease.token == token)
 
 
-def _legacy_output_refs(result: Dict[str, Any] | None) -> list[dict[str, Any]]:
+def _legacy_output_refs(result: dict[str, Any] | None) -> list[dict[str, Any]]:
     payload = dict(result or {})
     asset_id = str(payload.get("asset_id") or "").strip()
     if not asset_id:
@@ -117,12 +147,12 @@ def _legacy_output_refs(result: Dict[str, Any] | None) -> list[dict[str, Any]]:
     return [allowed]
 
 
-def _legacy_job_view(job: Any) -> Dict[str, Any]:
+def _legacy_job_view(job: Any) -> dict[str, Any]:
     status = getattr(getattr(job, "status", None), "value", str(getattr(job, "status", "queued")))
     if status == "completed":
         status = "complete"
     lease = getattr(job, "lease", None)
-    result: Dict[str, Any] | None = None
+    result: dict[str, Any] | None = None
     output_refs = list(getattr(job, "output_refs", []) or [])
     if output_refs:
         result = dict(output_refs[0])
@@ -135,6 +165,7 @@ def _legacy_job_view(job: Any) -> Dict[str, Any]:
         "status": status,
         "payload": dict(getattr(job, "input_payload", {}) or {}),
         "result": result,
+        "error": error.message if error is not None else None,
         "created_at": _epoch(getattr(job, "created_at", None)),
         "updated_at": _epoch(getattr(job, "updated_at", None)),
         "lease_token": getattr(lease, "token", "") if lease else "",

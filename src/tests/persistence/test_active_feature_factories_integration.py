@@ -166,7 +166,7 @@ assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 from app.chat import evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
-from app.gateway import live_chat_evaluation_routes as evaluation_routes
+from app.chat import live_chat_evaluation_routes as evaluation_routes
 assert evaluation_routes.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 assert evaluation_routes.default_live_chat_evaluation_store().__class__.__name__ == "PostgresLiveChatEvaluationStore"
 record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
@@ -312,6 +312,9 @@ import app.chat as chat_package
 assert chat_package.default_chat_store().__class__.__name__ == "FastPathPostgresCharacterChatSessionStore"
 
 from app.jobs import default_job_store
+from app.jobs.store import install_default_job_store_factory
+from app.runtime_composition import production_job_store
+install_default_job_store_factory(production_job_store)
 default_job_store()
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 assert getattr(PostgresJobStoreAdapter, "_omnix_voice_studio_jobs_installed", False) is False

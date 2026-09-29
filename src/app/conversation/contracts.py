@@ -64,7 +64,7 @@ class ChatSession(ChatSessionSummary):
     messages: list[ChatMessage] = Field(default_factory=list)
 
 
-class ChatSessionReader(Protocol):
+class TranscriptReader(Protocol):
     """Read port for features that need persisted conversation state."""
 
     def get_session(self, session_id: str) -> ChatSession | None: ...
@@ -72,7 +72,7 @@ class ChatSessionReader(Protocol):
     def list_sessions(self) -> Any: ...
 
 
-class ChatSessionMutationPort(ChatSessionReader, Protocol):
+class ChatSessionMutationPort(TranscriptReader, Protocol):
     """Atomic transcript mutation port shared by Chat and memory snapshots."""
 
     def _load_sessions(self) -> list[ChatSession]: ...
@@ -94,6 +94,12 @@ class PromptMemoryItem(BaseModel):
         "memory_v2",
         "shared_memory_v2",
     ] = "system"
+
+
+class DeliveryCheckpointRecorder(Protocol):
+    """Port for persisting voice delivery checkpoints into the owning chat turn."""
+
+    def __call__(self, details: dict[str, Any]) -> None: ...
 
 
 def estimate_tokens(text: str) -> int:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from .observability import CompanionMemoryMetrics, companion_metrics_snapshot
 from .settings import (
@@ -16,16 +16,16 @@ from .persistence.settings_store import SettingRevisionConflict
 
 
 def register_memory_settings_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     settings_store_factory: Callable[[], AssistantMemorySettingsStore] | None = None,
 ) -> None:
     settings_store_factory = settings_store_factory or default_memory_settings_store
-    names = {getattr(route, "name", "") for route in app.routes}
+    names = {getattr(route, "name", "") for route in router.routes}
     if "assistant_memory_settings_status_endpoint" in names:
         return
 
-    @app.get(
+    @router.get(
         "/api/assistant/memory/settings",
         response_model=AssistantMemoryRuntimeStatus,
         name="assistant_memory_settings_status_endpoint",
@@ -33,7 +33,7 @@ def register_memory_settings_routes(
     async def assistant_memory_settings_status_endpoint() -> AssistantMemoryRuntimeStatus:
         return settings_store_factory().load_effective()
 
-    @app.post(
+    @router.post(
         "/api/assistant/memory/settings",
         response_model=AssistantMemoryRuntimeStatus,
         name="assistant_memory_settings_update_endpoint",
@@ -54,7 +54,7 @@ def register_memory_settings_routes(
                 detail={"code": "memory_privacy_policy_rejected", "message": str(exc)},
             ) from exc
 
-    @app.get(
+    @router.get(
         "/api/assistant/memory/metrics",
         response_model=CompanionMemoryMetrics,
         name="assistant_memory_metrics_endpoint",

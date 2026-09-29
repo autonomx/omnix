@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assistant_context import web_search
+from app.research import web_search
 from app.security import provider_secret_store as secret_store
 from app.research import provider_chain
 

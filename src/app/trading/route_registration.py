@@ -1,12 +1,11 @@
 """Trading router composition and runtime-owned background workers."""
 from __future__ import annotations
 
-from importlib import import_module
-from types import SimpleNamespace
+from collections.abc import Callable
 
 from fastapi import APIRouter
 
-from app.runtime.background import BackgroundRegistry, BackgroundWorker
+from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
 
 
@@ -58,78 +57,68 @@ def create_trading_router(_context: FeatureContext) -> APIRouter:
     return router
 
 
-_TRADING_MONITOR_REGISTRARS = (
-    ("app.trading.alerts_monitor", "register_trading_alert_monitor"),
-    ("app.trading.execution_observation_monitor", "register_trading_execution_observation_monitor"),
-    ("app.trading.ibkr_market_data_monitor", "register_trading_ibkr_market_data_monitor"),
-    ("app.trading.metric_monitor", "register_trading_metric_monitor"),
-    ("app.trading.paper_monitor", "register_trading_paper_monitor"),
-    ("app.trading.prospective_gap_monitor", "register_prospective_gap_monitor"),
-    ("app.trading.providers.alpaca_iex_status", "register_alpaca_iex_status_monitor"),
-    ("app.trading.session_reconciliation_monitor", "register_trading_session_reconciliation_monitor"),
-    ("app.trading.strategy_ai_shadow_monitor", "register_trading_ai_shadow_monitor"),
-    ("app.trading.strategy_ai_shadow_v2_monitor", "register_trading_ai_shadow_v2_monitor"),
-    ("app.trading.strategy_ai_shadow_v3_monitor", "register_trading_ai_shadow_v3_monitor"),
-    ("app.trading.strategy_deep_recovery_monitor", "register_trading_strategy_deep_recovery_shadow_monitor"),
-    ("app.trading.strategy_dynamic_discovery_monitor", "register_interday_dynamic_discovery_monitor"),
-    ("app.trading.strategy_interday_learning_monitor", "register_interday_learning_monitor"),
-    ("app.trading.strategy_monitor", "register_trading_strategy_monitor"),
-    ("app.trading.strategy_prospective_economic_monitor", "register_trading_strategy_prospective_economic_monitor"),
-    ("app.trading.strategy_research_monitor", "register_trading_strategy_research_monitor"),
-    ("app.trading.strategy_research_outcome_monitor", "register_trading_strategy_research_outcome_monitor"),
-    ("app.trading.strategy_solana_ai_monitor", "register_trading_solana_ai_monitor"),
-    ("app.trading.strategy_universe_archive_monitor", "register_trading_strategy_universe_archive_monitor"),
-    ("app.trading.strategy_v2_qualification_monitor", "register_trading_strategy_v2_qualification_monitor"),
-    ("app.trading.yahoo_acquisition_monitor", "register_trading_yahoo_acquisition_monitor"),
-)
+def trading_background_worker_factories() -> tuple[Callable[[FeatureContext], BackgroundWorker | None], ...]:
+    """Return the monitor worker factories owned by the trading feature."""
+    from app.trading.alerts_monitor import create_trading_alert_monitor_worker
+    from app.trading.execution_observation_monitor import (
+        create_trading_execution_observation_monitor_worker,
+    )
+    from app.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_worker
+    from app.trading.metric_monitor import create_trading_metric_monitor_worker
+    from app.trading.paper_monitor import create_trading_paper_monitor_worker
+    from app.trading.prospective_gap_monitor import create_prospective_gap_monitor_worker
+    from app.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_worker
+    from app.trading.session_reconciliation_monitor import (
+        create_trading_session_reconciliation_monitor_worker,
+    )
+    from app.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_worker
+    from app.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_worker
+    from app.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_worker
+    from app.trading.strategy_deep_recovery_monitor import (
+        create_trading_strategy_deep_recovery_shadow_monitor_worker,
+    )
+    from app.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_worker
+    from app.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_worker
+    from app.trading.strategy_monitor import create_trading_strategy_monitor_worker
+    from app.trading.strategy_prospective_economic_monitor import (
+        create_trading_strategy_prospective_economic_monitor_worker,
+    )
+    from app.trading.strategy_research_monitor import create_trading_strategy_research_monitor_worker
+    from app.trading.strategy_research_outcome_monitor import (
+        create_trading_strategy_research_outcome_monitor_worker,
+    )
+    from app.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_worker
+    from app.trading.strategy_universe_archive_monitor import (
+        create_trading_strategy_universe_archive_monitor_worker,
+    )
+    from app.trading.strategy_v2_qualification_monitor import (
+        create_trading_strategy_v2_qualification_monitor_worker,
+    )
+    from app.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_worker
 
-
-class _WorkerCollector(BackgroundRegistry):
-    def __init__(self) -> None:
-        self.workers: list[BackgroundWorker] = []
-
-    def register_worker(self, worker: BackgroundWorker) -> None:
-        self.workers.append(worker)
-
-
-class _FeatureStateProxy:
-    def __init__(self, target, registry: BackgroundRegistry) -> None:
-        object.__setattr__(self, "_target", target)
-        object.__setattr__(self, "_registry", registry)
-
-    def __getattr__(self, name: str):
-        if name == "background_registry":
-            return object.__getattribute__(self, "_registry")
-        return getattr(object.__getattribute__(self, "_target"), name)
-
-    def __setattr__(self, name: str, value) -> None:
-        if name == "background_registry":
-            object.__setattr__(self, "_registry", value)
-            return
-        setattr(object.__getattribute__(self, "_target"), name, value)
-
-
-def _monitor_worker_factory(module_name: str, registrar_name: str):
-    def build(context: FeatureContext) -> BackgroundWorker | None:
-        collector = _WorkerCollector()
-        state = _FeatureStateProxy(context.runtime_state, collector)
-        registrar = getattr(import_module(module_name), registrar_name)
-        result = registrar(SimpleNamespace(state=state))
-        if not collector.workers and result is None:
-            return None
-        if len(collector.workers) != 1:
-            raise RuntimeError(
-                f"{module_name}.{registrar_name} must create exactly one BackgroundWorker"
-            )
-        return collector.workers[0]
-
-    return build
-
-
-def trading_background_worker_factories():
-    return tuple(
-        _monitor_worker_factory(module_name, registrar_name)
-        for module_name, registrar_name in _TRADING_MONITOR_REGISTRARS
+    return (
+        create_trading_alert_monitor_worker,
+        create_trading_execution_observation_monitor_worker,
+        create_trading_ibkr_market_data_monitor_worker,
+        create_trading_metric_monitor_worker,
+        create_trading_paper_monitor_worker,
+        create_prospective_gap_monitor_worker,
+        create_alpaca_iex_status_monitor_worker,
+        create_trading_session_reconciliation_monitor_worker,
+        create_trading_ai_shadow_monitor_worker,
+        create_trading_ai_shadow_v2_monitor_worker,
+        create_trading_ai_shadow_v3_monitor_worker,
+        create_trading_strategy_deep_recovery_shadow_monitor_worker,
+        create_interday_dynamic_discovery_monitor_worker,
+        create_interday_learning_monitor_worker,
+        create_trading_strategy_monitor_worker,
+        create_trading_strategy_prospective_economic_monitor_worker,
+        create_trading_strategy_research_monitor_worker,
+        create_trading_strategy_research_outcome_monitor_worker,
+        create_trading_solana_ai_monitor_worker,
+        create_trading_strategy_universe_archive_monitor_worker,
+        create_trading_strategy_v2_qualification_monitor_worker,
+        create_trading_yahoo_acquisition_monitor_worker,
     )
 
 

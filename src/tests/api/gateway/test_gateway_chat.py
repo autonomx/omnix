@@ -39,7 +39,7 @@ def _client(tmp_path: Path) -> TestClient:
 
 def _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service) -> None:
     monkeypatch.setattr(prompt_store, "get_provider", provider_service.get_provider)
-    from app.gateway import live_chat_low_latency_stream
+    from app.chat import live_chat_low_latency_stream
 
     monkeypatch.setattr(
         live_chat_low_latency_stream,

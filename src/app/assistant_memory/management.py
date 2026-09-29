@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversation.contracts import ChatSession, ChatSessionReader
+from app.conversation.contracts import ChatSession, TranscriptReader
 
 from app.memory_contracts import (
     MemoryCandidate,
@@ -84,7 +84,7 @@ class ForgetCandidateResponse(BaseModel):
     candidate_id: str
 
 
-def resolve_session_scope(store: ChatSessionReader, session_id: str):
+def resolve_session_scope(store: TranscriptReader, session_id: str):
     session = store.get_session(session_id)
     if session is None:
         return None, None
@@ -97,7 +97,7 @@ def require_memory_write(session: ChatSession) -> None:
 
 
 def records_for_session(
-    store: ChatSessionReader,
+    store: TranscriptReader,
     service: MemoryService,
     session_id: str,
     *,
@@ -137,7 +137,7 @@ def records_for_session(
 
 
 def candidates_for_session(
-    store: ChatSessionReader,
+    store: TranscriptReader,
     service: MemoryService,
     session_id: str,
     *,

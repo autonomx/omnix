@@ -11,7 +11,6 @@ from .authority import AuthorityOperation
 from .blob_store import LocalBlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
-from .migrations import apply_migrations
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
 
@@ -200,7 +199,6 @@ class PostgresLegacyImporter:
         *,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        apply_migrations(self.database)
         preflight = preflight_bundle(bundle)
         if not preflight["ok"]:
             raise LegacyBundleError("; ".join(preflight["errors"]))

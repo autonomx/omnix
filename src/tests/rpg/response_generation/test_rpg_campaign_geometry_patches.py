@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 import pytest
 from fastapi import FastAPI
 
-from app.gateway.rpg_geometry_patch_routes import register_rpg_geometry_patch_routes
+from app.rpg.api.feature_routes.rpg_geometry_patch_routes import register_rpg_geometry_patch_routes
 from app.rpg.map_geometry_patch import (
     ApplyGeometryPatchCommand,
     GeometryCellPatch,
@@ -133,7 +134,7 @@ def test_geometry_patch_changes_movement_los_and_replays() -> None:
     ) is False
 
 
-def test_geometry_patch_rejects_impassable_occupied_cell_and_route_is_hidden() -> None:
+def test_geometry_patch_rejects_impassable_occupied_cell_and_is_documented() -> None:
     definition = _definition()
     snapshot = create_map_instance_snapshot(
         map_instance_id="campaign:a:map:geometry",
@@ -155,16 +156,7 @@ def test_geometry_patch_rejects_impassable_occupied_cell_and_route_is_hidden() -
         )
 
     app = FastAPI()
-    register_rpg_geometry_patch_routes(app)
+    include_router_registrar(app, register_rpg_geometry_patch_routes)
     path = "/api/rpg/map-instances/{map_instance_id}/geometry-patches"
     assert path in {route.path for route in app.routes}
-    assert path not in app.openapi()["paths"]
-
-    gateway_app = FastAPI(title="Omnix Web Gateway")
-    gateway_paths = {
-        route_path
-        for route in gateway_app.routes
-        if (route_path := getattr(route, "path", None)) is not None
-    }
-    assert path in gateway_paths
-    assert path not in gateway_app.openapi()["paths"]
+    assert path in app.openapi()["paths"]

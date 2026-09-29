@@ -177,11 +177,16 @@ def test_phase12_policy_rejects_missing_or_mismatched_evidence(tmp_path: Path) -
 def test_phase12_hidden_routes_persist_list_export_gate_and_manage_policies(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    legacy_test_persistence,
 ) -> None:
     path = tmp_path / "voice-evaluations.json"
     monkeypatch.setenv("OMNIX_LIVE_CHAT_EVALUATION_PATH", str(path))
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "pytest"},
+    )
 
     evaluation_ids: list[str] = []
     for index in range(5):
@@ -236,7 +241,11 @@ def test_phase12_route_rejects_raw_conversation_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OMNIX_LIVE_CHAT_EVALUATION_PATH", str(tmp_path / "voice-evaluations.json"))
-    client = TestClient(create_gateway_app(job_store_factory=lambda: EmptyJobStore()))
+    client = TestClient(
+        create_gateway_app(job_store_factory=lambda: EmptyJobStore()),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "pytest"},
+    )
     response = client.post(
         "/api/tts/live-call/evaluations",
         json={**_create().model_dump(mode="json"), "prompt": "private system prompt"},

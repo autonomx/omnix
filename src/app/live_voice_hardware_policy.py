@@ -23,7 +23,7 @@ from app.config.env import environment
 from functools import wraps
 from typing import Any
 
-from app.live_speech.performance_contract import resolve_tts_provider_capabilities
+from app.conversation.performance_contract import resolve_tts_provider_capabilities
 
 _STATE_ENV = "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"
 _LMSTUDIO_DISCOVERY_CACHE_ENV = "OMNIX_LMSTUDIO_MODEL_DISCOVERY_CACHE_SECONDS"
@@ -130,10 +130,10 @@ def install_live_voice_hardware_policy() -> None:
     # is more robust than relying solely on the later runtime monkey-patch.
     apply_live_voice_process_defaults()
 
-    from app.gateway import live_chat_lmstudio_responses as responses_runtime
-    from app.gateway import live_chat_provider_metrics as metrics_runtime
-    from app.gateway import live_voice_speculative_tts as speculative_tts_runtime
-    from app.gateway.tts_stream_diagnostics import stream_log
+    from app.chat import live_chat_lmstudio_responses as responses_runtime
+    from app.chat import live_chat_provider_metrics as metrics_runtime
+    from app.voice import live_voice_speculative_tts as speculative_tts_runtime
+    from app.observability.tts_stream_diagnostics import stream_log
 
     if getattr(speculative_tts_runtime, _INSTALL_SENTINEL, False):
         return

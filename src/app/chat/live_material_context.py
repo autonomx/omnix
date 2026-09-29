@@ -9,7 +9,6 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.runtime.router_composition import APIRouterHost
 
 LIVE_MATERIAL_PATH = "/api/chat/sessions/{session_id}/live/material"
 DEFAULT_SESSION_TTL_SECONDS = 30 * 60
@@ -404,11 +403,10 @@ def live_material_context_items(session_id: str) -> list[dict[str, Any]]:
     return [item] if item is not None else []
 
 
-def create_live_material_context_router(state: Any = None) -> APIRouter:
+def create_live_material_context_router() -> APIRouter:
     router = APIRouter()
-    host = APIRouterHost(router, state=state)
 
-    @host.post(LIVE_MATERIAL_PATH, response_model=LiveMaterialAcknowledgement)
+    @router.post(LIVE_MATERIAL_PATH, response_model=LiveMaterialAcknowledgement)
     def append_live_material(
         session_id: str,
         request: LiveMaterialAppendRequest,
@@ -419,7 +417,7 @@ def create_live_material_context_router(state: Any = None) -> APIRouter:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-    @host.post(
+    @router.post(
         f"{LIVE_MATERIAL_PATH}/task-contract",
         response_model=LiveTaskContractAcknowledgement,
     )
@@ -431,21 +429,21 @@ def create_live_material_context_router(state: Any = None) -> APIRouter:
         except LiveMaterialConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @host.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot)
+    @router.get(LIVE_MATERIAL_PATH, response_model=LiveMaterialSnapshot)
     def get_live_material(session_id: str) -> LiveMaterialSnapshot:
         snapshot = live_material_store.snapshot(session_id)
         if snapshot is None:
             raise HTTPException(status_code=404, detail="live_material_not_found")
         return snapshot
 
-    @host.delete(LIVE_MATERIAL_PATH, response_model=LiveMaterialClearResponse)
+    @router.delete(LIVE_MATERIAL_PATH, response_model=LiveMaterialClearResponse)
     def clear_live_material(session_id: str) -> LiveMaterialClearResponse:
         return LiveMaterialClearResponse(
             ok=True,
             cleared=live_material_store.clear(session_id),
         )
 
-    @host.post(
+    @router.post(
         f"{LIVE_MATERIAL_PATH}/promote",
         response_model=LiveMaterialPromotionResponse,
     )

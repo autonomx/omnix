@@ -8,9 +8,9 @@ from contextlib import suppress
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import default_research_repository
@@ -130,17 +130,17 @@ class TradingStrategyResearchMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_research_monitor(gateway:FastAPI)->TradingStrategyResearchMonitor:
-    existing=getattr(gateway.state,_STATE_KEY,None)
-    if isinstance(existing,TradingStrategyResearchMonitor):return existing
-    monitor=TradingStrategyResearchMonitor();setattr(gateway.state,_STATE_KEY,monitor)
+def create_trading_strategy_research_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing=getattr(state,_STATE_KEY,None)
+    if isinstance(existing,TradingStrategyResearchMonitor):return None
+    monitor=TradingStrategyResearchMonitor();setattr(state,_STATE_KEY,monitor)
     async def startup():
         if strategy_research_monitor_enabled():monitor.start()
     async def shutdown():await monitor.stop()
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
-__all__=["TradingStrategyResearchMonitor","register_trading_strategy_research_monitor","strategy_research_monitor_enabled"]
+__all__=["TradingStrategyResearchMonitor","create_trading_strategy_research_monitor_worker","strategy_research_monitor_enabled"]

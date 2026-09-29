@@ -16,9 +16,9 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import (
@@ -420,14 +420,13 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         }
 
 
-def register_trading_strategy_deep_recovery_shadow_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyDeepRecoveryShadowMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_deep_recovery_shadow_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyDeepRecoveryShadowMonitor):
-        return existing
+        return None
     monitor = TradingStrategyDeepRecoveryShadowMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_deep_recovery_shadow_monitor_enabled():
@@ -436,14 +435,13 @@ def register_trading_strategy_deep_recovery_shadow_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyDeepRecoveryShadowMonitor",
-    "register_trading_strategy_deep_recovery_shadow_monitor",
+    "create_trading_strategy_deep_recovery_shadow_monitor_worker",
     "strategy_deep_recovery_shadow_monitor_enabled",
 ]

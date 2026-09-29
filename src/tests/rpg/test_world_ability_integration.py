@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.gateway import rpg_session_routes
+from app.rpg.api.feature_routes import rpg_session_routes
 from app.rpg.session import loadout
 from app.rpg.session.ability_system import build_progression_package
 from app.rpg.session.world_ability_integration import ensure_world_scale_abilities

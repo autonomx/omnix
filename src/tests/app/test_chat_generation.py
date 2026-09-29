@@ -24,7 +24,7 @@ class FakeProvider:
         self.calls: list[dict[str, object]] = []
         self.content = content
 
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         prompt = messages[-1].content
         self.calls.append({"messages": messages, "model": model, "stream": stream, "prompt": prompt})
         return SimpleNamespace(
@@ -42,7 +42,7 @@ class BlockingProvider(FakeProvider):
         self.entered = threading.Event()
         self.release = threading.Event()
 
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         prompt = messages[-1].content
         self.calls.append({"messages": messages, "model": model, "stream": stream, "prompt": prompt})
         self.entered.set()
@@ -69,7 +69,7 @@ class InterruptibleProvider(BlockingProvider):
 
 
 class FailingProvider:
-    def chat_completion(self, *, messages, model, stream=False):
+    def chat_completion(self, messages, *, model, stream=False):
         raise RuntimeError("Chat provider is not available")
 
 
@@ -304,7 +304,7 @@ def test_chat_endpoint_returns_provider_failure_instead_of_blank_500(monkeypatch
         )
     )
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
+    client = _test_client(
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
@@ -344,7 +344,7 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
         )
     )
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
+    client = _test_client(
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
@@ -389,7 +389,7 @@ def test_new_chat_prompt_interrupts_active_generation(monkeypatch, tmp_path):
         )
     )
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = TestClient(
+    client = _test_client(
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
@@ -500,7 +500,15 @@ def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello fro
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
-    return TestClient(app), provider, store
+    return _test_client(app), provider, store
+
+
+def _test_client(app):
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
 
 
 def _run_feature_job(client, store, job_id: str, *, background: bool = False):
@@ -728,7 +736,7 @@ def test_rpg_turn_jobs_return_before_background_completion(monkeypatch, tmp_path
     monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
-    client = TestClient(app)
+    client = _test_client(app)
 
     response = client.post(
         "/api/jobs",
@@ -772,7 +780,7 @@ def test_rpg_turn_submission_does_not_spawn_detached_worker_process(monkeypatch,
     monkeypatch.setattr(subprocess, "Popen", FakePopen)
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(job_store_factory=lambda: store)
-    client = TestClient(app)
+    client = _test_client(app)
 
     response = client.post(
         "/api/jobs",

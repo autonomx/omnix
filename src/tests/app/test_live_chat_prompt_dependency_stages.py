@@ -5,8 +5,8 @@ from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
 from app.chat import retention_policy as retention_policy_module
 from app.chat.models import ChatSession
-from app.gateway import live_chat_companion_context as companion_context
-from app.gateway import live_chat_prompt_dependency_stages as dependency_stages
+from app.gateway.hooks import live_chat_companion_context as companion_context
+from app.gateway.hooks import live_chat_prompt_dependency_stages as dependency_stages
 from app.providers import service as provider_service
 
 

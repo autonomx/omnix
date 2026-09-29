@@ -5,13 +5,7 @@ from app.production import ProductionApplication, create_production_app
 
 
 def create_runtime_app():
-    from app.gateway.live_job_events import install_resilient_live_job_events
-
-    gateway = create_production_app()
-    install_resilient_live_job_events(
-        gateway, job_store_factory=lambda: gateway.state.runtime_services.jobs
-    )
-    return gateway
+    return create_production_app()
 
 
 app = ProductionApplication(factory=create_runtime_app)

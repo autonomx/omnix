@@ -7,8 +7,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatMessage, ChatSession
-from app.gateway import live_chat_speculation as speculation
-from app.gateway import live_chat_speculation_handshake as handshake
+from app.chat import live_chat_speculation as speculation
+from app.chat import live_chat_speculation_handshake as handshake
+from tests.support.routers import include_router_registrar
 
 
 class _FakeProvider:
@@ -130,12 +131,14 @@ def _wait_until(predicate, timeout: float = 1.0) -> bool:
 
 def _client(store: _FakeStore) -> TestClient:
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(
+    include_router_registrar(
         app,
+        speculation.register_live_chat_speculation_routes,
         chat_store_factory=lambda: store,
     )
-    handshake.register_live_chat_speculation_handshake_routes(
+    include_router_registrar(
         app,
+        handshake.register_live_chat_speculation_handshake_routes,
         chat_store_factory=lambda: store,
     )
     return TestClient(app)
@@ -147,7 +150,7 @@ def test_json_handshake_starts_generation_before_stream_attachment(monkeypatch) 
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        speculation,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -214,7 +217,7 @@ def test_generation_stream_is_single_consumer(monkeypatch) -> None:
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        speculation,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -248,7 +251,7 @@ def test_cancel_marks_eager_generation_failed_without_persistence(monkeypatch) -
     store = _FakeStore()
     provider = _BlockingProvider()
     monkeypatch.setattr(
-        speculation.shared,
+        speculation,
         "get_provider",
         lambda _provider_id: provider,
     )

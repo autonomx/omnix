@@ -179,6 +179,9 @@ def _fastapi_class(bindings, node: ast.AST) -> bool:
 def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, Any]]:
     values: Counter = Counter({key: 0 for key in LOWER_TARGETS if key not in RUNTIME_METRICS})
     evidence: dict[str, Any] = {"python_syntax_errors": analysis.syntax_errors}
+    evidence["unbounded_fetchall_calls"] = []
+    evidence["capped_500_query_sites"] = []
+    evidence["absolute_storage_path_read_sites"] = []
     transport_exceptions = _documented_transport_exceptions(analysis.sources)
     violations = analysis.violations()
     for violation in violations:
@@ -294,27 +297,51 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                         sql = _assigned_sql(query_scope, receiver.id, node.lineno)
                     if not sql or not re.search(r"\bLIMIT\b", sql, re.I):
                         values["unbounded_fetchall"] += 1
+                        evidence["unbounded_fetchall_calls"].append({
+                            "path": path,
+                            "line": node.lineno,
+                            "sql": sql,
+                        })
                 if "list" in scope.lower() or "/persistence/" in path:
                     for item in node.keywords:
                         if item.arg == "limit" and isinstance(item.value, ast.Constant) and item.value.value == 500:
                             values["capped_500_queries"] += 1
+                            evidence["capped_500_query_sites"].append({
+                                "path": path,
+                                "line": node.lineno,
+                                "kind": "limit_keyword",
+                            })
                 if name.split(".")[-1] == "min" and "list" in scope.lower() and any(isinstance(arg, ast.Constant) and arg.value == 500 for arg in node.args):
                     values["capped_500_queries"] += 1
+                    evidence["capped_500_query_sites"].append({
+                        "path": path,
+                        "line": node.lineno,
+                        "kind": "min_call",
+                    })
             if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load) and node.attr == "storage_path" and path not in blob_owners:
                 storage_read = True
+                evidence["absolute_storage_path_read_sites"].append({
+                    "path": path,
+                    "line": node.lineno,
+                })
             if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)) and node.attr == "__init__":
                 fastapi_patch |= _fastapi_class(bindings, node.value)
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                 if not scope and (isinstance(node.value, (ast.Dict, ast.List, ast.Set)) or isinstance(node.value, ast.Call) and qualified_name(node.value.func, aliases).split(".")[-1] in {"dict", "list", "set", "defaultdict", "WeakValueDictionary", "Lock", "RLock"}):
                     for target in targets:
-                        if isinstance(target, ast.Name):
+                        if isinstance(target, ast.Name) and target.id != "__all__":
                             local_state.add((path, target.id))
             string = literal_string(node)
             parent_string = literal_string(parents[node]) if node in parents else None
             if string is not None and parent_string is None:
                 if re.search(r"\bLIMIT\s+500\b", string, re.I):
                     values["capped_500_queries"] += 1
+                    evidence["capped_500_query_sites"].append({
+                        "path": path,
+                        "line": node.lineno,
+                        "kind": "sql_limit",
+                    })
                 if not path.startswith("src/app/prompts/") and len(string) >= 50:
                     parent = parents.get(node)
                     names = [qualified_name(target) for target in parent.targets] if isinstance(parent, ast.Assign) else []
@@ -344,6 +371,9 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     evidence["mypy_ignored_patterns"] = sorted(patterns)
     evidence["unreachable_rpg_modules"] = _unreachable_python(analysis)
     values["unreachable_rpg_modules"] = len(evidence["unreachable_rpg_modules"])
+    evidence["absolute_storage_path_read_files"] = sorted({
+        item["path"] for item in evidence["absolute_storage_path_read_sites"]
+    })
     return dict(values), evidence
 
 
@@ -408,8 +438,13 @@ def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
                 roots.update(name for name in graph if target == name or target.startswith(name + "."))
         if not is_test(path):
             for node in ast.walk(tree):
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in graph:
-                    roots.add(node.value)
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    # Feature catalogs use ``module:attribute`` entry points.
+                    # The module is imported lazily by the composition root,
+                    # so the module portion is a real reachability root.
+                    target_module = node.value.partition(":")[0]
+                    if target_module in graph:
+                        roots.add(target_module)
     reached = _reach(graph, roots)
     return sorted(analysis.modules[name] for name in graph if name.startswith("app.rpg.") and name not in reached and not is_test(analysis.modules[name]))
 
@@ -490,7 +525,11 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
                     argument = code[call.end():].lstrip()
                     if not argument.startswith(("'", '"', "`")):
                         dynamic_calls.append(f"{path}:{code.count(chr(10), 0, call.start()) + 1}")
-            for declaration in re.finditer(r"\b(interface|type)\s+(\w+)\s*(?:<[^;{}]*>)?\s*(?:=\s*)?", mask_js(source, strings=True)):
+            for declaration in re.finditer(
+                r"(?m)^\s*(?:(?:export|declare|default)\s+)*(interface|type)\s+(\w+)\s*"
+                r"(?:<[^;{}]*>)?\s*(?:extends\s+[^\{]+\s*)?(?:\{|=)",
+                mask_js(source, strings=True),
+            ):
                 name = declaration.group(2)
                 remaining = code[declaration.end():].lstrip()
                 if declaration.group(1) == "type" and re.match(r"(?:components|operations|paths)\s*\[", remaining):

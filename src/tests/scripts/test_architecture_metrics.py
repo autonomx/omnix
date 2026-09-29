@@ -106,6 +106,13 @@ def test_only_exact_documented_stream_route_is_exempt_from_schema_metric():
     assert result["metrics"]["schema_excluded_routes"]["value"] == 1
 
 
+def test_tracked_transport_inventory_is_loaded_for_the_working_tree_scan():
+    sources = metrics.tracked_sources(SCRIPTS.parent)
+    result = observed(sources)
+    assert "docs/architecture/api-transport-exceptions.md" in sources
+    assert result["metrics"]["schema_excluded_routes"]["value"] == 0
+
+
 def test_raw_request_body_parsing_is_not_a_typed_body_contract():
     result = observed({
         APP + "gateway/a.py": (
@@ -153,6 +160,29 @@ def test_lint_report_is_excluded_from_runtime_source_digest():
     before = metrics.source_digest(sources)
     sources["resources/architecture/lint-baseline.json"] = '{"violations": []}'
     assert metrics.source_digest(sources) == before
+
+
+def test_feature_catalog_module_attribute_is_a_reachability_root():
+    result = observed({
+        APP + "production.py": "FEATURE = 'app.rpg.feature:FEATURE'",
+        APP + "rpg/feature.py": "from app.rpg.live import launch",
+        APP + "rpg/live.py": "",
+        APP + "rpg/dead.py": "",
+    })
+    assert result["metrics"]["unreachable_rpg_modules"]["value"] == 1
+    assert result["evidence"]["unreachable_rpg_modules"] == [APP + "rpg/dead.py"]
+
+
+def test_all_export_list_is_not_counted_as_process_local_state():
+    result = observed({
+        APP + "chat/a.py": "__all__ = ['PublicType']\ncache = {}",
+    })
+    assert result["metrics"]["process_local_state_unapproved"]["value"] == 1
+    assert result["evidence"]["process_local_state_candidates"] == [{
+        "path": APP + "chat/a.py",
+        "symbol": "cache",
+        "approved": False,
+    }]
 
 
 @pytest.mark.parametrize("source,foreign,patchers", [
@@ -294,6 +324,16 @@ def test_async_and_browser_fixed_waits_are_inventory_evidence_separate_from_time
 def test_handwritten_api_aliases_are_counted_but_generated_schema_aliases_are_not():
     source = "type SaveResponse = string | null;\ntype GoodResponse = components['schemas']['SaveResponse'];\nconst text = 'type FakeRequest = string';"
     assert observed({WEB + "api/a.ts": source})["metrics"]["web_handwritten_api_types"]["value"] == 1
+
+
+def test_type_only_imports_are_not_handwritten_api_declarations():
+    source = (
+        "import {\n"
+        "  type SaveRequest,\n"
+        "} from './contracts';\n"
+        "import type { SaveResponse } from './contracts';\n"
+    )
+    assert observed({WEB + "api/a.ts": source})["metrics"]["web_handwritten_api_types"]["value"] == 0
 
 
 def test_web_glob_reachability_resolves_parent_segments():

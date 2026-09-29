@@ -4,13 +4,14 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.provider_metrics import merge_provider_response_metrics
-from app.gateway import live_chat_live_voice_profile as live_voice_profile
-from app.gateway.live_chat_provider_metrics import (
+from app.chat import live_chat_live_voice_profile as live_voice_profile
+from app.chat.live_chat_provider_metrics import (
     _LowLatencyTextChunker,
     _is_lmstudio,
     _stream_lmstudio_reply,
 )
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
+from app.providers import service as provider_service
 
 
 def _stats_payload() -> dict[str, Any]:
@@ -225,7 +226,7 @@ def test_default_provider_is_detected_as_lmstudio(monkeypatch) -> None:
         requested.append(name)
         return provider
 
-    monkeypatch.setattr(shared, "get_provider", fake_get_provider)
+    monkeypatch.setattr(provider_service, "get_provider", fake_get_provider)
 
     assert _is_lmstudio(None) is True
     assert requested == [None]
@@ -263,7 +264,11 @@ def test_lmstudio_prompt_stream_persists_metrics_on_completion(monkeypatch) -> N
                 ]
             )
 
-    monkeypatch.setattr(shared, "get_provider", lambda name: FakeProvider() if name == "lmstudio" else None)
+    monkeypatch.setattr(
+        provider_service,
+        "get_provider",
+        lambda name: FakeProvider() if name == "lmstudio" else None,
+    )
 
     rendered = SimpleNamespace(
         messages=[SimpleNamespace(role="user", content="Hello")],

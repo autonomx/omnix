@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -7,8 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.image.routes.workspace as image_workspace_routes
-from app.gateway.rpg_world_image_routes import register_rpg_world_image_routes
-from app.jobs.image_contracts import ImageGenerateInput
+from app.rpg.api.feature_routes.rpg_world_image_routes import register_rpg_world_image_routes
+from app.image.job_contracts import ImageGenerateInput
 from app.image.jobs import _store_image_asset
 from app.rpg.worlds import world_images
 
@@ -17,7 +18,7 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
     calls: list[tuple[str, object]] = []
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_image_routes.read_world_image_targets",
+        "app.rpg.api.feature_routes.rpg_world_image_routes.read_world_image_targets",
         lambda world_id: {
             "ok": True,
             "world": {"id": world_id, "title": "Aurelia"},
@@ -53,20 +54,20 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
         return {"ok": True, "world": {"id": world_id}, "targets": []}
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_image_routes.generate_world_images",
+        "app.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
         fake_generate,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_image_routes.update_world_image_target",
+        "app.rpg.api.feature_routes.rpg_world_image_routes.update_world_image_target",
         fake_update,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_image_routes.regenerate_world_image_prompts",
+        "app.rpg.api.feature_routes.rpg_world_image_routes.regenerate_world_image_prompts",
         lambda world_id, **kwargs: {"ok": True, "world_id": world_id, "targets": kwargs["target_ids"]},
     )
 
     app = FastAPI()
-    register_rpg_world_image_routes(app)
+    include_router_registrar(app, register_rpg_world_image_routes)
     client = TestClient(app)
 
     manifest = client.get("/api/rpg/worlds/world:aurelia/image-targets")
@@ -131,18 +132,18 @@ def test_world_image_routes_support_manifest_generation_and_review(monkeypatch) 
     assert calls[2][0] == "generate"
     assert calls[2][1]["target_ids"] == ["world:cover"]
     assert calls[2][1]["no_cache"] is True
-    assert "/api/rpg/worlds/{world_id}/image-targets" not in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/image-targets" in app.openapi()["paths"]
 
 
 def test_world_image_generation_requires_at_least_one_target(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.gateway.rpg_world_image_routes.generate_world_images",
+        "app.rpg.api.feature_routes.rpg_world_image_routes.generate_world_images",
         lambda *args, **kwargs: (_ for _ in ()).throw(
             ValueError("world_image_generation_targets_required")
         ),
     )
     app = FastAPI()
-    register_rpg_world_image_routes(app)
+    include_router_registrar(app, register_rpg_world_image_routes)
     response = TestClient(app).post(
         "/api/rpg/worlds/world:aurelia/image-generation",
         json={"target_ids": []},
@@ -177,20 +178,22 @@ def test_world_image_generation_enqueues_for_the_active_user(monkeypatch) -> Non
         lambda: SimpleNamespace(workspace_id="workspace:local", user_id="user:local"),
     )
     monkeypatch.setattr(world_images, "require_world_writable", lambda *args: None)
-    monkeypatch.setattr(world_images, "default_job_store", lambda: object())
 
     @contextmanager
     def fake_unit_of_work(database=None):
         del database
         yield SimpleNamespace(connection=SimpleNamespace(execute=lambda *args: None), commit=lambda: None)
 
-    def fake_enqueue(store, **kwargs):
-        enqueued["store"] = store
-        enqueued.update(kwargs)
+    def fake_create_job(request):
+        enqueued["request"] = request
         return SimpleNamespace(id="job:image", status="queued")
 
+    monkeypatch.setattr(
+        world_images,
+        "default_job_store",
+        lambda: SimpleNamespace(create_job=fake_create_job),
+    )
     monkeypatch.setattr(world_images, "unit_of_work", fake_unit_of_work)
-    monkeypatch.setattr(world_images, "enqueue_image_job", fake_enqueue)
 
     result = world_images.generate_world_images(
         "world:aurelia", target_ids=["world:cover"]
@@ -199,8 +202,9 @@ def test_world_image_generation_enqueues_for_the_active_user(monkeypatch) -> Non
     assert result["jobs"] == [
         {"job_id": "job:image", "target_id": "world:cover", "status": "queued"}
     ]
-    assert enqueued["owner_id"] == "user:local"
-    assert "module" not in enqueued
+    assert enqueued["request"].owner_id == "user:local"
+    assert enqueued["request"].type == "image.generate"
+    assert enqueued["request"].module == "image-generation"
 
 
 def test_sync_world_image_jobs_types_missing_asset_id_for_postgres(monkeypatch) -> None:

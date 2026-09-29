@@ -57,14 +57,15 @@ def test_native_runtime_import_defers_database_and_gateway():
 
 
 def test_native_composition_uses_process_owned_job_store(monkeypatch):
-    from fastapi import FastAPI
+    from app.gateway.app_factory import create_gateway_app
     from app.gateway import runtime_app
-    app = FastAPI()
     store = object()
-    app.state.runtime_services = SimpleNamespace(jobs=store)
+    app = create_gateway_app(job_store_factory=lambda: store)
     monkeypatch.setattr(runtime_app, 'create_production_app', lambda: app)
     assert runtime_app.create_runtime_app() is app
-    assert sum(getattr(route, 'path', None) == '/events' for route in app.routes) == 1
+    matching = [route for route in app.routes if getattr(route, 'path', None) == '/events']
+    assert len(matching) == 1
+    assert matching[0].endpoint.__module__ == 'app.gateway.kernel_routes.core_jobs_routes'
 
 
 def test_private_shutdown_reader_does_not_block_numpy_initialization():

@@ -19,9 +19,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
@@ -652,14 +652,13 @@ class TradingStrategyProspectiveEconomicMonitor:
         }
 
 
-def register_trading_strategy_prospective_economic_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyProspectiveEconomicMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_prospective_economic_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyProspectiveEconomicMonitor):
-        return existing
+        return None
     monitor = TradingStrategyProspectiveEconomicMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_prospective_economic_monitor_enabled():
@@ -668,14 +667,13 @@ def register_trading_strategy_prospective_economic_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyProspectiveEconomicMonitor",
-    "register_trading_strategy_prospective_economic_monitor",
+    "create_trading_strategy_prospective_economic_monitor_worker",
     "strategy_prospective_economic_monitor_enabled",
 ]

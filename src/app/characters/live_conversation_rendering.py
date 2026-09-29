@@ -11,10 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.live_speech.performance_contract import SpeechPerformancePlan
+from app.conversation.performance_contract import SpeechPerformancePlan
 
 SpeechDeliveryPlan = SpeechPerformancePlan
 
@@ -255,7 +255,7 @@ def default_pronunciation_store() -> PronunciationStore:
 
 
 def register_live_conversation_rendering_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     chat_store_factory: Callable[[], Any] | None = None,
     pronunciation_store_factory: Callable[[], PronunciationStore] = (
@@ -266,7 +266,7 @@ def register_live_conversation_rendering_routes(
         if chat_store_factory is None or chat_store_factory().get_session(session_id) is None:
             raise HTTPException(status_code=404, detail="chat session not found")
 
-    @app.post(
+    @router.post(
         "/api/chat/sessions/{session_id}/live-conversation/delivery-plan",
         response_model=SpeechDeliveryPlan,
         tags=["live-chat"],
@@ -278,7 +278,7 @@ def register_live_conversation_rendering_routes(
         require_session(session_id)
         return create_speech_delivery_plan(request)
 
-    @app.get(
+    @router.get(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations",
         response_model=PronunciationListResponse,
         tags=["live-chat"],
@@ -287,7 +287,7 @@ def register_live_conversation_rendering_routes(
         require_session(session_id)
         return pronunciation_store_factory().list(session_id)
 
-    @app.post(
+    @router.post(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations",
         response_model=PronunciationListResponse,
         tags=["live-chat"],
@@ -299,7 +299,7 @@ def register_live_conversation_rendering_routes(
         require_session(session_id)
         return pronunciation_store_factory().create(session_id, request)
 
-    @app.delete(
+    @router.delete(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations/{entry_id}",
         response_model=PronunciationListResponse,
         tags=["live-chat"],

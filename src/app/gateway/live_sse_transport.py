@@ -17,8 +17,8 @@ from starlette.responses import StreamingResponse
 
 from app.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
 
-from .live_chat_async_sse_bridge import eager_async_sse_stream
-from .tts_stream_diagnostics import stream_log
+from app.chat.live_chat_async_sse_bridge import eager_async_sse_stream
+from app.observability.tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_sse_transport_installed"
 _FASTAPI_HOOK_SENTINEL = "_omnix_live_chat_sse_route_hook_installed"

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from pydantic import BaseModel
 
 from app.characters.live_conversation_profile import LiveConversationProfileStore
-from app.gateway import live_chat_prompt_cache as prompt_cache
+from app.gateway.hooks import live_chat_prompt_cache as prompt_cache
 
 
 class _FakeIdentity(BaseModel):

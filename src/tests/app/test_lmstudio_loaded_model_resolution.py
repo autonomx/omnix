@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.gateway.lmstudio_loaded_model_resolution import (
+from app.chat.lmstudio_loaded_model_resolution import (
     _clear_lmstudio_model_discovery_cache,
     _resolve_lmstudio_model,
 )

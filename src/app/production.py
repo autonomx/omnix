@@ -119,8 +119,10 @@ def create_production_app(config: RuntimeConfig | None = None):
     # previously imported the provider-free gateway factory in this process.
     from app.assets import default_asset_store
     from app.chat import default_chat_store
-    from app.jobs import default_job_store
-    from app.runtime_composition import production_model_residency_store
+    from app.runtime_composition import (
+        production_job_store,
+        production_model_residency_store,
+    )
     from app.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
@@ -128,7 +130,7 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.runtime.background import GatewayBackgroundRuntime
 
     services = GatewayRuntimeServices(
-        jobs=default_job_store(),
+        jobs=production_job_store(),
         assets=default_asset_store(),
         chat=default_chat_store(),
         model_residency=production_model_residency_store(),

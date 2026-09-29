@@ -111,7 +111,7 @@ class PostgresMemoryRepository:
         if before_updated_at is not None and before_id is not None:
             clauses.append("(updated_at, id) < (%s::timestamptz, %s)")
             params.extend([before_updated_at, before_id])
-        params.append(max(1, min(int(limit), 500)))
+        params.append(max(1, min(int(limit), 100)))
         rows = self.connection.execute(
             f"SELECT {_MEMORY_COLUMNS} FROM omnix_memory_records WHERE "
             + " AND ".join(clauses)

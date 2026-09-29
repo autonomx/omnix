@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from app.assets import SharedAssetStore
 from app.image import asset_store as legacy_asset_store
 from app.image.job_queue import (
@@ -12,16 +14,22 @@ from app.image.job_queue import (
     list_image_jobs,
     release_image_job,
 )
-from app.jobs import default_job_store
+from app.jobs import store as job_store_module
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
-def test_legacy_image_queue_uses_shared_jobs(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("OMNIX_JOBS_DB_PATH", str(tmp_path / "jobs.sqlite"))
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
+@pytest.fixture
+def image_job_store(monkeypatch, tmp_path: Path):
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    monkeypatch.setattr(job_store_module, "default_job_store", lambda: store)
+    return store
+
+
+def test_legacy_image_queue_uses_shared_jobs(image_job_store) -> None:
 
     queued = enqueue_image_job({"prompt": "A moonlit harbor", "width": 768, "height": 768})
 
-    shared = default_job_store().get_job(queued["job_id"])
+    shared = image_job_store.get_job(queued["job_id"])
     assert shared is not None
     assert shared.module == "image-generation"
     assert shared.type == "image.generate"
@@ -61,6 +69,7 @@ def test_legacy_image_queue_uses_shared_jobs(monkeypatch, tmp_path: Path) -> Non
 
 
 def test_shared_assets_read_through_legacy_image_manifest(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
     image_dir = tmp_path / "legacy-images"
     image_dir.mkdir()
     image_path = image_dir / "legacy.png"

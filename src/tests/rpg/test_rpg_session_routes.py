@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway import rpg_session_routes
+from app.rpg.api.feature_routes import rpg_session_routes
 
 
 def _coverage_session(session_id: str) -> dict[str, object]:
@@ -41,7 +42,7 @@ def _coverage_session(session_id: str) -> dict[str, object]:
 
 def test_clean_rpg_session_routes_expose_presets_and_new_game(monkeypatch) -> None:
     app = FastAPI(title="test")
-    rpg_session_routes.register_rpg_session_routes(app)
+    include_router_registrar(app, rpg_session_routes.register_rpg_session_routes)
 
     monkeypatch.setattr(
         rpg_session_routes,
@@ -67,7 +68,7 @@ def test_clean_rpg_session_routes_expose_presets_and_new_game(monkeypatch) -> No
 
 def test_clean_rpg_session_routes_expose_save_management(monkeypatch) -> None:
     app = FastAPI(title="test")
-    rpg_session_routes.register_rpg_session_routes(app)
+    include_router_registrar(app, rpg_session_routes.register_rpg_session_routes)
 
     monkeypatch.setattr(rpg_session_routes, "list_session_summaries", lambda **_kwargs: [{"manifest": {"id": "rpg_test"}}])
     monkeypatch.setattr(rpg_session_routes, "load_session", lambda session_id: _coverage_session(session_id))
@@ -89,7 +90,7 @@ def test_clean_rpg_session_routes_expose_save_management(monkeypatch) -> None:
 
 def test_clean_rpg_session_routes_expose_ability_coverage_endpoint(monkeypatch) -> None:
     app = FastAPI(title="test")
-    rpg_session_routes.register_rpg_session_routes(app)
+    include_router_registrar(app, rpg_session_routes.register_rpg_session_routes)
     monkeypatch.setattr(rpg_session_routes, "load_session", lambda session_id: _coverage_session(session_id))
 
     payload = TestClient(app).get("/api/rpg/sessions/rpg_test/ability-coverage").json()
@@ -111,7 +112,7 @@ def test_clean_rpg_session_routes_expose_ability_coverage_endpoint(monkeypatch) 
 
 def test_clean_rpg_session_routes_convert_errors_to_http_status(monkeypatch) -> None:
     app = FastAPI(title="test")
-    rpg_session_routes.register_rpg_session_routes(app)
+    include_router_registrar(app, rpg_session_routes.register_rpg_session_routes)
     monkeypatch.setattr(rpg_session_routes, "start_rpg_preset", lambda preset_id: {"ok": False, "error": "unknown_rpg_preset", "preset_id": preset_id})
 
     response = TestClient(app).post("/api/rpg/presets/missing/start", json={})

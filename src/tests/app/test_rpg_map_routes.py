@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from fastapi.testclient import TestClient
 
-import app.gateway.rpg_map_routes as rpg_map_routes
+import app.rpg.api.feature_routes.rpg_map_routes as rpg_map_routes
 from app.gateway.main import create_gateway_app
 from app.rpg.map_fixtures import FROST_HAVEN_MAP_ID
 from app.rpg.map_projection import initial_map_session_state

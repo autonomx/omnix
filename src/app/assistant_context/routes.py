@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -52,7 +52,7 @@ class DeepResearchPlanUpdateRequest(BaseModel):
 
 
 def register_assistant_context_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
     job_store_factory: Callable[[], Any] = default_job_store,
@@ -61,10 +61,10 @@ def register_assistant_context_routes(
     settings_factory: Callable[[], ResearchRuntimeSettings] = load_research_runtime_settings,
     release_policy_factory: Callable[[], ResearchReleasePolicy] = research_release_policy_from_env,
 ) -> None:
-    route_names = {getattr(route, "name", "") for route in app.routes}
+    route_names = {getattr(route, "name", "") for route in router.routes}
     if _STATUS_ROUTE_NAME not in route_names:
 
-        @app.get(
+        @router.get(
             "/api/assistant/research/status",
             response_model=ResearchRuntimeStatus,
             name=_STATUS_ROUTE_NAME,
@@ -80,7 +80,7 @@ def register_assistant_context_routes(
 
     if _PLAN_UPDATE_ROUTE_NAME not in route_names:
 
-        @app.patch(
+        @router.patch(
             "/api/assistant/context/research/jobs/{job_id}/plan",
             response_model=JobRecord,
             name=_PLAN_UPDATE_ROUTE_NAME,
@@ -115,7 +115,7 @@ def register_assistant_context_routes(
 
     if _PLAN_START_ROUTE_NAME not in route_names:
 
-        @app.post(
+        @router.post(
             "/api/assistant/context/research/jobs/{job_id}/start",
             response_model=JobRecord,
             name=_PLAN_START_ROUTE_NAME,
@@ -145,7 +145,7 @@ def register_assistant_context_routes(
     if _ROUTE_NAME in route_names:
         return
 
-    @app.post(
+    @router.post(
         "/api/assistant/context/chat/sessions/{session_id}/messages",
         response_model=SendChatMessageResponse,
         name=_ROUTE_NAME,
@@ -337,7 +337,7 @@ def register_assistant_context_routes(
         )
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
-    @app.post(
+    @router.post(
         "/api/assistant/context/chat/sessions/{session_id}/messages/stream",
         include_in_schema=False,
         name=_STREAM_ROUTE_NAME,

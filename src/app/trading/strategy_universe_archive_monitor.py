@@ -7,9 +7,9 @@ import os
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .strategy_universe_archiver import archive_daily_universe_if_due
@@ -109,12 +109,13 @@ class TradingStrategyUniverseArchiveMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> TradingStrategyUniverseArchiveMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_universe_archive_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
-        return existing
+        return None
     monitor = TradingStrategyUniverseArchiveMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if not strategy_universe_archive_monitor_enabled():
@@ -145,14 +146,13 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyUniverseArchiveMonitor",
-    "register_trading_strategy_universe_archive_monitor",
+    "create_trading_strategy_universe_archive_monitor_worker",
     "strategy_universe_archive_monitor_enabled",
 ]

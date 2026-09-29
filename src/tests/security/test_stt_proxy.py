@@ -10,9 +10,10 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from websockets.exceptions import SecurityError
 
-from app.gateway import stt_proxy_routes as proxy
+from app.voice import stt_proxy_routes as proxy
 from app.security.model_service import ModelServiceMiddleware
 from app.security.request_guard import RequestGuardMiddleware
+from tests.support.routers import include_router_registrar
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(proxy, "_stt_base_url", lambda: "http://127.0.0.1:5201/private")
     app = FastAPI()
     app.add_middleware(RequestGuardMiddleware)
-    proxy.register_stt_proxy_routes(app)
+    include_router_registrar(app, proxy.register_stt_proxy_routes)
     upstream = FastAPI()
     upstream.add_middleware(ModelServiceMiddleware)
     calls = []

@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 
-from .tts_stream_diagnostics import active_streams_snapshot, stream_log
+from app.observability.tts_stream_diagnostics import active_streams_snapshot, stream_log
 
 _HOOK_SENTINEL = "_omnix_event_loop_lag_monitor_hook_installed"
 _ROUTE_SENTINEL = "_omnix_event_loop_lag_monitor_registered"

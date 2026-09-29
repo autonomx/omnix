@@ -111,6 +111,8 @@ jobs:
           npm install
       - name: Apply PostgreSQL migrations
         run: python -m app.persistence migrate
+      - name: Initialize empty PostgreSQL authority and local identity
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
       - name: Compile Agent Runtime and Chat context modules
         run: |
           python -m compileall -q src/app/agent_runtime

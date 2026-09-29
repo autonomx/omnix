@@ -5,8 +5,8 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_stream_contract import estimate_chat_stream_max_new_tokens
-from app.live_speech.performance_contract import SpeechPerformancePlan
+from app.conversation.tts_stream_contract import estimate_chat_stream_max_new_tokens
+from app.conversation.performance_contract import SpeechPerformancePlan
 
 
 class FakeTtsProvider:
@@ -135,7 +135,7 @@ def _assert_start_control(
 
 
 def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
-    from app.gateway import tts_live_call_websocket
+    from app.voice import tts_live_call_websocket
 
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
     monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)

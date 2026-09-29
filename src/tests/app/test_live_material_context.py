@@ -78,7 +78,7 @@ def test_material_compaction_and_explicit_promotion_are_bounded() -> None:
 
 def test_material_routes_support_non_generating_append_and_clear() -> None:
     app = FastAPI()
-    app.include_router(create_live_material_context_router(app.state))
+    app.include_router(create_live_material_context_router())
     client = TestClient(app)
     session_id = "route-test-session"
 

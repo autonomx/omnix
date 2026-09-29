@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
@@ -22,7 +22,7 @@ from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
 from app.runtime.paths import resources_data_root
 from app.runtime.background import (
-    BackgroundOwnershipUnavailable, BackgroundWorker, register_background_worker,
+    BackgroundOwnershipUnavailable, BackgroundWorker,
 )
 from app.persistence.background_authority import require_background_owner
 from app.runtime.config import get_runtime_config
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 
 
 _LOG = logging.getLogger(__name__)
-_ROUTE_SENTINEL = "_omnix_audiobook_project_routes_registered"
 _SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$"
 _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
 _SERVICE_CONTEXT_LOCK = threading.Lock()
@@ -902,17 +901,3 @@ def create_audiobook_background_worker() -> BackgroundWorker:
     return BackgroundWorker(
         name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     )
-
-def register_audiobook_routes(gateway: FastAPI) -> None:
-    """Compatibility wrapper; FeatureModule composition uses the factories directly."""
-    if getattr(gateway.state, _ROUTE_SENTINEL, False):
-        return
-    setattr(gateway.state, _ROUTE_SENTINEL, True)
-    gateway.include_router(create_audiobook_router())
-    registry = (
-        getattr(gateway.state, "background_registry", None)
-        or getattr(gateway.state, "background_runtime", None)
-    )
-    if registry is not None:
-        register_background_worker(registry, create_audiobook_background_worker())
-

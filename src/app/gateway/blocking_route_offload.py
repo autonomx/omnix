@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.concurrency import run_in_threadpool
 
-from .tts_stream_diagnostics import stream_log
+from app.observability.tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_blocking_route_offload_hook_installed"
 _ROUTE_SENTINEL = "_omnix_blocking_route_offload_registered"

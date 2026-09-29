@@ -193,4 +193,6 @@ def test_management_static_control_routes_are_reachable() -> None:
     usage_response = client.get("/api/assistant/memory/usage", params={"session_id": "chat:controls"})
     assert usage_response.status_code == 200
     assert usage_response.json()["diagnostics_policy"] == "content_free"
-    assert "/api/assistant/memory/export" not in client.get("/openapi.json").json()["paths"]
+    schema = client.get("/openapi.json").json()
+    assert "/api/assistant/memory/export" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory/export"]

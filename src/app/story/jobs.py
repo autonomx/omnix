@@ -157,16 +157,15 @@ def _call_chat_provider(
     model_id: str | None,
 ) -> tuple[str, str | None]:
     from app.providers import ChatMessage
-    from app.providers.facade import ProviderFacade
+    from app.providers.service import chat_completion
 
     provider_name = _provider_key(provider_id)
-    facade = ProviderFacade()
-    response = facade.chat_completion(
+    response = chat_completion(
         messages=[
             ChatMessage(role="system", content="You are a helpful AI assistant."),
             ChatMessage(role="user", content=prompt),
         ],
-        provider=provider_name,
+        provider_name=provider_name,
         model=_model_key(model_id),
         stream=False,
     )

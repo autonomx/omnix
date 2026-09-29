@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
+from app.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
 from tests.support.in_memory_jobs import InMemoryJobStore
 from app.rpg.presentation.turn_response import build_turn_response_v2, turn_response_size_bytes
 

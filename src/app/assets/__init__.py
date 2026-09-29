@@ -177,6 +177,19 @@ class SharedAssetStore(ManifestSharedAssetStore):
         _merge_assets(candidates, "curated_rpg_maps", curated_rpg_map_assets)
         return candidates.get(normalized_id)
 
+    def read_asset_bytes(self, asset_id: str, *, max_bytes: int) -> bytes:
+        """Read a small legacy asset without exposing its storage path to callers."""
+        asset = self.get_asset(asset_id)
+        if asset is None:
+            raise FileNotFoundError(asset_id)
+        with Path(asset.storage_path).open("rb") as handle:
+            content = handle.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            from app.assets.models import AssetContentTooLarge
+
+            raise AssetContentTooLarge(asset_id)
+        return content
+
     def preview_legacy_non_image_import(self) -> AssetLegacyImportDryRun:
         """Summarize non-image legacy assets without mutating any source."""
         manifest_assets = super()._load_manifest()

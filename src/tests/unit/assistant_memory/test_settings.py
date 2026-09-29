@@ -146,7 +146,7 @@ def test_memory_settings_updates_use_optimistic_revisions(monkeypatch):
         )
 
 
-def test_settings_routes_are_content_free_and_hidden():
+def test_settings_routes_are_content_free_and_typed_in_openapi():
     _service, store = in_memory_assistant_memory_settings_store()
     app = FastAPI()
     register_assistant_memory_routes(
@@ -181,4 +181,7 @@ def test_settings_routes_are_content_free_and_hidden():
     assert rejected.json()["detail"]["code"] == "memory_privacy_policy_rejected"
 
     schema = client.get("/openapi.json").json()
-    assert "/api/assistant/memory/settings" not in schema["paths"]
+    operations = schema["paths"]["/api/assistant/memory/settings"]
+    assert {"get", "post"} <= set(operations)
+    assert "application/json" in operations["post"]["requestBody"]["content"]
+    assert "application/json" in operations["get"]["responses"]["200"]["content"]

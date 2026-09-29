@@ -9,16 +9,24 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.core_jobs_routes import register_core_jobs_routes
+from app.gateway.kernel_routes.core_jobs_routes import register_core_jobs_routes
 from app.worker_runtime.durable_feature_worker import _AuthorityBoundJobStore
 from app.jobs.foreground_execution import ForegroundExecution, current_foreground_execution, foreground_execution
-from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, ResourceClass
+from app.jobs.models import (
+    CompleteJobRequest,
+    CreateJobRequest,
+    FailJobRequest,
+    ReleaseJobRequest,
+    ResourceClass,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.identity_service import PostgresIdentityRepository
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
+from tests.support.routers import include_router_registrar
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -31,7 +39,9 @@ def client(monkeypatch):
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
     assert urlsplit(url).path in {"/omnix_test", "/omnix_refactor_baseline"}
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
+    local_context = ensure_local_identity(database)
     store = PostgresJobStoreAdapter(database)
+    store.context = local_context
     workspace = f"workspace:internal-jobs:{secrets.token_urlsafe(12)}"
     with database.transaction() as connection:
         connection.execute("INSERT INTO omnix_workspaces (id, name, created_by) VALUES (%s, 'Worker protocol test', %s)", (workspace, store.context.user_id))
@@ -40,7 +50,12 @@ def client(monkeypatch):
     token = secrets.token_urlsafe(32)
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
     app = FastAPI()
-    register_core_jobs_routes(app, get_job_store=lambda: store, get_chat_store=lambda: None)
+    include_router_registrar(
+        app,
+        register_core_jobs_routes,
+        get_job_store=lambda: store,
+        get_chat_store=lambda: None,
+    )
     try:
         with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}) as http:
             http.store = store
@@ -94,6 +109,33 @@ def test_active_lease_requires_callers_exact_credentials(client, operation):
     response = client.post(endpoint, json={**_credentials(claim), **extra}, headers=headers)
     assert response.status_code == 200, response.text
     assert response.json()["status"] == ("completed" if operation == "complete" else "failed")
+
+
+def test_release_requires_exact_credentials_and_records_released_attempt(client):
+    job = _job(client)
+    claim = _claim(client)
+    request = ReleaseJobRequest(
+        worker_id=claim["lease"]["worker_id"],
+        lease_token="wrong-token",
+        reason="worker shutdown",
+    )
+    with pytest.raises(JobClaimConflict):
+        client.store.release_job(job.id, request)
+    assert client.store.get_job(job.id).status.value == "leased"
+
+    released = client.store.release_job(
+        job.id,
+        request.model_copy(update={"lease_token": claim["lease"]["token"]}),
+    )
+    assert released.status.value == "queued"
+    assert released.lease is None
+    with unit_of_work(client.store.database) as work:
+        row = work.connection.execute(
+            "SELECT status FROM omnix_job_attempts WHERE job_id = %s AND attempt = 1",
+            (job.id,),
+        ).fetchone()
+        assert row[0] == "released"
+        work.rollback()
 
 
 @pytest.mark.parametrize("operation", ["complete", "fail"])

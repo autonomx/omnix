@@ -49,7 +49,7 @@ def make_job(job_id: str, module: str, audio_payload: str) -> JobRecord:
 
 
 def test_voice_job_summary_route_bounds_inline_browser_payloads(monkeypatch) -> None:
-    from app.gateway import voice_job_summary_routes
+    from app.voice import voice_job_summary_routes
 
     audio = "data:audio/wav;base64," + ("A" * 1_000)
     jobs = [

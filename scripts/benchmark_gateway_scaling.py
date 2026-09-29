@@ -24,7 +24,7 @@ def services(url, workspace_id):
     from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
     from app.persistence.repositories import PostgresIdentityRepository
     from app.gateway import _install_required_rpg_turn_hooks
-    from app.gateway import live_chat_postgres_fast_path as fast
+    from app.chat import live_chat_postgres_fast_path as fast
     database = PostgresDatabase(DatabaseSettings(url=url, pool_max=4))
     store = PostgresJobStoreAdapter(database)
     with database.connection() as connection:

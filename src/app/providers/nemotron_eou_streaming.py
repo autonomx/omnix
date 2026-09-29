@@ -7,7 +7,7 @@ not require the heavyweight speech environment.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import json
 import os

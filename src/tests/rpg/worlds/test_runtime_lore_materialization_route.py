@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway import rpg_campaign_lore_routes as routes
+from app.rpg.api.feature_routes import rpg_campaign_lore_routes as routes
 
 
 def test_runtime_materialization_route_returns_document_and_definition(
@@ -69,7 +70,7 @@ def test_runtime_materialization_route_returns_document_and_definition(
 
     monkeypatch.setattr(routes, "materialize_runtime_lore", materialize)
     app = FastAPI()
-    routes.register_rpg_campaign_lore_routes(app)
+    include_router_registrar(app, routes.register_rpg_campaign_lore_routes)
 
     response = TestClient(app).post(
         "/api/rpg/sessions/campaign:test/lore/materialize",

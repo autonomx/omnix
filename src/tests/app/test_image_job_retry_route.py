@@ -16,7 +16,6 @@ def _client(app):
 
 
 def test_failed_image_job_can_be_retried(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     source = store.create_job(
         CreateJobRequest(
@@ -41,7 +40,6 @@ def test_failed_image_job_can_be_retried(tmp_path, monkeypatch) -> None:
 
 
 def test_active_image_job_cannot_be_retried(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     source = store.create_job(
         CreateJobRequest(

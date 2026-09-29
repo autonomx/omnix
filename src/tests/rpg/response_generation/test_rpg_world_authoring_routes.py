@@ -1,14 +1,15 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_world_authoring_routes import register_rpg_world_authoring_routes
+from app.rpg.api.feature_routes.rpg_world_authoring_routes import register_rpg_world_authoring_routes
 
 
-def test_authoring_manifest_and_projection_routes_are_hidden_from_openapi(monkeypatch) -> None:
+def test_authoring_manifest_and_projection_routes_are_in_openapi(monkeypatch) -> None:
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.read_authoring_manifest",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_manifest",
         lambda world_id: {
             "ok": True,
             "world": {"id": world_id, "title": "Aurelia"},
@@ -17,7 +18,7 @@ def test_authoring_manifest_and_projection_routes_are_hidden_from_openapi(monkey
         },
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.read_authoring_section",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.read_authoring_section",
         lambda world_id, section_id: {
             "ok": True,
             "world_id": world_id,
@@ -29,7 +30,7 @@ def test_authoring_manifest_and_projection_routes_are_hidden_from_openapi(monkey
         },
     )
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
 
     manifest = client.get("/api/rpg/worlds/world:aurelia/authoring-manifest")
@@ -41,7 +42,7 @@ def test_authoring_manifest_and_projection_routes_are_hidden_from_openapi(monkey
     assert manifest.json()["sections"][0]["id"] == "overview"
     assert section.status_code == 200
     assert section.json()["section_id"] == "overview"
-    assert "/api/rpg/worlds/{world_id}/authoring-manifest" not in app.openapi()[
+    assert "/api/rpg/worlds/{world_id}/authoring-manifest" in app.openapi()[
         "paths"
     ]
 
@@ -61,11 +62,11 @@ def test_world_metadata_patch_requires_concurrency_token(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.update_world_metadata",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_metadata",
         fake_update,
     )
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
 
     missing = client.patch(
@@ -98,11 +99,11 @@ def test_topic_patch_requires_revision_hash_and_preserves_lock(monkeypatch) -> N
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.update_world_topic",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.update_world_topic",
         fake_update,
     )
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
 
     missing = client.patch(
@@ -145,11 +146,11 @@ def test_topic_history_restore_uses_dual_concurrency_tokens(monkeypatch) -> None
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_authoring_routes.restore_world_topic",
+        "app.rpg.api.feature_routes.rpg_world_authoring_routes.restore_world_topic",
         fake_restore,
     )
     app = FastAPI()
-    register_rpg_world_authoring_routes(app)
+    include_router_registrar(app, register_rpg_world_authoring_routes)
     client = TestClient(app)
 
     response = client.post(

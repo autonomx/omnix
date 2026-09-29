@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.gateway.content_free_diagnostics import sanitize_content_free_details
+from app.observability.content_free_diagnostics import sanitize_content_free_details
 
 ROOT = Path(__file__).resolve().parents[3]
 

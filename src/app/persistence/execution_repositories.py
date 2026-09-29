@@ -6,7 +6,7 @@ from typing import Any
 
 from app.jobs.errors import JobClaimConflict
 
-from .errors import EntityNotFound, PersistenceError
+from .errors import EntityNotFound
 from .tenant import TenantContext
 
 
@@ -613,6 +613,54 @@ class PostgresJobRepository:
                 """,
                 (context.workspace_id, job_id, str(error.get("code") or "failed"), _json(error)),
             )
+        return result
+
+    def release(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Return an active lease to the queue with an auditable attempt result."""
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs
+               SET status = 'queued', error = NULL, available_at = clock_timestamp(),
+                   lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
+                   completed_at = NULL, updated_at = clock_timestamp()
+             WHERE id = %s AND workspace_id = %s
+               AND lease_owner = %s AND lease_token = %s
+               AND status IN ('leased', 'running')
+               AND lease_expires_at > clock_timestamp()
+            RETURNING {_JOB_COLUMNS}
+            """,
+            (job_id, context.workspace_id, worker_id, lease_token),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"job release rejected: {job_id}")
+        result = _job(row)
+        attempt_result = {
+            "code": "job_released",
+            "message": str(reason or "Job lease released"),
+            "retryable": True,
+        }
+        self.connection.execute(
+            """
+            UPDATE omnix_job_attempts
+               SET status = 'released', completed_at = clock_timestamp(), error = %s::jsonb
+             WHERE job_id = %s AND attempt = %s AND lease_token = %s
+            """,
+            (_json(attempt_result), job_id, result["attempt_count"], lease_token),
+        )
+        self._event(
+            context,
+            job_id,
+            "job.released",
+            {"attempt": result["attempt_count"], "worker_id": worker_id, "reason": reason},
+        )
         return result
 
     def request_cancel(self, context: TenantContext, job_id: str) -> dict[str, Any]:

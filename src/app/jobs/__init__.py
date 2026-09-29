@@ -14,9 +14,9 @@ from .models import (
     JobListResponse,
     JobRecord,
     JobStatus,
+    ReleaseJobRequest,
     ResourceClass,
 )
-from .adapters import enqueue_image_job
 from .executor import LocalJobExecutor
 from .handlers import (
     AnyJobInput,
@@ -66,6 +66,7 @@ __all__ = [
     "JobListResponse",
     "JobRecord",
     "JobStatus",
+    "ReleaseJobRequest",
     "LocalJobExecutor",
     "ModelResidencyDiagnostics",
     "ModelResidencyRecord",
@@ -77,8 +78,8 @@ __all__ = [
     "create_model_load_job_request",
     "create_model_residency_handlers",
     "create_worker_model_control_hooks",
+    "default_model_residency_store",
     "default_job_store",
-    "enqueue_image_job",
     "evict_worker_model",
     "get_model_residency_diagnostics",
     "load_worker_model",

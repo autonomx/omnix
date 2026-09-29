@@ -223,7 +223,7 @@ class PostgresChatRepository:
                 context.workspace_id,
                 session_id,
                 int(after_position),
-                max(1, min(int(limit), 500)),
+                max(1, min(int(limit), 100)),
             ),
         ).fetchall()
         return [

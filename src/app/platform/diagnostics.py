@@ -64,7 +64,7 @@ def redact_diagnostics(value, key=''):
 
 
 def get_runtime_diagnostics_payload(
-    gateway,
+    state,
     *,
     model_residency_store_factory,
     allow_offline_store: bool = False,
@@ -73,7 +73,7 @@ def get_runtime_diagnostics_payload(
     from app.jobs.residency import GpuResidencyPolicy
     from .runtime_diagnostics import runtime_diagnostics
 
-    runtime = runtime_diagnostics(gateway)
+    runtime = runtime_diagnostics(state)
     error_class = runtime.postgresql.get('error_class')
     payload = None
     if runtime.postgresql.get("connectivity") is not False or allow_offline_store:

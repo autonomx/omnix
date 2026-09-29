@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, GetJsonSchemaHandler
+from pydantic import BaseModel, Field, GetJsonSchemaHandler, PrivateAttr
 from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import CoreSchema
 
@@ -149,7 +149,14 @@ class FailJobRequest(BaseModel):
     code: str = "job_failed"
     message: str
     retryable: bool = False
+    retry_delay_seconds: int = Field(default=0, ge=0)
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReleaseJobRequest(BaseModel):
+    worker_id: str = Field(min_length=1)
+    lease_token: str = Field(min_length=1)
+    reason: str = ""
 
 
 class CancelJobRequest(BaseModel):
@@ -157,6 +164,8 @@ class CancelJobRequest(BaseModel):
 
 
 class JobRecord(BaseModel):
+    _attempt_count: int = PrivateAttr(default=0)
+
     id: str
     owner_id: str | None = None
     module: str

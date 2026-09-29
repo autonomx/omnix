@@ -33,26 +33,12 @@ def test_api_rejects_worker_only_feature_lifecycle():
     assert app.state.feature_lifecycles == []
 
 
-def test_gateway_rejects_undeclared_startup_hooks_before_api_can_run_them(monkeypatch):
-    from app.runtime import router_composition
-
-    app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-
-    def registrar(gateway):
-        from fastapi import APIRouter
-
-        assert isinstance(gateway.router, APIRouter)
-        gateway.router.on_startup.append(lambda: pytest.fail('undeclared worker startup ran'))
-
-    monkeypatch.setattr(
-        router_composition,
-        'import_module',
-        lambda _: SimpleNamespace(register=registrar),
-    )
-    with pytest.raises(RuntimeError, match='must declare a FeatureLifecycle'):
-        router_composition.compose_registrar_router(
-            (('test.feature', 'register'),), state=app.state
-        )
+def test_feature_modules_do_not_use_transitional_router_hosts():
+    root = Path(__file__).resolve().parents[3] / "src" / "app"
+    for feature_path in root.glob("*/feature.py"):
+        source = feature_path.read_text(encoding="utf-8")
+        assert "APIRouterHost" not in source, feature_path
+        assert "compose_registrar_router" not in source, feature_path
 
 
 def test_api_lifespan_never_runs_recovery_or_worker_hooks():
@@ -135,7 +121,7 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
     app.state.runtime_services = SimpleNamespace(jobs=SimpleNamespace(
         database=SimpleNamespace(connection=connection), context=SimpleNamespace(workspace_id='test'),
     ))
-    payload = runtime_diagnostics(app).model_dump()
+    payload = runtime_diagnostics(app.state).model_dump()
     assert payload['postgresql'] == {'connectivity': False, 'error_class': 'OSError'}
     assert payload['tts']['mode'] == 'worker_routed'
     assert 'secret' not in json.dumps(payload)
@@ -156,7 +142,7 @@ def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monke
         database=SimpleNamespace(connection=connection), context=SimpleNamespace(workspace_id='test'),
     ))
     monkeypatch.setattr(diagnostics, 'get_worker_health_payload', lambda: WorkerHealthPayload())
-    payload = diagnostics.get_runtime_diagnostics_payload(app, model_residency_store_factory=lambda: pytest.fail('retried unavailable persistence'))
+    payload = diagnostics.get_runtime_diagnostics_payload(app.state, model_residency_store_factory=lambda: pytest.fail('retried unavailable persistence'))
     assert payload.runtime.postgresql['connectivity'] is False
     assert payload.runtime.process['gateway_role'] == 'api'
     assert payload.model_residency.status == 'unavailable' and not payload.ok
@@ -237,7 +223,7 @@ def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monk
 
 
 def test_runtime_tts_success_metrics_only_count_completed_audio(monkeypatch):
-    from app.gateway import tts_stream_diagnostics as streams
+    from app.observability import tts_stream_diagnostics as streams
     monkeypatch.setattr(streams, '_LAST_PCM_SUCCESS_AT', None)
     monkeypatch.setattr(streams, '_COMPLETED_PCM_STREAMS', 0)
     streams.stream_log('test', 'server', 'done_control_sent', sent_frames=0)

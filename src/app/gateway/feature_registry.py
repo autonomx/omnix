@@ -2,6 +2,10 @@
 
 import logging
 
+from fastapi import Depends
+
+from app.config.env import environment
+from app.config.load import load_feature_config
 from app.jobs.handlers import JobHandlerRegistry
 from app.persistence.repository_registry import install_repository_specs, reset_repository_specs
 from app.persistence.shared_repository_specs import shared_repository_specs
@@ -25,6 +29,15 @@ def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
     if any(item.name == feature.name for item in lifecycles):
         raise ValueError(f"Feature lifecycle already registered: {feature.name}")
     lifecycles.append(feature)
+
+
+def feature_guard(feature_id: str):
+    """Return the composition-level feature policy hook for mounted routes."""
+    def guard() -> None:
+        return None
+
+    guard.__name__ = "feature_guard_" + feature_id.replace("-", "_")
+    return guard
 
 
 def _register_feature_modules(gateway) -> None:
@@ -52,7 +65,7 @@ def _register_feature_modules(gateway) -> None:
             install_repository_specs(tuple(feature.repositories))
         context = FeatureContext(
             feature_id=feature.id,
-            config=None,
+            config=load_feature_config(feature.id, feature.config_model, env=environment()),
             runtime=config,
             capabilities=capabilities,
             services=services,
@@ -60,9 +73,16 @@ def _register_feature_modules(gateway) -> None:
             runtime_state=gateway.state,
         )
         for router_factory in feature.routers:
-            gateway.include_router(router_factory(context))
+            gateway.include_router(
+                router_factory(context),
+                dependencies=[Depends(feature_guard(feature.id))],
+            )
         for router_factory in feature.internal_routers:
-            gateway.include_router(router_factory(context), include_in_schema=False)
+            gateway.include_router(
+                router_factory(context),
+                dependencies=[Depends(feature_guard(feature.id))],
+                include_in_schema=False,
+            )
         for worker_factory in feature.background_workers:
             worker = worker_factory(context)
             if worker is not None:

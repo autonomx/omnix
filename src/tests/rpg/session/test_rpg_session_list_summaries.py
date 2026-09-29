@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 
-from app.gateway.rpg_session_routes import _attach_environment_snapshot_to_session
+from app.rpg.api.feature_routes.rpg_session_routes import _attach_environment_snapshot_to_session
 from app.rpg.session import list_summaries
 from app.rpg.session import service
 

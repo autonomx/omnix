@@ -6,7 +6,8 @@ import time
 
 from fastapi import FastAPI
 
-from app.gateway.live_voice_runtime_offload import (
+from tests.support.routers import include_router_registrar
+from app.voice.live_voice_runtime_offload import (
     CachedTtsProviderResolver,
     DeliveryPersistenceWorker,
     register_live_voice_runtime_offload,
@@ -161,7 +162,7 @@ def test_provider_monitor_refreshes_after_stream_becomes_idle() -> None:
 
 def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
     app = FastAPI(title="Omnix Web Gateway")
-    register_live_voice_runtime_offload(app)
+    include_router_registrar(app, register_live_voice_runtime_offload)
     resolver = app.state.live_voice_tts_provider_resolver
     started = threading.Event()
     release = threading.Event()
@@ -175,7 +176,7 @@ def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
     monkeypatch.setattr(resolver, "_resolve", slow_resolve)
     startup = next(
         handler for handler in app.router.on_startup
-        if handler.__module__ == "app.gateway.live_voice_runtime_offload"
+        if handler.__module__ == "app.voice.live_voice_runtime_offload"
     )
 
     try:

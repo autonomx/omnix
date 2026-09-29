@@ -6,14 +6,16 @@ import time
 import pytest
 from typing import Any
 
-from app.gateway import live_voice_execution_lane as execution_lane
-from app.gateway.live_voice_execution_lane import (
+from app.voice import live_voice_execution_lane as execution_lane
+from app.voice.live_voice_execution_lane import (
     PriorityTtsScheduler,
     TtsLanePriority,
-    live_voice_execution_lane_config,
     reset_live_voice_execution_lane_for_tests,
-    resolve_live_voice_chat_route,
     resolve_live_voice_tts_provider,
+)
+from app.runtime.live_voice_config import (
+    live_voice_execution_lane_config,
+    resolve_live_voice_chat_route,
 )
 
 

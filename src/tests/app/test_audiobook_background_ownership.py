@@ -3,22 +3,22 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
 
 from app.audiobook import routes
-from app.runtime.background import BackgroundOwnershipUnavailable, GatewayBackgroundRuntime
+from app.runtime.background import (
+    BackgroundOwnershipUnavailable,
+    GatewayBackgroundRuntime,
+    register_background_worker,
+)
 from app.runtime.config import GatewayRole, RuntimeConfig
 from app.persistence.background_authority import background_execution
 
 
 def test_api_audiobook_lifecycle_never_initializes_workers(monkeypatch):
-    app = FastAPI()
     owner = GatewayBackgroundRuntime(object(), "workspace", config=RuntimeConfig(gateway_role=GatewayRole.API))
-    app.state.background_runtime = owner
     monkeypatch.setattr(routes, "_service_and_context", lambda: pytest.fail("API started audiobook work"))
-    routes.register_audiobook_routes(app)
+    register_background_worker(owner, routes.create_audiobook_background_worker())
     assert owner.diagnostics()["registered_workers"] == ["audiobook"]
-    assert not app.router.on_startup
     asyncio.run(owner.startup())
     assert not owner.diagnostics()["started_workers"]
 
@@ -27,11 +27,9 @@ def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypat
     from app.audiobook import worker, assembly_service, export_service, render_service
     from app.persistence.background_authority import require_background_owner
 
-    app = FastAPI()
     owner = GatewayBackgroundRuntime(
         object(), "workspace", role="worker", execution_scope=background_execution
     )
-    app.state.background_runtime = owner
     live = threading.Event()
     live.set()
     release = threading.Event()
@@ -67,7 +65,7 @@ def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypat
     monkeypatch.setattr(worker, "run_analyze_once", lambda *a, **k: pytest.fail("unexpected analysis"))
     monkeypatch.setattr(assembly_service, "run_assemble_once", lambda *a, **k: pytest.fail("unexpected assembly"))
     monkeypatch.setattr(export_service, "run_export_once", lambda *a, **k: pytest.fail("unexpected export"))
-    routes.register_audiobook_routes(app)
+    register_background_worker(owner, routes.create_audiobook_background_worker())
 
     async def run():
         await owner.startup()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.gateway.live_chat_release_gate import (
+from app.chat.live_chat_release_gate import (
     DEFAULT_LIVE_CHAT_METRIC_POLICIES,
     LiveChatEvidenceBundle,
     LiveChatEvidenceMetadata,

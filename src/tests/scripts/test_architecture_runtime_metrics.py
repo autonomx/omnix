@@ -99,6 +99,39 @@ def test_snapshot_cannot_be_certified_under_a_different_source_digest(tmp_path):
     runtime.verify_snapshot({"src/app/a.py": "value = 2"}, snapshot)
 
 
+def test_collection_probe_applies_file_quarantine_to_explicit_paths(tmp_path):
+    root = tmp_path / "repository"
+    test_root = root / "src/tests"
+    test_root.mkdir(parents=True)
+    quarantined = test_root / "test_quarantined.py"
+    healthy = test_root / "test_healthy.py"
+    quarantined.write_text("import missing_test_dependency\n", encoding="utf-8")
+    healthy.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    (test_root / "quarantine.toml").write_text(
+        '[[quarantine]]\ncollect_glob = "src/tests/test_quarantined.py"\n',
+        encoding="utf-8",
+    )
+
+    active = runtime.active_collection_paths(root, [str(quarantined), str(healthy)])
+    assert active == [str(healthy)]
+
+    manifest, output = tmp_path / "manifest.json", tmp_path / "collection.json"
+    manifest.write_text(
+        json.dumps({"root": str(root), "test_paths": [str(quarantined), str(healthy)]}),
+        encoding="utf-8",
+    )
+    result = subprocess.run([
+        sys.executable, "-I", str(SCRIPTS / "architecture_runtime_metrics.py"),
+        "--child", "collection", "--manifest", str(manifest), "--output", str(output),
+    ], cwd=root, env=dict(os.environ, OMNIX_TEST_DATABASE_URL=URL),
+       capture_output=True, text=True, timeout=20)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert result.returncode == 0, result.stderr
+    assert report["metrics"] == {"collection_errors": 0}
+    assert report["evidence"]["collected_tests"] == 1
+    assert report["evidence"]["collection_failed_nodes"] == []
+
+
 def test_initial_outbox_probe_requires_registry_measurement_once_consumers_exist():
     config = runtime.load_layers(SCRIPTS.parent / "resources/architecture/layers.toml")
     assert runtime.outbox_initial_coverage({}, config)[0] == 0

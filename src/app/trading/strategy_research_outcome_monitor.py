@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .paper import PaperOrder
 from .paper_runtime_repository import default_runtime_paper_repository
@@ -248,14 +248,13 @@ class TradingStrategyResearchOutcomeMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_research_outcome_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyResearchOutcomeMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_research_outcome_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyResearchOutcomeMonitor):
-        return existing
+        return None
     monitor = TradingStrategyResearchOutcomeMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_research_outcome_monitor_enabled():
@@ -264,15 +263,14 @@ def register_trading_strategy_research_outcome_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyResearchOutcomeMonitor",
     "capture_closed_paper_outcome",
-    "register_trading_strategy_research_outcome_monitor",
+    "create_trading_strategy_research_outcome_monitor_worker",
     "strategy_research_outcome_monitor_enabled",
 ]

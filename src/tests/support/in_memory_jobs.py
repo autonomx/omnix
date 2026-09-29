@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import uuid
 from copy import deepcopy
@@ -23,6 +24,7 @@ from app.jobs.models import (
     JobLease,
     JobProgress,
     JobRecord,
+    ReleaseJobRequest,
     JobStage,
     JobStatus,
     ResourceClass,
@@ -79,9 +81,20 @@ class InMemoryJobStore:
         self._state = _state(db_path)
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
+        return self._create_job(request, f"job:{uuid.uuid4().hex}")
+
+    def create_job_once(
+        self, request: CreateJobRequest, *, idempotency_key: str
+    ) -> JobRecord:
+        identity = hashlib.sha256(
+            f"{request.module}\n{request.type}\n{idempotency_key}".encode("utf-8")
+        ).hexdigest()
+        return self._create_job(request, f"job:idempotent:{identity}")
+
+    def _create_job(self, request: CreateJobRequest, job_id: str) -> JobRecord:
         now = _utcnow()
         job = JobRecord(
-            id=f"job:{uuid.uuid4().hex}",
+            id=job_id,
             owner_id=request.owner_id,
             module=request.module,
             type=request.type,
@@ -102,6 +115,9 @@ class InMemoryJobStore:
             compat=request.compat,
         )
         with self._state.lock:
+            existing = self._state.jobs.get(job.id)
+            if existing is not None:
+                return deepcopy(existing)
             self._state.jobs[job.id] = deepcopy(job)
             self._event(job.id, "job.created", job.model_dump(mode="json"))
         return deepcopy(job)
@@ -409,6 +425,27 @@ class InMemoryJobStore:
                 for stage in value.stages
             ]
             self._save(value, "job.failed")
+            return deepcopy(value)
+
+    def release_job(self, job_id: str, request: ReleaseJobRequest) -> JobRecord | None:
+        with self._state.lock:
+            job = self._state.jobs.get(job_id)
+            if (
+                job is None
+                or job.status not in {JobStatus.LEASED, JobStatus.RUNNING}
+                or job.lease is None
+                or job.lease.worker_id != request.worker_id
+                or job.lease.token != request.lease_token
+            ):
+                return None
+            now = _utcnow()
+            value = deepcopy(job)
+            value.status = JobStatus.QUEUED
+            value.updated_at = now
+            value.completed_at = None
+            value.lease = None
+            value.error = None
+            self._save(value, "job.released")
             return deepcopy(value)
 
     def cancel_job(self, job_id: str, request: CancelJobRequest) -> JobRecord | None:

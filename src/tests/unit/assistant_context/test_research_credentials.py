@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.security import provider_secret_store as store
-from app.research.credential_routes import register_research_credential_routes
+from app.research.credential_routes import create_research_credential_router
 
 
 _RESEARCH_ENV_KEYS = (
@@ -26,7 +26,7 @@ def _client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.setattr(store, "_protect", lambda value: b"protected:" + value[::-1])
     monkeypatch.setattr(store, "_unprotect", lambda value: value.removeprefix(b"protected:")[::-1])
     app = FastAPI()
-    register_research_credential_routes(app)
+    app.include_router(create_research_credential_router())
     return TestClient(app)
 
 

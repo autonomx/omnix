@@ -1,9 +1,9 @@
-"""FastAPI routes for expanded Character avatar viseme generation."""
+"""Router registration for expanded Character avatar viseme generation."""
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from .avatar_viseme_generation import (
     CharacterVisemeGenerationBatch,
@@ -13,11 +13,11 @@ from .repository import CharacterNotFoundError
 
 
 def register_character_avatar_viseme_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     service_factory: Callable[[], CharacterVisemeGenerationService] = CharacterVisemeGenerationService,
 ) -> None:
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/avatar-visemes",
         response_model=CharacterVisemeGenerationBatch,
         status_code=202,
@@ -31,7 +31,7 @@ def register_character_avatar_viseme_routes(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get(
+    @router.get(
         "/api/character-avatar-visemes/{batch_id}",
         response_model=CharacterVisemeGenerationBatch,
         tags=["characters"],

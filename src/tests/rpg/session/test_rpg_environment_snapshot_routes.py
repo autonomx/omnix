@@ -1,10 +1,11 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.gateway.rpg_session_routes as routes
-from app.gateway.rpg_session_routes import register_rpg_session_routes
+import app.rpg.api.feature_routes.rpg_session_routes as routes
+from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
 from app.rpg.session import durable_store
 from app.rpg.session.service import load_session
 
@@ -13,7 +14,7 @@ def _client(monkeypatch, tmp_path) -> TestClient:
     monkeypatch.setattr(durable_store, "_SESSION_DIR", tmp_path)
     tmp_path.mkdir(parents=True, exist_ok=True)
     app = FastAPI()
-    register_rpg_session_routes(app)
+    include_router_registrar(app, register_rpg_session_routes)
     return TestClient(app)
 
 

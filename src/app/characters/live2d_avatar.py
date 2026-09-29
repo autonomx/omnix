@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import certifi
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -547,11 +547,11 @@ class CharacterLive2DAvatarService:
 
 
 def register_character_live2d_avatar_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     service_factory: Callable[[], CharacterLive2DAvatarService] = CharacterLive2DAvatarService,
 ) -> None:
-    @app.get(
+    @router.get(
         "/api/characters/{character_id}/live2d-models",
         response_model=Live2DModelCatalogResponse,
         tags=["characters"],
@@ -562,7 +562,7 @@ def register_character_live2d_avatar_routes(
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/live2d-avatar",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
@@ -578,7 +578,7 @@ def register_character_live2d_avatar_routes(
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/live2d-avatar/disable",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
@@ -589,7 +589,7 @@ def register_character_live2d_avatar_routes(
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get(
+    @router.get(
         "/api/character-live2d/runtime/{filename}",
         response_model=None,
         response_class=FileResponse,
@@ -612,7 +612,7 @@ def register_character_live2d_avatar_routes(
         media_type = "text/javascript" if path.suffix == ".js" else "application/octet-stream"
         return FileResponse(path, media_type=media_type)
 
-    @app.get(
+    @router.get(
         "/api/character-live2d/assets/{asset_id}/{asset_path:path}",
         response_model=None,
         response_class=FileResponse,

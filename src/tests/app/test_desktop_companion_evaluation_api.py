@@ -129,10 +129,11 @@ def test_explicit_speech_canary_collects_evidence_without_opening_default_rollou
     assert speech["release_gate_status"] == "insufficient"
 
 
-def test_desktop_companion_routes_remain_internal_to_openapi(tmp_path: Path):
+def test_desktop_companion_routes_are_in_generated_openapi(tmp_path: Path):
     store = DesktopCompanionEvaluationStore(tmp_path / "desktop-evaluations.json")
     app = FastAPI()
     register_desktop_companion_routes(app, evaluation_store_factory=lambda: store)
 
     schema = app.openapi()
-    assert not any(path.startswith("/api/desktop-companion") for path in schema["paths"])
+    assert "/api/desktop-companion/evaluations" in schema["paths"]
+    assert "/api/desktop-companion/release-gate" in schema["paths"]

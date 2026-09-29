@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.security import provider_secret_store as secret_store
@@ -41,46 +41,44 @@ def research_credentials_status() -> dict[str, object]:
     }
 
 
-def register_research_credential_routes(app: FastAPI) -> None:
-    route_names = {getattr(route, "name", "") for route in app.routes}
+def create_research_credential_router() -> APIRouter:
+    router = APIRouter()
 
-    if _GET_ROUTE_NAME not in route_names:
+    @router.get(
+        "/api/assistant/research/credentials",
+        name=_GET_ROUTE_NAME,
+    )
+    async def assistant_research_credentials_status_endpoint() -> dict[str, object]:
+        return research_credentials_status()
 
-        @app.get(
-            "/api/assistant/research/credentials",
-            name=_GET_ROUTE_NAME,
-        )
-        async def assistant_research_credentials_status_endpoint() -> dict[str, object]:
-            return research_credentials_status()
+    @router.post(
+        "/api/assistant/research/credentials",
+        name=_UPDATE_ROUTE_NAME,
+    )
+    async def assistant_research_credentials_update_endpoint(
+        request: ResearchCredentialUpdate,
+    ) -> dict[str, object]:
+        source = secret_store.research_provider_credential_source(request.provider)
+        if source in {"environment", "legacy_environment"}:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "research_credential_environment_owned",
+                    "provider": request.provider,
+                    "source": source,
+                },
+            )
+        try:
+            secret_store.save_research_provider_secret(request.provider, request.api_key)
+        except LegacyPersistenceRetired as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "research_credential_store_unavailable",
+                    "provider": request.provider,
+                    "message": str(exc),
+                },
+            ) from exc
+        return research_credentials_status()
 
-    if _UPDATE_ROUTE_NAME not in route_names:
-
-        @app.post(
-            "/api/assistant/research/credentials",
-            name=_UPDATE_ROUTE_NAME,
-        )
-        async def assistant_research_credentials_update_endpoint(
-            request: ResearchCredentialUpdate,
-        ) -> dict[str, object]:
-            source = secret_store.research_provider_credential_source(request.provider)
-            if source in {"environment", "legacy_environment"}:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "research_credential_environment_owned",
-                        "provider": request.provider,
-                        "source": source,
-                    },
-                )
-            try:
-                secret_store.save_research_provider_secret(request.provider, request.api_key)
-            except LegacyPersistenceRetired as exc:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "research_credential_store_unavailable",
-                        "provider": request.provider,
-                        "message": str(exc),
-                    },
-                ) from exc
-            return research_credentials_status()
+    return router

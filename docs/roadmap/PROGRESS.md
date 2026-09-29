@@ -19,15 +19,15 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-1.5 | not started | — | 2026-09-27 | — | One required CI pipeline |
 | WP-1.6 | not started | — | 2026-09-27 | — | Python type checking rollout |
 | WP-1.7 | not started | — | 2026-09-27 | — | ESLint for the web app with boundary and patch rules |
-| WP-2.1 | not started | — | 2026-09-27 | — | Neutral runtime package |
-| WP-2.2 | not started | — | 2026-09-27 | — | FeatureModule contract and feature catalog |
-| WP-2.3 | not started | — | 2026-09-27 | — | Typed configuration and a settings service |
-| WP-2.4 | not started | — | 2026-09-27 | — | Migrations become a release step; tenant bootstrap leaves request paths |
-| WP-2.5 | not started | — | 2026-09-27 | — | Jobs kernel inversion: typed handler registry |
-| WP-2.6 | not started | — | 2026-09-27 | — | Persistence kernel inversion and a composable unit of work |
-| WP-2.7 | not started | — | 2026-09-27 | — | Platform package cleanup |
-| WP-2.8 | not started | — | 2026-09-27 | — | Retire `shared.py` |
-| WP-2.9 | not started | — | 2026-09-27 | — | Package cycles to zero |
+| WP-2.1 | done | - | 2026-09-29 | AL001 106 -> 103; app.gateway imports in jobs/trading: 0 | Neutral runtime owners; unit architecture gate passes |
+| WP-2.2 | done | - | 2026-09-29 | 17 catalog features; excluded/untyped schema routes: 0/0 | Feature disable matrix passes; generated OpenAPI paths and schemas unchanged |
+| WP-2.3 | done | - | 2026-09-29 | AL007: 0; settings use optimistic revisions | Configuration registry/docs generated and checked; legacy settings writes absent; reads fail closed |
+| WP-2.4 | done | - | 2026-09-29 | AL012: 0; migration compatibility and ordering tests pass | Migrations run as a release step; PostgreSQL architecture gate passes |
+| WP-2.5 | done | - | 2026-09-29 | AL006: 0; jobs imports no feature package | Typed handler registry enforces validation, attempt limits and backoff; unit gate passes |
+| WP-2.6 | done | - | 2026-09-29 | Persistence imports no feature package | Feature repositories are lazy and cached per unit of work; persistence gate passes |
+| WP-2.7 | done | - | 2026-09-29 | app.platform -> app.rpg imports: 0 | RPG compatibility route tests pass |
+| WP-2.8 | done | - | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | ADR-0010 fail-closed test and legacy secret-import test pass |
+| WP-2.9 | done | - | 2026-09-29 | AL002: 0; package_cycles: 0 | Cycles verified by architecture lint and metrics |
 | WP-3.0 | not started | — | 2026-09-27 | — | Characterization harness |
 | WP-3.1 | not started | — | 2026-09-27 | — | Chat store: native targeted mutations; remove the whole-workspace save |
 | WP-3.2 | not started | — | 2026-09-27 | — | Live voice becomes a module (`app/live_voice`) with explicit ports |
@@ -127,6 +127,10 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 ## Validation evidence
 
 Validation is recorded per work package as execution proceeds.
+
+- WP-2.1–2.9: the unit and PostgreSQL architecture gates pass on `refactor-audit`; `architecture_lint.py --check` passes. The moved-file baseline rekey does not increase any rule/file count, and rule totals are nonincreasing (AL001 106→103, AL003 447→420, AL004 114→101, AL005 201→194). The Phase 2 scorecard slice is green: AL002/AL006/AL007/AL012, package cycles, schema-excluded routes and untyped body routes are all 0.
+- WP-2.2–2.8: the all-feature disable matrix, generated OpenAPI export comparison, generated configuration documentation check, fail-closed settings, settings-entry persistence, lazy unit-of-work, RPG compatibility routes and legacy-secret importer tests pass. OpenAPI has 515 paths and 731 schemas, unchanged from the current HEAD contract.
+- WP-2.5: durable job handler tests cover duplicate registration, input validation, unknown nonretryable jobs, feature-owned job types and the configured backoff schedule. Jobs have no feature imports or job-table SQL outside persistence.
 
 - WP-0.1: Gitleaks 8.30.0 source scan passes. Negative checks detect all six custom token families, including a new synthetic credential inside an allow-listed test file. Scanner binary checksum verified before use. Exceptions are restricted to named rules, paths and exact non-secret examples.
 - WP-0.2–0.3: focused Python containment suite passed (152 tests); after the Windows watchdog correction, security and launcher suites passed again (104 tests). Ruff passes for the new policy/guard modules and focused clients. The production-source public-bind AST gate passes.

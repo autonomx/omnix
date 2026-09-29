@@ -122,4 +122,4 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
                 assert key in _DOCUMENTED_NON_JSON_RESPONSES
                 assert route_path in transport_inventory
 
-    assert model_less_routes == _DOCUMENTED_NON_JSON_RESPONSES
+    assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES

@@ -1,20 +1,14 @@
 """Assistant tools feature declaration."""
 from app.runtime.features import FeatureModule
-from app.runtime.router_composition import compose_registrar_router
+from .routes import create_assistant_tool_internal_router, create_assistant_tool_router
 
 
-def _assistant_tools_router(context):
-    return compose_registrar_router(
-        (("app.assistant_tools.routes", "register_assistant_tool_routes"),),
-        state=context.runtime_state,
-    )
+def _assistant_tools_router(_context):
+    return create_assistant_tool_router()
 
 
-def _assistant_tools_internal_router(context):
-    return compose_registrar_router(
-        (("app.assistant_tools.routes", "register_assistant_tool_internal_routes"),),
-        state=context.runtime_state,
-    )
+def _assistant_tools_internal_router(_context):
+    return create_assistant_tool_internal_router()
 
 
 FEATURE = FeatureModule(

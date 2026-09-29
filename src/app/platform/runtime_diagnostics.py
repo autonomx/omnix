@@ -66,17 +66,14 @@ def _durable_snapshot(services):
     from app.persistence.unit_of_work import unit_of_work
 
     jobs = services.jobs
-    database, workspace = jobs.database, jobs.context.workspace_id
+    database = jobs.database
     with unit_of_work(database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ) as work:
         policy = require_authority_operation(work.connection, AuthorityOperation.DIAGNOSTIC_READ)
         snapshot = work.jobs.diagnostic_snapshot(jobs.context)
         groups = snapshot["groups"]
         events = snapshot["events"]
         session_owners = snapshot["session_owners"]
-        dead_letters = work.connection.execute(
-            "SELECT count(*) FROM omnix_dead_letters WHERE workspace_id = %s AND resolved_at IS NULL",
-            (workspace,),
-        ).fetchone()[0]
+        dead_letters = snapshot["dead_letter_count"]
         work.rollback()
     return {
         "connectivity": True, "authority_state": policy.authority_state,
@@ -95,17 +92,17 @@ def _durable_snapshot(services):
     }, session_owners
 
 
-def runtime_diagnostics(gateway) -> RuntimeDiagnostics:
-    config, capabilities = gateway.state.runtime_config, gateway.state.runtime_capabilities
-    metrics = gateway.state.runtime_metrics
-    owner = getattr(gateway.state, 'execution_owner', None)
-    background = getattr(gateway.state, 'background_runtime', None)
-    services = getattr(gateway.state, 'runtime_services', None)
+def runtime_diagnostics(state) -> RuntimeDiagnostics:
+    config, capabilities = state.runtime_config, state.runtime_capabilities
+    metrics = state.runtime_metrics
+    owner = getattr(state, 'execution_owner', None)
+    background = getattr(state, 'background_runtime', None)
+    services = getattr(state, 'runtime_services', None)
     postgres, jobs, sessions = {"connectivity": None}, {"available": False}, None
     if services is not None:
         try:
             postgres, jobs, sessions = _durable_snapshot(services)
-            postgres['migrations_pending'] = gateway.state.persistence_startup.get('migrations_pending', [])
+            postgres['migrations_pending'] = state.persistence_startup.get('migrations_pending', [])
         except Exception as exc:
             # No exception message or database URL crosses this boundary.
             postgres = {"connectivity": False, "error_class": type(exc).__name__}
@@ -115,10 +112,10 @@ def runtime_diagnostics(gateway) -> RuntimeDiagnostics:
     if owner is not None:
         chat.update(owner.recovery_diagnostics())
         chat['execution_owner_healthy'] = owner.healthy
-    tts_snapshot = getattr(gateway.state, "tts_stream_snapshot", None)
+    tts_snapshot = getattr(state, "tts_stream_snapshot", None)
     stream_snapshot = tts_snapshot() if callable(tts_snapshot) else {}
-    resolver = getattr(gateway.state, 'live_voice_tts_provider_resolver', None)
-    delivery = getattr(gateway.state, 'live_voice_delivery_persistence_worker', None)
+    resolver = getattr(state, 'live_voice_tts_provider_resolver', None)
+    delivery = getattr(state, 'live_voice_delivery_persistence_worker', None)
     return RuntimeDiagnostics(
         process={"process_id": os.getpid(), "runtime_id": getattr(owner, 'node_id', None),
                  "gateway_role": config.gateway_role.value, "uptime_seconds": time.monotonic() - metrics.started_at,
@@ -131,6 +128,6 @@ def runtime_diagnostics(gateway) -> RuntimeDiagnostics:
              "endpoint": config.tts.url if config.tts else None, **stream_snapshot,
              "provider_refresh": resolver.diagnostics() if resolver is not None else {},
              "delivery_queue": delivery.diagnostics() if delivery is not None else {}},
-        replicas={"known_origins": list(config.api_replica_origins), "local_runtime_started": gateway.state.runtime_started,
+        replicas={"known_origins": list(config.api_replica_origins), "local_runtime_started": state.runtime_started,
                   "remote_readiness": None},
     )

@@ -64,6 +64,19 @@ def test_windows_launcher_loads_protected_database_credential_and_checks_health(
     assert "Write-Output $databaseUrl" not in credential_script
 
 
+def test_windows_launcher_runs_migrations_after_database_checks_before_services() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    health_check = source.index('"%RPG_FLUX_PYTHON%" -m app.persistence health')
+    credential_check = source.index('if /I "%~1"=="--database-credential-injected-check"')
+    migration = source.index('"%RPG_FLUX_PYTHON%" -m app.persistence migrate')
+    launcher_start = source.index('"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app')
+
+    assert health_check < credential_check < migration < launcher_start
+    assert "PostgreSQL migrations failed. Omnix services were not started." in source
+
+
 def test_windows_launcher_retries_web_after_slow_gateway_startup() -> None:
     root = Path(__file__).resolve().parents[3]
     source = (root / "start_all.bat").read_text(encoding="utf-8")

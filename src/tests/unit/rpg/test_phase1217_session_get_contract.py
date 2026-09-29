@@ -1,10 +1,12 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import create_app
+from app.rpg.api.compat_router import create_rpg_compatibility_router
 
 
-def test_session_get_surfaces_bootstrap_payload_at_top_level(monkeypatch):
-    app = create_app()
+def test_session_get_surfaces_bootstrap_payload_in_game_envelope(monkeypatch):
+    app = FastAPI()
+    app.include_router(create_rpg_compatibility_router())
     client = TestClient(app)
 
     fake_session = {
@@ -23,11 +25,11 @@ def test_session_get_surfaces_bootstrap_payload_at_top_level(monkeypatch):
     }
 
     monkeypatch.setattr(
-        "app.rpg.api.rpg_session_routes.load_runtime_session",
+        "app.rpg.session.runtime.load_runtime_session",
         lambda session_id: fake_session if session_id == "session:test" else None,
     )
     monkeypatch.setattr(
-        "app.rpg.api.rpg_session_routes.build_frontend_bootstrap_payload",
+        "app.rpg.session.runtime.build_frontend_bootstrap_payload",
         lambda session: dict(fake_payload),
     )
 
@@ -36,9 +38,9 @@ def test_session_get_surfaces_bootstrap_payload_at_top_level(monkeypatch):
     body = res.json()
 
     assert body["ok"] is True
-    assert body["session_id"] == "session:test"
-    assert body["choices"] == fake_payload["choices"]
-    assert body["npcs"] == fake_payload["npcs"]
-    assert body["world"] == fake_payload["world"]
-    assert body["narration"] == fake_payload["narration"]
     assert body["game"] == fake_payload
+    assert body["game"]["session_id"] == "session:test"
+    assert body["game"]["choices"] == fake_payload["choices"]
+    assert body["game"]["npcs"] == fake_payload["npcs"]
+    assert body["game"]["world"] == fake_payload["world"]
+    assert body["game"]["narration"] == fake_payload["narration"]

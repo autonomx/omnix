@@ -6,7 +6,8 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from app.gateway import tts_runtime_actions, tts_runtime_routes, tts_runtime_state
+from app.voice import tts_runtime_actions, tts_runtime_routes, tts_runtime_state
+from tests.support.routers import include_router_registrar
 
 
 class FakeProvider:
@@ -115,7 +116,7 @@ def test_startup_warmup_runs_in_background(monkeypatch) -> None:
 
     monkeypatch.setattr(tts_runtime_routes, "startup_warmup_enabled", lambda: True)
     monkeypatch.setattr(tts_runtime_routes, "warm_tts_runtime", slow_warmup)
-    tts_runtime_routes.register_tts_runtime_routes(app)
+    include_router_registrar(app, tts_runtime_routes.register_tts_runtime_routes)
 
     async def run_startup() -> float:
         started = time.perf_counter()
@@ -133,8 +134,8 @@ def test_startup_warmup_runs_in_background(monkeypatch) -> None:
 
 def test_runtime_routes_register_once() -> None:
     app = FastAPI(title="Lifecycle Test")
-    tts_runtime_routes.register_tts_runtime_routes(app)
-    tts_runtime_routes.register_tts_runtime_routes(app)
+    include_router_registrar(app, tts_runtime_routes.register_tts_runtime_routes)
+    include_router_registrar(app, tts_runtime_routes.register_tts_runtime_routes)
 
     paths = [route.path for route in app.routes]
     assert paths.count("/api/tts/runtime/status") == 1

@@ -4,7 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from app.gateway.live_chat_stream_retry import (
+from app.chat.live_chat_stream_retry import (
     EmptyProviderStreamError,
     retry_provider_stream,
 )

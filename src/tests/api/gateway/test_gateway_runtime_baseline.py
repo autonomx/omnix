@@ -65,7 +65,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     stores[0].context = SimpleNamespace(
         workspace_id="test-workspace", user_id="test-user"
     )
-    monkeypatch.setattr(jobs, "default_job_store", lambda: stores[0])
+    monkeypatch.setattr(runtime_composition, "production_job_store", lambda: stores[0])
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
     monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
     monkeypatch.setattr(jobs, "default_model_residency_store", lambda: stores[3])
@@ -348,7 +348,7 @@ def test_job_read_does_not_block_health():
 
 
 def test_sse_store_poll_runs_outside_event_loop_thread():
-    from app.gateway.live_job_events import resilient_live_job_event_stream
+    from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
 
     threads = []
 

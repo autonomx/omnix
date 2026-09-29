@@ -14,7 +14,7 @@ from app.assistant_memory.structured_provider import (
 )
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 
-from .tts_stream_diagnostics import stream_log
+from app.observability.tts_stream_diagnostics import stream_log
 
 _SENTINEL = "_omnix_memory_job_offload_installed"
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="omnix-memory-post-turn")

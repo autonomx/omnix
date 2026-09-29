@@ -11,6 +11,7 @@ import argparse
 import ast
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
+import fnmatch
 import io
 import json
 import os
@@ -19,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import traceback
 from urllib.parse import urlsplit
 
@@ -26,6 +28,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from architecture_analysis import AnalysisError, SourceAnalysis, included_path, is_test, load_layers, qualified_name, source_digest, tracked_sources
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def active_collection_paths(root: Path, test_paths: list[str]) -> list[str]:
+    """Keep explicitly passed quarantined files out of the collection probe.
+
+    Pytest's ignore hooks do not consistently skip files that are supplied as
+    explicit file arguments, which is how the source-bound probe invokes it.
+    Apply the repository's exact collection quarantine inventory before
+    invoking pytest so the metric counts unquarantined collection failures.
+    Node-id quarantines remain collected and are handled by pytest as xfails.
+    """
+
+    inventory = root / "src/tests/quarantine.toml"
+    if not inventory.is_file():
+        return test_paths
+    payload = tomllib.loads(inventory.read_text(encoding="utf-8"))
+    entries = payload.get("quarantine", payload.get("tests", []))
+    if not isinstance(entries, list):
+        raise AnalysisError("test quarantine inventory must contain a list")
+    patterns = [
+        str(entry["collect_glob"]).replace("\\", "/")
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("collect_glob")
+    ]
+    active = []
+    for test_path in test_paths:
+        relative = Path(test_path).resolve().relative_to(root.resolve()).as_posix()
+        if not any(fnmatch.fnmatchcase(relative, pattern) for pattern in patterns):
+            active.append(test_path)
+    return active
 
 
 def disposable_snapshot(root: Path, destination: Path) -> None:
@@ -258,9 +290,10 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
                     if candidate.exists():
                         configuration = ["-c", str(candidate)]
                         break
+                test_paths = active_collection_paths(root, list(manifest["test_paths"]))
                 exit_code = pytest.main([
                     "--collect-only", "--continue-on-collection-errors", "-q", "-p", "no:cacheprovider",
-                    "--rootdir", str(root), *configuration, "-o", f"log_file={temporary / 'pytest.log'}", *manifest["test_paths"],
+                    "--rootdir", str(root), *configuration, "-o", f"log_file={temporary / 'pytest.log'}", *test_paths,
                 ], plugins=[collector])
                 diagnostics["pytest_exit_code"] = int(exit_code)
                 if (collector.internal_error or not collector.finished or int(exit_code) not in {0, 1, 2}

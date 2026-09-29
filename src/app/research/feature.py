@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import ResourceClass
-from app.persistence.module_repositories import PostgresResearchReportRepository
+from app.research.persistence.report_repository import PostgresResearchReportRepository
 from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureModule
+from app.runtime.features import FeatureContext
+from .credential_routes import create_research_credential_router
 
 from .jobs import DeepResearchJobInput, execute_research_job
 
@@ -16,17 +18,12 @@ def _execute(context: JobExecutionContext, job):
 
 
 
-from app.runtime.router_composition import compose_registrar_router
+def _research_router(_context: FeatureContext):
+    from fastapi import APIRouter
 
-
-def _research_router(context):
-    return compose_registrar_router(
-        (
-            ("app.gateway.research_mode_routes", "register_research_mode_routes"),
-            ("app.research.credential_routes", "register_research_credential_routes"),
-        ),
-        state=context.runtime_state,
-    )
+    router = APIRouter()
+    router.include_router(create_research_credential_router())
+    return router
 
 FEATURE = FeatureModule(
     id="research",

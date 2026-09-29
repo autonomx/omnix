@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.conversation.contracts import ChatSessionReader
+from app.conversation.contracts import TranscriptReader
 
 from .companion_context import invalidate_companion_context
 from app.memory_contracts import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
@@ -183,7 +183,7 @@ def export_owner_memory(service: MemoryService, context: MemoryScopeContext) -> 
 
 
 def reset_owner_memory(
-    store: ChatSessionReader,
+    store: TranscriptReader,
     service: MemoryService,
     context: MemoryScopeContext,
 ) -> MemoryResetResponse:

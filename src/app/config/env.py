@@ -49,6 +49,12 @@ def environment_copy() -> dict[str, str]:
     return values
 
 
+def env_prefixed(prefix: str, *, env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Read only variables with a known prefix and record their names."""
+    source = environment() if env is None else env
+    return {name: source[name] for name in source if name.startswith(prefix)}
+
+
 def set_environment_value(name: str, value: str) -> None:
     os.environ[name] = str(value)
 

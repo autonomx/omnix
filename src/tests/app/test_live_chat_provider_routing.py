@@ -5,10 +5,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.chat.models import SendChatMessageRequest
-from app.gateway import live_call_prewarm as prewarm
+from app.chat import live_call_prewarm as prewarm
 from app.providers import service as provider_service
 from app.settings import access as settings_access
-from app.gateway.live_chat_provider_routing import (
+from app.chat.live_chat_provider_routing import (
     _live_voice_affinity_for_current_provider,
     _remember_turn_route,
     _reset_provider_route_state_for_tests,

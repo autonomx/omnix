@@ -11,6 +11,28 @@ from .integrity import validate_revision
 from .models import SourceRevision
 
 
+def _cancel_current_render_jobs(jobs: Any, context: TenantContext, render_run_id: str) -> None:
+    cursor = None
+    while True:
+        rows = jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+            input_fields=(("render_run_id", render_run_id),),
+            statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+            after_created=cursor,
+            order_by="created_asc",
+            limit=100,
+            for_update=True,
+        )
+        for row in rows:
+            jobs.request_cancel(context, str(row["id"]))
+        if len(rows) < 100:
+            return
+        last = rows[-1]
+        cursor = (last["created_at"], str(last["id"]))
+
+
 class PostgresAudiobookRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
@@ -193,17 +215,7 @@ class PostgresAudiobookRepository:
             from app.persistence.job_repository import PostgresJobRepository
 
             jobs = PostgresJobRepository(self.connection)
-            rows = jobs.query_jobs(
-                context,
-                module="audiobook",
-                job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                input_fields=(("render_run_id", str(active[0])),),
-                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                limit=500,
-                for_update=True,
-            )
-            for row in rows:
-                jobs.request_cancel(context, str(row["id"]))
+            _cancel_current_render_jobs(jobs, context, str(active[0]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects

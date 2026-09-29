@@ -11,9 +11,9 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution import ExecutionObservation
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
@@ -434,12 +434,13 @@ class TradingPaperMonitor:
             await self._sleep_until_next_cycle()
 
 
-def register_trading_paper_monitor(gateway: FastAPI) -> TradingPaperMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_paper_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingPaperMonitor):
-        return existing
+        return None
     monitor = TradingPaperMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
+    setattr(state, _MONITOR_STATE_KEY, monitor)
 
     async def startup() -> None:
         if trading_paper_monitor_enabled():
@@ -448,7 +449,6 @@ def register_trading_paper_monitor(gateway: FastAPI) -> TradingPaperMonitor:
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

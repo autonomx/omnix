@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.chat.store import ChatSessionStore
 from app.gateway.main import create_gateway_app
-from app.gateway.live_job_events import (
+from app.gateway.kernel_routes.live_event_stream import (
     _parse_event_id,
     _sse_comment,
     _sse_event,

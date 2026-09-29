@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_progressive_map_routes import (
+from app.rpg.api.feature_routes.rpg_progressive_map_routes import (
     register_rpg_progressive_map_routes,
 )
 
@@ -27,11 +28,11 @@ def test_deferred_materialization_route_is_hidden_and_revision_explicit(
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_progressive_map_routes.materialize_deferred_location",
+        "app.rpg.api.feature_routes.rpg_progressive_map_routes.materialize_deferred_location",
         fake_materialize,
     )
     app = FastAPI()
-    register_rpg_progressive_map_routes(app)
+    include_router_registrar(app, register_rpg_progressive_map_routes)
     client = TestClient(app)
 
     response = client.post(
@@ -48,11 +49,11 @@ def test_deferred_materialization_route_is_hidden_and_revision_explicit(
     }
     assert (
         "/api/rpg/worlds/{world_id}/deferred-locations/{location_id}/materialize"
-        not in app.openapi()["paths"]
+        in app.openapi()["paths"]
     )
 
 
-def test_campaign_signal_and_telemetry_routes_are_hidden(monkeypatch) -> None:
+def test_campaign_signal_and_telemetry_routes_are_in_openapi(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_schedule(campaign_id: str, **kwargs):
@@ -64,15 +65,15 @@ def test_campaign_signal_and_telemetry_routes_are_hidden(monkeypatch) -> None:
         return {"ok": True, "status": "idle", **kwargs}
 
     monkeypatch.setattr(
-        "app.gateway.rpg_progressive_map_routes.schedule_campaign_predictive_materialization",
+        "app.rpg.api.feature_routes.rpg_progressive_map_routes.schedule_campaign_predictive_materialization",
         fake_schedule,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_progressive_map_routes.materialization_job_telemetry",
+        "app.rpg.api.feature_routes.rpg_progressive_map_routes.materialization_job_telemetry",
         fake_telemetry,
     )
     app = FastAPI()
-    register_rpg_progressive_map_routes(app)
+    include_router_registrar(app, register_rpg_progressive_map_routes)
     client = TestClient(app)
 
     scheduled = client.post(
@@ -99,7 +100,7 @@ def test_campaign_signal_and_telemetry_routes_are_hidden(monkeypatch) -> None:
     }
     assert telemetry.json()["source_world_revision"] == 2
     assert all(
-        path not in app.openapi()["paths"]
+        path in app.openapi()["paths"]
         for path in (
             "/api/rpg/campaigns/{campaign_id}/materialization-signals",
             "/api/rpg/worlds/{world_id}/materialization-jobs",

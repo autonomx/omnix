@@ -4,11 +4,14 @@ from __future__ import annotations
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.platform.effective_defaults import apply_job_defaults
+from app.runtime.background import BackgroundWorker
+from app.runtime.capabilities import RuntimeCapability
 from app.runtime.features import FeatureModule
-from app.runtime.router_composition import compose_registrar_router
 
 from .persistence.feature_repositories import RPG_REPOSITORY_SPECS
 from .api.compat_router import create_rpg_compatibility_router
+from .api.feature_routes import create_rpg_routes_router
+from .api.feature_routes.rpg_campaign_lore_routes import _kick_genesis_recovery
 
 from .jobs.turn_job_guard import rpg_turn_submission_policy
 from .jobs.handlers import (
@@ -39,28 +42,36 @@ def _compatibility_router(_context):
 
 
 def _rpg_routes_router(context):
-    return compose_registrar_router(
-        (
-            ("app.gateway.rpg_debug_routes", "register_rpg_debug_routes"),
-            ("app.gateway.rpg_geometry_patch_routes", "register_rpg_geometry_patch_routes"),
-            ("app.gateway.rpg_grid_performance_routes", "register_rpg_grid_performance_routes"),
-            ("app.gateway.rpg_map_editor_routes", "register_rpg_map_editor_routes"),
-            ("app.gateway.rpg_map_routes", "register_rpg_map_routes"),
-            ("app.gateway.rpg_world_bundle_routes", "register_rpg_world_bundle_routes"),
-            ("app.gateway.rpg_world_routes", "register_rpg_world_routes"),
-            ("app.gateway.rpg_world_generation_review_routes", "register_rpg_world_generation_review_routes"),
-            ("app.gateway.rpg_world_deletion_routes", "register_rpg_world_deletion_routes"),
-            ("app.gateway.rpg_world_authoring_routes", "register_rpg_world_authoring_routes"),
-            ("app.gateway.rpg_world_dossier_routes", "register_rpg_world_dossier_routes"),
-            ("app.gateway.rpg_world_image_routes", "register_rpg_world_image_routes"),
-            ("app.gateway.rpg_world_profile_routes", "register_rpg_world_profile_routes"),
-            ("app.gateway.rpg_progressive_map_routes", "register_rpg_progressive_map_routes"),
-            ("app.gateway.rpg_npc_spatial_routes", "register_rpg_npc_spatial_routes"),
-            ("app.gateway.rpg_observer_routes", "register_rpg_observer_routes"),
-            ("app.gateway.rpg_tactical_spatial_routes", "register_rpg_tactical_spatial_routes"),
-            ("app.gateway.rpg_session_routes", "register_rpg_session_routes"),
+    return create_rpg_routes_router(context)
+
+
+def _campaign_genesis_worker(context):
+    async def recover() -> None:
+        from app.rpg.session.genesis.async_coordinator import configure_campaign_genesis_owner
+
+        owner = getattr(context.runtime_state, "background_runtime", None)
+        if owner is not None:
+            configure_campaign_genesis_owner(owner)
+        _kick_genesis_recovery()
+
+    async def stop() -> None:
+        import asyncio
+
+        from app.rpg.session.genesis.async_coordinator import stop_campaign_genesis_worker
+
+        await asyncio.to_thread(stop_campaign_genesis_worker)
+
+    return BackgroundWorker(
+        name="rpg_campaign_genesis",
+        monitor=object(),
+        startup=(recover,),
+        shutdown=(stop,),
+        requires=frozenset(
+            {
+                RuntimeCapability.OWN_BACKGROUND_RUNTIME,
+                RuntimeCapability.RUN_RECOVERY,
+            }
         ),
-        state=context.runtime_state,
     )
 
 FEATURE = FeatureModule(
@@ -68,6 +79,7 @@ FEATURE = FeatureModule(
     title="RPG",
     routers=(_rpg_routes_router, _compatibility_router),
     repositories=RPG_REPOSITORY_SPECS,
+    background_workers=(_campaign_genesis_worker,),
     job_handlers=(
         JobHandlerSpec(
             type="rpg.turn",

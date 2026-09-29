@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from app.assets.models import AssetListResponse, AssetMigrationPreview, AssetRecord
+from app.assets.models import AssetContentTooLarge
 
 from .blob_store import LocalBlobStore
 from .database import PostgresDatabase, default_database
@@ -40,6 +41,19 @@ class PostgresSharedAssetStoreAdapter:
         if record is None or record["lifecycle_status"] == "deleted":
             return None
         return self._asset(record)
+
+    def read_asset_bytes(self, asset_id: str, *, max_bytes: int) -> bytes:
+        with unit_of_work(self.database) as work:
+            record = work.assets.get_asset(self.context, str(asset_id))
+            work.rollback()
+        if record is None or record["lifecycle_status"] == "deleted":
+            raise FileNotFoundError(asset_id)
+        if int(record["byte_size"]) > max_bytes:
+            raise AssetContentTooLarge(asset_id)
+        return self.blob_store.read_bytes(
+            record["storage_key"],
+            expected_checksum=record["checksum_sha256"],
+        )
 
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
         with unit_of_work(self.database) as work:

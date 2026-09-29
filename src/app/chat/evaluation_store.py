@@ -264,11 +264,19 @@ class LiveChatEvaluationStore:
     def export(self) -> dict:
         with self._lock:
             payload = self._read()
+        active_policies = {
+            str(preset): active
+            for preset, versions in payload.get("presence_policies", {}).items()
+            if isinstance(versions, list)
+            and (active := next(
+                (version for version in versions if version.get("active")), None
+            )) is not None
+        }
         return {
             "format_version": payload["format_version"],
             "generated_at": _now(),
             "evaluations": payload.get("evaluations", []),
-            "presence_policies": payload.get("presence_policies", {}),
+            "presence_policies": active_policies,
         }
 
     def list_policy_versions(self, preset: PresencePreset | None = None) -> list[PresencePolicyVersion]:

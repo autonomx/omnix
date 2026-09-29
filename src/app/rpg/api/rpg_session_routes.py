@@ -12,10 +12,11 @@ import queue
 import threading
 import time
 import uuid
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict
 
 from app.rpg.ai.semantic_state_change_capture import (
     capture_semantic_state_change_proposals_for_session,
@@ -83,8 +84,6 @@ from app.rpg.api.rpg_world_routes import (
     update_world_behavior as update_world_behavior,
 )
 
-from app.rpg.api import rpg_session_request_models as _request_models
-
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
 _LIVE_FIRST_DRAFT_TIMEOUT_S = 12.0
@@ -94,6 +93,55 @@ _STREAM_AUTHORITATIVE_PERFORMANCE = {
     "enable_semantic_action_advisory": False,
     "enable_live_narration_llm": False,
 }
+
+
+class _TypedRequestModel(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+class GetRpgSessionRequestBody(_TypedRequestModel):
+    session_id: Any = None
+
+
+class ExecuteRpgSessionTurnRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, Any] | None = None
+    runtime_settings: dict[str, Any] | None = None
+
+
+class ExecuteRpgSessionTurnStreamRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, Any] | None = None
+    runtime_settings: dict[str, Any] | None = None
+    performance: dict[str, Any] | None = None
+
+
+class ProcessRpgSessionNarrationRequestBody(_TypedRequestModel):
+    session_id: Any = None
+
+
+class GetRpgSessionNarrationStatusRequestBody(_TypedRequestModel):
+    session_id: Any = None
+    turn_id: Any = None
+
+
+class PollRpgSessionRequestBody(_TypedRequestModel):
+    after_seq: int | None = 0
+    limit: int | None = 8
+    session_id: Any = None
+
+
+class ResumeRpgSessionRequestBody(_TypedRequestModel):
+    elapsed_seconds: int | None = 0
+    session_id: Any = None
+
+
+class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
+    conversation_id: Any = None
+    option_id: Any = None
+    session_id: Any = None
 
 
 def _sse(data: dict) -> str:
@@ -119,7 +167,7 @@ def _has_stream_value(value: Any) -> bool:
     return True
 
 
-def _stream_authoritative_payload(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+def _stream_authoritative_payload(authoritative_result: dict[str, Any]) -> dict[str, Any]:
     """Return the turn payload shape used by the streaming route.
 
     Some runtime paths expose completed turn fields under ``result`` and some
@@ -136,7 +184,7 @@ def _stream_authoritative_payload(authoritative_result: Dict[str, Any]) -> Dict[
     return merged
 
 
-def _stream_narration_request(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+def _stream_narration_request(authoritative_result: dict[str, Any]) -> dict[str, Any]:
     authoritative_result = _safe_dict(authoritative_result)
     return (
         _safe_dict(authoritative_result.get("narration_request"))
@@ -145,12 +193,12 @@ def _stream_narration_request(authoritative_result: Dict[str, Any]) -> Dict[str,
     )
 
 
-def _live_first_draft_enabled(perf: Dict[str, Any]) -> bool:
+def _live_first_draft_enabled(perf: dict[str, Any]) -> bool:
     perf = _safe_dict(perf)
     return perf.get("enable_live_first_draft_stream") is True
 
 
-def _live_first_draft_timeout_s(perf: Dict[str, Any]) -> float:
+def _live_first_draft_timeout_s(perf: dict[str, Any]) -> float:
     perf = _safe_dict(perf)
     timeout_s = _safe_float(
         perf.get("live_first_draft_timeout_s"),
@@ -162,8 +210,8 @@ def _live_first_draft_timeout_s(perf: Dict[str, Any]) -> float:
 
 
 def _stream_authoritative_performance_override(
-    request_performance: Dict[str, Any],
-) -> Dict[str, Any]:
+    request_performance: dict[str, Any],
+) -> dict[str, Any]:
     requested = _safe_dict(request_performance)
     perf = dict(requested)
     perf.update(_STREAM_AUTHORITATIVE_PERFORMANCE)
@@ -174,9 +222,9 @@ def _stream_authoritative_performance_override(
 
 
 def _stream_background_narration_performance(
-    request_performance: Dict[str, Any],
-    authoritative_performance: Dict[str, Any],
-) -> Dict[str, Any]:
+    request_performance: dict[str, Any],
+    authoritative_performance: dict[str, Any],
+) -> dict[str, Any]:
     perf = dict(_safe_dict(authoritative_performance))
     requested = _safe_dict(request_performance)
     perf.update(requested)
@@ -211,11 +259,11 @@ def _mark_player_turn_active(session_id: str, request_id: str, player_input: str
 
 
 def _finish_player_turn_marker_in_state(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     request_id: str,
     *,
     status: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     marker = _safe_dict(runtime_state.get("active_player_turn_request"))
     if _safe_str(marker.get("request_id")) != _safe_str(request_id):
@@ -257,8 +305,8 @@ def _clear_player_turn_active(session_id: str, request_id: str, *, status: str) 
 
 def _start_live_first_draft_thread(
     session_id: str,
-    narration_request: Dict[str, Any],
-) -> "queue.Queue[Dict[str, Any]]":
+    narration_request: dict[str, Any],
+) -> "queue.Queue[dict[str, Any]]":
     """
     Generate the first-draft narration inline for the current turn request,
     while streaming chunks back to the same HTTP response.
@@ -268,7 +316,7 @@ def _start_live_first_draft_thread(
       {"type": "result", "result": {...}}
       {"type": "error", "error": "..."}
     """
-    event_q: "queue.Queue[Dict[str, Any]]" = queue.Queue()
+    event_q: "queue.Queue[dict[str, Any]]" = queue.Queue()
 
     def _emit_chunk(piece: str) -> None:
         piece = _safe_str(piece)
@@ -306,7 +354,7 @@ def _start_live_first_draft_thread(
     return event_q
 
 
-def _drop_queued_background_narration_jobs(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _drop_queued_background_narration_jobs(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     jobs = _safe_list(runtime_state.get("narration_jobs"))
     if not jobs:
@@ -348,11 +396,11 @@ def _drop_queued_background_narration_jobs(runtime_state: Dict[str, Any]) -> Dic
 
 def _enqueue_and_signal_narration_job(
     session_id: str,
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
     tick: int,
-    narration_request: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+    narration_request: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state["session_id"] = session_id
     narration_request = _safe_dict(narration_request)
@@ -393,8 +441,8 @@ ensure_narration_worker_running()
 
 def _merge_request_runtime_settings(
     session_id: str,
-    runtime_settings: Dict[str, Any],
-) -> Dict[str, Any]:
+    runtime_settings: dict[str, Any],
+) -> dict[str, Any]:
     runtime_settings = _safe_dict(runtime_settings)
     if not session_id or not runtime_settings:
         return {"ok": True, "applied": False}
@@ -422,7 +470,7 @@ register_rpg_world_routes(rpg_session_bp)
 
 
 @rpg_session_bp.post("/api/rpg/session/get")
-def get_rpg_session(request: Request, request_body: _request_models.GetRpgSessionRequestBody):
+def get_rpg_session(request: Request, request_body: GetRpgSessionRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
@@ -446,7 +494,7 @@ def get_rpg_session(request: Request, request_body: _request_models.GetRpgSessio
 
 
 @rpg_session_bp.post("/api/rpg/session/turn")
-def execute_rpg_session_turn(request: Request, request_body: _request_models.ExecuteRpgSessionTurnRequestBody):
+def execute_rpg_session_turn(request: Request, request_body: ExecuteRpgSessionTurnRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
@@ -481,7 +529,7 @@ def execute_rpg_session_turn(request: Request, request_body: _request_models.Exe
 
 
 @rpg_session_bp.post("/api/rpg/session/turn/stream")
-def execute_rpg_session_turn_stream(request: Request, request_body: _request_models.ExecuteRpgSessionTurnStreamRequestBody):
+def execute_rpg_session_turn_stream(request: Request, request_body: ExecuteRpgSessionTurnStreamRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
@@ -814,7 +862,7 @@ def execute_rpg_session_turn_stream(request: Request, request_body: _request_mod
 # ── Character Card API routes (Bundle BJ-BK-BL) ──────────────────────────────
 
 @rpg_session_bp.post("/api/rpg/session/process_narration")
-def process_rpg_session_narration(request: Request, request_body: _request_models.ProcessRpgSessionNarrationRequestBody):
+def process_rpg_session_narration(request: Request, request_body: ProcessRpgSessionNarrationRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
@@ -825,7 +873,7 @@ def process_rpg_session_narration(request: Request, request_body: _request_model
 
 
 @rpg_session_bp.post("/api/rpg/session/narration_status")
-def get_rpg_session_narration_status(request: Request, request_body: _request_models.GetRpgSessionNarrationStatusRequestBody):
+def get_rpg_session_narration_status(request: Request, request_body: GetRpgSessionNarrationStatusRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     turn_id = _safe_str(data.get("turn_id")).strip()
@@ -979,7 +1027,7 @@ def get_rpg_session_narration_status(request: Request, request_body: _request_mo
 
 
 @rpg_session_bp.post("/api/rpg/session/poll")
-def poll_rpg_session(request: Request, request_body: _request_models.PollRpgSessionRequestBody):
+def poll_rpg_session(request: Request, request_body: PollRpgSessionRequestBody):
     """Poll for pending ambient updates by sequence number."""
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
@@ -1120,7 +1168,7 @@ async def stream_rpg_session_narration_events(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/resume")
-def resume_rpg_session(request: Request, request_body: _request_models.ResumeRpgSessionRequestBody):
+def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBody):
     """Resume a session with bounded catch-up for elapsed time."""
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
@@ -1211,7 +1259,7 @@ def resume_rpg_session(request: Request, request_body: _request_models.ResumeRpg
 
 
 @rpg_session_bp.post("/api/rpg/session/conversation/intervene")
-def rpg_session_conversation_intervene(request: Request, request_body: _request_models.RpgSessionConversationInterveneRequestBody):
+def rpg_session_conversation_intervene(request: Request, request_body: RpgSessionConversationInterveneRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id"))
     conversation_id = _safe_str(data.get("conversation_id"))

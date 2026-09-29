@@ -8,7 +8,7 @@ import wave
 from io import BytesIO
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.providers.tts_service import generate_audio_bytes, voice_stem
 
@@ -17,7 +17,6 @@ from .audio_text import split_sentences
 AUDIOBOOK_SAMPLE_RATE = 24_000
 AUDIOBOOK_FRAME_BYTES = 4_800  # 100 ms of mono int16 PCM at 24 kHz.
 MAX_SENTENCE_CHARS = 500
-_ROUTE_SENTINEL = "_omnix_audiobook_ws_registered"
 
 
 def create_audiobook_streaming_router() -> APIRouter:
@@ -81,14 +80,6 @@ def create_audiobook_streaming_router() -> APIRouter:
                 return
 
     return router
-
-
-def register_audiobook_websocket(gateway: FastAPI) -> None:
-    """Compatibility wrapper for callers not yet on FeatureModule composition."""
-    if getattr(gateway.state, _ROUTE_SENTINEL, False):
-        return
-    setattr(gateway.state, _ROUTE_SENTINEL, True)
-    gateway.include_router(create_audiobook_streaming_router())
 
 
 def _sentence_segments_from_start_message(message: dict[str, Any]) -> list[dict[str, str]]:

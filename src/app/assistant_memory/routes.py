@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app.conversation.contracts import ChatSessionMutationPort
 from .session import (
@@ -25,7 +25,7 @@ _REFRESH_ROUTE_NAME = "assistant_memory_session_refresh_endpoint"
 
 
 def register_assistant_memory_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     chat_store_factory: Callable[[], ChatSessionMutationPort] | None = None,
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
@@ -36,10 +36,10 @@ def register_assistant_memory_routes(
             raise HTTPException(status_code=503, detail="Chat session storage is unavailable")
         return chat_store_factory()
 
-    route_names = {getattr(route, "name", "") for route in app.routes}
+    route_names = {getattr(route, "name", "") for route in router.routes}
     if _GET_ROUTE_NAME not in route_names:
 
-        @app.get(
+        @router.get(
             "/api/chat/sessions/{session_id}/memory",
             response_model=SessionMemoryState,
             tags=["chat-memory"],
@@ -59,7 +59,7 @@ def register_assistant_memory_routes(
 
     if _REFRESH_ROUTE_NAME not in route_names:
 
-        @app.post(
+        @router.post(
             "/api/chat/sessions/{session_id}/memory/refresh",
             response_model=SessionMemoryState,
             tags=["chat-memory"],
@@ -86,11 +86,11 @@ def register_assistant_memory_routes(
             return state
 
     register_memory_settings_routes(
-        app,
+        router,
         settings_store_factory=memory_settings_store_factory,
     )
     register_memory_management_routes(
-        app,
+        router,
         chat_store_factory=get_chat_store,
         memory_service_factory=memory_service_factory,
     )

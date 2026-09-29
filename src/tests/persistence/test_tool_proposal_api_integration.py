@@ -12,7 +12,10 @@ from app.assistant_tools import proposals
 from app.assistant_tools.config_store import default_assistant_tools_config
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.models import AssistantToolResult
-from app.assistant_tools.routes import register_assistant_tool_routes
+from app.assistant_tools.routes import (
+    create_assistant_tool_internal_router,
+    create_assistant_tool_router,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -43,7 +46,9 @@ def client(monkeypatch):
 
     monkeypatch.setattr(proposals, "_run_assistant_tool_request", execute)
     app = FastAPI()
-    register_assistant_tool_routes(app)
+    app.include_router(create_assistant_tool_router())
+    internal_router = create_assistant_tool_internal_router()
+    app.include_router(internal_router, include_in_schema=False)
     app.dependency_overrides[proposals.default_tool_proposal_service] = lambda: service
     try:
         with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}) as http:

@@ -42,8 +42,13 @@ def test_create_new_game_session_builds_level_one_campaign(monkeypatch) -> None:
     assert state["metadata"]["seed"] == 12345
     assert state["player"]["name"] == "Test Hero"
     assert state["player"]["level"] == 1
-    assert state["player"]["currency"] == {"gold": 10, "silver": 25, "copper": 50}
-    assert {item["id"] for item in state["player"]["inventory"]} >= {"ration", "torch", "iron_dagger", "simple_bow", "journal"}
+    assert state["player"]["currency"] == {"gold": 0, "silver": 10, "copper": 0}
+    assert {item["id"] for item in state["player"]["inventory"]} >= {
+        "travel_cloak",
+        "torch",
+        "iron_dagger",
+        "trail_rations",
+    }
     assert state["current_location"] == "Rusty Flagon Tavern"
     assert state["turn_count"] == 0
     snapshot = state["mechanics"]["ability_coverage_snapshots"][0]

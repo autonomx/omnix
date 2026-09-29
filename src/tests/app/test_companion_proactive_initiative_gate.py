@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.companion_activity.initiative import CompanionInitiativeAuthority
-from app.gateway import character_integration_routes
+from app.character_interactions import routes as character_integration_routes
 
 
 class FakeChatStore:

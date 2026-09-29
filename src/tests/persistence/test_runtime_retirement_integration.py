@@ -92,7 +92,7 @@ from app.settings.access import (
 )
 from app.settings.registry import core_setting_specs
 from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
-from app.settings.service import SettingsService
+from app.settings.service import SettingRevisionConflict, SettingsService
 
 settings_service = SettingsService(
     default_database(), current_tenant, specs=core_setting_specs()
@@ -108,6 +108,13 @@ save_settings({
     },
 })
 assert load_settings()["lmstudio"]["model"] == "runtime-model"
+try:
+    settings_service.set("provider", "cerebras", expected_revision=0)
+except SettingRevisionConflict:
+    pass
+else:
+    raise AssertionError("a stale settings revision unexpectedly overwrote the provider")
+assert settings_service.get("provider")["value"] == "lmstudio"
 with default_database().connection() as connection:
     assert connection.execute(
         "SELECT COUNT(*) FROM omnix_module_records "
@@ -324,14 +331,14 @@ from app.assets import store as asset_store_module
 from app.assistant_memory import service as memory_service_module
 from app.characters import service as character_service_module
 from app.chat import repository as chat_repository_module
-from app.jobs import store as job_store_module
+from app.runtime_composition import production_job_store
 
 assert chat_repository_module.InMemoryChatRepository.__name__ == "InMemoryChatRepository"
 assert memory_service_module.InMemoryMemoryRepository.__name__ == "InMemoryMemoryRepository"
 assert character_service_module.CharacterRepository.__name__ == "InMemoryCharacterRepository"
 assert asset_store_module.SharedAssetStore.__name__ == "SharedAssetStore"
 assert assets_package.SharedAssetStore.__name__ == "SharedAssetStore"
-assert job_store_module.default_job_store().__class__.__name__ == "PostgresJobStoreAdapter"
+assert production_job_store().__class__.__name__ == "PostgresJobStoreAdapter"
 
 print("runtime-postgresql-cutover-ok")
 '''

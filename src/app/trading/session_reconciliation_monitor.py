@@ -15,9 +15,9 @@ from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .providers.alpaca_sip import AlpacaSipResearchProvider
@@ -853,14 +853,13 @@ class TradingSessionReconciliationMonitor:
                 await task
 
 
-def register_trading_session_reconciliation_monitor(
-    gateway: FastAPI,
-) -> TradingSessionReconciliationMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_session_reconciliation_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingSessionReconciliationMonitor):
-        return existing
+        return None
     monitor = TradingSessionReconciliationMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if session_reconciliation_monitor_enabled():
@@ -869,14 +868,13 @@ def register_trading_session_reconciliation_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingSessionReconciliationMonitor",
-    "register_trading_session_reconciliation_monitor",
+    "create_trading_session_reconciliation_monitor_worker",
     "session_reconciliation_monitor_enabled",
 ]

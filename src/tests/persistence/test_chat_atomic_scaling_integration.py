@@ -42,7 +42,7 @@ def scaling_runtime():
 
 
 def chat_store(database, store, monkeypatch):
-    from app.gateway import live_chat_postgres_fast_path as fast
+    from app.chat import live_chat_postgres_fast_path as fast
     from app.gateway import _install_required_rpg_turn_hooks
 
     _install_required_rpg_turn_hooks()

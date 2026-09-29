@@ -1,9 +1,10 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway.rpg_world_dossier_routes import register_rpg_world_dossier_routes
+from app.rpg.api.feature_routes.rpg_world_dossier_routes import register_rpg_world_dossier_routes
 
 
 def test_dossier_routes_preserve_concurrency_tokens_and_editorial_scope(monkeypatch) -> None:
@@ -92,22 +93,23 @@ def test_dossier_routes_preserve_concurrency_tokens_and_editorial_scope(monkeypa
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.update_world_entity_dossier",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.update_world_entity_dossier",
         fake_update,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.preview_world_entity_dossier_regeneration",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.preview_world_entity_dossier_regeneration",
         fake_preview,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.regenerate_world_entity_dossier",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.regenerate_world_entity_dossier",
         fake_regenerate,
     )
 
     app = FastAPI()
-    register_rpg_world_dossier_routes(app)
+    include_router_registrar(app, register_rpg_world_dossier_routes)
     client = TestClient(app)
     path = "/api/rpg/worlds/world:aurelia/topics/npcs/entities/npc:bran"
+    route_path = "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}"
     dossier = {
         "schema_version": "rpg_world_entity_dossier_v1",
         "quick_facts": [],
@@ -189,12 +191,12 @@ def test_dossier_routes_preserve_concurrency_tokens_and_editorial_scope(monkeypa
             },
         ),
     ]
-    assert f"{path}/dossier" not in app.openapi()["paths"]
-    assert f"{path}/regenerate-dossier-preview" not in app.openapi()["paths"]
-    assert f"{path}/regenerate-dossier" not in app.openapi()["paths"]
+    assert f"{route_path}/dossier" in app.openapi()["paths"]
+    assert f"{route_path}/regenerate-dossier-preview" in app.openapi()["paths"]
+    assert f"{route_path}/regenerate-dossier" in app.openapi()["paths"]
 
 
-def test_quality_and_enrichment_routes_are_hidden_and_bounded(monkeypatch) -> None:
+def test_quality_and_enrichment_routes_are_in_openapi_and_bounded(monkeypatch) -> None:
     calls: list[tuple[str, object]] = []
 
     def fake_quality(world_id: str):
@@ -216,15 +218,15 @@ def test_quality_and_enrichment_routes_are_hidden_and_bounded(monkeypatch) -> No
         }
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.world_dossier_quality",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.world_dossier_quality",
         fake_quality,
     )
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()
-    register_rpg_world_dossier_routes(app)
+    include_router_registrar(app, register_rpg_world_dossier_routes)
     client = TestClient(app)
 
     quality = client.get("/api/rpg/worlds/world:aurelia/dossier-quality")
@@ -250,8 +252,8 @@ def test_quality_and_enrichment_routes_are_hidden_and_bounded(monkeypatch) -> No
             },
         ),
     ]
-    assert "/api/rpg/worlds/{world_id}/dossier-quality" not in app.openapi()["paths"]
-    assert "/api/rpg/worlds/{world_id}/enrich-dossiers" not in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/dossier-quality" in app.openapi()["paths"]
+    assert "/api/rpg/worlds/{world_id}/enrich-dossiers" in app.openapi()["paths"]
 
 
 def test_enrichment_route_can_explicitly_process_all_candidates(monkeypatch) -> None:
@@ -262,11 +264,11 @@ def test_enrichment_route_can_explicitly_process_all_candidates(monkeypatch) -> 
         return {"ok": True, "world_id": world_id, "dry_run": False}
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()
-    register_rpg_world_dossier_routes(app)
+    include_router_registrar(app, register_rpg_world_dossier_routes)
     client = TestClient(app)
 
     response = client.post(
@@ -292,11 +294,11 @@ def test_enrichment_route_accepts_specific_candidates_for_incremental_progress(m
         return {"ok": True, "world_id": world_id, "dry_run": False}
 
     monkeypatch.setattr(
-        "app.gateway.rpg_world_dossier_routes.enrich_world_dossiers",
+        "app.rpg.api.feature_routes.rpg_world_dossier_routes.enrich_world_dossiers",
         fake_enrich,
     )
     app = FastAPI()
-    register_rpg_world_dossier_routes(app)
+    include_router_registrar(app, register_rpg_world_dossier_routes)
     client = TestClient(app)
 
     response = client.post(
@@ -313,7 +315,7 @@ def test_enrichment_route_accepts_specific_candidates_for_incremental_progress(m
 
 def test_dossier_routes_require_concurrency_tokens_and_structured_dossier() -> None:
     app = FastAPI()
-    register_rpg_world_dossier_routes(app)
+    include_router_registrar(app, register_rpg_world_dossier_routes)
     client = TestClient(app)
     path = "/api/rpg/worlds/world:aurelia/topics/npcs/entities/npc:bran/dossier"
 

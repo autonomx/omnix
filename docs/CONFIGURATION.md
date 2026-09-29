@@ -140,7 +140,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IMAGE_SERVICE_MODE` | string | — | image, image-service-runtime.py | Controls image service mode for image, image-service-runtime.py. |
 | `OMNIX_IMAGE_URL` | string | — | image-http-client.py | Controls image url for image-http-client.py. |
 | `OMNIX_IMAGE_WARMUP` | string | `0` | image-service-runtime.py, launcher | Controls image warmup for image-service-runtime.py, launcher. |
-| `OMNIX_INLINE_IMAGE_JOB_EXECUTOR` | string | `1` | image | Controls inline image job executor for image. |
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
@@ -160,11 +159,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | — | launcher, live-voice-hardware-policy.py | Controls live lmstudio stateful responses for launcher, live-voice-hardware-policy.py. |
 | `OMNIX_LIVE_PRONUNCIATION_PATH` | string | — | characters | Controls live pronunciation path for characters. |
 | `OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION` | string | — | live-voice-hardware-policy.py | Controls live tts allow serial speculation for live-voice-hardware-policy.py. |
-| `OMNIX_LIVE_TTS_PROVIDER_NAME` | string | — | gateway | Controls live tts provider name for gateway. |
+| `OMNIX_LIVE_TTS_PROVIDER_NAME` | string | — | kernel | Controls live tts provider name for kernel. |
 | `OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS` | string | `2` | launcher | Controls live tts speculative chunk steps for launcher. |
-| `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | gateway | Controls live voice execution mode for gateway. |
-| `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | gateway | Controls live voice model id for gateway. |
-| `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | gateway | Controls live voice provider id for gateway. |
+| `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | kernel | Controls live voice execution mode for kernel. |
+| `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | kernel | Controls live voice model id for kernel. |
+| `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | kernel | Controls live voice provider id for kernel. |
 | `OMNIX_LMSTUDIO_MODEL_DISCOVERY_CACHE_SECONDS` | string | — | live-voice-hardware-policy.py | Controls lmstudio model discovery cache seconds for live-voice-hardware-policy.py. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
@@ -261,9 +260,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_YAHOO_EVIDENCE_DIR` | string | — | trading | Controls trading yahoo evidence dir for trading. |
 | `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
-| `OMNIX_TTS_STARTUP_WARMUP` | string | — | gateway | Controls tts startup warmup for gateway. |
+| `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
-| `OMNIX_TTS_WARMUP_SPEAKER` | string | — | gateway | Controls tts warmup speaker for gateway. |
+| `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |
 | `OMNIX_VISION_API_KEY` | string | — | assistant-context | Controls vision api key for assistant-context. |
 | `OMNIX_VISION_BASE_URL` | string | — | assistant-context | Controls vision base url for assistant-context. |
 | `OMNIX_VISION_MODEL` | string | — | assistant-context | Controls vision model for assistant-context. |

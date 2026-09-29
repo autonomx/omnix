@@ -19,6 +19,10 @@ from architecture_bindings import PythonBindings
 
 
 EXCLUDED_PARTS = {"node_modules", "vendor", "vendored", "third_party", "third-party", ".venv", "venv", ".tools"}
+TRACKED_SOURCE_SUFFIXES = frozenset({
+    ".py", ".pyfrag", ".ts", ".tsx", ".css", ".json", ".toml", ".ini",
+    ".cfg", ".sql", ".html", ".md",
+})
 ROUTE_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "api_route", "websocket"}
 PLATFORM_TABLES = {
     "omnix_jobs", "omnix_job_events", "omnix_job_attempts", "omnix_outbox",
@@ -48,7 +52,7 @@ def tracked_sources(root: Path, *, revision: str | None = None) -> dict[str, str
     for name in sorted(set(result.stdout.decode("utf-8").split("\0"))):
         if not name or not included_path(name):
             continue
-        if Path(name).suffix.lower() not in {".py", ".pyfrag", ".ts", ".tsx", ".css", ".json", ".toml", ".ini", ".cfg", ".sql", ".html"}:
+        if Path(name).suffix.lower() not in TRACKED_SOURCE_SUFFIXES:
             continue
         if revision:
             data = subprocess.run(["git", "show", f"{revision}:{name}"], cwd=root, capture_output=True, check=True).stdout

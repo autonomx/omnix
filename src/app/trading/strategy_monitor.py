@@ -11,9 +11,9 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .binding_authority import require_execution_binding
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
@@ -3404,12 +3404,13 @@ class TradingStrategyMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_monitor(gateway: FastAPI) -> TradingStrategyMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyMonitor):
-        return existing
+        return None
     monitor = TradingStrategyMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if managed_finviz_shadow_autoprovision_enabled():
@@ -3449,7 +3450,6 @@ def register_trading_strategy_monitor(gateway: FastAPI) -> TradingStrategyMonito
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

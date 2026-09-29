@@ -734,10 +734,8 @@ def test_chat_boundary_model_selection_sets_its_matching_provider(monkeypatch, t
 
 def test_suite_does_not_require_default_llm_provider(monkeypatch) -> None:
     """Guard the intended local-test contract against accidental provider coupling."""
-    
-
     monkeypatch.setattr(
-        shared,
+        chat_bridge,
         "get_provider",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("local Agent Runtime matrix must not call the default LLM provider")

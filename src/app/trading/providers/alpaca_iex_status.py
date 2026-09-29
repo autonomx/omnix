@@ -15,9 +15,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import certifi
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 
 ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"
@@ -423,12 +423,13 @@ class AlpacaIexStatusMonitor:
         }
 
 
-def register_alpaca_iex_status_monitor(gateway: FastAPI) -> AlpacaIexStatusMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_alpaca_iex_status_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, AlpacaIexStatusMonitor):
-        return existing
+        return None
     monitor = AlpacaIexStatusMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if _enabled():
@@ -437,7 +438,6 @@ def register_alpaca_iex_status_monitor(gateway: FastAPI) -> AlpacaIexStatusMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

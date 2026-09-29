@@ -17,7 +17,7 @@ from app.runtime.background import (
     BackgroundWorker,
     register_background_worker,
 )
-from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry
+from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus, ResourceClass
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.unit_of_work import unit_of_work
@@ -316,6 +316,10 @@ class DurableFeatureJobWorker:
                         "retryable": True,
                         "details": {"job_type": job.type},
                     },
+                    retry_delay_seconds=self.registry.retry_delay_seconds(
+                        job.type,
+                        max(1, int(getattr(job, "_attempt_count", 0) or 1)),
+                    ),
                 )
                 work.commit()
         except JobClaimConflict:
@@ -347,7 +351,14 @@ def execute_durable_feature_job(
             ),
         )
         return failed or job
-    return registry.execute(JobExecutionContext(job_store=job_store, services=getattr(job_store, "runtime_services", None)), job)
+    retry_aware_store = RetryPolicyJobStore(job_store, registry, job)
+    return registry.execute(
+        JobExecutionContext(
+            job_store=retry_aware_store,
+            services=getattr(job_store, "runtime_services", None),
+        ),
+        job,
+    )
 
 
 def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeatureJobWorker:

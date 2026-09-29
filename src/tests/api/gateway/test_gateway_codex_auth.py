@@ -13,11 +13,12 @@ if str(SRC_DIR) not in sys.path:
 
 
 def test_codex_auth_status_route_reports_chatgpt_login(monkeypatch) -> None:
+    from app.gateway import kernel_routes
     from app.gateway import main
 
-    monkeypatch.setattr(main, "_configured_codex_path", lambda: "codex-test")
+    monkeypatch.setattr(kernel_routes, "_configured_codex_path", lambda: "codex-test")
     monkeypatch.setattr(
-        main.ChatGPTCodexProvider,
+        kernel_routes.ChatGPTCodexProvider,
         "auth_status",
         classmethod(
             lambda _cls, path: {
@@ -30,7 +31,12 @@ def test_codex_auth_status_route_reports_chatgpt_login(monkeypatch) -> None:
         ),
     )
 
-    response = TestClient(main.create_gateway_app()).get("/api/providers/chatgpt-codex/auth")
+    client = TestClient(
+        main.create_gateway_app(),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+    response = client.get("/api/providers/chatgpt-codex/auth")
 
     assert response.status_code == 200
     assert response.json()["authenticated"] is True
@@ -38,11 +44,12 @@ def test_codex_auth_status_route_reports_chatgpt_login(monkeypatch) -> None:
 
 
 def test_codex_login_route_starts_codex_owned_browser_flow(monkeypatch) -> None:
+    from app.gateway import kernel_routes
     from app.gateway import main
 
-    monkeypatch.setattr(main, "_configured_codex_path", lambda: "codex-test")
+    monkeypatch.setattr(kernel_routes, "_configured_codex_path", lambda: "codex-test")
     monkeypatch.setattr(
-        main.ChatGPTCodexProvider,
+        kernel_routes.ChatGPTCodexProvider,
         "start_login",
         classmethod(
             lambda _cls, path: {
@@ -58,7 +65,12 @@ def test_codex_login_route_starts_codex_owned_browser_flow(monkeypatch) -> None:
         ),
     )
 
-    response = TestClient(main.create_gateway_app()).post("/api/providers/chatgpt-codex/login", json={})
+    client = TestClient(
+        main.create_gateway_app(),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+    response = client.post("/api/providers/chatgpt-codex/login", json={})
 
     assert response.status_code == 200
     assert response.json()["started"] is True

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.gateway import tts_live_call_pcm_diagnostics as diagnostics
+from app.voice import tts_live_call_pcm_diagnostics as diagnostics
 
 
 def _capture_events(monkeypatch):

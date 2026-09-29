@@ -1,7 +1,7 @@
 """Backend-owned conversation research-mode persistence."""
 from __future__ import annotations
 
-from app.research import ResearchMode
+from app.conversation.contracts import ResearchMode
 
 from .models import ChatSession
 from .store import ChatSessionStore

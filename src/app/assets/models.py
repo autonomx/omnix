@@ -42,6 +42,10 @@ class AssetRecord(BaseModel):
     compat: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssetContentTooLarge(ValueError):
+    """Raised when a bounded asset-content read exceeds its caller's limit."""
+
+
 class AssetListResponse(BaseModel):
     assets: list[AssetRecord]
 

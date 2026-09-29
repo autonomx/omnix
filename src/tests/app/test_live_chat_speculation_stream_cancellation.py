@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
 
-from app.gateway import live_chat_speculation as speculation_runtime
+from app.chat import live_chat_speculation as speculation_runtime
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import ChatResponse, LMStudioProvider, ProviderConfig
 

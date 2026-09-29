@@ -77,8 +77,8 @@ def test_concurrent_tts_keeps_hidden_prefetch_enabled_even_with_serial_kill_swit
 
 
 def test_deferred_entry_cannot_be_claimed_by_authoritative_tts() -> None:
-    from app.gateway import live_voice_speculative_tts as runtime
-    from app.gateway.tts_stream_contract import TtsStreamRequest
+    from app.voice import live_voice_speculative_tts as runtime
+    from app.conversation.tts_stream_contract import TtsStreamRequest
 
     provider = _SerialTtsProvider()
     request = TtsStreamRequest(

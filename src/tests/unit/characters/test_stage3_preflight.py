@@ -6,7 +6,7 @@ from typing import Any
 from app.characters.stage3_contracts import Stage3Checkpoint, Stage3PrepareConfig
 from app.characters.stage3_runner import prepare_stage3, verify_stage3_restart
 
-from test_stage2_preflight import FakeStage2Gateway
+from tests.unit.characters.test_stage2_preflight import FakeStage2Gateway
 
 
 class FakeStage3Gateway(FakeStage2Gateway):

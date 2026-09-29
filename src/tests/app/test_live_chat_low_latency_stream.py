@@ -4,8 +4,8 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from app.gateway import live_chat_low_latency_stream as stream_module
-from app.gateway.live_chat_low_latency_stream import (
+from app.chat import live_chat_low_latency_stream as stream_module
+from app.chat.live_chat_low_latency_stream import (
     LowLatencyTextChunker,
     _stream_low_latency_reply,
 )

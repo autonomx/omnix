@@ -43,7 +43,7 @@ class EmptyJobStore:
 
 
 def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.voice import tts_live_call_websocket
 
     provider = BlockingAfterFirstChunkTtsProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
@@ -146,7 +146,7 @@ def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
 
 
 def test_promoted_speculative_runway_is_sent_in_one_browser_message(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.voice import tts_live_call_websocket
 
     provider = ThreeFrameSpeculativeCacheProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []

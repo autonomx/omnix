@@ -8,9 +8,9 @@ from datetime import datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .strategy_discovery_acquisition import (
     CausalMarketObservation,
@@ -463,15 +463,14 @@ class InterdayDynamicDiscoveryMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_interday_dynamic_discovery_monitor(
-    gateway: FastAPI,
-) -> InterdayDynamicDiscoveryMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_interday_dynamic_discovery_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, InterdayDynamicDiscoveryMonitor):
-        return existing
+        return None
     install_default_discovery_sources()
     monitor = InterdayDynamicDiscoveryMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if dynamic_discovery_monitor_enabled():
@@ -480,10 +479,9 @@ def register_interday_dynamic_discovery_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
@@ -491,6 +489,6 @@ __all__ = [
     "_candidate_snapshot_state",
     "_current_observation_priority",
     "dynamic_discovery_monitor_enabled",
-    "register_interday_dynamic_discovery_monitor",
+    "create_interday_dynamic_discovery_monitor_worker",
     "run_dynamic_discovery_once",
 ]

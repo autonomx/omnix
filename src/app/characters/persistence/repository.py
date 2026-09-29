@@ -99,7 +99,7 @@ class PostgresCharacterRepository:
             f"SELECT {_CHARACTER_COLUMNS} FROM omnix_characters "
             f"WHERE workspace_id = %s{status_clause} "
             "ORDER BY lower(profile->>'display_name'), id LIMIT %s",
-            (context.workspace_id, max(1, min(int(limit), 500))),
+            (context.workspace_id, max(1, min(int(limit), 100))),
         ).fetchall()
         return [_character(row) for row in rows]
 
@@ -169,7 +169,13 @@ class PostgresCharacterRepository:
             )
         return _character(row)
 
-    def versions(self, context: TenantContext, character_id: str) -> list[dict[str, Any]]:
+    def versions(
+        self,
+        context: TenantContext,
+        character_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
         exists = self.get_character(context, character_id, include_archived=True)
         if exists is None:
             raise EntityNotFound(character_id)
@@ -177,9 +183,9 @@ class PostgresCharacterRepository:
             """
             SELECT version, profile, created_by, created_at
               FROM omnix_character_versions
-             WHERE character_id = %s ORDER BY version DESC
+             WHERE character_id = %s ORDER BY version DESC LIMIT %s
             """,
-            (character_id,),
+            (character_id, max(1, min(int(limit), 100))),
         ).fetchall()
         return [
             {

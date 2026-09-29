@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-from app.persistence import chat_compat
+from app.chat.persistence import chat_compat
 from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
 
 

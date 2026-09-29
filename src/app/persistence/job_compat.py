@@ -17,6 +17,7 @@ from app.jobs.models import (
     JobLease,
     JobProgress,
     JobRecord,
+    ReleaseJobRequest,
     JobStage,
     JobStatus,
 )
@@ -63,6 +64,11 @@ class PostgresJobStoreAdapter:
     def _create_job(self, request: CreateJobRequest, *, job_id: str | None = None) -> JobRecord:
         if self.handler_registry is not None:
             request = self.handler_registry.validate_submission(request)
+        handler = (
+            self.handler_registry.get(request.type)
+            if self.handler_registry is not None
+            else None
+        )
         request_payload = request.model_dump(mode="json")
         stages = request.stages or []
         metadata = dict(request_payload.get("metadata") or {})
@@ -91,7 +97,7 @@ class PostgresJobStoreAdapter:
                 "resource_class": self._enum_value(request.resource_class),
                 "priority": request.priority,
                 "input_payload": request.input_payload or {},
-                "max_attempts": int(request_payload.get("max_attempts") or 3),
+                "max_attempts": handler.max_attempts if handler is not None else 3,
                 "metadata": metadata,
             }
             if job_id is None:
@@ -305,6 +311,23 @@ class PostgresJobStoreAdapter:
             work.commit()
         return self._record(record)
 
+    def release_job(self, job_id: str, request: ReleaseJobRequest) -> JobRecord | None:
+        current = self.get_job(job_id)
+        if current is None:
+            return None
+        if not request.worker_id or not request.lease_token:
+            raise JobClaimConflict(f"job release requires caller lease credentials: {job_id}")
+        with unit_of_work(self.database) as work:
+            record = work.jobs.release(
+                self.context,
+                job_id=job_id,
+                worker_id=request.worker_id,
+                lease_token=request.lease_token,
+                reason=request.reason,
+            )
+            work.commit()
+        return self._record(record)
+
     def request_cancel(self, job_id: str, request: CancelJobRequest) -> JobRecord | None:
         with unit_of_work(self.database) as work:
             record = work.jobs.get_job(self.context, job_id)
@@ -501,7 +524,7 @@ class PostgresJobStoreAdapter:
         cancel = _model(CancelState, dict(contract.get("cancel") or {}))
         resource_class = value["resource_class"]
         status = "canceled" if value["status"] == "cancelled" else value["status"]
-        return _model(
+        record = _model(
             JobRecord,
             {
                 "id": value["id"],
@@ -528,3 +551,5 @@ class PostgresJobStoreAdapter:
                 "compat": dict(contract.get("compat") or {}),
             },
         )
+        record._attempt_count = max(0, int(value.get("attempt_count") or 0))
+        return record

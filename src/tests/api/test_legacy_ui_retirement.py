@@ -18,7 +18,11 @@ def test_all_application_entrypoints_use_the_shared_gateway():
     assert (launch.HOST, launch.PORT) == (main.HOST, main.PORT)
     factory_app = create_app()
     assert factory_app.title == "Omnix Web Gateway"
-    response = TestClient(factory_app).get("/health")
+    response = TestClient(
+        factory_app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    ).get("/health")
     assert response.status_code == 200
     assert response.json()["service"] == "omnix-gateway"
 
@@ -27,7 +31,7 @@ def test_current_apps_keep_their_shared_contracts_without_old_routes():
     from app.gateway.main import create_gateway_app
 
     gateway = create_gateway_app()
-    paths = {route.path for route in gateway.routes}
+    paths = set(gateway.openapi()["paths"])
     assert {
         "/api/chat/sessions", "/api/jobs", "/api/assets",
         "/api/audiobook/projects", "/api/rpg/session/get",
@@ -40,4 +44,9 @@ def test_current_apps_keep_their_shared_contracts_without_old_routes():
         "/ws/conversation", "/static",
     }
     assert paths.isdisjoint(retired)
-    assert TestClient(gateway).get("/static/script.js").status_code == 404
+    client = TestClient(
+        gateway,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+    assert client.get("/static/script.js").status_code == 404

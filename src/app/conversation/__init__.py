@@ -7,7 +7,6 @@ from .contracts import (
     ChatMessage,
     ChatMessageRole,
     ChatSession,
-    ChatSessionReader,
     ChatSessionMutationPort,
     ChatSessionSummary,
     InteractionMode,
@@ -15,6 +14,8 @@ from .contracts import (
     ResearchMode,
     SharedMemoryAccess,
     TranscriptPolicy,
+    TranscriptReader,
+    DeliveryCheckpointRecorder,
     estimate_tokens,
 )
 from .live_profile import (
@@ -30,7 +31,6 @@ __all__ = [
     "ChatMessage",
     "ChatMessageRole",
     "ChatSession",
-    "ChatSessionReader",
     "ChatSessionMutationPort",
     "ChatSessionSummary",
     "InteractionMode",
@@ -41,5 +41,7 @@ __all__ = [
     "ResearchMode",
     "SharedMemoryAccess",
     "TranscriptPolicy",
+    "TranscriptReader",
+    "DeliveryCheckpointRecorder",
     "estimate_tokens",
 ]

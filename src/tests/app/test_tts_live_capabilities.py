@@ -1,4 +1,4 @@
-from app.gateway import tts_live_capabilities
+from app.voice import tts_live_capabilities
 
 
 class _PhraseProvider:

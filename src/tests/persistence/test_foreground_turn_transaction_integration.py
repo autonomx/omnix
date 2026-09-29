@@ -368,7 +368,7 @@ def test_foreground_transaction_cannot_borrow_a_workers_current_lease(supplied_l
 
 
 def test_foreground_mirror_carries_original_claim_through_atomic_turn_and_replay(monkeypatch) -> None:
-    from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
+    from app.rpg.jobs.turn_job_mirror import _apply_turn_with_job_mirror
     from app.jobs.foreground_execution import current_foreground_execution
     from app.jobs import store as stores
     from app.chat.persistence.job_store import PostgresJobStoreAdapter

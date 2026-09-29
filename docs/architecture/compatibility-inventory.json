@@ -71,7 +71,7 @@
       "production_call_sites": [
         "src/app/runtime_composition.py",
         "src/app/chat/history_search.py",
-        "src/app/gateway/live_chat_postgres_fast_path.py"
+        "src/app/chat/live_chat_postgres_fast_path.py"
       ],
       "tests": [
         "src/tests/app/test_chat_generation.py",

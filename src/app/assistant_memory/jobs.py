@@ -25,7 +25,7 @@ from .structured_extraction import extract_structured_memory_proposals
 from .structured_provider import StructuredProposalProvider
 
 if TYPE_CHECKING:
-    from app.conversation.contracts import ChatSessionReader
+    from app.conversation.contracts import TranscriptReader
 
 MEMORY_SUGGEST_JOB_TYPE = "assistant.memory.suggest"
 MEMORY_IMPORT_JOB_TYPE = "assistant.memory.import"
@@ -147,7 +147,7 @@ def _complete_result(
 def process_memory_suggestion_job(
     job: JobRecord,
     *,
-    chat_store: ChatSessionReader,
+    chat_store: TranscriptReader,
     memory_service: MemoryService | None = None,
     job_store: Any | None = None,
     proposal_provider: StructuredProposalProvider | None = None,
@@ -170,7 +170,7 @@ def process_memory_suggestion_job(
 def _process_claimed_memory_job(
     job, *, chat_store, memory_service, proposal_provider, execution,
 ) -> MemorySuggestionJobResult:
-    from app.chat.retention_policy import automatic_memory_derivation_allowed
+    from app.conversation.privacy import automatic_memory_derivation_allowed
 
     payload = MemorySuggestionJobInput.model_validate(job.input_payload or {})
     session = chat_store.get_session(payload.session_id)

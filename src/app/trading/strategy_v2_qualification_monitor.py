@@ -9,9 +9,9 @@ from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .paper import PaperExecutionPolicy
@@ -455,12 +455,13 @@ class TradingStrategyV2QualificationMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_v2_qualification_monitor(gateway: FastAPI) -> TradingStrategyV2QualificationMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_v2_qualification_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyV2QualificationMonitor):
-        return existing
+        return None
     monitor = TradingStrategyV2QualificationMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_v2_qualification_monitor_enabled():
@@ -469,15 +470,14 @@ def register_trading_strategy_v2_qualification_monitor(gateway: FastAPI) -> Trad
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyV2QualificationMonitor",
-    "register_trading_strategy_v2_qualification_monitor",
+    "create_trading_strategy_v2_qualification_monitor_worker",
     "replay_v2_shadow_session",
     "strategy_v2_qualification_monitor_enabled",
 ]

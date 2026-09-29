@@ -16,9 +16,9 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from app.runtime.background import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
@@ -217,14 +217,13 @@ class TradingYahooAcquisitionMonitor:
         }
 
 
-def register_trading_yahoo_acquisition_monitor(
-    gateway: FastAPI,
-) -> TradingYahooAcquisitionMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_yahoo_acquisition_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingYahooAcquisitionMonitor):
-        return existing
+        return None
     monitor = TradingYahooAcquisitionMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if yahoo_acquisition_monitor_enabled():
@@ -233,14 +232,13 @@ def register_trading_yahoo_acquisition_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway.state.background_registry, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingYahooAcquisitionMonitor",
-    "register_trading_yahoo_acquisition_monitor",
+    "create_trading_yahoo_acquisition_monitor_worker",
     "yahoo_acquisition_monitor_enabled",
 ]

@@ -273,4 +273,4 @@ def test_phase40_source_guards_cover_persistence_streaming_and_gateway_cutover()
     assert "last-event-id" in routes
     assert "event: narrative_block" in routes
     assert "cancel_before_publication" in routes
-    assert "register_rpg_narrative_delivery_routes(app)" in sessions
+    assert "register_rpg_narrative_delivery_routes(router, state)" in sessions

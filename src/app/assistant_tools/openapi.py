@@ -64,8 +64,8 @@ def _install_route_registrar() -> None:
 
     def assistant_tools_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
         _ORIGINAL_INIT(self, *args, **kwargs)
-        from .routes import register_assistant_tool_routes
+        from .routes import create_assistant_tool_router
 
-        register_assistant_tool_routes(self)
+        self.include_router(create_assistant_tool_router())
 
     FastAPI.__init__ = assistant_tools_init

@@ -1,14 +1,15 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.gateway import rpg_world_deletion_routes
+from app.rpg.api.feature_routes import rpg_world_deletion_routes
 
 
 def test_world_deletion_routes_register_safe_endpoints() -> None:
     app = FastAPI()
-    rpg_world_deletion_routes.register_rpg_world_deletion_routes(app)
+    include_router_registrar(app, rpg_world_deletion_routes.register_rpg_world_deletion_routes)
     routes = {(route.path, method) for route in app.routes for method in route.methods}
 
     assert (
@@ -20,7 +21,7 @@ def test_world_deletion_routes_register_safe_endpoints() -> None:
 
 def test_world_deletion_route_requires_typed_confirmation(monkeypatch) -> None:
     app = FastAPI()
-    rpg_world_deletion_routes.register_rpg_world_deletion_routes(app)
+    include_router_registrar(app, rpg_world_deletion_routes.register_rpg_world_deletion_routes)
     client = TestClient(app)
 
     response = client.request(
@@ -56,7 +57,7 @@ def test_world_deletion_route_passes_explicit_decision(monkeypatch) -> None:
 
     monkeypatch.setattr(rpg_world_deletion_routes, "delete_world_project", fake_delete)
     app = FastAPI()
-    rpg_world_deletion_routes.register_rpg_world_deletion_routes(app)
+    include_router_registrar(app, rpg_world_deletion_routes.register_rpg_world_deletion_routes)
     client = TestClient(app)
 
     response = client.request(

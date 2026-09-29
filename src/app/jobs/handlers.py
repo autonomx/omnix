@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 import random
 from threading import Event
 from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict
 
-from .models import CreateJobRequest, JobRecord, ResourceClass
+from .models import CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
 
 
 class AnyJobInput(BaseModel):
@@ -91,6 +92,13 @@ class JobHandlerRegistry:
     def resource_classes(self) -> tuple[str, ...]:
         return tuple(sorted({spec.resource_class.value for spec in self._handlers.values()}))
 
+    def retry_delay_seconds(self, job_type: str, attempt_count: int) -> int:
+        spec = self.get(job_type)
+        if spec is None:
+            return 0
+        attempt = max(0, int(attempt_count) - 1)
+        return max(0, math.ceil(spec.retry_backoff.delay(attempt)))
+
     def validate_submission(self, request: CreateJobRequest) -> CreateJobRequest:
         spec = self.get(request.type)
         if spec is None:
@@ -114,6 +122,35 @@ class JobHandlerRegistry:
         if payload.model_dump(mode="python") != (job.input_payload or {}):
             job = job.model_copy(update={"input_payload": payload.model_dump(mode="python")})
         return spec.handler(context, job)
+
+
+class RetryPolicyJobStore:
+    """Apply a feature's retry schedule to retryable handler failures."""
+
+    def __init__(
+        self,
+        job_store: Any,
+        registry: JobHandlerRegistry,
+        job: JobRecord,
+    ) -> None:
+        self._job_store = job_store
+        self._registry = registry
+        self._job_type = job.type
+        self._attempt_count = max(1, int(getattr(job, "_attempt_count", 0) or 1))
+
+    def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
+        if request.retryable:
+            delay = self._registry.retry_delay_seconds(
+                self._job_type,
+                self._attempt_count,
+            )
+            request = request.model_copy(
+                update={"retry_delay_seconds": max(request.retry_delay_seconds, delay)}
+            )
+        return self._job_store.fail_job(job_id, request)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._job_store, name)
 
 
 def registry_from_features(features: tuple[Any, ...]) -> JobHandlerRegistry:

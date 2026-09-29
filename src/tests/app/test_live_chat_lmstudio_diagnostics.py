@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from app.gateway import live_chat_lmstudio_diagnostics as diagnostics
-from app.gateway import live_chat_lmstudio_responses as responses_runtime
+from app.chat import live_chat_lmstudio_diagnostics as diagnostics
+from app.chat import live_chat_lmstudio_responses as responses_runtime
 from app.providers.base import ChatMessage, ProviderConfig
 from app.providers.lmstudio_provider import LMStudioProvider
 

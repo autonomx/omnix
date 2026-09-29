@@ -953,13 +953,6 @@
   },
   {
     "default": "1",
-    "description": "Controls inline image job executor for image.",
-    "feature": "image",
-    "name": "OMNIX_INLINE_IMAGE_JOB_EXECUTOR",
-    "type": "string"
-  },
-  {
-    "default": "1",
     "description": "Controls inline research job executor for research.",
     "feature": "research",
     "name": "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR",
@@ -1093,8 +1086,8 @@
   },
   {
     "default": null,
-    "description": "Controls live tts provider name for gateway.",
-    "feature": "gateway",
+    "description": "Controls live tts provider name for kernel.",
+    "feature": "kernel",
     "name": "OMNIX_LIVE_TTS_PROVIDER_NAME",
     "type": "string"
   },
@@ -1107,22 +1100,22 @@
   },
   {
     "default": null,
-    "description": "Controls live voice execution mode for gateway.",
-    "feature": "gateway",
+    "description": "Controls live voice execution mode for kernel.",
+    "feature": "kernel",
     "name": "OMNIX_LIVE_VOICE_EXECUTION_MODE",
     "type": "string"
   },
   {
     "default": null,
-    "description": "Controls live voice model id for gateway.",
-    "feature": "gateway",
+    "description": "Controls live voice model id for kernel.",
+    "feature": "kernel",
     "name": "OMNIX_LIVE_VOICE_MODEL_ID",
     "type": "string"
   },
   {
     "default": null,
-    "description": "Controls live voice provider id for gateway.",
-    "feature": "gateway",
+    "description": "Controls live voice provider id for kernel.",
+    "feature": "kernel",
     "name": "OMNIX_LIVE_VOICE_PROVIDER_ID",
     "type": "string"
   },
@@ -1800,8 +1793,8 @@
   },
   {
     "default": null,
-    "description": "Controls tts startup warmup for gateway.",
-    "feature": "gateway",
+    "description": "Controls tts startup warmup for voice.",
+    "feature": "voice",
     "name": "OMNIX_TTS_STARTUP_WARMUP",
     "type": "string"
   },
@@ -1814,8 +1807,8 @@
   },
   {
     "default": null,
-    "description": "Controls tts warmup speaker for gateway.",
-    "feature": "gateway",
+    "description": "Controls tts warmup speaker for voice.",
+    "feature": "voice",
     "name": "OMNIX_TTS_WARMUP_SPEAKER",
     "type": "string"
   },

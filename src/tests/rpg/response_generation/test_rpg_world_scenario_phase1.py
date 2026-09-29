@@ -1,8 +1,9 @@
 from __future__ import annotations
+from tests.support.routers import include_router_registrar
 
 from fastapi import FastAPI
 
-from app.gateway.rpg_world_routes import register_rpg_world_routes
+from app.rpg.api.feature_routes.rpg_world_routes import register_rpg_world_routes
 from app.rpg.session.genesis.contract import CampaignGenesisContract
 from app.rpg.worlds.contracts import (
     MapDefinitionBinding,
@@ -142,7 +143,7 @@ def test_legacy_genesis_adapter_separates_world_scenario_and_campaign() -> None:
 
 def test_world_routes_register_separate_resource_endpoints() -> None:
     app = FastAPI()
-    register_rpg_world_routes(app)
+    include_router_registrar(app, register_rpg_world_routes)
     paths = {route.path for route in app.routes}
 
     assert "/api/rpg/worlds" in paths

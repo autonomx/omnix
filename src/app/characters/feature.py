@@ -26,11 +26,11 @@ def _router(context: FeatureContext) -> APIRouter:
     if context.services is not None and getattr(context.services, "chat", None) is not None:
         chat_kwargs["chat_store_factory"] = lambda: context.services.chat
     register_character_routes(router)
-    register_character_avatar_routes(router)  # type: ignore[arg-type]
-    register_character_avatar_generation_routes(router)  # type: ignore[arg-type]
-    register_character_avatar_viseme_routes(router)  # type: ignore[arg-type]
-    register_character_live2d_avatar_routes(router)  # type: ignore[arg-type]
-    register_live_conversation_rendering_routes(router, **chat_kwargs)  # type: ignore[arg-type]
+    register_character_avatar_routes(router)
+    register_character_avatar_generation_routes(router)
+    register_character_avatar_viseme_routes(router)
+    register_character_live2d_avatar_routes(router)
+    register_live_conversation_rendering_routes(router, **chat_kwargs)
     return router
 
 

@@ -5,12 +5,12 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
-from app.gateway.live_job_events import (
-    install_resilient_live_job_events,
+from app.gateway.kernel_routes.live_event_stream import (
     live_event_start_id,
     resilient_live_job_event_stream,
 )
 from app.gateway.main import create_gateway_app
+from fastapi.routing import APIRoute
 from app.persistence.database import DatabaseUnavailableError
 
 
@@ -51,7 +51,7 @@ def test_live_event_stream_survives_transient_postgres_error(monkeypatch) -> Non
     async def no_wait(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("app.gateway.live_job_events.asyncio.sleep", no_wait)
+    monkeypatch.setattr("app.gateway.kernel_routes.live_event_stream.asyncio.sleep", no_wait)
 
     async def collect() -> list[str]:
         stream = resilient_live_job_event_stream(FakeStore([FakeEvent(1)], fail_once=True))
@@ -86,16 +86,16 @@ def test_event_reads_run_outside_the_event_loop() -> None:
     asyncio.run(collect())
 
 
-def test_runtime_installer_replaces_the_legacy_events_route() -> None:
+def test_job_events_route_uses_the_jobs_kernel_stream() -> None:
     store = FakeStore()
     app = create_gateway_app(job_store_factory=lambda: store)
-
-    install_resilient_live_job_events(app, job_store_factory=lambda: store)
     matching = [
         route
         for route in app.router.routes
-        if getattr(route, "path", None) == "/events" and "GET" in getattr(route, "methods", set())
+        if isinstance(route, APIRoute)
+        and route.path == "/events"
+        and "GET" in route.methods
     ]
 
     assert len(matching) == 1
-    assert matching[0].endpoint.__module__ == "app.gateway.live_job_events"
+    assert matching[0].endpoint.__module__ == "app.gateway.kernel_routes.core_jobs_routes"

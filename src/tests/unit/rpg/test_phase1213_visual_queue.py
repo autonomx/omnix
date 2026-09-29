@@ -1,5 +1,8 @@
 """Phase 12.13 — Visual queue tests."""
 
+import pytest
+
+from app.jobs import store as job_store_module
 from app.rpg.visual.job_queue import (
     claim_next_visual_job,
     complete_visual_job,
@@ -8,10 +11,17 @@ from app.rpg.visual.job_queue import (
     prune_completed_visual_jobs,
     release_visual_job,
 )
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
-def test_enqueue_dedupes_same_active_job(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+@pytest.fixture
+def visual_job_store(monkeypatch, tmp_path):
+    store = InMemoryJobStore(tmp_path / "visual-jobs")
+    monkeypatch.setattr(job_store_module, "default_job_store", lambda: store)
+    return store
+
+
+def test_enqueue_dedupes_same_active_job(visual_job_store):
     job1 = enqueue_visual_job(session_id="s1", request_id="r1")
     job2 = enqueue_visual_job(session_id="s1", request_id="r1")
     assert job1["request_id"] == job2["request_id"]
@@ -19,8 +29,7 @@ def test_enqueue_dedupes_same_active_job(monkeypatch, tmp_path):
     assert len(jobs) == 1
 
 
-def test_claim_and_complete_job(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_claim_and_complete_job(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     claimed = claim_next_visual_job(lease_seconds=60)
     assert claimed["status"] == "leased"
@@ -29,8 +38,7 @@ def test_claim_and_complete_job(monkeypatch, tmp_path):
     assert completed["status"] == "complete"
 
 
-def test_stale_leased_job_can_be_reclaimed(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_stale_leased_job_can_be_reclaimed(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     claimed = claim_next_visual_job(lease_seconds=1)
     assert claimed["job_id"] != ""
@@ -43,14 +51,12 @@ def test_stale_leased_job_can_be_reclaimed(monkeypatch, tmp_path):
     assert reclaimed["lease_token"] != claimed["lease_token"]
 
 
-def test_no_jobs_returns_empty(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_no_jobs_returns_empty(visual_job_store):
     result = claim_next_visual_job()
     assert result == {}
 
 
-def test_release_job_returns_to_queued(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_release_job_returns_to_queued(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     claimed = claim_next_visual_job(lease_seconds=60)
     released = release_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"])
@@ -58,8 +64,7 @@ def test_release_job_returns_to_queued(monkeypatch, tmp_path):
     assert released["lease_token"] == ""
 
 
-def test_complete_with_error_marks_failed(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_complete_with_error_marks_failed(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     claimed = claim_next_visual_job(lease_seconds=60)
     completed = complete_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"], error="test error")
@@ -67,29 +72,24 @@ def test_complete_with_error_marks_failed(monkeypatch, tmp_path):
     assert completed["error"] == "test error"
 
 
-def test_prune_completed_jobs(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
-    # Create 3 jobs
+def test_prune_completed_jobs_keeps_latest_finished_visual(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     enqueue_visual_job(session_id="s2", request_id="r2")
     enqueue_visual_job(session_id="s3", request_id="r3")
 
-    # Claim and complete first two
+    claimed = claim_next_visual_job(lease_seconds=60)
+    complete_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"])
     claimed = claim_next_visual_job(lease_seconds=60)
     complete_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"])
 
-    claimed = claim_next_visual_job(lease_seconds=60)
-    complete_visual_job(job_id=claimed["job_id"], lease_token=claimed["lease_token"])
-
-    # Prune
     result = prune_completed_visual_jobs(keep_last=1)
-    assert result["active"] == 1  # One still queued
-    assert result["finished_kept"] == 1  # Only one kept
+    assert result["active"] == 1
+    assert result["finished_kept"] == 1
     assert result["kept"] == 2
+    assert result["pruned"] == 1
 
 
-def test_wrong_lease_token_fails(monkeypatch, tmp_path):
-    monkeypatch.setenv("RPG_VISUAL_QUEUE_DIR", str(tmp_path))
+def test_wrong_lease_token_fails(visual_job_store):
     enqueue_visual_job(session_id="s1", request_id="r1")
     claimed = claim_next_visual_job(lease_seconds=60)
     result = complete_visual_job(job_id=claimed["job_id"], lease_token="wrong:token")

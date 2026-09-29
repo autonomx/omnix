@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import BackgroundTasks, FastAPI, Query
+from fastapi import BackgroundTasks, APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat import ChatSessionStore, default_chat_store
@@ -112,7 +112,7 @@ def _resolve_authoritative_identity(
 
 
 def register_desktop_companion_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = (
         default_desktop_companion_evaluation_store
@@ -141,7 +141,7 @@ def register_desktop_companion_routes(
         default_desktop_companion_activity_bridge
     ),
 ) -> None:
-    @app.get(
+    @router.get(
         "/api/desktop-companion/operational-status",
         response_model=DesktopCompanionOperationalStatus,
         tags=["desktop-companion"],
@@ -149,7 +149,7 @@ def register_desktop_companion_routes(
     def desktop_companion_operations() -> DesktopCompanionOperationalStatus:
         return operational_status_factory()
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/build-identity",
         response_model=DesktopCompanionBuildIdentity,
         tags=["desktop-companion"],
@@ -157,7 +157,7 @@ def register_desktop_companion_routes(
     def desktop_companion_build_identity() -> DesktopCompanionBuildIdentity:
         return build_identity_factory()
 
-    @app.post(
+    @router.post(
         "/api/desktop-companion/preflight",
         response_model=DesktopCompanionPreflightResult,
         tags=["desktop-companion"],
@@ -174,7 +174,7 @@ def register_desktop_companion_routes(
             )
         return preflight_service_factory().check(request)
 
-    @app.post(
+    @router.post(
         "/api/desktop-companion/observe",
         response_model=DesktopCompanionObserveResponse,
         tags=["desktop-companion"],
@@ -225,7 +225,7 @@ def register_desktop_companion_routes(
             background_tasks.add_task(memory_bridge_factory().record, result.observation)
         return result
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/context",
         response_model=DesktopCompanionContextSnapshot | None,
         tags=["desktop-companion"],
@@ -235,7 +235,7 @@ def register_desktop_companion_routes(
     ) -> DesktopCompanionContextSnapshot | None:
         return context_store_factory().snapshot(session_id)
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/activity",
         response_model=DesktopCompanionActivitySnapshot | None,
         tags=["desktop-companion"],
@@ -245,7 +245,7 @@ def register_desktop_companion_routes(
     ) -> DesktopCompanionActivitySnapshot | None:
         return activity_bridge_factory().snapshot(session_id)
 
-    @app.post(
+    @router.post(
         "/api/desktop-companion/reset",
         response_model=DesktopCompanionResetResponse,
         tags=["desktop-companion"],
@@ -258,7 +258,7 @@ def register_desktop_companion_routes(
         activity_bridge_factory().clear(request.session_id, request.capture_generation)
         return DesktopCompanionResetResponse(session_id=request.session_id)
 
-    @app.post(
+    @router.post(
         "/api/desktop-companion/evaluations",
         response_model=DesktopCompanionEvaluationRecord,
         tags=["desktop-companion"],
@@ -268,7 +268,7 @@ def register_desktop_companion_routes(
     ) -> DesktopCompanionEvaluationRecord:
         return evaluation_store_factory().upsert(request)
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/evaluations",
         response_model=list[DesktopCompanionEvaluationRecord],
         tags=["desktop-companion"],
@@ -279,7 +279,7 @@ def register_desktop_companion_routes(
     ) -> list[DesktopCompanionEvaluationRecord]:
         return evaluation_store_factory().list(limit=limit, session_id=session_id)
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/evaluations/export",
         response_model=DesktopCompanionEvaluationExport,
         tags=["desktop-companion"],
@@ -308,7 +308,7 @@ def register_desktop_companion_routes(
             remote_provider=remote_provider,
         )
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/release-gate",
         response_model=DesktopCompanionReleaseGateReport,
         tags=["desktop-companion"],
@@ -336,7 +336,7 @@ def register_desktop_companion_routes(
             return build_partitioned_desktop_companion_speech_gate(records, partition)
         return build_partitioned_desktop_companion_release_gate(records, partition)
 
-    @app.get(
+    @router.get(
         "/api/desktop-companion/rollout-status",
         response_model=DesktopCompanionRolloutStatus,
         tags=["desktop-companion"],
