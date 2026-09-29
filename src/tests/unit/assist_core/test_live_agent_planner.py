@@ -75,11 +75,11 @@ def test_live_agent_planner_executes_only_governed_kasa_reads(monkeypatch) -> No
         FakeKasaReadHermesClient,
     )
 
-    def execute(user_request, request):
+    def execute(user_request, request, *, approved=False):
         assert user_request == "Is the Kasa desk plug on?"
         assert request.tool_id == "kasa"
         assert request.action_id == "kasa.get_state"
-        assert request.approved is False
+        assert approved is False
         return HermesAssistantToolExecutePayload(
             user_request=user_request,
             selected_tool_id="kasa",

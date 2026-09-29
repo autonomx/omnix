@@ -6,6 +6,7 @@ from typing import Any
 from app.chat.lmstudio_loaded_model_resolution import (
     _clear_lmstudio_model_discovery_cache,
     _resolve_lmstudio_model,
+    install_lmstudio_loaded_model_resolution_hook,
 )
 from app.providers import ChatMessage, LMStudioProvider, ProviderConfig
 from app.providers.base import ConnectionError as ProviderConnectionError
@@ -130,6 +131,7 @@ def test_single_loaded_llm_uses_model_key_not_instance_id(monkeypatch) -> None:
 
 
 def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     chat_payloads: list[dict[str, Any]] = []
@@ -181,6 +183,7 @@ def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
 
 
 def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     calls: list[tuple[str, dict[str, Any]]] = []
@@ -228,6 +231,7 @@ def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch
 
 
 def test_native_metrics_rejection_retries_openai_stream_transport(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     calls: list[str] = []
@@ -326,7 +330,7 @@ def test_discovery_failure_does_not_auto_load_stale_fallback(monkeypatch) -> Non
     _clear_lmstudio_model_discovery_cache()
 
     def unavailable(*args, **kwargs):
-        raise OSError("LM Studio model discovery unavailable")
+        raise ProviderConnectionError("LM Studio model discovery unavailable")
 
     monkeypatch.setattr(provider, "_make_request", unavailable)
 
@@ -338,6 +342,7 @@ def test_discovery_failure_does_not_auto_load_stale_fallback(monkeypatch) -> Non
 
 
 def test_discovery_failure_omits_stale_fallback_from_chat_payload(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     chat_payloads: list[dict[str, Any]] = []

@@ -164,10 +164,10 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(monkeypatch) -> Non
     session.messages.append(assistant)
     confirm = _message("confirm", "confirm")
     session.messages.append(confirm)
-    captured: list[AssistantToolRequest] = []
+    captured: list[tuple[AssistantToolRequest, bool]] = []
 
-    def execute(user_request: str, request: AssistantToolRequest):
-        captured.append(request)
+    def execute(user_request: str, request: AssistantToolRequest, *, approved: bool = False):
+        captured.append((request, approved))
         return _execution_payload(request)
 
     monkeypatch.setattr("app.chat.live_agent_store.hermes_assistant_tool_execute_payload", execute)
@@ -181,9 +181,9 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(monkeypatch) -> Non
     )
     completed = next(event for event in execution_events if event["type"] == "complete")
 
-    assert captured[0].approved is True
-    assert captured[0].action_id == "kasa.turn_off"
-    assert captured[0].session_id == "chat:kasa"
+    assert captured[0][1] is True
+    assert captured[0][0].action_id == "kasa.turn_off"
+    assert captured[0][0].session_id == "chat:kasa"
     assert completed["content"] == "Verified Desk Plug is off."
     assert completed["metadata"]["executes"] is True
     assert assistant.metadata["kasa_execution_status"] == "executed"

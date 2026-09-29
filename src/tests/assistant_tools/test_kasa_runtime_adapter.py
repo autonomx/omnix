@@ -6,7 +6,6 @@ from app.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
-    save_assistant_tools_config,
 )
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.kasa_adapter import KasaDeviceRecord, run_kasa_tool_request
@@ -98,10 +97,11 @@ def test_kasa_write_adapter_reports_verified_before_and_after_state() -> None:
     assert adapter.set_calls == [("Desk Plug", True)]
 
 
-def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch, tmp_path) -> None:
-    path = tmp_path / "assistant_tools_config.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
-    save_assistant_tools_config(_connected_kasa_config(), path)
+def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.assistant_tools.gate.load_assistant_tools_config",
+        _connected_kasa_config,
+    )
     calls: list[AssistantToolRequest] = []
 
     def fake_run(request: AssistantToolRequest):
@@ -133,8 +133,8 @@ def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch, tmp_pa
     assert blocked.approval_decision.approval_required is True
     assert blocked.execution_result.error == "approval_required"
     assert len(calls) == 1
-    assert calls[0].approved is True
     assert calls[0].session_id == "chat:1"
+    assert calls[0].action_id == "kasa.turn_on"
     assert approved.execution_result.error is None
     assert approved.execution_result.output["after"]["is_on"] is True
 

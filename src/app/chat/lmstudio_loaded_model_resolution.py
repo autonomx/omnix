@@ -207,14 +207,14 @@ def _fetch_json(provider: LMStudioProvider, endpoint: str) -> Any:
 def _discover_loaded_models_uncached(provider: LMStudioProvider) -> _Discovery:
     try:
         parsed = _parse_v1_models(_fetch_json(provider, "/api/v1/models"))
-    except (AttributeError, OSError, TypeError, ValueError):
+    except (AttributeError, OSError, ProviderConnectionError, TypeError, ValueError):
         parsed = None
     if parsed is not None:
         return _Discovery(available=True, endpoint="/api/v1/models", models=parsed)
 
     try:
         parsed = _parse_v0_models(_fetch_json(provider, "/api/v0/models"))
-    except (AttributeError, OSError, TypeError, ValueError):
+    except (AttributeError, OSError, ProviderConnectionError, TypeError, ValueError):
         parsed = None
     if parsed is not None:
         return _Discovery(available=True, endpoint="/api/v0/models", models=parsed)

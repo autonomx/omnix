@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 20
     env:
       PYTHONPATH: src
+      OMNIX_ALLOWED_HOSTS: testserver
+      OMNIX_ALLOWED_ORIGINS: http://testserver
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
