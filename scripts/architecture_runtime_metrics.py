@@ -97,7 +97,7 @@ def measurement_profile() -> dict:
     import importlib.metadata
     import platform
 
-    names = ("pytest", "fastapi", "uvicorn", "httpx", "pydantic", "requests",
+    names = ("pytest", "aiohttp", "fastapi", "uvicorn", "httpx", "pydantic", "requests",
              "python-multipart", "pillow", "playwright", "numpy", "psutil",
              "psycopg", "psycopg-pool", "rich", "websockets")
     versions = {}

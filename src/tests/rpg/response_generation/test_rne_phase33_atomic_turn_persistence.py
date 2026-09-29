@@ -106,7 +106,7 @@ def test_production_hook_generates_canon_before_postgresql_commit() -> None:
         ROOT / "src" / "app" / "rpg" / "session" / "interaction_timeline_hook.py"
     ).read_text(encoding="utf-8")
     service = (
-        ROOT / "src" / "app" / "persistence" / "rpg_turn_service.py"
+        ROOT / "src" / "app" / "rpg" / "persistence" / "rpg_turn_service.py"
     ).read_text(encoding="utf-8")
 
     assert hook.index("canonicalize_resolved_turn_result(") < hook.index(

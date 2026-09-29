@@ -35,6 +35,13 @@ def test_explicit_disposable_database_audience_is_accepted():
     assert runtime.disposable_url(URL) == URL
 
 
+def test_measurement_profile_records_live_voice_collection_dependency():
+    profile = runtime.measurement_profile()
+
+    assert "aiohttp" in profile["dependencies"]
+    assert profile["dependencies"]["aiohttp"]
+
+
 def test_guard_enforces_real_filesystem_network_and_subprocess_audits(tmp_path):
     owned = tmp_path / "owned"
     owned.mkdir()

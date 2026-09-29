@@ -73,6 +73,8 @@ def cohort():
     url = os.environ['OMNIX_TEST_DATABASE_URL']
     database = PostgresDatabase(DatabaseSettings(url=url))
     ensure_postgresql_runtime_ready(database)
+    from app.persistence.identity_service import ensure_local_identity
+    ensure_local_identity(database)
     children = []
     def start(role, workspace):
         process, pipe = start_process(url, workspace, role)

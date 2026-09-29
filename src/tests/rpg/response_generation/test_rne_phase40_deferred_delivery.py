@@ -251,17 +251,19 @@ def test_phase40_source_guards_cover_persistence_streaming_and_gateway_cutover()
         / "0022_rpg_narrative_delivery.sql"
     ).read_text(encoding="utf-8")
     gateway = (
-        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
+        ROOT / "src" / "app" / "rpg" / "api" / "turn_pipeline.py"
     ).read_text(encoding="utf-8")
     routes = (
         ROOT
         / "src"
         / "app"
-        / "gateway"
+        / "rpg"
+        / "api"
+        / "feature_routes"
         / "rpg_narrative_delivery_routes.py"
     ).read_text(encoding="utf-8")
     sessions = (
-        ROOT / "src" / "app" / "gateway" / "rpg_session_routes.py"
+        ROOT / "src" / "app" / "rpg" / "api" / "feature_routes" / "rpg_session_routes.py"
     ).read_text(encoding="utf-8")
 
     assert "omnix_rpg_narrative_deliveries" in migration

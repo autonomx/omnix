@@ -112,7 +112,7 @@ def test_foreground_pipeline_publishes_and_persists_consumer_bundle() -> None:
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
-    source = (root / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(encoding="utf-8")
+    source = (root / "app" / "rpg" / "api" / "turn_pipeline.py").read_text(encoding="utf-8")
     assert "attach_canonical_consumer_bundle" in source
     assert 'payload["narrative_projections"]' in source
     assert "narrative_session_projection_patched" in source

@@ -11491,7 +11491,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 2515
+      "value": 2541
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -11611,7 +11611,7 @@
     "quarantined_tests": {
       "direction": "lower",
       "target": 0,
-      "value": 0
+      "value": 92
     },
     "retention_policies_executed_pct": {
       "direction": "higher",

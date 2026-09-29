@@ -47,8 +47,10 @@ def service_token(monkeypatch):
     return token
 
 
-def pytest_ignore_collect(collection_path: Path, config) -> bool:
-    return should_ignore_collection(collection_path)
+def pytest_ignore_collect(collection_path: Path, config) -> bool | None:
+    if should_ignore_collection(collection_path):
+        return True
+    return None
 
 _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 

@@ -320,9 +320,8 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
         / "genesis"
         / "materialization.py"
     ).read_text(encoding="utf-8")
-    routes = (
-        ROOT / "src" / "app" / "gateway" / "rpg_campaign_lore_routes.py"
-    ).read_text(encoding="utf-8")
+    feature = (ROOT / "src" / "app" / "rpg" / "feature.py").read_text(encoding="utf-8")
+    feature_registry = (ROOT / "src" / "app" / "gateway" / "feature_registry.py").read_text(encoding="utf-8")
 
     assert "work.jobs.claim_next(" in coordinator
     assert "work.jobs.mark_running(" in coordinator
@@ -340,9 +339,9 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert "campaign_bible_hash(bible)" in materialization
     assert "retry produced different canon" in materialization
     assert 'status="ready"' in materialization
-    assert 'register_background_worker(' in routes
-    assert 'RuntimeCapability.RUN_RECOVERY' in routes
-    assert "kick_campaign_genesis_worker()" in routes
+    assert 'register_background_worker(' in feature_registry
+    assert 'RuntimeCapability.RUN_RECOVERY' in feature
+    assert "_kick_genesis_recovery()" in feature
 
 
 def test_background_expansion_preserves_live_discovery_and_thread_progress() -> None:

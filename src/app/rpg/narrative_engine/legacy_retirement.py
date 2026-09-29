@@ -22,7 +22,7 @@ _RETIRED_PUBLICATION_TOKENS = (
     'result["visible_publisher"]',
 )
 _PRODUCTION_OWNER_PATHS = (
-    "src/app/gateway/rpg_turn_pipeline.py",
+    "src/app/rpg/api/turn_pipeline.py",
     "src/app/rpg/session/turn_presenter.py",
     "src/app/rpg/session/narrative_engine_bridge.py",
     "src/app/rpg/narrative_engine/consumer_publish.py",
@@ -84,7 +84,7 @@ def audit_legacy_publisher_retirement(
         if hits:
             forbidden_hits[relative] = hits
 
-    gateway = sources.get("src/app/gateway/rpg_turn_pipeline.py", "")
+    gateway = sources.get("src/app/rpg/api/turn_pipeline.py", "")
     presenter = sources.get("src/app/rpg/session/turn_presenter.py", "")
     bridge = sources.get("src/app/rpg/session/narrative_engine_bridge.py", "")
     publisher = sources.get("src/app/rpg/narrative_engine/consumer_publish.py", "")

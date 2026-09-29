@@ -19,15 +19,15 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-1.5 | not started | — | 2026-09-27 | — | One required CI pipeline |
 | WP-1.6 | not started | — | 2026-09-27 | — | Python type checking rollout |
 | WP-1.7 | not started | — | 2026-09-27 | — | ESLint for the web app with boundary and patch rules |
-| WP-2.1 | done | - | 2026-09-29 | AL001 106 -> 103; app.gateway imports in jobs/trading: 0 | Neutral runtime owners; unit architecture gate passes |
-| WP-2.2 | done | - | 2026-09-29 | 17 catalog features; excluded/untyped schema routes: 0/0 | Feature disable matrix passes; generated OpenAPI paths and schemas unchanged |
-| WP-2.3 | done | - | 2026-09-29 | AL007: 0; settings use optimistic revisions | Configuration registry/docs generated and checked; legacy settings writes absent; reads fail closed |
-| WP-2.4 | done | - | 2026-09-29 | AL012: 0; migration compatibility and ordering tests pass | Migrations run as a release step; PostgreSQL architecture gate passes |
-| WP-2.5 | done | - | 2026-09-29 | AL006: 0; jobs imports no feature package | Typed handler registry enforces validation, attempt limits and backoff; unit gate passes |
-| WP-2.6 | done | - | 2026-09-29 | Persistence imports no feature package | Feature repositories are lazy and cached per unit of work; persistence gate passes |
-| WP-2.7 | done | - | 2026-09-29 | app.platform -> app.rpg imports: 0 | RPG compatibility route tests pass |
-| WP-2.8 | done | - | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | ADR-0010 fail-closed test and legacy secret-import test pass |
-| WP-2.9 | done | - | 2026-09-29 | AL002: 0; package_cycles: 0 | Cycles verified by architecture lint and metrics |
+| WP-2.1 | in progress | #1547 | 2026-09-29 | AL001 106 -> 103; app.gateway imports in jobs/trading: 0 | Neutral runtime owners; current-source CI gate refresh pending |
+| WP-2.2 | in progress | #1547 | 2026-09-29 | 17 catalog features; excluded/untyped schema routes: 0/0 | Feature disable matrix and generated OpenAPI comparison pass locally; current-source CI gate refresh pending |
+| WP-2.3 | in progress | #1547 | 2026-09-29 | AL007: 0; settings use optimistic revisions | Configuration registry/docs and fail-closed tests pass; current-source CI gate refresh pending |
+| WP-2.4 | in progress | #1547 | 2026-09-29 | AL012: 0; migration compatibility and ordering tests pass | Release-step migration and identity fixtures updated; current-source PostgreSQL CI gate refresh pending |
+| WP-2.5 | in progress | #1547 | 2026-09-29 | AL006: 0; jobs imports no feature package | Typed handler registry tests pass; current-source CI gate refresh pending |
+| WP-2.6 | in progress | #1547 | 2026-09-29 | Persistence imports no feature package | Lazy unit-of-work tests pass; current-source persistence CI gate refresh pending |
+| WP-2.7 | in progress | #1547 | 2026-09-29 | app.platform -> app.rpg imports: 0 | RPG compatibility source guards and focused tests updated; current-source CI gate refresh pending |
+| WP-2.8 | in progress | #1547 | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | ADR-0010 and secret-import tests pass; current-source CI gate refresh pending |
+| WP-2.9 | in progress | #1547 | 2026-09-29 | AL002: 0; package_cycles: 0 | Local architecture lint passes; fresh source-bound Linux metrics report and CI check pending |
 | WP-3.0 | not started | — | 2026-09-27 | — | Characterization harness |
 | WP-3.1 | not started | — | 2026-09-27 | — | Chat store: native targeted mutations; remove the whole-workspace save |
 | WP-3.2 | not started | — | 2026-09-27 | — | Live voice becomes a module (`app/live_voice`) with explicit ports |
@@ -129,6 +129,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 Validation is recorded per work package as execution proceeds.
 
 - WP-2.1–2.9: the unit and PostgreSQL architecture gates pass on `refactor-audit`; `architecture_lint.py --check` passes. The moved-file baseline rekey does not increase any rule/file count, and rule totals are nonincreasing (AL001 106→103, AL003 447→420, AL004 114→101, AL005 201→194). The Phase 2 scorecard slice is green: AL002/AL006/AL007/AL012, package cycles, schema-excluded routes and untyped body routes are all 0.
+- WP-2.1–2.9 revalidation: PR #1547 exposed stale RPG owner guards, PostgreSQL identity fixtures, and a platform-specific bundle checksum assertion. Those regressions are corrected in the working branch. The previous Linux runtime report is stale for the current source digest; WPs remain in progress until the fresh PR metrics artifact and all current-source Phase 2 gates pass.
 - WP-2.2–2.8: the all-feature disable matrix, generated OpenAPI export comparison, generated configuration documentation check, fail-closed settings, settings-entry persistence, lazy unit-of-work, RPG compatibility routes and legacy-secret importer tests pass. OpenAPI has 515 paths and 731 schemas, unchanged from the current HEAD contract.
 - WP-2.5: durable job handler tests cover duplicate registration, input validation, unknown nonretryable jobs, feature-owned job types and the configured backoff schedule. Jobs have no feature imports or job-table SQL outside persistence.
 
@@ -155,7 +156,7 @@ Validation is recorded per work package as execution proceeds.
 - WP-0.5 follow-up: the undefined-name scan caught an out-of-scope connection ID in the STT background-feed error handler. It now uses the middleware request ID or a generated fallback. Two new failure-path regressions cover both cases and verify private response details. All 44 focused model-service/live-STT tests pass after the fix; F821 is zero in the changed files.
 - WP-1.3 inspection: the initial non-vendor `src`/`scripts` F821 scan reports 241 findings, including the known NPC initiative defect and retired Flask handlers. These are recorded for correction and reachability review; no suppression was added.
 - WP-1.3 preparation: a digest-pinned, non-root Python 3.11.16 Linux container and isolated pip-tools 7.6.1 resolver are ready. The draft gateway lock compiles with 63 distributions and 1,904 SHA-256 hashes. A fresh Linux environment installs it successfully using `--require-hashes`. The real production module imports successfully with networking disabled and a read-only, verified tracked-source snapshot; it does not eagerly import the gateway or model libraries. This draft remains under ignored task tooling; existing runtime installations, requirements and setup paths have not been replaced. Its newer framework versions require focused behavior validation or alignment with the currently tested pins before promotion.
-- No real credential was rotated, history rewritten, operator database migrated, or operator data deleted. No PR/commit exists yet. Explicit task-owned new source, configuration and documentation files are staged for the tracked-file scan; Git index writes were approved by the sandbox reviewer. Unrelated untracked operator artifacts remain untouched.
+- No real credential was rotated, history rewritten, operator database migrated, or operator data deleted. PR #1547 is open from `refactor-audit` to `main`; its GitHub Actions checks are the canonical CI evidence. Only reviewed task paths are staged for each commit, and unrelated untracked operator artifacts remain untouched.
 
 - WP-1.3 implementation: root Python 3.11 packaging/tooling configuration and runtime-specific dependency inputs are now committed. The retired Python 3.10 Trading compatibility tests were converted to assert the Python 3.11/no-monkey-patch contract. The RPG initiative opening bonus now has an owning-module default instead of depending on sitecustomize.
 

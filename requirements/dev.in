@@ -4,6 +4,7 @@ pytest-cov
 pytest-xdist
 pytest-playwright
 playwright
+aiohttp
 mypy
 ruff
 pip-tools

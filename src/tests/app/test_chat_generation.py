@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 import time
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.providers import service as shared
@@ -17,6 +19,19 @@ from app.rpg.jobs.turn_executor import (
 )
 from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
+
+
+@pytest.fixture(autouse=True)
+def prepare_local_identity_for_postgresql_tests():
+    if not (os.environ.get("OMNIX_TEST_DATABASE_URL") or os.environ.get("OMNIX_DATABASE_URL")):
+        yield
+        return
+
+    from app.persistence.database import default_database
+    from app.persistence.identity_service import ensure_local_identity
+
+    ensure_local_identity(default_database())
+    yield
 
 
 class FakeProvider:

@@ -37,9 +37,12 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def runtime():
+    from app.persistence.identity_service import ensure_local_identity
+
     database = PostgresDatabase(
         DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_max=8)
     )
+    ensure_local_identity(database)
     seed = PostgresJobStoreAdapter(database)
     workspaces = []
 

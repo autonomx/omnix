@@ -153,7 +153,7 @@ def test_existing_canonical_identity_is_rebound_after_interaction_commit(monkeyp
 
 def test_runtime_uses_direct_canonical_entry_without_monkey_patch() -> None:
     gateway = (
-        REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py"
+        REPO_ROOT / "src/app/rpg/api/turn_pipeline.py"
     ).read_text(encoding="utf-8")
     first_call = (
         REPO_ROOT / "src/app/rpg/session/first_call_dialogue.py"

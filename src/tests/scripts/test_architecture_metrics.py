@@ -162,6 +162,21 @@ def test_lint_report_is_excluded_from_runtime_source_digest():
     assert metrics.source_digest(sources) == before
 
 
+def test_roadmap_changes_do_not_invalidate_runtime_evidence_but_markdown_inputs_do():
+    sources = {
+        APP + "chat/a.py": "value = 1",
+        "docs/roadmap/PROGRESS.md": "WP-1.1 is in progress",
+        "resources/examples/voice/prompt.md": "Speak clearly.",
+    }
+    before = metrics.source_digest(sources)
+    sources["docs/roadmap/PROGRESS.md"] = "WP-1.1 is done"
+    assert metrics.source_digest(sources) == before
+    sources["resources/examples/voice/prompt.md"] = "Speak naturally."
+    assert metrics.source_digest(sources) != before
+    sources[APP + "chat/a.py"] = "value = 2"
+    assert metrics.source_digest(sources) != before
+
+
 def test_feature_catalog_module_attribute_is_a_reachability_root():
     result = observed({
         APP + "production.py": "FEATURE = 'app.rpg.feature:FEATURE'",

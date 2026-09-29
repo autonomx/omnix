@@ -78,7 +78,17 @@ def source_digest(sources: dict[str, str]) -> str:
     for path, source in sorted(sources.items()):
         # Runtime evidence is bound to code/configuration, not to the reports
         # containing that evidence or the baseline that consumes it.
-        if path in {"resources/architecture/metrics-baseline.json", "resources/architecture/runtime-metrics.json", "resources/architecture/lint-baseline.json"} or path.startswith("docs/measurements/"):
+        if (
+            path in {
+                "docs/ENTERPRISE_ARCHITECTURE_REVIEW_2026-09-27.md",
+                "docs/ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md",
+                "resources/architecture/metrics-baseline.json",
+                "resources/architecture/runtime-metrics.json",
+                "resources/architecture/lint-baseline.json",
+            }
+            or path.startswith("docs/roadmap/")
+            or path.startswith("docs/measurements/")
+        ):
             continue
         digest.update(path.encode("utf-8") + b"\0" + source.replace("\r\n", "\n").encode("utf-8") + b"\0")
     return digest.hexdigest()

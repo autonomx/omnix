@@ -84,7 +84,7 @@ def test_shadow_attachment_is_diagnostic_only() -> None:
 
 
 def test_foreground_pipeline_publishes_shadow_diagnostics_not_shadow_prose() -> None:
-    source = (REPO_ROOT / "src/app/gateway/rpg_turn_pipeline.py").read_text(encoding="utf-8")
+    source = (REPO_ROOT / "src/app/rpg/api/turn_pipeline.py").read_text(encoding="utf-8")
     assert "attach_shadow_report" in source
     assert 'payload["narrative_engine_shadow"]' in source
     assert "canonical_text" not in source.replace('payload["narrative_engine_shadow"]', "")

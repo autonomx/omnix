@@ -76,6 +76,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_job_events, omnix_jobs, omnix_outbox_events, omnix_audit_events, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
+    ensure_local_identity(database)
 
 
 def _published_fixture(database: PostgresDatabase) -> tuple[str, str, str]:

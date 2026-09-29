@@ -93,7 +93,7 @@ def test_production_legacy_deletion_audit_has_no_retired_owner_imports() -> None
 
 def test_static_audit_fails_when_retired_publisher_reenters_gateway(tmp_path) -> None:
     for relative in (
-        "src/app/gateway/rpg_turn_pipeline.py",
+        "src/app/rpg/api/turn_pipeline.py",
         "src/app/rpg/session/turn_presenter.py",
         "src/app/rpg/session/narrative_engine_bridge.py",
         "src/app/rpg/narrative_engine/consumer_publish.py",
@@ -108,7 +108,7 @@ def test_static_audit_fails_when_retired_publisher_reenters_gateway(tmp_path) ->
         source += 'result["legacy_compatibility_fields_source"] = "canonical_projection_only"\n'
         source += "NarrativeProductionPathError\nif not certification.passed\n"
         path.write_text(source, encoding="utf-8")
-    gateway = tmp_path / "src/app/gateway/rpg_turn_pipeline.py"
+    gateway = tmp_path / "src/app/rpg/api/turn_pipeline.py"
     gateway.write_text(
         gateway.read_text(encoding="utf-8")
         + "\nfrom app.rpg.response_generation.legacy_bridge import play_scene\n",
@@ -118,10 +118,11 @@ def test_static_audit_fails_when_retired_publisher_reenters_gateway(tmp_path) ->
     audit = audit_legacy_publisher_retirement(tmp_path)
     assert audit.passed is False
     assert audit.checks["retired_imports_deleted_from_production_owners"] is False
-    assert "src/app/gateway/rpg_turn_pipeline.py" in audit.forbidden_hits
+    assert "src/app/rpg/api/turn_pipeline.py" in audit.forbidden_hits
 
 
-def test_production_enforcement_records_durable_retirement_proof() -> None:
+def test_production_enforcement_records_durable_retirement_proof(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_RPG_NARRATIVE_RETIREMENT_REPOSITORY", "in_memory")
     result = enforce_production_narrative_result(_canonical_result())
     record = result["narrative_retirement_record"]
     assert result["legacy_publisher_deletion_certified"] is True

@@ -217,7 +217,7 @@ def test_web_ui_selects_published_worlds_and_keeps_lore_browser() -> None:
         REPO_ROOT / "src/apps/web/src/features/rpg/RpgNarrativeTabs.tsx"
     ).read_text(encoding="utf-8")
     routes = (
-        REPO_ROOT / "src/app/gateway/rpg_campaign_lore_routes.py"
+        REPO_ROOT / "src/app/rpg/api/feature_routes/rpg_campaign_lore_routes.py"
     ).read_text(encoding="utf-8")
     assert 'aria-label="Available campaign worlds"' in catalog
     assert "Existing campaigns for" in catalog

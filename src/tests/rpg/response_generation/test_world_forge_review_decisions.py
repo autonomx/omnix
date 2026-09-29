@@ -143,7 +143,6 @@ class _Work:
 
 def test_keep_decision_does_not_promote_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     work = _Work()
-    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_retry,
@@ -166,7 +165,6 @@ def test_decision_is_rejected_until_generation_finishes(
 ) -> None:
     work = _Work()
     work.world_generation.run["status"] = "running"
-    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
 
     with pytest.raises(
@@ -187,7 +185,6 @@ def test_replace_decision_promotes_only_after_explicit_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     work = _Work()
-    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_retry,
@@ -212,18 +209,18 @@ class _Cursor:
     rowcount: int = 1
 
 
-class _Connection:
+class _Jobs:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, tuple]] = []
+        self.call: tuple[object, dict[str, object]] | None = None
 
-    def execute(self, sql, params):
-        self.calls.append((sql, params))
-        return _Cursor()
+    def release_interrupted_job(self, context, **kwargs):
+        self.call = (context, kwargs)
+        return kwargs["status"] == "retrying"
 
 
 class _RecoveryWork:
     def __init__(self) -> None:
-        self.connection = _Connection()
+        self.jobs = _Jobs()
 
 
 def test_spooled_persistence_replay_extends_queue_attempt_budget(
@@ -247,11 +244,14 @@ def test_spooled_persistence_replay_extends_queue_attempt_budget(
         error_code="database_unavailable",
     )
     assert retryable is True
-    params = work.connection.calls[0][1]
-    sql = work.connection.calls[0][0]
-    assert "'code', %s::text" in sql
-    assert "'resume_policy', %s::text" in sql
-    assert params[0] == "retrying"
-    assert params[1] == 3
-    assert params[4] == "persist_existing_spool"
+    assert work.jobs.call is not None
+    recovered_context, request = work.jobs.call
+    assert recovered_context is context
+    assert request == {
+        "job_id": "job:rules",
+        "status": "retrying",
+        "max_attempts": 3,
+        "error_code": "database_unavailable",
+        "resume_policy": "persist_existing_spool",
+    }
     delete_candidate_spool("job:rules")

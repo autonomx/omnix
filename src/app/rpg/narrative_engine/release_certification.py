@@ -47,8 +47,8 @@ _REQUIRED_PRODUCTION_FILES = (
     "src/app/rpg/narrative_engine/legacy_retirement.py",
     "src/app/rpg/narrative_delivery.py",
     "src/app/rpg/narrative_retirement.py",
-    "src/app/gateway/rpg_turn_pipeline.py",
-    "src/app/gateway/rpg_narrative_delivery_routes.py",
+    "src/app/rpg/api/turn_pipeline.py",
+    "src/app/rpg/api/feature_routes/rpg_narrative_delivery_routes.py",
     "src/app/rpg/session/genesis/async_coordinator.py",
     "src/app/rpg/session/genesis/world_forge_provider.py",
 )

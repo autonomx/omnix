@@ -74,7 +74,7 @@ def test_dossier_gate_rejects_incomplete_visible_actor() -> None:
 
 
 def test_foreground_gateway_checks_genesis_before_authoritative_turn() -> None:
-    source = (REPO_ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(
+    source = (REPO_ROOT / "src" / "app" / "rpg" / "api" / "turn_pipeline.py").read_text(
         encoding="utf-8"
     )
     gate = source.index("require_campaign_launch_ready")

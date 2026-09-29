@@ -429,7 +429,7 @@ def test_group_dialogue_plans_one_provider_authored_block_per_speaker(
 
 def test_production_sources_no_longer_use_dialogue_monkey_patch_or_legacy_line_writer() -> None:
     gateway = (
-        ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py"
+        ROOT / "src" / "app" / "rpg" / "api" / "turn_pipeline.py"
     ).read_text(encoding="utf-8")
     bridge = (
         ROOT / "src" / "app" / "rpg" / "session" / "narrative_engine_bridge.py"

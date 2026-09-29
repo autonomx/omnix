@@ -45,7 +45,8 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
     assert bran["kind"] == "npc"
     assert bran["profile_authority"] == "campaign_bible"
     assert bran["visibility"] == "player_known"
-    assert "watches debts carefully" in bran["description"]
+    assert "Rusty Flagon" in bran["description"]
+    assert "debts" in bran["description"]
     assert bran["provenance"]["first_seen_tick"] == 7
 
     document = updated["documents"][0]
@@ -53,7 +54,8 @@ def test_encountered_bran_gets_one_player_known_bio_and_dossier() -> None:
     assert document["topic_id"] == "npcs"
     assert document["title"] == "Bran"
     assert document["visibility"] == "player_known"
-    assert "watches debts carefully" in document["full_text"]
+    assert "Rusty Flagon" in document["full_text"]
+    assert "debts" in document["full_text"]
     assert "old mill debts" not in document["full_text"].casefold()
     assert updated["discovery_state"]["pages"][document["document_id"]] == "learned"
     assert updated["discovery_state"]["entities"]["npc:Bran"] == "learned"
@@ -92,7 +94,8 @@ def test_encountered_npc_bio_is_searchable_gameplay_evidence() -> None:
     )
 
     assert bran_document.visibility is VisibilityClass.PLAYER_KNOWN
-    assert "watches debts carefully" in bran_document.content
+    assert "Rusty Flagon" in bran_document.content
+    assert "debts" in bran_document.content
     assert "npc:Bran" in bran_document.entity_refs
 
 

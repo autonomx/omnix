@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from app.providers import service as shared
 from app.providers.base import (
     BaseProvider,
     ChatMessage,
@@ -367,7 +368,6 @@ def test_offline_mode_never_publishes_deterministic_lore() -> None:
 
 
 def test_auto_mode_reuses_settings_control_center_llm_route(monkeypatch) -> None:
-    from app.providers import service as provider_service
     from app.platform import effective_defaults
 
     provider = _Provider([_payload()])
@@ -396,7 +396,6 @@ def test_auto_mode_reuses_settings_control_center_llm_route(monkeypatch) -> None
 
 
 def test_production_factory_uses_settings_over_inherited_live_environment(monkeypatch) -> None:
-    from app.providers import service as provider_service
     from app.platform import effective_defaults
 
     provider = _Provider([_payload()])

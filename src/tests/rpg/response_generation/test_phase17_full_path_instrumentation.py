@@ -95,8 +95,8 @@ def test_response_headers_expose_trace_bytes_and_completed_attribution() -> None
 
 
 def test_required_full_path_stage_names_are_wired() -> None:
-    pipeline = (_REPO_ROOT / "src" / "app" / "gateway" / "rpg_turn_pipeline.py").read_text(encoding="utf-8")
-    mirror = (_REPO_ROOT / "src" / "app" / "gateway" / "rpg_turn_job_mirror.py").read_text(encoding="utf-8")
+    pipeline = (_REPO_ROOT / "src" / "app" / "rpg" / "api" / "turn_pipeline.py").read_text(encoding="utf-8")
+    mirror = (_REPO_ROOT / "src" / "app" / "rpg" / "jobs" / "turn_job_mirror.py").read_text(encoding="utf-8")
     interaction = (_REPO_ROOT / "src" / "app" / "rpg" / "session" / "interaction_timeline_hook.py").read_text(encoding="utf-8")
 
     for stage in (
