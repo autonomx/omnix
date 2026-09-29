@@ -59,10 +59,12 @@ def isolated_runtime_configuration(monkeypatch):
 
     from app.runtime import config as runtime_config
     from app.security import tenant_context as tenant_runtime
+    from app.persistence.runtime import reset_persistence_mode_cache
     from app.settings import access as settings_access
     from app.settings.registry import core_setting_specs
     from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 
+    reset_persistence_mode_cache()
     monkeypatch.setattr(runtime_config, "_process_config", None)
 
     class _TestSettingsService:
@@ -128,6 +130,7 @@ def isolated_runtime_configuration(monkeypatch):
     try:
         yield
     finally:
+        reset_persistence_mode_cache()
         tenant_runtime.reset_process_tenant_for_tests()
         settings_access.reset_settings_service_for_tests()
 
