@@ -20,7 +20,7 @@ on:
       - "src/app/providers/chatgpt_codex_provider.py"
       - "src/app/providers/codex_reliability.py"
       - "src/app/providers/__init__.py"
-      - "src/app/gateway/trading_routes.py"
+      - "src/app/trading/route_registration.py"
       - "src/app/gateway/__init__.py"
       - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"

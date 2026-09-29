@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI
-from fastapi.routing import APIRoute
 from pydantic import BaseModel
 
 import app.gateway.feature_registry as feature_registry
@@ -91,13 +90,19 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(RuntimeConfig())
     gateway.state.runtime_services = None
     gateway.state.background_registry = None
+    included = []
+    include_router = gateway.include_router
+
+    def capture_include_router(router, **options):
+        included.append((router, options))
+        return include_router(router, **options)
+
+    monkeypatch.setattr(gateway, "include_router", capture_include_router)
 
     feature_registry._register_feature_modules(gateway)
 
     assert captured == [SampleFeatureConfig(enabled=True, retries=4)]
-    route = next(
-        route
-        for route in gateway.routes
-        if isinstance(route, APIRoute) and route.path == "/sample-feature/probe"
-    )
-    assert route.dependant.dependencies[0].call.__name__ == "feature_guard_sample_feature"
+    assert "/sample-feature/probe" in gateway.openapi()["paths"]
+    assert len(included) == 1
+    dependencies = included[0][1]["dependencies"]
+    assert dependencies[0].dependency.__name__ == "feature_guard_sample_feature"

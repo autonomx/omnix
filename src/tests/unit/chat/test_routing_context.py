@@ -223,7 +223,7 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
     monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
     monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     store = _CountingStore(tmp_path / "chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Cache"))
     current = ChatMessage(

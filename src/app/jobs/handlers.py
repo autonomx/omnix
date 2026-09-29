@@ -144,9 +144,8 @@ class RetryPolicyJobStore:
                 self._job_type,
                 self._attempt_count,
             )
-            request = request.model_copy(
-                update={"retry_delay_seconds": max(request.retry_delay_seconds, delay)}
-            )
+            request = request.model_copy(deep=True)
+            request._retry_delay_seconds = max(request._retry_delay_seconds, delay)
         return self._job_store.fail_job(job_id, request)
 
     def __getattr__(self, name: str) -> Any:

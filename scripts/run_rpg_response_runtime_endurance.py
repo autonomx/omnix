@@ -149,9 +149,15 @@ def _base_turn_factory(state: dict[str, Any]) -> Callable[..., dict[str, Any]]:
         }
         session = {
             "session_id": session_id,
+            "manifest": {
+                "id": session_id,
+                "session_id": session_id,
+                "title": "Response endurance",
+            },
             "simulation_state": deepcopy(state),
             "runtime_state": {
                 "tick": turn,
+                "state_revision": turn,
                 "performance": {
                     "enable_live_narration_llm": False,
                     "enable_provider_runtime_narration": False,

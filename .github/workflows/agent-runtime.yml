@@ -10,7 +10,7 @@ on:
       - "src/tests/persistence/test_agent_*"
       - "src/tests/persistence/test_workflow_*"
       - "src/tests/persistence/test_task_graph_*"
-      - "src/app/gateway/agent_runtime_routes.py"
+      - "src/app/agent_runtime/routes.py"
       - "src/app/gateway/__init__.py"
       - "src/app/assist_core/hermes_catalog.py"
       - "src/app/assist_core/hermes_client.py"

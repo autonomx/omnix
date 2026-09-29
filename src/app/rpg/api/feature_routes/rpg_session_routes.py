@@ -54,6 +54,51 @@ class RpgLocalDialogueFixtureRequestBody(_TypedRequestModel):
     session_id: _TypedRequestAny = None
 
 
+class GetRpgSessionRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+
+
+class ExecuteRpgSessionTurnRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, Any] | None = None
+    runtime_settings: dict[str, Any] | None = None
+
+
+class ExecuteRpgSessionTurnStreamRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, Any] | None = None
+    runtime_settings: dict[str, Any] | None = None
+    performance: dict[str, Any] | None = None
+
+
+class ProcessRpgSessionNarrationRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+
+
+class GetRpgSessionNarrationStatusRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+    turn_id: _TypedRequestAny = None
+
+
+class PollRpgSessionRequestBody(_TypedRequestModel):
+    after_seq: int | None = 0
+    limit: int | None = 8
+    session_id: _TypedRequestAny = None
+
+
+class ResumeRpgSessionRequestBody(_TypedRequestModel):
+    elapsed_seconds: int | None = 0
+    session_id: _TypedRequestAny = None
+
+
+class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
+    conversation_id: _TypedRequestAny = None
+    option_id: _TypedRequestAny = None
+    session_id: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_session_route_hook_installed"
 _GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"

@@ -306,7 +306,7 @@ class PostgresJobStoreAdapter:
                 worker_id=owner,
                 lease_token=token,
                 error=error,
-                retry_delay_seconds=int(payload.get("retry_delay_seconds") or 0),
+                retry_delay_seconds=int(getattr(request, "_retry_delay_seconds", 0) or 0),
             )
             work.commit()
         return self._record(record)

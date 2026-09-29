@@ -177,7 +177,11 @@ def test_registered_backoff_is_applied_to_retryable_feature_failure():
     result = execute_durable_feature_job(Store(), job, registry)
 
     assert result.status == "retrying"
-    assert failures[0][1].retry_delay_seconds == 8
+    assert failures[0][1]._retry_delay_seconds == 8
+
+
+def test_fail_job_retry_delay_is_not_part_of_public_request_schema():
+    assert "retry_delay_seconds" not in FailJobRequest.model_json_schema()["properties"]
 
 
 def test_unknown_durable_type_fails_nonretryably_with_lease_credentials():

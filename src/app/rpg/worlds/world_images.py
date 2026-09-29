@@ -4,8 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable, Mapping, Sequence
 
-from app.jobs import CreateJobRequest, ResourceClass, default_job_store
-from app.jobs.models import JobStage
+from app.jobs import default_job_store
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
@@ -801,31 +800,6 @@ def _job_asset_id(job: Any) -> str | None:
     return None
 
 
-def _create_world_image_job(owner_id: str, payload: dict[str, Any]) -> Any:
-    """Submit an RPG image request through the neutral jobs contract."""
-    return default_job_store().create_job(
-        CreateJobRequest(
-            owner_id=owner_id,
-            module="image-generation",
-            type="image.generate",
-            resource_class=ResourceClass.GPU_IMAGE,
-            stages=[
-                JobStage(
-                    id="generate-image",
-                    label="Generate image",
-                    resource_class=ResourceClass.GPU_IMAGE,
-                ),
-                JobStage(
-                    id="store-asset",
-                    label="Store image asset",
-                    resource_class=ResourceClass.CPU,
-                ),
-            ],
-            input_payload=payload,
-        )
-    )
-
-
 def _sync_jobs(work: Any, context: Any, world_id: str) -> None:
     store = default_job_store()
     rows = work.connection.execute(
@@ -971,6 +945,8 @@ def generate_world_images(
     no_cache: bool = False,
     database: Any | None = None,
 ) -> dict[str, Any]:
+    from .world_image_jobs import create_world_image_job
+
     materialized = read_world_image_targets(world_id, database=database)
     selected = _selected_targets(materialized["targets"], target_ids)
     context = current_tenant()
@@ -990,7 +966,7 @@ def generate_world_images(
             else:
                 target_width = 1024 if target["role"] in {"banner", "map"} else width
                 target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
-            job = _create_world_image_job(
+            job = create_world_image_job(
                 # Job ownership is a user foreign key.  The workspace ID scopes
                 # the record separately in the PostgreSQL job store, but is not
                 # itself a valid job owner.
@@ -1011,6 +987,7 @@ def generate_world_images(
                         "source_content_hash": target["source_content_hash"],
                     },
                 },
+                job_store=default_job_store(),
             )
             work.connection.execute(
                 "INSERT INTO omnix_rpg_world_image_attempts (workspace_id, "

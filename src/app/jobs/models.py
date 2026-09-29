@@ -149,7 +149,7 @@ class FailJobRequest(BaseModel):
     code: str = "job_failed"
     message: str
     retryable: bool = False
-    retry_delay_seconds: int = Field(default=0, ge=0)
+    _retry_delay_seconds: int = PrivateAttr(default=0)
     details: dict[str, Any] = Field(default_factory=dict)
 
 

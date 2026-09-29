@@ -2605,7 +2605,7 @@
       }
     },
     "collection": {
-      "collected_tests": 15748,
+      "collected_tests": 15749,
       "collection_failed_nodes": [],
       "collection_failure_kinds": [],
       "collection_finished": true,
@@ -3330,7 +3330,7 @@
       "reason": "no relay consumer registration or outbox claimant in production source"
     }
   },
-  "measured_at": "2026-09-29T10:08:36.662138+00:00",
+  "measured_at": "2026-09-29T11:12:07.042657+00:00",
   "metrics": {
     "boot_imported_modules": 2577,
     "collection_errors": 0,
@@ -3339,5 +3339,5 @@
     "rls_coverage_pct": 0.0
   },
   "schema_version": 1,
-  "source_digest": "6e72ff3a12aa3ee0df60b6065546d4f2040bc75382dd1bad72502a99898954b9"
+  "source_digest": "87f64f5d36dd37176ea531a9a6d75c08fb6f71e7abcae5051f521c2a99f7d2c4"
 }

@@ -16,7 +16,6 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict
 
 from app.rpg.ai.semantic_state_change_capture import (
     capture_semantic_state_change_proposals_for_session,
@@ -49,6 +48,16 @@ from app.rpg.api.rpg_session_payloads import (
     _safe_dict,
     _safe_list,
     _safe_str,
+)
+from app.rpg.api.feature_routes.rpg_session_routes import (
+    ExecuteRpgSessionTurnRequestBody,
+    ExecuteRpgSessionTurnStreamRequestBody,
+    GetRpgSessionNarrationStatusRequestBody,
+    GetRpgSessionRequestBody,
+    PollRpgSessionRequestBody,
+    ProcessRpgSessionNarrationRequestBody,
+    ResumeRpgSessionRequestBody,
+    RpgSessionConversationInterveneRequestBody,
 )
 from app.rpg.session.ambient_builder import (
     get_pending_ambient_updates,
@@ -93,55 +102,6 @@ _STREAM_AUTHORITATIVE_PERFORMANCE = {
     "enable_semantic_action_advisory": False,
     "enable_live_narration_llm": False,
 }
-
-
-class _TypedRequestModel(BaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-
-class GetRpgSessionRequestBody(_TypedRequestModel):
-    session_id: Any = None
-
-
-class ExecuteRpgSessionTurnRequestBody(_TypedRequestModel):
-    session_id: str | None = None
-    player_input: str | None = None
-    action: dict[str, Any] | None = None
-    runtime_settings: dict[str, Any] | None = None
-
-
-class ExecuteRpgSessionTurnStreamRequestBody(_TypedRequestModel):
-    session_id: str | None = None
-    player_input: str | None = None
-    action: dict[str, Any] | None = None
-    runtime_settings: dict[str, Any] | None = None
-    performance: dict[str, Any] | None = None
-
-
-class ProcessRpgSessionNarrationRequestBody(_TypedRequestModel):
-    session_id: Any = None
-
-
-class GetRpgSessionNarrationStatusRequestBody(_TypedRequestModel):
-    session_id: Any = None
-    turn_id: Any = None
-
-
-class PollRpgSessionRequestBody(_TypedRequestModel):
-    after_seq: int | None = 0
-    limit: int | None = 8
-    session_id: Any = None
-
-
-class ResumeRpgSessionRequestBody(_TypedRequestModel):
-    elapsed_seconds: int | None = 0
-    session_id: Any = None
-
-
-class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
-    conversation_id: Any = None
-    option_id: Any = None
-    session_id: Any = None
 
 
 def _sse(data: dict) -> str:

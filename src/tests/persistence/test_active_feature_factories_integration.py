@@ -9,7 +9,9 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
+from app.security.tenant_context import install_process_tenant
 
 
 pytestmark = pytest.mark.skipif(
@@ -61,6 +63,19 @@ def _reset(database: PostgresDatabase) -> None:
              WHERE singleton = TRUE
             """
         )
+
+
+def _restore_runtime_authority(database: PostgresDatabase) -> None:
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
+        )
+    install_process_tenant(ensure_local_identity(database))
 
 
 _SCRIPT = r'''
@@ -348,25 +363,28 @@ def test_active_feature_factories_use_postgresql(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
+        environment = dict(os.environ)
+        environment.update(
+            {
+                "PYTHONPATH": "src",
+                "OMNIX_DATABASE_URL": os.environ["OMNIX_TEST_DATABASE_URL"],
+                "OMNIX_PERSISTENCE_MODE": "postgresql",
+                "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
+            }
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", _SCRIPT],
+            cwd=Path(__file__).resolve().parents[3],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+        assert "active-postgresql-feature-factories-ok" in result.stdout
     finally:
-        database.close()
-    environment = dict(os.environ)
-    environment.update(
-        {
-            "PYTHONPATH": "src",
-            "OMNIX_DATABASE_URL": os.environ["OMNIX_TEST_DATABASE_URL"],
-            "OMNIX_PERSISTENCE_MODE": "postgresql",
-            "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
-        }
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", _SCRIPT],
-        cwd=Path(__file__).resolve().parents[3],
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
-    assert "active-postgresql-feature-factories-ok" in result.stdout
+        try:
+            _restore_runtime_authority(database)
+        finally:
+            database.close()
