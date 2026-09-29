@@ -27,6 +27,26 @@ def _setup_payload(simulation_state: dict) -> dict:
     return {"setup_payload": {"metadata": {"simulation_state": simulation_state}}}
 
 
+def test_gateway_rpg_compatibility_routes_publish_typed_contracts() -> None:
+    client = _client()
+    schema = client.app.openapi()
+    operations = [
+        operation
+        for path_item in schema["paths"].values()
+        for method, operation in path_item.items()
+        if method in {"get", "post", "put", "patch", "delete"}
+        and any(tag.startswith("rpg-") and tag.endswith("-compat") for tag in operation.get("tags", []))
+    ]
+
+    assert len(operations) == 21
+    for operation in operations:
+        if "requestBody" in operation:
+            request_schema = operation["requestBody"]["content"]["application/json"]["schema"]
+            assert request_schema["$ref"].endswith("/RpgCompatibilityRequest")
+        response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        assert response_schema["$ref"].endswith("/RpgCompatibilityResponse")
+
+
 def test_gateway_rpg_player_state_returns_initialized_state() -> None:
     response = _client().post("/api/rpg/player/state", json=_setup_payload({"tick": 42}))
 

@@ -18409,6 +18409,7 @@
         "title": "JobStatus",
         "type": "string"
       },
+      "JsonValue": {},
       "LegacyGenerateTitleRequest": {
         "properties": {
           "ai_response": {
@@ -32523,9 +32524,19 @@
         "type": "object"
       },
       "RpgCompatibilityRequest": {
-        "additionalProperties": true,
-        "description": "Preserve legacy object payloads while publishing an explicit schema.",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "description": "Preserve legacy JSON objects with a recursively typed request contract.",
         "title": "RpgCompatibilityRequest",
+        "type": "object"
+      },
+      "RpgCompatibilityResponse": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/JsonValue"
+        },
+        "description": "Validate JSON object responses from legacy compatibility handlers.",
+        "title": "RpgCompatibilityResponse",
         "type": "object"
       },
       "RpgConfigureCampaignSpatialPolicyRequestBody": {
@@ -59025,9 +59036,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Compare Entity Api Rpg Adventure Compare Entity Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59068,9 +59077,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Compare World Api Rpg Adventure Compare World Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59111,9 +59118,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Inspect World Api Rpg Adventure Inspect World Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59154,9 +59159,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Inspect World Snapshot Api Rpg Adventure Inspect World Snapshot Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59197,9 +59200,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Preview Api Rpg Adventure Preview Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59240,9 +59241,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Simulate Step Api Rpg Adventure Simulate Step Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59283,9 +59282,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Simulation State Api Rpg Adventure Simulation State Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59316,9 +59313,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Templates Api Rpg Adventure Templates Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59349,9 +59344,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Adventure Validate Api Rpg Adventure Validate Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59916,9 +59909,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Inspect Npc Reasoning Api Rpg Inspect Npc Reasoning Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -59959,9 +59950,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Inspect Tick Diff Api Rpg Inspect Tick Diff Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60002,9 +59991,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Inspect Timeline Api Rpg Inspect Timeline Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60045,9 +60032,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Inspect Timeline Tick Api Rpg Inspect Timeline Tick Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60088,9 +60073,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Inspect World Events Api Rpg Inspect World Events Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60864,9 +60847,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Player Codex Api Rpg Player Codex Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60907,9 +60888,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Player Encounter Api Rpg Player Encounter Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60950,9 +60929,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Player Journal Api Rpg Player Journal Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -60993,9 +60970,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Player Objectives Api Rpg Player Objectives Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -61036,9 +61011,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Player State Api Rpg Player State Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -61391,9 +61364,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Session Get Api Rpg Session Get Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },
@@ -61424,9 +61395,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Rpg Session List Api Rpg Session List Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RpgCompatibilityResponse"
                 }
               }
             },

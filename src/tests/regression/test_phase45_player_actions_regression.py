@@ -194,11 +194,3 @@ class TestPlayerActionRegression:
             apply_player_action_endpoint,
         )
         assert callable(apply_player_action_endpoint)
-
-    def test_creator_routes_include_simulation_action(self):
-        """The creator routes should expose the simulation/action endpoint."""
-        from app.rpg import creator_routes
-        # Check that the route function exists
-        assert hasattr(creator_routes, "simulation_action"), (
-            "simulation_action route should exist on creator_routes module"
-        )

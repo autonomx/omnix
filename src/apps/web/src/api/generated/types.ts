@@ -16612,6 +16612,7 @@ export interface components {
          * @enum {string}
          */
         JobStatus: "queued" | "leased" | "running" | "waiting" | "retrying" | "completed" | "failed" | "cancel_requested" | "paused" | "canceled" | "stale";
+        JsonValue: unknown;
         /** LegacyGenerateTitleRequest */
         LegacyGenerateTitleRequest: {
             /**
@@ -22126,10 +22127,17 @@ export interface components {
         };
         /**
          * RpgCompatibilityRequest
-         * @description Preserve legacy object payloads while publishing an explicit schema.
+         * @description Preserve legacy JSON objects with a recursively typed request contract.
          */
         RpgCompatibilityRequest: {
-            [key: string]: unknown;
+            [key: string]: components["schemas"]["JsonValue"];
+        };
+        /**
+         * RpgCompatibilityResponse
+         * @description Validate JSON object responses from legacy compatibility handlers.
+         */
+        RpgCompatibilityResponse: {
+            [key: string]: components["schemas"]["JsonValue"];
         };
         /** RpgConfigureCampaignSpatialPolicyRequestBody */
         RpgConfigureCampaignSpatialPolicyRequestBody: {
@@ -36843,9 +36851,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -36878,9 +36884,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -36913,9 +36917,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -36948,9 +36950,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -36983,9 +36983,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37018,9 +37016,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37053,9 +37049,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37084,9 +37078,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
         };
@@ -37110,9 +37102,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37529,9 +37519,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37564,9 +37552,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37599,9 +37585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37634,9 +37618,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37669,9 +37651,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38203,9 +38183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38238,9 +38216,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38273,9 +38249,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38308,9 +38282,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38343,9 +38315,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38609,9 +38579,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -38640,9 +38608,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["RpgCompatibilityResponse"];
                 };
             };
         };

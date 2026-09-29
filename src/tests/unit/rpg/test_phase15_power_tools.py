@@ -12,8 +12,6 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 # Ensure the src directory is on the import path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -391,117 +389,6 @@ class TestRegenerateMultipleItemsService(unittest.TestCase):
 # ===========================================================================
 # PATCH 3 — Routes
 # ===========================================================================
-
-
-def _create_test_app():
-    """Create a FastAPI test app with the creator router."""
-    from app.rpg.creator_routes import creator_bp
-
-    app = FastAPI()
-    app.include_router(creator_bp)
-    return app
-
-
-class TestRegenerateRouteExtended(unittest.TestCase):
-    """Test that the regenerate route accepts tone/constraints."""
-
-    def setUp(self):
-        self.app = _create_test_app()
-        self.client = TestClient(self.app)
-
-    def test_regenerate_accepts_tone(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate",
-            json={
-                "target": "npc_seeds",
-                "setup": _rich_setup(),
-                "mode": "preview",
-                "tone": "grim",
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data.get("success"))
-
-    def test_regenerate_accepts_constraints(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate",
-            json={
-                "target": "factions",
-                "setup": _rich_setup(),
-                "mode": "preview",
-                "constraints": {"require_factions": True},
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data.get("success"))
-
-
-class TestRegenerateMultipleRoute(unittest.TestCase):
-    """Test the /api/rpg/adventure/regenerate-multiple endpoint."""
-
-    def setUp(self):
-        self.app = _create_test_app()
-        self.client = TestClient(self.app)
-
-    def test_missing_json(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate-multiple",
-            content="not json",
-            headers={"Content-Type": "text/plain"},
-        )
-        self.assertEqual(resp.status_code, 400)
-
-    def test_missing_target(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate-multiple",
-            json={"setup": _rich_setup(), "item_ids": ["npc_fixer"]},
-        )
-        self.assertEqual(resp.status_code, 400)
-
-    def test_empty_item_ids(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate-multiple",
-            json={"target": "npc_seeds", "setup": _rich_setup(), "item_ids": []},
-        )
-        self.assertEqual(resp.status_code, 400)
-        data = resp.json()
-        self.assertFalse(data["success"])
-
-    def test_successful_bulk_regen(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate-multiple",
-            json={
-                "target": "npc_seeds",
-                "setup": _rich_setup(),
-                "item_ids": ["npc_fixer", "npc_guard"],
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertTrue(data["success"])
-        self.assertEqual(data["target"], "npc_seeds")
-        self.assertIn("count", data)
-        self.assertIn("items", data)
-
-    def test_response_shape(self):
-        resp = self.client.post(
-            "/api/rpg/adventure/regenerate-multiple",
-            json={
-                "target": "factions",
-                "setup": _rich_setup(),
-                "item_ids": ["fac_guild"],
-            },
-        )
-        data = resp.json()
-        self.assertTrue(data["success"])
-        self.assertIn("target", data)
-        self.assertIn("count", data)
-        self.assertIn("items", data)
-
-
-# ===========================================================================
 # Backward compatibility
 # ===========================================================================
 
@@ -538,20 +425,6 @@ class TestPhase15BackwardCompatibility(unittest.TestCase):
         self.assertTrue(result.get("success"))
         self.assertIn("diff", result)
         self.assertIn("apply_token", result)
-
-    def test_existing_route_still_works(self):
-        app = _create_test_app()
-        client = TestClient(app)
-        resp = client.post(
-            "/api/rpg/adventure/regenerate",
-            json={
-                "target": "npc_seeds",
-                "setup": _rich_setup(),
-                "mode": "preview",
-            },
-        )
-        self.assertEqual(resp.status_code, 200)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -6512,15 +6512,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:adventure_templates",
-      "lines": [
-        202
-      ],
-      "path": "src/app/rpg/api/rpg_adventure_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:delete_rpg_game",
       "lines": [
         234
@@ -6611,15 +6602,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:player_inventory_registry",
-      "lines": [
-        186
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:list_rpg_sessions",
       "lines": [
         355
@@ -6697,15 +6679,6 @@
         1088
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:list_adventure_templates",
-      "lines": [
-        41
-      ],
-      "path": "src/app/rpg/creator_routes.py",
       "rule": "AL005"
     },
     {
