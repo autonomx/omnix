@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 GATES = {
     'unit': (
+        'src/tests/characterization',
         'src/tests/app/test_audiobook_background_ownership.py',
         'src/tests/unit/characters/test_management.py',
         'src/tests/app/test_character_management_api.py',
