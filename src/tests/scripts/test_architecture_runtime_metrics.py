@@ -42,6 +42,35 @@ def test_measurement_profile_records_live_voice_collection_dependency():
     assert profile["dependencies"]["aiohttp"]
 
 
+def test_boot_measurement_requires_production_profile_and_matching_source():
+    report = {
+        "schema_version": 1,
+        "environment": "disposable",
+        "source_digest": "source-digest",
+        "metrics": {"boot_imported_modules": 2},
+        "evidence": {
+            "boot": {
+                "boot_module_names": ["app", "fastapi"],
+                "measurement_profile": {"dependencies": {"aiohttp": None}},
+            }
+        },
+    }
+
+    assert runtime.validate_boot_measurement(report, "source-digest") == (
+        {"boot_imported_modules": 2},
+        {"boot": report["evidence"]["boot"]},
+    )
+
+    report["source_digest"] = "stale-source"
+    with pytest.raises(ValueError, match="source changed"):
+        runtime.validate_boot_measurement(report, "source-digest")
+
+    report["source_digest"] = "source-digest"
+    report["evidence"]["boot"]["measurement_profile"]["dependencies"]["aiohttp"] = "3.13.4"
+    with pytest.raises(ValueError, match="without test-only aiohttp"):
+        runtime.validate_boot_measurement(report, "source-digest")
+
+
 def test_guard_enforces_real_filesystem_network_and_subprocess_audits(tmp_path):
     owned = tmp_path / "owned"
     owned.mkdir()
@@ -137,6 +166,7 @@ def test_collection_probe_applies_file_quarantine_to_explicit_paths(tmp_path):
     assert report["metrics"] == {"collection_errors": 0}
     assert report["evidence"]["collected_tests"] == 1
     assert report["evidence"]["collection_failed_nodes"] == []
+    assert report["evidence"]["measurement_profile"]["dependencies"]["aiohttp"]
 
 
 def test_initial_outbox_probe_requires_registry_measurement_once_consumers_exist():

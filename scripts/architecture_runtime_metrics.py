@@ -109,6 +109,28 @@ def measurement_profile() -> dict:
     return {"python": platform.python_version(), "platform": platform.system(), "dependencies": versions}
 
 
+def validate_boot_measurement(report: dict, expected_source_digest: str) -> tuple[dict, dict]:
+    """Validate a boot-only report before merging it with test-profile probes."""
+    if report.get("schema_version") != 1 or report.get("environment") != "disposable":
+        raise ValueError("boot measurement must use the disposable runtime report schema")
+    if report.get("source_digest") != expected_source_digest:
+        raise ValueError("boot measurement source changed before the remaining probes")
+    metrics = report.get("metrics")
+    evidence = report.get("evidence")
+    boot_count = metrics.get("boot_imported_modules") if isinstance(metrics, dict) else None
+    boot = evidence.get("boot") if isinstance(evidence, dict) else None
+    names = boot.get("boot_module_names") if isinstance(boot, dict) else None
+    profile = boot.get("measurement_profile") if isinstance(boot, dict) else None
+    dependencies = profile.get("dependencies") if isinstance(profile, dict) else None
+    if type(boot_count) is not int or boot_count < 0 or not isinstance(names, list) or len(names) != boot_count:
+        raise ValueError("boot measurement is missing its imported-module evidence")
+    if not isinstance(dependencies, dict) or dependencies.get("aiohttp") is not None:
+        raise ValueError("boot measurement must use the production profile without test-only aiohttp")
+    if report.get("errors"):
+        raise ValueError("boot measurement contains probe errors")
+    return {"boot_imported_modules": boot_count}, {"boot": boot}
+
+
 def install_probe_guard(root: Path, temporary: Path, database_url: str) -> None:
     """Refuse provider connections and writes outside the probe's temporary dir."""
     parsed = urlsplit(database_url)
@@ -305,6 +327,7 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
                 result["evidence"]["pytest_configuration"] = collector.configuration
                 result["evidence"]["collected_tests"] = collector.collected_tests
                 result["evidence"]["collection_finished"] = collector.finished
+                result["evidence"]["measurement_profile"] = measurement_profile()
             else:
                 raise ValueError("unknown architecture probe")
     except Exception as exc:
@@ -320,18 +343,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=ROOT / "resources/architecture/runtime-metrics.json")
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--boot-only", action="store_true", help="measure production imports before test-only dependencies are installed")
+    parser.add_argument("--reuse-boot-report", type=Path, help="merge a source-matched boot report into database and collection probes")
     parser.add_argument("--child", choices=["boot", "database", "collection"], help=argparse.SUPPRESS)
     parser.add_argument("--manifest", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.child:
         return child_probe(args.child, args.manifest, args.output)
+    if args.boot_only and args.reuse_boot_report:
+        parser.error("--boot-only and --reuse-boot-report cannot be combined")
     try:
         disposable_url(os.environ.get("OMNIX_TEST_DATABASE_URL", ""))
         root = args.root.resolve()
         sources = tracked_sources(root)
+        digest = source_digest(sources)
         config = load_layers(root / "resources/architecture/layers.toml")
         outbox, outbox_evidence = outbox_initial_coverage(sources, config)
         values, evidence = {"outbox_consumer_coverage_pct": outbox}, {"outbox": outbox_evidence}
+        if args.reuse_boot_report:
+            boot_report = json.loads(args.reuse_boot_report.read_text(encoding="utf-8"))
+            boot_metrics, boot_evidence = validate_boot_measurement(boot_report, digest)
+            values.update(boot_metrics)
+            evidence.update(boot_evidence)
         with tempfile.TemporaryDirectory(prefix="omnix-architecture-probe-") as temporary_name:
             temporary = Path(temporary_name)
             snapshot = temporary / "repository"
@@ -345,7 +378,10 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("no tracked tests are available for the collection probe")
             manifest = temporary / "manifest.json"
             manifest.write_text(json.dumps({"root": str(snapshot), "test_paths": test_paths}), encoding="utf-8")
-            for mode in ("boot", "database", "collection"):
+            modes = ("boot",) if args.boot_only else (
+                ("database", "collection") if args.reuse_boot_report else ("boot", "database", "collection")
+            )
+            for mode in modes:
                 output = temporary / f"{mode}.json"
                 process = subprocess.run([
                     sys.executable, "-I", str(probe_script), "--child", mode,
@@ -361,7 +397,15 @@ def main(argv: list[str] | None = None) -> int:
                 observed = json.loads(output.read_text(encoding="utf-8"))
                 values.update(observed["metrics"])
                 evidence[mode] = observed["evidence"]
-        report = {"schema_version": 1, "environment": "disposable", "source_digest": source_digest(sources),
+                if mode == "boot" and args.boot_only:
+                    validate_boot_measurement({
+                        "schema_version": 1,
+                        "environment": "disposable",
+                        "source_digest": digest,
+                        "metrics": observed["metrics"],
+                        "evidence": {"boot": observed["evidence"]},
+                    }, digest)
+        report = {"schema_version": 1, "environment": "disposable", "source_digest": digest,
                   "measured_at": datetime.now(timezone.utc).isoformat(), "metrics": values, "evidence": evidence}
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8")

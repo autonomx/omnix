@@ -43,7 +43,7 @@ def test_authoritative_turn_queues_narration_instead_of_generating_inline():
     }
 
     with patch('app.rpg.session.runtime_part19.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime_part19.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part39.save_runtime_session'), \
          patch('app.rpg.session.runtime_part19._apply_turn_authoritative') as mock_auth:
 
         mock_auth.return_value = {
@@ -506,7 +506,7 @@ def test_compatibility_wrapper_returns_immediate_result():
     }
 
     with patch('app.rpg.session.runtime_part19.load_runtime_session', return_value=mock_session), \
-         patch('app.rpg.session.runtime_part19.save_runtime_session'), \
+         patch('app.rpg.session.runtime_part39.save_runtime_session'), \
          patch('app.rpg.session.runtime_part19._apply_turn_authoritative') as mock_auth:
 
         mock_auth.return_value = {
