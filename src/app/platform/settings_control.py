@@ -8,8 +8,8 @@ from app.settings.access import (
     current_settings_service,
     load_secrets,
     load_settings,
-    save_secrets,
     save_settings,
+    save_secrets,
 )
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.providers.service import invalidate_provider_cache
@@ -28,6 +28,10 @@ from .settings_profile_repository import (
 
 PROFILE_PATCH_KEY = "settings_profile_patch"
 PROFILE_BASE_REVISION_KEY = "base_revision"
+
+# Runtime hooks consume this service-backed compatibility export until the
+# settings UI and provider routing are composed directly through SettingsService.
+__all__ = ["save_settings"]
 
 
 def get_settings_payload() -> SettingsPayload:

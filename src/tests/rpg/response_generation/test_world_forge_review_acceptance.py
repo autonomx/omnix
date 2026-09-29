@@ -251,7 +251,7 @@ class _Work:
 
 def _install(monkeypatch: pytest.MonkeyPatch, work: _Work) -> None:
     context = type("Context", (), {"workspace_id": "workspace:1"})()
-    monkeypatch.setattr(generation_acceptance, "ensure_local_identity", lambda database: context)
+    monkeypatch.setattr(generation_acceptance, "current_tenant", lambda: context)
     monkeypatch.setattr(generation_acceptance, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_acceptance,

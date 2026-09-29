@@ -6,7 +6,6 @@ from typing import Any, Iterator
 
 import pytest
 
-from app.providers import service as provider_service
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.gateway import live_chat_live_voice_profile as profile
 from app.providers import ChatMessage as ProviderMessage

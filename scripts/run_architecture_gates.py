@@ -28,6 +28,7 @@ GATES = {
         'src/tests/api/gateway/test_gateway_runtime_baseline.py',
         'src/tests/api/gateway/test_gateway_foundation.py',
         'src/tests/unit/test_import_isolation.py',
+        'src/tests/unit/test_unit_of_work_registry.py',
         'src/tests/persistence/test_sqlite_runtime_retirement.py',
         'src/tests/unit/test_shared_state_safety.py',
         'src/tests/unit/test_tts_http_url_normalization.py',

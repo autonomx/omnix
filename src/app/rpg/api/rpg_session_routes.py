@@ -83,49 +83,7 @@ from app.rpg.api.rpg_world_routes import (
     update_world_behavior as update_world_behavior,
 )
 
-from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
-from typing import Any as _TypedRequestAny
-
-class _TypedRequestModel(_TypedRequestBaseModel):
-    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
-
-class GetRpgSessionRequestBody(_TypedRequestModel):
-    session_id: _TypedRequestAny = None
-
-class ExecuteRpgSessionTurnRequestBody(_TypedRequestModel):
-    session_id: str | None = None
-    player_input: str | None = None
-    action: dict[str, _TypedRequestAny] | None = None
-    runtime_settings: dict[str, _TypedRequestAny] | None = None
-
-class ExecuteRpgSessionTurnStreamRequestBody(_TypedRequestModel):
-    session_id: str | None = None
-    player_input: str | None = None
-    action: dict[str, _TypedRequestAny] | None = None
-    runtime_settings: dict[str, _TypedRequestAny] | None = None
-    performance: dict[str, _TypedRequestAny] | None = None
-
-class ProcessRpgSessionNarrationRequestBody(_TypedRequestModel):
-    session_id: _TypedRequestAny = None
-
-class GetRpgSessionNarrationStatusRequestBody(_TypedRequestModel):
-    session_id: _TypedRequestAny = None
-    turn_id: _TypedRequestAny = None
-
-class PollRpgSessionRequestBody(_TypedRequestModel):
-    after_seq: int | None = 0
-    limit: int | None = 8
-    session_id: _TypedRequestAny = None
-
-class ResumeRpgSessionRequestBody(_TypedRequestModel):
-    elapsed_seconds: int | None = 0
-    session_id: _TypedRequestAny = None
-
-class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
-    conversation_id: _TypedRequestAny = None
-    option_id: _TypedRequestAny = None
-    session_id: _TypedRequestAny = None
-
+from app.rpg.api import rpg_session_request_models as _request_models
 
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
@@ -464,7 +422,7 @@ register_rpg_world_routes(rpg_session_bp)
 
 
 @rpg_session_bp.post("/api/rpg/session/get")
-def get_rpg_session(request: Request, request_body: GetRpgSessionRequestBody):
+def get_rpg_session(request: Request, request_body: _request_models.GetRpgSessionRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
@@ -488,7 +446,7 @@ def get_rpg_session(request: Request, request_body: GetRpgSessionRequestBody):
 
 
 @rpg_session_bp.post("/api/rpg/session/turn")
-def execute_rpg_session_turn(request: Request, request_body: ExecuteRpgSessionTurnRequestBody):
+def execute_rpg_session_turn(request: Request, request_body: _request_models.ExecuteRpgSessionTurnRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
@@ -523,7 +481,7 @@ def execute_rpg_session_turn(request: Request, request_body: ExecuteRpgSessionTu
 
 
 @rpg_session_bp.post("/api/rpg/session/turn/stream")
-def execute_rpg_session_turn_stream(request: Request, request_body: ExecuteRpgSessionTurnStreamRequestBody):
+def execute_rpg_session_turn_stream(request: Request, request_body: _request_models.ExecuteRpgSessionTurnStreamRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
@@ -856,7 +814,7 @@ def execute_rpg_session_turn_stream(request: Request, request_body: ExecuteRpgSe
 # ── Character Card API routes (Bundle BJ-BK-BL) ──────────────────────────────
 
 @rpg_session_bp.post("/api/rpg/session/process_narration")
-def process_rpg_session_narration(request: Request, request_body: ProcessRpgSessionNarrationRequestBody):
+def process_rpg_session_narration(request: Request, request_body: _request_models.ProcessRpgSessionNarrationRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
@@ -867,7 +825,7 @@ def process_rpg_session_narration(request: Request, request_body: ProcessRpgSess
 
 
 @rpg_session_bp.post("/api/rpg/session/narration_status")
-def get_rpg_session_narration_status(request: Request, request_body: GetRpgSessionNarrationStatusRequestBody):
+def get_rpg_session_narration_status(request: Request, request_body: _request_models.GetRpgSessionNarrationStatusRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     turn_id = _safe_str(data.get("turn_id")).strip()
@@ -1021,7 +979,7 @@ def get_rpg_session_narration_status(request: Request, request_body: GetRpgSessi
 
 
 @rpg_session_bp.post("/api/rpg/session/poll")
-def poll_rpg_session(request: Request, request_body: PollRpgSessionRequestBody):
+def poll_rpg_session(request: Request, request_body: _request_models.PollRpgSessionRequestBody):
     """Poll for pending ambient updates by sequence number."""
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
@@ -1162,7 +1120,7 @@ async def stream_rpg_session_narration_events(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/resume")
-def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBody):
+def resume_rpg_session(request: Request, request_body: _request_models.ResumeRpgSessionRequestBody):
     """Resume a session with bounded catch-up for elapsed time."""
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
@@ -1214,12 +1172,6 @@ def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBo
             status_code=409,
         )
 
-    if session:
-        sim = _safe_dict(session.get("simulation_state"))
-        rt = _safe_dict(session.get("runtime_state"))
-        print("POST-RESUME SIM TICK =", sim.get("tick"), sim.get("current_tick"))
-        print("POST-RESUME RUNTIME TICK =", rt.get("tick"))
-
     # Post-catchup capture: after resume advances the world, capture again so
     # recorded proposals reflect the newly advanced scene state.
     try:
@@ -1239,21 +1191,11 @@ def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBo
     if session:
         runtime_state = _safe_dict(session.get("runtime_state"))
         if not _safe_list(runtime_state.get("recorded_semantic_llm_proposals")):
-            rt = _safe_dict(session.get("runtime_state"))
-            print("ROUTE recorded_semantic_llm_proposals =", rt.get("recorded_semantic_llm_proposals"))
-            print("ROUTE recorded_semantic_llm_prompt present =", bool(rt.get("recorded_semantic_llm_prompt")))
-            print("ROUTE recorded_semantic_llm_raw_output present =", bool(rt.get("recorded_semantic_llm_raw_output")))
             session = capture_semantic_state_change_proposals_for_session(session)
             try:
                 save_runtime_session(session)
             except Exception:
                 pass
-
-    # Debug: check if recap is generated
-    if result.get("world_advance_recap"):
-        print("DEBUG RECAP:", result.get("world_advance_recap"))
-    else:
-        print("DEBUG RECAP: None")
 
     return {
         "ok": True,
@@ -1269,7 +1211,7 @@ def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBo
 
 
 @rpg_session_bp.post("/api/rpg/session/conversation/intervene")
-def rpg_session_conversation_intervene(request: Request, request_body: RpgSessionConversationInterveneRequestBody):
+def rpg_session_conversation_intervene(request: Request, request_body: _request_models.RpgSessionConversationInterveneRequestBody):
     data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id"))
     conversation_id = _safe_str(data.get("conversation_id"))

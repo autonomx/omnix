@@ -425,7 +425,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                     try:
                         payload = base64.b64decode(str(data.get("data", "")), validate=True)
                         accepted = segment.append(sample_start, payload)
-                    except Exception as exc:  # noqa: BLE001 - malformed frames become protocol errors
+                    except Exception:  # noqa: BLE001 - malformed frames become protocol errors
                         manager.release(segment_id)
                         state.segments.pop(segment_id, None)
                         await _safe_send(

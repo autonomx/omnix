@@ -140,19 +140,34 @@ def _claim_chat_process(url, workspace, user, session, control):
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.identity_service import PostgresIdentityRepository
+    from app.runtime.tenant_context import pop_tenant, push_tenant
+
     database = PostgresDatabase(DatabaseSettings(url=url))
-    store = PostgresJobStoreAdapter(database)
-    with database.connection() as connection:
-        store.context = PostgresIdentityRepository(connection).load_context(user_id=user, workspace_id=workspace)
-    owner = GatewayRuntimeOwner(database, workspace)
-    owner.register()
-    store.chat_execution_owner = owner
-    job = store.create_job(CreateJobRequest(module='chatbot', type='chat.generate',
-                           resource_class=ResourceClass.GPU_LLM, input_payload={'session_id': session},
-                           compat={'inline_execution': True}))
-    store.mark_running(job.id)
-    control.send({'job_id': job.id, 'owner_id': owner.node_id})
-    control.recv()
+    try:
+        with database.connection() as connection:
+            context = PostgresIdentityRepository(connection).load_context(
+                user_id=user, workspace_id=workspace
+            )
+        tenant_token = push_tenant(context)
+        try:
+            store = PostgresJobStoreAdapter(database)
+            owner = GatewayRuntimeOwner(database, workspace)
+            owner.register()
+            store.chat_execution_owner = owner
+            job = store.create_job(CreateJobRequest(
+                module='chatbot',
+                type='chat.generate',
+                resource_class=ResourceClass.GPU_LLM,
+                input_payload={'session_id': session},
+                compat={'inline_execution': True},
+            ))
+            store.mark_running(job.id)
+            control.send({'job_id': job.id, 'owner_id': owner.node_id})
+            control.recv()
+        finally:
+            pop_tenant(tenant_token)
+    finally:
+        database.close()
 
 
 @pytest.fixture

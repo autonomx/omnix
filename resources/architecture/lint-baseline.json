@@ -8332,21 +8332,6 @@
       "rule": "AL008"
     },
     {
-      "count": 7,
-      "fingerprint": "resume_rpg_session:print",
-      "lines": [
-        1220,
-        1221,
-        1243,
-        1244,
-        1245,
-        1254,
-        1256
-      ],
-      "path": "src/app/rpg/api/rpg_session_routes.py",
-      "rule": "AL008"
-    },
-    {
       "count": 1,
       "fingerprint": "ActionResolver.resolve:print",
       "lines": [

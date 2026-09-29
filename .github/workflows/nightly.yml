@@ -40,5 +40,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
       - run: python -m pip install -r requirements/dev.in
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
       - run: python -m pytest -n auto
       - run: python scripts/measure_gateway_soak.py --mock-compute --duration-seconds 600 --output artifacts/nightly-soak.json

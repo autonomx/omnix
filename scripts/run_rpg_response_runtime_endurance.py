@@ -254,6 +254,9 @@ def _run(turns: int, *, session_id: str) -> tuple[str, dict[str, Any]]:
 
 
 def main() -> int:
+    from app.security.tenant_context import install_process_tenant, local_tenant_context
+
+    install_process_tenant(local_tenant_context())
     parser = argparse.ArgumentParser(
         description="Run canonical public apply_turn endurance and replay checks."
     )

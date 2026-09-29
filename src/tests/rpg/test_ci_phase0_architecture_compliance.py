@@ -31,7 +31,7 @@ REQUIRED_RPG_WORKFLOWS = [
 ]
 REQUIRED_CI_BRANCHES = "branches: [main, rpg]"
 REGISTERED_STRUCTURED_FEATURES = [
-    "src/app/rpg_world_forge_provider.py",
+    "src/app/rpg/worlds/providers/world_forge_generator.py",
     "src/app/rpg/narrative_provider.py",
     "src/app/assistant_memory/structured_provider.py",
     "src/app/rpg/llm_app_gateway.py",
@@ -48,7 +48,7 @@ LEGACY_COMPLETE_JSON_COMPATIBILITY = {
     "src/app/rpg/ai/semantic_action_intelligence.py",
 }
 CENTRAL_STRUCTURED_MARKERS = {
-    "src/app/rpg_world_forge_provider.py": "StructuredOutputGateway",
+    "src/app/rpg/worlds/providers/world_forge_generator.py": "StructuredOutputGateway",
     "src/app/rpg/narrative_provider.py": "StructuredOutputGateway",
     "src/app/assistant_memory/structured_provider.py": "StructuredOutputGateway",
     "src/app/rpg/llm_app_gateway.py": "StructuredOutputGateway",

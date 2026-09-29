@@ -16,7 +16,7 @@ from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.identity_service import PostgresIdentityRepository
 from app.persistence.unit_of_work import unit_of_work
 

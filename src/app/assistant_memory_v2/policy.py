@@ -10,7 +10,6 @@ from app.memory_policy import sensitivity_allows, strongest_sensitivity, weakest
 from .contracts import (
     DerivedPolicyEnvelope,
     Observation,
-    Sensitivity,
     TrustLevel,
     VisibilityScope,
 )
