@@ -144,7 +144,7 @@ def test_legacy_genesis_adapter_separates_world_scenario_and_campaign() -> None:
 def test_world_routes_register_separate_resource_endpoints() -> None:
     app = FastAPI()
     include_router_registrar(app, register_rpg_world_routes)
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
 
     assert "/api/rpg/worlds" in paths
     assert "/api/rpg/worlds/{world_id}/archive" in paths

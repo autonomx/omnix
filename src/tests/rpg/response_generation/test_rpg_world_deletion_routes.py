@@ -9,14 +9,19 @@ from app.rpg.api.feature_routes import rpg_world_deletion_routes
 
 def test_world_deletion_routes_register_safe_endpoints() -> None:
     app = FastAPI()
-    include_router_registrar(app, rpg_world_deletion_routes.register_rpg_world_deletion_routes)
-    routes = {(route.path, method) for route in app.routes for method in route.methods}
+    router = include_router_registrar(
+        app, rpg_world_deletion_routes.register_rpg_world_deletion_routes
+    )
+    routes = {(route.path, method) for route in router.routes for method in route.methods}
 
     assert (
         "/api/rpg/worlds/{world_id}/deletion-eligibility",
         "GET",
     ) in routes
     assert ("/api/rpg/worlds/{world_id}", "DELETE") in routes
+    paths = app.openapi()["paths"]
+    assert "get" in paths["/api/rpg/worlds/{world_id}/deletion-eligibility"]
+    assert "delete" in paths["/api/rpg/worlds/{world_id}"]
 
 
 def test_world_deletion_route_requires_typed_confirmation(monkeypatch) -> None:

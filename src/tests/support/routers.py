@@ -12,9 +12,10 @@ def include_router_registrar(
     registrar: Callable[..., None],
     *args: Any,
     **kwargs: Any,
-) -> None:
+) -> APIRouter:
     router = APIRouter()
     if "state" in signature(registrar).parameters:
         kwargs.setdefault("state", app.state)
     registrar(router, *args, **kwargs)
     app.include_router(router)
+    return router

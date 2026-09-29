@@ -121,7 +121,7 @@ def test_routine_emits_deterministic_cross_map_goal_and_routes_are_hidden() -> N
 
     app = FastAPI()
     include_router_registrar(app, register_rpg_npc_spatial_routes)
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
     expected = {
         "/api/rpg/campaigns/{campaign_id}/spatial-goals",
         "/api/rpg/campaigns/{campaign_id}/spatial-routines",
@@ -130,4 +130,3 @@ def test_routine_emits_deterministic_cross_map_goal_and_routes_are_hidden() -> N
         "/api/rpg/campaigns/{campaign_id}/spatial-state",
     }
     assert expected <= paths
-    assert expected <= app.openapi()["paths"].keys()

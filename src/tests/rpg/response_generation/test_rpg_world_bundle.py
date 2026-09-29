@@ -270,11 +270,12 @@ def test_world_bundle_rejects_unsafe_asset_path_and_bad_checksum() -> None:
 
 def test_world_bundle_routes_are_in_openapi_and_registered_once() -> None:
     app = FastAPI()
-    include_router_registrar(app, register_rpg_world_bundle_routes)
-    include_router_registrar(app, register_rpg_world_bundle_routes)
+    registered_router = include_router_registrar(app, register_rpg_world_bundle_routes)
+    duplicate_router = include_router_registrar(app, register_rpg_world_bundle_routes)
 
-    paths = [getattr(route, "path", "") for route in app.routes]
-    assert paths.count("/api/rpg/worlds/{world_id}/export") == 1
-    assert paths.count("/api/rpg/worlds/import") == 1
+    registered_paths = [route.path for route in registered_router.routes]
+    assert registered_paths.count("/api/rpg/worlds/{world_id}/export") == 1
+    assert registered_paths.count("/api/rpg/worlds/import") == 1
+    assert duplicate_router.routes == []
     assert "/api/rpg/worlds/{world_id}/export" in app.openapi()["paths"]
     assert "/api/rpg/worlds/import" in app.openapi()["paths"]

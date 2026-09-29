@@ -158,5 +158,4 @@ def test_geometry_patch_rejects_impassable_occupied_cell_and_is_documented() -> 
     app = FastAPI()
     include_router_registrar(app, register_rpg_geometry_patch_routes)
     path = "/api/rpg/map-instances/{map_instance_id}/geometry-patches"
-    assert path in {route.path for route in app.routes}
     assert path in app.openapi()["paths"]

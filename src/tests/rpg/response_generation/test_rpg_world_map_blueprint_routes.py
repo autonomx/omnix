@@ -17,7 +17,7 @@ from app.rpg.worlds.contracts import MapInitializationOperation
 def test_world_routes_register_map_blueprint_authoring_endpoints() -> None:
     app = FastAPI()
     include_router_registrar(app, register_rpg_world_routes)
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
 
     assert "/api/rpg/worlds/{world_id}/map-blueprints" in paths
     assert "/api/rpg/worlds/{world_id}/map-blueprints/materialize" in paths

@@ -234,7 +234,4 @@ def test_tactical_routes_are_documented() -> None:
     }
     app = FastAPI()
     include_router_registrar(app, register_rpg_tactical_spatial_routes)
-    assert paths <= {route.path for route in app.routes}
-    assert paths <= app.openapi()["paths"].keys()
-
     assert paths <= app.openapi()["paths"].keys()

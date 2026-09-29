@@ -147,6 +147,4 @@ def test_observer_routes_are_in_openapi() -> None:
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/observe",
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/projection",
     }
-    paths = {route.path for route in app.routes}
-    assert expected <= paths
     assert expected <= app.openapi()["paths"].keys()

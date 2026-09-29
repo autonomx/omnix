@@ -155,5 +155,4 @@ def test_grid_performance_route_is_documented() -> None:
     path = "/api/rpg/map-instances/{map_instance_id}/performance-profile"
     app = FastAPI()
     include_router_registrar(app, register_rpg_grid_performance_routes)
-    assert path in {route.path for route in app.routes}
     assert path in app.openapi()["paths"]
