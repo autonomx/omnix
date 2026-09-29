@@ -120,8 +120,8 @@ def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
 
 
 def test_server_diagnostics_enforce_content_free_boundary() -> None:
-    tts = _source("src/app/gateway/tts_stream_diagnostics.py")
-    browser_route = _source("src/app/gateway/live_voice_diagnostics_routes.py")
+    tts = _source("src/app/observability/tts_stream_diagnostics.py")
+    browser_route = _source("src/app/voice/live_voice_diagnostics_routes.py")
     assert "sanitize_content_free_details(details)" in tts
     assert "sanitize_content_free_details(item.details)" in browser_route
     assert "**item.details" not in browser_route
@@ -162,9 +162,9 @@ def test_durable_payload_uses_aggregates_not_event_or_content_uploads() -> None:
 
 
 def test_release_gate_aggregates_durable_system_and_character_evidence() -> None:
-    source = _source("src/app/gateway/live_chat_release_gate.py")
-    aggregation = _source("src/app/gateway/live_chat_release_aggregation.py")
-    routes = _source("src/app/gateway/live_chat_evaluation_routes.py")
+    source = _source("src/app/chat/live_chat_release_gate.py")
+    aggregation = _source("src/app/chat/live_chat_release_aggregation.py")
+    routes = _source("src/app/chat/live_chat_evaluation_routes.py")
     assert "evaluate_live_chat_release_gate_bundles" in source
     assert "metadata_records" in source
     assert "character_id" in source
