@@ -4,7 +4,7 @@ from app.rpg.interactive_cli_response_quality import (
     RESPONSE_QUALITY_SOURCE as APP_RESPONSE_QUALITY_SOURCE,
     apply_interactive_response_quality_cleanup as app_cleanup,
 )
-from rpg.interactive_cli_response_quality import (
+from tests.rpg.interactive_cli_response_quality import (
     RESPONSE_QUALITY_SOURCE as COMPAT_RESPONSE_QUALITY_SOURCE,
     apply_interactive_response_quality_cleanup as compat_cleanup,
 )

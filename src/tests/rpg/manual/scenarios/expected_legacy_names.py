@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Expected legacy scenario names from manual_llm_transcript_old.py
+# Expected names retained for compatibility with archived transcript artifacts.
 # This file contains exactly 136 scenario names that should be present
 # in the modular registry after migration.
 

@@ -8,5 +8,9 @@ from app.rpg.session.autoplay_runtime_guards import (  # noqa: E402
     install_test_result_artifact_write_parent_guard as _bundle_d_install_write_parent_guard,
 )
 
-_BUNDLE_D_WRITE_PARENT_GUARD_INSTALLED = _bundle_d_install_write_parent_guard()
-_BUNDLE_D_HTML_PROMPT_GUARD_INSTALLED = _bundle_d_install_html_prompt_guard(globals())
+if _AUTOPLAY_INSTALL_PATH_HOOKS:
+    _BUNDLE_D_WRITE_PARENT_GUARD_INSTALLED = _bundle_d_install_write_parent_guard()
+    _BUNDLE_D_HTML_PROMPT_GUARD_INSTALLED = _bundle_d_install_html_prompt_guard(globals())
+else:
+    _BUNDLE_D_WRITE_PARENT_GUARD_INSTALLED = False
+    _BUNDLE_D_HTML_PROMPT_GUARD_INSTALLED = False

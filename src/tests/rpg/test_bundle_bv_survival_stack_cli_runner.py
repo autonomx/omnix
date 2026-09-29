@@ -5,8 +5,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from rpg import run_survival_stack
-from rpg.survival_stack_manifest import SURVIVAL_STACK_TEST_FILES
+from tests.rpg import run_survival_stack
+from tests.rpg.survival_stack_manifest import SURVIVAL_STACK_TEST_FILES
 
 ROOT = Path(__file__).resolve().parents[3]
 RUNNER = ROOT / "src" / "tests" / "rpg" / "run_survival_stack.py"

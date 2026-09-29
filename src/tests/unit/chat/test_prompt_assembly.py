@@ -27,7 +27,7 @@ def session_with_history() -> ChatSession:
 
 
 def test_memory_disabled_prompt_matches_legacy_payload(monkeypatch):
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     session = session_with_history()
     current = ChatMessage(id="msg:current", role="user", content="Current question", created_at=NOW)
     context = [
@@ -97,8 +97,8 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
             return SimpleNamespace(content="Regular answer.", model=model, usage={})
 
     provider = RecordingProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     context = [{"source_id": "desktop", "title": "Desktop", "content": "A window is open."}]
 
     regular = ChatSessionStore(tmp_path / "regular.json")

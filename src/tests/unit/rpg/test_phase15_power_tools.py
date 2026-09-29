@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 # Ensure the src directory is on the import path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -392,14 +394,11 @@ class TestRegenerateMultipleItemsService(unittest.TestCase):
 
 
 def _create_test_app():
-    """Create a Flask test app with the creator blueprint."""
-    from flask import Flask
-
+    """Create a FastAPI test app with the creator router."""
     from app.rpg.creator_routes import creator_bp
 
-    app = Flask(__name__)
-    app.register_blueprint(creator_bp)
-    app.config["TESTING"] = True
+    app = FastAPI()
+    app.include_router(creator_bp)
     return app
 
 
@@ -408,7 +407,7 @@ class TestRegenerateRouteExtended(unittest.TestCase):
 
     def setUp(self):
         self.app = _create_test_app()
-        self.client = self.app.test_client()
+        self.client = TestClient(self.app)
 
     def test_regenerate_accepts_tone(self):
         resp = self.client.post(
@@ -421,7 +420,7 @@ class TestRegenerateRouteExtended(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
+        data = resp.json()
         self.assertTrue(data.get("success"))
 
     def test_regenerate_accepts_constraints(self):
@@ -435,7 +434,7 @@ class TestRegenerateRouteExtended(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
+        data = resp.json()
         self.assertTrue(data.get("success"))
 
 
@@ -444,13 +443,13 @@ class TestRegenerateMultipleRoute(unittest.TestCase):
 
     def setUp(self):
         self.app = _create_test_app()
-        self.client = self.app.test_client()
+        self.client = TestClient(self.app)
 
     def test_missing_json(self):
         resp = self.client.post(
             "/api/rpg/adventure/regenerate-multiple",
-            content_type="text/plain",
-            data="not json",
+            content="not json",
+            headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status_code, 400)
 
@@ -467,7 +466,7 @@ class TestRegenerateMultipleRoute(unittest.TestCase):
             json={"target": "npc_seeds", "setup": _rich_setup(), "item_ids": []},
         )
         self.assertEqual(resp.status_code, 400)
-        data = resp.get_json()
+        data = resp.json()
         self.assertFalse(data["success"])
 
     def test_successful_bulk_regen(self):
@@ -480,7 +479,7 @@ class TestRegenerateMultipleRoute(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
+        data = resp.json()
         self.assertTrue(data["success"])
         self.assertEqual(data["target"], "npc_seeds")
         self.assertIn("count", data)
@@ -495,7 +494,7 @@ class TestRegenerateMultipleRoute(unittest.TestCase):
                 "item_ids": ["fac_guild"],
             },
         )
-        data = resp.get_json()
+        data = resp.json()
         self.assertTrue(data["success"])
         self.assertIn("target", data)
         self.assertIn("count", data)
@@ -542,7 +541,7 @@ class TestPhase15BackwardCompatibility(unittest.TestCase):
 
     def test_existing_route_still_works(self):
         app = _create_test_app()
-        client = app.test_client()
+        client = TestClient(app)
         resp = client.post(
             "/api/rpg/adventure/regenerate",
             json={

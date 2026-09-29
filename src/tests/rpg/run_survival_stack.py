@@ -27,7 +27,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from rpg.survival_stack_manifest import (  # noqa: E402
+from tests.rpg.survival_stack_manifest import (  # noqa: E402
     missing_survival_stack_tests,
     survival_stack_powershell_command,
     survival_stack_pytest_args,

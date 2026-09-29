@@ -10,8 +10,27 @@ import traceback
 from pathlib import Path
 from typing import Dict, List
 
+from tests.rpg.autoplay_fragment_codegen import (
+    autoplay_campaign_fragments,
+    combine_autoplay_campaign_fragments,
+)
+
 _RUNTIME_LOADED = False
 _RUNTIME_EXCEPTION_TRACEBACK_OUTPUT_DIR: Path | None = None
+_AUTOPLAY_PATH_BASE_TYPE = type(Path())
+
+
+class _AutoplayPathMeta(type):
+    def __instancecheck__(cls, instance: object) -> bool:
+        return isinstance(instance, _AUTOPLAY_PATH_BASE_TYPE)
+
+
+_AUTOPLAY_PATH_CLASS = _AutoplayPathMeta(
+    "AutoplayPath",
+    (_AUTOPLAY_PATH_BASE_TYPE,),
+    {"__module__": __name__},
+)
+_AUTOPLAY_INSTALL_PATH_HOOKS = False
 _DEFAULT_AUTOPLAY_RESULT_DIR_PARTS = (
     "resources",
     "data",
@@ -220,36 +239,21 @@ def _register_autoplay_runtime_aliases() -> None:
 
 def _autoplay_campaign_fragment_paths() -> List[Path]:
     parts_dir = Path(__file__).with_name("autoplay_llm_campaign_parts")
-    fragments = sorted(
-        path
-        for path in parts_dir.glob("*.pyfrag")
-        if not path.name.startswith("chunk_")
-    )
-    if not fragments:
-        raise RuntimeError(f"No autoplay campaign source fragments found in {parts_dir}")
-    return fragments
+    return autoplay_campaign_fragments(parts_dir)
+
+
+def _install_autoplay_path_write_hook(path_type: type[Path], hook: object) -> None:
+    if not _AUTOPLAY_INSTALL_PATH_HOOKS or not callable(hook):
+        return
+    path_type.write_text = hook
 
 
 def _combine_autoplay_campaign_fragments(fragments: List[Path]) -> str:
-    future_imports: List[str] = []
-    seen_futures = set()
-    body_parts: List[str] = []
-    for fragment in fragments:
-        body_lines: List[str] = []
-        for line in fragment.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("from __future__ import "):
-                if stripped not in seen_futures:
-                    seen_futures.add(stripped)
-                    future_imports.append(stripped)
-                continue
-            body_lines.append(line)
-        body_parts.append("\n".join(body_lines))
-    prefix = "\n".join(future_imports)
-    body = "\n".join(body_parts)
-    if prefix:
-        return prefix + "\n\n" + body
-    return body
+    return combine_autoplay_campaign_fragments(fragments)
+
+
+def _autoplay_campaign_generated_path() -> Path:
+    return Path(__file__).with_name("autoplay_llm_campaign.generated.pyfrag")
 
 
 def _wrap_runtime_probe_functions(namespace: Dict[str, object]) -> None:
@@ -346,9 +350,8 @@ def _load_autoplay_campaign_runtime() -> None:
     if _RUNTIME_LOADED:
         return
     _register_autoplay_runtime_aliases()
-    fragments = _autoplay_campaign_fragment_paths()
     combined_source = _instrument_runtime_exception_traceback_capture(
-        _combine_autoplay_campaign_fragments(fragments)
+        _autoplay_campaign_generated_path().read_text(encoding="utf-8")
     )
     combined_filename = str(
         Path(__file__).with_name("autoplay_llm_campaign_parts")
@@ -363,6 +366,11 @@ def _load_autoplay_campaign_runtime() -> None:
     chunk_globals: Dict[str, object] = globals()
     chunk_globals.setdefault("__file__", str(Path(__file__).resolve()))
     original_name = chunk_globals.get("__name__", __name__)
+    chunk_globals["_AUTOPLAY_PATH_CLASS"] = _AUTOPLAY_PATH_CLASS
+    chunk_globals["_install_autoplay_path_write_hook"] = _install_autoplay_path_write_hook
+    chunk_globals["_AUTOPLAY_INSTALL_PATH_HOOKS"] = (
+        original_name == "__main__" and "pytest" not in sys.modules
+    )
     chunk_globals["__name__"] = "_autoplay_campaign_runtime"
     _RUNTIME_LOADED = True
     try:

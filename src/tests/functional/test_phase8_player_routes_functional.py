@@ -1,153 +1,28 @@
-"""Functional tests for Phase 8 — Player-Facing UX Routes."""
+"""Functional tests for the FastAPI player-facing RPG routes."""
 
 from __future__ import annotations
 
 import pytest
-from flask import Flask
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.rpg.api.rpg_player_routes import rpg_player_bp
 
 
-def _make_test_app():
-    """Create a minimal Flask test app with just the player blueprint."""
-    from app.rpg.player import (
-        ensure_player_state,
-        enter_dialogue_mode,
-        exit_dialogue_mode,
-    )
-    from app.rpg.player.player_encounter import build_encounter_view
-
-    try:
-        from app.rpg.api.rpg_player_routes import rpg_player_bp
-        blueprint_registered = True
-    except ImportError:
-        blueprint_registered = False
-
-    app = Flask(__name__)
-
-    if blueprint_registered:
-        app.register_blueprint(rpg_player_bp)
-    else:
-        from flask import jsonify, request
-
-        @app.post("/api/rpg/player/state")
-        def player_state():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            meta = dict((setup_payload or {}).get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            return jsonify({
-                "ok": True,
-                "player_state": state.get("player_state", {}),
-            })
-
-        @app.post("/api/rpg/player/journal")
-        def player_journal():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            meta = dict((setup_payload or {}).get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            ps = state.get("player_state", {})
-            entries = list(ps.get("journal_entries") or [])
-            return jsonify({
-                "ok": True,
-                "journal_entries": entries[-50:],
-            })
-
-        @app.post("/api/rpg/player/codex")
-        def player_codex():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            meta = dict((setup_payload or {}).get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            ps = state.get("player_state", {})
-            return jsonify({
-                "ok": True,
-                "codex": dict(ps.get("codex") or {}),
-            })
-
-        @app.post("/api/rpg/player/objectives")
-        def player_objectives():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            meta = dict((setup_payload or {}).get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            ps = state.get("player_state", {})
-            objs = list(ps.get("active_objectives") or [])
-            return jsonify({
-                "ok": True,
-                "active_objectives": objs[-20:],
-            })
-
-        @app.post("/api/rpg/player/dialogue/enter")
-        def player_dialogue_enter():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            npc_id = str(data.get("npc_id") or "")
-            scene_id = str(data.get("scene_id") or "")
-
-            meta = dict(setup_payload.get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            state = enter_dialogue_mode(state, npc_id=npc_id, scene_id=scene_id)
-
-            meta["simulation_state"] = state
-            setup_payload["metadata"] = meta
-
-            return jsonify({
-                "ok": True,
-                "setup_payload": setup_payload,
-                "player_state": state.get("player_state", {}),
-            })
-
-        @app.post("/api/rpg/player/dialogue/exit")
-        def player_dialogue_exit():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            fallback_mode = str(data.get("fallback_mode") or "scene")
-
-            meta = dict(setup_payload.get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-            state = exit_dialogue_mode(state, fallback_mode=fallback_mode)
-
-            meta["simulation_state"] = state
-            setup_payload["metadata"] = meta
-
-            return jsonify({
-                "ok": True,
-                "setup_payload": setup_payload,
-                "player_state": state.get("player_state", {}),
-            })
-
-        @app.post("/api/rpg/player/encounter")
-        def player_encounter():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            scene = dict(data.get("scene") or {})
-
-            meta = dict(setup_payload.get("metadata") or {})
-            sim_state = dict(meta.get("simulation_state") or {})
-            state = ensure_player_state(sim_state)
-
-            return jsonify({
-                "ok": True,
-                "encounter": build_encounter_view(scene, state),
-            })
-
+def _make_test_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(rpg_player_bp)
     return app
 
 
 @pytest.fixture
-def app():
+def app() -> FastAPI:
     return _make_test_app()
 
 
 @pytest.fixture
-def client(app):
-    return app.test_client()
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app)
 
 
 class TestPlayerStateEndpoint:
@@ -164,7 +39,7 @@ class TestPlayerStateEndpoint:
         }
         resp = client.post("/api/rpg/player/state", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         ps = data["player_state"]
         assert "current_scene_id" in ps
@@ -183,7 +58,7 @@ class TestPlayerStateEndpoint:
         }
         resp = client.post("/api/rpg/player/state", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["player_state"]["current_mode"] == "scene"
 
 
@@ -201,7 +76,7 @@ class TestPlayerJournalEndpoint:
         }
         resp = client.post("/api/rpg/player/journal", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         assert "journal_entries" in data
         assert isinstance(data["journal_entries"], list)
@@ -221,7 +96,7 @@ class TestPlayerCodexEndpoint:
         }
         resp = client.post("/api/rpg/player/codex", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         codex = data["codex"]
         assert "npcs" in codex
@@ -244,7 +119,7 @@ class TestPlayerObjectivesEndpoint:
         }
         resp = client.post("/api/rpg/player/objectives", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         assert "active_objectives" in data
         assert isinstance(data["active_objectives"], list)
@@ -266,7 +141,7 @@ class TestPlayerDialogueEndpoint:
         }
         resp = client.post("/api/rpg/player/dialogue/enter", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         ps = data["player_state"]
         assert ps["current_mode"] == "dialogue"
@@ -285,7 +160,7 @@ class TestPlayerDialogueEndpoint:
             "scene_id": "s_town_square",
         }
         resp = client.post("/api/rpg/player/dialogue/enter", json=enter_payload)
-        enter_data = resp.get_json()
+        enter_data = resp.json()
 
         # Then exit
         exit_payload = {
@@ -293,7 +168,7 @@ class TestPlayerDialogueEndpoint:
         }
         resp = client.post("/api/rpg/player/dialogue/exit", json=exit_payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         ps = data["player_state"]
         assert ps["current_mode"] == "scene"
@@ -312,7 +187,7 @@ class TestPlayerDialogueEndpoint:
             "scene_id": "s_gate",
         }
         resp = client.post("/api/rpg/player/dialogue/enter", json=enter_payload)
-        enter_data = resp.get_json()
+        enter_data = resp.json()
 
         # Exit with custom fallback
         exit_payload = {
@@ -321,7 +196,7 @@ class TestPlayerDialogueEndpoint:
         }
         resp = client.post("/api/rpg/player/dialogue/exit", json=exit_payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         ps = data["player_state"]
         assert ps["current_mode"] == "travel"
 
@@ -353,7 +228,7 @@ class TestPlayerEncounterEndpoint:
         }
         resp = client.post("/api/rpg/player/encounter", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         encounter = data["encounter"]
         assert encounter["scene_id"] == "s_ambush"
@@ -379,7 +254,7 @@ class TestPlayerEncounterEndpoint:
         }
         resp = client.post("/api/rpg/player/encounter", json=payload)
         assert resp.status_code == 200
-        data = resp.get_json()
+        data = resp.json()
         encounter = data["encounter"]
         # Actors are bounded to 8 by implementation
         assert len(encounter["actors"]) <= 8

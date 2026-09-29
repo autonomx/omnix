@@ -5,9 +5,27 @@ if exist "%~dp0.tools\npm-global" set "PATH=%~dp0.tools\npm-global;%PATH%"
 if exist "%~dp0.tools\npm-global\agent-browser.cmd" set "OMNIX_AGENT_BROWSER_COMMAND=%~dp0.tools\npm-global\agent-browser.cmd"
 if exist "%~dp0.tools\npm-global\mcporter.cmd" set "OMNIX_AGENT_MCPORTER_COMMAND=%~dp0.tools\npm-global\mcporter.cmd"
 
-set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
-set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
-set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
+if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
+set "RPG_FLUX_PYTHON=%CONDA_ROOT%\envs\rpg-flux\python.exe"
+set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\rpg-tts\python.exe"
+set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
+
+if not exist "%RPG_FLUX_PYTHON%" (
+    echo ERROR: Locked rpg-flux runtime not found. Run setup.bat first.
+    exit /b 1
+)
+"%RPG_FLUX_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+if errorlevel 1 (
+    echo ERROR: The locked image runtime requires Python 3.11. Run setup.bat.
+    exit /b 1
+)
+if exist "%RPG_STT_PYTHON%" (
+    "%RPG_STT_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+    if errorlevel 1 (
+        echo ERROR: The locked STT runtime requires Python 3.11. Run setup.bat.
+        exit /b 1
+    )
+)
 
 REM A second launcher must not auto-start services before failing to bind 5055.
 if /I not "%~1"=="--postgres-only" if /I not "%~1"=="--database-credential-injected-check" (
@@ -187,7 +205,7 @@ if /I "%OMNIX_KASA_ENABLED%"=="1" (
     "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
     if errorlevel 1 (
         echo WARNING: python-kasa could not be imported in rpg-flux; see the error above.
-        echo          Run: "%RPG_FLUX_PYTHON%" -m pip install "python-kasa^>=0.7.7,^<0.8"
+        echo          Run setup.bat to install the hash-locked image runtime from requirements\image.lock.txt.
     )
 )
 

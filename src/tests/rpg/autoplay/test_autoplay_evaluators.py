@@ -142,6 +142,7 @@ def test_evaluate_autoplay_health_can_fail_on_action_diversity():
     )
 
     assert health["ok"] is False
+    assert "action_diversity_rate_below_threshold" in health["warnings"]
 
 
 def test_extract_npc_payload_from_turn_result_uses_current_turn_result_not_result_variable():
@@ -157,4 +158,3 @@ def test_extract_npc_payload_from_turn_result_uses_current_turn_result_not_resul
     )
 
     assert payload == {"speaker": "Bran", "line": "The road is the danger."}
-    assert "action_diversity_rate_below_threshold" in health["warnings"]

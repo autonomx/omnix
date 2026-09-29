@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .errors import IdempotencyConflict
+from .errors import EntityNotFound, IdempotencyConflict
 from .tenant import TenantContext
 
 

@@ -2179,7 +2179,7 @@
       "count": 1,
       "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        483
+        528
       ],
       "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
       "rule": "AL003"
@@ -2188,7 +2188,7 @@
       "count": 1,
       "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        482
+        527
       ],
       "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
       "rule": "AL003"
@@ -4534,7 +4534,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_runtime_offload_hook:app.voice.live_voice_stream_diagnostics._persist_delivery",
       "lines": [
-        365
+        366
       ],
       "path": "src/app/voice/live_voice_runtime_offload.py",
       "rule": "AL003"
@@ -4543,7 +4543,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_runtime_offload_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        382
+        383
       ],
       "path": "src/app/voice/live_voice_runtime_offload.py",
       "rule": "AL003"
@@ -4552,7 +4552,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_runtime_offload_hook:fastapi.FastAPI.__init__",
       "lines": [
-        381
+        382
       ],
       "path": "src/app/voice/live_voice_runtime_offload.py",
       "rule": "AL003"
@@ -5029,7 +5029,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_session_route_hook",
       "lines": [
-        464
+        509
       ],
       "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
       "rule": "AL004"
@@ -5515,7 +5515,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_voice_runtime_offload_hook",
       "lines": [
-        355
+        356
       ],
       "path": "src/app/voice/live_voice_runtime_offload.py",
       "rule": "AL004"
@@ -6611,54 +6611,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:player_codex",
-      "lines": [
-        69
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:player_inventory",
-      "lines": [
-        141
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:player_inventory_registry",
       "lines": [
-        179
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:player_journal",
-      "lines": [
-        58
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:player_objectives",
-      "lines": [
-        80
-      ],
-      "path": "src/app/rpg/api/rpg_player_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:player_state",
-      "lines": [
-        47
+        186
       ],
       "path": "src/app/rpg/api/rpg_player_routes.py",
       "rule": "AL005"
@@ -6730,7 +6685,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session",
       "lines": [
-        1055
+        1015
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -6739,7 +6694,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session_narration_events",
       "lines": [
-        1128
+        1088
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -6748,7 +6703,7 @@
       "count": 1,
       "fingerprint": "<module>:list_adventure_templates",
       "lines": [
-        28
+        41
       ],
       "path": "src/app/rpg/creator_routes.py",
       "rule": "AL005"
@@ -7090,7 +7045,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_voice_release_gate_payload",
       "lines": [
-        101
+        100
       ],
       "path": "src/app/voice/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7099,7 +7054,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:ingest_live_voice_diagnostics",
       "lines": [
-        58
+        57
       ],
       "path": "src/app/voice/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7108,7 +7063,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:live_voice_diagnostics_status",
       "lines": [
-        75
+        74
       ],
       "path": "src/app/voice/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7117,7 +7072,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:live_voice_release_gate",
       "lines": [
-        82
+        81
       ],
       "path": "src/app/voice/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7126,7 +7081,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:accept_speculative_tts",
       "lines": [
-        708
+        707
       ],
       "path": "src/app/voice/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7135,7 +7090,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:cancel_speculative_tts",
       "lines": [
-        724
+        723
       ],
       "path": "src/app/voice/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7144,7 +7099,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:live_voice_execution_lane_status",
       "lines": [
-        646
+        645
       ],
       "path": "src/app/voice/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7153,7 +7108,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:prefetch_speculative_tts",
       "lines": [
-        660
+        659
       ],
       "path": "src/app/voice/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7398,9 +7353,9 @@
       "count": 3,
       "fingerprint": "LlamaCppInstaller.download_model_from_url:print",
       "lines": [
-        546,
-        571,
-        573
+        549,
+        574,
+        576
       ],
       "path": "src/app/llamacpp_installer.py",
       "rule": "AL008"
@@ -7858,7 +7813,7 @@
       "count": 1,
       "fingerprint": "get_rpg_session:print",
       "lines": [
-        480
+        440
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL008"
@@ -8375,7 +8330,7 @@
       "count": 1,
       "fingerprint": "_disconnect_all:except",
       "lines": [
-        241
+        243
       ],
       "path": "src/app/assistant_tools/kasa_adapter.py",
       "rule": "AL009"
@@ -8520,7 +8475,7 @@
       "count": 1,
       "fingerprint": "LlamaCppInstaller.get_available_models:except",
       "lines": [
-        617
+        620
       ],
       "path": "src/app/llamacpp_installer.py",
       "rule": "AL009"
@@ -8785,8 +8740,8 @@
       "count": 2,
       "fingerprint": "resume_rpg_session:except",
       "lines": [
-        1199,
-        1245
+        1159,
+        1205
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL009"

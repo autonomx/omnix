@@ -1,4 +1,4 @@
-from rpg.interactive_cli_response_quality import apply_interactive_response_quality_cleanup
+from tests.rpg.interactive_cli_response_quality import apply_interactive_response_quality_cleanup
 
 
 def test_phase13_50_rumor_fallback_cleanup_handles_in_tavern_suffix_from_live_matrix():

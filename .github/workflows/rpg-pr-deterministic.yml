@@ -52,10 +52,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart playwright \
-            "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Apply PostgreSQL migrations and initialize authority
         run: |
           python -m app.persistence migrate
@@ -302,9 +299,7 @@ jobs:
 
       - name: Install endurance dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest fastapi httpx pydantic requests python-multipart "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Apply PostgreSQL migrations
         run: python -m app.persistence migrate
 

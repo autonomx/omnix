@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from rpg.survival_stack_manifest import (
+from tests.rpg.survival_stack_manifest import (
     SURVIVAL_STACK_MANIFEST_VERSION,
     SURVIVAL_STACK_PHASES,
     SURVIVAL_STACK_TEST_FILES,

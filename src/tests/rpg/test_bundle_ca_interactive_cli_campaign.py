@@ -4,8 +4,8 @@ import json
 import zipfile
 from pathlib import Path
 
-from rpg import interactive_cli_campaign as cli
-from rpg.interactive_cli_commerce_followup import (
+from tests.rpg import interactive_cli_campaign as cli
+from tests.rpg.interactive_cli_commerce_followup import (
     apply_commerce_followup_repair,
     extract_service_offer_context,
     infer_requested_service_kind,
@@ -124,7 +124,7 @@ def test_bundle_ca_builds_interactive_summary_json_safe() -> None:
         stop_reason="turn_limit",
     )
 
-    assert summary["format_version"] == "interactive_cli_campaign_v2"
+    assert summary["format_version"] == "interactive_cli_campaign_v4"
     assert summary["completed_turns"] == 2
     assert summary["warning_count"] == 1
     assert summary["elapsed_seconds"] == 3.25

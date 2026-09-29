@@ -32,10 +32,10 @@ def test_unchanged_audio_configuration_keeps_cached_instances(monkeypatch) -> No
 
     tts = _Provider()
     stt = _Provider()
-    monkeypatch.setattr(shared, "_tts_provider_instance", tts)
-    monkeypatch.setattr(shared, "_tts_provider_name", "faster-qwen3-tts")
-    monkeypatch.setattr(shared, "_stt_provider_instance", stt)
-    monkeypatch.setattr(shared, "_stt_provider_name", "parakeet")
+    monkeypatch.setattr(provider_service, "_tts_provider_instance", tts)
+    monkeypatch.setattr(provider_service, "_tts_provider_name", "faster-qwen3-tts")
+    monkeypatch.setattr(provider_service, "_stt_provider_instance", stt)
+    monkeypatch.setattr(provider_service, "_stt_provider_name", "parakeet")
     settings = _settings()
 
     assert invalidate_changed_audio_caches(settings, dict(settings)) == (False, False)
@@ -50,10 +50,10 @@ def test_tts_configuration_change_stops_and_clears_tts_only(monkeypatch) -> None
 
     tts = _Provider()
     stt = _Provider()
-    monkeypatch.setattr(shared, "_tts_provider_instance", tts)
-    monkeypatch.setattr(shared, "_tts_provider_name", "faster-qwen3-tts")
-    monkeypatch.setattr(shared, "_stt_provider_instance", stt)
-    monkeypatch.setattr(shared, "_stt_provider_name", "parakeet")
+    monkeypatch.setattr(provider_service, "_tts_provider_instance", tts)
+    monkeypatch.setattr(provider_service, "_tts_provider_name", "faster-qwen3-tts")
+    monkeypatch.setattr(provider_service, "_stt_provider_instance", stt)
+    monkeypatch.setattr(provider_service, "_stt_provider_name", "parakeet")
     before = _settings()
     after = _settings()
     after["faster-qwen3-tts"] = {**after["faster-qwen3-tts"], "model_dir": "models/tts-v2", "chunk_size": 20}
@@ -71,10 +71,10 @@ def test_stt_endpoint_change_stops_and_clears_stt_only(monkeypatch) -> None:
 
     tts = _Provider()
     stt = _Provider()
-    monkeypatch.setattr(shared, "_tts_provider_instance", tts)
-    monkeypatch.setattr(shared, "_tts_provider_name", "faster-qwen3-tts")
-    monkeypatch.setattr(shared, "_stt_provider_instance", stt)
-    monkeypatch.setattr(shared, "_stt_provider_name", "parakeet")
+    monkeypatch.setattr(provider_service, "_tts_provider_instance", tts)
+    monkeypatch.setattr(provider_service, "_tts_provider_name", "faster-qwen3-tts")
+    monkeypatch.setattr(provider_service, "_stt_provider_instance", stt)
+    monkeypatch.setattr(provider_service, "_stt_provider_name", "parakeet")
     before = _settings()
     after = _settings()
     after["parakeet"] = {"base_url": "http://localhost:5201"}

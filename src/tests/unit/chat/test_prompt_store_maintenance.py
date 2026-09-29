@@ -31,8 +31,8 @@ def test_post_turn_maintenance_failure_does_not_fail_completed_chat(
     monkeypatch,
     caplog,
 ):
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: _StaticProvider())
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: _StaticProvider())
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
 
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("PostgreSQL operation failed")

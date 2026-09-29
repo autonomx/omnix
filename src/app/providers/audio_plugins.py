@@ -392,7 +392,10 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
             return {"running": True, "message": f"FasterQwen3TTS model loaded successfully on {self.device}"}
             
         except ImportError:
-            return {"running": False, "message": "faster-qwen3-tts library not installed. Run: pip install faster-qwen3-tts"}
+            return {
+                "running": False,
+                "message": "Qwen3-TTS runtime dependencies are missing; rerun setup.bat or setup.sh.",
+            }
         except Exception as e:
             logger.error(f"Failed to load FasterQwen3TTS model: {e}")
             return {"running": False, "message": f"Failed to load model: {str(e)}"}

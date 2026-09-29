@@ -47,9 +47,8 @@ jobs:
         with:
           node-version: "22"
       - name: Install focused Python dependencies
-        run: >-
-          python -m pip install
-          ruff pytest pillow pydantic fastapi httpx requests python-multipart
+        run: |
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Install web dependencies
         run: npm install
       - name: Lint avatar code

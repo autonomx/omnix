@@ -30,9 +30,7 @@ jobs:
 
       - name: Install deterministic test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest fastapi httpx pydantic requests python-multipart playwright
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Run Phase 0 architecture compliance gates
         run: |
           set -o pipefail

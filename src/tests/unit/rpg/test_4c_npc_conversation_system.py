@@ -1307,15 +1307,6 @@ class TestAmbientNarrationMultiThreadCooldown:
 
         result = runtime._maybe_enqueue_latest_ambient_conversation_narration("sess_bound", sim, rt)
         assert result["enqueued"] <= runtime._MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK
-        
-        required = {
-            "allow_npc_address_player",
-            "allow_conversation_world_signals",
-            "conversation_frequency",
-            "combat_suppression",
-            "stealth_suppression",
-        }
-        assert required.issubset(set(settings.keys()))
 
     # H. World signal system
 

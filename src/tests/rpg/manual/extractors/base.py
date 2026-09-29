@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from tests.rpg.manual.safe import _safe_dict, _safe_list, _safe_str
 
@@ -95,6 +95,107 @@ def _extract_simulation_state(result: Dict[str, Any]) -> Dict[str, Any]:
     setup_payload = _safe_dict(session.get("setup_payload"))
     metadata = _safe_dict(setup_payload.get("metadata"))
     return _safe_dict(metadata.get("simulation_state"))
+
+
+def _extract_combat_narration_contract(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Read the combat narration contract from current or nested result shapes."""
+    result = _safe_dict(result)
+    result_sub = _safe_dict(result.get("result"))
+    resolved = _safe_dict(result.get("resolved_result"))
+    nested_resolved = _safe_dict(result_sub.get("resolved_result"))
+    turn_contract = _extract_turn_contract(result)
+    contract_resolved = _safe_dict(
+        turn_contract.get("resolved_result") or turn_contract.get("resolved_action")
+    )
+    for candidate in (
+        result.get("combat_narration_contract"),
+        result_sub.get("combat_narration_contract"),
+        resolved.get("combat_narration_contract"),
+        nested_resolved.get("combat_narration_contract"),
+        turn_contract.get("combat_narration_contract"),
+        contract_resolved.get("combat_narration_contract"),
+    ):
+        contract = _safe_dict(candidate)
+        if contract:
+            return contract
+    return {}
+
+
+def _extract_service_debug(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Collect service outcome fields used by manual scenario summaries."""
+    contract = _extract_turn_contract(result)
+    contract_service_result = _safe_dict(contract.get("service_result"))
+    resolved = _safe_dict(
+        contract.get("resolved_result") or contract.get("resolved_action")
+    )
+    presentation = _safe_dict(contract.get("presentation"))
+    service = _safe_dict(resolved.get("service_result")) or contract_service_result
+    purchase = _safe_dict(service.get("purchase"))
+    resource_changes = _safe_dict(purchase.get("resource_changes"))
+    applied_effects = _safe_dict(purchase.get("applied_effects"))
+    effects = _safe_dict(purchase.get("effects"))
+    service_application = _safe_dict(resolved.get("service_application"))
+    return {
+        "resolved_result": resolved,
+        "service_result": service,
+        "available_actions": _safe_list(
+            presentation.get("available_actions") or service.get("available_actions")
+        ),
+        "resource_changes": resource_changes,
+        "purchase": purchase,
+        "service_application": service_application,
+        "transaction_record": _safe_dict(
+            resolved.get("transaction_record")
+            or service_application.get("transaction_record")
+        ),
+        "memory_entry": _safe_dict(
+            resolved.get("memory_entry") or service_application.get("memory_entry")
+        ),
+        "social_effects": _safe_dict(
+            resolved.get("social_effects") or service_application.get("social_effects")
+        ),
+        "stock_update": _safe_dict(
+            resolved.get("stock_update") or service_application.get("stock_update")
+        ),
+        "rumor_added": _safe_dict(
+            resolved.get("rumor_added") or service_application.get("rumor_added")
+        ),
+        "journal_entry": _safe_dict(
+            resolved.get("journal_entry") or service_application.get("journal_entry")
+        ),
+        "service_world_event": _safe_dict(
+            resolved.get("service_world_event")
+            or service_application.get("service_world_event")
+        ),
+        "rumor_world_event": _safe_dict(
+            resolved.get("rumor_world_event")
+            or service_application.get("rumor_world_event")
+        ),
+        "inventory_changes": {
+            "items_added": _safe_list(
+                applied_effects.get("items_added") or effects.get("items_added")
+            ),
+            "items_removed": _safe_list(
+                applied_effects.get("items_removed") or effects.get("items_removed")
+            ),
+        },
+    }
+
+
+def _extract_location_state(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("location_state"))
+    if direct:
+        return direct
+    return _safe_dict(_extract_simulation_state(result).get("location_state"))
+
+
+def _extract_travel_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    result_sub = _safe_dict(_safe_dict(result).get("result"))
+    direct = _safe_dict(result_sub.get("travel_result"))
+    if direct:
+        return direct
+    return _safe_dict(_extract_simulation_state(result).get("travel_result"))
 
 
 def _extract_session(result: Dict[str, Any]) -> Dict[str, Any]:

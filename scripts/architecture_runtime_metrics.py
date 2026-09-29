@@ -307,11 +307,10 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
                         ]
 
                 collector = Collector()
-                configuration = []
-                for candidate in (root / "pytest.ini", root / "pyproject.toml", root / "src/tests/pytest.ini"):
-                    if candidate.exists():
-                        configuration = ["-c", str(candidate)]
-                        break
+                pytest_config = root / "pyproject.toml"
+                if not pytest_config.is_file():
+                    raise RuntimeError("root pyproject.toml pytest configuration is missing from probe snapshot")
+                configuration = ["-c", str(pytest_config)]
                 test_paths = active_collection_paths(root, list(manifest["test_paths"]))
                 exit_code = pytest.main([
                     "--collect-only", "--continue-on-collection-errors", "-q", "-p", "no:cacheprovider",

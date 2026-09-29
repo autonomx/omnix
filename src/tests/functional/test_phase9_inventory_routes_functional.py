@@ -2,21 +2,22 @@
 from __future__ import annotations
 
 import pytest
-from flask import Flask
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.rpg.api.rpg_player_routes import rpg_player_bp
 
 
-def _make_test_app():
-    app = Flask(__name__)
-    app.register_blueprint(rpg_player_bp)
+def _make_test_app() -> FastAPI:
+    app = FastAPI()
+    app.include_router(rpg_player_bp)
     return app
 
 
 @pytest.fixture
 def client():
     """Provide a test client for the inventory endpoints."""
-    return _make_test_app().test_client()
+    return TestClient(_make_test_app())
 
 
 def _make_payload(simulation_state):
@@ -26,7 +27,7 @@ def _make_payload(simulation_state):
 class TestInventoryRoutes:
     def test_inventory_returns_empty_for_new_player(self, client):
         resp = client.post("/api/rpg/player/inventory", json=_make_payload({}))
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         # Inventory should be initialised with defaults
         inv = data.get("inventory_state", {})
@@ -38,7 +39,7 @@ class TestInventoryRoutes:
             "items": [{"item_id": "gold_coin", "qty": 10}],
         }}}
         resp = client.post("/api/rpg/player/inventory", json=_make_payload(sim))
-        data = resp.get_json()
+        data = resp.json()
         assert len(data["inventory_state"]["items"]) == 1
         assert data["inventory_state"]["items"][0]["qty"] == 10
 
@@ -51,7 +52,7 @@ class TestInventoryRoutes:
             "item_id": "healing_potion",
         }
         resp = client.post("/api/rpg/player/inventory/use", json=use_payload)
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         assert data["inventory_state"]["items"][0]["qty"] == 1
         # Setup payload should be updated
@@ -65,12 +66,12 @@ class TestInventoryRoutes:
             "item_id": "nonexistent",
         }
         resp = client.post("/api/rpg/player/inventory/use", json=use_payload)
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is False
 
     def test_registry_returns_items(self, client):
         resp = client.post("/api/rpg/player/inventory/registry", json={})
-        data = resp.get_json()
+        data = resp.json()
         assert data["ok"] is True
         assert "gold_coin" in data["items"]
         assert "healing_potion" in data["items"]
@@ -83,7 +84,7 @@ class TestInventoryRoutes:
             ],
         }}}
         resp = client.post("/api/rpg/player/inventory", json=_make_payload(sim))
-        data = resp.get_json()
+        data = resp.json()
         summary = data.get("inventory_summary", {})
         assert summary.get("slots_used") == 2
         assert summary.get("total_item_qty") == 7

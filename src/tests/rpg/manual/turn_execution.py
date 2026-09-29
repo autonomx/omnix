@@ -42,7 +42,7 @@ def _trace_value_shape(value):
 
 def _publish_first_call_context_for_cli(player_input: str, result: Dict[str, Any]) -> None:
     try:
-        from rpg.interactive_cli_intent_fallback import set_first_call_context_for_next_intent
+        from tests.rpg.interactive_cli_intent_fallback import set_first_call_context_for_next_intent
 
         set_first_call_context_for_next_intent(player_input=player_input, raw_result=result)
     except Exception:

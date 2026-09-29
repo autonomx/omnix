@@ -1,9 +1,7 @@
-nemo_toolkit[asr]
-torch==2.6.0
-torchvision==0.21.0
-torchaudio==2.6.0
+nemo_toolkit[asr]>=2.5.3,<3
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
 fastapi
 uvicorn[standard]
 python-multipart
-transformers==4.46.3
-tokenizers==0.20.3

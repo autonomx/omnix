@@ -71,7 +71,7 @@ def session() -> ChatSession:
 
 def test_desktop_generation_uses_internal_prompt_and_filters_transient_history(monkeypatch):
     provider = FakeProvider(["That inventory grid is packed."])
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
     store = FakeStore(session())
 
     events = list(
@@ -97,7 +97,7 @@ def test_desktop_generation_uses_internal_prompt_and_filters_transient_history(m
 
 def test_desktop_skip_does_not_emit_text_chunk(monkeypatch):
     provider = FakeProvider(["SKIP"])
-    monkeypatch.setattr(shared, "get_provider", lambda _name=None: provider)
+    monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
     store = FakeStore(session())
 
     events = list(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from rpg.interactive_cli_response_quality import (
+from tests.rpg.interactive_cli_response_quality import (
     RESPONSE_QUALITY_SOURCE,
     apply_interactive_response_quality_cleanup,
     apply_response_quality_to_matrix_result,

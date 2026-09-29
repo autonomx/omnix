@@ -125,7 +125,7 @@ def test_prompt_integration_is_feature_gated_and_separates_history_from_memory(m
         content="What was the streaming audio bug?",
         created_at=NOW,
     )
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
 
     monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
     disabled, disabled_rendered = store.build_provider_prompt(current, user_message, [])

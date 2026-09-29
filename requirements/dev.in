@@ -9,3 +9,8 @@ mypy
 ruff
 pip-tools
 pip-audit
+Pillow
+PyYAML
+psutil
+pytest-base-url
+anyio

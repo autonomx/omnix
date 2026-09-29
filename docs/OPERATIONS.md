@@ -72,7 +72,7 @@ The Vite server proxies browser calls to the gateway. A direct browser request t
 
 3. Install dependencies and apply migrations:
 
-       pip install -r requirements.txt
+       python -m pip install --require-hashes -r requirements.txt
        npm install
        python -m app.persistence migrate
        python -m app.persistence verify

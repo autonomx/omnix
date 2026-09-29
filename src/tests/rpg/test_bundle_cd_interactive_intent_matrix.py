@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from app.providers.base import ChatMessage, ChatResponse
-from rpg import interactive_intent_matrix as matrix
+from tests.rpg import interactive_intent_matrix as matrix
 
 
 @dataclass

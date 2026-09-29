@@ -498,6 +498,8 @@ def main() -> int:
     manifest_path = run_dir / "manifest.json"
 
     env = os.environ.copy()
+    python_paths = [str(TESTS_DIR), env.get("PYTHONPATH", "")]
+    env["PYTHONPATH"] = os.pathsep.join(path for path in python_paths if path)
     env["OMNIX_RUN_LIVE_VOICE_PERFORMANCE"] = "1"
     env["OMNIX_BASE_URL"] = args.app_url
     env["OMNIX_STT_URL"] = args.stt_url
@@ -510,9 +512,9 @@ def main() -> int:
         "-m",
         "pytest",
         "--rootdir",
-        str(TESTS_DIR),
+        str(ROOT_DIR),
         "-c",
-        str(TESTS_DIR / "pytest.ini"),
+        str(ROOT_DIR / "pyproject.toml"),
         str(TEST_PATH),
         "-q",
         "-s",

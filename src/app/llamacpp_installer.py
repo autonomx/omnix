@@ -497,7 +497,10 @@ class LlamaCppInstaller:
         try:
             from huggingface_hub import hf_hub_download
         except ImportError:
-            return {"success": False, "error": "huggingface_hub not installed. Install with: pip install huggingface_hub"}
+            return {
+                "success": False,
+                "error": "huggingface_hub is missing from the locked image runtime; rerun setup.bat or setup.sh",
+            }
         
         try:
             if progress_callback:

@@ -259,8 +259,8 @@ Any voice files you've uploaded through the web interface will appear here with 
 ## Troubleshooting
 
 ### Server Won't Start
-1. Ensure Python 3.8+ is installed
-2. Check that all requirements are installed: `pip install -r requirements.txt`
+1. Ensure Python 3.11 is installed
+2. Check that the hash-locked gateway requirements are installed: `python -m pip install --require-hashes -r requirements.txt`
 3. Verify port 8001 is not in use by another application
 
 ### TTS Not Working

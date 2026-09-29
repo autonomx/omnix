@@ -27,16 +27,16 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from rpg.interactive_cli_commerce_followup import (  # noqa: E402
+from tests.rpg.interactive_cli_commerce_followup import (  # noqa: E402
     apply_commerce_followup_repair,
     extract_service_offer_context,
 )
-from rpg.interactive_cli_intent_fallback import (  # noqa: E402
+from tests.rpg.interactive_cli_intent_fallback import (  # noqa: E402
     classify_service_intent_with_fallback,
     narration_source_for_turn,
 )
-from rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
-from rpg.interactive_cli_survival_repair import (  # noqa: E402
+from tests.rpg.interactive_cli_quest_followup import apply_quest_followup_repair  # noqa: E402
+from tests.rpg.interactive_cli_survival_repair import (  # noqa: E402
     apply_survival_visible_response_repair,
 )
 

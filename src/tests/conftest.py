@@ -1,7 +1,7 @@
 """
 Pytest configuration and fixtures for Omnix Playwright tests.
 
-Provides page-object fixtures, API request context, Flask test client,
+Provides page-object fixtures, API request context, application test clients,
 console-error capture, and automatic screenshot-on-failure.
 """
 
@@ -51,9 +51,6 @@ def pytest_ignore_collect(collection_path: Path, config) -> bool | None:
     if should_ignore_collection(collection_path):
         return True
     return None
-
-_ORIGINAL_PATH_WRITE_TEXT = Path.write_text
-
 
 @pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
@@ -246,20 +243,6 @@ def isolate_historical_app_imports(request):
         with state.activate():
             yield
 
-
-@pytest.fixture(autouse=True)
-def isolate_path_write_hooks():
-    """Keep historical RPG report hooks from leaking into unrelated tests.
-
-    Several report fragments replace Path.write_text at import time. Each test
-    installs the hook it exercises; stacking hooks across tests can recursively
-    generate other reports and stall the complete suite.
-    """
-    Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
-    try:
-        yield
-    finally:
-        Path.write_text = _ORIGINAL_PATH_WRITE_TEXT
 
 @pytest.fixture(scope="session")
 def base_url(request):

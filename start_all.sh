@@ -18,6 +18,25 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+CONDA_ROOT="${CONDA_ROOT:-$HOME/miniconda3}"
+RPG_FLUX_ENV="${RPG_FLUX_ENV:-rpg-flux}"
+RPG_STT_ENV="${RPG_STT_ENV:-rpg-stt}"
+RPG_FLUX_PYTHON="${RPG_FLUX_PYTHON:-$CONDA_ROOT/envs/$RPG_FLUX_ENV/bin/python}"
+RPG_STT_PYTHON="${RPG_STT_PYTHON:-$CONDA_ROOT/envs/$RPG_STT_ENV/bin/python}"
+
+if [ ! -x "$RPG_FLUX_PYTHON" ] || [ ! -x "$RPG_STT_PYTHON" ]; then
+    echo "ERROR: Locked FLUX or STT runtime is missing. Run ./setup.sh first."
+    exit 1
+fi
+for runtime_python in "$RPG_FLUX_PYTHON" "$RPG_STT_PYTHON"; do
+    "$runtime_python" -c 'import sys; assert sys.version_info[:2] == (3, 11), sys.version'
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Omnix runtimes require Python 3.11: $runtime_python"
+        exit 1
+    fi
+done
+export PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+
 # Every child entrypoint validates public binding against OMNIX_ALLOW_LAN.
 export OMNIX_BIND_HOST="${OMNIX_BIND_HOST:-127.0.0.1}"
 
@@ -37,43 +56,6 @@ kill $(lsof -ti:8000) 2>/dev/null
 sleep 2
 echo "[Cleanup] Done."
 
-# Check if virtual environment exists and activate it
-if [ -d "venv" ]; then
-    echo "[Setup] Activating virtual environment..."
-    source venv/bin/activate
-else
-    echo "WARNING: Virtual environment not found. Creating now..."
-    python3 -m venv venv
-    source venv/bin/activate
-    echo "[Setup] Installing faster-qwen3-tts in virtual environment..."
-    pip install faster-qwen3-tts>=0.2.4
-    echo "[Setup] Virtual environment created and faster-qwen3-tts installed."
-fi
-
-# Check if PyTorch is already installed
-echo "[Setup] Checking PyTorch installation..."
-python -c "import torch; print('PyTorch already installed:', torch.__version__)" >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "[Setup] PyTorch not found, installing CUDA-enabled PyTorch for RTX 4090 compatibility..."
-    pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
-else
-    echo "[Setup] PyTorch already installed, skipping download."
-fi
-
-# Check if faster-qwen3-tts is already installed
-echo "[Setup] Checking faster-qwen3-tts installation..."
-python -c "import faster_qwen3_tts; print('faster-qwen3-tts already installed:', faster_qwen3_tts.__version__)" >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    echo "[Setup] faster-qwen3-tts not found, installing..."
-    pip install faster-qwen3-tts>=0.2.4
-else
-    echo "[Setup] faster-qwen3-tts already installed, skipping download."
-fi
-
-# Install other dependencies
-echo "[Setup] Installing Python dependencies..."
-pip install -q fastapi uvicorn websockets aiohttp pydub numpy soundfile 2>/dev/null
-
 # Function to cleanup background processes on exit
 cleanup() {
     echo ""
@@ -86,7 +68,7 @@ trap cleanup SIGINT SIGTERM
 # Start Parakeet STT Server in background
 echo "[1/2] Starting Parakeet STT Server on port 8000..."
 if [ -f "$SCRIPT_DIR/parakeet_stt_server.py" ]; then
-    python parakeet_stt_server.py &
+    "$RPG_STT_PYTHON" "$SCRIPT_DIR/parakeet_stt_server.py" &
     STT_PID=$!
 else
     echo "WARNING: parakeet_stt_server.py not found - STT will not be available"
@@ -101,7 +83,7 @@ sleep 5
 # Start Omnix FastAPI Server (supports WebSocket TTS streaming)
 echo "[2/2] Starting Omnix FastAPI Server on port 5000..."
 echo ""
-python app.py &
+"$RPG_FLUX_PYTHON" "$SCRIPT_DIR/app.py" &
 CHATBOT_PID=$!
 
 # Wait for chatbot

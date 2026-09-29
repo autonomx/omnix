@@ -55,7 +55,7 @@ def _gate_snapshot(
     current_bars: list[MarketBar],
     *,
     reason_code: str,
-    state: StochRsiState = "waiting_data",
+    state: StochRsi5mState = "waiting_data",
 ) -> StochRsi5mSnapshot:
     last = current_bars[-1] if current_bars else None
     return StochRsi5mSnapshot(

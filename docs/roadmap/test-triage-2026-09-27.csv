@@ -91,3 +91,4 @@ nodeid,outcome,error summary,category,action,wp
 "src/tests/unit/rpg/test_tier5_experience_orchestration.py",collection_error,"baseline source-bound runtime probe collection failure",unknown,quarantine_collect,WP-8.6
 "src/tests/unit/rpg/test_tier6_narrative_intelligence.py",collection_error,"baseline source-bound runtime probe collection failure",unknown,quarantine_collect,WP-8.6
 "src/tests/unit/rpg/test_tier8_world_complexity.py",collection_error,"baseline source-bound runtime probe collection failure",unknown,quarantine_collect,WP-8.6
+"src/tests/integration/test_integration.py::TestEndToEnd::test_chat_to_tts_pipeline",retired_contract,"Targets removed Flask /api/sessions, /api/chat, and /api/tts routes and depended on the retired flask client fixture; current chat generation is covered by src/tests/app/test_chat_generation.py and TTS streaming by src/tests/app/test_gateway_tts_live_call_websocket.py",retired_contract,delete_covered,WP-1.4

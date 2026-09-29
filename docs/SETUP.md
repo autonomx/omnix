@@ -158,14 +158,19 @@ python -m app.persistence --help
 Create/activate your environment, then install the base dependencies:
 
 ```bash
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
 ```
 
-The requirements include FastAPI/Uvicorn/Pydantic, PostgreSQL drivers, audio/document-processing dependencies, optional image-model libraries, local Kasa support, and the Python test stack.
+Use Python 3.11. `requirements.txt` installs the gateway runtime from its
+hash-locked dependency set. Install test tools from `requirements/dev.lock.txt`;
+the image, TTS, and STT runtimes have separate locks and isolated environments.
 
 ### GPU/PyTorch note
 
-`requirements.txt` intentionally does not pin/install the repository's CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through `scripts/requirements/bootstrap_omnix_flux_env.ps1`.
+`requirements.txt` intentionally does not install the repository's CUDA
+PyTorch build. The image, TTS, and STT locks target CUDA 12.4 and keep each
+Torch runtime isolated. The Windows image environment can be installed with
+`scripts/requirements/bootstrap_omnix_flux_env.ps1`.
 
 For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:
 

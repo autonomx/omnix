@@ -17,6 +17,7 @@ runtime = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
 spec.loader.exec_module(runtime)
 URL = "postgresql://tester:disposable-test-only@127.0.0.1:55871/omnix_test"
+PYTEST_CONFIG = "[tool.pytest.ini_options]\npython_files = ['test_*.py']\naddopts = '-q --tb=short'\n"
 
 
 @pytest.mark.parametrize("url", [
@@ -139,6 +140,7 @@ def test_collection_probe_applies_file_quarantine_to_explicit_paths(tmp_path):
     root = tmp_path / "repository"
     test_root = root / "src/tests"
     test_root.mkdir(parents=True)
+    (root / "pyproject.toml").write_text(PYTEST_CONFIG, encoding="utf-8")
     quarantined = test_root / "test_quarantined.py"
     healthy = test_root / "test_healthy.py"
     quarantined.write_text("import missing_test_dependency\n", encoding="utf-8")
@@ -204,6 +206,7 @@ def test_database_coverage_uses_enabled_policies_and_tenant_tables():
 def test_collection_probe_cannot_certify_empty_or_interrupted_collection(tmp_path, source, success):
     root = tmp_path / "repository"
     root.mkdir()
+    (root / "pyproject.toml").write_text(PYTEST_CONFIG, encoding="utf-8")
     file = root / "test_subject.py"
     file.write_text(source, encoding="utf-8")
     manifest, output = tmp_path / "manifest.json", tmp_path / "collection.json"

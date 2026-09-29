@@ -7,6 +7,7 @@ ownership.
 from __future__ import annotations
 
 from . import runtime_part01_legacy as _legacy
+from .runtime_part01_legacy import _safe_dict, _safe_str
 
 for _name in _legacy.__all__:
     globals()[_name] = getattr(_legacy, _name)

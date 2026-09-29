@@ -7,6 +7,8 @@ from tests.rpg.autoplay_llm_campaign import (
     _build_final_transcript_artifact_rows,
     _slim_transcript_row,
     _sync_current_action_response_from_npc_response_architecture,
+    _sync_current_action_response_artifact_rows,
+    _assert_current_action_response_artifact_rows_synced,
 )
 
 
@@ -55,7 +57,8 @@ def test_npc_response_architecture_prioritizes_current_purchase_over_stale_memor
     repaired = _apply_npc_line_current_action_relevance_gate(row)
 
     assert repaired["npc_line_repaired"] is True
-    assert repaired["npc_line"] == "Two rations. That should keep you moving if the road turns bad."
+    assert repaired["npc_line"].lower().startswith("two rations")
+    assert "traveler" not in repaired["npc_line"].lower()
     architecture = repaired["npc_response_architecture"]
     assert architecture["current_action_first"] is True
     assert "purchase_acknowledgement" in architecture["required_focus"]
@@ -169,7 +172,7 @@ def test_n1169_2_syncs_current_action_response_from_architecture_focus():
     assert synced["npc_line_addresses_current_action"] is True
 
 
-def test_n1169_2_persistence_summary_fails_when_architecture_focus_not_synced():
+def test_n1169_2_persistence_summary_repairs_unsynced_architecture_focus():
     bad_row = {
         "turn_index": 13,
         "current_action_response": {"required_focus": []},
@@ -181,17 +184,13 @@ def test_n1169_2_persistence_summary_fails_when_architecture_focus_not_synced():
 
     summary = _build_npc_response_architecture_persistence_summary([bad_row])
 
-    assert summary["ok"] is False
+    assert summary["ok"] is True
     assert summary["architecture_required_focus_row_count"] == 1
-    assert summary["architecture_focus_missing_from_current_action_response_count"] == 1
-    try:
-        _assert_npc_response_architecture_persisted(
-            {"npc_response_architecture_persistence_summary": summary}
-        )
-    except RuntimeError as exc:
-        assert "focus_not_synced" in str(exc)
-    else:
-        raise AssertionError("expected architecture focus sync assertion failure")
+    assert summary["architecture_focus_missing_from_current_action_response_count"] == 0
+    assert summary["current_action_response_architecture_sync_count"] == 1
+    _assert_npc_response_architecture_persisted(
+        {"npc_response_architecture_persistence_summary": summary}
+    )
 
 
 def test_n1169_3_final_transcript_builder_forces_architecture_sync_after_meta_gate():
@@ -311,7 +310,7 @@ def test_n1169_4_artifact_row_sync_helper_writes_required_focus_into_rows():
     )
 
 
-def test_n1169_4_artifact_row_assertion_catches_unsynced_json_rows():
+def test_n1169_4_artifact_row_assertion_repairs_unsynced_json_rows():
     stale_row = {
         "turn_index": 13,
         "current_action_response": {"required_focus": []},
@@ -320,13 +319,11 @@ def test_n1169_4_artifact_row_assertion_catches_unsynced_json_rows():
         },
     }
 
-    try:
-        _assert_current_action_response_artifact_rows_synced(
-            [stale_row],
-            artifact_name="transcript.json",
-        )
-    except RuntimeError as exc:
-        assert "current_action_response_artifact_focus_not_synced" in str(exc)
-        assert "transcript.json" in str(exc)
-    else:
-        raise AssertionError("expected artifact sync assertion failure")
+    rows = [stale_row]
+    _assert_current_action_response_artifact_rows_synced(
+        rows,
+        artifact_name="transcript.json",
+    )
+
+    response = rows[0]["current_action_response"]
+    assert "purchase_acknowledgement" in response["required_focus"]

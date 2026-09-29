@@ -225,8 +225,8 @@ FastAPI Web Gateway
 <p>Images should be committed under <code>docs/images</code> and referenced from a guide with a relative path such as <code>![Trading workspace](images/trading.png)</code>. The renderer turns standalone Markdown images into responsive, captioned HTML figures. Use the <code>omnix-diagram</code> fenced markers for native HTML/CSS diagrams that should appear in the generated guide pages.</p>
 <h2 id="quick-local-development">Quick local development</h2>
 <p>The full setup, including PostgreSQL and optional workers, is in <a href="SETUP.html">SETUP.html</a>. The shortest development path is:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash"># Python dependencies
-pip install -r requirements.txt
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash"># Python dependencies (Python 3.11)
+python -m pip install --require-hashes -r requirements.txt
 
 # Frontend dependencies
 npm install
@@ -267,7 +267,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <li><code>../SPEC.md</code> — platform architecture rules.</li>
 </ul>
 <h2 id="compatibility-boundary">Compatibility boundary</h2>
-<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. <code>src/run_app.py</code> and older feature routes can still exist as backend compatibility surfaces while contracts migrate, but new browser behavior belongs in <code>src/apps/web</code> and should use the shared gateway, jobs, assets, providers, events, and design system.</p>
+<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. The old compatibility application server is also retired. Both <code>src/main.py</code> and <code>src/launch.py</code> start the shared gateway. Browser behavior belongs in <code>src/apps/web</code> and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.</p>
       </article>
     </main>
     <footer class="guide-footer">

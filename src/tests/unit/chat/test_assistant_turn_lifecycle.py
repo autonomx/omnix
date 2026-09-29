@@ -57,8 +57,8 @@ def test_assistant_turn_coordinator_persists_terminal_interruption(tmp_path) -> 
 def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(monkeypatch, tmp_path) -> None:
     provider = StreamingProvider()
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         "app.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
@@ -152,8 +152,8 @@ def test_completed_audio_turn_still_persists_assistant_transcript(monkeypatch, t
 def test_client_disconnect_persists_generated_interrupted_transcript(monkeypatch, tmp_path) -> None:
     provider = StreamingProvider()
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         "app.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,

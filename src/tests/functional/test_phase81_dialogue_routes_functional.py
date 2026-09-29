@@ -1,79 +1,16 @@
 """Functional tests for Phase 8.1 Dialogue Routes."""
 
 import pytest
-from flask import Flask
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 def _make_test_app():
-    """Create a minimal Flask test app with just the dialogue blueprint."""
-    from app.rpg.ai.dialogue import DialogueManager
-    from app.rpg.player import ensure_player_state
+    """Create a FastAPI test app with the production dialogue router."""
+    from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
 
-    try:
-        from app.rpg.api.rpg_dialogue_routes import rpg_dialogue_bp
-        blueprint_registered = True
-    except ImportError:
-        blueprint_registered = False
-
-    app = Flask(__name__)
-
-    if blueprint_registered:
-        app.register_blueprint(rpg_dialogue_bp)
-    else:
-        from flask import jsonify, request
-
-        dialogue_manager = DialogueManager()
-
-        @app.post("/api/rpg/dialogue/start")
-        def dialogue_start():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            npc_id = str(data.get("npc_id") or "")
-            scene_id = str(data.get("scene_id") or "")
-            state = ensure_player_state(_get_simulation_state(setup_payload))
-            state = dialogue_manager.start_dialogue(state, npc_id=npc_id, scene_id=scene_id)
-            setup_payload = _write_simulation_state(setup_payload, state)
-            return jsonify({
-                "ok": True,
-                "setup_payload": setup_payload,
-                "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
-            })
-
-        @app.post("/api/rpg/dialogue/message")
-        def dialogue_message():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            npc_id = str(data.get("npc_id") or "")
-            scene_id = str(data.get("scene_id") or "")
-            player_message = str(data.get("message") or "")
-            state = ensure_player_state(_get_simulation_state(setup_payload))
-            scene = _get_scene(setup_payload, scene_id)
-            npc, npc_mind = _get_npc_and_mind(state, npc_id)
-            result = dialogue_manager.send_message(
-                simulation_state=state, npc=npc, scene=scene, npc_mind=npc_mind, player_message=player_message,
-            )
-            state = result["simulation_state"]
-            setup_payload = _write_simulation_state(setup_payload, state)
-            return jsonify({
-                "ok": True,
-                "setup_payload": setup_payload,
-                "reply": result["reply"],
-                "dialogue_state": result["dialogue_state"],
-            })
-
-        @app.post("/api/rpg/dialogue/end")
-        def dialogue_end():
-            data = request.get_json(silent=True) or {}
-            setup_payload = dict(data.get("setup_payload") or {})
-            state = ensure_player_state(_get_simulation_state(setup_payload))
-            state = dialogue_manager.end_dialogue(state)
-            setup_payload = _write_simulation_state(setup_payload, state)
-            return jsonify({
-                "ok": True,
-                "setup_payload": setup_payload,
-                "dialogue_state": state.get("player_state", {}).get("dialogue_state", {}),
-            })
-
+    app = FastAPI()
+    app.include_router(rpg_dialogue_bp)
     return app
 
 
@@ -88,7 +25,7 @@ def app():
 
 @pytest.fixture
 def client(app):
-    return app.test_client()
+    return TestClient(app)
 
 
 class TestDialogueRoutesFunctional:
@@ -100,7 +37,7 @@ class TestDialogueRoutesFunctional:
         payload["npc_id"] = "test_npc"
         payload["scene_id"] = "test_scene"
         resp = client.post("/api/rpg/dialogue/start", json=payload)
-        data = resp.get_json()
+        data = resp.json()
         assert resp.status_code == 200
         assert data["ok"] is True
         assert data["dialogue_state"]["active"] is True
@@ -110,7 +47,7 @@ class TestDialogueRoutesFunctional:
         payload = _make_setup_payload()
         payload["scene_id"] = "test_scene"
         resp = client.post("/api/rpg/dialogue/start", json=payload)
-        data = resp.get_json()
+        data = resp.json()
         assert resp.status_code == 200
         # Should still work but npc_id will be empty
 
@@ -120,11 +57,11 @@ class TestDialogueRoutesFunctional:
         start_payload["npc_id"] = "test_npc"
         start_payload["scene_id"] = "test_scene"
         start_resp = client.post("/api/rpg/dialogue/start", json=start_payload)
-        start_data = start_resp.get_json()
+        start_data = start_resp.json()
 
         msg_payload = {"setup_payload": start_data["setup_payload"], "npc_id": "test_npc", "scene_id": "test_scene", "message": "Hello!"}
         resp = client.post("/api/rpg/dialogue/message", json=msg_payload)
-        data = resp.get_json()
+        data = resp.json()
         assert resp.status_code == 200
         assert data["ok"] is True
         assert "reply" in data
@@ -136,11 +73,11 @@ class TestDialogueRoutesFunctional:
         start_payload["npc_id"] = "test_npc"
         start_payload["scene_id"] = "test_scene"
         start_resp = client.post("/api/rpg/dialogue/start", json=start_payload)
-        start_data = start_resp.get_json()
+        start_data = start_resp.json()
 
         end_payload = {"setup_payload": start_data["setup_payload"]}
         resp = client.post("/api/rpg/dialogue/end", json=end_payload)
-        data = resp.get_json()
+        data = resp.json()
         assert resp.status_code == 200
         assert data["ok"] is True
         assert data["dialogue_state"]["active"] is False
@@ -151,7 +88,7 @@ class TestDialogueRoutesFunctional:
         start_payload["npc_id"] = "flow_npc"
         start_payload["scene_id"] = "flow_scene"
         start_resp = client.post("/api/rpg/dialogue/start", json=start_payload)
-        start_data = start_resp.get_json()
+        start_data = start_resp.json()
 
         for i in range(3):
             msg_payload = {
@@ -162,11 +99,11 @@ class TestDialogueRoutesFunctional:
             }
             msg_resp = client.post("/api/rpg/dialogue/message", json=msg_payload)
             assert msg_resp.status_code == 200
-            start_data["setup_payload"] = msg_resp.get_json()["setup_payload"]
+            start_data["setup_payload"] = msg_resp.json()["setup_payload"]
 
         end_resp = client.post("/api/rpg/dialogue/end", json={"setup_payload": start_data["setup_payload"]})
         assert end_resp.status_code == 200
-        data = end_resp.get_json()
+        data = end_resp.json()
         assert data["dialogue_state"]["active"] is False
 
     def test_multiple_dialogues_isolated(self, client):
@@ -184,7 +121,7 @@ class TestDialogueRoutesFunctional:
         assert resp1.status_code == 200
         assert resp2.status_code == 200
 
-        data1 = resp1.get_json()
-        data2 = resp2.get_json()
+        data1 = resp1.json()
+        data2 = resp2.json()
         assert data1["dialogue_state"]["npc_id"] == "npc1"
         assert data2["dialogue_state"]["npc_id"] == "npc2"

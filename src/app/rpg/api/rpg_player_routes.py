@@ -5,7 +5,10 @@ for UI integration.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
 from app.rpg.items import apply_item_use, list_item_definitions
 from app.rpg.party import (
@@ -25,17 +28,21 @@ from app.rpg.player.player_encounter import build_encounter_view
 rpg_player_bp = APIRouter()
 
 
-async def _load_setup_payload() -> dict:
+def _json_response(payload: Any, *, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(content=payload, status_code=status_code)
+
+
+async def _load_setup_payload(request: Request) -> dict:
     data = await request.json() or {}
     return dict(data.get("setup_payload") or {})
 
 
-async def _get_simulation_state(setup_payload: dict) -> dict:
+def _get_simulation_state(setup_payload: dict) -> dict:
     meta = dict((setup_payload or {}).get("metadata") or {})
     return dict(meta.get("simulation_state") or {})
 
 
-async def _write_simulation_state(setup_payload: dict, simulation_state: dict) -> dict:
+def _write_simulation_state(setup_payload: dict, simulation_state: dict) -> dict:
     setup_payload = dict(setup_payload or {})
     meta = dict(setup_payload.get("metadata") or {})
     meta["simulation_state"] = dict(simulation_state or {})
@@ -44,51 +51,51 @@ async def _write_simulation_state(setup_payload: dict, simulation_state: dict) -
 
 
 @rpg_player_bp.post("/api/rpg/player/state")
-async def player_state():
+async def player_state(request: Request):
     """Return the current player-facing state."""
-    setup_payload = _load_setup_payload()
+    setup_payload = await _load_setup_payload(request)
     state = ensure_player_state(_get_simulation_state(setup_payload))
-    return jsonify({
+    return _json_response({
         "ok": True,
         "player_state": state.get("player_state", {}),
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/journal")
-async def player_journal():
+async def player_journal(request: Request):
     """Return the player journal entries (last 50)."""
-    setup_payload = _load_setup_payload()
+    setup_payload = await _load_setup_payload(request)
     state = ensure_player_state(_get_simulation_state(setup_payload))
-    return jsonify({
+    return _json_response({
         "ok": True,
         "journal_entries": list((state.get("player_state") or {}).get("journal_entries") or [])[-50:],
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/codex")
-async def player_codex():
+async def player_codex(request: Request):
     """Return the player codex."""
-    setup_payload = _load_setup_payload()
+    setup_payload = await _load_setup_payload(request)
     state = ensure_player_state(_get_simulation_state(setup_payload))
-    return jsonify({
+    return _json_response({
         "ok": True,
         "codex": dict((state.get("player_state") or {}).get("codex") or {}),
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/objectives")
-async def player_objectives():
+async def player_objectives(request: Request):
     """Return the player active objectives (last 20)."""
-    setup_payload = _load_setup_payload()
+    setup_payload = await _load_setup_payload(request)
     state = ensure_player_state(_get_simulation_state(setup_payload))
-    return jsonify({
+    return _json_response({
         "ok": True,
         "active_objectives": list((state.get("player_state") or {}).get("active_objectives") or [])[-20:],
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/dialogue/enter")
-async def player_dialogue_enter():
+async def player_dialogue_enter(request: Request):
     """Enter dialogue mode with the specified NPC."""
     data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
@@ -99,7 +106,7 @@ async def player_dialogue_enter():
     state = enter_dialogue_mode(state, npc_id=npc_id, scene_id=scene_id)
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return _json_response({
         "ok": True,
         "setup_payload": setup_payload,
         "player_state": state.get("player_state", {}),
@@ -107,7 +114,7 @@ async def player_dialogue_enter():
 
 
 @rpg_player_bp.post("/api/rpg/player/dialogue/exit")
-async def player_dialogue_exit():
+async def player_dialogue_exit(request: Request):
     """Exit dialogue mode and return to the fallback mode."""
     data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
@@ -117,7 +124,7 @@ async def player_dialogue_exit():
     state = exit_dialogue_mode(state, fallback_mode=fallback_mode)
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return _json_response({
         "ok": True,
         "setup_payload": setup_payload,
         "player_state": state.get("player_state", {}),
@@ -125,26 +132,26 @@ async def player_dialogue_exit():
 
 
 @rpg_player_bp.post("/api/rpg/player/encounter")
-async def player_encounter():
+async def player_encounter(request: Request):
     """Build and return an encounter view for a given scene."""
     data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
     scene = dict(data.get("scene") or {})
     state = ensure_player_state(_get_simulation_state(setup_payload))
-    return jsonify({
+    return _json_response({
         "ok": True,
         "encounter": build_encounter_view(scene, state),
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory")
-async def player_inventory():
+async def player_inventory(request: Request):
     """Return the player inventory state and summary."""
-    setup_payload = _load_setup_payload()
+    setup_payload = await _load_setup_payload(request)
     state = ensure_player_state(_get_simulation_state(setup_payload))
     state = ensure_player_inventory(state)
     inventory_view = build_player_inventory_view(state)
-    return jsonify({
+    return _json_response({
         "ok": True,
         "inventory_state": inventory_view.get("inventory_state", {}),
         "inventory_summary": inventory_view.get("inventory_summary", {}),
@@ -152,7 +159,7 @@ async def player_inventory():
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/use")
-async def player_inventory_use():
+async def player_inventory_use(request: Request):
     """Use one inventory item via deterministic item effect hooks."""
     data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
@@ -166,7 +173,7 @@ async def player_inventory_use():
     setup_payload = _write_simulation_state(setup_payload, state)
 
     inventory_view = build_player_inventory_view(state)
-    return jsonify({
+    return _json_response({
         "ok": bool((result.get("result") or {}).get("ok")),
         "setup_payload": setup_payload,
         "result": dict(result.get("result") or {}),
@@ -176,16 +183,16 @@ async def player_inventory_use():
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/registry")
-async def player_inventory_registry():
+async def player_inventory_registry(request: Request):
     """Return the full item registry for debug/GM tools."""
-    return jsonify({
+    return _json_response({
         "ok": True,
         "items": list_item_definitions(),
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/party")
-async def player_party():
+async def player_party(request: Request):
     """Return the current party state."""
     data = await request.json() or {}
     setup_payload = dict(data.get("setup_payload") or {})
@@ -193,14 +200,14 @@ async def player_party():
     state = ensure_player_state(_get_simulation_state(setup_payload))
     player_state = ensure_party_state(state.get("player_state") or {})
 
-    return jsonify({
+    return _json_response({
         "ok": True,
         "party_state": player_state.get("party_state"),
     })
 
 
 @rpg_player_bp.post("/api/rpg/player/party/recruit")
-async def recruit_companion():
+async def recruit_companion(request: Request):
     """Recruit a new companion to the party."""
     data = await request.json() or {}
     npc_id = str(data.get("npc_id") or "")
@@ -212,7 +219,7 @@ async def recruit_companion():
     # Validate NPC exists in world state
     npcs = state.get("npcs") or {}
     if npc_id not in npcs:
-        return jsonify({
+        return _json_response({
             "ok": False,
             "reason": "npc_not_found",
             "npc_id": npc_id,
@@ -224,7 +231,7 @@ async def recruit_companion():
     state["player_state"] = player_state
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return _json_response({
         "ok": True,
         "setup_payload": setup_payload,
         "party_state": player_state.get("party_state"),
@@ -232,7 +239,7 @@ async def recruit_companion():
 
 
 @rpg_player_bp.post("/api/rpg/player/party/remove")
-async def remove_companion_route():
+async def remove_companion_route(request: Request):
     """Remove a companion from the party."""
     data = await request.json() or {}
     npc_id = str(data.get("npc_id") or "")
@@ -246,7 +253,7 @@ async def remove_companion_route():
     state["player_state"] = player_state
     setup_payload = _write_simulation_state(setup_payload, state)
 
-    return jsonify({
+    return _json_response({
         "ok": True,
         "setup_payload": setup_payload,
         "party_state": player_state.get("party_state"),
@@ -256,7 +263,7 @@ async def remove_companion_route():
 # Phase 18.3A — Equipment and progression endpoints (session-aware)
 
 @rpg_player_bp.post("/api/rpg/player/inventory/equip")
-async def equip_item_route():
+async def equip_item_route(request: Request):
     """Equip an inventory item into equipment slot."""
     from app.rpg.items.inventory_state import equip_inventory_item
     from app.rpg.session.runtime import load_runtime_session, save_runtime_session
@@ -267,7 +274,7 @@ async def equip_item_route():
     session_id = str(data.get("session_id", ""))
 
     if not item_id:
-        return {"ok": False, "error": "item_id required"}, 400
+        return _json_response({"ok": False, "error": "item_id required"}, status_code=400)
 
     if session_id:
         session = load_runtime_session(session_id)
@@ -286,7 +293,7 @@ async def equip_item_route():
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/unequip")
-async def unequip_item_route():
+async def unequip_item_route(request: Request):
     """Unequip an item from equipment slot."""
     from app.rpg.items.inventory_state import unequip_inventory_slot
     from app.rpg.session.runtime import load_runtime_session, save_runtime_session
@@ -296,7 +303,7 @@ async def unequip_item_route():
     session_id = str(data.get("session_id", ""))
 
     if not slot:
-        return {"ok": False, "error": "slot required"}, 400
+        return _json_response({"ok": False, "error": "slot required"}, status_code=400)
 
     if session_id:
         session = load_runtime_session(session_id)
@@ -315,7 +322,7 @@ async def unequip_item_route():
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/drop")
-async def drop_item_route():
+async def drop_item_route(request: Request):
     """Drop an item from inventory into the world."""
     from app.rpg.items.inventory_state import (
         get_inventory_item_for_drop,
@@ -329,7 +336,7 @@ async def drop_item_route():
     session_id = str(data.get("session_id", ""))
 
     if not item_id:
-        return {"ok": False, "error": "item_id required"}, 400
+        return _json_response({"ok": False, "error": "item_id required"}, status_code=400)
 
     if session_id:
         session = load_runtime_session(session_id)
@@ -355,7 +362,7 @@ async def drop_item_route():
             final_inv = dict(ps.get("inventory_state") or {})
             session["simulation_state"] = sim
             save_runtime_session(session)
-            return jsonify({
+            return _json_response({
                 "ok": True,
                 "item_id": item_id,
                 "location_id": location_id,
@@ -367,7 +374,7 @@ async def drop_item_route():
 
 
 @rpg_player_bp.post("/api/rpg/player/inventory/pickup")
-async def pickup_item_route():
+async def pickup_item_route(request: Request):
     """Pick up a world item into inventory."""
     from app.rpg.items.inventory_state import add_inventory_items
     from app.rpg.items.world_items import pickup_world_item
@@ -378,7 +385,7 @@ async def pickup_item_route():
     session_id = str(data.get("session_id", ""))
 
     if not instance_id:
-        return {"ok": False, "error": "instance_id required"}, 400
+        return _json_response({"ok": False, "error": "instance_id required"}, status_code=400)
 
     if session_id:
         session = load_runtime_session(session_id)
@@ -395,14 +402,14 @@ async def pickup_item_route():
                 sim["player_state"] = ps
                 session["simulation_state"] = sim
                 save_runtime_session(session)
-                return jsonify({
+                return _json_response({
                     "ok": True,
                     "instance_id": instance_id,
                     "item": picked,
                     "result": dict(pickup_result.get("result") or {}),
                     "equipment": dict(inv.get("equipment") or {}),
                 })
-            return jsonify({
+            return _json_response({
                 "ok": False,
                 "error": "item_not_found",
                 "instance_id": instance_id,
@@ -413,7 +420,7 @@ async def pickup_item_route():
 
 
 @rpg_player_bp.post("/api/rpg/player/progression")
-async def player_progression_route():
+async def player_progression_route(request: Request):
     """Get player progression data from session."""
     from app.rpg.session.runtime import load_runtime_session
 
@@ -426,7 +433,7 @@ async def player_progression_route():
             sim = dict(session.get("simulation_state") or {})
             ps = dict(sim.get("player_state") or {})
             inventory_state = dict(ps.get("inventory_state") or {})
-            return jsonify({
+            return _json_response({
                 "ok": True,
                 "level": int(ps.get("level", 1) or 1),
                 "xp": int(ps.get("xp", 0) or 0),
@@ -444,7 +451,7 @@ async def player_progression_route():
 
 
 @rpg_player_bp.post("/api/rpg/player/stats/allocate")
-async def allocate_stats_route():
+async def allocate_stats_route(request: Request):
     """Allocate stat points from session."""
     from app.rpg.player.player_progression_state import allocate_starting_stats
     from app.rpg.session.runtime import load_runtime_session, save_runtime_session
@@ -454,7 +461,7 @@ async def allocate_stats_route():
     session_id = str(data.get("session_id", ""))
 
     if not isinstance(allocation, dict) or not allocation:
-        return {"ok": False, "error": "allocation required"}, 400
+        return _json_response({"ok": False, "error": "allocation required"}, status_code=400)
 
     if session_id:
         session = load_runtime_session(session_id)
@@ -464,7 +471,7 @@ async def allocate_stats_route():
             unspent = int(ps.get("unspent_points", 0) or 0)
             total_requested = sum(int(v) for v in allocation.values())
             if total_requested > unspent:
-                return {"ok": False, "error": "insufficient_points", "unspent": unspent, "requested": total_requested}, 400
+                return _json_response({"ok": False, "error": "insufficient_points", "unspent": unspent, "requested": total_requested}, status_code=400)
             ps = allocate_starting_stats(ps, allocation)
             ps["unspent_points"] = max(0, unspent - total_requested)
             sim["player_state"] = ps

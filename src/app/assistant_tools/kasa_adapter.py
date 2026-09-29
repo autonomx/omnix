@@ -99,7 +99,9 @@ class PythonKasaRuntimeAdapter:
         try:
             from kasa import Discover
         except ImportError as exc:
-            raise RuntimeError("python-kasa is not installed; run: pip install python-kasa") from exc
+            raise RuntimeError(
+                "python-kasa is missing from the locked image runtime; rerun setup.bat or setup.sh"
+            ) from exc
         timeout = max(1, int(math.ceil(self.config.timeout_seconds)))
         auth = _auth_kwargs(self.config)
         if self.config.host:

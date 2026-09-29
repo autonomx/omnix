@@ -7,7 +7,7 @@ from typing import Any, Dict
 from tests.rpg.manual.constants import RPG_SESSION_DIRS
 from tests.rpg.manual.safe import _safe_dict, _safe_str
 
-# From manual_llm_transcript_old.py
+# Adapted from the archived manual transcript runner.
 
 
 def _thread_label() -> str:

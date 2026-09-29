@@ -26,6 +26,7 @@ Usage:
     scene = engine.handle_input("look around")
 """
 
+from threading import Event
 from typing import Any, Callable, Dict, List, Optional
 
 from .event_bus import EventBus

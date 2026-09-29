@@ -677,7 +677,7 @@ docs/                    Human-maintained product and engineering documentation<
             <div class="panel" data-search-item><h3>PowerShell quick start</h3><div class="code-shell"><button class="copy-button" type="button" data-copy-target="powershell-code">Copy</button><pre id="powershell-code">docker compose -f docker-compose.postgres.yml up -d
 $env:OMNIX_DATABASE_URL = 'postgresql://omnix:&lt;password&gt;@127.0.0.1:5432/omnix'
 
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
 $env:PYTHONPATH = 'src'
 python -m app.persistence migrate
 python -m app.persistence verify
@@ -692,7 +692,7 @@ npm run web:dev</pre></div><p class="muted">Open <code>http://localhost:5173/</c
             <div class="panel" data-search-item><h3>Bash / WSL quick start</h3><div class="code-shell"><button class="copy-button" type="button" data-copy-target="bash-code">Copy</button><pre id="bash-code">docker compose -f docker-compose.postgres.yml up -d
 export OMNIX_DATABASE_URL='postgresql://omnix:&lt;password&gt;@127.0.0.1:5432/omnix'
 
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.txt
 export PYTHONPATH=src
 python -m app.persistence migrate
 python -m app.persistence verify

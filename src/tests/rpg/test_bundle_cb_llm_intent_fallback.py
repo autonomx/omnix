@@ -4,21 +4,21 @@ import json
 from dataclasses import dataclass
 
 from app.providers.base import ChatMessage, ChatResponse
-from rpg import interactive_cli_campaign as cli
-from rpg.interactive_cli_commerce_followup import extract_service_offer_context
-from rpg.interactive_cli_intent_fallback import (
+from tests.rpg import interactive_cli_campaign as cli
+from tests.rpg.interactive_cli_commerce_followup import extract_service_offer_context
+from tests.rpg.interactive_cli_intent_fallback import (
     build_deterministic_intent_classification,
     call_llm_intent_classifier,
     classify_service_intent_with_fallback,
     narration_source_for_turn,
     validate_llm_intent_against_context,
 )
-from rpg.interactive_cli_quest_followup import (
+from tests.rpg.interactive_cli_quest_followup import (
     apply_quest_followup_repair,
     extract_quest_context,
     is_quest_inquiry,
 )
-from rpg.test_bundle_ca_interactive_cli_campaign import (  # type: ignore
+from tests.rpg.test_bundle_ca_interactive_cli_campaign import (  # type: ignore
     _drink_offer_result,
     _fake_turn,
     _service_offer_result,

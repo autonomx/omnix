@@ -25,7 +25,7 @@ for path in (str(TESTS_ROOT), str(SRC_ROOT), str(REPO_ROOT)):
 
 from tests.rpg import interactive_cli_campaign as cli  # noqa: E402
 from tests.rpg import interactive_intent_matrix as matrix  # noqa: E402
-from rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
+from tests.rpg.interactive_cli_response_quality import apply_response_quality_to_matrix_result  # noqa: E402
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
