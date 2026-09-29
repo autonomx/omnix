@@ -73,7 +73,6 @@ jobs:
             src/app/gateway/hooks/live_chat_companion_context.py \
             src/app/chat/live_chat_live_voice_profile.py \
             src/app/chat/live_chat_low_latency_stream.py \
-            src/app/chat/live_chat_postgres_fast_path.py \
             src/app/chat/live_chat_provider_metrics.py \
             src/app/chat/live_chat_provider_routing.py \
             src/app/chat/live_chat_stream_retry.py \

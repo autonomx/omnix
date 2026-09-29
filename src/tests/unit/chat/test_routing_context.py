@@ -261,7 +261,7 @@ def test_expanded_ambiguous_history_query_keeps_recent_fallback_semantics(tmp_pa
             ),
         ],
     )
-    repository.save_sessions([old])
+    repository.save_session(old)
     service = InMemoryHistorySearchService(db)
     expanded = build_history_recall_query(
         "fix it",
@@ -315,7 +315,7 @@ def test_ambiguous_cross_session_reference_falls_back_to_recent_scoped_history(t
             ),
         ],
     )
-    repository.save_sessions([old])
+    repository.save_session(old)
     service = InMemoryHistorySearchService(db)
 
     result = service.search(

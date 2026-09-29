@@ -191,6 +191,9 @@ def _mutate_chat_process(
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import PostgresIdentityRepository
     from app.runtime.tenant_context import pop_tenant, push_tenant
+    from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+    from app.settings.access import install_settings_service
+    from tests.support.in_memory_settings import InMemorySettingsService
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_max=2))
     try:
@@ -201,6 +204,9 @@ def _mutate_chat_process(
             )
         tenant_token = push_tenant(context)
         try:
+            settings_service = InMemorySettingsService()
+            settings_service.register_specs((assistant_memory_setting_spec(),))
+            install_settings_service(settings_service)
             adapter = PostgresChatRepositoryAdapter(database)
             if action == "create":
                 assert start_gate.wait(20), "session creation barrier timed out"

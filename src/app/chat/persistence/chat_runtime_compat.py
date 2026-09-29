@@ -753,7 +753,7 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        from .live_chat_provider_routing import route_postgres_begin_user_message
+        from app.chat.live_chat_provider_routing import route_postgres_begin_user_message
         from app.chat.live_chat_speculation import prime_live_speculation_session
 
         with _durable_session_mutation(self, session_id):
