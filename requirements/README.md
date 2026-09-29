@@ -14,7 +14,10 @@ Use `pip-compile --generate-hashes --output-file requirements/<name>.lock.txt
 requirements/<name>.in`; add `--allow-unsafe` for dev and GPU locks. For GPU
 locks, also pass `--extra-index-url https://download.pytorch.org/whl/cu124`.
 Review the complete resolver diff and validate installations with
-`python -m pip install --require-hashes -r requirements/<name>.lock.txt`.
+`python -m pip install --require-hashes -r requirements/<name>.lock.txt` on
+Linux and Windows. The gateway inputs pin Uvicorn's `uvloop` extra behind a
+non-Windows platform marker; preserve that hashed entry when compiling from a
+Windows environment, where the marker is inactive.
 
 The base install is the gateway runtime. Tests and optional model services use
 their own lock files and setup scripts; they are not layered into a single

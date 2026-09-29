@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+uvloop==0.22.1; sys_platform != "win32"
 pydantic
 psycopg[binary]
 psycopg-pool
