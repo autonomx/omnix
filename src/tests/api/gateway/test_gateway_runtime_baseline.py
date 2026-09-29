@@ -467,3 +467,84 @@ def test_worker_health_probes_run_concurrently_and_keep_discovery_order(monkeypa
     payload = workers.get_worker_health_payload({})
     assert [worker.id for worker in payload.workers] == ["tts", "stt", "image"]
     assert payload.ok
+
+
+def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
+    monkeypatch, tmp_path
+):
+    from app.persistence import identity_service, migrations
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("request paths must not migrate or bootstrap identity")
+
+    monkeypatch.setattr(migrations, "apply_migrations", forbidden)
+    monkeypatch.setattr(identity_service, "ensure_local_identity", forbidden)
+    monkeypatch.setattr("app.persistence.apply_migrations", forbidden)
+
+    from app.rpg.api.feature_routes import rpg_world_library_routes
+    from app.rpg.session import service as rpg_session_service
+
+    monkeypatch.setattr(
+        rpg_world_library_routes,
+        "read_world_library",
+        lambda **_kwargs: {
+            "ok": True,
+            "worlds": [],
+            "scenarios": [],
+            "campaigns": [],
+            "generation_runs": [],
+        },
+    )
+    monkeypatch.setattr(rpg_session_service, "load_session", lambda _session_id: None)
+
+    from app.characters import feature as character_feature
+    from app.characters.models import CharacterListResponse
+
+    original_register_character_routes = character_feature.register_character_routes
+
+    def register_test_character_routes(router):
+        original_register_character_routes(
+            router,
+            service_factory=lambda: SimpleNamespace(
+                list=lambda **_kwargs: CharacterListResponse(characters=[])
+            ),
+        )
+
+    monkeypatch.setattr(
+        character_feature, "register_character_routes", register_test_character_routes
+    )
+
+    from app.gateway.main import create_gateway_app
+    from fastapi.testclient import TestClient
+
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://127.0.0.1:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
+
+    turn = client.post(
+        "/api/rpg/sessions/missing-session/turn",
+        json={"command": "look around"},
+    )
+    world_library = client.get("/api/rpg/world-library")
+    prompt = client.post(
+        "/api/prompts/render",
+        json={
+            "template": {
+                "id": "chat.reply",
+                "version": "v1",
+                "module": "chat",
+                "text": "Reply to {message}.",
+            },
+            "variables": {"message": "hello"},
+        },
+    )
+    characters = client.get("/api/characters")
+
+    assert turn.status_code == 404
+    assert world_library.status_code == 200
+    assert prompt.status_code == 200
+    assert prompt.json()["rendered_text"] == "Reply to hello."
+    assert characters.status_code == 200
+    assert characters.json()["characters"] == []
