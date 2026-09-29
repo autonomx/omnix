@@ -944,22 +944,23 @@ def _remove_assistant_reply(chat_store: Any, session_id: str, message_id: str) -
     if callable(remove):
         remove(session_id, message_id)
         return
-    sessions = chat_store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        session.messages = [
-            item
-            for item in session.messages
-            if not (
-                item.role == "assistant"
-                and item.metadata.get("reply_to_message_id") == message_id
-            )
-        ]
-        session.message_count = len(session.messages)
-        sessions[index] = session
-        chat_store._save_sessions(sessions)
+    session = chat_store.get_session(session_id)
+    if session is None:
         return
+    reply_ids = [
+        item.id
+        for item in session.messages
+        if item.role == "assistant"
+        and item.metadata.get("reply_to_message_id") == message_id
+    ]
+    delete_messages = getattr(chat_store, "delete_messages", None)
+    if callable(delete_messages):
+        delete_messages(session_id, reply_ids)
+        return
+    delete_ids = set(reply_ids)
+    session.messages = [item for item in session.messages if item.id not in delete_ids]
+    session.message_count = len(session.messages)
+    chat_store._save_session(session)
 
 
 def _generate_reply(
@@ -1048,17 +1049,18 @@ def _patch_user_message_metadata(
     if callable(update):
         update(session_id=session_id, message_id=message_id, metadata=metadata)
         return
-    sessions = chat_store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id == message_id:
-                message.metadata.update(metadata)
-                break
-        sessions[index] = session
-        chat_store._save_sessions(sessions)
+    update = getattr(chat_store, "update_message_metadata", None)
+    if callable(update):
+        update(session_id=session_id, message_id=message_id, metadata=metadata)
         return
+    session = chat_store.get_session(session_id)
+    if session is None:
+        return
+    message = next((item for item in session.messages if item.id == message_id), None)
+    if message is None:
+        return
+    message.metadata.update(metadata)
+    chat_store._save_session(session)
 
 
 def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[str, str]]:

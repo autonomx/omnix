@@ -11,9 +11,7 @@ its separate 12-message latency policy.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
-
-import os
+from app.config.env import environment
 from collections.abc import Callable
 from functools import wraps
 from typing import Any

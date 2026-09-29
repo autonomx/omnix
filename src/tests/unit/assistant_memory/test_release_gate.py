@@ -46,7 +46,7 @@ def _runtime(tmp_path):
         updated_at=NOW,
         messages=[],
     )
-    store._save_sessions([session])
+    store._save_session(session)
     context = resolve_chat_scope(
         session.id,
         profile_id=session.profile_id,

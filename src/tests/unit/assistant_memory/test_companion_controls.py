@@ -61,11 +61,17 @@ class _Store:
     def get_session(self, session_id: str):
         return next((item for item in self.sessions if item.id == session_id), None)
 
-    def _load_sessions(self):
-        return self.sessions
-
-    def _save_sessions(self, sessions):
-        self.sessions = sessions
+    def clear_memory_snapshots_for_owner(self, owner_type: str, owner_id: str) -> int:
+        changed = 0
+        for session in self.sessions:
+            actual_owner = "character" if session.interaction_mode == "character" else "system"
+            actual_id = session.character_id if actual_owner == "character" else "system-assistant"
+            if (actual_owner, actual_id) != (owner_type, owner_id):
+                continue
+            session.memory_enabled = False
+            session.memory_snapshot_id = None
+            changed += 1
+        return changed
 
 
 def test_archive_restore_export_and_reset_are_owner_scoped() -> None:

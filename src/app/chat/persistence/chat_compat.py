@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
@@ -20,6 +21,27 @@ def _json(value: Any) -> str:
 _MESSAGE_PAGE_SIZE = 500
 
 
+def _encode_session_cursor(record: dict[str, Any]) -> str:
+    payload = json.dumps(
+        [record["updated_at"], record["id"]], separators=(",", ":")
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_session_cursor(cursor: str | None) -> tuple[str, str] | None:
+    if not cursor:
+        return None
+    try:
+        encoded = cursor.encode("ascii")
+        payload = base64.urlsafe_b64decode(encoded + b"=" * (-len(encoded) % 4))
+        updated_at, session_id = json.loads(payload)
+    except (UnicodeEncodeError, ValueError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError("chat session cursor is invalid") from error
+    if not isinstance(updated_at, str) or not isinstance(session_id, str) or not session_id:
+        raise ValueError("chat session cursor is invalid")
+    return updated_at, session_id
+
+
 class PostgresChatRepositoryAdapter:
     """Compatibility implementation for the current ChatStore contract.
 
@@ -33,24 +55,24 @@ class PostgresChatRepositoryAdapter:
         self.database = database or default_database()
         self.context = current_tenant()
 
-    def load_sessions(self) -> list[ChatSession]:
-        sessions: list[ChatSession] = []
+    def list_session_summaries(
+        self, *, limit: int = 100, cursor: str | None = None
+    ) -> tuple[list[ChatSessionSummary], str | None]:
+        """List one bounded summary page without loading any transcript rows."""
+        page_size = max(1, min(int(limit), 100))
+        before = _decode_session_cursor(cursor)
         with unit_of_work(self.database) as work:
-            records = work.chats.list_sessions(self.context, limit=200)
-            for record in records:
-                messages = self._list_all_messages(work, record["id"])
-                sessions.append(self._to_session(record, messages))
+            records = work.chats.list_sessions(
+                self.context,
+                limit=page_size + 1,
+                before_updated_at=before[0] if before else None,
+                before_id=before[1] if before else None,
+            )
             work.rollback()
-        return sessions
-
-    def list_session_summaries(self) -> list[ChatSessionSummary]:
-        """List sidebar rows without loading every persisted transcript."""
-
-        with unit_of_work(self.database) as work:
-            records = work.chats.list_sessions(self.context, limit=200)
-            summaries = [self._to_summary(record) for record in records]
-            work.rollback()
-        return summaries
+        has_more = len(records) > page_size
+        page = records[:page_size]
+        next_cursor = _encode_session_cursor(page[-1]) if has_more and page else None
+        return [self._to_summary(record) for record in page], next_cursor
 
     def get_session(self, session_id: str) -> ChatSession | None:
         """Load one transcript without hydrating the complete chat workspace."""
@@ -65,98 +87,125 @@ class PostgresChatRepositoryAdapter:
             work.rollback()
         return session
 
-    def save_sessions(self, sessions: list[ChatSession]) -> None:
-        with unit_of_work(self.database) as work:
-            existing_records = work.chats.list_sessions(self.context, limit=500)
-            existing_by_id = {record["id"]: record for record in existing_records}
-            requested_ids = {session.id for session in sessions}
+    def save_session(self, session: ChatSession) -> None:
+        """Persist one session and its changed message rows atomically.
 
-            for existing_id in sorted(set(existing_by_id) - requested_ids):
+        Chat history is append-only: existing message IDs must remain in order.
+        Updating a message only writes that message row, while new messages are
+        appended through the repository's row-locked append operation.
+        """
+        with unit_of_work(self.database) as work:
+            session_row = work.connection.execute(
+                """
+                SELECT status, revision FROM omnix_chat_sessions
+                 WHERE id = %s AND workspace_id = %s
+                 FOR UPDATE
+                """,
+                (session.id, self.context.workspace_id),
+            ).fetchone()
+            if session_row is None:
+                work.chats.create_session(self.context, self._session_payload(session))
+                stored_messages: list[dict[str, Any]] = []
+            else:
+                if session_row[0] != "active":
+                    raise RuntimeError(f"chat session {session.id} is not active")
+                if int(session_row[1]) != session._revision:
+                    raise RuntimeError(
+                        f"chat session {session.id} changed after it was loaded"
+                    )
+                stored_messages = self._list_all_messages(work, session.id)
                 work.connection.execute(
                     """
-                    UPDATE omnix_chat_sessions
-                       SET status = 'deleted', revision = revision + 1,
-                           updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                    UPDATE omnix_chat_sessions SET
+                        title = %s,
+                        provider_id = %s,
+                        model_id = %s,
+                        project_id = %s,
+                        profile_id = %s,
+                        interaction_mode = %s,
+                        character_id = %s,
+                        character_version = %s,
+                        memory_enabled = %s,
+                        memory_snapshot_id = %s,
+                        settings = %s::jsonb,
+                        transcript_policy = %s,
+                        active_segment_id = %s,
+                        revision = revision + 1,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s AND status = 'active'
                     """,
-                    (self.context.workspace_id, existing_id),
+                    (
+                        session.title,
+                        session.provider_id,
+                        session.model_id,
+                        session.project_id,
+                        session.profile_id,
+                        session.interaction_mode,
+                        session.character_id,
+                        session.character_profile_version,
+                        session.memory_enabled,
+                        session.memory_snapshot_id,
+                        _json(self._settings(session)),
+                        session.transcript_policy,
+                        session.active_segment_id,
+                        self.context.workspace_id,
+                        session.id,
+                    ),
                 )
 
-            for session in sessions:
-                existing = existing_by_id.get(session.id)
-                if existing is None:
-                    work.chats.create_session(
-                        self.context,
-                        self._session_payload(session),
-                    )
-                    stored_messages: list[dict[str, Any]] = []
-                else:
+            stored_ids = [message["id"] for message in stored_messages]
+            requested_prefix = [message.id for message in session.messages[: len(stored_ids)]]
+            if stored_ids != requested_prefix:
+                raise RuntimeError(
+                    f"Chat transcript rewrite rejected for {session.id}; "
+                    "PostgreSQL message history is append-only"
+                )
+            retained_messages = (
+                session.messages
+                if transcript_retention_allowed(session)
+                else session.messages[: len(stored_ids)]
+            )
+            stored_by_id = {message["id"]: message for message in stored_messages}
+            for message in retained_messages:
+                payload = {
+                    "id": message.id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at,
+                    "metadata": dict(message.metadata),
+                }
+                stored = stored_by_id.get(message.id)
+                if stored is None:
+                    work.chats.append_message(self.context, session.id, payload)
+                elif any(
+                    stored[field] != payload[field]
+                    for field in ("content", "metadata", "created_at")
+                ):
                     work.connection.execute(
                         """
-                        UPDATE omnix_chat_sessions SET
-                            title = %s,
-                            provider_id = %s,
-                            model_id = %s,
-                            project_id = %s,
-                            profile_id = %s,
-                            interaction_mode = %s,
-                            character_id = %s,
-                            character_version = %s,
-                            memory_enabled = %s,
-                            memory_snapshot_id = %s,
-                            settings = %s::jsonb,
-                            transcript_policy = %s,
-                            active_segment_id = %s,
-                            status = 'active',
-                            revision = revision + 1,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s
+                        UPDATE omnix_chat_messages
+                           SET content = %s,
+                               metadata = %s::jsonb,
+                               created_at = %s::timestamptz
+                         WHERE workspace_id = %s AND session_id = %s AND id = %s
                         """,
                         (
-                            session.title,
-                            session.provider_id,
-                            session.model_id,
-                            session.project_id,
-                            session.profile_id,
-                            session.interaction_mode,
-                            session.character_id,
-                            session.character_profile_version,
-                            session.memory_enabled,
-                            session.memory_snapshot_id,
-                            _json(self._settings(session)),
-                            session.transcript_policy,
-                            session.active_segment_id,
+                            payload["content"],
+                            _json(payload["metadata"]),
+                            payload["created_at"],
                             self.context.workspace_id,
                             session.id,
+                            message.id,
                         ),
                     )
-                    stored_messages = self._list_all_messages(work, session.id)
-
-                stored_ids = [message["id"] for message in stored_messages]
-                requested_prefix = [message.id for message in session.messages[: len(stored_ids)]]
-                if stored_ids != requested_prefix:
-                    raise RuntimeError(
-                        f"Chat transcript rewrite rejected for {session.id}; "
-                        "PostgreSQL message history is append-only"
-                    )
-                retained_messages = (
-                    session.messages
-                    if transcript_retention_allowed(session)
-                    else session.messages[: len(stored_ids)]
-                )
-                for message in retained_messages[len(stored_ids) :]:
-                    work.chats.append_message(
-                        self.context,
-                        session.id,
-                        {
-                            "id": message.id,
-                            "role": message.role,
-                            "content": message.content,
-                            "created_at": message.created_at,
-                            "metadata": dict(message.metadata),
-                        },
-                    )
+            revision_row = work.connection.execute(
+                """SELECT revision FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s""",
+                (self.context.workspace_id, session.id),
+            ).fetchone()
+            revision = int(revision_row[0])
             work.commit()
+        session._revision = revision
 
     def create_session(self, session: ChatSession) -> None:
         """Insert one session and its retained greeting without rewriting neighbors."""
@@ -171,7 +220,13 @@ class PostgresChatRepositoryAdapter:
                         "created_at": message.created_at,
                         "metadata": dict(message.metadata),
                     })
+            revision = work.connection.execute(
+                """SELECT revision FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s""",
+                (self.context.workspace_id, session.id),
+            ).fetchone()[0]
             work.commit()
+        session._revision = int(revision)
 
     def delete_session(self, session_id: str) -> bool:
         """Soft-delete only the requested active session in the current workspace."""
@@ -184,6 +239,37 @@ class PostgresChatRepositoryAdapter:
                 (self.context.workspace_id, session_id),
             )
             changed = cursor.rowcount > 0
+            work.commit()
+        return changed
+
+    def clear_memory_snapshots_for_owner(self, owner_type: str, owner_id: str) -> int:
+        """Clear cached memory references for sessions owned by one memory scope."""
+        if owner_type == "character":
+            if not owner_id:
+                return 0
+            owner_clause = "character_id = %s"
+            owner_params: tuple[str, ...] = (owner_id,)
+        elif owner_type == "system" and owner_id == "system-assistant":
+            owner_clause = "interaction_mode = 'system' AND character_id IS NULL"
+            owner_params = ()
+        else:
+            return 0
+        with unit_of_work(self.database) as work:
+            result = work.connection.execute(
+                f"""
+                UPDATE omnix_chat_sessions
+                   SET memory_enabled = FALSE,
+                       memory_snapshot_id = NULL,
+                       settings = settings - 'memory_snapshot_revision'
+                                         - 'memory_record_count'
+                                         - 'memory_last_refreshed_at',
+                       revision = revision + 1,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND {owner_clause}
+                """,
+                (self.context.workspace_id, *owner_params),
+            )
+            changed = result.rowcount
             work.commit()
         return changed
 
@@ -221,6 +307,15 @@ class PostgresChatRepositoryAdapter:
         if not metadata:
             return False
         with unit_of_work(self.database) as work:
+            session = work.connection.execute(
+                """SELECT id FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                     FOR UPDATE""",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if session is None:
+                work.rollback()
+                return False
             cursor = work.connection.execute(
                 """
                 UPDATE omnix_chat_messages
@@ -237,6 +332,13 @@ class PostgresChatRepositoryAdapter:
                 ),
             )
             changed = cursor.rowcount > 0
+            if changed:
+                work.connection.execute(
+                    """UPDATE omnix_chat_sessions
+                          SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                    (self.context.workspace_id, session_id),
+                )
             work.commit()
         return changed
 
@@ -248,28 +350,118 @@ class PostgresChatRepositoryAdapter:
         metadata: dict[str, object],
     ) -> bool:
         """Patch one accepted user turn without rewriting the chat workspace."""
+        return self.update_message_metadata(
+            session_id=session_id,
+            message_id=message_id,
+            metadata=metadata,
+            role="user",
+        )
+
+    def update_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, object],
+        role: str | None = None,
+    ) -> bool:
+        """Patch one message row and bump only its owning session revision."""
         if not metadata:
             return False
         with unit_of_work(self.database) as work:
+            session = work.connection.execute(
+                """SELECT id FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                     FOR UPDATE""",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if session is None:
+                work.rollback()
+                return False
+            role_clause = " AND role = %s" if role else ""
+            params: tuple[Any, ...] = (
+                _json(metadata), self.context.workspace_id, session_id, message_id,
+                *((role,) if role else ()),
+            )
             cursor = work.connection.execute(
-                """
-                UPDATE omnix_chat_messages
-                   SET metadata = metadata || %s::jsonb
-                 WHERE workspace_id = %s
-                   AND session_id = %s
-                   AND id = %s
-                   AND role = 'user'
-                """,
-                (
-                    _json(metadata),
-                    self.context.workspace_id,
-                    session_id,
-                    message_id,
-                ),
+                """UPDATE omnix_chat_messages
+                      SET metadata = metadata || %s::jsonb
+                    WHERE workspace_id = %s AND session_id = %s AND id = %s"""
+                + role_clause,
+                params,
             )
             changed = cursor.rowcount > 0
+            if changed:
+                work.connection.execute(
+                    """UPDATE omnix_chat_sessions
+                          SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                    (self.context.workspace_id, session_id),
+                )
             work.commit()
         return changed
+
+    def delete_messages(self, session_id: str, message_ids: list[str]) -> int:
+        """Delete selected transcript rows from one locked session."""
+        ids = list(dict.fromkeys(message_ids))
+        if not ids:
+            return 0
+        with unit_of_work(self.database) as work:
+            session = work.connection.execute(
+                """SELECT message_count FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                     FOR UPDATE""",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if session is None:
+                work.rollback()
+                return 0
+            deleted = work.connection.execute(
+                """DELETE FROM omnix_chat_messages
+                     WHERE workspace_id = %s AND session_id = %s AND id = ANY(%s)""",
+                (self.context.workspace_id, session_id, ids),
+            ).rowcount
+            if deleted:
+                work.connection.execute(
+                    """UPDATE omnix_chat_sessions
+                          SET message_count = GREATEST(message_count - %s, 0),
+                              revision = revision + 1,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                    (deleted, self.context.workspace_id, session_id),
+                )
+            work.commit()
+        return deleted
+
+    def remove_assistant_reply(self, session_id: str, user_message_id: str) -> int:
+        """Remove only assistant rows addressed to one user turn."""
+        with unit_of_work(self.database) as work:
+            session = work.connection.execute(
+                """SELECT message_count FROM omnix_chat_sessions
+                     WHERE workspace_id = %s AND id = %s AND status = 'active'
+                     FOR UPDATE""",
+                (self.context.workspace_id, session_id),
+            ).fetchone()
+            if session is None:
+                work.rollback()
+                return 0
+            deleted = work.connection.execute(
+                """DELETE FROM omnix_chat_messages
+                     WHERE workspace_id = %s AND session_id = %s AND role = 'assistant'
+                       AND metadata ->> 'reply_to_message_id' = %s""",
+                (self.context.workspace_id, session_id, user_message_id),
+            ).rowcount
+            if deleted:
+                work.connection.execute(
+                    """UPDATE omnix_chat_sessions
+                          SET message_count = GREATEST(message_count - %s, 0),
+                              revision = revision + 1,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                    (deleted, self.context.workspace_id, session_id),
+                )
+            work.commit()
+        return deleted
 
     def _session_payload(self, session: ChatSession) -> dict[str, Any]:
         return {
@@ -345,7 +537,7 @@ class PostgresChatRepositoryAdapter:
         record: dict[str, Any],
         messages: list[dict[str, Any]],
     ) -> ChatSession:
-        return ChatSession(
+        session = ChatSession(
             **cls._summary_fields(record),
             messages=[
                 ChatMessage(
@@ -358,3 +550,5 @@ class PostgresChatRepositoryAdapter:
                 for message in messages
             ],
         )
+        session._revision = int(record.get("revision") or 0)
+        return session

@@ -15,7 +15,7 @@ from .models import ChatSession
 class ChatRepository(Protocol):
     def load_sessions(self) -> list[ChatSession]: ...
 
-    def save_sessions(self, sessions: list[ChatSession]) -> None: ...
+    def save_session(self, session: ChatSession) -> None: ...
 
 
 class ChatImportState(BaseModel):
@@ -57,9 +57,13 @@ class InMemoryChatRepository:
         with self._state.lock:
             return deepcopy(self._state.sessions)
 
-    def save_sessions(self, sessions: list[ChatSession]) -> None:
+    def save_session(self, session: ChatSession) -> None:
         with self._state.lock:
-            self._state.sessions = deepcopy(sessions)
+            sessions = {value.id: value for value in self._state.sessions}
+            sessions[session.id] = deepcopy(session)
+            self._state.sessions = sorted(
+                sessions.values(), key=lambda value: (value.created_at, value.id)
+            )
 
     def import_sessions(
         self,

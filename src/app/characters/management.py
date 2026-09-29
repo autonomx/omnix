@@ -163,30 +163,39 @@ class CharacterManagementService:
     def _session_summaries(self, character_id: str) -> list[CharacterSessionSummary]:
         summaries: list[CharacterSessionSummary] = []
         repository = self.character_service.repository
-        for session in self.chat_store._load_sessions():
-            segment_ids = {
-                segment.id
-                for segment in repository.segments(session.id)
-                if segment.character_id == character_id
-            }
-            character_messages = sum(
-                1
-                for message in session.messages
-                if message.metadata.get("segment_id") in segment_ids
-                or message.metadata.get("character_id") == character_id
-            )
-            if session.character_id != character_id and character_messages == 0:
-                continue
-            summaries.append(
-                CharacterSessionSummary(
-                    id=session.id,
-                    title=session.title,
-                    message_count=len(session.messages),
-                    character_message_count=character_messages,
-                    created_at=session.created_at,
-                    updated_at=session.updated_at,
+        cursor = None
+        while True:
+            page = self.chat_store.list_sessions(limit=100, cursor=cursor)
+            for summary in page.sessions:
+                session = self.chat_store.get_session(summary.id)
+                if session is None:
+                    continue
+                segment_ids = {
+                    segment.id
+                    for segment in repository.segments(session.id)
+                    if segment.character_id == character_id
+                }
+                character_messages = sum(
+                    1
+                    for message in session.messages
+                    if message.metadata.get("segment_id") in segment_ids
+                    or message.metadata.get("character_id") == character_id
                 )
-            )
+                if session.character_id != character_id and character_messages == 0:
+                    continue
+                summaries.append(
+                    CharacterSessionSummary(
+                        id=session.id,
+                        title=session.title,
+                        message_count=len(session.messages),
+                        character_message_count=character_messages,
+                        created_at=session.created_at,
+                        updated_at=session.updated_at,
+                    )
+                )
+            if not page.next_cursor:
+                break
+            cursor = page.next_cursor
         return summaries
 
     def _delete_memory_owner(self, character_id: str) -> tuple[int, int, int]:
@@ -197,27 +206,39 @@ class CharacterManagementService:
 
     def _delete_character_transcripts(self, character_id: str) -> int:
         repository = self.character_service.repository
-        sessions = self.chat_store._load_sessions()
         deleted = 0
-        for session in sessions:
-            segment_ids = {
-                segment.id
-                for segment in repository.segments(session.id)
-                if segment.character_id == character_id
-            }
-            kept = []
-            for message in session.messages:
-                belongs = (
-                    message.metadata.get("segment_id") in segment_ids
+        cursor = None
+        while True:
+            page = self.chat_store.list_sessions(limit=100, cursor=cursor)
+            for summary in page.sessions:
+                session = self.chat_store.get_session(summary.id)
+                if session is None:
+                    continue
+                segment_ids = {
+                    segment.id
+                    for segment in repository.segments(session.id)
+                    if segment.character_id == character_id
+                }
+                message_ids = [
+                    message.id
+                    for message in session.messages
+                    if message.metadata.get("segment_id") in segment_ids
                     or message.metadata.get("character_id") == character_id
-                )
-                if belongs:
-                    deleted += 1
-                else:
-                    kept.append(message)
-            session.messages = kept
-            session.message_count = len(kept)
-        self.chat_store._save_sessions(sessions)
+                ]
+                delete_messages = getattr(self.chat_store, "delete_messages", None)
+                if callable(delete_messages):
+                    deleted += delete_messages(session.id, message_ids)
+                elif message_ids:
+                    delete_ids = set(message_ids)
+                    session.messages = [
+                        message for message in session.messages if message.id not in delete_ids
+                    ]
+                    session.message_count = len(session.messages)
+                    self.chat_store._save_session(session)
+                    deleted += len(message_ids)
+            if not page.next_cursor:
+                break
+            cursor = page.next_cursor
         return deleted
 
 

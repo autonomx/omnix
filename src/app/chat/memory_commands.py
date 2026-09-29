@@ -40,8 +40,7 @@ class MemoryCommandResult(BaseModel):
 
 class SessionStoreLike(Protocol):
     def get_session(self, session_id: str) -> ChatSession | None: ...
-    def _load_sessions(self) -> list[ChatSession]: ...
-    def _save_sessions(self, sessions: list[ChatSession]) -> None: ...
+    def _save_session(self, session: ChatSession) -> None: ...
 
 
 _SAVE_PATTERN = re.compile(
@@ -191,24 +190,21 @@ def execute_memory_command(
         return MemoryCommandResult(content=f"Refreshed active Chat memory to snapshot revision {revision} with {count} records.", command="refresh", mutated=True)
 
     if command.kind == "disable":
-        sessions = store._load_sessions()
-        for index, current in enumerate(sessions):
-            if current.id != session_id:
-                continue
-            if current.interaction_mode == "character":
-                current.read_memory = False
-                current.write_memory = False
-                current.shared_memory_access = "none"
-                current.memory_snapshot_id = None
-                current.memory_snapshot_revision = None
-                current.memory_record_count = 0
-                current.memory_last_refreshed_at = None
-            else:
-                current.memory_enabled = False
-            sessions[index] = current
-            store._save_sessions(sessions)
-            return MemoryCommandResult(content="Memory is disabled for this Chat. Saved records were not deleted.", command="disable", mutated=True)
-        return MemoryCommandResult(content="The Chat session no longer exists.", command="disable", mutated=False)
+        current = store.get_session(session_id)
+        if current is None:
+            return MemoryCommandResult(content="The Chat session no longer exists.", command="disable", mutated=False)
+        if current.interaction_mode == "character":
+            current.read_memory = False
+            current.write_memory = False
+            current.shared_memory_access = "none"
+            current.memory_snapshot_id = None
+            current.memory_snapshot_revision = None
+            current.memory_record_count = 0
+            current.memory_last_refreshed_at = None
+        else:
+            current.memory_enabled = False
+        store._save_session(current)
+        return MemoryCommandResult(content="Memory is disabled for this Chat. Saved records were not deleted.", command="disable", mutated=True)
 
     record = service.repository.get_record(command.memory_id or "")
     if record is None or record not in service.list_active(context):

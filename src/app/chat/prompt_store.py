@@ -77,17 +77,14 @@ def _persist_routing_metadata(
             metadata=patch,
         )
         return
-    sessions = store._load_sessions()
-    for index, stored_session in enumerate(sessions):
-        if stored_session.id != session.id:
-            continue
-        for message in stored_session.messages:
-            if message.id == user_message.id:
-                message.metadata.update(patch)
-                break
-        sessions[index] = stored_session
-        store._save_sessions(sessions)
+    stored_session = store.get_session(session.id)
+    if stored_session is None:
         return
+    for message in stored_session.messages:
+        if message.id == user_message.id:
+            message.metadata.update(patch)
+            store._save_session(stored_session)
+            return
 
 
 def _generalized_stream_events(content: str, metadata: dict[str, Any]):
@@ -273,9 +270,10 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             history_service = self.history_search_factory()
             search_sessions = getattr(history_service, "search_sessions", None)
-            if callable(search_sessions):
+            history_sessions = self._sessions_for_history_search()
+            if callable(search_sessions) and history_sessions is not None:
                 history_result = search_sessions(
-                    list(self._load_sessions()),
+                    history_sessions,
                     history_query,
                     profile_id=session.profile_id,
                     workspace_id=session.workspace_id,
@@ -335,6 +333,10 @@ class ChatSessionStore(JsonChatSessionStore):
             else {"enabled": False, "retrieved_count": 0}
         )
         return assembly
+
+    def _sessions_for_history_search(self) -> list[ChatSession] | None:
+        """Return transcripts only for local search backends that require them."""
+        return list(self._load_sessions())
 
     def _cache_prompt_context(
         self,
@@ -439,17 +441,14 @@ class ChatSessionStore(JsonChatSessionStore):
         }
 
     def _mark_memory_command(self, session_id: str, message_id: str, command: dict[str, Any]) -> None:
-        sessions = self._load_sessions()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            for message in session.messages:
-                if message.id == message_id:
-                    message.metadata["memory_command"] = command
-                    break
-            sessions[index] = session
-            self._save_sessions(sessions)
+        session = self.get_session(session_id)
+        if session is None:
             return
+        for message in session.messages:
+            if message.id == message_id:
+                message.metadata["memory_command"] = command
+                self._save_session(session)
+                return
 
     def _enqueue_memory_suggestion_job(self, session_id: str, user_message_id: str) -> None:
         job = enqueue_memory_suggestion_job(session_id, user_message_id)

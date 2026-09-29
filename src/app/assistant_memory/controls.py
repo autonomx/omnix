@@ -194,21 +194,9 @@ def reset_owner_memory(
         owner_type=context.owner_type,
         owner_id=context.owner_id,
     )
-    sessions = store._load_sessions()
-    changed = False
-    for session in sessions:
-        owner_type = "character" if session.interaction_mode == "character" else "system"
-        owner_id = session.character_id if owner_type == "character" else "system-assistant"
-        if (owner_type, owner_id) != (context.owner_type, context.owner_id):
-            continue
-        session.memory_enabled = False
-        session.memory_snapshot_id = None
-        session.memory_snapshot_revision = None
-        session.memory_record_count = 0
-        session.memory_last_refreshed_at = None
-        changed = True
-    if changed:
-        store._save_sessions(sessions)
+    clear_snapshots = getattr(store, "clear_memory_snapshots_for_owner", None)
+    if callable(clear_snapshots):
+        clear_snapshots(context.owner_type, context.owner_id)
     _invalidate(context)
     return MemoryResetResponse(
         owner_type=context.owner_type,

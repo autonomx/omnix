@@ -60,7 +60,7 @@ def _seed(tmp_path: Path, monkeypatch):
             metadata={"segment_id": session.active_segment_id},
         )
     )
-    store._save_sessions([session])
+    store._save_session(session)
     memory = default_memory_service().create_explicit_memory(
         resolve_chat_scope(session.id, owner_type="character", owner_id="maya"),
         scope="global",
@@ -99,7 +99,7 @@ def test_relationship_reset_deletes_memory_and_character_transcript_only(tmp_pat
             metadata={"segment_id": "segment:other"},
         )
     )
-    store._save_sessions([session])
+    store._save_session(session)
     service = CharacterManagementService(default_character_service(), store, _memory_repository())
 
     result = service.apply(

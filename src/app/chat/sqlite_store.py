@@ -44,5 +44,5 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
     def _load_sessions(self) -> list[ChatSession]:
         return self.repository.load_sessions()
 
-    def _save_sessions(self, sessions: list[ChatSession]) -> None:
-        self.repository.save_sessions(sessions)
+    def _save_session(self, session: ChatSession) -> None:
+        self.repository.save_session(session)

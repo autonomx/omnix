@@ -45,8 +45,14 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     @router.get(
         "/api/chat/sessions", response_model=ChatSessionListResponse, tags=["chat"]
     )
-    async def chat_sessions() -> ChatSessionListResponse:
-        return get_chat_store().list_sessions()
+    async def chat_sessions(
+        limit: int = Query(default=100, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=512),
+    ) -> ChatSessionListResponse:
+        try:
+            return get_chat_store().list_sessions(limit=limit, cursor=cursor)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
 
     @router.post("/api/chat/sessions", response_model=ChatSession, tags=["chat"])
     def create_chat_session(request: CreateChatSessionRequest) -> ChatSession:

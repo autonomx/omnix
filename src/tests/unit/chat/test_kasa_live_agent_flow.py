@@ -18,11 +18,13 @@ class KasaFlowStore:
         self.sessions = [session]
         self.provider_calls = 0
 
-    def _load_sessions(self):
-        return self.sessions
+    def get_session(self, session_id):
+        return next((item for item in self.sessions if item.id == session_id), None)
 
-    def _save_sessions(self, sessions):
-        self.sessions = sessions
+    def _save_session(self, session):
+        self.sessions = [
+            session if item.id == session.id else item for item in self.sessions
+        ]
 
     def stream_provider_reply_chunks(
         self,

@@ -95,7 +95,7 @@ def test_processing_compaction_job_persists_summary_and_completes_job(tmp_path, 
     monkeypatch.setenv("OMNIX_CHAT_COMPACTION_THRESHOLD", "40")
     session = long_session(count=60)
     store = ChatSessionStore(tmp_path / "chat.json")
-    store._save_sessions([session])
+    store._save_session(session)
     job_store = InMemoryJobStore(tmp_path / "jobs")
     summary_repository = InMemoryConversationSummaryRepository(tmp_path / "summaries")
     job = enqueue_compaction_job(session, job_store=job_store)

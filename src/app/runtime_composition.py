@@ -27,18 +27,19 @@ def production_asset_store():
 
 def production_chat_store():
     _register_feature_repositories("chat")
-    from app.chat.persistence.chat_runtime_compat import default_chat_store
+    from app.chat.persistence.chat_runtime_compat import (
+        PostgresCharacterChatSessionStore,
+        default_chat_store,
+    )
     from app.chat.live_agent_store import install_live_agent_store_hooks
     from app.assistant_memory import default_memory_service
     from app.assistant_memory.settings import load_memory_runtime_settings
-    from app.chat.live_chat_postgres_fast_path import FastPathPostgresCharacterChatSessionStore
 
     install_live_agent_store_hooks(
-        FastPathPostgresCharacterChatSessionStore,
-        FastPathPostgresCharacterChatSessionStore,
+        PostgresCharacterChatSessionStore,
     )
     return default_chat_store(
-        store_class=FastPathPostgresCharacterChatSessionStore,
+        store_class=PostgresCharacterChatSessionStore,
         memory_service_factory=default_memory_service,
         memory_settings_factory=load_memory_runtime_settings,
     )

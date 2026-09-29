@@ -28,21 +28,18 @@ def sync_delivery_metadata(record: AssistantTurnRecord) -> bool:
     # Compatibility fallback for non-PostgreSQL stores. The active runtime uses
     # the targeted metadata update above so delivery checkpoints never serialize
     # the entire chat workspace against an immediately following voice turn.
-    sessions = store._load_sessions()
+    session = store.get_session(record.session_id)
+    if session is None:
+        return False
     changed = False
-    for session_index, session in enumerate(sessions):
-        if session.id != record.session_id:
+    for message in session.messages:
+        if message.metadata.get("assistant_turn_id") != record.assistant_turn_id:
             continue
-        for message in session.messages:
-            if message.metadata.get("assistant_turn_id") != record.assistant_turn_id:
-                continue
-            message.metadata.update(metadata)
-            changed = True
-        if changed:
-            sessions[session_index] = session
-            store._save_sessions(sessions)
-        return changed
-    return False
+        message.metadata.update(metadata)
+        changed = True
+    if changed:
+        store._save_session(session)
+    return changed
 
 
 def persist_live_voice_delivery(details: Mapping[str, Any]) -> None:

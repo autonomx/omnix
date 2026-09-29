@@ -25,7 +25,6 @@ from app.jobs.models import (
     JobStatus,
 )
 from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
-from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 from app.persistence.execution_repositories import JobClaimConflict
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
@@ -42,7 +41,7 @@ def scaling_runtime():
 
 
 def chat_store(database, store, monkeypatch):
-    from app.chat import live_chat_postgres_fast_path as fast
+    from app.chat.persistence import chat_runtime_compat as fast
     from app.gateway import _install_required_rpg_turn_hooks
 
     _install_required_rpg_turn_hooks()
@@ -56,8 +55,8 @@ def chat_store(database, store, monkeypatch):
         message.metadata["user_turn_id"] = request.user_turn_id
 
     monkeypatch.setattr(fast, "_start_assistant_turn", begin)
-    chat = fast.FastPathPostgresCharacterChatSessionStore.__new__(
-        fast.FastPathPostgresCharacterChatSessionStore
+    chat = fast.PostgresCharacterChatSessionStore.__new__(
+        fast.PostgresCharacterChatSessionStore
     )
     chat._repository = PostgresChatRepositoryAdapter(database)
     chat._repository.context = store.context
@@ -85,11 +84,43 @@ def test_targeted_creation_preserves_concurrent_transcripts_and_large_workspace(
     database, store, _ = runtime
     adapter = PostgresChatRepositoryAdapter(database)
     adapter.context = store.context
-    # Exceed the sidebar's 200-row page to catch snapshot-driven deletion.
+    # Put a real session beyond the first two bounded sidebar pages.
+    oldest_id = f"chat:{uuid.uuid4().hex}"
     with unit_of_work(database) as work:
-        for index in range(205):
+        work.chats.create_session(
+            store.context,
+            {"id": oldest_id, "title": "Oldest chat"},
+        )
+        for index in range(204):
             work.chats.create_session(store.context, {"id": f"chat:{uuid.uuid4().hex}", "title": str(index)})
+        work.connection.execute(
+            "UPDATE omnix_chat_sessions SET updated_at = '2000-01-01T00:00:00Z' WHERE id = %s",
+            (oldest_id,),
+        )
         work.commit()
+
+    cursor = None
+    listed_ids = []
+    while True:
+        summaries, cursor = adapter.list_session_summaries(limit=100, cursor=cursor)
+        listed_ids.extend(item.id for item in summaries)
+        if cursor is None:
+            break
+    assert oldest_id in listed_ids[200:]
+    oldest = adapter.get_session(oldest_id)
+    assert oldest is not None
+    oldest.messages.append(
+        ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="user",
+            content="Still mutable after 200 sessions",
+            created_at="2026-09-26T00:00:00+00:00",
+        )
+    )
+    oldest.message_count = len(oldest.messages)
+    adapter.save_session(oldest)
+    assert adapter.get_session(oldest_id).messages[-1].content == "Still mutable after 200 sessions"
+
     barrier = threading.Barrier(2)
 
     def create(index):
@@ -123,6 +154,72 @@ def test_targeted_delete_is_scoped_idempotent_and_preserves_neighbors(runtime):
     with database.connection() as connection:
         rows = connection.execute('SELECT id, status FROM omnix_chat_sessions WHERE id = ANY(%s)', ([target, neighbor, foreign],)).fetchall()
     assert dict(rows) == {target: 'deleted', neighbor: 'active', foreign: 'active'}
+
+
+def test_targeted_message_delete_and_stale_session_write_are_fenced(runtime):
+    database, store, _ = runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    now = "2026-09-26T00:00:00+00:00"
+    session = ChatSession(
+        id=f"chat:{uuid.uuid4().hex}",
+        title="Targeted mutation",
+        created_at=now,
+        updated_at=now,
+        messages=[
+            ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="user",
+                content="Keep this user turn",
+                created_at=now,
+            ),
+            ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content="Remove only this reply",
+                created_at=now,
+                metadata={"reply_to_message_id": "turn:target"},
+            ),
+        ],
+    )
+    adapter.create_session(session)
+    current = adapter.get_session(session.id)
+    stale = adapter.get_session(session.id)
+    assert current is not None and stale is not None
+
+    current.title = "Current writer"
+    adapter.save_session(current)
+    stale.title = "Stale writer"
+    with pytest.raises(RuntimeError, match="changed after it was loaded"):
+        adapter.save_session(stale)
+
+    loaded = adapter.get_session(session.id)
+    assert loaded is not None
+    assistant_id = loaded.messages[-1].id
+    assert adapter.delete_messages(session.id, [assistant_id]) == 1
+    after_delete = adapter.get_session(session.id)
+    assert after_delete is not None
+    assert after_delete.title == "Current writer"
+    assert [message.content for message in after_delete.messages] == ["Keep this user turn"]
+    assert after_delete.message_count == 1
+
+    after_delete.messages.append(
+        ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content="A later reply keeps append order",
+            created_at=now,
+            metadata={"reply_to_message_id": "turn:target"},
+        )
+    )
+    after_delete.message_count = len(after_delete.messages)
+    adapter.save_session(after_delete)
+    final = adapter.get_session(session.id)
+    assert final is not None
+    assert [message.content for message in final.messages] == [
+        "Keep this user turn",
+        "A later reply keeps append order",
+    ]
 
 
 def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):

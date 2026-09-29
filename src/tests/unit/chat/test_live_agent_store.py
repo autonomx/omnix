@@ -13,12 +13,14 @@ class DummyStore:
         self.provider_calls = 0
         self.save_calls = 0
 
-    def _load_sessions(self):
-        return self.sessions
+    def get_session(self, session_id):
+        return next((item for item in self.sessions if item.id == session_id), None)
 
-    def _save_sessions(self, sessions):
+    def _save_session(self, session):
         self.save_calls += 1
-        self.sessions = sessions
+        self.sessions = [
+            session if item.id == session.id else item for item in self.sessions
+        ]
 
     def stream_provider_reply_chunks(
         self,
@@ -44,6 +46,22 @@ class TargetedMetadataStore(DummyStore):
         self.targeted_updates: list[dict[str, object]] = []
 
     def update_user_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, object],
+    ) -> bool:
+        self.targeted_updates.append(
+            {
+                "session_id": session_id,
+                "message_id": message_id,
+                "metadata": dict(metadata),
+            }
+        )
+        return True
+
+    def update_message_metadata(
         self,
         *,
         session_id: str,

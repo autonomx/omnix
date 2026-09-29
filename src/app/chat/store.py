@@ -107,10 +107,22 @@ class ChatSessionStore:
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def list_sessions(self) -> ChatSessionListResponse:
+    def list_sessions(self, *, limit: int = 100, cursor: str | None = None) -> ChatSessionListResponse:
         sessions = [self._summary(session) for session in self._load_sessions()]
         sessions.sort(key=lambda session: session.updated_at, reverse=True)
-        return ChatSessionListResponse(sessions=sessions)
+        start = 0
+        if cursor:
+            matching = next((index for index, item in enumerate(sessions) if item.id == cursor), None)
+            if matching is None:
+                raise ValueError("chat session cursor is invalid")
+            start = matching + 1
+        page_size = max(1, min(int(limit), 100))
+        page = sessions[start : start + page_size]
+        has_more = start + page_size < len(sessions)
+        return ChatSessionListResponse(
+            sessions=page,
+            next_cursor=page[-1].id if page and has_more else None,
+        )
 
     @serialized_chat_mutation
     def create_session(self, request: CreateChatSessionRequest) -> ChatSession:
@@ -142,9 +154,7 @@ class ChatSessionStore:
         return session
 
     def _save_created_session(self, session: ChatSession) -> None:
-        sessions = self._load_sessions()
-        sessions.append(session)
-        self._save_sessions(sessions)
+        self._save_session(session)
 
     def get_session(self, session_id: str) -> ChatSession | None:
         for session in self._load_sessions():
@@ -154,12 +164,7 @@ class ChatSessionStore:
 
     @serialized_chat_mutation
     def delete_session(self, session_id: str) -> bool:
-        sessions = self._load_sessions()
-        remaining = [session for session in sessions if session.id != session_id]
-        if len(remaining) == len(sessions):
-            return False
-        self._save_sessions(remaining)
-        return True
+        return self._delete_session(session_id)
 
     @serialized_chat_mutation
     def append_user_message(
@@ -170,90 +175,86 @@ class ChatSessionStore:
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        sessions = self._load_sessions()
+        session = self.get_session(session_id)
+        if session is None:
+            return None
         now = _utcnow()
         turn_context = context_items or []
         context_sources = _context_source_summaries(turn_context)
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            if request.user_turn_id:
-                existing = next(
-                    (
-                        item
-                        for item in session.messages
-                        if item.role == "user"
-                        and item.metadata.get("user_turn_id") == request.user_turn_id
-                    ),
-                    None,
-                )
-                if existing is not None:
-                    return session, existing
+        if request.user_turn_id:
+            existing = next(
+                (
+                    item
+                    for item in session.messages
+                    if item.role == "user"
+                    and item.metadata.get("user_turn_id") == request.user_turn_id
+                ),
+                None,
+            )
+            if existing is not None:
+                return session, existing
 
-            message_metadata: dict[str, Any] = {
-                "generation_status": "running",
-                "agent_mode": request.agent_mode,
-                "coding_approval_policy": request.coding_approval_policy,
-            }
-            if request.user_turn_id:
-                message_metadata["user_turn_id"] = request.user_turn_id
-            if request.image_data_urls:
-                message_metadata["image_data_urls"] = list(request.image_data_urls)
-                # Keep the legacy first-image projection for older persisted consumers.
-                message_metadata["image_data_url"] = request.image_data_urls[0]
-            if request.text_attachment:
-                message_metadata["text_attachment"] = request.text_attachment.model_dump()
-            if request.research_mode is not None:
-                message_metadata["research_mode"] = request.research_mode
-            if request.workspace_root:
-                message_metadata["workspace_root"] = request.workspace_root
-            if context_sources:
-                message_metadata["context_sources"] = context_sources
-            if context_diagnostics:
-                message_metadata["context_diagnostics"] = context_diagnostics
-            message = ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="user",
-                content=request.content.strip(),
-                created_at=now,
-                metadata=message_metadata,
-            )
-            provider_id = request.provider_id or session.provider_id
-            model_id = request.model_id or session.model_id
-            answer = self._generate_reply(
-                session,
-                message,
-                provider_id=provider_id,
-                model_id=model_id,
-                request=request,
-                context_items=turn_context,
-            )
-            if context_sources:
-                answer["metadata"]["context_sources"] = context_sources
-            if context_diagnostics:
-                answer["metadata"]["context_diagnostics"] = context_diagnostics
-            answer["metadata"]["reply_to_message_id"] = message.id
-            assistant_message = ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="assistant",
-                content=answer["content"],
-                created_at=_utcnow(),
-                metadata=answer["metadata"],
-            )
-            message.metadata["generation_status"] = "completed"
-            session.messages.append(message)
-            session.messages.append(assistant_message)
-            session.provider_id = provider_id
-            session.model_id = model_id
-            session.message_count = len(session.messages)
-            if session.title.strip().lower() in {"new chat", "new chat..."}:
-                session.title = message.content[:48] or "New chat"
-            session.updated_at = assistant_message.created_at
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session, message
-
-        return None
+        message_metadata: dict[str, Any] = {
+            "generation_status": "running",
+            "agent_mode": request.agent_mode,
+            "coding_approval_policy": request.coding_approval_policy,
+        }
+        if request.user_turn_id:
+            message_metadata["user_turn_id"] = request.user_turn_id
+        if request.image_data_urls:
+            message_metadata["image_data_urls"] = list(request.image_data_urls)
+            # Keep the legacy first-image projection for older persisted consumers.
+            message_metadata["image_data_url"] = request.image_data_urls[0]
+        if request.text_attachment:
+            message_metadata["text_attachment"] = request.text_attachment.model_dump()
+        if request.research_mode is not None:
+            message_metadata["research_mode"] = request.research_mode
+        if request.workspace_root:
+            message_metadata["workspace_root"] = request.workspace_root
+        if context_sources:
+            message_metadata["context_sources"] = context_sources
+        if context_diagnostics:
+            message_metadata["context_diagnostics"] = context_diagnostics
+        message = ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="user",
+            content=request.content.strip(),
+            created_at=now,
+            metadata=message_metadata,
+        )
+        provider_id = request.provider_id or session.provider_id
+        model_id = request.model_id or session.model_id
+        answer = self._generate_reply(
+            session,
+            message,
+            provider_id=provider_id,
+            model_id=model_id,
+            request=request,
+            context_items=turn_context,
+        )
+        if context_sources:
+            answer["metadata"]["context_sources"] = context_sources
+        if context_diagnostics:
+            answer["metadata"]["context_diagnostics"] = context_diagnostics
+        answer["metadata"]["reply_to_message_id"] = message.id
+        assistant_message = ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content=answer["content"],
+            created_at=_utcnow(),
+            metadata=answer["metadata"],
+        )
+        message.metadata["generation_status"] = "completed"
+        session.messages.append(message)
+        session.messages.append(assistant_message)
+        session.provider_id = provider_id
+        session.model_id = model_id
+        session.message_count = len(session.messages)
+        if session.title.strip().lower() in {"new chat", "new chat..."}:
+            session.title = message.content[:48] or "New chat"
+        session.updated_at = assistant_message.created_at
+        self._save_session(session)
+        return session, message
 
     @serialized_chat_mutation
     def begin_user_message(
@@ -264,64 +265,61 @@ class ChatSessionStore:
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        sessions = self._load_sessions()
+        session = self.get_session(session_id)
+        if session is None:
+            return None
         now = _utcnow()
         turn_context = context_items or []
         context_sources = _context_source_summaries(turn_context)
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            if request.user_turn_id:
-                existing = next(
-                    (
-                        item
-                        for item in session.messages
-                        if item.role == "user"
-                        and item.metadata.get("user_turn_id") == request.user_turn_id
-                    ),
-                    None,
-                )
-                if existing is not None:
-                    return session, existing
-            message_metadata: dict[str, Any] = {
-                "generation_status": "running",
-                "agent_mode": request.agent_mode,
-                "coding_approval_policy": request.coding_approval_policy,
-            }
-            if request.user_turn_id:
-                message_metadata["user_turn_id"] = request.user_turn_id
-            if request.image_data_urls:
-                message_metadata["image_data_urls"] = list(request.image_data_urls)
-                # Keep the legacy first-image projection for older persisted consumers.
-                message_metadata["image_data_url"] = request.image_data_urls[0]
-            if request.text_attachment:
-                message_metadata["text_attachment"] = request.text_attachment.model_dump()
-            if request.research_mode is not None:
-                message_metadata["research_mode"] = request.research_mode
-            if request.workspace_root:
-                message_metadata["workspace_root"] = request.workspace_root
-            if context_sources:
-                message_metadata["context_sources"] = context_sources
-            if context_diagnostics:
-                message_metadata["context_diagnostics"] = context_diagnostics
-            message = ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="user",
-                content=request.content.strip(),
-                created_at=now,
-                metadata=message_metadata,
+        if request.user_turn_id:
+            existing = next(
+                (
+                    item
+                    for item in session.messages
+                    if item.role == "user"
+                    and item.metadata.get("user_turn_id") == request.user_turn_id
+                ),
+                None,
             )
-            session.messages.append(message)
-            session.provider_id = request.provider_id or session.provider_id
-            session.model_id = request.model_id or session.model_id
-            session.message_count = len(session.messages)
-            if session.title.strip().lower() in {"new chat", "new chat..."}:
-                session.title = message.content[:48] or "New chat"
-            session.updated_at = now
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session, message
-        return None
+            if existing is not None:
+                return session, existing
+        message_metadata: dict[str, Any] = {
+            "generation_status": "running",
+            "agent_mode": request.agent_mode,
+            "coding_approval_policy": request.coding_approval_policy,
+        }
+        if request.user_turn_id:
+            message_metadata["user_turn_id"] = request.user_turn_id
+        if request.image_data_urls:
+            message_metadata["image_data_urls"] = list(request.image_data_urls)
+            # Keep the legacy first-image projection for older persisted consumers.
+            message_metadata["image_data_url"] = request.image_data_urls[0]
+        if request.text_attachment:
+            message_metadata["text_attachment"] = request.text_attachment.model_dump()
+        if request.research_mode is not None:
+            message_metadata["research_mode"] = request.research_mode
+        if request.workspace_root:
+            message_metadata["workspace_root"] = request.workspace_root
+        if context_sources:
+            message_metadata["context_sources"] = context_sources
+        if context_diagnostics:
+            message_metadata["context_diagnostics"] = context_diagnostics
+        message = ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="user",
+            content=request.content.strip(),
+            created_at=now,
+            metadata=message_metadata,
+        )
+        session.messages.append(message)
+        session.provider_id = request.provider_id or session.provider_id
+        session.model_id = request.model_id or session.model_id
+        session.message_count = len(session.messages)
+        if session.title.strip().lower() in {"new chat", "new chat..."}:
+            session.title = message.content[:48] or "New chat"
+        session.updated_at = now
+        self._save_session(session)
+        return session, message
 
     def stream_provider_reply_chunks(
         self,
@@ -414,54 +412,50 @@ class ChatSessionStore:
         content: str,
         metadata: dict[str, Any],
     ) -> ChatSession | None:
-        sessions = self._load_sessions()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            user_index = next(
-                (
-                    message_index
-                    for message_index, message in enumerate(session.messages)
-                    if message.id == user_message_id and message.role == "user"
-                ),
-                None,
-            )
-            if user_index is None:
-                return None
-            session.messages[user_index].metadata["generation_status"] = "completed"
-            reply_metadata = {**metadata, "reply_to_message_id": user_message_id}
-            existing_reply = next(
-                (
-                    message
-                    for message in session.messages
-                    if message.role == "assistant"
-                    and message.metadata.get("reply_to_message_id") == user_message_id
-                ),
-                None,
-            )
-            if existing_reply is not None:
-                existing_reply.content = content.strip()
-                existing_reply.metadata = reply_metadata
-                existing_reply.created_at = _utcnow()
-                session.message_count = len(session.messages)
-                session.updated_at = existing_reply.created_at
-                sessions[index] = session
-                self._save_sessions(sessions)
-                return session
-            assistant_message = ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="assistant",
-                content=content.strip(),
-                created_at=_utcnow(),
-                metadata=reply_metadata,
-            )
-            session.messages.insert(user_index + 1, assistant_message)
+        session = self.get_session(session_id)
+        if session is None:
+            return None
+        user_index = next(
+            (
+                message_index
+                for message_index, message in enumerate(session.messages)
+                if message.id == user_message_id and message.role == "user"
+            ),
+            None,
+        )
+        if user_index is None:
+            return None
+        session.messages[user_index].metadata["generation_status"] = "completed"
+        reply_metadata = {**metadata, "reply_to_message_id": user_message_id}
+        existing_reply = next(
+            (
+                message
+                for message in session.messages
+                if message.role == "assistant"
+                and message.metadata.get("reply_to_message_id") == user_message_id
+            ),
+            None,
+        )
+        if existing_reply is not None:
+            existing_reply.content = content.strip()
+            existing_reply.metadata = reply_metadata
+            existing_reply.created_at = _utcnow()
             session.message_count = len(session.messages)
-            session.updated_at = assistant_message.created_at
-            sessions[index] = session
-            self._save_sessions(sessions)
+            session.updated_at = existing_reply.created_at
+            self._save_session(session)
             return session
-        return None
+        assistant_message = ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content=content.strip(),
+            created_at=_utcnow(),
+            metadata=reply_metadata,
+        )
+        session.messages.insert(user_index + 1, assistant_message)
+        session.message_count = len(session.messages)
+        session.updated_at = assistant_message.created_at
+        self._save_session(session)
+        return session
 
     @serialized_chat_mutation
     def append_assistant_message(
@@ -476,37 +470,34 @@ class ChatSessionStore:
         the idempotency identity and is checked while holding the chat mutation lock.
         """
 
-        sessions = self._load_sessions()
+        session = self.get_session(session_id)
+        if session is None:
+            return None
         turn_id = str(metadata.get("turn_id") or "").strip()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            if turn_id:
-                existing = next(
-                    (
-                        message
-                        for message in session.messages
-                        if message.role == "assistant"
-                        and message.metadata.get("turn_id") == turn_id
-                    ),
-                    None,
-                )
-                if existing is not None:
-                    return session, existing, True
-            assistant_message = ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="assistant",
-                content=content.strip(),
-                created_at=_utcnow(),
-                metadata=dict(metadata),
+        if turn_id:
+            existing = next(
+                (
+                    message
+                    for message in session.messages
+                    if message.role == "assistant"
+                    and message.metadata.get("turn_id") == turn_id
+                ),
+                None,
             )
-            session.messages.append(assistant_message)
-            session.message_count = len(session.messages)
-            session.updated_at = assistant_message.created_at
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session, assistant_message, False
-        return None
+            if existing is not None:
+                return session, existing, True
+        assistant_message = ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content=content.strip(),
+            created_at=_utcnow(),
+            metadata=dict(metadata),
+        )
+        session.messages.append(assistant_message)
+        session.message_count = len(session.messages)
+        session.updated_at = assistant_message.created_at
+        self._save_session(session)
+        return session, assistant_message, False
 
     @serialized_chat_mutation
     def remove_assistant_reply(
@@ -516,26 +507,75 @@ class ChatSessionStore:
     ) -> ChatSession | None:
         """Remove only the generated reply linked to a particular user turn."""
 
-        sessions = self._load_sessions()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            session.messages = [
-                message
-                for message in session.messages
-                if not (
-                    message.role == "assistant"
-                    and message.metadata.get("reply_to_message_id") == user_message_id
-                )
-            ]
-            session.message_count = len(session.messages)
-            session.updated_at = (
-                session.messages[-1].created_at if session.messages else session.created_at
+        session = self.get_session(session_id)
+        if session is None:
+            return None
+        session.messages = [
+            message
+            for message in session.messages
+            if not (
+                message.role == "assistant"
+                and message.metadata.get("reply_to_message_id") == user_message_id
             )
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session
-        return None
+        ]
+        session.message_count = len(session.messages)
+        session.updated_at = (
+            session.messages[-1].created_at if session.messages else session.created_at
+        )
+        self._save_session(session)
+        return session
+
+    def update_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, Any],
+    ) -> bool:
+        session = self.get_session(session_id)
+        if session is None:
+            return False
+        message = next((item for item in session.messages if item.id == message_id), None)
+        if message is None or not metadata:
+            return False
+        message.metadata.update(metadata)
+        self._save_session(session)
+        return True
+
+    def update_user_message_metadata(
+        self,
+        *,
+        session_id: str,
+        message_id: str,
+        metadata: dict[str, Any],
+    ) -> bool:
+        session = self.get_session(session_id)
+        if session is None:
+            return False
+        message = next(
+            (item for item in session.messages if item.id == message_id and item.role == "user"),
+            None,
+        )
+        if message is None or not metadata:
+            return False
+        message.metadata.update(metadata)
+        self._save_session(session)
+        return True
+
+    def delete_messages(self, session_id: str, message_ids: list[str]) -> int:
+        session = self.get_session(session_id)
+        if session is None or not message_ids:
+            return 0
+        delete_ids = set(message_ids)
+        kept = [message for message in session.messages if message.id not in delete_ids]
+        deleted = len(session.messages) - len(kept)
+        if not deleted:
+            return 0
+        session.messages = kept
+        session.message_count = len(kept)
+        session.updated_at = kept[-1].created_at if kept else session.created_at
+        self._save_session(session)
+        return deleted
 
     def _generate_reply(
         self,
@@ -722,7 +762,7 @@ class ChatSessionStore:
                 raise error
         return [ChatSession.model_validate(session) for session in payload.get("sessions", [])]
 
-    def _save_sessions(self, sessions: list[ChatSession]) -> None:
+    def _write_session_snapshot(self, sessions: list[ChatSession]) -> None:
         path = self.path
         if path is None:
             raise RuntimeError("JSON chat storage requires an explicit path")
@@ -735,6 +775,40 @@ class ChatSessionStore:
             temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
+
+    def _save_session(self, session: ChatSession) -> None:
+        sessions = self._load_sessions()
+        for index, existing in enumerate(sessions):
+            if existing.id == session.id:
+                sessions[index] = session
+                break
+        else:
+            sessions.append(session)
+        self._write_session_snapshot(sessions)
+
+    def clear_memory_snapshots_for_owner(self, owner_type: str, owner_id: str) -> int:
+        changed = 0
+        for session in self._load_sessions():
+            session_owner_type = "character" if session.interaction_mode == "character" else "system"
+            session_owner_id = session.character_id if session_owner_type == "character" else "system-assistant"
+            if (session_owner_type, session_owner_id) != (owner_type, owner_id):
+                continue
+            session.memory_enabled = False
+            session.memory_snapshot_id = None
+            session.memory_snapshot_revision = None
+            session.memory_record_count = 0
+            session.memory_last_refreshed_at = None
+            self._save_session(session)
+            changed += 1
+        return changed
+
+    def _delete_session(self, session_id: str) -> bool:
+        sessions = self._load_sessions()
+        remaining = [session for session in sessions if session.id != session_id]
+        if len(remaining) == len(sessions):
+            return False
+        self._write_session_snapshot(remaining)
+        return True
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:

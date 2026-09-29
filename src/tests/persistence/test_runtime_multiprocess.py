@@ -3,8 +3,11 @@ import asyncio
 import multiprocessing
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
+
+from app.chat.models import ChatMessage, ChatSession
 
 pytestmark = pytest.mark.skipif(not os.environ.get('OMNIX_TEST_DATABASE_URL'), reason='requires disposable PostgreSQL')
 
@@ -172,6 +175,73 @@ def _claim_chat_process(url, workspace, user, session, control):
         database.close()
 
 
+def _mutate_chat_process(
+    url,
+    workspace,
+    user,
+    action,
+    target_session_id,
+    start_gate,
+    finish_gate,
+    control,
+):
+    from app.chat.models import ChatMessage, ChatSession
+    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+    from app.persistence.config import DatabaseSettings
+    from app.persistence.database import PostgresDatabase
+    from app.persistence.identity_service import PostgresIdentityRepository
+    from app.runtime.tenant_context import pop_tenant, push_tenant
+
+    database = PostgresDatabase(DatabaseSettings(url=url, pool_max=2))
+    try:
+        with database.connection() as connection:
+            context = PostgresIdentityRepository(connection).load_context(
+                user_id=user,
+                workspace_id=workspace,
+            )
+        tenant_token = push_tenant(context)
+        try:
+            adapter = PostgresChatRepositoryAdapter(database)
+            if action == "create":
+                assert start_gate.wait(20), "session creation barrier timed out"
+                now = datetime.now(timezone.utc).isoformat()
+                session_id = f"chat:multiprocess:{uuid.uuid4().hex}"
+                adapter.create_session(
+                    ChatSession(
+                        id=session_id,
+                        title="Created by process A",
+                        created_at=now,
+                        updated_at=now,
+                        messages=[
+                            ChatMessage(
+                                id=f"msg:{uuid.uuid4().hex}",
+                                role="user",
+                                content="Created while another session changes",
+                                created_at=now,
+                            )
+                        ],
+                    )
+                )
+                control.send({"action": action, "session_id": session_id})
+            elif action == "mutate":
+                session = adapter.get_session(target_session_id)
+                assert session is not None
+                control.send({"action": action, "event": "loaded"})
+                assert finish_gate.wait(20), "session mutation barrier timed out"
+                session.title = "Mutated by process B"
+                adapter.save_session(session)
+                control.send({"action": action, "session_id": target_session_id})
+            else:
+                raise ValueError(f"unsupported chat mutation: {action}")
+        finally:
+            pop_tenant(tenant_token)
+    except BaseException as error:
+        control.send({"action": action, "error": f"{type(error).__name__}: {error}"})
+        raise
+    finally:
+        database.close()
+
+
 @pytest.fixture
 def chat_runtime():
     from src.tests.persistence import test_chat_execution_ownership_integration as ownership
@@ -222,6 +292,95 @@ def test_killed_chat_owner_recovers_once_without_duplicate_assistant_output(chat
             process.terminate()
         process.join(5)
         parent.close()
+
+
+def test_two_process_chat_mutations_preserve_unrelated_session(chat_runtime):
+    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+
+    database, store, _ = chat_runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    target_id = f"chat:multiprocess-target:{uuid.uuid4().hex}"
+    now = datetime.now(timezone.utc).isoformat()
+    adapter.create_session(
+        ChatSession(
+            id=target_id,
+            title="Original target",
+            created_at=now,
+            updated_at=now,
+            messages=[
+                ChatMessage(
+                    id=f"msg:{uuid.uuid4().hex}",
+                    role="user",
+                    content="Existing transcript",
+                    created_at=now,
+                )
+            ],
+        )
+    )
+
+    context = multiprocessing.get_context("spawn")
+    create_gate = context.Event()
+    save_gate = context.Event()
+    workers = []
+    receivers = {}
+    for action in ("mutate", "create"):
+        parent, child = context.Pipe()
+        process = context.Process(
+            target=_mutate_chat_process,
+            args=(
+                os.environ["OMNIX_TEST_DATABASE_URL"],
+                store.context.workspace_id,
+                store.context.user_id,
+                action,
+                target_id,
+                create_gate,
+                save_gate,
+                child,
+            ),
+        )
+        process.start()
+        child.close()
+        workers.append(process)
+        receivers[action] = parent
+
+    try:
+        assert receivers["mutate"].poll(30), "process B did not load its target session"
+        loaded = receivers["mutate"].recv()
+        assert loaded == {"action": "mutate", "event": "loaded"}
+        create_gate.set()
+        assert receivers["create"].poll(30), "process A did not create its session"
+        created = receivers["create"].recv()
+        save_gate.set()
+        assert receivers["mutate"].poll(30), "process B did not save its target session"
+        mutated = receivers["mutate"].recv()
+        for process in workers:
+            process.join(30)
+            assert process.exitcode == 0
+        assert "error" not in created, created
+        assert "error" not in mutated, mutated
+        created_id = created["session_id"]
+        assert adapter.get_session(created_id) is not None
+        mutated = adapter.get_session(target_id)
+        assert mutated is not None
+        assert mutated.title == "Mutated by process B"
+        with database.connection() as connection:
+            statuses = dict(
+                connection.execute(
+                    "SELECT id, status FROM omnix_chat_sessions WHERE id = ANY(%s)",
+                    ([created_id, target_id],),
+                ).fetchall()
+            )
+        assert statuses == {created_id: "active", target_id: "active"}
+    finally:
+        create_gate.set()
+        save_gate.set()
+        for process in workers:
+            if process.is_alive():
+                process.terminate()
+            process.join(5)
+        for receiver in receivers.values():
+            receiver.close()
 
 
 def test_expired_job_attempt_is_fenced_after_another_worker_claims(chat_runtime):

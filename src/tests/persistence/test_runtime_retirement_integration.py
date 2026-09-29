@@ -238,7 +238,7 @@ install_repository_specs(tuple(load_feature("chat").repositories))
 
 now = datetime.now(timezone.utc).isoformat()
 chat_repository = PostgresChatRepositoryAdapter()
-chat_repository.save_sessions([
+chat_repository.create_session(
     ChatSession(
         id="chat:runtime",
         title="Runtime PostgreSQL",
@@ -252,10 +252,10 @@ chat_repository.save_sessions([
         updated_at=now,
         messages=[ChatMessage(id="message:runtime", role="user", content="hello", created_at=now)],
     )
-])
-loaded_chats = chat_repository.load_sessions()
-assert len(loaded_chats) == 1
-assert loaded_chats[0].messages[0].content == "hello"
+)
+loaded_chat = chat_repository.get_session("chat:runtime")
+assert loaded_chat is not None
+assert loaded_chat.messages[0].content == "hello"
 
 from app.characters.models import CreateCharacterRequest
 from app.characters.persistence.character_compat import PostgresCharacterRepositoryAdapter

@@ -47,7 +47,7 @@ def load_sessions() -> dict[str, Any]:
     return dict(loader() or {})
 
 
-def save_sessions(sessions: dict[str, Any]) -> None:
+def write_legacy_session_state(sessions: dict[str, Any]) -> None:
     global _sessions
     payload = dict(sessions or {})
     with _lock:
@@ -68,6 +68,6 @@ def update_sessions(mutator: Callable[[dict[str, Any]], _T]) -> _T:
             return result
         current = load_sessions()
         result = mutator(current)
-        save_sessions(current)
+        write_legacy_session_state(current)
         _sessions = dict(current)
         return result

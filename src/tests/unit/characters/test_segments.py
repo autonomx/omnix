@@ -30,7 +30,7 @@ def test_identity_switch_closes_old_segment_and_filters_prompt_history(tmp_path:
         ChatMessage(id="u1", role="user", content="We were discussing hiking plans.", created_at="2026-01-01T00:00:00Z", metadata={"segment_id": first_segment}),
         ChatMessage(id="a1", role="assistant", content="Old system assistant style response.", created_at="2026-01-01T00:00:01Z", metadata={"segment_id": first_segment}),
     ])
-    store._save_sessions([session])
+    store._save_session(session)
 
     switched = store.set_session_interaction(
         session.id,

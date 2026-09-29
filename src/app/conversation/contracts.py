@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 
 class AssistantContextItem(BaseModel):
@@ -61,6 +61,7 @@ class ChatSessionSummary(BaseModel):
 
 
 class ChatSession(ChatSessionSummary):
+    _revision: int = PrivateAttr(default=0)
     messages: list[ChatMessage] = Field(default_factory=list)
 
 
@@ -73,11 +74,11 @@ class TranscriptReader(Protocol):
 
 
 class ChatSessionMutationPort(TranscriptReader, Protocol):
-    """Atomic transcript mutation port shared by Chat and memory snapshots."""
+    """Single-session mutation port shared by Chat and memory snapshots."""
 
-    def _load_sessions(self) -> list[ChatSession]: ...
+    def _save_session(self, session: ChatSession) -> None: ...
 
-    def _save_sessions(self, sessions: list[ChatSession]) -> None: ...
+    def delete_messages(self, session_id: str, message_ids: list[str]) -> int: ...
 
 
 class PromptMemoryItem(BaseModel):

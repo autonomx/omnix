@@ -29,7 +29,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-2.8 | done | #1547 | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | Settings fail-closed and legacy-secret importer tests pass; fallback scan and current-source lint/metrics are clean. |
 | WP-2.9 | done | #1547 | 2026-09-29 | AL002: 0; package_cycles: 0 | Current PR architecture-lint and architecture-metrics pass; the metrics artifact records zero package cycles. |
 | WP-3.0 | in progress | #1547 | 2026-09-29 | 6 characterization tests; local architecture unit gate passes | `chat-live-sse-turn` golden and guide precede WP-3.1/3.2; awaiting PR Actions and WP-1.4 dependency acceptance. |
-| WP-3.1 | not started | — | 2026-09-27 | — | Chat store: native targeted mutations; remove the whole-workspace save |
+| WP-3.1 | in progress | #1547 | 2026-09-29 | local architecture-unit gate; 23 focused chat/store tests; 6 characterization tests | PostgreSQL chat writes use one-session operations, optimistic revision fencing, summary cursors, and durable row locks; production `save_sessions` and the FastPath module/import are removed. The >200-session and independent-process PostgreSQL regressions are in the branch but still require PR Actions evidence. |
 | WP-3.2 | not started | — | 2026-09-27 | — | Live voice becomes a module (`app/live_voice`) with explicit ports |
 | WP-3.3 | not started | — | 2026-09-27 | — | RPG: determinism, an explicit turn pipeline, and collapsing the runtime parts |
 | WP-3.3a | not started | — | 2026-09-27 | — | Deterministic core (fixes RPG1) |

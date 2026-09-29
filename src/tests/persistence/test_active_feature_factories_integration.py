@@ -281,7 +281,7 @@ from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
 from app.chat.compaction import ConversationSummary
 
 now = datetime.now(timezone.utc).isoformat()
-PostgresChatRepositoryAdapter().save_sessions([
+PostgresChatRepositoryAdapter().create_session(
     ChatSession(
         id="chat:factory",
         title="Factory",
@@ -303,7 +303,7 @@ PostgresChatRepositoryAdapter().save_sessions([
             )
         ],
     )
-])
+)
 summary_repo = compaction.default_summary_repository()
 summary = summary_repo.save(ConversationSummary(
     id="summary:factory",
@@ -325,7 +325,7 @@ search = history_search.default_history_search_service().search(
 assert search.items and search.items[0].message_id == "message:factory"
 
 import app.chat as chat_package
-assert chat_package.default_chat_store().__class__.__name__ == "FastPathPostgresCharacterChatSessionStore"
+assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacterChatSessionStore"
 
 from app.jobs import default_job_store
 from app.jobs.store import install_default_job_store_factory

@@ -1,9 +1,7 @@
 """Deterministic token estimates and bounded prompt-section helpers."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
-
-import os
+from app.config.env import environment
 
 from pydantic import BaseModel, ConfigDict, Field
 from app.conversation.contracts import estimate_tokens

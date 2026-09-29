@@ -446,18 +446,7 @@ def _persist_route(
             metadata=patch,
         )
         return
-    sessions = store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id != message_id:
-                continue
-            message.metadata.update(patch)
-            break
-        sessions[index] = session
-        store._save_sessions(sessions)
-        return
+    _patch_message_metadata(store, session_id, message_id, patch, role="user")
 
 
 def _persist_omnix_route(
@@ -474,17 +463,41 @@ def _persist_omnix_route(
     if callable(targeted_update):
         targeted_update(session_id=session_id, message_id=user_message.id, metadata=patch)
         return
-    sessions = store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id == user_message.id:
-                message.metadata.update(patch)
-                break
-        sessions[index] = session
-        store._save_sessions(sessions)
-        return
+    _patch_message_metadata(store, session_id, user_message.id, patch, role="user")
+
+
+def _patch_message_metadata(
+    store: Any,
+    session_id: str,
+    message_id: str,
+    patch: dict[str, Any],
+    *,
+    role: str | None = None,
+) -> bool:
+    targeted_update = getattr(store, "update_message_metadata", None)
+    if callable(targeted_update):
+        return bool(
+            targeted_update(
+                session_id=session_id,
+                message_id=message_id,
+                metadata=patch,
+            )
+        )
+    session = store.get_session(session_id)
+    if session is None:
+        return False
+    message = next(
+        (
+            item for item in session.messages
+            if item.id == message_id and (role is None or item.role == role)
+        ),
+        None,
+    )
+    if message is None:
+        return False
+    message.metadata.update(patch)
+    store._save_session(session)
+    return True
 
 
 def _pending_governed_proposal(
@@ -514,20 +527,16 @@ def _mark_governed_proposal(
     status: str,
     result: dict[str, Any],
 ) -> None:
-    sessions = store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id != assistant_message_id:
-                continue
-            message.metadata["governed_tool_execution_status"] = status
-            message.metadata["governed_tool_execution_result"] = result
-            message.metadata["governed_tool_execution_updated_at"] = datetime.now(timezone.utc).isoformat()
-            break
-        sessions[index] = session
-        store._save_sessions(sessions)
-        return
+    _patch_message_metadata(
+        store,
+        session_id,
+        assistant_message_id,
+        {
+            "governed_tool_execution_status": status,
+            "governed_tool_execution_result": result,
+            "governed_tool_execution_updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
 def _generalized_result_events(
@@ -656,22 +665,16 @@ def _mark_kasa_proposal(
     status: str,
     result: dict[str, Any],
 ) -> None:
-    sessions = store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id != assistant_message_id:
-                continue
-            message.metadata["kasa_execution_status"] = status
-            message.metadata["kasa_execution_result"] = result
-            message.metadata["kasa_execution_updated_at"] = datetime.now(
-                timezone.utc
-            ).isoformat()
-            break
-        sessions[index] = session
-        store._save_sessions(sessions)
-        return
+    _patch_message_metadata(
+        store,
+        session_id,
+        assistant_message_id,
+        {
+            "kasa_execution_status": status,
+            "kasa_execution_result": result,
+            "kasa_execution_updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
 def _kasa_execution_events(user_message: ChatMessage, payload):

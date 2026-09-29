@@ -77,46 +77,44 @@ def refresh_session_memory(
     request: RefreshSessionMemoryRequest,
 ) -> SessionMemoryState | None:
     with _SESSION_MEMORY_LOCK, CHAT_MUTATION_LOCK:
-        sessions = store._load_sessions()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            if session.interaction_mode == "character" and not session.read_memory:
-                raise SessionMemoryConflictError("character memory read is disabled")
-            current_revision = session.memory_snapshot_revision
-            if request.expected_snapshot_revision is not None and request.expected_snapshot_revision != current_revision:
-                raise SessionMemoryConflictError(
-                    "memory snapshot revision conflict: "
-                    f"expected {request.expected_snapshot_revision}, actual {current_revision}"
-                )
-            context = resolve_session_memory_scope(session)
-            snapshot = memory_service.create_session_snapshot(
-                context,
-                token_budget=request.token_budget,
-                refresh=current_revision is not None,
+        session = store.get_session(session_id)
+        if session is None:
+            return None
+        if session.interaction_mode == "character" and not session.read_memory:
+            raise SessionMemoryConflictError("character memory read is disabled")
+        current_revision = session.memory_snapshot_revision
+        if request.expected_snapshot_revision is not None and request.expected_snapshot_revision != current_revision:
+            raise SessionMemoryConflictError(
+                "memory snapshot revision conflict: "
+                f"expected {request.expected_snapshot_revision}, actual {current_revision}"
             )
-            refreshed_at = snapshot.refreshed_at or snapshot.created_at
-            if session.interaction_mode == "system":
-                session.memory_enabled = True
-            session.memory_snapshot_id = snapshot.id
-            session.memory_snapshot_revision = snapshot.revision
-            session.memory_record_count = len(snapshot.items)
-            session.memory_last_refreshed_at = refreshed_at
-            session.updated_at = refreshed_at
-            sessions[index] = session
-            store._save_sessions(sessions)
-            view = resolve_snapshot_view(memory_service, context, snapshot.id)
-            return SessionMemoryState(
-                session_id=session.id,
-                memory_enabled=True,
-                read_memory=session.read_memory,
-                write_memory=session.write_memory,
-                owner_type=context.owner_type,
-                owner_id=context.owner_id,
-                snapshot_id=snapshot.id,
-                snapshot_revision=snapshot.revision,
-                memory_record_count=view.active_count if view else 0,
-                last_refreshed_at=refreshed_at,
-                snapshot=view,
-            )
+        context = resolve_session_memory_scope(session)
+        snapshot = memory_service.create_session_snapshot(
+            context,
+            token_budget=request.token_budget,
+            refresh=current_revision is not None,
+        )
+        refreshed_at = snapshot.refreshed_at or snapshot.created_at
+        if session.interaction_mode == "system":
+            session.memory_enabled = True
+        session.memory_snapshot_id = snapshot.id
+        session.memory_snapshot_revision = snapshot.revision
+        session.memory_record_count = len(snapshot.items)
+        session.memory_last_refreshed_at = refreshed_at
+        session.updated_at = refreshed_at
+        store._save_session(session)
+        view = resolve_snapshot_view(memory_service, context, snapshot.id)
+        return SessionMemoryState(
+            session_id=session.id,
+            memory_enabled=True,
+            read_memory=session.read_memory,
+            write_memory=session.write_memory,
+            owner_type=context.owner_type,
+            owner_id=context.owner_id,
+            snapshot_id=snapshot.id,
+            snapshot_revision=snapshot.revision,
+            memory_record_count=view.active_count if view else 0,
+            last_refreshed_at=refreshed_at,
+            snapshot=view,
+        )
     return None

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.chat import live_chat_postgres_fast_path as fast_path
+from app.chat.persistence import chat_runtime_compat as fast_path
 from app.chat.persistence import chat_runtime_compat
 
 
@@ -377,29 +377,73 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     assert events == ["live_chat_assistant_completion_fast_path_completed"]
 
 
-def test_live_session_mutation_allows_different_sessions_to_proceed() -> None:
-    """The PostgreSQL path must not inherit the file-store global mutex."""
-    import threading
+def test_durable_session_mutation_locks_only_the_requested_row(monkeypatch) -> None:
+    from contextlib import contextmanager
 
-    first_entered = threading.Event()
-    release_first = threading.Event()
-    second_entered = threading.Event()
+    class FakeConnection:
+        statement = ""
+        params = ()
 
-    def hold_first() -> None:
-        with fast_path._live_session_mutation("chat:first"):
-            first_entered.set()
-            assert release_first.wait(timeout=1)
+        def execute(self, statement: str, params: tuple[Any, ...]) -> None:
+            self.statement = statement
+            self.params = params
 
-    thread = threading.Thread(target=hold_first)
-    thread.start()
-    assert first_entered.wait(timeout=1)
-    with fast_path._live_session_mutation("chat:second"):
-        second_entered.set()
-    release_first.set()
-    thread.join(timeout=1)
+    class FakeWork:
+        def __init__(self) -> None:
+            self.connection = FakeConnection()
+            self.commits = 0
 
-    assert second_entered.is_set()
-    assert not thread.is_alive()
+        def commit(self) -> None:
+            self.commits += 1
+
+    work = FakeWork()
+
+    @contextmanager
+    def fake_unit_of_work(database: object):
+        yield work
+
+    @contextmanager
+    def fake_share_transaction(current_work: object):
+        assert current_work is work
+        yield
+
+    monkeypatch.setattr(fast_path, "unit_of_work", fake_unit_of_work)
+    monkeypatch.setattr(fast_path, "share_transaction", fake_share_transaction)
+    store = SimpleNamespace(
+        _repository=SimpleNamespace(
+            database=object(),
+            context=SimpleNamespace(workspace_id="workspace:test"),
+        )
+    )
+
+    with fast_path._durable_session_mutation(store, "chat:target"):
+        pass
+
+    assert "WHERE id = %s AND workspace_id = %s FOR UPDATE" in work.connection.statement
+    assert work.connection.params == ("chat:target", "workspace:test")
+    assert work.commits == 1
+
+
+def test_durable_store_does_not_depend_on_the_process_chat_lock(monkeypatch) -> None:
+    from app.chat import concurrency
+
+    class ForbiddenLock:
+        def __enter__(self):
+            raise AssertionError("durable chat writes must use PostgreSQL row locks")
+
+        def __exit__(self, *_args):
+            return False
+
+    class DurableStore:
+        _durable_chat_mutations = True
+
+    monkeypatch.setattr(concurrency, "CHAT_MUTATION_LOCK", ForbiddenLock())
+
+    @concurrency.serialized_chat_mutation
+    def mutate(store):
+        return store._durable_chat_mutations
+
+    assert mutate(DurableStore()) is True
 
 
 def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> None:

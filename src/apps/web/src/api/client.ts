@@ -456,7 +456,23 @@ export class OmnixApiClient {
   }
 
   async listChatSessions(): Promise<ChatSessionListResponse> {
-    return this.get<ChatSessionListResponse>('/api/chat/sessions');
+    const sessions: ChatSessionListResponse['sessions'] = [];
+    const cursors = new Set<string>();
+    let path: `/api/${string}` = '/api/chat/sessions';
+    let nextCursor: string | null = null;
+    do {
+      const page = await this.get<ChatSessionListResponse>(path);
+      sessions.push(...page.sessions);
+      nextCursor = page.next_cursor ?? null;
+      if (nextCursor && cursors.has(nextCursor)) {
+        throw new Error('Chat session pagination did not advance');
+      }
+      if (nextCursor) {
+        cursors.add(nextCursor);
+        path = `/api/chat/sessions?limit=100&cursor=${encodeURIComponent(nextCursor)}`;
+      }
+    } while (nextCursor);
+    return { sessions, next_cursor: null };
   }
 
   async createChatSession(request: CreateChatSessionRequest): Promise<ChatSession> {

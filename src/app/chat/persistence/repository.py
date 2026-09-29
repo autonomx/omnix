@@ -165,7 +165,17 @@ class PostgresChatRepository:
         ).fetchone()
         if session is None:
             raise EntityNotFound(session_id)
-        position = int(session[0])
+        # Read the transcript watermark after acquiring the session lock. A
+        # separate statement observes any appends committed while this writer
+        # waited for the lock under PostgreSQL READ COMMITTED isolation.
+        position = int(
+            self.connection.execute(
+                """SELECT COALESCE(MAX(position) + 1, 0)
+                     FROM omnix_chat_messages
+                    WHERE workspace_id = %s AND session_id = %s""",
+                (context.workspace_id, session_id),
+            ).fetchone()[0]
+        )
         row = self.connection.execute(
             """
             INSERT INTO omnix_chat_messages

@@ -12057,6 +12057,8 @@ export interface components {
         };
         /** ChatSessionListResponse */
         ChatSessionListResponse: {
+            /** Next Cursor */
+            next_cursor?: string | null;
             /** Sessions */
             sessions: components["schemas"]["ChatSessionSummary"][];
         };
@@ -33299,7 +33301,10 @@ export interface operations {
     };
     chat_sessions_api_chat_sessions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -33313,6 +33318,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatSessionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

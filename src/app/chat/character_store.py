@@ -78,7 +78,9 @@ class _CharacterSessionMixin:
 
     @serialized_chat_mutation
     def set_session_interaction(self, session_id: str, request: SetSessionInteractionRequest) -> ChatSession | None:
-        sessions = self._load_sessions()
+        session = self.get_session(session_id)
+        if session is None:
+            return None
         interaction, character_profile = _resolve_request(
             request.interaction_mode,
             request.character_id,
@@ -89,54 +91,49 @@ class _CharacterSessionMixin:
             request.shared_memory_access if request.interaction_mode == "character" else "none",
         )
         now = _utcnow()
-        for index, session in enumerate(sessions):
-            if session.id != session_id:
-                continue
-            context_changed = (
-                session.interaction_mode != interaction.interaction_mode
-                or session.character_id != interaction.character_id
-                or session.transcript_policy != interaction.transcript_policy
-                or session.read_memory != interaction.read_memory
-                or session.write_memory != interaction.write_memory
-                or session.shared_memory_access != interaction.shared_memory_access
+        context_changed = (
+            session.interaction_mode != interaction.interaction_mode
+            or session.character_id != interaction.character_id
+            or session.transcript_policy != interaction.transcript_policy
+            or session.read_memory != interaction.read_memory
+            or session.write_memory != interaction.write_memory
+            or session.shared_memory_access != interaction.shared_memory_access
+        )
+        if context_changed:
+            carryover = _neutral_topic_carryover(session) if request.continue_topic else None
+            if session.active_segment_id:
+                _character_repository().close_segment(session.active_segment_id)
+            segment = _character_repository().create_segment(
+                session_id=session.id,
+                interaction_mode=interaction.interaction_mode,
+                character_id=interaction.character_id,
+                profile_version=interaction.character_profile_version,
+                transcript_policy=interaction.transcript_policy,
+                read_memory=interaction.read_memory,
+                write_memory=interaction.write_memory,
+                shared_memory_access=interaction.shared_memory_access,
+                carryover_summary=carryover,
             )
-            if context_changed:
-                carryover = _neutral_topic_carryover(session) if request.continue_topic else None
-                if session.active_segment_id:
-                    _character_repository().close_segment(session.active_segment_id)
-                segment = _character_repository().create_segment(
-                    session_id=session.id,
-                    interaction_mode=interaction.interaction_mode,
-                    character_id=interaction.character_id,
-                    profile_version=interaction.character_profile_version,
-                    transcript_policy=interaction.transcript_policy,
-                    read_memory=interaction.read_memory,
-                    write_memory=interaction.write_memory,
-                    shared_memory_access=interaction.shared_memory_access,
-                    carryover_summary=carryover,
-                )
-                session.active_segment_id = segment.id
-                session.memory_snapshot_id = None
-                session.memory_snapshot_revision = None
-                session.memory_record_count = 0
-                session.memory_last_refreshed_at = None
-                _append_character_greeting(session.messages, character_profile, now, segment.id)
-            session.interaction_mode = interaction.interaction_mode
-            session.character_id = interaction.character_id
-            session.voice_asset_id = interaction.voice_asset_id
-            session.read_memory = interaction.read_memory
-            session.write_memory = interaction.write_memory
-            session.shared_memory_access = interaction.shared_memory_access
-            session.transcript_policy = interaction.transcript_policy
-            session.character_profile_version = interaction.character_profile_version
-            session.effective_identity_hash = interaction.effective_identity_hash
-            _attach_character_snapshot(session)
-            session.message_count = len(session.messages)
-            session.updated_at = now
-            sessions[index] = session
-            self._save_sessions(sessions)
-            return session
-        return None
+            session.active_segment_id = segment.id
+            session.memory_snapshot_id = None
+            session.memory_snapshot_revision = None
+            session.memory_record_count = 0
+            session.memory_last_refreshed_at = None
+            _append_character_greeting(session.messages, character_profile, now, segment.id)
+        session.interaction_mode = interaction.interaction_mode
+        session.character_id = interaction.character_id
+        session.voice_asset_id = interaction.voice_asset_id
+        session.read_memory = interaction.read_memory
+        session.write_memory = interaction.write_memory
+        session.shared_memory_access = interaction.shared_memory_access
+        session.transcript_policy = interaction.transcript_policy
+        session.character_profile_version = interaction.character_profile_version
+        session.effective_identity_hash = interaction.effective_identity_hash
+        _attach_character_snapshot(session)
+        session.message_count = len(session.messages)
+        session.updated_at = now
+        self._save_session(session)
+        return session
 
     @serialized_chat_mutation
     def append_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
@@ -175,7 +172,7 @@ class _CharacterSessionMixin:
             "assistant_turn_id": record.assistant_turn_id,
             "assistant_turn": record.model_dump(mode="json"),
         })
-        self._save_sessions(_replace_session(self._load_sessions(), session))
+        self._save_session(session)
         return session, user_message
 
     def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
@@ -286,7 +283,7 @@ class _CharacterSessionMixin:
                     if turn is not None:
                         message.metadata["assistant_turn"] = turn.model_dump(mode="json")
                 break
-        self._save_sessions(_replace_session(self._load_sessions(), session))
+        self._save_session(session)
         return session
 
     @staticmethod
@@ -433,47 +430,40 @@ def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assist
         if found_user and message.role == "assistant":
             message.metadata.update({"segment_id": segment_id, "assistant_turn_id": assistant_turn_id})
             break
-    store._save_sessions(_replace_session(store._load_sessions(), session))
+    store._save_session(session)
 
 
 def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, assistant_turn_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
-    sessions = store._load_sessions()
+    session = store.get_session(session_id)
+    if session is None:
+        return None
     coordinator = _turn_coordinator(store)
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        user_message = next((message for message in session.messages if message.id == user_message_id), None)
-        if user_message is None:
-            return session
-        user_message.metadata["generation_status"] = "interrupted"
-        turn = coordinator.get(assistant_turn_id)
-        if turn is not None:
-            user_message.metadata["assistant_turn"] = turn.model_dump(mode="json")
-        already_persisted = any(
-            message.role == "assistant" and message.metadata.get("assistant_turn_id") == assistant_turn_id
-            for message in session.messages
-        )
-        generated = content.strip()
-        if generated and not already_persisted:
-            session.messages.append(ChatMessage(
-                id=f"msg:{uuid.uuid4().hex}",
-                role="assistant",
-                content=generated,
-                created_at=_utcnow(),
-                metadata={
-                    **metadata,
-                    "generation_status": "interrupted",
-                    "delivery_status": "interrupted",
-                    "assistant_turn_id": assistant_turn_id,
-                },
-            ))
-        session.message_count = len(session.messages)
-        session.updated_at = _utcnow()
-        sessions[index] = session
-        store._save_sessions(sessions)
+    user_message = next((message for message in session.messages if message.id == user_message_id), None)
+    if user_message is None:
         return session
-    return None
-
-
-def _replace_session(sessions: list[ChatSession], replacement: ChatSession) -> list[ChatSession]:
-    return [replacement if session.id == replacement.id else session for session in sessions]
+    user_message.metadata["generation_status"] = "interrupted"
+    turn = coordinator.get(assistant_turn_id)
+    if turn is not None:
+        user_message.metadata["assistant_turn"] = turn.model_dump(mode="json")
+    already_persisted = any(
+        message.role == "assistant" and message.metadata.get("assistant_turn_id") == assistant_turn_id
+        for message in session.messages
+    )
+    generated = content.strip()
+    if generated and not already_persisted:
+        session.messages.append(ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content=generated,
+            created_at=_utcnow(),
+            metadata={
+                **metadata,
+                "generation_status": "interrupted",
+                "delivery_status": "interrupted",
+                "assistant_turn_id": assistant_turn_id,
+            },
+        ))
+    session.message_count = len(session.messages)
+    session.updated_at = _utcnow()
+    store._save_session(session)
+    return session
