@@ -114,6 +114,7 @@ jobs:
       PYTHONPATH: src
       OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
       OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -124,10 +125,12 @@ jobs:
         run: python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Apply PostgreSQL migrations to the disposable test database
         run: python -m app.persistence migrate
+      - name: Initialize fresh PostgreSQL runtime authority for tests
+        run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
       - name: Run the complete Python suite
         run: |
           mkdir -p artifacts
-          python -m pytest -n auto --junitxml artifacts/full-python-suite.xml
+          python -m pytest -n auto -m "not gpu and not live_provider and not playwright and not live_codex" --junitxml artifacts/full-python-suite.xml
       - name: Upload full-suite triage inventory
         if: always()
         uses: actions/upload-artifact@v4

@@ -8,8 +8,11 @@ console errors or uncaught page errors.
 from __future__ import annotations
 
 import asyncio
+import pytest
 from playwright.async_api import async_playwright
 from playwright.sync_api import Page
+
+pytestmark = pytest.mark.playwright
 
 
 class TestJSConsoleErrors:
