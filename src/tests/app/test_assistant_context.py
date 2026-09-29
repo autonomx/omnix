@@ -320,8 +320,8 @@ def test_context_service_keeps_desktop_failure_visible_to_chat_prompt():
 
 def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(monkeypatch, tmp_path):
     provider = FakeProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr("app.providers.service.get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr("app.providers.service.get_global_system_prompt", lambda: "System prompt")
 
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
@@ -393,8 +393,8 @@ def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(mon
 
 def test_agent_chat_quick_search_uses_retrieved_context_for_provider_reply(monkeypatch, tmp_path):
     provider = FakeProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr("app.providers.service.get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr("app.providers.service.get_global_system_prompt", lambda: "System prompt")
 
     chat_store = ChatSessionStore(tmp_path / "chat.json")
     session = chat_store.create_session(

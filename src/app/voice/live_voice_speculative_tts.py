@@ -6,7 +6,6 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from functools import wraps
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
