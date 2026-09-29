@@ -19,15 +19,15 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-1.5 | not started | — | 2026-09-27 | — | One required CI pipeline |
 | WP-1.6 | not started | — | 2026-09-27 | — | Python type checking rollout |
 | WP-1.7 | not started | — | 2026-09-27 | — | ESLint for the web app with boundary and patch rules |
-| WP-2.1 | in progress | #1547 | 2026-09-29 | AL001 106 -> 103; app.gateway imports in jobs/trading: 0 | Neutral runtime owners; current-source CI gate refresh pending |
-| WP-2.2 | in progress | #1547 | 2026-09-29 | 17 catalog features; excluded/untyped schema routes: 0/0 | Feature disable matrix and generated OpenAPI comparison pass locally; current-source CI gate refresh pending |
-| WP-2.3 | in progress | #1547 | 2026-09-29 | AL007: 0; settings use optimistic revisions | Configuration registry/docs and fail-closed tests pass; current-source CI gate refresh pending |
-| WP-2.4 | in progress | #1547 | 2026-09-29 | AL012: 0; migration compatibility and ordering tests pass | Release-step migration and identity fixtures updated; current-source PostgreSQL CI gate refresh pending |
-| WP-2.5 | in progress | #1547 | 2026-09-29 | AL006: 0; jobs imports no feature package | Typed handler registry tests pass; current-source CI gate refresh pending |
-| WP-2.6 | in progress | #1547 | 2026-09-29 | Persistence imports no feature package | Lazy unit-of-work tests pass; current-source persistence CI gate refresh pending |
-| WP-2.7 | in progress | #1547 | 2026-09-29 | app.platform -> app.rpg imports: 0 | RPG compatibility source guards and focused tests updated; current-source CI gate refresh pending |
-| WP-2.8 | in progress | #1547 | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | ADR-0010 and secret-import tests pass; current-source CI gate refresh pending |
-| WP-2.9 | in progress | #1547 | 2026-09-29 | AL002: 0; package_cycles: 0 | Local architecture lint passes; fresh source-bound Linux metrics report and CI check pending |
+| WP-2.1 | done | #1547 | 2026-09-29 | AL001 106 -> 103; app.gateway imports in jobs/trading: 0 | Neutral runtime owners; current-source architecture-unit, lint and metrics gates pass |
+| WP-2.2 | done | #1547 | 2026-09-29 | 17 catalog features; excluded/untyped schema routes: 0/0 | Static `FEATURES` removed; feature-disable matrix and reviewed OpenAPI comparison pass |
+| WP-2.3 | done | #1547 | 2026-09-29 | AL007: 0; optimistic settings revisions | Generated configuration docs, settings validation and fail-closed tests pass; no legacy settings-document writes |
+| WP-2.4 | done | #1547 | 2026-09-29 | AL012: 0; migration compatibility and ordering tests pass | Release-step migration; current-source PostgreSQL architecture and persistence gates pass |
+| WP-2.5 | done | #1547 | 2026-09-29 | AL006: 0; jobs imports no feature package | Typed handler registry, input validation and retry tests pass; durable worker gate passes |
+| WP-2.6 | done | #1547 | 2026-09-29 | Persistence imports no feature package | Lazy unit-of-work tests and current compatibility inventory; persistence gate passes |
+| WP-2.7 | done | #1547 | 2026-09-29 | app.platform -> app.rpg imports: 0 | RPG compatibility routes and focused deterministic regressions pass |
+| WP-2.8 | done | #1547 | 2026-09-29 | shared.py absent; settings/session/secret file fallback markers: 0 | ADR-0010 fail-closed and secret-import tests pass |
+| WP-2.9 | done | #1547 | 2026-09-29 | AL002: 0; package_cycles: 0 | Exact-branch source-bound metrics and architecture lint gates pass |
 | WP-3.0 | not started | — | 2026-09-27 | — | Characterization harness |
 | WP-3.1 | not started | — | 2026-09-27 | — | Chat store: native targeted mutations; remove the whole-workspace save |
 | WP-3.2 | not started | — | 2026-09-27 | — | Live voice becomes a module (`app/live_voice`) with explicit ports |
@@ -161,3 +161,5 @@ Validation is recorded per work package as execution proceeds.
 - WP-1.3 implementation: root Python 3.11 packaging/tooling configuration and runtime-specific dependency inputs are now committed. The retired Python 3.10 Trading compatibility tests were converted to assert the Python 3.11/no-monkey-patch contract. The RPG initiative opening bonus now has an owning-module default instead of depending on sitecustomize.
 
 - WP-1.4 implementation: pytest now uses the root pyproject with importlib mode and the full src/tests tree. The 92 source-bound baseline collection failures are represented in an explicit shrinking quarantine with reasons, categories and owner WPs; exact collection paths are normalized for Windows/Linux. No test file was deleted or silently excluded outside that inventory.
+
+- Phase 2 final acceptance on `4c56a40f3518be8fc30fe581933c6decae00259d`: architecture metrics push run [36585938715](https://github.com/autonomx/omnix/actions/runs/36585938715) passed against source digest `f5ff590b282729b228705b7da895199ac412df75aec4689bbe1d7bbe95ee9eb4`; the local scorecard check against that artifact passed with no errors. The source-bound values are AL001/layer violations 103 (down from 106), package cycles 0, schema-excluded routes 0, untyped body routes 0, AL006/platform-table SQL 0, AL007/environment reads 0, AL012/bootstrap calls 0, boot imports 2,541 (at the existing ratchet), and collection errors 0. The current PR checks also pass architecture-unit, PostgreSQL/multiprocess architecture-durable, architecture-web, PostgreSQL persistence, deterministic RPG, and architecture lint. Local `architecture_lint.py --check` passes. Source audits confirm there are no `app.gateway` imports in trading/jobs, no `app.rpg` imports in platform, no legacy settings/session/secret fallback markers in src/scripts, and `src/app/shared.py` is absent. The feature catalog has 17 entries, the old static `FEATURES` registry is absent, the feature-disable matrix is green, and the generated OpenAPI comparison was reviewed. These results satisfy WP-2.1 through WP-2.9; Phase 3 may now start.
