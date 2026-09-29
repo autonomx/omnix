@@ -1,8 +1,8 @@
 """Governed repository adapter: local preparation is separate from remote publication."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -392,7 +392,7 @@ class GitHubCliRuntimeAdapter:
 
 
 def get_repository_runtime_adapter() -> RepositoryRuntimeAdapter:
-    if (os.environ.get("OMNIX_GITHUB_REAL_ADAPTER") or "").strip().lower() in {"1", "true", "yes", "on"}:
+    if (_env_str("OMNIX_GITHUB_REAL_ADAPTER") or "").strip().lower() in {"1", "true", "yes", "on"}:
         return GitHubCliRuntimeAdapter()
     raise RuntimeError("github_runtime_adapter_unavailable")
 

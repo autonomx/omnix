@@ -49,7 +49,12 @@ def test_rpg_replay_adapter_checkpoint_roundtrip() -> None:
 def test_gateway_replay_endpoints_expose_rpg_wrappers() -> None:
     from app.gateway.main import create_gateway_app
 
-    client = TestClient(create_gateway_app(), raise_server_exceptions=False)
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"x-omnix-client": "test-gateway-replay"},
+        raise_server_exceptions=False,
+    )
 
     primitives = client.get("/api/replay/primitives")
     assert primitives.status_code == 200
@@ -78,6 +83,8 @@ def test_gateway_replay_inventory_can_be_injected() -> None:
 
     client = TestClient(
         create_gateway_app(replay_adapter_factory=lambda: FakeReplayAdapter()),
+        base_url="http://localhost",
+        headers={"x-omnix-client": "test-gateway-replay"},
         raise_server_exceptions=False,
     )
 

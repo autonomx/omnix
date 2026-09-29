@@ -147,9 +147,12 @@ class _CharacterSessionMixin:
         if result is None:
             return None
         session, user_message = result
-        record = _start_assistant_turn(session, user_message, request)
-        record = default_assistant_turn_coordinator().mark_streaming(record.assistant_turn_id) or record
-        default_assistant_turn_coordinator().try_complete(record.assistant_turn_id)
+        record = _start_assistant_turn(
+            session, user_message, request, database=_store_database(self)
+        )
+        coordinator = _turn_coordinator(self)
+        record = coordinator.mark_streaming(record.assistant_turn_id) or record
+        coordinator.try_complete(record.assistant_turn_id)
         _tag_turn_and_save(self, session, user_message.id, record.assistant_turn_id, record.user_turn_id, record.speech_segment_id)
         return session, user_message
 
@@ -162,7 +165,9 @@ class _CharacterSessionMixin:
         if result is None:
             return None
         session, user_message = result
-        record = _start_assistant_turn(session, user_message, request)
+        record = _start_assistant_turn(
+            session, user_message, request, database=_store_database(self)
+        )
         user_message.metadata.update({
             "segment_id": session.active_segment_id,
             "user_turn_id": record.user_turn_id,
@@ -174,7 +179,7 @@ class _CharacterSessionMixin:
         return session, user_message
 
     def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
-        coordinator = default_assistant_turn_coordinator()
+        coordinator = _turn_coordinator(self)
         assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
         if assistant_turn_id:
             coordinator.mark_streaming(assistant_turn_id)
@@ -246,7 +251,7 @@ class _CharacterSessionMixin:
             if user_message
             else str(metadata.get("assistant_turn_id") or "").strip()
         )
-        coordinator = default_assistant_turn_coordinator()
+        coordinator = _turn_coordinator(self)
         if assistant_turn_id and coordinator.is_cancelled(assistant_turn_id):
             return _persist_interrupted_reply(
                 self,
@@ -304,7 +309,9 @@ def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
     if uses_postgresql_runtime():
         from app.runtime_composition import production_chat_store
         return production_chat_store()
-    return InMemoryChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
+    if chat_sqlite_store_enabled():
+        return InMemoryChatSessionStore()
+    raise RuntimeError("PostgreSQL chat persistence is required when local memory storage is disabled")
 
 
 def _character_repository():
@@ -372,9 +379,26 @@ def _find_idempotent_user_turn(session: ChatSession | None, user_turn_id: str | 
     return (session, message) if message is not None else None
 
 
-def _start_assistant_turn(session: ChatSession, user_message: ChatMessage, request: SendChatMessageRequest):
+def _store_database(store):
+    repository = getattr(store, "_repository", None)
+    return getattr(repository, "database", None)
+
+
+def _turn_coordinator(store):
+    database = _store_database(store)
+    return default_assistant_turn_coordinator(database) if database is not None else default_assistant_turn_coordinator()
+
+
+def _start_assistant_turn(
+    session: ChatSession,
+    user_message: ChatMessage,
+    request: SendChatMessageRequest,
+    *,
+    database=None,
+):
     user_turn_id = request.user_turn_id or f"user-turn:{uuid.uuid4().hex}"
-    record = default_assistant_turn_coordinator().start(
+    coordinator = default_assistant_turn_coordinator(database) if database is not None else default_assistant_turn_coordinator()
+    record = coordinator.start(
         session_id=session.id,
         user_message_id=user_message.id,
         user_turn_id=user_turn_id,
@@ -392,7 +416,7 @@ def _start_assistant_turn(session: ChatSession, user_message: ChatMessage, reque
 def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assistant_turn_id: str, user_turn_id: str, speech_segment_id: str | None) -> None:
     segment_id = session.active_segment_id
     found_user = False
-    coordinator = default_assistant_turn_coordinator()
+    coordinator = _turn_coordinator(store)
     for message in session.messages:
         if message.id == user_message_id:
             message.metadata.update({
@@ -414,7 +438,7 @@ def _tag_turn_and_save(store, session: ChatSession, user_message_id: str, assist
 
 def _persist_interrupted_reply(store, *, session_id: str, user_message_id: str, assistant_turn_id: str, content: str, metadata: dict[str, Any]) -> ChatSession | None:
     sessions = store._load_sessions()
-    coordinator = default_assistant_turn_coordinator()
+    coordinator = _turn_coordinator(store)
     for index, session in enumerate(sessions):
         if session.id != session_id:
             continue

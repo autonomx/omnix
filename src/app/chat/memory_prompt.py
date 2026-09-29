@@ -17,10 +17,10 @@ from app.assistant_memory.settings import load_memory_runtime_settings
 from app.assistant_memory.selection import estimate_memory_tokens
 from app.assistant_memory_v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
 from app.characters import resolve_shared_memory_categories
+from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import prompt_budget_from_env
 from .models import ChatSession
-from .prompt_assembly import PromptMemoryItem
 
 
 def chat_memory_enabled() -> bool:

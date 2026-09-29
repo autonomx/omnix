@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import app.gateway.image_workspace_routes as image_workspace_routes
+import app.image.routes.workspace as image_workspace_routes
 from app.gateway.rpg_world_image_routes import register_rpg_world_image_routes
 from app.jobs.image_contracts import ImageGenerateInput
 from app.image.jobs import _store_image_asset
@@ -173,10 +173,8 @@ def test_world_image_generation_enqueues_for_the_active_user(monkeypatch) -> Non
     )
     monkeypatch.setattr(
         world_images,
-        "bootstrap_local_tenant",
-        lambda database=None: SimpleNamespace(
-            workspace_id="workspace:local", user_id="user:local"
-        ),
+        "current_tenant",
+        lambda: SimpleNamespace(workspace_id="workspace:local", user_id="user:local"),
     )
     monkeypatch.setattr(world_images, "require_world_writable", lambda *args: None)
     monkeypatch.setattr(world_images, "default_job_store", lambda: object())

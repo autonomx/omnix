@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -178,49 +179,7 @@ class CompletePostgresLegacyImporter(PostgresLegacyImporter):
         job_id: str,
         item: dict[str, Any],
     ) -> None:
-        for event in list(item.get("events") or []):
-            work.connection.execute(
-                """
-                INSERT INTO omnix_job_events (
-                    workspace_id, job_id, event_type, payload, created_at
-                ) VALUES (%s, %s, %s, %s::jsonb,
-                          COALESCE(%s::timestamptz, CURRENT_TIMESTAMP))
-                """,
-                (
-                    context.workspace_id,
-                    job_id,
-                    event.get("event_type", "legacy.event"),
-                    _json(event.get("payload") or {}),
-                    event.get("created_at"),
-                ),
-            )
-        attempt_count = int(item.get("attempt_count", 0))
-        lease = dict((item.get("metadata") or {}).get("lease") or {})
-        for attempt in range(1, attempt_count + 1):
-            token = str(lease.get("token") or lease.get("lease_token") or f"legacy:{job_id}:{attempt}")
-            worker = str(lease.get("worker_id") or lease.get("owner_id") or "worker:legacy")
-            status = "completed" if item.get("status") == "completed" else str(item.get("status") or "legacy")
-            work.connection.execute(
-                """
-                INSERT INTO omnix_job_attempts (
-                    job_id, attempt, worker_id, lease_token, status,
-                    started_at, completed_at, error
-                ) VALUES (%s, %s, %s, %s, %s,
-                          COALESCE(%s::timestamptz, CURRENT_TIMESTAMP),
-                          %s::timestamptz, %s::jsonb)
-                ON CONFLICT (job_id, attempt) DO NOTHING
-                """,
-                (
-                    job_id,
-                    attempt,
-                    worker,
-                    token,
-                    status,
-                    lease.get("claimed_at"),
-                    item.get("completed_at"),
-                    _json(item.get("error")) if item.get("error") is not None else None,
-                ),
-            )
+        work.jobs.import_job_history(context, job_id=job_id, item=item)
 
     @staticmethod
     def _rpg_history(
@@ -306,11 +265,7 @@ class CompletePostgresLegacyImporter(PostgresLegacyImporter):
         for submission in list(item.get("foreground_submissions") or []):
             job_id = submission.get("job_id")
             if job_id:
-                exists = work.connection.execute(
-                    "SELECT 1 FROM omnix_jobs WHERE id = %s",
-                    (job_id,),
-                ).fetchone()
-                if exists is None:
+                if not work.jobs.job_exists(str(job_id)):
                     job_id = None
             response = submission.get("response")
             interaction_id = None
@@ -365,7 +320,10 @@ class CompletePostgresLegacyImporter(PostgresLegacyImporter):
                 engine_version,
                 schema_version,
             ),
-        )def canonical_json(value: Any) -> str:
+        )
+
+
+def canonical_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 

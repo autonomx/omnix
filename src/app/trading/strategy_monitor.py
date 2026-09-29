@@ -1,8 +1,8 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -124,18 +124,18 @@ def _current_session_1m_integrity(
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_strategy_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_STRATEGY_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)

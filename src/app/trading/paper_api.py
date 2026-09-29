@@ -205,7 +205,6 @@ def create_trading_paper_router(
     @router.post(
         "/accounts/{account_id}/risk-preview",
         response_model=PaperRiskPreview,
-        include_in_schema=False,
     )
     async def risk_preview(account_id: str, request: PaperRiskPreviewRequest):
         """Return the canonical server sizing/risk decision for a proposed long entry."""
@@ -214,7 +213,6 @@ def create_trading_paper_router(
     @router.post(
         "/accounts/{account_id}/risk-orders",
         response_model=PaperRiskOrderResult,
-        include_in_schema=False,
         status_code=201,
     )
     async def place_risk_order(account_id: str, request: PaperRiskOrderRequest):
@@ -395,7 +393,6 @@ def create_trading_paper_router(
     @router.delete(
         "/accounts/{account_id}/orders/{order_id}",
         response_model=PaperOrder,
-        include_in_schema=False,
     )
     async def cancel_order(
         account_id: str,
@@ -417,7 +414,6 @@ def create_trading_paper_router(
     @router.post(
         "/accounts/{account_id}/orders/{order_id}/replace",
         response_model=PaperOrderReplaceResponse,
-        include_in_schema=False,
     )
     async def replace_order(
         account_id: str,
@@ -462,7 +458,6 @@ def create_trading_paper_router(
     @router.post(
         "/accounts/{account_id}/observations",
         response_model=PaperFillListResponse,
-        include_in_schema=False,
     )
     async def process_observation(
         account_id: str,

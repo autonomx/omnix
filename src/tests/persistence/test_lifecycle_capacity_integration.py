@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.lifecycle import PostgresLifecycleRepository
 from app.persistence.migrations import apply_migrations
 
@@ -34,7 +34,7 @@ def test_cleanup_removes_only_expired_terminal_records() -> None:
     database = _database()
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with database.transaction() as connection:
             for table in (
                 "omnix_outbox_consumer_inbox",
@@ -117,7 +117,7 @@ def test_outbox_payload_capacity_is_database_enforced() -> None:
     database = _database()
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(Exception):
             with database.transaction() as connection:
                 connection.execute(

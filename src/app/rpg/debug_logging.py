@@ -31,8 +31,6 @@ _LOGGER_NAMES = (
     "app.gateway.rpg_session_routes",
     "app.gateway.rpg_direct_turn_routes",
     "app.gateway.rpg_turn_job_mirror",
-    "app.jobs.inline_feature_jobs",
-    "app.jobs.rpg_last10_report",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (

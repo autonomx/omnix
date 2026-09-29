@@ -143,7 +143,7 @@ class _Work:
 
 def test_keep_decision_does_not_promote_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
     work = _Work()
-    monkeypatch.setattr(generation_retry, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_retry,
@@ -166,7 +166,7 @@ def test_decision_is_rejected_until_generation_finishes(
 ) -> None:
     work = _Work()
     work.world_generation.run["status"] = "running"
-    monkeypatch.setattr(generation_retry, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
 
     with pytest.raises(
@@ -187,7 +187,7 @@ def test_replace_decision_promotes_only_after_explicit_action(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     work = _Work()
-    monkeypatch.setattr(generation_retry, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(generation_retry, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(generation_retry, "unit_of_work", lambda database: work)
     monkeypatch.setattr(
         generation_retry,

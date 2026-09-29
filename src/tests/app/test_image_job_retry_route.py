@@ -2,14 +2,22 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-import app.gateway.image_workspace_routes as image_workspace_routes
 from app.gateway.main import create_gateway_app
-from app.jobs import CreateJobRequest, FailJobRequest, ResourceClass, SQLiteJobStore
+from app.jobs import CreateJobRequest, FailJobRequest, ResourceClass
+from tests.support.in_memory_jobs import InMemoryJobStore
+
+
+def _client(app):
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
 
 
 def test_failed_image_job_can_be_retried(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     source = store.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -20,8 +28,7 @@ def test_failed_image_job_can_be_retried(tmp_path, monkeypatch) -> None:
         )
     )
     store.fail_job(source.id, FailJobRequest(message="provider failed", retryable=True))
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: store)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(job_store_factory=lambda: store))
 
     response = client.post(f"/api/image-generation/jobs/{source.id}/retry")
 
@@ -35,7 +42,7 @@ def test_failed_image_job_can_be_retried(tmp_path, monkeypatch) -> None:
 
 def test_active_image_job_cannot_be_retried(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     source = store.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -44,8 +51,7 @@ def test_active_image_job_cannot_be_retried(tmp_path, monkeypatch) -> None:
             input_payload={"prompt": "Still queued", "width": 768, "height": 768},
         )
     )
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: store)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(job_store_factory=lambda: store))
 
     response = client.post(f"/api/image-generation/jobs/{source.id}/retry")
 

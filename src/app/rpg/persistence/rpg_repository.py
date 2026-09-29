@@ -419,20 +419,13 @@ class PostgresRpgRepository:
         event_type: str,
         payload: dict[str, Any],
     ) -> int:
-        row = self.connection.execute(
-            """
-            INSERT INTO omnix_outbox_events (
-                workspace_id, aggregate_type, aggregate_id, event_type,
-                ordering_key, payload
-            ) VALUES (%s, 'rpg_campaign', %s, %s, %s, %s::jsonb)
-            RETURNING id
-            """,
-            (
-                context.workspace_id,
-                aggregate_id,
-                event_type,
-                aggregate_id,
-                canonical_json(payload),
-            ),
-        ).fetchone()
-        return int(row[0])
+        from app.persistence.outbox_repository import PostgresOutboxRepository
+
+        return PostgresOutboxRepository(self.connection).append(
+            context,
+            aggregate_type="rpg_campaign",
+            aggregate_id=aggregate_id,
+            event_type=event_type,
+            payload=payload,
+            ordering_key=aggregate_id,
+        )

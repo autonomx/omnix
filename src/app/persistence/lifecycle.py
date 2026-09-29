@@ -3,23 +3,25 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .audit import PostgresAuditRepository
+from .job_repository import PostgresJobRepository
+from .outbox_repository import PostgresOutboxRepository
+
 
 class PostgresLifecycleRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
+        self.jobs = PostgresJobRepository(connection)
+        self.audit = PostgresAuditRepository(connection)
+        self.outbox = PostgresOutboxRepository(connection)
 
     def capacity_report(self) -> dict[str, Any]:
+        outbox_counts = self.outbox.retention_counts()
         row = self.connection.execute(
             """
             SELECT
                 pg_database_size(current_database()),
-                (SELECT COUNT(*) FROM omnix_outbox_events),
-                (SELECT COUNT(*) FROM omnix_outbox_consumer_inbox),
-                (SELECT COUNT(*) FROM omnix_outbox_dead_letters),
-                (SELECT COUNT(*) FROM omnix_job_events),
-                (SELECT COUNT(*) FROM omnix_audit_events),
-                (SELECT COUNT(*) FROM omnix_rpg_turns),
-                (SELECT COALESCE(MAX(pg_column_size(payload)), 0) FROM omnix_outbox_events)
+                (SELECT COUNT(*) FROM omnix_rpg_turns)
             """
         ).fetchone()
         policy = self.connection.execute(
@@ -32,14 +34,14 @@ class PostgresLifecycleRepository:
         return {
             "database_bytes": int(row[0]),
             "counts": {
-                "outbox_events": int(row[1]),
-                "outbox_consumer_inbox": int(row[2]),
-                "outbox_dead_letters": int(row[3]),
-                "job_events": int(row[4]),
-                "audit_events": int(row[5]),
-                "rpg_turns": int(row[6]),
+                "outbox_events": outbox_counts["outbox_events"],
+                "outbox_consumer_inbox": outbox_counts["outbox_consumer_inbox"],
+                "outbox_dead_letters": outbox_counts["outbox_dead_letters"],
+                "job_events": self.jobs.count_job_events(),
+                "audit_events": self.audit.count_events(),
+                "rpg_turns": int(row[1]),
             },
-            "max_outbox_payload_bytes_observed": int(row[7]),
+            "max_outbox_payload_bytes_observed": outbox_counts["max_outbox_payload_bytes"],
             "policy": {
                 "max_outbox_payload_bytes": int(policy[0]),
                 "max_jsonb_record_bytes": int(policy[1]),
@@ -73,51 +75,14 @@ class PostgresLifecycleRepository:
         try:
             deleted["consumer_inbox"] = self._delete_with_policy(
                 record_type="outbox_consumer_inbox",
-                sql="""
-                    DELETE FROM omnix_outbox_consumer_inbox
-                     WHERE (consumer_id, event_key) IN (
-                         SELECT consumer_id, event_key
-                           FROM omnix_outbox_consumer_inbox
-                          WHERE status IN ('completed', 'dead_letter')
-                            AND updated_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                          ORDER BY updated_at, consumer_id, event_key
-                          LIMIT %s
-                     )
-                """,
                 batch_size=resolved_batch,
             )
             deleted["outbox_events"] = self._delete_with_policy(
                 record_type="outbox_events",
-                sql="""
-                    DELETE FROM omnix_outbox_events
-                     WHERE id IN (
-                         SELECT id
-                           FROM omnix_outbox_events
-                          WHERE status = 'published'
-                            AND published_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                            AND NOT EXISTS (
-                                SELECT 1 FROM omnix_outbox_consumer_inbox AS inbox
-                                 WHERE inbox.event_key = omnix_outbox_events.event_key
-                            )
-                          ORDER BY published_at, id
-                          LIMIT %s
-                     )
-                """,
                 batch_size=resolved_batch,
             )
             deleted["dead_letters"] = self._delete_with_policy(
                 record_type="outbox_dead_letters",
-                sql="""
-                    DELETE FROM omnix_outbox_dead_letters
-                     WHERE id IN (
-                         SELECT id
-                           FROM omnix_outbox_dead_letters
-                          WHERE resolved_at IS NOT NULL
-                            AND resolved_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
-                          ORDER BY resolved_at, id
-                          LIMIT %s
-                     )
-                """,
                 batch_size=resolved_batch,
             )
             deleted["runtime_failure_evidence"] = self._delete_with_policy(
@@ -161,12 +126,28 @@ class PostgresLifecycleRepository:
             )
             raise
 
-    def _delete_with_policy(self, *, record_type: str, sql: str, batch_size: int) -> int:
+    def _delete_with_policy(self, *, record_type: str, batch_size: int) -> int:
         policy = self.connection.execute(
             "SELECT retention_days, enabled FROM omnix_retention_policies WHERE record_type = %s",
             (record_type,),
         ).fetchone()
         if policy is None or not bool(policy[1]):
             return 0
-        cursor = self.connection.execute(sql, (int(policy[0]), batch_size))
-        return int(cursor.rowcount)
+        if record_type.startswith("outbox_"):
+            return self.outbox.delete_retained(
+                record_type=record_type,
+                retention_days=int(policy[0]),
+                batch_size=batch_size,
+            )
+        if record_type == "runtime_failure_evidence":
+            cursor = self.connection.execute(
+                """DELETE FROM omnix_runtime_failure_evidence
+                    WHERE id IN (
+                        SELECT id FROM omnix_runtime_failure_evidence
+                         WHERE created_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                         ORDER BY created_at, id LIMIT %s
+                    )""",
+                (int(policy[0]), batch_size),
+            )
+            return int(cursor.rowcount)
+        raise ValueError(f"unsupported lifecycle retention type: {record_type}")

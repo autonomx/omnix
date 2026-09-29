@@ -15,7 +15,7 @@ if str(SRC_DIR) not in sys.path:
 
 def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
-    import app.shared as shared
+    from app.voice import legacy_clone_files
     monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
@@ -24,8 +24,8 @@ def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch)
     existing.write_bytes(b"png")
     empty_legacy = tmp_path / "empty_legacy"
     empty_legacy.mkdir()
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(empty_legacy))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_DIR", str(empty_legacy))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
     monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(empty_legacy))
     monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(empty_legacy))
     store = SharedAssetStore(tmp_path / "assets.json")
@@ -59,7 +59,7 @@ def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch)
 
 def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
-    import app.shared as shared
+    from app.voice import legacy_clone_files
     monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
     monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
@@ -69,8 +69,8 @@ def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path:
     missing = tmp_path / "missing.png"
     empty_legacy = tmp_path / "empty_legacy"
     empty_legacy.mkdir()
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(empty_legacy))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_DIR", str(empty_legacy))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_FILE", str(empty_legacy / "voice_clones.json"))
     monkeypatch.setenv("OMNIX_LEGACY_AUDIO_DIRS", str(empty_legacy))
     monkeypatch.setenv("OMNIX_LEGACY_DOCUMENT_DIRS", str(empty_legacy))
     store = SharedAssetStore(tmp_path / "assets.json")
@@ -129,7 +129,9 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
 
     client = TestClient(
         create_gateway_app(asset_store_factory=lambda: FakeAssetStore()),
+        base_url="http://127.0.0.1",
         raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
     )
 
     response = client.get("/api/assets")
@@ -178,7 +180,7 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
 
     from app.assets import AssetListResponse, AssetRecord, AssetType
     from app.gateway.main import create_gateway_app
-    import app.shared as shared
+    from app.voice import legacy_clone_files
 
     clone_dir = tmp_path / "voice_clones"
     clone_dir.mkdir()
@@ -186,8 +188,8 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
     clone_path.write_bytes(b"voice")
     manifest_path = clone_dir / "voice_clones.json"
     manifest_path.write_text(json.dumps({"jinx2": {"voice_clone_id": "jinx2"}}), encoding="utf-8")
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(clone_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(manifest_path))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_DIR", str(clone_dir))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_FILE", str(manifest_path))
 
     asset = AssetRecord(
         id="voice-cloning:jinx2",
@@ -207,7 +209,7 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
             assert asset_id == asset.id
             return {"deleted": True, "file_deleted": False}
 
-    client = TestClient(create_gateway_app(asset_store_factory=lambda: FakeAssetStore()))
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: FakeAssetStore()), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.delete("/api/voice-cloning/assets/voice-cloning:jinx2")
 
@@ -220,7 +222,7 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
 def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeypatch) -> None:
     from app.assets import canonical_voice_clones
     from app.gateway.main import create_gateway_app
-    import app.shared as shared
+    from app.voice import legacy_clone_files
 
     clone_dir = tmp_path / "voice_clones"
     clone_dir.mkdir()
@@ -232,8 +234,8 @@ def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeyp
     duplicate.write_bytes(b"sample")
     other_voice = clone_dir / "other.wav"
     other_voice.write_bytes(b"other")
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(clone_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(clone_dir / "voice_clones.json"))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_DIR", str(clone_dir))
+    monkeypatch.setattr(legacy_clone_files, "VOICE_CLONES_FILE", str(clone_dir / "voice_clones.json"))
     monkeypatch.setattr(canonical_voice_clones, "canonical_voice_clone_root", lambda: clone_dir)
 
     class FileOnlyStore:
@@ -243,7 +245,7 @@ def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeyp
         def delete_asset(self, asset_id: str) -> dict[str, bool]:
             return {"deleted": False, "file_deleted": False}
 
-    client = TestClient(create_gateway_app(asset_store_factory=lambda: FileOnlyStore()))
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: FileOnlyStore()), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     response = client.delete("/api/voice-cloning/assets/voice-cloning%3Aehsan")
 
     assert response.status_code == 200

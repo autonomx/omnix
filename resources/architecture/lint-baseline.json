@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "521b2c964c8467c09a3f7872fc1ec3983846ead7e6b7428e72186c9b62c92b75",
+  "policy_digest": "00fe8d10768ed781db2542208a10b8d471b60b97aded15a19f838c828fd56911",
   "rules": [
     "AL001",
     "AL002",
@@ -24,7 +24,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
-        16
+        17
       ],
       "path": "src/app/agent_runtime/broker_api.py",
       "rule": "AL001"
@@ -33,7 +33,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
       "lines": [
-        17
+        18
       ],
       "path": "src/app/agent_runtime/broker_api.py",
       "rule": "AL001"
@@ -42,7 +42,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        18
+        19
       ],
       "path": "src/app/agent_runtime/broker_api.py",
       "rule": "AL001"
@@ -51,7 +51,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
-        18
+        22
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -60,7 +60,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
       "lines": [
-        19
+        23
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -69,7 +69,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        20
+        24
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -78,7 +78,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.prompt_assembly",
       "lines": [
-        384
+        385
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -87,7 +87,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.routing_context",
       "lines": [
-        385
+        386
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -132,7 +132,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.repo_adapter",
       "lines": [
-        20
+        21
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL001"
@@ -186,36 +186,9 @@
       "count": 1,
       "fingerprint": "SharedAssetStore.preview_image_manifest_import:app.image.asset_store",
       "lines": [
-        245
+        247
       ],
       "path": "src/app/assets/store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.context_budget",
-      "lines": [
-        17
-      ],
-      "path": "src/app/assistant_memory/companion_context.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.prompt_assembly",
-      "lines": [
-        18
-      ],
-      "path": "src/app/assistant_memory/companion_context.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat",
-      "lines": [
-        9
-      ],
-      "path": "src/app/assistant_memory/controls.py",
       "rule": "AL001"
     },
     {
@@ -229,74 +202,20 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.characters.live_conversation_profile",
-      "lines": [
-        16
-      ],
-      "path": "src/app/assistant_memory/initiative.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat",
-      "lines": [
-        29
-      ],
-      "path": "src/app/assistant_memory/jobs.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "_process_claimed_memory_job:app.chat.retention_policy",
       "lines": [
-        174
+        173
       ],
       "path": "src/app/assistant_memory/jobs.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat",
-      "lines": [
-        8
-      ],
-      "path": "src/app/assistant_memory/management.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat",
-      "lines": [
-        8
-      ],
-      "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL001"
     },
     {
       "count": 1,
       "fingerprint": "_legacy_memory_write_guard:app.assistant_memory_v2.authority",
       "lines": [
-        69
+        66
       ],
       "path": "src/app/assistant_memory/owner_defaults.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat",
-      "lines": [
-        8
-      ],
-      "path": "src/app/assistant_memory/routes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.memory_session",
-      "lines": [
-        9
-      ],
-      "path": "src/app/assistant_memory/routes.py",
       "rule": "AL001"
     },
     {
@@ -312,61 +231,16 @@
       "count": 1,
       "fingerprint": "_default_legacy_write_guard:app.assistant_memory_v2.authority",
       "lines": [
-        396
+        393
       ],
       "path": "src/app/assistant_memory/service.py",
       "rule": "AL001"
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.chat.prompt_assembly",
-      "lines": [
-        15
-      ],
-      "path": "src/app/assistant_memory/temporal_retrieval.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory.models",
-      "lines": [
-        9
-      ],
-      "path": "src/app/assistant_memory_v2/legacy_shadow.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.process_environment",
-      "lines": [
-        40
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_log_browser_activity:app.agent_runtime.debug_logging",
-      "lines": [
-        698
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_log_playwright_worker_event:app.agent_runtime.debug_logging",
-      "lines": [
-        383
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "_workspace_for_preview:app.agent_runtime.service",
       "lines": [
-        836
+        837
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL001"
@@ -375,45 +249,9 @@
       "count": 1,
       "fingerprint": "_default_tool_enabled:app.trading.providers.alpaca_iex",
       "lines": [
-        150
+        152
       ],
       "path": "src/app/assistant_tools/config_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.capabilities",
-      "lines": [
-        6
-      ],
-      "path": "src/app/assistant_tools/kasa_plan.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.mcp_policy",
-      "lines": [
-        19
-      ],
-      "path": "src/app/assistant_tools/mcp_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "mcp_runtime_available:app.agent_runtime.mcp_policy",
-      "lines": [
-        73
-      ],
-      "path": "src/app/assistant_tools/mcp_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.capabilities",
-      "lines": [
-        6
-      ],
-      "path": "src/app/assistant_tools/registry.py",
       "rule": "AL001"
     },
     {
@@ -454,51 +292,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory",
-      "lines": [
-        13
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.live_call_greeting",
-      "lines": [
-        14
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.live_conversation_proactive",
-      "lines": [
-        15
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.models",
-      "lines": [
-        21
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.companion_activity.initiative",
-      "lines": [
-        22
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.image.reference_assets",
       "lines": [
         10
@@ -517,65 +310,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory.hermes_adapter",
-      "lines": [
-        11
-      ],
-      "path": "src/app/characters/hermes_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory.models",
-      "lines": [
-        12
-      ],
-      "path": "src/app/characters/hermes_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory.service",
-      "lines": [
-        13
-      ],
-      "path": "src/app/characters/hermes_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.chat.models",
-      "lines": [
-        11
-      ],
-      "path": "src/app/characters/live_call.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.live_speech.performance_contract",
       "lines": [
-        15
+        17
       ],
       "path": "src/app/characters/live_conversation_rendering.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory",
-      "lines": [
-        9
-      ],
-      "path": "src/app/characters/management.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CharacterManagementService.__init__:app.runtime_composition",
-      "lines": [
-        91
-      ],
-      "path": "src/app/characters/management.py",
       "rule": "AL001"
     },
     {
@@ -585,15 +324,6 @@
         48
       ],
       "path": "src/app/characters/service.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory",
-      "lines": [
-        8
-      ],
-      "path": "src/app/characters/stage4_runner.py",
       "rule": "AL001"
     },
     {
@@ -618,7 +348,7 @@
       "count": 1,
       "fingerprint": "default_chat_store:app.runtime_composition",
       "lines": [
-        305
+        310
       ],
       "path": "src/app/chat/character_store.py",
       "rule": "AL001"
@@ -627,7 +357,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_memory.settings",
       "lines": [
-        17
+        18
       ],
       "path": "src/app/chat/compaction.py",
       "rule": "AL001"
@@ -636,7 +366,7 @@
       "count": 1,
       "fingerprint": "default_summary_repository:app.runtime_composition",
       "lines": [
-        224
+        225
       ],
       "path": "src/app/chat/compaction.py",
       "rule": "AL001"
@@ -645,7 +375,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_memory.settings",
       "lines": [
-        8
+        11
       ],
       "path": "src/app/chat/context_budget.py",
       "rule": "AL001"
@@ -762,52 +492,16 @@
       "count": 1,
       "fingerprint": "_memory_v2_runtime:app.assistant_memory_v2.runtime",
       "lines": [
-        41
+        38
       ],
       "path": "src/app/chat/memory_prompt.py",
       "rule": "AL001"
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_memory",
-      "lines": [
-        9
-      ],
-      "path": "src/app/chat/memory_session.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory.lifecycle",
-      "lines": [
-        10
-      ],
-      "path": "src/app/chat/memory_session.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory",
-      "lines": [
-        12
-      ],
-      "path": "src/app/chat/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.characters",
       "lines": [
-        13
-      ],
-      "path": "src/app/chat/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.research",
-      "lines": [
-        20
+        12
       ],
       "path": "src/app/chat/models.py",
       "rule": "AL001"
@@ -825,7 +519,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_memory",
       "lines": [
-        12
+        14
       ],
       "path": "src/app/chat/prompt_store.py",
       "rule": "AL001"
@@ -834,16 +528,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_memory.jobs",
       "lines": [
-        13
-      ],
-      "path": "src/app/chat/prompt_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_chat_store:app.runtime_composition",
-      "lines": [
-        786
+        15
       ],
       "path": "src/app/chat/prompt_store.py",
       "rule": "AL001"
@@ -852,7 +537,7 @@
       "count": 1,
       "fingerprint": "route_typed_stream_boundary:app.agent_runtime.chat_bridge",
       "lines": [
-        148
+        150
       ],
       "path": "src/app/chat/prompt_store.py",
       "rule": "AL001"
@@ -906,54 +591,9 @@
       "count": 1,
       "fingerprint": "ChatSessionStore._generate_reply:app.agent_runtime.chat_bridge",
       "lines": [
-        559
+        550
       ],
       "path": "src/app/chat/store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
-      "lines": [
-        9
-      ],
-      "path": "src/app/companion_activity/cognition.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.policy",
-      "lines": [
-        10
-      ],
-      "path": "src/app/companion_activity/cognition.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
-      "lines": [
-        14
-      ],
-      "path": "src/app/companion_activity/contracts.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.policy",
-      "lines": [
-        15
-      ],
-      "path": "src/app/companion_activity/contracts.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_memory_v2.contracts",
-      "lines": [
-        14
-      ],
-      "path": "src/app/companion_activity/integrations.py",
       "rule": "AL001"
     },
     {
@@ -1075,56 +715,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "CreateJobRequest.apply_central_defaults:app.platform.effective_defaults",
-      "lines": [
-        150
-      ],
-      "path": "src/app/jobs/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CreateJobRequest.apply_central_defaults:app.platform.voice_cloning_defaults",
-      "lines": [
-        146
-      ],
-      "path": "src/app/jobs/models.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_model_residency_store:app.runtime_composition",
-      "lines": [
-        119
-      ],
-      "path": "src/app/jobs/residency.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "default_job_store:app.runtime_composition",
       "lines": [
         16
       ],
       "path": "src/app/jobs/store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.gateway.workers",
-      "lines": [
-        7
-      ],
-      "path": "src/app/platform/diagnostics.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "runtime_diagnostics:app.gateway.tts_stream_diagnostics",
-      "lines": [
-        126
-      ],
-      "path": "src/app/platform/runtime_diagnostics.py",
       "rule": "AL001"
     },
     {
@@ -1248,7 +843,7 @@
       "count": 1,
       "fingerprint": "download_flux_klein_status_route:app.image.downloads",
       "lines": [
-        273
+        288
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL001"
@@ -1260,24 +855,6 @@
         117
       ],
       "path": "src/app/rpg/narrative/narrative_persistence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "kick_campaign_genesis_worker.run:app.gateway.background_runtime",
-      "lines": [
-        813
-      ],
-      "path": "src/app/rpg/session/genesis/async_coordinator.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_current_submission_id:app.gateway.rpg_turn_job_mirror",
-      "lines": [
-        221
-      ],
-      "path": "src/app/rpg/session/interaction_timeline_hook.py",
       "rule": "AL001"
     },
     {
@@ -1408,321 +985,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "app.agent_runtime->app.assistant_tools",
-      "lines": [
-        1
-      ],
-      "path": "src/app/agent_runtime/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assist_core->app.agent_runtime",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assist_core/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assist_core->app.assistant_tools",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assist_core/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_context->app.chat",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_context/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_context->app.research",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_context/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_memory->app.characters",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_memory/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_memory->app.chat",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_memory/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_memory_v2->app.assistant_memory",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_memory_v2/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_tools->app.agent_runtime",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_tools/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.assistant_tools->app.assist_core",
-      "lines": [
-        1
-      ],
-      "path": "src/app/assistant_tools/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.characters->app.assistant_memory",
-      "lines": [
-        1
-      ],
-      "path": "src/app/characters/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.characters->app.chat",
-      "lines": [
-        1
-      ],
-      "path": "src/app/characters/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.characters->app.companion_activity",
-      "lines": [
-        1
-      ],
-      "path": "src/app/characters/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat->app.assistant_memory",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat->app.assistant_memory_v2",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat->app.characters",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat->app.research",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.chat->app.testing",
-      "lines": [
-        1
-      ],
-      "path": "src/app/chat/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.companion_activity->app.assistant_memory_v2",
-      "lines": [
-        1
-      ],
-      "path": "src/app/companion_activity/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.gateway->app.platform",
-      "lines": [
-        1
-      ],
-      "path": "src/app/gateway/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.jobs->app.persistence",
-      "lines": [
-        1
-      ],
-      "path": "src/app/jobs/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.jobs->app.security",
-      "lines": [
-        1
-      ],
-      "path": "src/app/jobs/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.persistence->app.jobs",
-      "lines": [
-        1
-      ],
-      "path": "src/app/persistence/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.platform->app.gateway",
-      "lines": [
-        1
-      ],
-      "path": "src/app/platform/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.research->app.assistant_context",
-      "lines": [
-        1
-      ],
-      "path": "src/app/research/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg->app.rpg_world_forge_profile_provider",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg->app.rpg_world_forge_provider",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg->app.rpg_world_forge_single_pass_provider",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg_world_forge_profile_provider->app.rpg",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg_world_forge_profile_provider/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg_world_forge_profile_provider->app.rpg_world_forge_provider",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg_world_forge_profile_provider/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg_world_forge_provider->app.rpg",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg_world_forge_provider/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg_world_forge_single_pass_provider->app.rpg",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg_world_forge_single_pass_provider/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.rpg_world_forge_single_pass_provider->app.rpg_world_forge_provider",
-      "lines": [
-        1
-      ],
-      "path": "src/app/rpg_world_forge_single_pass_provider/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.security->app.persistence",
-      "lines": [
-        1
-      ],
-      "path": "src/app/security/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
-      "fingerprint": "app.testing->app.chat",
-      "lines": [
-        1
-      ],
-      "path": "src/app/testing/",
-      "rule": "AL002"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.agent_runtime.pi_runtime_core._omnix_base_normalize_pi_event",
       "lines": [
         116
@@ -1781,7 +1043,7 @@
       "count": 1,
       "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.PostgresAgentRunRepository",
       "lines": [
-        560
+        561
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL003"
@@ -1790,7 +1052,7 @@
       "count": 1,
       "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.WorkspaceAuthority",
       "lines": [
-        561
+        562
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL003"
@@ -1799,7 +1061,7 @@
       "count": 1,
       "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.default_semantic_task_parser",
       "lines": [
-        562
+        563
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL003"
@@ -1808,7 +1070,7 @@
       "count": 1,
       "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.unit_of_work",
       "lines": [
-        559
+        560
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL003"
@@ -1847,24 +1109,6 @@
         273
       ],
       "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_agent_runtime_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        48
-      ],
-      "path": "src/app/gateway/agent_runtime_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_agent_runtime_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        47
-      ],
-      "path": "src/app/gateway/agent_runtime_routes.py",
       "rule": "AL003"
     },
     {
@@ -1952,7 +1196,7 @@
       "count": 1,
       "fingerprint": "install_event_loop_lag_monitor_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        397
+        398
       ],
       "path": "src/app/gateway/event_loop_lag_monitor.py",
       "rule": "AL003"
@@ -1961,70 +1205,16 @@
       "count": 1,
       "fingerprint": "install_event_loop_lag_monitor_hook:fastapi.FastAPI.__init__",
       "lines": [
-        396
+        397
       ],
       "path": "src/app/gateway/event_loop_lag_monitor.py",
       "rule": "AL003"
     },
     {
       "count": 1,
-      "fingerprint": "install_image_asset_file_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        186
-      ],
-      "path": "src/app/gateway/image_asset_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_image_asset_file_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        185
-      ],
-      "path": "src/app/gateway/image_asset_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_image_reference_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        65
-      ],
-      "path": "src/app/gateway/image_reference_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_image_reference_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        64
-      ],
-      "path": "src/app/gateway/image_reference_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_image_workspace_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        294
-      ],
-      "path": "src/app/gateway/image_workspace_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_image_workspace_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        293
-      ],
-      "path": "src/app/gateway/image_workspace_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
       "fingerprint": "install_live_chat_companion_context_hook:app.gateway.live_chat_live_voice_profile.<dynamic>",
       "lines": [
-        362
+        363
       ],
       "path": "src/app/gateway/live_chat_companion_context.py",
       "rule": "AL003"
@@ -2033,7 +1223,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_companion_context_hook:app.gateway.live_chat_live_voice_profile._build_live_voice_prompt",
       "lines": [
-        361
+        362
       ],
       "path": "src/app/gateway/live_chat_companion_context.py",
       "rule": "AL003"
@@ -2312,7 +1502,7 @@
       "count": 1,
       "fingerprint": "_install_builder_breakdown:app.gateway.live_chat_live_voice_profile._build_live_voice_prompt",
       "lines": [
-        366
+        313
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2321,7 +1511,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.chat.context_budget.load_memory_runtime_settings",
       "lines": [
-        254
+        192
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2330,7 +1520,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.chat.memory_prompt.load_memory_runtime_settings",
       "lines": [
-        251
+        189
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2339,7 +1529,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.chat.retention_policy.load_memory_runtime_settings",
       "lines": [
-        257
+        195
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2348,7 +1538,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context._create_memory_service",
       "lines": [
-        264
+        202
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2357,7 +1547,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context._effective_profile",
       "lines": [
-        280
+        218
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2366,7 +1556,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context._merge_memory",
       "lines": [
-        292
+        230
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2375,7 +1565,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context._temporal_prompt_memory",
       "lines": [
-        288
+        226
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2384,7 +1574,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.build_companion_context_packet",
       "lines": [
-        296
+        234
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2393,7 +1583,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.build_prompt_assembly",
       "lines": [
-        304
+        242
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2402,7 +1592,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.compaction_enabled",
       "lines": [
-        247
+        185
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2411,7 +1601,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.companion_rollout_policy",
       "lines": [
-        272
+        210
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2420,7 +1610,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.load_memory_runtime_settings",
       "lines": [
-        244
+        182
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2429,7 +1619,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.observe_paralinguistic_turn",
       "lines": [
-        312
+        250
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2438,7 +1628,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.plan_companion_initiative",
       "lines": [
-        308
+        246
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2447,7 +1637,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.record_companion_diagnostics",
       "lines": [
-        320
+        258
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2456,7 +1646,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.record_memory_usage",
       "lines": [
-        300
+        238
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2465,7 +1655,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.render_prompt_assembly",
       "lines": [
-        316
+        254
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2474,7 +1664,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.resolve_prompt_memory",
       "lines": [
-        268
+        206
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2483,7 +1673,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.resolve_session_memory_scope",
       "lines": [
-        276
+        214
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2492,7 +1682,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_companion_context.retrieve_temporal_context",
       "lines": [
-        284
+        222
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2501,7 +1691,7 @@
       "count": 1,
       "fingerprint": "_install_dependency_wrappers:app.gateway.live_chat_live_voice_profile._live_voice_prompt_budget",
       "lines": [
-        260
+        198
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2510,7 +1700,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_prompt_dependency_stage_hook:app.gateway.live_chat_live_voice_profile.<dynamic>",
       "lines": [
-        384
+        331
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL003"
@@ -2519,7 +1709,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_prompt_window_hook:app.chat.prompt_store.<dynamic>",
       "lines": [
-        225
+        227
       ],
       "path": "src/app/gateway/live_chat_prompt_window.py",
       "rule": "AL003"
@@ -2528,7 +1718,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_prompt_window_hook:app.chat.prompt_store.build_prompt_assembly",
       "lines": [
-        224
+        226
       ],
       "path": "src/app/gateway/live_chat_prompt_window.py",
       "rule": "AL003"
@@ -2564,7 +1754,7 @@
       "count": 1,
       "fingerprint": "_install_settings_cache_invalidation:app.platform.settings_control.<dynamic>",
       "lines": [
-        244
+        272
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2573,7 +1763,7 @@
       "count": 1,
       "fingerprint": "_install_settings_cache_invalidation:app.platform.settings_control.save_settings",
       "lines": [
-        243
+        271
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2582,7 +1772,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_provider_routing_hook:app.chat.prompt_store.ChatSessionStore.<dynamic>",
       "lines": [
-        405
+        414
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2591,7 +1781,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_provider_routing_hook:app.chat.prompt_store.ChatSessionStore._generate_provider_reply",
       "lines": [
-        400
+        410
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2600,7 +1790,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_provider_routing_hook:app.chat.prompt_store.ChatSessionStore._generate_reply",
       "lines": [
-        399
+        409
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2609,7 +1799,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_provider_routing_hook:app.chat.prompt_store.ChatSessionStore.begin_user_message",
       "lines": [
-        402
+        412
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2618,7 +1808,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_provider_routing_hook:app.chat.prompt_store.ChatSessionStore.stream_provider_reply_chunks",
       "lines": [
-        401
+        411
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL003"
@@ -2627,7 +1817,7 @@
       "count": 1,
       "fingerprint": "install_live_speculative_tts_prefetch_hook:app.gateway.tts_live_call_websocket.get_tts_provider",
       "lines": [
-        646
+        644
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL003"
@@ -2636,7 +1826,7 @@
       "count": 1,
       "fingerprint": "install_live_speculative_tts_prefetch_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        658
+        656
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL003"
@@ -2645,7 +1835,7 @@
       "count": 1,
       "fingerprint": "install_live_speculative_tts_prefetch_hook:fastapi.FastAPI.__init__",
       "lines": [
-        657
+        655
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL003"
@@ -2666,42 +1856,6 @@
         311
       ],
       "path": "src/app/gateway/live_chat_stream_retry.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_material_context_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        468
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_material_context_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        467
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_observation_generation_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        179
-      ],
-      "path": "src/app/gateway/live_observation_generation.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_observation_generation_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        178
-      ],
-      "path": "src/app/gateway/live_observation_generation.py",
       "rule": "AL003"
     },
     {
@@ -2771,7 +1925,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_cue_asset_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        181
+        195
       ],
       "path": "src/app/gateway/live_voice_cue_asset_routes.py",
       "rule": "AL003"
@@ -2780,7 +1934,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_cue_asset_hook:fastapi.FastAPI.__init__",
       "lines": [
-        180
+        194
       ],
       "path": "src/app/gateway/live_voice_cue_asset_routes.py",
       "rule": "AL003"
@@ -2789,7 +1943,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_diagnostics_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        148
+        145
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL003"
@@ -2798,7 +1952,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_diagnostics_hook:fastapi.FastAPI.__init__",
       "lines": [
-        147
+        144
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL003"
@@ -2834,7 +1988,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_execution_lane_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        750
+        748
       ],
       "path": "src/app/gateway/live_voice_speculative_tts.py",
       "rule": "AL003"
@@ -2843,7 +1997,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_execution_lane_hook:fastapi.FastAPI.__init__",
       "lines": [
-        749
+        747
       ],
       "path": "src/app/gateway/live_voice_speculative_tts.py",
       "rule": "AL003"
@@ -2904,34 +2058,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "install_realtime_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        34
-      ],
-      "path": "src/app/gateway/realtime_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_realtime_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        33
-      ],
-      "path": "src/app/gateway/realtime_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
       "fingerprint": "install_research_mode_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        56
-      ],
-      "path": "src/app/gateway/research_mode_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_research_mode_route_hook:fastapi.FastAPI.__init__",
       "lines": [
         55
       ],
@@ -2940,9 +2067,18 @@
     },
     {
       "count": 1,
+      "fingerprint": "install_research_mode_route_hook:fastapi.FastAPI.__init__",
+      "lines": [
+        54
+      ],
+      "path": "src/app/gateway/research_mode_routes.py",
+      "rule": "AL003"
+    },
+    {
+      "count": 1,
       "fingerprint": "install_rpg_debug_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        35
+        49
       ],
       "path": "src/app/gateway/rpg_debug_routes.py",
       "rule": "AL003"
@@ -2951,7 +2087,7 @@
       "count": 1,
       "fingerprint": "install_rpg_debug_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        34
+        48
       ],
       "path": "src/app/gateway/rpg_debug_routes.py",
       "rule": "AL003"
@@ -2960,7 +2096,7 @@
       "count": 1,
       "fingerprint": "install_rpg_geometry_patch_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        87
+        90
       ],
       "path": "src/app/gateway/rpg_geometry_patch_routes.py",
       "rule": "AL003"
@@ -2969,7 +2105,7 @@
       "count": 1,
       "fingerprint": "install_rpg_geometry_patch_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        86
+        89
       ],
       "path": "src/app/gateway/rpg_geometry_patch_routes.py",
       "rule": "AL003"
@@ -2978,7 +2114,7 @@
       "count": 1,
       "fingerprint": "install_rpg_grid_performance_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        92
+        104
       ],
       "path": "src/app/gateway/rpg_grid_performance_routes.py",
       "rule": "AL003"
@@ -2987,7 +2123,7 @@
       "count": 1,
       "fingerprint": "install_rpg_grid_performance_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        91
+        103
       ],
       "path": "src/app/gateway/rpg_grid_performance_routes.py",
       "rule": "AL003"
@@ -2996,7 +2132,7 @@
       "count": 1,
       "fingerprint": "install_rpg_map_editor_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        114
+        195
       ],
       "path": "src/app/gateway/rpg_map_editor_routes.py",
       "rule": "AL003"
@@ -3005,7 +2141,7 @@
       "count": 1,
       "fingerprint": "install_rpg_map_editor_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        113
+        194
       ],
       "path": "src/app/gateway/rpg_map_editor_routes.py",
       "rule": "AL003"
@@ -3014,7 +2150,7 @@
       "count": 1,
       "fingerprint": "install_rpg_map_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        203
+        270
       ],
       "path": "src/app/gateway/rpg_map_routes.py",
       "rule": "AL003"
@@ -3023,7 +2159,7 @@
       "count": 1,
       "fingerprint": "install_rpg_map_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        202
+        269
       ],
       "path": "src/app/gateway/rpg_map_routes.py",
       "rule": "AL003"
@@ -3032,7 +2168,7 @@
       "count": 1,
       "fingerprint": "install_rpg_npc_spatial_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        175
+        225
       ],
       "path": "src/app/gateway/rpg_npc_spatial_routes.py",
       "rule": "AL003"
@@ -3041,7 +2177,7 @@
       "count": 1,
       "fingerprint": "install_rpg_npc_spatial_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        174
+        224
       ],
       "path": "src/app/gateway/rpg_npc_spatial_routes.py",
       "rule": "AL003"
@@ -3050,7 +2186,7 @@
       "count": 1,
       "fingerprint": "install_rpg_observer_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        108
+        119
       ],
       "path": "src/app/gateway/rpg_observer_routes.py",
       "rule": "AL003"
@@ -3059,7 +2195,7 @@
       "count": 1,
       "fingerprint": "install_rpg_observer_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        107
+        118
       ],
       "path": "src/app/gateway/rpg_observer_routes.py",
       "rule": "AL003"
@@ -3068,7 +2204,7 @@
       "count": 1,
       "fingerprint": "install_rpg_progressive_map_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        159
+        178
       ],
       "path": "src/app/gateway/rpg_progressive_map_routes.py",
       "rule": "AL003"
@@ -3077,7 +2213,7 @@
       "count": 1,
       "fingerprint": "install_rpg_progressive_map_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        158
+        177
       ],
       "path": "src/app/gateway/rpg_progressive_map_routes.py",
       "rule": "AL003"
@@ -3086,7 +2222,7 @@
       "count": 1,
       "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        463
+        482
       ],
       "path": "src/app/gateway/rpg_session_routes.py",
       "rule": "AL003"
@@ -3095,7 +2231,7 @@
       "count": 1,
       "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        462
+        481
       ],
       "path": "src/app/gateway/rpg_session_routes.py",
       "rule": "AL003"
@@ -3104,7 +2240,7 @@
       "count": 1,
       "fingerprint": "install_rpg_tactical_spatial_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        124
+        148
       ],
       "path": "src/app/gateway/rpg_tactical_spatial_routes.py",
       "rule": "AL003"
@@ -3113,7 +2249,7 @@
       "count": 1,
       "fingerprint": "install_rpg_tactical_spatial_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        123
+        147
       ],
       "path": "src/app/gateway/rpg_tactical_spatial_routes.py",
       "rule": "AL003"
@@ -3158,7 +2294,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_authoring_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        293
+        314
       ],
       "path": "src/app/gateway/rpg_world_authoring_routes.py",
       "rule": "AL003"
@@ -3167,7 +2303,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_authoring_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        292
+        313
       ],
       "path": "src/app/gateway/rpg_world_authoring_routes.py",
       "rule": "AL003"
@@ -3176,7 +2312,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_bundle_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        105
+        116
       ],
       "path": "src/app/gateway/rpg_world_bundle_routes.py",
       "rule": "AL003"
@@ -3185,7 +2321,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_bundle_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        104
+        115
       ],
       "path": "src/app/gateway/rpg_world_bundle_routes.py",
       "rule": "AL003"
@@ -3194,7 +2330,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_deletion_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        101
+        110
       ],
       "path": "src/app/gateway/rpg_world_deletion_routes.py",
       "rule": "AL003"
@@ -3203,7 +2339,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_deletion_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        100
+        109
       ],
       "path": "src/app/gateway/rpg_world_deletion_routes.py",
       "rule": "AL003"
@@ -3212,7 +2348,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_dossier_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        232
+        251
       ],
       "path": "src/app/gateway/rpg_world_dossier_routes.py",
       "rule": "AL003"
@@ -3221,7 +2357,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_dossier_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        231
+        250
       ],
       "path": "src/app/gateway/rpg_world_dossier_routes.py",
       "rule": "AL003"
@@ -3230,7 +2366,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_generation_review_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        330
+        345
       ],
       "path": "src/app/gateway/rpg_world_generation_review_routes.py",
       "rule": "AL003"
@@ -3239,7 +2375,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_generation_review_hook:fastapi.FastAPI.__init__",
       "lines": [
-        329
+        344
       ],
       "path": "src/app/gateway/rpg_world_generation_review_routes.py",
       "rule": "AL003"
@@ -3248,7 +2384,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_image_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        195
+        222
       ],
       "path": "src/app/gateway/rpg_world_image_routes.py",
       "rule": "AL003"
@@ -3257,7 +2393,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_image_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        194
+        221
       ],
       "path": "src/app/gateway/rpg_world_image_routes.py",
       "rule": "AL003"
@@ -3266,7 +2402,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_profile_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        145
+        156
       ],
       "path": "src/app/gateway/rpg_world_profile_routes.py",
       "rule": "AL003"
@@ -3275,7 +2411,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_profile_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        144
+        155
       ],
       "path": "src/app/gateway/rpg_world_profile_routes.py",
       "rule": "AL003"
@@ -3284,7 +2420,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        372
+        444
       ],
       "path": "src/app/gateway/rpg_world_routes.py",
       "rule": "AL003"
@@ -3293,7 +2429,7 @@
       "count": 1,
       "fingerprint": "install_rpg_world_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        371
+        443
       ],
       "path": "src/app/gateway/rpg_world_routes.py",
       "rule": "AL003"
@@ -3302,7 +2438,7 @@
       "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        80
+        79
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -3311,7 +2447,7 @@
       "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.__init__",
       "lines": [
-        79
+        78
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -3320,27 +2456,9 @@
       "count": 1,
       "fingerprint": "initialize_gateway_runtime_hooks:app.gateway.tts_live_call_websocket.get_tts_provider",
       "lines": [
-        148
+        149
       ],
       "path": "src/app/gateway/runtime_hooks.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        128
-      ],
-      "path": "src/app/gateway/trading_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        127
-      ],
-      "path": "src/app/gateway/trading_routes.py",
       "rule": "AL003"
     },
     {
@@ -3419,7 +2537,7 @@
       "count": 1,
       "fingerprint": "install_tts_pcm_websocket_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        463
+        464
       ],
       "path": "src/app/gateway/tts_pcm_websocket.py",
       "rule": "AL003"
@@ -3428,7 +2546,7 @@
       "count": 1,
       "fingerprint": "install_tts_pcm_websocket_hook:fastapi.FastAPI.__init__",
       "lines": [
-        462
+        463
       ],
       "path": "src/app/gateway/tts_pcm_websocket.py",
       "rule": "AL003"
@@ -3473,7 +2591,7 @@
       "count": 1,
       "fingerprint": "install_voice_library_route_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        51
+        50
       ],
       "path": "src/app/gateway/voice_library_routes.py",
       "rule": "AL003"
@@ -3482,7 +2600,7 @@
       "count": 1,
       "fingerprint": "install_voice_library_route_hook:fastapi.FastAPI.__init__",
       "lines": [
-        50
+        49
       ],
       "path": "src/app/gateway/voice_library_routes.py",
       "rule": "AL003"
@@ -3500,7 +2618,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_hardware_policy:app.gateway.live_chat_lmstudio_responses.stateful_responses_enabled",
       "lines": [
-        149
+        150
       ],
       "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL003"
@@ -3509,7 +2627,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_hardware_policy:app.gateway.live_chat_provider_metrics._stream_lmstudio_reply",
       "lines": [
-        225
+        226
       ],
       "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL003"
@@ -3518,7 +2636,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_hardware_policy:app.gateway.live_voice_speculative_tts.<dynamic>",
       "lines": [
-        226
+        227
       ],
       "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL003"
@@ -3527,7 +2645,7 @@
       "count": 1,
       "fingerprint": "install_live_voice_hardware_policy:app.gateway.live_voice_speculative_tts._start_prefetch",
       "lines": [
-        173
+        174
       ],
       "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL003"
@@ -4606,7 +3724,7 @@
       "count": 1,
       "fingerprint": "install_persistent_ai_shadow_circuit:app.trading.ai_shadow_reliability._CIRCUIT",
       "lines": [
-        157
+        159
       ],
       "path": "src/app/trading/ai_shadow_circuit_persistence.py",
       "rule": "AL003"
@@ -5837,15 +4955,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:install_agent_runtime_route_hook",
-      "lines": [
-        36
-      ],
-      "path": "src/app/gateway/agent_runtime_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:install_assistant_context_route_hook",
       "lines": [
         18
@@ -5884,43 +4993,16 @@
       "count": 1,
       "fingerprint": "<module>:install_event_loop_lag_monitor_hook",
       "lines": [
-        384
+        385
       ],
       "path": "src/app/gateway/event_loop_lag_monitor.py",
       "rule": "AL004"
     },
     {
       "count": 1,
-      "fingerprint": "<module>:install_image_asset_file_hook",
-      "lines": [
-        172
-      ],
-      "path": "src/app/gateway/image_asset_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_image_reference_route_hook",
-      "lines": [
-        53
-      ],
-      "path": "src/app/gateway/image_reference_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_image_workspace_route_hook",
-      "lines": [
-        282
-      ],
-      "path": "src/app/gateway/image_workspace_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:install_live_chat_companion_context_hook",
       "lines": [
-        345
+        346
       ],
       "path": "src/app/gateway/live_chat_companion_context.py",
       "rule": "AL004"
@@ -5972,15 +5054,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:install_live_chat_postgres_fast_path",
-      "lines": [
-        535
-      ],
-      "path": "src/app/gateway/live_chat_postgres_fast_path.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:_install_character_snapshot_cache",
       "lines": [
         178
@@ -6019,7 +5092,7 @@
       "count": 1,
       "fingerprint": "<module>:_install_builder_breakdown",
       "lines": [
-        328
+        272
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL004"
@@ -6028,7 +5101,7 @@
       "count": 1,
       "fingerprint": "<module>:_install_dependency_wrappers",
       "lines": [
-        243
+        181
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL004"
@@ -6037,7 +5110,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_chat_prompt_dependency_stage_hook",
       "lines": [
-        377
+        324
       ],
       "path": "src/app/gateway/live_chat_prompt_dependency_stages.py",
       "rule": "AL004"
@@ -6046,7 +5119,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_chat_prompt_window_hook",
       "lines": [
-        205
+        207
       ],
       "path": "src/app/gateway/live_chat_prompt_window.py",
       "rule": "AL004"
@@ -6064,7 +5137,7 @@
       "count": 1,
       "fingerprint": "<module>:_install_settings_cache_invalidation",
       "lines": [
-        229
+        257
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL004"
@@ -6073,25 +5146,16 @@
       "count": 1,
       "fingerprint": "<module>:install_live_chat_provider_routing_hook",
       "lines": [
-        247
+        275
       ],
       "path": "src/app/gateway/live_chat_provider_routing.py",
       "rule": "AL004"
     },
     {
       "count": 1,
-      "fingerprint": "<module>:_install_live_speculation_session_cache_hook",
-      "lines": [
-        143
-      ],
-      "path": "src/app/gateway/live_chat_speculation.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:install_live_speculative_tts_prefetch_hook",
       "lines": [
-        629
+        627
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL004"
@@ -6103,24 +5167,6 @@
         259
       ],
       "path": "src/app/gateway/live_chat_stream_retry.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_material_context_hook",
-      "lines": [
-        456
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_observation_generation_hook",
-      "lines": [
-        167
-      ],
-      "path": "src/app/gateway/live_observation_generation.py",
       "rule": "AL004"
     },
     {
@@ -6145,7 +5191,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_voice_cue_asset_hook",
       "lines": [
-        168
+        182
       ],
       "path": "src/app/gateway/live_voice_cue_asset_routes.py",
       "rule": "AL004"
@@ -6154,7 +5200,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_voice_diagnostics_hook",
       "lines": [
-        135
+        132
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL004"
@@ -6172,7 +5218,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_voice_execution_lane_hook",
       "lines": [
-        735
+        733
       ],
       "path": "src/app/gateway/live_voice_speculative_tts.py",
       "rule": "AL004"
@@ -6206,18 +5252,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:install_realtime_route_hook",
-      "lines": [
-        22
-      ],
-      "path": "src/app/gateway/realtime_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:install_research_mode_route_hook",
       "lines": [
-        43
+        42
       ],
       "path": "src/app/gateway/research_mode_routes.py",
       "rule": "AL004"
@@ -6226,7 +5263,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_debug_route_hook",
       "lines": [
-        21
+        35
       ],
       "path": "src/app/gateway/rpg_debug_routes.py",
       "rule": "AL004"
@@ -6235,7 +5272,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_geometry_patch_route_hook",
       "lines": [
-        73
+        76
       ],
       "path": "src/app/gateway/rpg_geometry_patch_routes.py",
       "rule": "AL004"
@@ -6244,7 +5281,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_grid_performance_route_hook",
       "lines": [
-        78
+        90
       ],
       "path": "src/app/gateway/rpg_grid_performance_routes.py",
       "rule": "AL004"
@@ -6253,7 +5290,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_map_editor_route_hook",
       "lines": [
-        102
+        183
       ],
       "path": "src/app/gateway/rpg_map_editor_routes.py",
       "rule": "AL004"
@@ -6262,7 +5299,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_map_route_hook",
       "lines": [
-        191
+        258
       ],
       "path": "src/app/gateway/rpg_map_routes.py",
       "rule": "AL004"
@@ -6271,7 +5308,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_npc_spatial_route_hook",
       "lines": [
-        161
+        211
       ],
       "path": "src/app/gateway/rpg_npc_spatial_routes.py",
       "rule": "AL004"
@@ -6280,7 +5317,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_observer_route_hook",
       "lines": [
-        94
+        105
       ],
       "path": "src/app/gateway/rpg_observer_routes.py",
       "rule": "AL004"
@@ -6289,7 +5326,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_progressive_map_route_hook",
       "lines": [
-        145
+        164
       ],
       "path": "src/app/gateway/rpg_progressive_map_routes.py",
       "rule": "AL004"
@@ -6298,7 +5335,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_session_route_hook",
       "lines": [
-        444
+        463
       ],
       "path": "src/app/gateway/rpg_session_routes.py",
       "rule": "AL004"
@@ -6307,7 +5344,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_tactical_spatial_route_hook",
       "lines": [
-        110
+        134
       ],
       "path": "src/app/gateway/rpg_tactical_spatial_routes.py",
       "rule": "AL004"
@@ -6334,7 +5371,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_authoring_route_hook",
       "lines": [
-        279
+        300
       ],
       "path": "src/app/gateway/rpg_world_authoring_routes.py",
       "rule": "AL004"
@@ -6343,7 +5380,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_bundle_route_hook",
       "lines": [
-        91
+        102
       ],
       "path": "src/app/gateway/rpg_world_bundle_routes.py",
       "rule": "AL004"
@@ -6352,7 +5389,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_deletion_route_hook",
       "lines": [
-        87
+        96
       ],
       "path": "src/app/gateway/rpg_world_deletion_routes.py",
       "rule": "AL004"
@@ -6361,7 +5398,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_dossier_route_hook",
       "lines": [
-        218
+        237
       ],
       "path": "src/app/gateway/rpg_world_dossier_routes.py",
       "rule": "AL004"
@@ -6370,7 +5407,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_generation_review_hook",
       "lines": [
-        316
+        331
       ],
       "path": "src/app/gateway/rpg_world_generation_review_routes.py",
       "rule": "AL004"
@@ -6379,7 +5416,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_image_route_hook",
       "lines": [
-        181
+        208
       ],
       "path": "src/app/gateway/rpg_world_image_routes.py",
       "rule": "AL004"
@@ -6388,7 +5425,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_profile_route_hook",
       "lines": [
-        131
+        142
       ],
       "path": "src/app/gateway/rpg_world_profile_routes.py",
       "rule": "AL004"
@@ -6397,7 +5434,7 @@
       "count": 1,
       "fingerprint": "<module>:install_rpg_world_route_hook",
       "lines": [
-        358
+        430
       ],
       "path": "src/app/gateway/rpg_world_routes.py",
       "rule": "AL004"
@@ -6406,18 +5443,9 @@
       "count": 1,
       "fingerprint": "<module>:_install_local_browser_cors_hook",
       "lines": [
-        56
+        55
       ],
       "path": "src/app/gateway/runtime_hooks.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_trading_route_hook",
-      "lines": [
-        116
-      ],
-      "path": "src/app/gateway/trading_routes.py",
       "rule": "AL004"
     },
     {
@@ -6460,7 +5488,7 @@
       "count": 1,
       "fingerprint": "<module>:install_tts_pcm_websocket_hook",
       "lines": [
-        449
+        450
       ],
       "path": "src/app/gateway/tts_pcm_websocket.py",
       "rule": "AL004"
@@ -6487,7 +5515,7 @@
       "count": 1,
       "fingerprint": "<module>:install_voice_library_route_hook",
       "lines": [
-        37
+        36
       ],
       "path": "src/app/gateway/voice_library_routes.py",
       "rule": "AL004"
@@ -6496,7 +5524,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_voice_hardware_policy",
       "lines": [
-        125
+        126
       ],
       "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL004"
@@ -6757,7 +5785,7 @@
       "count": 1,
       "fingerprint": "<module>:install_persistent_ai_shadow_circuit",
       "lines": [
-        153
+        155
       ],
       "path": "src/app/trading/ai_shadow_circuit_persistence.py",
       "rule": "AL004"
@@ -6928,7 +5956,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_agent_events",
       "lines": [
-        297
+        307
       ],
       "path": "src/app/agent_runtime/api.py",
       "rule": "AL005"
@@ -6937,7 +5965,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_task_graph_events",
       "lines": [
-        97
+        106
       ],
       "path": "src/app/agent_runtime/task_graph_api.py",
       "rule": "AL005"
@@ -6955,7 +5983,7 @@
       "count": 1,
       "fingerprint": "register_assistant_context_routes:start_deep_research_plan_endpoint",
       "lines": [
-        125
+        123
       ],
       "path": "src/app/assistant_context/routes.py",
       "rule": "AL005"
@@ -6964,7 +5992,7 @@
       "count": 1,
       "fingerprint": "register_assistant_context_routes:update_deep_research_plan_endpoint",
       "lines": [
-        89
+        88
       ],
       "path": "src/app/assistant_context/routes.py",
       "rule": "AL005"
@@ -6973,7 +6001,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_archive_endpoint",
       "lines": [
-        370
+        356
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -6982,7 +6010,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_archived_endpoint",
       "lines": [
-        137
+        135
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -6991,7 +6019,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_candidate_approve_endpoint",
       "lines": [
-        438
+        421
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7000,7 +6028,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_candidate_forget_endpoint",
       "lines": [
-        487
+        468
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7009,7 +6037,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_candidate_reject_endpoint",
       "lines": [
-        458
+        440
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7018,7 +6046,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_candidates_endpoint",
       "lines": [
-        224
+        217
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7027,7 +6055,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_create_endpoint",
       "lines": [
-        117
+        115
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7036,7 +6064,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_export_endpoint",
       "lines": [
-        201
+        196
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7045,7 +6073,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_forget_endpoint",
       "lines": [
-        285
+        275
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7054,7 +6082,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_list_endpoint",
       "lines": [
-        87
+        86
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7063,7 +6091,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_move_endpoint",
       "lines": [
-        349
+        336
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7072,7 +6100,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_pin_endpoint",
       "lines": [
-        307
+        296
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7081,7 +6109,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_read_endpoint",
       "lines": [
-        244
+        236
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7090,7 +6118,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_recent_automatic_endpoint",
       "lines": [
-        169
+        166
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7099,7 +6127,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_reset_endpoint",
       "lines": [
-        211
+        205
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7108,7 +6136,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_restore_endpoint",
       "lines": [
-        392
+        377
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7117,7 +6145,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_undo_endpoint",
       "lines": [
-        414
+        398
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7126,7 +6154,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_unpin_endpoint",
       "lines": [
-        328
+        316
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7135,7 +6163,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_update_endpoint",
       "lines": [
-        264
+        255
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7144,7 +6172,7 @@
       "count": 1,
       "fingerprint": "register_memory_management_routes:assistant_memory_usage_endpoint",
       "lines": [
-        191
+        187
       ],
       "path": "src/app/assistant_memory/management_routes.py",
       "rule": "AL005"
@@ -7153,7 +6181,7 @@
       "count": 1,
       "fingerprint": "register_assistant_memory_routes:assistant_memory_session_refresh_endpoint",
       "lines": [
-        63
+        68
       ],
       "path": "src/app/assistant_memory/routes.py",
       "rule": "AL005"
@@ -7162,7 +6190,7 @@
       "count": 1,
       "fingerprint": "register_assistant_memory_routes:assistant_memory_session_state_endpoint",
       "lines": [
-        42
+        48
       ],
       "path": "src/app/assistant_memory/routes.py",
       "rule": "AL005"
@@ -7171,7 +6199,7 @@
       "count": 1,
       "fingerprint": "register_memory_settings_routes:assistant_memory_metrics_endpoint",
       "lines": [
-        58
+        62
       ],
       "path": "src/app/assistant_memory/settings_routes.py",
       "rule": "AL005"
@@ -7180,7 +6208,7 @@
       "count": 1,
       "fingerprint": "register_memory_settings_routes:assistant_memory_settings_status_endpoint",
       "lines": [
-        32
+        33
       ],
       "path": "src/app/assistant_memory/settings_routes.py",
       "rule": "AL005"
@@ -7198,7 +6226,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_connection_start_endpoint",
       "lines": [
-        107
+        108
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7207,7 +6235,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_dashboard_endpoint",
       "lines": [
-        99
+        100
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7216,7 +6244,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_github_callback_endpoint",
       "lines": [
-        119
+        134
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7225,7 +6253,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_google_callback_endpoint",
       "lines": [
-        115
+        123
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7234,7 +6262,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_intent_endpoint",
       "lines": [
-        95
+        96
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7243,7 +6271,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_ledger_endpoint",
       "lines": [
-        103
+        104
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7252,7 +6280,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tool_oauth_client_endpoint",
       "lines": [
-        111
+        112
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7261,7 +6289,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:assistant_tools_config",
       "lines": [
-        67
+        68
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7270,7 +6298,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:hermes_assistant_tool_review_endpoint",
       "lines": [
-        123
+        138
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7279,7 +6307,7 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:review_assistant_tool_endpoint",
       "lines": [
-        75
+        76
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -7288,43 +6316,16 @@
       "count": 1,
       "fingerprint": "register_assistant_tool_routes:save_assistant_tools_config_endpoint",
       "lines": [
-        71
+        72
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
     },
     {
       "count": 1,
-      "fingerprint": "register_character_routes:apply_character_data_actions",
-      "lines": [
-        292
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_character_routes:archive_character",
       "lines": [
-        160
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:clear_live_conversation_profile",
-      "lines": [
-        346
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:commit_live_conversation_proactive_delivery",
-      "lines": [
-        505
+        87
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7333,25 +6334,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:create_character",
       "lines": [
-        133
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:export_character_data",
-      "lines": [
-        280
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:export_character_hermes",
-      "lines": [
-        205
+        60
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7360,16 +6343,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:get_character",
       "lines": [
-        142
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:get_live_call_runtime",
-      "lines": [
-        356
+        69
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7378,25 +6352,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:get_live_conversation_defaults",
       "lines": [
-        250
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:get_live_conversation_profile",
-      "lines": [
-        323
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:get_session_interaction",
-      "lines": [
-        304
+        133
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7405,16 +6361,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:get_voice_profile_governance",
       "lines": [
-        223
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:import_character_hermes",
-      "lines": [
-        187
+        108
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7423,7 +6370,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:list_character_versions",
       "lines": [
-        167
+        94
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7432,25 +6379,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:list_characters",
       "lines": [
-        129
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:set_session_interaction",
-      "lines": [
-        308
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:stream_live_call_greeting",
-      "lines": [
-        368
+        56
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7459,7 +6388,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:update_character",
       "lines": [
-        149
+        76
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7468,16 +6397,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:update_live_conversation_defaults",
       "lines": [
-        259
-      ],
-      "path": "src/app/characters/api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_character_routes:update_live_conversation_profile",
-      "lines": [
-        333
+        141
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7486,7 +6406,7 @@
       "count": 1,
       "fingerprint": "register_character_routes:update_voice_profile_governance",
       "lines": [
-        235
+        119
       ],
       "path": "src/app/characters/api.py",
       "rule": "AL005"
@@ -7495,7 +6415,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_routes:delete_character_avatar_pack",
       "lines": [
-        77
+        73
       ],
       "path": "src/app/characters/avatar_api.py",
       "rule": "AL005"
@@ -7504,7 +6424,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_routes:get_character_avatar_pack",
       "lines": [
-        46
+        44
       ],
       "path": "src/app/characters/avatar_api.py",
       "rule": "AL005"
@@ -7513,7 +6433,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_routes:get_optional_character_avatar_pack",
       "lines": [
-        32
+        31
       ],
       "path": "src/app/characters/avatar_api.py",
       "rule": "AL005"
@@ -7522,7 +6442,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_routes:upsert_character_avatar_pack",
       "lines": [
-        58
+        55
       ],
       "path": "src/app/characters/avatar_api.py",
       "rule": "AL005"
@@ -7531,7 +6451,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_generation_routes:backfill_cloned_voice_characters",
       "lines": [
-        169
+        165
       ],
       "path": "src/app/characters/avatar_generation_api.py",
       "rule": "AL005"
@@ -7540,7 +6460,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_generation_routes:create_character_avatar_generation",
       "lines": [
-        53
+        52
       ],
       "path": "src/app/characters/avatar_generation_api.py",
       "rule": "AL005"
@@ -7549,7 +6469,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_generation_routes:get_character_avatar_generation",
       "lines": [
-        139
+        136
       ],
       "path": "src/app/characters/avatar_generation_api.py",
       "rule": "AL005"
@@ -7558,7 +6478,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_generation_routes:list_character_avatar_generations",
       "lines": [
-        111
+        109
       ],
       "path": "src/app/characters/avatar_generation_api.py",
       "rule": "AL005"
@@ -7567,7 +6487,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_viseme_routes:create_character_avatar_visemes",
       "lines": [
-        27
+        26
       ],
       "path": "src/app/characters/avatar_viseme_api.py",
       "rule": "AL005"
@@ -7576,7 +6496,7 @@
       "count": 1,
       "fingerprint": "register_character_avatar_viseme_routes:get_character_avatar_visemes",
       "lines": [
-        41
+        39
       ],
       "path": "src/app/characters/avatar_viseme_api.py",
       "rule": "AL005"
@@ -7585,7 +6505,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:activate_live2d_avatar",
       "lines": [
-        572
+        570
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -7594,7 +6514,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:disable_live2d_avatar",
       "lines": [
-        589
+        586
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -7603,7 +6523,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_model_catalog",
       "lines": [
-        560
+        559
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -7612,7 +6532,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_model_file",
       "lines": [
-        613
+        632
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -7621,7 +6541,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_runtime_file",
       "lines": [
-        600
+        607
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -7630,7 +6550,7 @@
       "count": 1,
       "fingerprint": "register_live_conversation_rendering_routes:create_pronunciation",
       "lines": [
-        296
+        295
       ],
       "path": "src/app/characters/live_conversation_rendering.py",
       "rule": "AL005"
@@ -7639,7 +6559,7 @@
       "count": 1,
       "fingerprint": "register_live_conversation_rendering_routes:delete_pronunciation",
       "lines": [
-        309
+        307
       ],
       "path": "src/app/characters/live_conversation_rendering.py",
       "rule": "AL005"
@@ -7648,7 +6568,7 @@
       "count": 1,
       "fingerprint": "register_live_conversation_rendering_routes:delivery_plan",
       "lines": [
-        273
+        274
       ],
       "path": "src/app/characters/live_conversation_rendering.py",
       "rule": "AL005"
@@ -7666,7 +6586,7 @@
       "count": 1,
       "fingerprint": "register_desktop_companion_routes:desktop_companion_release_gate",
       "lines": [
-        324
+        316
       ],
       "path": "src/app/desktop_companion/routes.py",
       "rule": "AL005"
@@ -7675,7 +6595,7 @@
       "count": 1,
       "fingerprint": "register_desktop_companion_routes:desktop_companion_rollout_status",
       "lines": [
-        353
+        344
       ],
       "path": "src/app/desktop_companion/routes.py",
       "rule": "AL005"
@@ -7684,7 +6604,7 @@
       "count": 1,
       "fingerprint": "register_desktop_companion_routes:export_desktop_companion_evaluations",
       "lines": [
-        296
+        287
       ],
       "path": "src/app/desktop_companion/routes.py",
       "rule": "AL005"
@@ -7693,7 +6613,7 @@
       "count": 1,
       "fingerprint": "register_desktop_companion_routes:list_desktop_companion_evaluations",
       "lines": [
-        284
+        276
       ],
       "path": "src/app/desktop_companion/routes.py",
       "rule": "AL005"
@@ -7702,7 +6622,7 @@
       "count": 1,
       "fingerprint": "register_desktop_companion_routes:upsert_desktop_companion_evaluation",
       "lines": [
-        273
+        266
       ],
       "path": "src/app/desktop_companion/routes.py",
       "rule": "AL005"
@@ -7729,7 +6649,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:asset_content",
       "lines": [
-        29
+        76
       ],
       "path": "src/app/gateway/core_assets_routes.py",
       "rule": "AL005"
@@ -7738,7 +6658,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:image_asset_migration_dry_run",
       "lines": [
-        50
+        96
       ],
       "path": "src/app/gateway/core_assets_routes.py",
       "rule": "AL005"
@@ -7747,7 +6667,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:image_asset_migration_import",
       "lines": [
-        58
+        104
       ],
       "path": "src/app/gateway/core_assets_routes.py",
       "rule": "AL005"
@@ -7756,7 +6676,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:legacy_non_image_asset_migration_dry_run",
       "lines": [
-        66
+        112
       ],
       "path": "src/app/gateway/core_assets_routes.py",
       "rule": "AL005"
@@ -7765,7 +6685,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:save_story_asset_endpoint",
       "lines": [
-        40
+        86
       ],
       "path": "src/app/gateway/core_assets_routes.py",
       "rule": "AL005"
@@ -7774,7 +6694,7 @@
       "count": 1,
       "fingerprint": "register_core_chat_routes:chat_session",
       "lines": [
-        44
+        58
       ],
       "path": "src/app/gateway/core_chat_routes.py",
       "rule": "AL005"
@@ -7783,7 +6703,7 @@
       "count": 1,
       "fingerprint": "register_core_chat_routes:chat_session_attachments",
       "lines": [
-        69
+        83
       ],
       "path": "src/app/gateway/core_chat_routes.py",
       "rule": "AL005"
@@ -7792,7 +6712,7 @@
       "count": 1,
       "fingerprint": "register_core_chat_routes:chat_sessions",
       "lines": [
-        34
+        48
       ],
       "path": "src/app/gateway/core_chat_routes.py",
       "rule": "AL005"
@@ -7801,7 +6721,7 @@
       "count": 1,
       "fingerprint": "register_live_chat_speculation_handshake_routes:cancel_started_live_speculation",
       "lines": [
-        215
+        213
       ],
       "path": "src/app/gateway/live_chat_speculation_handshake.py",
       "rule": "AL005"
@@ -7810,7 +6730,7 @@
       "count": 1,
       "fingerprint": "register_live_chat_speculation_handshake_routes:stream_started_live_speculation",
       "lines": [
-        163
+        162
       ],
       "path": "src/app/gateway/live_chat_speculation_handshake.py",
       "rule": "AL005"
@@ -7819,7 +6739,7 @@
       "count": 1,
       "fingerprint": "register_live_speculative_tts_routes:accept_speculative_tts",
       "lines": [
-        596
+        595
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL005"
@@ -7828,7 +6748,7 @@
       "count": 1,
       "fingerprint": "register_live_speculative_tts_routes:cancel_speculative_tts",
       "lines": [
-        620
+        618
       ],
       "path": "src/app/gateway/live_chat_speculative_tts.py",
       "rule": "AL005"
@@ -7844,54 +6764,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "register_live_material_context_routes:acknowledge_live_task_contract",
-      "lines": [
-        422
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_material_context_routes:append_live_material",
-      "lines": [
-        407
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_material_context_routes:clear_live_material",
-      "lines": [
-        438
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_material_context_routes:get_live_material",
-      "lines": [
-        431
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_material_context_routes:promote_live_material",
-      "lines": [
-        446
-      ],
-      "path": "src/app/gateway/live_material_context.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_chat_release_gate_payload",
       "lines": [
-        123
+        120
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7900,7 +6775,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_voice_release_gate_payload",
       "lines": [
-        110
+        108
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7927,7 +6802,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:live_voice_release_gate",
       "lines": [
-        90
+        89
       ],
       "path": "src/app/gateway/live_voice_diagnostics_routes.py",
       "rule": "AL005"
@@ -7936,7 +6811,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:accept_speculative_tts",
       "lines": [
-        710
+        709
       ],
       "path": "src/app/gateway/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7945,7 +6820,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_execution_lane_routes:cancel_speculative_tts",
       "lines": [
-        727
+        725
       ],
       "path": "src/app/gateway/live_voice_speculative_tts.py",
       "rule": "AL005"
@@ -7970,405 +6845,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "create_gateway_app:api_health",
-      "lines": [
-        259
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:assistant_tools",
-      "lines": [
-        312
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:chatgpt_codex_auth_status",
-      "lines": [
-        338
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:chatgpt_codex_login",
-      "lines": [
-        346
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:compatibility_handoff",
-      "lines": [
-        304
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:create_session",
-      "lines": [
-        386
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:delete_model_residency",
-      "lines": [
-        560
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:delete_session",
-      "lines": [
-        428
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:generate_session_title",
-      "lines": [
-        394
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:health",
-      "lines": [
-        255
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:legacy_session",
-      "lines": [
-        404
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:legacy_sessions",
-      "lines": [
-        378
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:model_residency",
-      "lines": [
-        540
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:refresh_models",
-      "lines": [
-        358
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:refresh_providers",
-      "lines": [
-        352
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:render_prompt",
-      "lines": [
-        610
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:replay_checkpoint",
-      "lines": [
-        631
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:replay_persistence_inventory",
-      "lines": [
-        639
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:replay_primitives",
-      "lines": [
-        619
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:replay_state_hash",
-      "lines": [
-        625
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:report_model_residency",
-      "lines": [
-        548
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:reports",
-      "lines": [
-        523
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_compare_entity",
-      "lines": [
-        463
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_compare_world",
-      "lines": [
-        459
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_inspect_world",
-      "lines": [
-        447
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_inspect_world_snapshot",
-      "lines": [
-        453
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_preview",
-      "lines": [
-        443
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_simulate_step",
-      "lines": [
-        467
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_simulation_state",
-      "lines": [
-        471
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_templates",
-      "lines": [
-        435
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_adventure_validate",
-      "lines": [
-        439
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_inspect_npc_reasoning",
-      "lines": [
-        495
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_inspect_tick_diff",
-      "lines": [
-        491
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_inspect_timeline",
-      "lines": [
-        483
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_inspect_timeline_tick",
-      "lines": [
-        487
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_inspect_world_events",
-      "lines": [
-        499
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_player_codex",
-      "lines": [
-        511
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_player_encounter",
-      "lines": [
-        519
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_player_journal",
-      "lines": [
-        507
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_player_objectives",
-      "lines": [
-        515
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_player_state",
-      "lines": [
-        503
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:rpg_session_list",
-      "lines": [
-        475
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:update_session",
-      "lines": [
-        415
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "create_gateway_app:worker_payload_policy",
-      "lines": [
-        296
-      ],
-      "path": "src/app/gateway/main.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "register_rpg_debug_routes:rpg_debug_status",
       "lines": [
-        46
+        59
       ],
       "path": "src/app/gateway/rpg_debug_routes.py",
       "rule": "AL005"
@@ -8377,7 +6856,7 @@
       "count": 1,
       "fingerprint": "register_rpg_world_library_routes:rpg_world_prepare_openings_for_launch",
       "lines": [
-        463
+        503
       ],
       "path": "src/app/gateway/rpg_world_library_routes.py",
       "rule": "AL005"
@@ -8395,7 +6874,7 @@
       "count": 1,
       "fingerprint": "<module>:asset_manifest",
       "lines": [
-        105
+        192
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8404,7 +6883,7 @@
       "count": 1,
       "fingerprint": "<module>:cleanup_assets",
       "lines": [
-        110
+        197
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8413,7 +6892,7 @@
       "count": 1,
       "fingerprint": "<module>:download_flux_klein_route",
       "lines": [
-        37
+        121
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8422,7 +6901,7 @@
       "count": 1,
       "fingerprint": "<module>:enqueue_chat",
       "lines": [
-        85
+        170
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8431,7 +6910,7 @@
       "count": 1,
       "fingerprint": "<module>:enqueue_image",
       "lines": [
-        80
+        164
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8440,7 +6919,7 @@
       "count": 1,
       "fingerprint": "<module>:enqueue_story",
       "lines": [
-        90
+        176
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8449,7 +6928,7 @@
       "count": 1,
       "fingerprint": "<module>:flux_klein_status_route",
       "lines": [
-        43
+        127
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8458,7 +6937,7 @@
       "count": 1,
       "fingerprint": "<module>:image_provider_unload_all_route",
       "lines": [
-        159
+        246
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8467,7 +6946,7 @@
       "count": 1,
       "fingerprint": "<module>:image_providers_route",
       "lines": [
-        131
+        218
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8476,7 +6955,7 @@
       "count": 1,
       "fingerprint": "<module>:image_runtime_route",
       "lines": [
-        126
+        213
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8485,7 +6964,7 @@
       "count": 1,
       "fingerprint": "<module>:image_settings_get_route",
       "lines": [
-        115
+        202
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8494,7 +6973,7 @@
       "count": 1,
       "fingerprint": "<module>:list_jobs",
       "lines": [
-        100
+        187
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8503,7 +6982,7 @@
       "count": 1,
       "fingerprint": "<module>:run_one",
       "lines": [
-        95
+        182
       ],
       "path": "src/app/image/api.py",
       "rule": "AL005"
@@ -8512,7 +6991,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_progress",
       "lines": [
-        335
+        359
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -8521,7 +7000,7 @@
       "count": 1,
       "fingerprint": "<module>:health",
       "lines": [
-        241
+        265
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -8530,7 +7009,7 @@
       "count": 1,
       "fingerprint": "<module>:provider_status",
       "lines": [
-        255
+        279
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -8539,7 +7018,7 @@
       "count": 1,
       "fingerprint": "create_live_speech_router:protocol",
       "lines": [
-        19
+        23
       ],
       "path": "src/app/live_speech/api_stub.py",
       "rule": "AL005"
@@ -8548,7 +7027,7 @@
       "count": 1,
       "fingerprint": "create_live_speech_router:status",
       "lines": [
-        23
+        30
       ],
       "path": "src/app/live_speech/api_stub.py",
       "rule": "AL005"
@@ -8557,7 +7036,7 @@
       "count": 1,
       "fingerprint": "register_research_credential_routes:assistant_research_credentials_status_endpoint",
       "lines": [
-        54
+        53
       ],
       "path": "src/app/research/credential_routes.py",
       "rule": "AL005"
@@ -8566,7 +7045,7 @@
       "count": 1,
       "fingerprint": "register_research_credential_routes:assistant_research_credentials_update_endpoint",
       "lines": [
-        64
+        62
       ],
       "path": "src/app/research/credential_routes.py",
       "rule": "AL005"
@@ -8575,7 +7054,7 @@
       "count": 1,
       "fingerprint": "<module>:adventure_templates",
       "lines": [
-        43
+        202
       ],
       "path": "src/app/rpg/api/rpg_adventure_routes.py",
       "rule": "AL005"
@@ -8737,7 +7216,7 @@
       "count": 1,
       "fingerprint": "<module>:download_flux_klein_route",
       "lines": [
-        260
+        275
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8746,7 +7225,7 @@
       "count": 1,
       "fingerprint": "<module>:download_flux_klein_status_route",
       "lines": [
-        267
+        282
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8755,7 +7234,7 @@
       "count": 1,
       "fingerprint": "<module>:get_visual_provider_settings_route",
       "lines": [
-        219
+        234
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8764,7 +7243,7 @@
       "count": 1,
       "fingerprint": "<module>:normalize_visual_queue_route",
       "lines": [
-        90
+        105
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8773,7 +7252,7 @@
       "count": 1,
       "fingerprint": "<module>:visual_provider_status_route",
       "lines": [
-        322
+        337
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8782,7 +7261,7 @@
       "count": 1,
       "fingerprint": "<module>:visual_queue_stats_route",
       "lines": [
-        77
+        92
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL005"
@@ -8791,7 +7270,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session",
       "lines": [
-        1005
+        1049
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -8800,7 +7279,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session_narration_events",
       "lines": [
-        1078
+        1122
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -8953,7 +7432,7 @@
       "count": 1,
       "fingerprint": "create_trading_paper_router:process_observation",
       "lines": [
-        467
+        462
       ],
       "path": "src/app/trading/paper_api.py",
       "rule": "AL005"
@@ -9007,7 +7486,7 @@
       "count": 1,
       "fingerprint": "create_trading_replay_router:advance_execution",
       "lines": [
-        159
+        157
       ],
       "path": "src/app/trading/replay_api.py",
       "rule": "AL005"
@@ -9016,7 +7495,7 @@
       "count": 1,
       "fingerprint": "create_trading_replay_router:detach_replay_account",
       "lines": [
-        150
+        149
       ],
       "path": "src/app/trading/replay_api.py",
       "rule": "AL005"
@@ -9025,7 +7504,7 @@
       "count": 1,
       "fingerprint": "create_trading_replay_router:place_execution_order",
       "lines": [
-        173
+        170
       ],
       "path": "src/app/trading/replay_api.py",
       "rule": "AL005"
@@ -9034,7 +7513,7 @@
       "count": 1,
       "fingerprint": "create_trading_scanner_router:create_scanner",
       "lines": [
-        44
+        51
       ],
       "path": "src/app/trading/scanner_api.py",
       "rule": "AL005"
@@ -9043,7 +7522,7 @@
       "count": 1,
       "fingerprint": "create_trading_scanner_router:list_results",
       "lines": [
-        91
+        104
       ],
       "path": "src/app/trading/scanner_api.py",
       "rule": "AL005"
@@ -9052,7 +7531,7 @@
       "count": 1,
       "fingerprint": "create_trading_scanner_router:list_runs",
       "lines": [
-        77
+        84
       ],
       "path": "src/app/trading/scanner_api.py",
       "rule": "AL005"
@@ -9061,7 +7540,7 @@
       "count": 1,
       "fingerprint": "create_trading_scanner_router:list_scanners",
       "lines": [
-        38
+        45
       ],
       "path": "src/app/trading/scanner_api.py",
       "rule": "AL005"
@@ -9070,7 +7549,7 @@
       "count": 1,
       "fingerprint": "create_trading_scanner_router:update_scanner",
       "lines": [
-        53
+        60
       ],
       "path": "src/app/trading/scanner_api.py",
       "rule": "AL005"
@@ -9097,7 +7576,7 @@
       "count": 1,
       "fingerprint": "create_trading_strategy_operations_router:interday_monitor_operations_status",
       "lines": [
-        446
+        444
       ],
       "path": "src/app/trading/strategy_operations_api.py",
       "rule": "AL005"
@@ -9115,7 +7594,7 @@
       "count": 1,
       "fingerprint": "create_trading_strategy_operations_router:yahoo_acquisition_operations_status",
       "lines": [
-        423
+        422
       ],
       "path": "src/app/trading/strategy_operations_api.py",
       "rule": "AL005"
@@ -9169,7 +7648,7 @@
       "count": 1,
       "fingerprint": "<module>:create_chat_completion",
       "lines": [
-        259
+        264
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9178,7 +7657,7 @@
       "count": 1,
       "fingerprint": "<module>:create_speech",
       "lines": [
-        210
+        215
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9187,7 +7666,7 @@
       "count": 1,
       "fingerprint": "<module>:create_transcription",
       "lines": [
-        247
+        252
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9196,7 +7675,7 @@
       "count": 1,
       "fingerprint": "<module>:get_voice",
       "lines": [
-        195
+        200
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9205,7 +7684,7 @@
       "count": 1,
       "fingerprint": "<module>:get_voice_preview",
       "lines": [
-        203
+        208
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9214,7 +7693,7 @@
       "count": 1,
       "fingerprint": "<module>:health_check",
       "lines": [
-        329
+        334
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9223,7 +7702,7 @@
       "count": 1,
       "fingerprint": "<module>:list_models",
       "lines": [
-        172
+        177
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9232,7 +7711,7 @@
       "count": 1,
       "fingerprint": "<module>:list_voices",
       "lines": [
-        188
+        193
       ],
       "path": "src/openai_api.py",
       "rule": "AL005"
@@ -9241,7 +7720,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_audio",
       "lines": [
-        390
+        391
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -9250,7 +7729,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_stream_audio",
       "lines": [
-        491
+        492
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -9259,7 +7738,7 @@
       "count": 1,
       "fingerprint": "<module>:health",
       "lines": [
-        338
+        339
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -9268,7 +7747,7 @@
       "count": 1,
       "fingerprint": "<module>:speakers",
       "lines": [
-        352
+        353
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -9277,2202 +7756,10 @@
       "count": 1,
       "fingerprint": "<module>:voice_clone",
       "lines": [
-        589
+        590
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_assemble_once:omnix_jobs",
-      "lines": [
-        204
-      ],
-      "path": "src/app/audiobook/assembly_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "start_export:omnix_jobs",
-      "lines": [
-        80,
-        100
-      ],
-      "path": "src/app/audiobook/export_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "check_book_render_readiness:omnix_jobs",
-      "lines": [
-        25
-      ],
-      "path": "src/app/audiobook/render_readiness.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_pause_if_requested:omnix_job_attempts",
-      "lines": [
-        225
-      ],
-      "path": "src/app/audiobook/render_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_pause_if_requested:omnix_jobs",
-      "lines": [
-        211
-      ],
-      "path": "src/app/audiobook/render_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_persist_effective_generation_parameters:omnix_jobs",
-      "lines": [
-        112
-      ],
-      "path": "src/app/audiobook/render_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "higher_priority_tts_pending:omnix_jobs",
-      "lines": [
-        157
-      ],
-      "path": "src/app/audiobook/render_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "run_render_once:omnix_jobs",
-      "lines": [
-        528,
-        539
-      ],
-      "path": "src/app/audiobook/render_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "audit_export:omnix_jobs",
-      "lines": [
-        102
-      ],
-      "path": "src/app/audiobook/report.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookRepository.append_source_revision:omnix_jobs",
-      "lines": [
-        195
-      ],
-      "path": "src/app/audiobook/repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookRepository.is_current_ingest:omnix_jobs",
-      "lines": [
-        44
-      ],
-      "path": "src/app/audiobook/repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookReviewRepository._promote_proposed_speaker:omnix_jobs",
-      "lines": [
-        106
-      ],
-      "path": "src/app/audiobook/review_repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookReviewRepository.assign_voice:omnix_jobs",
-      "lines": [
-        649
-      ],
-      "path": "src/app/audiobook/review_repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookReviewRepository.confirm_alias:omnix_jobs",
-      "lines": [
-        552
-      ],
-      "path": "src/app/audiobook/review_repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAudiobookReviewRepository.revise_span:omnix_jobs",
-      "lines": [
-        837
-      ],
-      "path": "src/app/audiobook/review_repository.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService._invalidate_speech_audio:omnix_jobs",
-      "lines": [
-        811
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.cancel_job:omnix_jobs",
-      "lines": [
-        1198
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.delete_project:omnix_jobs",
-      "lines": [
-        167
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 5,
-      "fingerprint": "AudiobookService.get_project:omnix_jobs",
-      "lines": [
-        285,
-        318,
-        338,
-        351,
-        365
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 3,
-      "fingerprint": "AudiobookService.pause_job:omnix_jobs",
-      "lines": [
-        1227,
-        1242,
-        1252
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 5,
-      "fingerprint": "AudiobookService.pause_render_queue:omnix_jobs",
-      "lines": [
-        1307,
-        1321,
-        1331,
-        1340,
-        1350
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.read_preview:omnix_jobs",
-      "lines": [
-        1781
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "AudiobookService.reclassify_source:omnix_jobs",
-      "lines": [
-        1501,
-        1568
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 3,
-      "fingerprint": "AudiobookService.resume_job:omnix_jobs",
-      "lines": [
-        1267,
-        1277,
-        1287
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "AudiobookService.retry_pipeline_job:omnix_jobs",
-      "lines": [
-        1389,
-        1438
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.set_audiobook_mode:omnix_jobs",
-      "lines": [
-        636
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "AudiobookService.set_document_override:omnix_jobs",
-      "lines": [
-        725,
-        759
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.set_pronunciation:omnix_jobs",
-      "lines": [
-        922
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AudiobookService.stop_render_queue:omnix_jobs",
-      "lines": [
-        1364
-      ],
-      "path": "src/app/audiobook/service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_pause_analysis_if_requested:omnix_job_attempts",
-      "lines": [
-        71
-      ],
-      "path": "src/app/audiobook/worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_pause_analysis_if_requested:omnix_jobs",
-      "lines": [
-        57
-      ],
-      "path": "src/app/audiobook/worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_AuthorityBoundJobStore.require_execution_authority:omnix_jobs",
-      "lines": [
-        73
-      ],
-      "path": "src/app/jobs/durable_feature_worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CompletePostgresLegacyImporter._job_history:omnix_job_attempts",
-      "lines": [
-        205
-      ],
-      "path": "src/app/persistence/complete_cutover.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CompletePostgresLegacyImporter._job_history:omnix_job_events",
-      "lines": [
-        184
-      ],
-      "path": "src/app/persistence/complete_cutover.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "CompletePostgresLegacyImporter._rpg_history:omnix_jobs",
-      "lines": [
-        311
-      ],
-      "path": "src/app/persistence/complete_cutover.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresLegacyImporter._dispatch:omnix_jobs",
-      "lines": [
-        531
-      ],
-      "path": "src/app/persistence/cutover.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter._append_compat_logs:omnix_jobs",
-      "lines": [
-        553
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter._create_job:omnix_jobs",
-      "lines": [
-        102
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.delete_job:omnix_jobs",
-      "lines": [
-        127
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "PostgresJobStoreAdapter.finalize_cancel:omnix_jobs",
-      "lines": [
-        421,
-        440
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.list_events:omnix_job_events",
-      "lines": [
-        470
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.request_cancel:omnix_jobs",
-      "lines": [
-        317
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "PostgresJobStoreAdapter.update_job_input:omnix_jobs",
-      "lines": [
-        362,
-        376
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "PostgresJobStoreAdapter.update_job_stages:omnix_jobs",
-      "lines": [
-        396,
-        406
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.update_progress:omnix_jobs",
-      "lines": [
-        339
-      ],
-      "path": "src/app/persistence/job_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.latest_event_id:omnix_job_events",
-      "lines": [
-        150
-      ],
-      "path": "src/app/persistence/job_runtime_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresJobStoreAdapter.list_events:omnix_job_events",
-      "lines": [
-        173
-      ],
-      "path": "src/app/persistence/job_runtime_compat.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresLifecycleRepository.capacity_report:omnix_audit_events,omnix_job_events,omnix_outbox_events",
-      "lines": [
-        13
-      ],
-      "path": "src/app/persistence/lifecycle.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresLifecycleRepository.cleanup:omnix_outbox_events",
-      "lines": [
-        91
-      ],
-      "path": "src/app/persistence/lifecycle.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresAuditRepository.append:omnix_audit_events",
-      "lines": [
-        165
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresIdentityRepository.ensure_local_identity:omnix_users",
-      "lines": [
-        35
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresIdentityRepository.ensure_local_identity:omnix_workspace_memberships",
-      "lines": [
-        56
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresIdentityRepository.ensure_local_identity:omnix_workspaces",
-      "lines": [
-        43
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresIdentityRepository.get_workspace:omnix_workspace_memberships,omnix_workspaces",
-      "lines": [
-        96
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresIdentityRepository.load_context:omnix_users,omnix_workspace_memberships,omnix_workspaces",
-      "lines": [
-        73
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "PostgresIdentityRepository.update_workspace_name:omnix_workspaces",
-      "lines": [
-        124,
-        140
-      ],
-      "path": "src/app/persistence/repositories.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_durable_snapshot:omnix_job_events",
-      "lines": [
-        82
-      ],
-      "path": "src/app/platform/runtime_diagnostics.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_durable_snapshot:omnix_jobs",
-      "lines": [
-        72,
-        86
-      ],
-      "path": "src/app/platform/runtime_diagnostics.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_terminally_fail_job:omnix_jobs",
-      "lines": [
-        731
-      ],
-      "path": "src/app/rpg/worlds/generation_coordinator.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_recover_interrupted_jobs:omnix_jobs",
-      "lines": [
-        210,
-        225
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_recover_worker_database_interruption:omnix_jobs",
-      "lines": [
-        261
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_release_interrupted_job:omnix_jobs",
-      "lines": [
-        178
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_world_generation_worker_once:omnix_jobs",
-      "lines": [
-        407
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "delete_world_project:omnix_jobs",
-      "lines": [
-        250
-      ],
-      "path": "src/app/rpg/worlds/lifecycle_service.py",
-      "rule": "AL006"
-    },
-    {
-      "count": 1,
-      "fingerprint": "build_routing_environment:os.environ.get:OMNIX_AGENT_DEFAULT_REPOSITORY",
-      "lines": [
-        235
-      ],
-      "path": "src/app/agent_runtime/active_objective.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "execute_agent_capability:os.environ.get:OMNIX_AGENT_READ_RETRY_AFTER_SECONDS",
-      "lines": [
-        821
-      ],
-      "path": "src/app/agent_runtime/broker_api.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "quality_attempt_limit:os.environ.get:OMNIX_AGENT_QUALITY_MAX_ATTEMPTS",
-      "lines": [
-        255
-      ],
-      "path": "src/app/agent_runtime/coding_quality.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_semantic_evidence_adviser:os.environ.get:OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT",
-      "lines": [
-        202
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_semantic_evidence_adviser:os.environ.get:OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER",
-      "lines": [
-        193
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_semantic_evidence_adviser:os.environ.get:OMNIX_HERMES_API_KEY",
-      "lines": [
-        201
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_semantic_evidence_adviser:os.environ.get:OMNIX_HERMES_URL",
-      "lines": [
-        200
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "freshness_max_age_seconds:os.environ.get:None",
-      "lines": [
-        152
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "mcp_policy_path:os.environ.get:OMNIX_AGENT_MCP_POLICY_PATH",
-      "lines": [
-        127
-      ],
-      "path": "src/app/agent_runtime/mcp_policy.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "build_agent_environment:os.environ:<whole environment>",
-      "lines": [
-        119
-      ],
-      "path": "src/app/agent_runtime/pi_runtime_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "planning_mode:os.environ:<whole environment>",
-      "lines": [
-        64
-      ],
-      "path": "src/app/agent_runtime/planning.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_lease_heartbeat_interval_seconds:os.environ.get:OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS",
-      "lines": [
-        30
-      ],
-      "path": "src/app/agent_runtime/quality_recovery.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_lease_heartbeat_ttl_seconds:os.environ.get:OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS",
-      "lines": [
-        39
-      ],
-      "path": "src/app/agent_runtime/quality_recovery.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "allowed_workspace_root:os.environ.get:OMNIX_AGENT_WORKSPACE_ROOTS",
-      "lines": [
-        63
-      ],
-      "path": "src/app/agent_runtime/request_policy.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "review_runtime_retry_limit:os.environ.get:OMNIX_AGENT_REVIEW_RUNTIME_RETRIES",
-      "lines": [
-        32
-      ],
-      "path": "src/app/agent_runtime/review_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService._advance_quality_on_settle:os.environ.get:OMNIX_AGENT_REVIEW_ROOT",
-      "lines": [
-        2030
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_implementation_candidate_retry_limit:os.environ.get:OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES",
-      "lines": [
-        360
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_self_review_protocol_retry_limit:os.environ.get:OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES",
-      "lines": [
-        227
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_validation_retry_limit:os.environ.get:OMNIX_AGENT_VALIDATION_RETRIES",
-      "lines": [
-        297
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService.__init__:os.environ.get:OMNIX_PI_PATH",
-      "lines": [
-        234
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService._prepare_workspace:os.environ.get:OMNIX_AGENT_WORKTREE_ROOT",
-      "lines": [
-        2676
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_acceptance_retry_limit:os.environ.get:OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT",
-      "lines": [
-        124
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_progress_idle_timeout_seconds:os.environ.get:OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS",
-      "lines": [
-        145
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_stalled_recovery_limit:os.environ.get:OMNIX_AGENT_STALLED_RECOVERY_LIMIT",
-      "lines": [
-        153
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_workspace_process_environment:os.environ:<whole environment>",
-      "lines": [
-        93
-      ],
-      "path": "src/app/agent_runtime/workspace.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_cache_key:os.environ.get:OMNIX_USER_LOCALE",
-      "lines": [
-        234
-      ],
-      "path": "src/app/assistant_memory/companion_context.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_cache_key:os.environ.get:OMNIX_USER_TIMEZONE",
-      "lines": [
-        229
-      ],
-      "path": "src/app/assistant_memory/companion_context.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_hermes_memory_dir:os.environ.get:OMNIX_HERMES_MEMORY_DIR",
-      "lines": [
-        46
-      ],
-      "path": "src/app/assistant_memory/hermes_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "build_trusted_capability_manifest:os.environ.get:None",
-      "lines": [
-        117
-      ],
-      "path": "src/app/assistant_memory/initiative.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "OwnerAwareInMemoryMemoryRepository.__init__:os.environ.get:OMNIX_ASSISTANT_MEMORY_DB_PATH",
-      "lines": [
-        19
-      ],
-      "path": "src/app/assistant_memory/owner_repository.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "resolve_companion_timezone:os.environ.get:OMNIX_USER_TIMEZONE",
-      "lines": [
-        91
-      ],
-      "path": "src/app/assistant_memory/temporal_retrieval.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_browser_backend:os.environ.get:OMNIX_AGENT_BROWSER_BACKEND",
-      "lines": [
-        168
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        141
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_minimal_environment:os.environ.get:AGENT_BROWSER_EXECUTABLE_PATH",
-      "lines": [
-        316
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_minimal_environment:os.environ:<whole environment>",
-      "lines": [
-        314
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_playwright_executable:os.environ.get:AGENT_BROWSER_EXECUTABLE_PATH",
-      "lines": [
-        180
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_playwright_executable:os.environ.get:LOCALAPPDATA",
-      "lines": [
-        186
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_playwright_executable:os.environ.get:PROGRAMFILES",
-      "lines": [
-        184
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_playwright_executable:os.environ.get:PROGRAMFILES(X86)",
-      "lines": [
-        185
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preview_environment:os.environ.items:<dynamic>",
-      "lines": [
-        326
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preview_npm_command:os.environ.get:OMNIX_AGENT_PREVIEW_NPM_COMMAND",
-      "lines": [
-        850
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preview_start_timeout_seconds:os.environ.get:OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS",
-      "lines": [
-        301
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preview_ttl_seconds:os.environ.get:OMNIX_AGENT_PREVIEW_TTL_SECONDS",
-      "lines": [
-        308
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_timeout_seconds:os.environ.get:OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS",
-      "lines": [
-        294
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "agent_browser_command:os.environ.get:OMNIX_AGENT_BROWSER_COMMAND",
-      "lines": [
-        148
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "browser_allowed_domains:os.environ.get:OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS",
-      "lines": [
-        209
-      ],
-      "path": "src/app/assistant_tools/browser_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "get_calendar_runtime_adapter:os.environ.get:OMNIX_ASSISTANT_TOOLS_FAKE_CALENDAR",
-      "lines": [
-        177
-      ],
-      "path": "src/app/assistant_tools/calendar_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_refresh_google_credential:os.environ.get:GOOGLE_OAUTH_CLIENT_ID",
-      "lines": [
-        237
-      ],
-      "path": "src/app/assistant_tools/gmail_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_refresh_google_credential:os.environ.get:GOOGLE_OAUTH_CLIENT_SECRET",
-      "lines": [
-        238
-      ],
-      "path": "src/app/assistant_tools/gmail_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "get_repository_runtime_adapter:os.environ.get:OMNIX_GITHUB_REAL_ADAPTER",
-      "lines": [
-        395
-      ],
-      "path": "src/app/assistant_tools/repo_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_character_hermes_root:os.environ.get:OMNIX_CHARACTER_HERMES_MEMORY_DIR",
-      "lines": [
-        45
-      ],
-      "path": "src/app/characters/hermes_adapter.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_flag:os.environ.get:None",
-      "lines": [
-        39
-      ],
-      "path": "src/app/characters/interaction.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_character_db_path:os.environ.get:OMNIX_CHARACTER_DB_PATH",
-      "lines": [
-        60
-      ],
-      "path": "src/app/characters/repository.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "chat_sqlite_store_enabled:os.environ.get:OMNIX_CHAT_SQLITE_STORE_ENABLED",
-      "lines": [
-        775
-      ],
-      "path": "src/app/chat/prompt_store.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_companion_initiative_authority:os.environ.get:OMNIX_DATABASE_URL",
-      "lines": [
-        607
-      ],
-      "path": "src/app/companion_activity/initiative.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "desktop_companion_speech_canary_enabled:os.environ:<whole environment>",
-      "lines": [
-        93
-      ],
-      "path": "src/app/desktop_companion/release_gate.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_log_threshold_ms:os.environ.get:OMNIX_BLOCKING_ROUTE_OFFLOAD_LOG_THRESHOLD_MS",
-      "lines": [
-        50
-      ],
-      "path": "src/app/gateway/blocking_route_offload.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_flag:os.environ.get:None",
-      "lines": [
-        34
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_float:os.environ.get:None",
-      "lines": [
-        39
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_int:os.environ.get:None",
-      "lines": [
-        47
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_repository_total_bytes:os.environ.get:HF_TOKEN",
-      "lines": [
-        80
-      ],
-      "path": "src/app/gateway/image_model_routes.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_build_companion_prompt:os.environ.get:OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS",
-      "lines": [
-        139
-      ],
-      "path": "src/app/gateway/live_chat_companion_context.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_build_companion_prompt:os.environ.get:OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT",
-      "lines": [
-        141
-      ],
-      "path": "src/app/gateway/live_chat_companion_context.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_build_companion_prompt:os.environ.get:OMNIX_USER_TIMEZONE",
-      "lines": [
-        137
-      ],
-      "path": "src/app/gateway/live_chat_companion_context.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_integer_setting:os.environ.get:None",
-      "lines": [
-        36
-      ],
-      "path": "src/app/gateway/live_chat_live_voice_profile.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_max_continuations:os.environ.get:None",
-      "lines": [
-        91
-      ],
-      "path": "src/app/gateway/live_chat_lmstudio_responses.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_state_ttl_seconds:os.environ.get:None",
-      "lines": [
-        82
-      ],
-      "path": "src/app/gateway/live_chat_lmstudio_responses.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "stateful_responses_enabled:os.environ.get:None",
-      "lines": [
-        62
-      ],
-      "path": "src/app/gateway/live_chat_lmstudio_responses.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_configured_delay_ms:os.environ.get:None",
-      "lines": [
-        49
-      ],
-      "path": "src/app/gateway/live_chat_stream_retry.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_stream_attempts:os.environ.get:OMNIX_LIVE_CHAT_STREAM_ATTEMPTS",
-      "lines": [
-        36
-      ],
-      "path": "src/app/gateway/live_chat_stream_retry.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_configured_preamble_bytes:os.environ.get:OMNIX_SSE_FLUSH_PREAMBLE_BYTES",
-      "lines": [
-        40
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "live_voice_cue_root:os.environ.get:OMNIX_LIVE_VOICE_CUE_ROOT",
-      "lines": [
-        46
-      ],
-      "path": "src/app/gateway/live_voice_cue_asset_routes.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_float:os.environ.get:None",
-      "lines": [
-        35
-      ],
-      "path": "src/app/gateway/live_voice_runtime_offload.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_env_int:os.environ.get:None",
-      "lines": [
-        43
-      ],
-      "path": "src/app/gateway/live_voice_runtime_offload.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_float_setting:os.environ.get:None",
-      "lines": [
-        68
-      ],
-      "path": "src/app/gateway/lmstudio_loaded_model_resolution.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_require_local_dialogue_fixture_request:os.environ.get:CI",
-      "lines": [
-        238
-      ],
-      "path": "src/app/gateway/rpg_session_routes.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_submission_lease_seconds:os.environ.get:OMNIX_RPG_SUBMISSION_LEASE_SECONDS",
-      "lines": [
-        513
-      ],
-      "path": "src/app/gateway/rpg_turn_job_mirror.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_submission_wait_seconds:os.environ.get:OMNIX_RPG_SUBMISSION_WAIT_SECONDS",
-      "lines": [
-        505
-      ],
-      "path": "src/app/gateway/rpg_turn_job_mirror.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_candidate_browser_paths:os.environ.get:PROGRAMFILES(X86)",
-      "lines": [
-        100
-      ],
-      "path": "src/app/launcher/control_app.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_blob_root:os.environ.get:OMNIX_BLOB_ROOT",
-      "lines": [
-        21
-      ],
-      "path": "src/app/persistence/blob_store.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_tool_database_arguments:os.environ:<whole environment>",
-      "lines": [
-        76
-      ],
-      "path": "src/app/persistence/cli.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ChatGPTCodexProvider._codex_environment:os.environ.copy:<dynamic>",
-      "lines": [
-        316
-      ],
-      "path": "src/app/providers/chatgpt_codex_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_qwen3_model_name:os.environ.get:OMNIX_QWEN3_TTS_MODEL_DIR",
-      "lines": [
-        113
-      ],
-      "path": "src/app/providers/faster_qwen3_tts_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_qwen3_model_name:os.environ.get:OMNIX_TTS_MODEL_DIR",
-      "lines": [
-        109
-      ],
-      "path": "src/app/providers/faster_qwen3_tts_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "LMStudioProvider._api_token:os.environ.get:LM_API_TOKEN",
-      "lines": [
-        103
-      ],
-      "path": "src/app/providers/lmstudio_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "preview_tail_rms_threshold:os.environ.get:OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD",
-      "lines": [
-        101
-      ],
-      "path": "src/app/providers/nemotron_eou_live_websocket.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_research_source_store_path:os.environ.get:OMNIX_RESEARCH_SOURCE_STORE_PATH",
-      "lines": [
-        255
-      ],
-      "path": "src/app/research/source_store.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_html_limit:os.environ.get:RPG_AUTOPLAY_MAX_REPORT_HTML_BYTES",
-      "lines": [
-        40
-      ],
-      "path": "src/app/rpg/autoplay_report_size_guard.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_json_limit:os.environ.get:RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES",
-      "lines": [
-        36
-      ],
-      "path": "src/app/rpg/autoplay_report_size_guard.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:os.environ:<whole environment>",
-      "lines": [
-        266
-      ],
-      "path": "src/app/rpg/local_dialogue_quality_smoke.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "assert_live_smoke_allowed:os.environ:<whole environment>",
-      "lines": [
-        50
-      ],
-      "path": "src/app/rpg/local_live_smoke.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_sample_rate:os.environ.get:OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE",
-      "lines": [
-        34
-      ],
-      "path": "src/app/rpg/narrative_engine/shadow.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "NarrativeProviderConfig.from_environment:os.environ:<whole environment>",
-      "lines": [
-        107
-      ],
-      "path": "src/app/rpg/narrative_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_profile_root:os.environ.get:RPG_NPC_PROFILE_ROOT",
-      "lines": [
-        41
-      ],
-      "path": "src/app/rpg/npc_evolution/profile_store.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "fast_turn_enabled:os.environ.get:None",
-      "lines": [
-        87
-      ],
-      "path": "src/app/rpg/session/fast_turn_mode.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "campaign_genesis_async_enabled:os.environ:<whole environment>",
-      "lines": [
-        65
-      ],
-      "path": "src/app/rpg/session/genesis/async_coordinator.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "campaign_genesis_sync_fallback_allowed:os.environ:<whole environment>",
-      "lines": [
-        77
-      ],
-      "path": "src/app/rpg/session/genesis/async_coordinator.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "persist_campaign_genesis:os.environ.get:OMNIX_REQUIRE_POSTGRESQL_GENESIS",
-      "lines": [
-        155
-      ],
-      "path": "src/app/rpg/session/genesis/materialization.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_deterministic_test_mode:os.environ.get:RPG_TEST_MODE",
-      "lines": [
-        131
-      ],
-      "path": "src/app/rpg/session/genesis/world_forge_pipeline.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_key_path:os.environ.get:OMNIX_RPG_AUTHORSHIP_KEY_FILE",
-      "lines": [
-        124
-      ],
-      "path": "src/app/rpg/worlds/generation_authorship_signing.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_signing_key:os.environ.get:OMNIX_RPG_AUTHORSHIP_SIGNING_KEY",
-      "lines": [
-        131
-      ],
-      "path": "src/app/rpg/worlds/generation_authorship_signing.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_root:os.environ.get:OMNIX_RPG_WORLD_GENERATION_SPOOL_DIR",
-      "lines": [
-        22
-      ],
-      "path": "src/app/rpg/worlds/generation_candidate_spool.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "resolve_world_forge_route:os.environ:<whole environment>",
-      "lines": [
-        113
-      ],
-      "path": "src/app/rpg/worlds/generation_routing.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "deterministic_world_forge_test_mode:os.environ:<whole environment>",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/worlds/generation_test_mode.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_configured_world_forge_provider:os.environ:<whole environment>",
-      "lines": [
-        77
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "world_generation_worker_limit:os.environ:<whole environment>",
-      "lines": [
-        104
-      ],
-      "path": "src/app/rpg/worlds/generation_worker.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "WorldForgeProviderConfig.from_environment:os.environ:<whole environment>",
-      "lines": [
-        237
-      ],
-      "path": "src/app/rpg_world_forge_provider.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "max_upload_bytes:os.environ.get:OMNIX_MAX_UPLOAD_BYTES",
-      "lines": [
-        27
-      ],
-      "path": "src/app/security/model_service.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "RequestGuardMiddleware.__init__:os.environ.get:OMNIX_ALLOWED_HOSTS",
-      "lines": [
-        48
-      ],
-      "path": "src/app/security/request_guard.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "initialize_service_token:os.environ.get:OMNIX_AUTH_MODE",
-      "lines": [
-        95
-      ],
-      "path": "src/app/security/service_credentials.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "initialize_service_token:os.environ.get:OMNIX_SERVICE_TOKEN",
-      "lines": [
-        94
-      ],
-      "path": "src/app/security/service_credentials.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_alpaca_assets:os.environ.get:OMNIX_ALPACA_TRADING_URL",
-      "lines": [
-        99
-      ],
-      "path": "src/app/trading/historical_gapper_reconstruction.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_alpaca_bars:os.environ.get:OMNIX_ALPACA_DATA_URL",
-      "lines": [
-        141
-      ],
-      "path": "src/app/trading/historical_gapper_reconstruction.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        48
-      ],
-      "path": "src/app/trading/ibkr_market_data_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_IBKR_DEMAND_RECONCILE_SECONDS",
-      "lines": [
-        59
-      ],
-      "path": "src/app/trading/ibkr_market_data_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_market_data_line_budget:os.environ.get:OMNIX_IBKR_MARKET_DATA_LINE_BUDGET",
-      "lines": [
-        69
-      ],
-      "path": "src/app/trading/ibkr_market_data_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ibkr_market_data_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        52
-      ],
-      "path": "src/app/trading/ibkr_market_data_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AlpacaSipResearchProvider.__init__:os.environ.get:OMNIX_ALPACA_DATA_URL",
-      "lines": [
-        95
-      ],
-      "path": "src/app/trading/providers/alpaca_sip.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_environment_api_key:os.environ.get:CMC_PRO_API_KEY",
-      "lines": [
-        43
-      ],
-      "path": "src/app/trading/providers/coinmarketcap.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_environment_api_key:os.environ.get:COINMARKETCAP_API_KEY",
-      "lines": [
-        42
-      ],
-      "path": "src/app/trading/providers/coinmarketcap.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrEquityProvider.get_quote:os.environ.get:OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS",
-      "lines": [
-        352
-      ],
-      "path": "src/app/trading/providers/ibkr.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.__init__:os.environ.get:OMNIX_IBKR_CLIENT_ID",
-      "lines": [
-        679
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.__init__:os.environ.get:OMNIX_IBKR_HOST",
-      "lines": [
-        677
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.__init__:os.environ.get:OMNIX_IBKR_PORT",
-      "lines": [
-        678
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.connect:os.environ.get:OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS",
-      "lines": [
-        777
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.historical_bars:os.environ.get:OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS",
-      "lines": [
-        967
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "IbkrRuntime.historical_bars:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        964
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_bool_env:os.environ.get:None",
-      "lines": [
-        651
-      ],
-      "path": "src/app/trading/providers/ibkr_runtime.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "SecEdgarAdapter._headers:os.environ.get:OMNIX_SEC_USER_AGENT",
-      "lines": [
-        53
-      ],
-      "path": "src/app/trading/research/adapters/sec_edgar.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "SecIssuerIdentityResolver._headers:os.environ.get:OMNIX_SEC_USER_AGENT",
-      "lines": [
-        37
-      ],
-      "path": "src/app/trading/research/issuer_identity.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        56
-      ],
-      "path": "src/app/trading/session_reconciliation_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS",
-      "lines": [
-        68
-      ],
-      "path": "src/app/trading/session_reconciliation_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_max_age_days:os.environ.get:OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS",
-      "lines": [
-        94
-      ],
-      "path": "src/app/trading/session_reconciliation_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_retry_minutes:os.environ.get:OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES",
-      "lines": [
-        81
-      ],
-      "path": "src/app/trading/session_reconciliation_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "session_reconciliation_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        60
-      ],
-      "path": "src/app/trading/session_reconciliation_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        102
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_AI_SHADOW_INTERVAL_SECONDS",
-      "lines": [
-        113
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ai_shadow_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        106
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        80
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_AI_SHADOW_V2_INTERVAL_SECONDS",
-      "lines": [
-        91
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ai_shadow_v2_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        84
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        79
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v3_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_AI_SHADOW_V3_INTERVAL_SECONDS",
-      "lines": [
-        90
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v3_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ai_shadow_v3_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        83
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v3_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        48
-      ],
-      "path": "src/app/trading/strategy_deep_recovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_DEEP_RECOVERY_SHADOW_INTERVAL_SECONDS",
-      "lines": [
-        59
-      ],
-      "path": "src/app/trading/strategy_deep_recovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "strategy_deep_recovery_shadow_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        52
-      ],
-      "path": "src/app/trading/strategy_deep_recovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        47
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_DYNAMIC_DISCOVERY_INTERVAL_SECONDS",
-      "lines": [
-        58
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "dynamic_discovery_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        51
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        35
-      ],
-      "path": "src/app/trading/strategy_interday_learning_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS",
-      "lines": [
-        47
-      ],
-      "path": "src/app/trading/strategy_interday_learning_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "interday_learning_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        39
-      ],
-      "path": "src/app/trading/strategy_interday_learning_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        127
-      ],
-      "path": "src/app/trading/strategy_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS",
-      "lines": [
-        138
-      ],
-      "path": "src/app/trading/strategy_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "trading_strategy_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        131
-      ],
-      "path": "src/app/trading/strategy_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        56
-      ],
-      "path": "src/app/trading/strategy_prospective_economic_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS",
-      "lines": [
-        67
-      ],
-      "path": "src/app/trading/strategy_prospective_economic_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "strategy_prospective_economic_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        60
-      ],
-      "path": "src/app/trading/strategy_prospective_economic_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        31
-      ],
-      "path": "src/app/trading/strategy_research_outcome_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_RESEARCH_OUTCOME_INTERVAL_SECONDS",
-      "lines": [
-        42
-      ],
-      "path": "src/app/trading/strategy_research_outcome_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "strategy_research_outcome_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        35
-      ],
-      "path": "src/app/trading/strategy_research_outcome_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_default_strategy_repository_factory:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        66
-      ],
-      "path": "src/app/trading/strategy_solana_ai_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        72
-      ],
-      "path": "src/app/trading/strategy_solana_ai_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_SOLANA_AI_POLL_SECONDS",
-      "lines": [
-        85
-      ],
-      "path": "src/app/trading/strategy_solana_ai_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "solana_ai_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        76
-      ],
-      "path": "src/app/trading/strategy_solana_ai_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_flag:os.environ.get:None",
-      "lines": [
-        51
-      ],
-      "path": "src/app/trading/strategy_v2_qualification_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_interval_seconds:os.environ.get:OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS",
-      "lines": [
-        62
-      ],
-      "path": "src/app/trading/strategy_v2_qualification_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "strategy_v2_qualification_monitor_enabled:os.environ.get:OMNIX_PERSISTENCE_MODE",
-      "lines": [
-        55
-      ],
-      "path": "src/app/trading/strategy_v2_qualification_monitor.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_collect_trend_signal:os.environ.get:OMNIX_TRADING_TREND_CONTINUATION_SHADOW",
-      "lines": [
-        532
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_launcher_auto_kill_enabled:os.environ.get:OMNIX_LAUNCHER_KILL_PORT",
-      "lines": [
-        39
-      ],
-      "path": "src/launch.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_ffmpeg_binary:os.environ.get:OMNIX_FFMPEG",
-      "lines": [
-        138
-      ],
-      "path": "src/nemotron_eou_stt_server.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:os.environ.get:OMNIX_STT_PORT",
-      "lines": [
-        193
-      ],
-      "path": "src/nemotron_eou_stt_server.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:os.environ.get:OMNIX_OPENAI_API_PORT",
-      "lines": [
-        343
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:os.environ.get:OMNIX_TTS_PORT",
-      "lines": [
-        650
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preflight_tts_port:os.environ.get:OMNIX_LAUNCHER_KILL_PORT",
-      "lines": [
-        159
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL007"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_preflight_tts_port:os.environ.get:OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT",
-      "lines": [
-        164
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL007"
     },
     {
       "count": 1,
@@ -11533,14 +7820,14 @@
       "count": 8,
       "fingerprint": "startup_load_provider:print",
       "lines": [
-        200,
-        204,
-        209,
-        211,
-        213,
-        219,
+        224,
+        228,
+        233,
         235,
-        237
+        237,
+        243,
+        259,
+        261
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL008"
@@ -11756,9 +8043,9 @@
       "count": 3,
       "fingerprint": "NemotronEouModelManager.load:print",
       "lines": [
-        289,
-        294,
-        299
+        291,
+        296,
+        301
       ],
       "path": "src/app/providers/nemotron_eou_streaming.py",
       "rule": "AL008"
@@ -11767,7 +8054,7 @@
       "count": 1,
       "fingerprint": "_metric:print",
       "lines": [
-        56
+        58
       ],
       "path": "src/app/providers/nemotron_eou_streaming.py",
       "rule": "AL008"
@@ -11776,7 +8063,7 @@
       "count": 1,
       "fingerprint": "provider_call_enter:print",
       "lines": [
-        103
+        105
       ],
       "path": "src/app/providers/provider_trace.py",
       "rule": "AL008"
@@ -11785,7 +8072,7 @@
       "count": 1,
       "fingerprint": "provider_call_exit:print",
       "lines": [
-        125
+        127
       ],
       "path": "src/app/providers/provider_trace.py",
       "rule": "AL008"
@@ -11842,7 +8129,7 @@
       "count": 1,
       "fingerprint": "metric:print",
       "lines": [
-        46
+        47
       ],
       "path": "src/app/providers/stt_live_runtime_support.py",
       "rule": "AL008"
@@ -11970,9 +8257,9 @@
       "count": 3,
       "fingerprint": "run_one_queued_job_route:print",
       "lines": [
-        102,
         117,
-        209
+        132,
+        224
       ],
       "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
       "rule": "AL008"
@@ -12039,7 +8326,7 @@
       "count": 1,
       "fingerprint": "get_rpg_session:print",
       "lines": [
-        430
+        474
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL008"
@@ -12048,13 +8335,13 @@
       "count": 7,
       "fingerprint": "resume_rpg_session:print",
       "lines": [
-        1176,
-        1177,
-        1199,
-        1200,
-        1201,
-        1210,
-        1212
+        1220,
+        1221,
+        1243,
+        1244,
+        1245,
+        1254,
+        1256
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL008"
@@ -12232,7 +8519,7 @@
       "count": 1,
       "fingerprint": "_agent_reasoning_effort:except",
       "lines": [
-        346
+        347
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL009"
@@ -12250,7 +8537,7 @@
       "count": 1,
       "fingerprint": "_resolve_agent_model_route:except",
       "lines": [
-        321
+        323
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL009"
@@ -12259,7 +8546,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:except",
       "lines": [
-        380
+        381
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL009"
@@ -12268,7 +8555,7 @@
       "count": 1,
       "fingerprint": "_workflow_lookup:except",
       "lines": [
-        1806
+        1807
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL009"
@@ -12295,33 +8582,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_sanitize:except",
-      "lines": [
-        332
-      ],
-      "path": "src/app/agent_runtime/debug_logging.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_write_event:except",
-      "lines": [
-        234
-      ],
-      "path": "src/app/agent_runtime/debug_logging.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "configure_agent_debug_logging:except",
-      "lines": [
-        146
-      ],
-      "path": "src/app/agent_runtime/debug_logging.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_security_subject:except",
       "lines": [
         363
@@ -12342,7 +8602,7 @@
       "count": 1,
       "fingerprint": "_provider_reasoning_effort:except",
       "lines": [
-        26
+        28
       ],
       "path": "src/app/agent_runtime/model_fidelity.py",
       "rule": "AL009"
@@ -12351,7 +8611,7 @@
       "count": 1,
       "fingerprint": "PiRpcSession.close:except",
       "lines": [
-        746
+        747
       ],
       "path": "src/app/agent_runtime/pi_runtime_core.py",
       "rule": "AL009"
@@ -12360,7 +8620,7 @@
       "count": 1,
       "fingerprint": "default_plan_semantic_reviewer:except",
       "lines": [
-        638
+        640
       ],
       "path": "src/app/agent_runtime/planning_review.py",
       "rule": "AL009"
@@ -12460,7 +8720,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._dispatch_pending_quality_commands:except",
       "lines": [
-        2129
+        2130
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -12469,7 +8729,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._execute_quality_action:except",
       "lines": [
-        2102
+        2103
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -12478,7 +8738,7 @@
       "count": 1,
       "fingerprint": "AgentRunService.command_with_context:except",
       "lines": [
-        928
+        929
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -12487,7 +8747,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._prepare_workspace:except",
       "lines": [
-        2693
+        2694
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL009"
@@ -12541,34 +8801,16 @@
       "count": 1,
       "fingerprint": "SharedAssetStore._load_manifest:except",
       "lines": [
-        497
+        496
       ],
       "path": "src/app/assets/store.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "_playwright_duckduckgo_rows:except",
-      "lines": [
-        335
-      ],
-      "path": "src/app/assistant_context/web_search.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_raise_if_playwright_search_blocked:except",
-      "lines": [
-        346
-      ],
-      "path": "src/app/assistant_context/web_search.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "default_structured_proposal_provider:except",
       "lines": [
-        181
+        182
       ],
       "path": "src/app/assistant_memory/structured_provider.py",
       "rule": "AL009"
@@ -12577,7 +8819,7 @@
       "count": 1,
       "fingerprint": "_log_browser_activity:except",
       "lines": [
-        715
+        716
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -12586,7 +8828,7 @@
       "count": 1,
       "fingerprint": "_log_playwright_worker_event:except",
       "lines": [
-        390
+        391
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -12595,10 +8837,10 @@
       "count": 4,
       "fingerprint": "_playwright_worker:except",
       "lines": [
-        545,
-        583,
-        588,
-        593
+        546,
+        584,
+        589,
+        594
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -12607,7 +8849,7 @@
       "count": 1,
       "fingerprint": "_disconnect_all:except",
       "lines": [
-        239
+        241
       ],
       "path": "src/app/assistant_tools/kasa_adapter.py",
       "rule": "AL009"
@@ -12616,7 +8858,7 @@
       "count": 1,
       "fingerprint": "_bounded:except",
       "lines": [
-        132
+        134
       ],
       "path": "src/app/audiobook/classification_logging.py",
       "rule": "AL009"
@@ -12625,7 +8867,7 @@
       "count": 1,
       "fingerprint": "classification_log:except",
       "lines": [
-        150
+        152
       ],
       "path": "src/app/audiobook/classification_logging.py",
       "rule": "AL009"
@@ -12634,7 +8876,7 @@
       "count": 1,
       "fingerprint": "local_classifier:except",
       "lines": [
-        112
+        113
       ],
       "path": "src/app/audiobook/classifier.py",
       "rule": "AL009"
@@ -12652,7 +8894,7 @@
       "count": 1,
       "fingerprint": "local_structure_classifier:except",
       "lines": [
-        32
+        33
       ],
       "path": "src/app/audiobook/document_structure_classifier.py",
       "rule": "AL009"
@@ -12670,7 +8912,7 @@
       "count": 1,
       "fingerprint": "AssistantTurnCoordinator._load:except",
       "lines": [
-        275
+        276
       ],
       "path": "src/app/chat/assistant_turns.py",
       "rule": "AL009"
@@ -12679,7 +8921,7 @@
       "count": 1,
       "fingerprint": "_active_segment_summary:except",
       "lines": [
-        85
+        70
       ],
       "path": "src/app/chat/prompt_assembly.py",
       "rule": "AL009"
@@ -12691,24 +8933,6 @@
         46
       ],
       "path": "src/app/chat/routing_deadline.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_delete_jobs_for_image_asset:except",
-      "lines": [
-        204
-      ],
-      "path": "src/app/gateway/image_workspace_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_image_workspace_routes.image_jobs:except",
-      "lines": [
-        44
-      ],
-      "path": "src/app/gateway/image_workspace_routes.py",
       "rule": "AL009"
     },
     {
@@ -12825,18 +9049,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "DurableFeatureJobWorker._renew_loop:except",
-      "lines": [
-        316
-      ],
-      "path": "src/app/jobs/durable_feature_worker.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_kill_processes_for_port:except",
       "lines": [
-        450
+        491
       ],
       "path": "src/app/launcher/service_manager.py",
       "rule": "AL009"
@@ -12919,7 +9134,7 @@
       "count": 1,
       "fingerprint": "ChatGPTCodexProvider._reset_process_state:except",
       "lines": [
-        1164
+        1165
       ],
       "path": "src/app/providers/chatgpt_codex_provider.py",
       "rule": "AL009"
@@ -12955,7 +9170,7 @@
       "count": 1,
       "fingerprint": "deep_research_log:except",
       "lines": [
-        42
+        44
       ],
       "path": "src/app/research/deep_research_diagnostics.py",
       "rule": "AL009"
@@ -13101,8 +9316,8 @@
       "count": 2,
       "fingerprint": "resume_rpg_session:except",
       "lines": [
-        1149,
-        1205
+        1193,
+        1249
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL009"
@@ -13247,7 +9462,7 @@
       "count": 1,
       "fingerprint": "_sanitize:except",
       "lines": [
-        413
+        415
       ],
       "path": "src/app/rpg/debug_logging.py",
       "rule": "AL009"
@@ -13349,7 +9564,7 @@
       "count": 1,
       "fingerprint": "get_runtime_llm_provider:except",
       "lines": [
-        21
+        19
       ],
       "path": "src/app/rpg/narration/runtime_provider.py",
       "rule": "AL009"
@@ -13403,8 +9618,8 @@
       "count": 2,
       "fingerprint": "_rss_bytes:except",
       "lines": [
-        323,
-        349
+        325,
+        351
       ],
       "path": "src/app/rpg/performance_trace.py",
       "rule": "AL009"
@@ -13773,18 +9988,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "build_production_world_forge_generator:except",
-      "lines": [
-        1373
-      ],
-      "path": "src/app/rpg_world_forge_provider.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "PersistentCircuitState._hydrate:except",
       "lines": [
-        104
+        106
       ],
       "path": "src/app/trading/ai_shadow_circuit_persistence.py",
       "rule": "AL009"
@@ -13793,7 +9999,7 @@
       "count": 1,
       "fingerprint": "_persist:except",
       "lines": [
-        84
+        86
       ],
       "path": "src/app/trading/ai_shadow_circuit_persistence.py",
       "rule": "AL009"
@@ -13874,7 +10080,7 @@
       "count": 1,
       "fingerprint": "ProspectiveGapRuntime._execution_cost:except",
       "lines": [
-        1653
+        1655
       ],
       "path": "src/app/trading/prospective_gap_runtime.py",
       "rule": "AL009"
@@ -14309,7 +10515,7 @@
       "count": 1,
       "fingerprint": "YahooEvidenceStore.load_market_bars:except",
       "lines": [
-        637
+        639
       ],
       "path": "src/app/trading/yahoo_evidence.py",
       "rule": "AL009"
@@ -14318,7 +10524,7 @@
       "count": 1,
       "fingerprint": "YahooEvidenceStore.persist_chart_result:except",
       "lines": [
-        479
+        481
       ],
       "path": "src/app/trading/yahoo_evidence.py",
       "rule": "AL009"
@@ -14327,7 +10533,7 @@
       "count": 1,
       "fingerprint": "YahooEvidenceStore.premarket_relative_volume.session_totals:except",
       "lines": [
-        702
+        704
       ],
       "path": "src/app/trading/yahoo_evidence.py",
       "rule": "AL009"
@@ -14336,7 +10542,7 @@
       "count": 1,
       "fingerprint": "_kill_processes_for_port:except",
       "lines": [
-        86
+        87
       ],
       "path": "src/launch.py",
       "rule": "AL009"
@@ -14354,7 +10560,7 @@
       "count": 1,
       "fingerprint": "_kill_windows_port_owners:except",
       "lines": [
-        150
+        151
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -14363,7 +10569,7 @@
       "count": 1,
       "fingerprint": "get_tts_service_status:except",
       "lines": [
-        245
+        246
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -14372,7 +10578,7 @@
       "count": 1,
       "fingerprint": "initialize_tts_provider:except",
       "lines": [
-        223
+        224
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -16595,7 +12801,7 @@
       "count": 1,
       "fingerprint": "AgentRunService.__init__:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        232
+        233
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL011"
@@ -16604,7 +12810,7 @@
       "count": 1,
       "fingerprint": "_service_and_context:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        195
+        201
       ],
       "path": "src/app/audiobook/routes.py",
       "rule": "AL011"
@@ -16613,7 +12819,7 @@
       "count": 1,
       "fingerprint": "main:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        760
+        761
       ],
       "path": "src/app/audiobook/worker.py",
       "rule": "AL011"
@@ -16622,7 +12828,7 @@
       "count": 1,
       "fingerprint": "PostgresSharedAssetStoreAdapter.__init__:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        30
+        28
       ],
       "path": "src/app/persistence/asset_compat.py",
       "rule": "AL011"
@@ -16631,9 +12837,9 @@
       "count": 3,
       "fingerprint": "_recovery_command:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        249,
-        250,
-        264
+        255,
+        256,
+        270
       ],
       "path": "src/app/persistence/cli.py",
       "rule": "AL011"
@@ -16642,7 +12848,7 @@
       "count": 1,
       "fingerprint": "PostgresLegacyImporter.__init__:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        187
+        194
       ],
       "path": "src/app/persistence/cutover.py",
       "rule": "AL011"
@@ -16655,186 +12861,6 @@
       ],
       "path": "src/app/trading/replay_runtime_repository.py",
       "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_tool_proposal_service:app.persistence.identity_service.bootstrap_local_tenant",
-      "lines": [
-        151
-      ],
-      "path": "src/app/assistant_tools/proposals.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_postgres_snapshot:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        63
-      ],
-      "path": "src/app/rpg/session/genesis/campaign_bible_runtime.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingAlertRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        344
-      ],
-      "path": "src/app/trading/alerts.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingBounceModelRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        13
-      ],
-      "path": "src/app/trading/bounce_model_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingCatalystRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        15
-      ],
-      "path": "src/app/trading/catalyst_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingPaperAnalytics.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        555
-      ],
-      "path": "src/app/trading/paper_analytics.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingPaperJournal.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        192
-      ],
-      "path": "src/app/trading/paper_journal.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingPaperLifecycle.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        29
-      ],
-      "path": "src/app/trading/paper_lifecycle.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingPaperProtectionRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        38
-      ],
-      "path": "src/app/trading/paper_protection_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingPaperRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        91
-      ],
-      "path": "src/app/trading/paper_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingReplayRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        73
-      ],
-      "path": "src/app/trading/replay_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingDocumentRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        44
-      ],
-      "path": "src/app/trading/repositories.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingFactRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        17
-      ],
-      "path": "src/app/trading/research/fact_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingResearchRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        17
-      ],
-      "path": "src/app/trading/research/repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingShadowResearchRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        14
-      ],
-      "path": "src/app/trading/research/shadow_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingScannerRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        105
-      ],
-      "path": "src/app/trading/scanner_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "SessionEvidenceRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        415
-      ],
-      "path": "src/app/trading/session_evidence.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingStrategyRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        219
-      ],
-      "path": "src/app/trading/strategy_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "SolanaAIStrategyRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        36
-      ],
-      "path": "src/app/trading/strategy_solana_ai_repository.py",
-      "rule": "AL012"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TriggerPlanRepository.__init__:app.persistence.tenant.local_tenant_context",
-      "lines": [
-        352
-      ],
-      "path": "src/app/trading/trigger_plan.py",
-      "rule": "AL012"
     },
     {
       "count": 1,

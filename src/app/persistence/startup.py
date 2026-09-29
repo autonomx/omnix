@@ -27,8 +27,10 @@ def bootstrap_postgresql_runtime(
         apply_schema_changes=False,
     )
     from .identity_service import ensure_local_identity
+    from app.runtime.tenant_context import install_process_tenant
 
-    ensure_local_identity(db)
+    tenant = ensure_local_identity(db)
+    install_process_tenant(tenant)
     return status
 
 

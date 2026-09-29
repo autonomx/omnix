@@ -217,9 +217,9 @@ def _session_lock(session_id: str) -> threading.RLock:
 
 def _current_submission_id() -> str:
     try:
-        from app.gateway.rpg_turn_job_mirror import _DIRECT_RPG_SUBMISSION_ID
+        from app.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID
 
-        return _text(_DIRECT_RPG_SUBMISSION_ID.get(""))
+        return _text(DIRECT_RPG_SUBMISSION_ID.get(""))
     except Exception:
         return ""
 

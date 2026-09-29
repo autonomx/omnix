@@ -11,7 +11,7 @@ from app.providers.structured import UnsupportedStructuredMode
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.worlds.generation_first_pass_provider import _strict_registry_contract
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     ProviderWorldForgeTopicGenerator,
     WorldForgeEntityRegistryItem,
     WorldForgeProviderConfig,

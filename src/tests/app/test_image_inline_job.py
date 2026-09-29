@@ -4,9 +4,10 @@ import time
 from pathlib import Path
 
 from app.image.models import ImageGenerationResponse
-from app.jobs import CreateJobRequest, ResourceClass, SQLiteJobStore
+from app.jobs import CreateJobRequest, ResourceClass
 from app.jobs.models import JobStage
 from app.image.jobs import execute_image_job
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 class MemoryAssetStore:
@@ -21,7 +22,7 @@ class MemoryAssetStore:
 def test_image_job_executes_and_persists_shared_asset(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     monkeypatch.setattr(Path, "is_file", lambda _path: True)
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     asset_store = MemoryAssetStore()
     job = job_store.create_job(
         CreateJobRequest(
@@ -65,7 +66,7 @@ def test_image_job_executes_and_persists_shared_asset(monkeypatch, tmp_path) -> 
 def test_character_avatar_image_keeps_its_module_boundary(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     monkeypatch.setattr(Path, "is_file", lambda _path: True)
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     asset_store = MemoryAssetStore()
     job = job_store.create_job(
         CreateJobRequest(
@@ -104,7 +105,7 @@ def test_character_avatar_image_keeps_its_module_boundary(monkeypatch, tmp_path)
 def test_image_job_reports_milestone_progress_during_generation(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     monkeypatch.setattr(Path, "is_file", lambda _path: True)
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     asset_store = MemoryAssetStore()
     job = job_store.create_job(
         CreateJobRequest(
@@ -152,7 +153,7 @@ def test_image_job_polls_service_step_progress(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_IMAGE_URL", "http://127.0.0.1:5301")
     monkeypatch.setattr(Path, "is_file", lambda _path: True)
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     asset_store = MemoryAssetStore()
     job = job_store.create_job(
         CreateJobRequest(
@@ -204,7 +205,7 @@ def test_image_job_polls_service_step_progress(monkeypatch, tmp_path) -> None:
 
 def test_invalid_image_job_fails_without_generation(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     job = store.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -223,7 +224,7 @@ def test_invalid_image_job_fails_without_generation(monkeypatch, tmp_path) -> No
 
 def test_image_generation_failure_preserves_progress_and_marks_stage_failed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    store = InMemoryJobStore(tmp_path / "jobs")
     job = store.create_job(
         CreateJobRequest(
             module="image-generation",

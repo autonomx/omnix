@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.agent_runtime.capabilities import default_capability_registry
-from app.assist_core.core import ToolCall
+from app.capabilities import default_capability_registry
+from app.capabilities.tool_call import ToolCall
 
 from .models import AssistantToolRequest
 

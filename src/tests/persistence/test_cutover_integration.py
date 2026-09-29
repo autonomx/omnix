@@ -17,7 +17,7 @@ from app.persistence.cutover import (
     preflight_bundle,
 )
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 
 
@@ -250,7 +250,7 @@ def test_end_to_end_import_is_verified_resumable_and_cutover_gated(tmp_path: Pat
     store = LocalBlobStore(tmp_path / "blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(
+        context = ensure_local_identity(
             database,
             authority_operation=AuthorityOperation.LEGACY_IMPORT,
         )
@@ -326,7 +326,7 @@ def test_import_generates_portable_asset_key_and_registers_secret_reference(
     store = LocalBlobStore(tmp_path / "blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(
+        context = ensure_local_identity(
             database,
             authority_operation=AuthorityOperation.LEGACY_IMPORT,
         )
@@ -362,7 +362,7 @@ def test_changed_source_id_is_rejected_after_import(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(
+        context = ensure_local_identity(
             database,
             authority_operation=AuthorityOperation.LEGACY_IMPORT,
         )
@@ -386,7 +386,7 @@ def test_missing_asset_is_rejected_before_import_run(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(
+        context = ensure_local_identity(
             database,
             authority_operation=AuthorityOperation.LEGACY_IMPORT,
         )
@@ -421,7 +421,7 @@ def test_declared_hash_drift_fails_preflight(tmp_path: Path) -> None:
             importer = PostgresLegacyImporter(
                 database, blob_store=LocalBlobStore(tmp_path / "blobs")
             )
-            context = bootstrap_local_tenant(
+            context = ensure_local_identity(
                 database,
                 authority_operation=AuthorityOperation.LEGACY_IMPORT,
             )

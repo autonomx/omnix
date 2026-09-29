@@ -15,7 +15,7 @@ from app.assistant_tools.models import AssistantToolResult
 from app.assistant_tools.routes import register_assistant_tool_routes
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -28,7 +28,7 @@ def client(monkeypatch):
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
     assert urlsplit(url).path in {"/omnix_test", "/omnix_refactor_baseline"}
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=3))
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     service = proposals.AssistantToolProposalService(database, context)
     config = default_assistant_tools_config()
     for tool in config.tools:

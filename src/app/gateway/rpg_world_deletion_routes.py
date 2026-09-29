@@ -11,6 +11,17 @@ from app.rpg.worlds.lifecycle_service import (
     world_deletion_eligibility,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgDeleteWorldRequestBody(_TypedRequestModel):
+    acknowledge_permanent: _TypedRequestAny = None
+    confirmation_title: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_deletion_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_deletion_route_hook_installed"
 
@@ -46,7 +57,6 @@ def register_rpg_world_deletion_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/worlds/{world_id}/deletion-eligibility",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_world_deletion_eligibility(world_id: str) -> dict[str, Any]:
         try:
@@ -58,10 +68,9 @@ def register_rpg_world_deletion_routes(app: FastAPI) -> None:
     @app.delete(
         "/api/rpg/worlds/{world_id}",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_delete_world(world_id: str, request: Request) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+    def rpg_delete_world(world_id: str, request: Request, request_body: RpgDeleteWorldRequestBody) -> dict[str, Any]:
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         confirmation_title = str(payload.get("confirmation_title") or "")
         if not confirmation_title:
             raise HTTPException(

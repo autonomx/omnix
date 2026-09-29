@@ -292,8 +292,18 @@ _default_coordinator: AssistantTurnCoordinator | None = None
 _default_lock = threading.Lock()
 
 
-def default_assistant_turn_coordinator() -> AssistantTurnCoordinator:
+def default_assistant_turn_coordinator(database=None) -> AssistantTurnCoordinator:
+    """Return a coordinator bound to the caller's durable database authority."""
     global _default_coordinator
+    if database is not None:
+        with _default_lock:
+            coordinator = getattr(database, "_assistant_turn_coordinator", None)
+            if coordinator is None:
+                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+
+                coordinator = PostgresAssistantTurnCoordinator(database=database)
+                database._assistant_turn_coordinator = coordinator
+            return coordinator
     if _default_coordinator is not None:
         return _default_coordinator
     with _default_lock:

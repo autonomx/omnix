@@ -270,7 +270,6 @@ def register_live_conversation_rendering_routes(
         "/api/chat/sessions/{session_id}/live-conversation/delivery-plan",
         response_model=SpeechDeliveryPlan,
         tags=["live-chat"],
-        include_in_schema=False,
     )
     async def delivery_plan(
         session_id: str,
@@ -283,7 +282,6 @@ def register_live_conversation_rendering_routes(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations",
         response_model=PronunciationListResponse,
         tags=["live-chat"],
-        include_in_schema=False,
     )
     async def list_pronunciations(session_id: str) -> PronunciationListResponse:
         require_session(session_id)
@@ -293,7 +291,6 @@ def register_live_conversation_rendering_routes(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations",
         response_model=PronunciationListResponse,
         tags=["live-chat"],
-        include_in_schema=False,
     )
     async def create_pronunciation(
         session_id: str,
@@ -306,7 +303,6 @@ def register_live_conversation_rendering_routes(
         "/api/chat/sessions/{session_id}/live-conversation/pronunciations/{entry_id}",
         response_model=PronunciationListResponse,
         tags=["live-chat"],
-        include_in_schema=False,
     )
     async def delete_pronunciation(
         session_id: str,

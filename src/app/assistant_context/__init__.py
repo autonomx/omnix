@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import AssistantContextChatRequest, AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
+
+from .models import AssistantContextChatRequest
 from .routes import register_assistant_context_routes as _register_assistant_context_routes
 from .service import AssistantContextService, default_assistant_context_service
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 """Process-wide IBKR Gateway transport and runtime.
 
@@ -8,7 +9,6 @@ Unit tests use FakeIbkrTransport so CI does not require Gateway or IBKR's local
 TWS API installation.
 """
 
-import os
 import threading
 import time as time_module
 from collections.abc import Callable
@@ -648,7 +648,7 @@ class FakeIbkrTransport:
 
 
 def _bool_env(name: str, default: str = "0") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class IbkrRuntime:
@@ -674,9 +674,9 @@ class IbkrRuntime:
             IbkrSettings(
                 enabled=_bool_env("OMNIX_IBKR_ENABLED", "0") if enabled is None else bool(enabled),
                 monitor_enabled=_bool_env("OMNIX_IBKR_MONITOR", "1"),
-                host=host or os.environ.get("OMNIX_IBKR_HOST", "127.0.0.1"),
-                port=int(port or os.environ.get("OMNIX_IBKR_PORT", "4002")),
-                client_id=int(client_id or os.environ.get("OMNIX_IBKR_CLIENT_ID", "71")),
+                host=host or _env_str("OMNIX_IBKR_HOST", "127.0.0.1"),
+                port=int(port or _env_str("OMNIX_IBKR_PORT", "4002")),
+                client_id=int(client_id or _env_str("OMNIX_IBKR_CLIENT_ID", "71")),
                 live_authority_enabled=_bool_env("OMNIX_IBKR_LIVE_AUTHORITY", "0"),
                 recovery_authority_enabled=_bool_env("OMNIX_IBKR_RECOVERY_AUTHORITY", "0"),
             ),
@@ -774,7 +774,7 @@ class IbkrRuntime:
                 self.connect_failure_count += 1
                 backoff = max(
                     0.25,
-                    float(os.environ.get("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
+                    float(_env_str("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
                 )
                 self._next_connect_attempt_monotonic = time_module.monotonic() + backoff
                 self.last_error = f"{type(exc).__name__}: {exc}"
@@ -961,10 +961,10 @@ class IbkrRuntime:
         duration = int((end.astimezone(timezone.utc) - start.astimezone(timezone.utc)).total_seconds())
         min_interval = (
             0.0
-            if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
+            if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
             else max(
                 0.0,
-                float(os.environ.get("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")),
+                float(_env_str("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")),
             )
         )
         with self._historical_lock:

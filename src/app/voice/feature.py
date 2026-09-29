@@ -4,8 +4,11 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
-from app.jobs.models import ResourceClass
+from app.jobs.models import CreateJobRequest, ResourceClass
+from app.platform.effective_defaults import apply_job_defaults
+from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
 from app.runtime.features import FeatureModule
+from app.runtime.router_composition import compose_registrar_router
 
 from .jobs import execute_voice_studio_job
 
@@ -18,14 +21,18 @@ def _execute(context: JobExecutionContext, job):
     return execute_voice_studio_job(context.job_store, job)
 
 
+def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
+    value = request.model_dump(mode="python")
+    if request.module == "voice-cloning":
+        value = apply_voice_cloning_defaults(value)
+    else:
+        value = apply_job_defaults(value)
+    return CreateJobRequest.model_validate(value)
 
-from app.runtime.gateway_installer import install_registrars
 
 
-def _install_gateway(gateway, context):
-    install_registrars(
-        gateway,
-        context,
+def _voice_router(context):
+    return compose_registrar_router(
         (
             ("app.gateway.live_voice_runtime_offload", "register_live_voice_runtime_offload"),
             ("app.gateway.live_voice_diagnostics_routes", "register_live_voice_diagnostics_routes"),
@@ -38,12 +45,13 @@ def _install_gateway(gateway, context):
             ("app.gateway.voice_job_summary_routes", "register_voice_job_summary_routes"),
             ("app.gateway.voice_library_routes", "register_voice_library_route"),
         ),
+        state=context.runtime_state,
     )
 
 FEATURE = FeatureModule(
     id="voice",
     title="Voice",
-    installers=(_install_gateway,),
+    routers=(_voice_router,),
     job_handlers=tuple(
         JobHandlerSpec(
             type=job_type,
@@ -56,6 +64,7 @@ FEATURE = FeatureModule(
             ),
             timeout_seconds=900,
             max_attempts=3,
+            submission_policy=voice_submission_defaults,
         )
         for job_type in (
             "tts.synthesize",

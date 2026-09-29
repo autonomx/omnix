@@ -22,7 +22,7 @@ from .contracts import (
     TaskRevision,
     WorkerLease,
 )
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 
 
 def _json_default(value: Any) -> Any:

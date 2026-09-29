@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -13,17 +14,37 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
+@pytest.fixture(autouse=True)
+def in_memory_character_repository(monkeypatch):
+    from app.persistence import runtime
+
+    monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: False)
+
+
 def _client(tmp_path: Path) -> TestClient:
-    from app.chat import ChatSessionStore
+    from app.chat import InMemoryChatSessionStore
     from app.gateway.main import create_gateway_app
     from tests.support.in_memory_jobs import InMemoryJobStore
 
     return TestClient(
         create_gateway_app(
-            chat_store_factory=lambda: ChatSessionStore(tmp_path / "chat.json"),
+            chat_store_factory=lambda: InMemoryChatSessionStore(tmp_path / "chat-store"),
             job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs.sqlite"),
         ),
+        base_url="http://127.0.0.1",
         raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
+    )
+
+
+def _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service) -> None:
+    monkeypatch.setattr(prompt_store, "get_provider", provider_service.get_provider)
+    from app.gateway import live_chat_low_latency_stream
+
+    monkeypatch.setattr(
+        live_chat_low_latency_stream,
+        "get_provider",
+        provider_service.get_provider,
     )
 
 
@@ -69,10 +90,11 @@ def test_gateway_chat_sessions_are_backend_owned(tmp_path: Path) -> None:
 def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app import shared
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
 
     monkeypatch.setattr(
-        shared,
+        provider_service,
         "get_provider",
         lambda provider_name=None: SimpleNamespace(
             chat_completion=lambda **kwargs: SimpleNamespace(
@@ -82,7 +104,8 @@ def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monke
             )
         ),
     )
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Question"}).json()
 
@@ -113,7 +136,8 @@ def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monke
 def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app import shared
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
 
     calls = 0
 
@@ -122,8 +146,9 @@ def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, mo
         calls += 1
         return SimpleNamespace(content="Only once.", model=kwargs.get("model") or "gpt", usage={})
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Retry"}).json()
     body = {
@@ -161,7 +186,9 @@ def test_gateway_chat_queue_failure_marks_user_turn_failed(tmp_path: Path) -> No
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: FailingJobStore(tmp_path / "jobs.sqlite"),
         ),
+        base_url="http://127.0.0.1",
         raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
     )
     session = client.post("/api/chat/sessions", json={"title": "Queue failure"}).json()
 
@@ -180,7 +207,8 @@ def test_gateway_chat_cancel_cannot_commit_late_provider_reply(tmp_path: Path, m
     import threading
     from types import SimpleNamespace
 
-    from app import shared
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
 
     entered = threading.Event()
     release = threading.Event()
@@ -191,8 +219,9 @@ def test_gateway_chat_cancel_cannot_commit_late_provider_reply(tmp_path: Path, m
             raise RuntimeError("provider release timed out")
         return SimpleNamespace(content="Too late.", model=kwargs.get("model") or "gpt", usage={})
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Cancel"}).json()
     accepted = client.post(
@@ -219,7 +248,8 @@ def test_gateway_interrupts_active_generation_within_a_chat_session(tmp_path: Pa
     import threading
     from types import SimpleNamespace
 
-    from app import shared
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
 
     first_entered = threading.Event()
     first_release = threading.Event()
@@ -239,8 +269,9 @@ def test_gateway_interrupts_active_generation_within_a_chat_session(tmp_path: Pa
             content = "Second answer"
         return SimpleNamespace(content=content, model=model or "gpt", usage={})
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Ordered"}).json()
     first = client.post(
@@ -273,8 +304,9 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
 ) -> None:
     from types import SimpleNamespace
 
-    from app import shared
-    from app.assistant_context.models import AssistantContextItem
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
+    from app.conversation.contracts import AssistantContextItem
     from app.research.quick_search import QuickSearchExecution, QuickSearchService
 
     calls: list[dict[str, object]] = []
@@ -297,8 +329,9 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
             diagnostics={"status": "completed", "results": 1},
         )
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(QuickSearchService, "search", fake_search)
 
     client = _client(tmp_path)
@@ -330,13 +363,14 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
 def test_context_completion_failure_removes_unvalidated_reply(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace
 
-    from app import shared
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
     from app.assistant_context import routes
-    from app.assistant_context.models import AssistantContextItem
+    from app.conversation.contracts import AssistantContextItem
     from app.research.quick_search import QuickSearchExecution, QuickSearchService
 
     monkeypatch.setattr(
-        shared,
+        provider_service,
         "get_provider",
         lambda provider_name=None: SimpleNamespace(
             chat_completion=lambda **kwargs: SimpleNamespace(
@@ -346,7 +380,8 @@ def test_context_completion_failure_removes_unvalidated_reply(tmp_path: Path, mo
             )
         ),
     )
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         QuickSearchService,
         "search",
@@ -393,8 +428,9 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
 ) -> None:
     from types import SimpleNamespace
 
-    from app import shared
-    from app.assistant_context.models import AssistantContextItem
+    from app.chat import prompt_store
+    from app.providers import service as provider_service
+    from app.conversation.contracts import AssistantContextItem
     from app.assistant_context.vision import DesktopVisionClient
 
     calls: list[dict[str, object]] = []
@@ -412,8 +448,9 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
             content="The shared desktop shows the Omnix chat window.",
         )
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
+    _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(DesktopVisionClient, "describe", fake_describe)
     monkeypatch.setenv("OMNIX_VISION_PROVIDER", "lmstudio")
     monkeypatch.setenv("OMNIX_VISION_MODEL", "fixture:vision")

@@ -16,6 +16,7 @@ agent-browser daemon cannot establish a CDP channel. That fallback preserves
 run-scoped sessions and Omnix's navigation/resource allowlist.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str, environment as _environment
 
 import atexit
 from dataclasses import dataclass, field
@@ -37,7 +38,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .models import AssistantToolRequest, AssistantToolResult
-from app.agent_runtime.process_environment import bounded_process_environment
+from app.runtime.process_environment import bounded_process_environment
 
 _BROWSER_ACTIONS = {
     "browser.open",
@@ -138,14 +139,14 @@ _PLAYWRIGHT_SESSIONS: dict[str, _PlaywrightSession] = {}
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = _env_str(name)
     if value is None:
         return default
     return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def agent_browser_command() -> str:
-    configured = os.environ.get("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
+    configured = _env_str("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
     if configured:
         return configured
     repo_root = Path(__file__).resolve().parents[3]
@@ -165,7 +166,7 @@ def _playwright_available() -> bool:
 
 
 def _browser_backend() -> str:
-    configured = os.environ.get("OMNIX_AGENT_BROWSER_BACKEND", "").strip().casefold()
+    configured = _env_str("OMNIX_AGENT_BROWSER_BACKEND", "").strip().casefold()
     if configured in {"agent-browser", "playwright"}:
         return configured
     # The native agent-browser Windows daemon currently loses its CDP channel
@@ -177,13 +178,13 @@ def _browser_backend() -> str:
 
 
 def _playwright_executable() -> str | None:
-    configured = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    configured = _env_str("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
     if configured and Path(configured).is_file():
         return configured
     roots = [
-        os.environ.get("PROGRAMFILES", ""),
-        os.environ.get("PROGRAMFILES(X86)", ""),
-        os.environ.get("LOCALAPPDATA", ""),
+        _env_str("PROGRAMFILES", ""),
+        _env_str("PROGRAMFILES(X86)", ""),
+        _env_str("LOCALAPPDATA", ""),
     ]
     relative = Path("Google") / "Chrome" / "Application" / "chrome.exe"
     for root in roots:
@@ -206,7 +207,7 @@ def browser_available() -> bool:
 
 
 def browser_allowed_domains() -> tuple[str, ...]:
-    raw = os.environ.get("OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS", "").strip()
+    raw = _env_str("OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS", "").strip()
     if not raw:
         return _DEFAULT_ALLOWED_DOMAINS
     values: list[str]
@@ -291,29 +292,29 @@ def _safe_selector(value: object) -> str:
 
 def _timeout_seconds() -> int:
     try:
-        return max(5, min(int(os.environ.get("OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS", "45")), 180))
+        return max(5, min(int(_env_str("OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS", "45")), 180))
     except ValueError:
         return 45
 
 
 def _preview_start_timeout_seconds() -> int:
     try:
-        return max(3, min(int(os.environ.get("OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS", "20")), 60))
+        return max(3, min(int(_env_str("OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS", "20")), 60))
     except ValueError:
         return 20
 
 
 def _preview_ttl_seconds() -> int:
     try:
-        return max(30, min(int(os.environ.get("OMNIX_AGENT_PREVIEW_TTL_SECONDS", "300")), 1800))
+        return max(30, min(int(_env_str("OMNIX_AGENT_PREVIEW_TTL_SECONDS", "300")), 1800))
     except ValueError:
         return 300
 
 
 def _minimal_environment() -> dict[str, str]:
-    source = os.environ
+    source = _environment()
     env = bounded_process_environment(source, _SAFE_ENV_KEYS)
-    executable = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    executable = _env_str("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
     if executable:
         env["AGENT_BROWSER_EXECUTABLE_PATH"] = executable
     if os.name == "nt":
@@ -323,7 +324,7 @@ def _minimal_environment() -> dict[str, str]:
 
 def _preview_environment() -> dict[str, str]:
     env = _minimal_environment()
-    for key, value in os.environ.items():
+    for key, value in _environment().items():
         # VITE_* values are deliberately browser-public configuration. Do not
         # leak arbitrary Omnix/backend environment variables into repository
         # code executed by the preview process.
@@ -380,7 +381,7 @@ def _playwright_snapshot(page: Any, timeout_ms: int) -> str:
 
 def _log_playwright_worker_event(session: _PlaywrightSession, event: str) -> None:
     try:
-        from app.agent_runtime.debug_logging import log_agent_activity
+        from app.observability.agent_logging import log_agent_activity
 
         log_agent_activity(
             event,
@@ -695,7 +696,7 @@ def _log_browser_activity(
     error: BaseException | str | None = None,
 ) -> None:
     try:
-        from app.agent_runtime.debug_logging import log_agent_activity
+        from app.observability.agent_logging import log_agent_activity
 
         fields: dict[str, Any] = {
             "action_id": request.action_id,
@@ -847,7 +848,7 @@ def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path]:
 
 
 def _preview_npm_command() -> str:
-    configured = os.environ.get("OMNIX_AGENT_PREVIEW_NPM_COMMAND", "").strip()
+    configured = _env_str("OMNIX_AGENT_PREVIEW_NPM_COMMAND", "").strip()
     if configured:
         candidate = Path(configured)
         if candidate.is_file():

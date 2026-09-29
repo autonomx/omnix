@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
 from app.assistant_memory.consolidation import (
     MemoryCapacityPolicy,
     analyze_memory_health,
@@ -12,7 +12,7 @@ from app.assistant_memory.repository import MemoryConflictError
 
 
 def setup_service(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     context = resolve_chat_scope("chat:one", project_id="project:omnix")
     return service, context
 

@@ -1,11 +1,11 @@
 """Segmented WebSocket transport for Nemotron ASR + Parakeet Realtime EOU."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import base64
 import json
 import math
-import os
 import struct
 import time
 import uuid
@@ -98,7 +98,7 @@ def pcm16le_rms(payload: bytes) -> float:
 
 def preview_tail_rms_threshold() -> float:
     try:
-        value = float(os.environ.get("OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD", "0.012"))
+        value = float(_env_str("OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD", "0.012"))
     except (TypeError, ValueError):
         return 0.012
     return min(0.05, max(0.001, value))

@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.models import ChatSession
+from app.conversation.contracts import ChatSession
 from app.voice_debug import voice_debug_log
 
 from .avatar_models import CharacterAvatarPack

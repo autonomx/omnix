@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.contracts import (
@@ -182,7 +182,7 @@ def test_blueprint_reconciliation_and_publication_provenance() -> None:
         assert latest == [corrected]
         assert [row["blueprint_revision"] for row in history] == [2, 1]
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             requirements = latest_ready_blueprint_requirements(
                 work,

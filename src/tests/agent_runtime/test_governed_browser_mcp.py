@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from app.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,
 )
-from app.agent_runtime.mcp_policy import (
+from app.capabilities.mcp_policy import (
     configured_mcp_capability_ids,
     load_mcp_policy,
 )

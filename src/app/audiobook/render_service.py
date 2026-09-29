@@ -17,6 +17,7 @@ from app.assets.canonical_voice_clones import discover_canonical_voice_clone_ass
 from app.assets.voice_clone_identity import voice_reference_revision
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase
+from app.persistence.job_repository import PostgresJobRepository
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.providers.service import get_tts_provider
@@ -108,16 +109,15 @@ def _persist_effective_generation_parameters(
     effective: dict[str, Any],
 ) -> None:
     with unit_of_work(database) as work:
-        work.connection.execute(
-            """UPDATE omnix_jobs
-                  SET input_payload = jsonb_set(
-                          input_payload, '{generation_parameters}', %s::jsonb, true
-                      ),
-                      updated_at = CURRENT_TIMESTAMP
-                WHERE workspace_id = %s AND id = %s
-                  AND module = 'audiobook'""",
-            (canonical_json(effective), context.workspace_id, job_id),
-        )
+        current = work.jobs.get_job(context, job_id)
+        if current is not None and current["module"] == "audiobook":
+            input_payload = dict(current.get("input_payload") or {})
+            input_payload["generation_parameters"] = effective
+            work.jobs.patch_job(
+                context,
+                job_id=job_id,
+                input_payload=input_payload,
+            )
         work.commit()
 
 
@@ -153,22 +153,10 @@ def decode_pcm_wav(response: dict[str, Any]) -> tuple[bytes, float, int]:
 
 
 def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool:
-    row = connection.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1 FROM omnix_jobs
-             WHERE workspace_id = %s AND resource_class = ANY(%s)
-               AND (
-                   (status IN ('queued', 'waiting', 'retrying')
-                    AND available_at <= CURRENT_TIMESTAMP
-                    AND attempt_count < max_attempts)
-                   OR (status IN ('leased', 'running', 'cancel_requested')
-                       AND lease_expires_at > CURRENT_TIMESTAMP)
-               )
-        )
-        """, (context.workspace_id, list(_HIGHER_PRIORITY)),
-    ).fetchone()
-    return bool(row[0])
+    return PostgresJobRepository(connection).has_pending_higher_priority_tts(
+        context,
+        resource_classes=tuple(_HIGHER_PRIORITY),
+    )
 
 
 def _checkpoint(
@@ -207,24 +195,25 @@ def _pause_if_requested(
         return False
     if not bool((current.get("metadata") or {}).get("pause_requested")):
         return False
-    row = work.connection.execute(
-        """UPDATE omnix_jobs
-              SET status = 'paused', lease_owner = NULL, lease_token = NULL,
-                  lease_expires_at = NULL,
-                  metadata = (metadata - 'pause_requested') || %s::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE workspace_id = %s AND id = %s
-              AND lease_owner = %s AND lease_token = %s
-              AND status IN ('leased', 'running')
-        RETURNING id""",
-        ('{"paused":true}', context.workspace_id, job_id, worker_id, lease_token),
-    ).fetchone()
-    if row is None:
+    updated = work.jobs.patch_job(
+        context,
+        job_id=job_id,
+        expected_statuses=("leased", "running"),
+        lease_owner=worker_id,
+        lease_token=lease_token,
+        status="paused",
+        metadata_set={"paused": True},
+        metadata_remove=("pause_requested",),
+        clear_lease=True,
+    )
+    if updated is None:
         return False
-    work.connection.execute(
-        """UPDATE omnix_job_attempts SET status = 'paused'
-            WHERE job_id = %s AND lease_token = %s AND status IN ('leased', 'running')""",
-        (job_id, lease_token),
+    work.jobs.update_attempt_status(
+        context,
+        job_id=job_id,
+        lease_token=lease_token,
+        expected_statuses=("leased", "running"),
+        status="paused",
     )
     return True
 
@@ -524,27 +513,22 @@ def run_render_once(
                     "resource_class": "cpu", "priority": 0,
                     "input_payload": dict(payload), "max_attempts": 3,
                 })
-            incomplete = int(work.connection.execute(
-                """
-                SELECT count(*) FROM omnix_jobs
-                 WHERE workspace_id = %s AND module = 'audiobook'
-                   AND job_type = 'audiobook.render-chapter'
-                   AND input_payload->>'render_run_id' = %s
-                   AND status <> 'completed'
-                """, (context.workspace_id, payload["render_run_id"]),
-            ).fetchone()[0])
-            if incomplete == 0:
+            rendered_jobs = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.render-chapter",
+                input_fields=(("render_run_id", str(payload["render_run_id"])),),
+                order_by="created_asc",
+                limit=500,
+            )
+            incomplete = [job for job in rendered_jobs if job["status"] != "completed"]
+            if not incomplete:
                 if current_run and current_run[0] == payload["render_run_id"]:
-                    rendered_jobs = work.connection.execute(
-                        """
-                        SELECT input_payload FROM omnix_jobs
-                         WHERE workspace_id = %s AND module = 'audiobook'
-                           AND job_type = 'audiobook.render-chapter'
-                           AND input_payload->>'render_run_id' = %s
-                         ORDER BY input_payload->>'chapter_id'
-                        """, (context.workspace_id, payload["render_run_id"]),
-                    ).fetchall()
-                    for (render_input,) in rendered_jobs:
+                    for rendered_job in sorted(
+                        rendered_jobs,
+                        key=lambda job: str((job["input_payload"] or {}).get("chapter_id") or ""),
+                    ):
+                        render_input = dict(rendered_job["input_payload"] or {})
                         chapter_id = str(render_input["chapter_id"])
                         assembly_job_id = f"ab:assemble:{text_hash(str(payload['render_run_id']) + ':' + chapter_id)}"
                         work.jobs.create_job_once(context, {

@@ -42,6 +42,9 @@ def _register_feature_modules(gateway) -> None:
         feature = load_feature(feature_id)
         capabilities.require(*feature.requires)
         loaded_features.append(feature)
+        settings_service = getattr(services, "settings", None)
+        if feature.settings and settings_service is not None:
+            settings_service.register_specs(tuple(feature.settings))
         install_runtime_hooks(feature.hooks)
         for handler in feature.job_handlers:
             job_handlers.register(handler)
@@ -54,15 +57,16 @@ def _register_feature_modules(gateway) -> None:
             capabilities=capabilities,
             services=services,
             logger=logging.getLogger(f"app.feature.{feature.id}"),
+            runtime_state=gateway.state,
         )
-        for installer in feature.installers:
-            installer(gateway, context)
         for router_factory in feature.routers:
             gateway.include_router(router_factory(context))
         for router_factory in feature.internal_routers:
-            gateway.include_router(router_factory(context))
+            gateway.include_router(router_factory(context), include_in_schema=False)
         for worker_factory in feature.background_workers:
-            register_background_worker(registry, worker_factory(context))
+            worker = worker_factory(context)
+            if worker is not None:
+                register_background_worker(registry, worker)
         if feature.lifecycle is not None:
             register_feature_lifecycle(gateway, feature.lifecycle)
         registered.append(feature.id)
@@ -70,6 +74,10 @@ def _register_feature_modules(gateway) -> None:
     gateway.state.feature_modules = tuple(registered)
     gateway.state.loaded_feature_modules = tuple(loaded_features)
     gateway.state.job_handler_registry = job_handlers
+    jobs = getattr(services, "jobs", None)
+    configure_handlers = getattr(jobs, "configure_handler_registry", None)
+    if callable(configure_handlers):
+        configure_handlers(job_handlers)
 
 
 def _install_kernel_extensions(gateway) -> None:
@@ -80,7 +88,7 @@ def _install_kernel_extensions(gateway) -> None:
     register_blocking_route_offload(gateway)
 
 
-def register_gateway_features(gateway):
+def compose_features(gateway):
     if getattr(gateway.state, "features_registered", False):
         return
     _install_kernel_extensions(gateway)

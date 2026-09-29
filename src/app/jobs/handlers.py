@@ -92,15 +92,21 @@ class JobHandlerRegistry:
         return tuple(sorted({spec.resource_class.value for spec in self._handlers.values()}))
 
     def validate_submission(self, request: CreateJobRequest) -> CreateJobRequest:
-        spec = self.require(request.type)
-        payload = spec.input_model.model_validate(request.input_payload or {})
-        updated = request.model_copy(
+        spec = self.get(request.type)
+        if spec is None:
+            return request
+        updated = (
+            spec.submission_policy(request)
+            if spec.submission_policy is not None
+            else request
+        )
+        payload = spec.input_model.model_validate(updated.input_payload or {})
+        return updated.model_copy(
             update={
                 "input_payload": payload.model_dump(mode="python"),
                 "resource_class": spec.resource_class,
             }
         )
-        return spec.submission_policy(updated) if spec.submission_policy else updated
 
     def execute(self, context: JobExecutionContext, job: JobRecord) -> JobRecord:
         spec = self.require(job.type)

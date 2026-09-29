@@ -492,7 +492,7 @@ def _default_workflow(
     checkpoint: ResearchExecutionCheckpoint | None = None,
     save_checkpoint: Callable[[str, ResearchExecutionCheckpoint], None] | None = None,
 ) -> DeepResearchWorkflowResult:
-    from app.assistant_context.web_search import WebSearchClient
+    from app.research.web_search import WebSearchClient
     from app.research.extraction import ReadablePageExtractor
     from app.research.planner import ResearchPlanner
     from app.research.policy import research_policy_from_env

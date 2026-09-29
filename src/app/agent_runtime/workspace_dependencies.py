@@ -9,7 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from .process_environment import normalize_windows_process_environment
+from app.runtime.process_environment import normalize_windows_process_environment
 
 
 class WorkspaceDependencyError(RuntimeError):

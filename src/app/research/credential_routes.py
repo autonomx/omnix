@@ -6,8 +6,8 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.persistence import provider_secret_store as secret_store
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.security import provider_secret_store as secret_store
+from app.errors import LegacyPersistenceRetired
 
 _RESEARCH_CREDENTIAL_PROVIDERS = ("brave", "tavily")
 _GET_ROUTE_NAME = "assistant_research_credentials_status_endpoint"
@@ -48,7 +48,6 @@ def register_research_credential_routes(app: FastAPI) -> None:
 
         @app.get(
             "/api/assistant/research/credentials",
-            include_in_schema=False,
             name=_GET_ROUTE_NAME,
         )
         async def assistant_research_credentials_status_endpoint() -> dict[str, object]:
@@ -58,7 +57,6 @@ def register_research_credential_routes(app: FastAPI) -> None:
 
         @app.post(
             "/api/assistant/research/credentials",
-            include_in_schema=False,
             name=_UPDATE_ROUTE_NAME,
         )
         async def assistant_research_credentials_update_endpoint(

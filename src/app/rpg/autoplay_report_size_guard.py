@@ -7,6 +7,7 @@ artifact bundle.  It runs only after the campaign has completed and never affect
 simulation truth.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import json
 import os
@@ -33,11 +34,11 @@ def _safe_int(value: Any, default: int) -> int:
 
 
 def _json_limit() -> int:
-    return _safe_int(os.environ.get("RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES"), DEFAULT_MAX_REPORT_JSON_BYTES)
+    return _safe_int(_env_str("RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES"), DEFAULT_MAX_REPORT_JSON_BYTES)
 
 
 def _html_limit() -> int:
-    return _safe_int(os.environ.get("RPG_AUTOPLAY_MAX_REPORT_HTML_BYTES"), DEFAULT_MAX_REPORT_HTML_BYTES)
+    return _safe_int(_env_str("RPG_AUTOPLAY_MAX_REPORT_HTML_BYTES"), DEFAULT_MAX_REPORT_HTML_BYTES)
 
 
 def _is_report_json(path_or_name: str | Path) -> bool:

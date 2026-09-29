@@ -22,7 +22,6 @@ def register_character_avatar_viseme_routes(
         response_model=CharacterVisemeGenerationBatch,
         status_code=202,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def create_character_avatar_visemes(character_id: str) -> CharacterVisemeGenerationBatch:
         try:
@@ -36,7 +35,6 @@ def register_character_avatar_viseme_routes(
         "/api/character-avatar-visemes/{batch_id}",
         response_model=CharacterVisemeGenerationBatch,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def get_character_avatar_visemes(batch_id: str) -> CharacterVisemeGenerationBatch:
         try:

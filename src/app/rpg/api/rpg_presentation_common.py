@@ -194,7 +194,7 @@ from app.rpg.visual.worker import (
     _complete_scene_illustration,
     process_pending_image_requests,
 )
-from app.config.access import load_settings, save_settings
+from app.settings.access import load_settings, save_settings
 
 
 def _jsonify(data: Dict[str, Any], status_code: int = 200) -> JSONResponse:

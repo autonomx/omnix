@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.gateway.live_chat_evaluation_store import (
+from app.chat.evaluation_store import (
     LiveChatEvaluationStore,
     PresencePolicyValues,
     PresencePolicyVersionCreate,

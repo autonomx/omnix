@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from app.jobs.durable_feature_worker import (
+from app.worker_runtime.durable_feature_worker import (
     _AuthorityBoundJobStore,
     DurableFeatureJobWorker,
     execute_durable_feature_job,
@@ -106,6 +106,29 @@ def test_registry_dispatch_does_not_require_core_job_type_changes():
         registry,
     )
     assert result is expected
+
+
+def test_unknown_durable_type_fails_nonretryably_with_lease_credentials():
+    calls = []
+    expected = SimpleNamespace(status="failed")
+
+    class Store:
+        def fail_job(self, job_id, request):
+            calls.append((job_id, request))
+            return expected
+
+    lease = SimpleNamespace(worker_id="worker:test", token="lease:test")
+    job = SimpleNamespace(type="feature.missing", id="job:missing", lease=lease)
+    result = execute_durable_feature_job(Store(), job, JobHandlerRegistry())
+
+    assert result is expected
+    assert len(calls) == 1
+    job_id, failure = calls[0]
+    assert job_id == "job:missing"
+    assert failure.code == "unsupported_job_type"
+    assert failure.retryable is False
+    assert failure.worker_id == "worker:test"
+    assert failure.lease_token == "lease:test"
 
 
 @pytest.mark.parametrize("live", [True, False])

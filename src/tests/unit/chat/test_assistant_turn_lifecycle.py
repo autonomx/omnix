@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.chat.assistant_turns import AssistantTurnCoordinator
 from app.chat.compaction import build_deterministic_summary

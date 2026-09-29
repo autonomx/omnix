@@ -342,7 +342,7 @@ def _default_output_dir() -> Path:
 
 
 def _load_provider():
-    from app.shared import get_provider
+    from app.providers.service import get_provider
 
     return get_provider()
 

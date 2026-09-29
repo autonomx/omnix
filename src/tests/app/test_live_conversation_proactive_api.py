@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.characters import api as character_api
+from app.gateway import character_integration_routes
 from app.gateway.main import create_gateway_app
 from app.chat.character_store import InMemoryChatSessionStore
 from app.persistence.runtime import reset_persistence_mode_cache
@@ -22,7 +22,9 @@ def _client(monkeypatch) -> TestClient:
         create_gateway_app(
             chat_store_factory=lambda: chat_store,
             job_store_factory=lambda: job_store,
-        )
+        ),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
     )
 
 
@@ -62,7 +64,7 @@ def test_proactive_stream_is_transient_until_delivery_commit(
             },
         }
 
-    monkeypatch.setattr(character_api, "stream_proactive_turn_chunks", fake_proactive_stream)
+    monkeypatch.setattr(character_integration_routes, "stream_proactive_turn_chunks", fake_proactive_stream)
     before = client.get(f"/api/chat/sessions/{session_id}").json()
 
     response = client.post(
@@ -119,7 +121,11 @@ def test_proactive_stream_is_transient_until_delivery_commit(
 def test_proactive_delivery_requires_existing_session(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(chat_store_factory=InMemoryChatSessionStore),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
 
     response = client.post(
         "/api/chat/sessions/chat:missing/live-conversation/proactive/delivery",

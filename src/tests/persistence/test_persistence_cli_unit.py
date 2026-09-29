@@ -28,6 +28,7 @@ def test_cli_usage_errors_are_machine_readable_json(capsys) -> None:
 
 def test_cli_exposes_authoritative_cutover_and_recovery_commands() -> None:
     parser = cli.build_parser()
+    status = parser.parse_args(["status", "--json"])
     cutover = parser.parse_args(
         [
             "cutover",
@@ -59,6 +60,8 @@ def test_cli_exposes_authoritative_cutover_and_recovery_commands() -> None:
     )
     assert cutover.cutover_command == "activate-frozen"
     assert recovery.recovery_command == "verify-blobs"
+    assert status.command == "status"
+    assert status.json is True
 
 
 def test_operator_output_redacts_secret_keys_and_credential_urls(capsys) -> None:

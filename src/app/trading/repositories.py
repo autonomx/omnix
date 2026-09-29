@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from app.persistence.errors import RevisionConflict
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 
@@ -41,7 +41,7 @@ class TradingDocumentRepository:
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
 
     @staticmethod

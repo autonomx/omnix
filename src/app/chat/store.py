@@ -1,8 +1,6 @@
 """Local backend-owned chat session history store."""
 from __future__ import annotations
 
-from app.config.env import environment
-
 import json
 import os
 import re
@@ -10,8 +8,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-from app.runtime.paths import resources_data_root
 
 from .concurrency import serialized_chat_mutation
 
@@ -103,19 +99,13 @@ def _quick_research_uses_chat_lane(_content: str, research_mode: str | None) -> 
     return True
 
 
-def default_chat_store_path() -> Path:
-    override = environment().get("OMNIX_CHAT_STORE_PATH")
-    if override:
-        return Path(override)
-    return resources_data_root() / "omnix_chat_sessions.json"
-
-
 class ChatSessionStore:
-    """Small JSON-backed chat history store."""
+    """Explicit-path JSON adapter for tests and one-time legacy imports."""
 
     def __init__(self, path: str | Path | None = None) -> None:
-        self.path = Path(path) if path is not None else default_chat_store_path()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = Path(path) if path is not None else None
+        if self.path is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def list_sessions(self) -> ChatSessionListResponse:
         sessions = [self._summary(session) for session in self._load_sessions()]
@@ -716,9 +706,12 @@ class ChatSessionStore:
         return messages
 
     def _load_sessions(self) -> list[ChatSession]:
-        if not self.path.exists():
+        path = self.path
+        if path is None:
+            raise RuntimeError("JSON chat storage requires an explicit path")
+        if not path.exists():
             return []
-        raw = self.path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8")
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as error:
@@ -730,13 +723,16 @@ class ChatSessionStore:
         return [ChatSession.model_validate(session) for session in payload.get("sessions", [])]
 
     def _save_sessions(self, sessions: list[ChatSession]) -> None:
+        path = self.path
+        if path is None:
+            raise RuntimeError("JSON chat storage requires an explicit path")
         payload = {"sessions": [session.model_dump(mode="json") for session in sessions]}
-        temporary = self.path.with_name(
-            f".{self.path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+        temporary = path.with_name(
+            f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
         )
         try:
             temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-            temporary.replace(self.path)
+            temporary.replace(path)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -751,11 +747,6 @@ class ChatSessionStore:
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
-
-
-def default_chat_store() -> ChatSessionStore:
-    from app.chat.character_store import default_chat_store as factory
-    return factory()
 
 
 def _provider_message(message, *, content: str | None = None):

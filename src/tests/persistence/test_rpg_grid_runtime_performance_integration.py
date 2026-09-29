@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.grid_runtime_performance import GridRuntimeBudget
@@ -85,7 +85,7 @@ def _definition() -> GridMapDefinition:
 
 
 def _seed(database: PostgresDatabase) -> str:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     definition = _definition()
     revision = compile_world_revision(
         world_id=definition.world_id,
@@ -155,7 +155,7 @@ def _seed(database: PostgresDatabase) -> str:
 
 
 def _durable_counts(database: PostgresDatabase, map_instance_id: str) -> dict[str, int]:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         campaign = work.rpg.get_campaign(context, "campaign:performance")
         instance = work.map_instances.get_instance(context, map_instance_id)

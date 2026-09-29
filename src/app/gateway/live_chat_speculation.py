@@ -11,7 +11,6 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from functools import wraps
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -34,7 +33,6 @@ from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
 
 _ROUTE_SENTINEL = "_omnix_live_chat_speculation_registered"
-_SESSION_CACHE_HOOK_SENTINEL = "_omnix_live_speculation_session_cache_hook_installed"
 _SPECULATION_TTL_SECONDS = 90.0
 _SESSION_CACHE_TTL_SECONDS = 120.0
 _SESSION_LOAD_WAIT_SECONDS = 5.0
@@ -140,87 +138,11 @@ def clear_live_speculation_session_cache() -> None:
         event.set()
 
 
-def _install_live_speculation_session_cache_hook() -> None:
-    """Prime speculation snapshots from normal PostgreSQL chat operations."""
-
-    from app.chat.persistence.chat_runtime_compat import (
-        PostgresCharacterChatSessionStore,
-        PostgresChatSessionStore,
-    )
-
-    if getattr(PostgresCharacterChatSessionStore, _SESSION_CACHE_HOOK_SENTINEL, False):
-        return
-
-    original_get_session = PostgresChatSessionStore.get_session
-    original_begin_user_message = PostgresCharacterChatSessionStore.begin_user_message
-    original_complete_streamed_reply = (
-        PostgresCharacterChatSessionStore.complete_streamed_reply
-    )
-
-    @wraps(original_get_session)
-    def cached_get_session(
-        store: PostgresChatSessionStore,
-        session_id: str,
-    ) -> Any | None:
-        session = original_get_session(store, session_id)
-        if session is not None:
-            prime_live_speculation_session(session)
-        return session
-
-    @wraps(original_begin_user_message)
-    def cached_begin_user_message(
-        store: PostgresCharacterChatSessionStore,
-        session_id: str,
-        request: SendChatMessageRequest,
-        **kwargs: Any,
-    ) -> Any:
-        result = original_begin_user_message(
-            store,
-            session_id,
-            request,
-            **kwargs,
-        )
-        if result is not None:
-            prime_live_speculation_session(result[0])
-        return result
-
-    @wraps(original_complete_streamed_reply)
-    def cached_complete_streamed_reply(
-        store: PostgresCharacterChatSessionStore,
-        session_id: str,
-        user_message_id: str,
-        content: str,
-        metadata: dict[str, Any],
-    ) -> Any | None:
-        session = original_complete_streamed_reply(
-            store,
-            session_id,
-            user_message_id,
-            content,
-            metadata,
-        )
-        if session is not None:
-            prime_live_speculation_session(session)
-        return session
-
-    PostgresChatSessionStore.get_session = cached_get_session
-    PostgresCharacterChatSessionStore.begin_user_message = cached_begin_user_message
-    PostgresCharacterChatSessionStore.complete_streamed_reply = (
-        cached_complete_streamed_reply
-    )
-    setattr(
-        PostgresCharacterChatSessionStore,
-        _SESSION_CACHE_HOOK_SENTINEL,
-        True,
-    )
-
-
 def register_live_chat_speculation_routes(
     app: FastAPI,
     *,
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
 ) -> None:
-    _install_live_speculation_session_cache_hook()
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
@@ -313,7 +235,6 @@ def register_live_chat_speculation_routes(
 
     @app.post(
         "/api/live/speculation/sessions/{session_id}/{generation_id}/accept",
-        include_in_schema=False,
     )
     async def accept_live_speculation(
         session_id: str,

@@ -7,7 +7,7 @@ from app.assets.models import AssetListResponse, AssetMigrationPreview, AssetRec
 
 from .blob_store import LocalBlobStore
 from .database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.runtime.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
 
 

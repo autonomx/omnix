@@ -418,7 +418,6 @@ def create_trading_strategy_operations_router(
     @router.get(
         "/yahoo-acquisition-status",
         response_model=StrategyRuntimeMonitorStatus,
-        include_in_schema=False,
     )
     async def yahoo_acquisition_operations_status(
         request: Request,
@@ -441,7 +440,6 @@ def create_trading_strategy_operations_router(
     @router.get(
         "/interday-status",
         response_model=InterdayMonitorOperationsStatus,
-        include_in_schema=False,
     )
     async def interday_monitor_operations_status(request: Request) -> InterdayMonitorOperationsStatus:
         # This is an operator/Codex diagnostic endpoint rather than a public UI

@@ -260,7 +260,7 @@ def _parse_mapping(value: Any) -> dict[str, Any]:
             continue
         try:
             parsed = json.loads(candidate)
-        except Exception:
+        except json.JSONDecodeError:
             continue
         if isinstance(parsed, dict):
             return parsed

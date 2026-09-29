@@ -13,6 +13,19 @@ from app.rpg.map_observer_service import (
     observe_campaign_map,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgObserveMapRequestBody(_TypedRequestModel):
+    sight_radius: int | None = _typed_field(default=None, ge=1, le=128)
+    detection_radius: int | None = _typed_field(default=None, ge=0, le=128)
+    remember_terrain: bool | None = None
+    expected_knowledge_revision: int | None = _typed_field(default=None, ge=0)
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_observer_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_observer_route_hook_installed"
 
@@ -49,14 +62,13 @@ def register_rpg_observer_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/observe",
-        include_in_schema=False,
     )
-    async def rpg_observe_map(
+    def rpg_observe_map(
         map_instance_id: str,
         observer_actor_id: str,
-        request: Request,
+        request: Request, request_body: RpgObserveMapRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         expected = payload.pop("expected_knowledge_revision", None)
         try:
             policy = ObserverPerceptionPolicy.model_validate(payload)
@@ -74,7 +86,6 @@ def register_rpg_observer_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/map-instances/{map_instance_id}/observers/{observer_actor_id}/projection",
-        include_in_schema=False,
     )
     def rpg_observer_projection(
         map_instance_id: str,

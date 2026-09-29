@@ -16,7 +16,7 @@ from app.jobs.models import JobStatus
 from app.runtime.hooks import invoke_runtime_hook
 
 from app.jobs.image_contracts import ImageGenerateInput, ImageOutputRef, image_title_from_prompt
-from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
+from app.jobs.inline_execution_compat import require_execution_authority
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
 
 IMAGE_JOB_TYPE = "image.generate"
@@ -327,7 +327,7 @@ def _start_image_generation_progress_poll(
             get_image_generation_progress,
             is_image_service_enabled,
         )
-    except Exception:
+    except ImportError:
         return None
 
     if not is_image_service_enabled():
@@ -340,7 +340,7 @@ def _start_image_generation_progress_poll(
         nonlocal last_percent
         try:
             data = get_image_generation_progress(job_id)
-        except Exception:
+        except RuntimeError:
             return
         if not bool(data.get("ok")):
             return

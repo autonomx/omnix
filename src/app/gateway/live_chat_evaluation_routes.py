@@ -5,7 +5,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query
 
-from .live_chat_evaluation_store import (
+from app.chat.evaluation_store import (
+    LiveChatEvaluationExport,
     LiveChatEvaluationStore,
     PresencePolicyVersion,
     PresencePolicyVersionCreate,
@@ -29,7 +30,7 @@ def register_live_chat_evaluation_routes(
     setattr(gateway.state, _ROUTE_SENTINEL, True)
     def get_store():
         return store if store is not None else default_live_chat_evaluation_store()
-    router = APIRouter(prefix="/api/tts/live-call", include_in_schema=False)
+    router = APIRouter(prefix="/api/tts/live-call")
 
     @router.post("/evaluations", response_model=VoiceSessionEvaluationRecord)
     def upsert_voice_session_evaluation(
@@ -63,9 +64,9 @@ def register_live_chat_evaluation_routes(
                 get_store().update_release_gate_status(record.evaluation_id, report.status)
         return report
 
-    @router.get("/evaluations/export")
-    def export_voice_session_evaluations() -> dict:
-        return get_store().export()
+    @router.get("/evaluations/export", response_model=LiveChatEvaluationExport)
+    def export_voice_session_evaluations() -> LiveChatEvaluationExport:
+        return LiveChatEvaluationExport.model_validate(get_store().export())
 
     @router.get("/evaluations/{evaluation_id}", response_model=VoiceSessionEvaluationRecord)
     def get_voice_session_evaluation(evaluation_id: str) -> VoiceSessionEvaluationRecord:

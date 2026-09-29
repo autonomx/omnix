@@ -1,8 +1,8 @@
 """Clean RPG session launch and save-management gateway routes."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
-import os
 from functools import wraps
 from typing import Any, Callable
 
@@ -31,6 +31,27 @@ from app.rpg.session.new_game import (
 )
 from app.rpg.session.service import list_session_summaries, load_session
 from app.rpg.session.world_ability_integration import ensure_world_scale_abilities
+
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgNewGameRequestBody(RpgNewGameRequest):
+    genesis: dict[str, Any] | None = None
+
+class RpgApplyTurnRequestBody(_TypedRequestModel):
+    command: str | dict[str, Any] | None = None
+    player_input: str | dict[str, Any] | None = None
+    text: str | dict[str, Any] | None = None
+    message: str | dict[str, Any] | None = None
+
+class RpgLocalDialogueFixtureRequestBody(_TypedRequestModel):
+    case_id: _TypedRequestAny = None
+    run_id: _TypedRequestAny = None
+    session_id: _TypedRequestAny = None
+
 
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_session_route_hook_installed"
@@ -235,7 +256,7 @@ def _require_local_dialogue_fixture_request(request: Request) -> None:
     loopback_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
     if client_host not in loopback_hosts:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
-    if str(os.environ.get("CI") or "").strip().casefold() in {"1", "true", "yes", "on"}:
+    if str(_env_str("CI") or "").strip().casefold() in {"1", "true", "yes", "on"}:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
     if request.headers.get(_LOCAL_DIALOGUE_FIXTURE_HEADER) != "1":
         raise HTTPException(
@@ -325,10 +346,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
 
     @app.post("/api/rpg/new-game", tags=["rpg-session"])
     async def rpg_new_game(
-        http_request: Request,
-        request: RpgNewGameRequest,
+        http_request: Request, request_body: RpgNewGameRequestBody,
     ) -> dict[str, Any]:
-        raw_payload = await http_request.json()
+        raw_payload = request_body.model_dump(exclude_unset=True, by_alias=True)
+        request = RpgNewGameRequest.model_validate(raw_payload)
         return await asyncio.to_thread(
             lambda: _with_rpg_response_surface(
                 _create_new_game_from_payload(raw_payload, request)
@@ -350,13 +371,12 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/sessions/{session_id}/turn",
         tags=["rpg-session"],
-        include_in_schema=False,
     )
     async def rpg_apply_turn(
         session_id: str,
-        http_request: Request,
+        http_request: Request, request_body: RpgApplyTurnRequestBody,
     ) -> Any:
-        raw_payload = await http_request.json()
+        raw_payload = request_body.model_dump(exclude_unset=True, by_alias=True)
         command = _foreground_turn_command(raw_payload)
         return await execute_foreground_rpg_turn(
             session_id=session_id,
@@ -367,11 +387,10 @@ def register_rpg_session_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/local-qualification/dialogue-fixture",
         tags=["rpg-session"],
-        include_in_schema=False,
     )
-    async def rpg_local_dialogue_fixture(http_request: Request) -> dict[str, Any]:
+    async def rpg_local_dialogue_fixture(http_request: Request, request_body: RpgLocalDialogueFixtureRequestBody) -> dict[str, Any]:
         _require_local_dialogue_fixture_request(http_request)
-        payload = await http_request.json()
+        payload = request_body.model_dump(exclude_unset=True, by_alias=True)
         from app.rpg.local_dialogue_quality_fixtures import (
             dialogue_benchmark_case,
             provision_local_dialogue_fixture,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.jobs import inline_feature_jobs
+from app.rpg.jobs import turn_executor
 from app.rpg.presentation.visible_response import visible_response_text
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -22,7 +22,7 @@ def test_all_delivery_paths_share_canonical_visible_text() -> None:
     expected = visible_response_text(result, result["player_input"])
 
     assert expected
-    assert inline_feature_jobs._rpg_turn_visible_text(result) == expected
+    assert turn_executor._rpg_turn_visible_text(result) == expected
 
 
 def test_legacy_gateway_response_bridge_and_duplicate_route_are_deleted() -> None:
@@ -36,7 +36,7 @@ def test_gateway_and_job_guards_do_not_patch_visible_formatters() -> None:
     gateway_init = (_REPO_ROOT / "src" / "app" / "gateway" / "__init__.py").read_text(encoding="utf-8")
     mirror = (_REPO_ROOT / "src" / "app" / "gateway" / "rpg_turn_job_mirror.py").read_text(encoding="utf-8")
     session_routes = (_REPO_ROOT / "src" / "app" / "gateway" / "rpg_session_routes.py").read_text(encoding="utf-8")
-    job_guard = (_REPO_ROOT / "src" / "app" / "jobs" / "rpg_turn_job_guard.py").read_text(encoding="utf-8")
+    job_guard = (_REPO_ROOT / "src" / "app" / "rpg" / "jobs" / "turn_job_guard.py").read_text(encoding="utf-8")
 
     assert "rpg_visible_response_bridge" not in gateway_init
     assert "_visible_turn_text" not in mirror

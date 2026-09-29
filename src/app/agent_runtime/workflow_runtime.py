@@ -17,7 +17,7 @@ from app.security.tenant_context import current_tenant
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.unit_of_work import unit_of_work
 
-from .capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from .interfaces import WorkflowRuntime
 from .workflows import (
     WORKFLOW_END,

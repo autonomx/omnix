@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.runtime.config import RuntimeConfig
+from .runtime import RuntimeConfig
 
 
 class NetworkConfig(BaseModel):

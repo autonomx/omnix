@@ -13,6 +13,20 @@ from app.rpg.debug_logging import (
     rpg_debug_log_status,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgDebugClientEventRequestBody(_TypedRequestModel):
+    event: str | None = "client.event"
+    session_id: str | None = None
+    turn_id: str | None = None
+    trace_id: str | None = None
+    duration_ms: float | None = None
+
+
 _HOOK_SENTINEL = "_omnix_rpg_debug_route_hook_installed"
 _MIDDLEWARE_SENTINEL = "_omnix_rpg_debug_middleware_installed"
 _ROUTE_SENTINEL = "_omnix_rpg_debug_routes_installed"
@@ -37,18 +51,17 @@ def install_rpg_debug_route_hook() -> None:
 
 def register_rpg_debug_routes(app: FastAPI) -> None:
     configure_rpg_debug_logging()
-    _install_rpg_debug_middleware(app)
     if getattr(app.state, _ROUTE_SENTINEL, False):
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.get("/api/rpg/debug/log-status", tags=["rpg-debug"], include_in_schema=False)
+    @app.get("/api/rpg/debug/log-status", tags=["rpg-debug"])
     async def rpg_debug_status() -> dict[str, Any]:
         return {"ok": True, **rpg_debug_log_status()}
 
-    @app.post("/api/rpg/debug/event", tags=["rpg-debug"], include_in_schema=False)
-    async def rpg_debug_client_event(request: Request) -> dict[str, Any]:
-        payload = await request.json()
+    @app.post("/api/rpg/debug/event", tags=["rpg-debug"])
+    def rpg_debug_client_event(request: Request, request_body: RpgDebugClientEventRequestBody) -> dict[str, Any]:
+        payload = request_body.model_dump(exclude_unset=True, by_alias=True)
         if not isinstance(payload, dict):
             payload = {"value": payload}
         event = str(payload.pop("event", "client.event") or "client.event").strip()
@@ -72,7 +85,7 @@ def register_rpg_debug_routes(app: FastAPI) -> None:
         return {"ok": True, "trace_id": trace_id}
 
 
-def _install_rpg_debug_middleware(app: FastAPI) -> None:
+def install_rpg_debug_middleware(app: FastAPI) -> None:
     if getattr(app.state, _MIDDLEWARE_SENTINEL, False):
         return
     setattr(app.state, _MIDDLEWARE_SENTINEL, True)

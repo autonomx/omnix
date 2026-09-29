@@ -16,7 +16,6 @@ from .live_chat_lmstudio_diagnostics import (
 )
 from .live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
 from .live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
-from .live_chat_postgres_fast_path import install_live_chat_postgres_fast_path
 from .live_chat_prompt_cache import install_live_chat_prompt_cache_hook
 from .live_chat_prompt_dependency_stages import (
     install_live_chat_prompt_dependency_stage_hook,
@@ -127,7 +126,6 @@ def initialize_gateway_runtime_hooks():
 
     install_companion_activity_user_turn_hook()
     install_live_sse_transport_hook(constructor_hook=False)
-    install_live_chat_postgres_fast_path()
     install_live_chat_low_latency_stream_hook()
     install_live_chat_provider_metrics_hook()
     install_live_chat_stream_retry_hook()

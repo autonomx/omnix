@@ -24,6 +24,27 @@ from app.rpg.worlds.generation_review_analytics import (
 from app.rpg.worlds.generation_review_state import review_state
 from app.rpg.worlds.generation_worker import kick_world_generation_worker
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgWorldGenerationRetryReviewRequestBody(_TypedRequestModel):
+    retry_scopes: _TypedRequestAny = None
+
+class RpgWorldGenerationAcceptCandidateRequestBody(_TypedRequestModel):
+    candidate: _TypedRequestAny = None
+    expected_candidate_hash: _TypedRequestAny = None
+    waiver_reason: _TypedRequestAny = None
+
+class RpgWorldGenerationAcceptAllRequestBody(_TypedRequestModel):
+    waiver_reason: _TypedRequestAny = None
+
+class RpgWorldGenerationRetryDecisionRequestBody(_TypedRequestModel):
+    decision: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_generation_review_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_generation_review_hook_installed"
 _MAX_RETRY_LINEAGE = 6
@@ -169,7 +190,6 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/world-generation/{run_id}/results",
-        include_in_schema=False,
     )
     def rpg_world_generation_results(run_id: str) -> dict[str, Any]:
         try:
@@ -187,7 +207,6 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}",
-        include_in_schema=False,
     )
     def rpg_world_generation_topic_result(
         run_id: str,
@@ -218,13 +237,12 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/retry-review",
-        include_in_schema=False,
     )
-    async def rpg_world_generation_retry_review(
+    def rpg_world_generation_retry_review(
         run_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldGenerationRetryReviewRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         topic_ids = _topic_ids(payload)
         retry_scopes = payload.get("retry_scopes")
         if retry_scopes is not None and not isinstance(retry_scopes, Mapping):
@@ -248,14 +266,13 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}/accept",
-        include_in_schema=False,
     )
-    async def rpg_world_generation_accept_candidate(
+    def rpg_world_generation_accept_candidate(
         run_id: str,
         topic_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldGenerationAcceptCandidateRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         candidate = payload.get("candidate")
         if candidate is not None and not isinstance(candidate, Mapping):
             raise HTTPException(
@@ -275,13 +292,12 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/accept-all",
-        include_in_schema=False,
     )
-    async def rpg_world_generation_accept_all(
+    def rpg_world_generation_accept_all(
         run_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldGenerationAcceptAllRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return accept_world_generation_candidates(
                 run_id,
@@ -294,14 +310,13 @@ def register_rpg_world_generation_review_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/results/{topic_id}/decision",
-        include_in_schema=False,
     )
-    async def rpg_world_generation_retry_decision(
+    def rpg_world_generation_retry_decision(
         run_id: str,
         topic_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldGenerationRetryDecisionRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         decision = str(payload.get("decision") or "")
         try:
             return decide_world_generation_retry(

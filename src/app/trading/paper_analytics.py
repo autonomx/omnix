@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
@@ -552,7 +552,7 @@ class TradingPaperAnalytics:
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
 
     def list_epochs(self, account_id: str) -> list[PaperSimulationEpoch]:

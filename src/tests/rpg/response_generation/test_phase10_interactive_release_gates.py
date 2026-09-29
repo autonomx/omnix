@@ -7,7 +7,6 @@ from threading import Lock
 from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
-from app.jobs.store import InMemoryJobStore
 from app.rpg.presentation.dialogue_quality import enforce_dialogue_quality
 from app.rpg.presentation.turn_response import build_turn_response_v2
 from app.rpg.presentation.visible_response import visible_response_text
@@ -17,6 +16,7 @@ from app.rpg.release_gates import (
     evaluate_session_release_gates,
     evaluate_turn_response_release_gates,
 )
+from tests.support.in_memory_jobs import InMemoryJobStore
 from app.rpg.session.interaction_lifecycle import initialize_interaction_lifecycle
 from app.rpg.session.interaction_timeline import commit_turn_interaction, interaction_events
 

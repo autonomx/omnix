@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.assistant_memory.models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryRecord,
     MemorySnapshot,
@@ -15,10 +15,15 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.persistence.repository_registry import install_repository_specs
+from app.assistant_memory.persistence.repository_specs import (
+    ASSISTANT_MEMORY_REPOSITORY_SPECS,
+)
 
 
 class PostgresMemoryRepositoryAdapter:
     def __init__(self, database: PostgresDatabase | None = None) -> None:
+        install_repository_specs(ASSISTANT_MEMORY_REPOSITORY_SPECS)
         self.database = database or default_database()
         self.context = current_tenant()
 

@@ -6,9 +6,9 @@ It never substitutes IEX, web quotes, adjusted daily bars, or partial prints.
 """
 
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
-import os
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -53,11 +53,11 @@ _DEFAULT_CREATE_AFTER = time(16, 5)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def session_reconciliation_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR", "1")
 
@@ -65,7 +65,7 @@ def session_reconciliation_monitor_enabled() -> bool:
 def _interval_seconds() -> float:
     try:
         value = float(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS",
                 "300",
             )
@@ -78,7 +78,7 @@ def _interval_seconds() -> float:
 def _retry_minutes() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES",
                 "15",
             )
@@ -91,7 +91,7 @@ def _retry_minutes() -> int:
 def _max_age_days() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS",
                 "7",
             )

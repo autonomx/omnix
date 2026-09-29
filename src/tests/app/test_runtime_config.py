@@ -55,6 +55,17 @@ def test_production_config_cannot_be_reinterpreted_after_binding(monkeypatch):
         runtime.install_runtime_config(RuntimeConfig())
 
 
+def test_unbound_runtime_config_reads_the_typed_environment(monkeypatch):
+    monkeypatch.setenv('OMNIX_GATEWAY_BACKGROUND_ROLE', 'api')
+    monkeypatch.setenv('OMNIX_TTS_URL', 'http://localhost:5101')
+
+    config = runtime.get_runtime_config()
+
+    assert config.gateway_role is GatewayRole.API
+    assert config.use_remote_tts
+    assert config.tts is not None and config.tts.url == 'http://localhost:5101'
+
+
 def test_api_capabilities_exclude_singleton_and_local_gpu_work():
     capabilities = RuntimeCapabilities.from_config(RuntimeConfig(gateway_role=GatewayRole.API))
     assert capabilities.allows(Capability.SERVE_API)
@@ -74,3 +85,40 @@ def test_worker_discovery_is_an_immutable_normalized_snapshot(monkeypatch):
     config = RuntimeConfig.from_environment({'OMNIX_WORKER_CUSTOM_URL': 'http://LOCALHOST:8000/'})
     monkeypatch.setenv('OMNIX_WORKER_CUSTOM_URL', 'http://other:9000')
     assert config.worker_discovery_environment()['OMNIX_WORKER_CUSTOM_URL'] == 'http://localhost:8000'
+
+
+def test_migrate_on_start_is_limited_to_local_development_workers():
+    from app.production import maybe_apply_migrations_on_start
+
+    calls = []
+    assert maybe_apply_migrations_on_start(
+        RuntimeConfig(),
+        env={"OMNIX_MIGRATE_ON_START": "false"},
+        apply_migrations_fn=lambda: calls.append("apply"),
+    ) is False
+    assert calls == []
+
+    assert maybe_apply_migrations_on_start(
+        RuntimeConfig(),
+        env={
+            "OMNIX_MIGRATE_ON_START": "true",
+            "OMNIX_AUTH_MODE": "local",
+            "OMNIX_ENV": "development",
+        },
+        apply_migrations_fn=lambda: calls.append("apply"),
+    ) is True
+    assert calls == ["apply"]
+
+    unsafe = (
+        (RuntimeConfig(gateway_role=GatewayRole.API), {"OMNIX_AUTH_MODE": "local", "OMNIX_ENV": "development"}),
+        (RuntimeConfig(), {"OMNIX_AUTH_MODE": "oidc", "OMNIX_ENV": "development"}),
+        (RuntimeConfig(), {"OMNIX_AUTH_MODE": "local", "OMNIX_ENV": "production"}),
+    )
+    for config, values in unsafe:
+        with pytest.raises(RuntimeError, match="local-auth development worker"):
+            maybe_apply_migrations_on_start(
+                config,
+                env={"OMNIX_MIGRATE_ON_START": "true", **values},
+                apply_migrations_fn=lambda: calls.append("unsafe"),
+            )
+    assert calls == ["apply"]

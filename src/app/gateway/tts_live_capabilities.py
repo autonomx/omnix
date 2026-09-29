@@ -56,6 +56,6 @@ def register_tts_live_capability_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.get("/api/tts/live-call/capabilities", include_in_schema=False)
+    @app.get("/api/tts/live-call/capabilities")
     async def tts_live_call_capabilities() -> dict[str, Any]:
         return live_tts_capabilities_payload()

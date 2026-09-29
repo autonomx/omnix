@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any
+from pydantic import ValidationError
 
 from app.chat.assistant_turns import AssistantTurnCoordinator, AssistantTurnRecord
 from app.persistence.document_store import PostgresDocumentStore
@@ -11,13 +11,17 @@ from app.persistence.transaction_binding import after_commit
 
 
 class PostgresAssistantTurnCoordinator(AssistantTurnCoordinator):
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path | None = None, *, database=None) -> None:
         if path is not None:
             raise RuntimeError("file-backed assistant-turn authority is retired")
         self._record_type = AssistantTurnRecord
         self.path = Path("postgresql:/assistant-turns")
         self._lock = threading.RLock()
-        self._documents = PostgresDocumentStore()
+        self._documents = (
+            PostgresDocumentStore(database=database)
+            if database is not None
+            else PostgresDocumentStore()
+        )
         self._records = self._load()
         self._persisted_records = {
             key: record.model_dump(mode="json")
@@ -34,7 +38,7 @@ class PostgresAssistantTurnCoordinator(AssistantTurnCoordinator):
         for item in payload if isinstance(payload, list) else []:
             try:
                 record = AssistantTurnRecord.model_validate(item)
-            except Exception:
+            except ValidationError:
                 continue
             records[record.assistant_turn_id] = record
         for _, item, _ in self._documents.list(
@@ -44,7 +48,7 @@ class PostgresAssistantTurnCoordinator(AssistantTurnCoordinator):
         ):
             try:
                 record = AssistantTurnRecord.model_validate(item)
-            except Exception:
+            except ValidationError:
                 continue
             records[record.assistant_turn_id] = record
         return records

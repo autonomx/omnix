@@ -520,39 +520,7 @@ class PostgresLegacyImporter:
                 work.chats.append_message(context, stable_id, dict(message))
             return "omnix_chat_sessions", stable_id, None
         if entity_type == "jobs":
-            job = work.jobs.create_job(
-                context,
-                {
-                    "id": stable_id,
-                    "module": item.get("module", "legacy"),
-                    "job_type": item.get("job_type") or item.get("type") or "legacy",
-                    "resource_class": item.get("resource_class", "cpu"),
-                    "priority": item.get("priority", 0),
-                    "max_attempts": item.get("max_attempts", 3),
-                    "input_payload": item.get("input_payload") or {},
-                    "metadata": {**dict(item.get("metadata") or {}), "legacy_import": True},
-                },
-            )
-            status = str(item.get("status") or "queued")
-            work.connection.execute(
-                """
-                UPDATE omnix_jobs SET status = %s, output_refs = %s::jsonb,
-                    progress = %s::jsonb, error = %s::jsonb,
-                    attempt_count = %s, completed_at = %s::timestamptz,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND workspace_id = %s
-                """,
-                (
-                    status,
-                    _canonical(item.get("output_refs") or []),
-                    _canonical(item.get("progress") or {}),
-                    _canonical(item.get("error")) if item.get("error") is not None else None,
-                    int(item.get("attempt_count", 0)),
-                    item.get("completed_at"),
-                    job["id"],
-                    context.workspace_id,
-                ),
-            )
+            work.jobs.import_job(context, job_id=stable_id, item=item)
             return "omnix_jobs", stable_id, None
         if entity_type == "rpg_campaigns":
             state = dict(item.get("state") or {})

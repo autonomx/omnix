@@ -23,6 +23,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from app.config.env import env_int
 from app.runtime.net import allowed_origins, bind_host
 from app.security.model_service import ModelServiceMiddleware
 
@@ -344,7 +345,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "openai_api:app",
         host=bind_host(),
-        port=int(os.environ.get("OMNIX_OPENAI_API_PORT", "8101")),
+        port=env_int("OMNIX_OPENAI_API_PORT", 8101, minimum=1, maximum=65535),
         reload=False,
         log_level="info"
     )

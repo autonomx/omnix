@@ -5,7 +5,7 @@ from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException, Query
 
-from app.chat import ChatSessionStore, default_chat_store
+from app.conversation.contracts import ChatSessionReader
 
 from .controls import (
     MemoryExportResponse,
@@ -33,7 +33,7 @@ from .management import (
     require_memory_write,
     resolve_session_scope,
 )
-from .models import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
+from app.memory_contracts import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
 from .observability import MemoryUsageResponse, memory_usage_snapshot
 from .repository import MemoryConflictError, MemoryNotFoundError
 from .service import MemoryPolicyError, MemoryService, default_memory_service
@@ -56,7 +56,7 @@ def _translate_memory_error(exc: Exception) -> HTTPException:
 def register_memory_management_routes(
     app: FastAPI,
     *,
-    chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
+    chat_store_factory: Callable[[], ChatSessionReader],
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
 ) -> None:
     names = {getattr(route, "name", "") for route in app.routes}
@@ -81,7 +81,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory",
             response_model=MemoryListResponse,
-            include_in_schema=False,
             name="assistant_memory_list_endpoint",
         )
         async def assistant_memory_list_endpoint(
@@ -111,7 +110,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_create_endpoint",
         )
         async def assistant_memory_create_endpoint(request: CreateManagedMemoryRequest) -> MemoryRecord:
@@ -121,6 +119,7 @@ def register_memory_management_routes(
                     context,
                     scope=request.scope,
                     category=request.category,
+                    sensitivity=request.sensitivity,
                     content=request.content,
                     provenance_id=request.session_id,
                     pinned=request.pinned,
@@ -131,7 +130,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/archived",
             response_model=MemoryListResponse,
-            include_in_schema=False,
             name="assistant_memory_archived_endpoint",
         )
         async def assistant_memory_archived_endpoint(session_id: str) -> MemoryListResponse:
@@ -163,7 +161,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/recent-automatic",
             response_model=RecentAutomaticMemoryResponse,
-            include_in_schema=False,
             name="assistant_memory_recent_automatic_endpoint",
         )
         async def assistant_memory_recent_automatic_endpoint(
@@ -185,7 +182,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/usage",
             response_model=MemoryUsageResponse,
-            include_in_schema=False,
             name="assistant_memory_usage_endpoint",
         )
         async def assistant_memory_usage_endpoint(session_id: str) -> MemoryUsageResponse:
@@ -195,7 +191,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/export",
             response_model=MemoryExportResponse,
-            include_in_schema=False,
             name="assistant_memory_export_endpoint",
         )
         async def assistant_memory_export_endpoint(session_id: str) -> MemoryExportResponse:
@@ -205,7 +200,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/reset",
             response_model=MemoryResetResponse,
-            include_in_schema=False,
             name="assistant_memory_reset_endpoint",
         )
         async def assistant_memory_reset_endpoint(session_id: str) -> MemoryResetResponse:
@@ -218,7 +212,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/candidates/pending",
             response_model=MemoryCandidateListResponse,
-            include_in_schema=False,
             name="assistant_memory_candidates_endpoint",
         )
         async def assistant_memory_candidates_endpoint(
@@ -238,7 +231,6 @@ def register_memory_management_routes(
         @app.get(
             "/api/assistant/memory/{memory_id}",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_read_endpoint",
         )
         async def assistant_memory_read_endpoint(memory_id: str, session_id: str) -> MemoryRecord:
@@ -258,7 +250,6 @@ def register_memory_management_routes(
         @app.patch(
             "/api/assistant/memory/{memory_id}",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_update_endpoint",
         )
         async def assistant_memory_update_endpoint(
@@ -279,7 +270,6 @@ def register_memory_management_routes(
         @app.delete(
             "/api/assistant/memory/{memory_id}",
             response_model=ForgetMemoryResponse,
-            include_in_schema=False,
             name="assistant_memory_forget_endpoint",
         )
         async def assistant_memory_forget_endpoint(
@@ -301,7 +291,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/pin",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_pin_endpoint",
         )
         async def assistant_memory_pin_endpoint(
@@ -322,7 +311,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/unpin",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_unpin_endpoint",
         )
         async def assistant_memory_unpin_endpoint(
@@ -343,7 +331,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/move",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_move_endpoint",
         )
         async def assistant_memory_move_endpoint(
@@ -364,7 +351,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/archive",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_archive_endpoint",
         )
         async def assistant_memory_archive_endpoint(
@@ -386,7 +372,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/restore",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_restore_endpoint",
         )
         async def assistant_memory_restore_endpoint(
@@ -408,7 +393,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/{memory_id}/undo",
             response_model=ForgetMemoryResponse,
-            include_in_schema=False,
             name="assistant_memory_undo_endpoint",
         )
         async def assistant_memory_undo_endpoint(
@@ -432,7 +416,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/candidates/{candidate_id}/approve",
             response_model=MemoryRecord,
-            include_in_schema=False,
             name="assistant_memory_candidate_approve_endpoint",
         )
         async def assistant_memory_candidate_approve_endpoint(
@@ -452,7 +435,6 @@ def register_memory_management_routes(
         @app.post(
             "/api/assistant/memory/candidates/{candidate_id}/reject",
             response_model=MemoryCandidate,
-            include_in_schema=False,
             name="assistant_memory_candidate_reject_endpoint",
         )
         async def assistant_memory_candidate_reject_endpoint(
@@ -481,7 +463,6 @@ def register_memory_management_routes(
         @app.delete(
             "/api/assistant/memory/candidates/{candidate_id}",
             response_model=ForgetCandidateResponse,
-            include_in_schema=False,
             name="assistant_memory_candidate_forget_endpoint",
         )
         async def assistant_memory_candidate_forget_endpoint(

@@ -23,11 +23,19 @@ def _session() -> dict[str, object]:
     }
 
 
+def _client() -> TestClient:
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
+
+
 def test_enter_action_returns_child_definition_and_overlay(monkeypatch) -> None:
     stored = _session()
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: deepcopy(stored))
     monkeypatch.setattr(rpg_map_routes, "save_session", lambda session, compact=False: session)
-    client = TestClient(create_gateway_app())
+    client = _client()
     overlay_path = f"/api/rpg/sessions/session:test/maps/{FROST_HAVEN_MAP_ID}/overlay"
     overlay = client.get(overlay_path).json()
 

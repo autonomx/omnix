@@ -157,6 +157,10 @@ def test_terminal_job_state_cannot_be_reopened_or_overwritten(tmp_path: Path) ->
 
 
 def test_record_only_type_is_not_an_inline_executable() -> None:
-    from app.rpg.jobs.turn_executor import INLINE_FEATURE_JOB_TYPES
+    from app.jobs.handlers import registry_from_features
+    from app.runtime.feature_catalog import load_feature
 
-    assert RPG_FOREGROUND_RECORD_TYPE not in INLINE_FEATURE_JOB_TYPES
+    registry = registry_from_features((load_feature("rpg"),))
+
+    assert RPG_FOREGROUND_RECORD_TYPE not in registry.types()
+    assert "rpg.turn" in registry.types()

@@ -250,7 +250,7 @@ def test_failed_retry_reuses_original_graph_provider_and_prompt_settings(
     worker_call: dict[str, object] = {}
 
     monkeypatch.setattr(
-        "app.rpg.worlds.generation_retry.bootstrap_local_tenant",
+        "app.rpg.worlds.generation_retry.ensure_local_identity",
         lambda database=None: SimpleNamespace(workspace_id="workspace:test"),
     )
     monkeypatch.setattr(
@@ -397,7 +397,7 @@ def test_continue_generation_restores_a_partial_review_run_and_reuses_completed_
 
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "app.rpg.worlds.generation_retry.bootstrap_local_tenant",
+        "app.rpg.worlds.generation_retry.ensure_local_identity",
         lambda database=None: SimpleNamespace(workspace_id="workspace:test"),
     )
     monkeypatch.setattr(
@@ -496,7 +496,7 @@ def test_continue_resumes_an_existing_running_run_without_creating_a_retry(
     kicked: list[dict] = []
     monkeypatch.setattr(
         generation_retry_module,
-        "bootstrap_local_tenant",
+        "ensure_local_identity",
         lambda database=None: object(),
     )
     monkeypatch.setattr(
@@ -571,7 +571,7 @@ def test_retry_rejects_profile_drift(monkeypatch: pytest.MonkeyPatch) -> None:
             return None
 
     monkeypatch.setattr(
-        "app.rpg.worlds.generation_retry.bootstrap_local_tenant",
+        "app.rpg.worlds.generation_retry.ensure_local_identity",
         lambda database=None: SimpleNamespace(workspace_id="workspace:test"),
     )
     monkeypatch.setattr(

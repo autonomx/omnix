@@ -35,7 +35,7 @@ _INDICATOR_BAR_LIMIT = 1000
 
 def _stored_credentials() -> dict[str, str]:
     try:
-        from app.persistence.provider_secret_store import load_trading_provider_secrets
+        from app.security.provider_secret_store import load_trading_provider_secrets
 
         return dict(load_trading_provider_secrets().get("alpaca_iex") or {})
     except Exception:

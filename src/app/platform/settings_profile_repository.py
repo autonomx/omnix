@@ -1,4 +1,4 @@
-"""Versioned Settings Control Center persistence over the legacy settings file."""
+"""Versioned settings profiles and normalization of legacy payload shapes."""
 from __future__ import annotations
 
 import hashlib
@@ -64,6 +64,7 @@ _PROFILE_KEY_ALIASES = {
     "temporary_asset_cleanup": "temporaryAssetCleanup",
     "reduce_motion": "reduceMotion",
     "live_captions": "liveCaptions",
+    "text_scale": "textScale",
 }
 _OPEN_RECORD_PATHS = {
     ("global", "routing", "taskOverrides"),

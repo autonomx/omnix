@@ -80,16 +80,12 @@ class MemoryJobExecution:
     def _require_lease(self, work):
         if self._lost.is_set():
             raise JobClaimConflict(f"memory job lease lost: {self.job.id}")
-        row = work.connection.execute(
-            "SELECT id FROM omnix_jobs WHERE id = %s AND workspace_id = %s "
-            "AND lease_owner = %s AND lease_token = %s AND status = 'running' "
-            "AND cancel_requested_at IS NULL AND lease_expires_at > clock_timestamp() "
-            "FOR UPDATE",
-            (self.job.id, self.store.context.workspace_id,
-             self.worker_id, self.lease_token),
-        ).fetchone()
-        if row is None:
-            raise JobClaimConflict(f"memory job lease lost or canceled: {self.job.id}")
+        work.jobs.require_running_lease(
+            self.store.context,
+            job_id=self.job.id,
+            worker_id=self.worker_id,
+            lease_token=self.lease_token,
+        )
 
     @contextmanager
     def write_result(self, memory_service=None):

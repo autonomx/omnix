@@ -114,7 +114,7 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     }
     assert required <= paths
 
-    gateway = Path("src/app/gateway/trading_routes.py").read_text(encoding="utf-8")
+    gateway = Path("src/app/trading/route_registration.py").read_text(encoding="utf-8")
     for registration in (
         "create_trading_router",
         "create_trading_execution_router",

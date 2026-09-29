@@ -1,11 +1,10 @@
 """Test for Cerebras model status and connection using settings.json API key."""
 
-import json
 import os
-import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
 from app.providers.base import AuthenticationError, ConnectionError
@@ -13,28 +12,6 @@ from app.providers.base import AuthenticationError, ConnectionError
 
 class TestCerebrasModelStatus:
     """Test suite for Cerebras model status and connection functionality."""
-    
-    def setup_method(self):
-        """Setup for each test method."""
-        # Create a temporary settings file for testing
-        self.temp_settings_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_settings_path = self.temp_settings_file.name
-        self.temp_settings_file.close()
-        
-        # Store original settings path
-        self.original_settings_path = os.environ.get('SETTINGS_FILE_PATH')
-    
-    def teardown_method(self):
-        """Cleanup after each test method."""
-        # Clean up temporary file
-        if os.path.exists(self.temp_settings_path):
-            os.unlink(self.temp_settings_path)
-        
-        # Restore original settings path
-        if self.original_settings_path:
-            os.environ['SETTINGS_FILE_PATH'] = self.original_settings_path
-        elif 'SETTINGS_FILE_PATH' in os.environ:
-            del os.environ['SETTINGS_FILE_PATH']
     
     def test_cerebras_provider_initialization_with_valid_config(self):
         """Test Cerebras provider initialization with valid configuration."""
@@ -131,7 +108,9 @@ class TestCerebrasModelStatus:
         # Mock 401 response
         mock_response = Mock()
         mock_response.status_code = 401
-        mock_response.raise_for_status.side_effect = Exception("Authentication failed")
+        mock_response.raise_for_status.side_effect = requests.HTTPError(
+            "Authentication failed", response=mock_response
+        )
         mock_request.return_value = mock_response
         
         config = ProviderConfig(
@@ -146,8 +125,8 @@ class TestCerebrasModelStatus:
     @patch('app.providers.cerebras_provider.requests.request')
     def test_cerebras_test_connection_connection_error(self, mock_request):
         """Test connection failure due to network error."""
-        # Mock connection error
-        mock_request.side_effect = Exception("Connection failed")
+        # An unavailable connection is reported as an unsuccessful probe.
+        mock_request.side_effect = requests.ConnectionError("Connection failed")
         
         config = ProviderConfig(
             provider_type='cerebras',
@@ -155,8 +134,8 @@ class TestCerebrasModelStatus:
         )
         provider = CerebrasProvider(config)
         
-        with pytest.raises(ConnectionError, match="Failed to connect to Cerebras"):
-            provider.test_connection()
+        assert provider.test_connection() is False
+        assert mock_request.call_count == 2
     
     @patch('app.providers.cerebras_provider.requests.request')
     def test_cerebras_get_models_success(self, mock_request):
@@ -236,7 +215,7 @@ class TestCerebrasModelStatus:
         )
         provider = CerebrasProvider(config)
         
-        with pytest.raises(ConnectionError, match="Invalid JSON response"):
+        with pytest.raises(ConnectionError, match="Failed to fetch models from Cerebras: Invalid JSON"):
             provider.get_models()
     
     @patch('app.providers.cerebras_provider.requests.request')
@@ -245,7 +224,9 @@ class TestCerebrasModelStatus:
         # Mock 401 response
         mock_response = Mock()
         mock_response.status_code = 401
-        mock_response.raise_for_status.side_effect = Exception("Authentication failed")
+        mock_response.raise_for_status.side_effect = requests.HTTPError(
+            "Authentication failed", response=mock_response
+        )
         mock_request.return_value = mock_response
         
         config = ProviderConfig(
@@ -351,7 +332,7 @@ class TestCerebrasModelStatus:
         provider = CerebrasProvider(config)
         
         with patch('app.providers.cerebras_provider.requests.request') as mock_request:
-            mock_request.side_effect = Exception("Connection failed")
+            mock_request.side_effect = requests.ConnectionError("Connection failed")
             
             with pytest.raises(ConnectionError, match="Failed to connect to Cerebras"):
                 provider._make_request('get', '/test/endpoint')
@@ -365,112 +346,60 @@ class TestCerebrasModelStatus:
         provider = CerebrasProvider(config)
         
         with patch('app.providers.cerebras_provider.requests.request') as mock_request:
-            mock_request.side_effect = Exception("Timeout")
+            mock_request.side_effect = requests.Timeout("Timeout")
             
             with pytest.raises(ConnectionError, match="Connection to Cerebras timed out"):
                 provider._make_request('get', '/test/endpoint', timeout=5)
 
 
-class TestCerebrasIntegrationWithSettings:
-    """Integration tests for Cerebras provider using settings.json."""
-    
-    def setup_method(self):
-        """Setup for integration tests."""
-        # Create a temporary settings file
-        self.temp_settings_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_settings_path = self.temp_settings_file.name
-        self.temp_settings_file.close()
-        
-        # Store original environment
-        self.original_env = os.environ.get('SETTINGS_FILE_PATH')
-        os.environ['SETTINGS_FILE_PATH'] = self.temp_settings_path
-    
-    def teardown_method(self):
-        """Cleanup after integration tests."""
-        # Clean up temporary file
-        if os.path.exists(self.temp_settings_path):
-            os.unlink(self.temp_settings_path)
-        
-        # Restore original environment
-        if self.original_env:
-            os.environ['SETTINGS_FILE_PATH'] = self.original_env
-        elif 'SETTINGS_FILE_PATH' in os.environ:
-            del os.environ['SETTINGS_FILE_PATH']
-    
-    def test_cerebras_provider_from_settings(self):
-        """Test creating Cerebras provider from settings.json."""
-        # Create test settings
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'api_key': 'test-api-key-from-settings',
-                'model': 'llama-3.3-70b-versatile'
-            }
+class TestCerebrasProviderServiceSettings:
+    """Provider construction uses typed settings and the secret-store port."""
+
+    def _install(self, monkeypatch, settings, secrets):
+        from app.providers import service as provider_service
+
+        monkeypatch.setattr(provider_service, "load_settings", lambda: settings)
+        monkeypatch.setattr(provider_service, "load_secrets", lambda: secrets)
+        provider_service.invalidate_provider_cache()
+        return provider_service
+
+    def test_provider_uses_settings_and_secret_store(self, monkeypatch):
+        settings = {
+            "provider": "cerebras",
+            "cerebras": {"model": "llama-3.3-70b-versatile"},
         }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        # Import shared module to test settings loading
-        import app.shared as shared
-        
-        # Mock the load_settings function to use our test file
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            assert settings['provider'] == 'cerebras'
-            assert settings['cerebras']['api_key'] == 'test-api-key-from-settings'
-            assert settings['cerebras']['model'] == 'llama-3.3-70b-versatile'
-            
-            # Test creating provider from settings
-            provider = shared.get_provider()
-            assert provider is not None
-            assert provider.provider_name == 'cerebras'
-            assert provider.config.api_key == 'test-api-key-from-settings'
-            assert provider.config.model == 'llama-3.3-70b-versatile'
-    
-    def test_cerebras_provider_with_missing_api_key_in_settings(self):
-        """Test handling of missing API key in settings.json."""
-        # Create test settings without API key
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'model': 'llama-3.3-70b-versatile'
-                # Missing api_key
-            }
-        }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        import app.shared as shared
-        
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            # This should not raise an error during provider creation
-            # but the provider should be None or handle the missing key gracefully
-            provider = shared.get_provider()
-            # The exact behavior depends on the implementation, but it should not crash
-            assert provider is None or provider.config.api_key == ''
-    
-    def test_cerebras_provider_with_empty_settings(self):
-        """Test Cerebras provider with empty settings.json."""
-        # Create empty settings
-        test_settings = {}
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        import app.shared as shared
-        
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            # Should return default settings
-            assert 'provider' in settings
-            assert 'cerebras' in settings
-            
-            # Creating provider should work but may not be functional
-            provider = shared.get_provider()
-            assert provider is not None
-            assert provider.provider_name == 'cerebras'
+        provider_service = self._install(
+            monkeypatch,
+            settings,
+            {"api_keys": {"cerebras": "test-api-key-from-secret-store"}},
+        )
+
+        provider = provider_service.get_provider()
+
+        assert provider is not None
+        assert provider.provider_name == "cerebras"
+        assert provider.config.api_key == "test-api-key-from-secret-store"
+        assert provider.config.model == "llama-3.3-70b-versatile"
+
+    def test_missing_secret_does_not_read_a_fallback_file(self, monkeypatch):
+        from app.providers.exceptions import ProviderRegistrationError
+
+        provider_service = self._install(
+            monkeypatch,
+            {"provider": "cerebras", "cerebras": {"model": "llama-3.3-70b-versatile"}},
+            {"api_keys": {}},
+        )
+
+        with pytest.raises(ProviderRegistrationError, match="Cerebras requires an API key"):
+            provider_service.get_provider()
+
+    def test_empty_settings_use_kernel_defaults(self, monkeypatch):
+        provider_service = self._install(monkeypatch, {}, {"api_keys": {}})
+
+        provider = provider_service.get_provider()
+
+        assert provider is not None
+        assert provider.provider_name == "lmstudio"
 
 
 class TestCerebrasModelStatusEndToEnd:

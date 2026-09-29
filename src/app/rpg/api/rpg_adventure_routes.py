@@ -28,6 +28,165 @@ from ..services.adventure_builder_service import (
     validate_setup,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class AdventureTemplateRequestBody(_TypedRequestModel):
+    template_name: str | None = ''
+
+class _AdventureLoreConstraintBody(_TypedRequestModel):
+    name: str
+    description: str
+    authority: str = "creator_canon"
+
+
+class _AdventureFactionSeedBody(_TypedRequestModel):
+    faction_id: str
+    name: str
+    description: str
+    goals: list[str] = _typed_field(default_factory=list)
+    relationships: dict[str, str] = _typed_field(default_factory=dict)
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+
+
+class _AdventureLocationSeedBody(_TypedRequestModel):
+    location_id: str
+    name: str
+    description: str
+    tags: list[str] = _typed_field(default_factory=list)
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+
+
+class _AdventureNpcSeedBody(_TypedRequestModel):
+    npc_id: str
+    name: str
+    role: str
+    description: str
+    goals: list[str] = _typed_field(default_factory=list)
+    faction_id: str | None = None
+    location_id: str | None = None
+    must_survive: bool = False
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+
+
+class _AdventureThemeConstraintBody(_TypedRequestModel):
+    name: str
+    description: str
+
+
+class _AdventurePacingProfileBody(_TypedRequestModel):
+    style: str = "balanced"
+    danger_level: str = "medium"
+    mystery_weight: float = 0.25
+    combat_weight: float = 0.25
+    politics_weight: float = 0.15
+    social_weight: float = 0.35
+
+
+class _AdventureSafetyConstraintBody(_TypedRequestModel):
+    forbidden_themes: list[str] = _typed_field(default_factory=list)
+    soft_avoid_themes: list[str] = _typed_field(default_factory=list)
+
+
+class _AdventureContentBalanceBody(_TypedRequestModel):
+    mystery: float = 0.2
+    combat: float = 0.2
+    politics: float = 0.2
+    exploration: float = 0.2
+    social: float = 0.2
+
+
+class AdventureSetupRequestBody(_TypedRequestModel):
+    setup_id: str
+    title: str
+    genre: str
+    setting: str
+    premise: str
+    hard_rules: list[str] = _typed_field(default_factory=list)
+    soft_tone_rules: list[str] = _typed_field(default_factory=list)
+    lore_constraints: list[_AdventureLoreConstraintBody] = _typed_field(default_factory=list)
+    factions: list[_AdventureFactionSeedBody] = _typed_field(default_factory=list)
+    locations: list[_AdventureLocationSeedBody] = _typed_field(default_factory=list)
+    npc_seeds: list[_AdventureNpcSeedBody] = _typed_field(default_factory=list)
+    themes: list[_AdventureThemeConstraintBody] = _typed_field(default_factory=list)
+    pacing: _AdventurePacingProfileBody | None = None
+    safety: _AdventureSafetyConstraintBody | None = None
+    content_balance: _AdventureContentBalanceBody | None = None
+    forbidden_content: list[str] = _typed_field(default_factory=list)
+    canon_notes: list[str] = _typed_field(default_factory=list)
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+    difficulty_style: str | None = None
+    mood: str | None = None
+    starting_location_id: str | None = None
+    starting_npc_ids: list[str] = _typed_field(default_factory=list)
+    player_role: str = ""
+    player_archetype: str = ""
+    player_background: str = ""
+    campaign_objective: str = ""
+    opening_hook: str = ""
+    starter_conflict: str = ""
+    core_world_laws: list[str] = _typed_field(default_factory=list)
+    genre_rules: list[str] = _typed_field(default_factory=list)
+    desired_content_mix: dict[str, float] = _typed_field(default_factory=dict)
+    starting_gear: list[dict[str, Any]] = _typed_field(default_factory=list)
+    starting_resources: dict[str, int] = _typed_field(default_factory=dict)
+    opening: dict[str, Any] = _typed_field(default_factory=dict)
+    world_behavior: dict[str, str] = _typed_field(default_factory=dict)
+    response_length: dict[str, str] = _typed_field(default_factory=dict)
+
+
+AdventureValidateRequestBody = AdventureSetupRequestBody
+
+class AdventurePreviewRequestBody(_TypedRequestModel):
+    setup: _TypedRequestAny = None
+
+AdventureStartRequestBody = AdventureSetupRequestBody
+
+class AdventureRegenerateRequestBody(_TypedRequestModel):
+    apply_strategy: str | None = 'replace'
+    apply_token: _TypedRequestAny = None
+    constraints: _TypedRequestAny = None
+    mode: str | None = 'apply'
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+    target: str | None = ''
+    tone: _TypedRequestAny = None
+
+class AdventureRegenerateItemRequestBody(_TypedRequestModel):
+    item_id: str | None = ''
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+    target: str | None = ''
+
+class AdventureRegenerateMultipleRequestBody(_TypedRequestModel):
+    item_ids: list[_TypedRequestAny] | None = _typed_field(default_factory=list)
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+    target: str | None = ''
+
+class AdventureInspectWorldRequestBody(_TypedRequestModel):
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+
+class AdventureInspectWorldSnapshotRequestBody(_TypedRequestModel):
+    label: _TypedRequestAny = None
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+
+class AdventureCompareWorldRequestBody(_TypedRequestModel):
+    after_setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+    before_setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+
+class AdventureCompareEntityRequestBody(_TypedRequestModel):
+    after_setup: _TypedRequestAny = None
+    before_setup: _TypedRequestAny = None
+    entity_id: str | None = ''
+
+class AdventureSimulateStepRequestBody(_TypedRequestModel):
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+
+class AdventureSimulationStateRequestBody(_TypedRequestModel):
+    setup: dict[str, _TypedRequestAny] | None = _typed_field(default_factory=dict)
+
+
 rpg_adventure_bp = APIRouter()
 
 
@@ -51,9 +210,9 @@ async def adventure_templates():
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/template")
-async def adventure_template(request: Request):
+def adventure_template(request: Request, request_body: AdventureTemplateRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         template_name = data.get("template_name", "")
         if not template_name:
             return JSONResponse(
@@ -68,9 +227,9 @@ async def adventure_template(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/validate")
-async def adventure_validate(request: Request):
+def adventure_validate(request: Request, request_body: AdventureValidateRequestBody):
     try:
-        result = validate_setup(await request.json())
+        result = validate_setup(request_body.model_dump(exclude_unset=True, by_alias=True))
         validation = _safe_dict(result.get("validation"))
         return {
             "ok": not validation.get("blocking", False),
@@ -92,9 +251,9 @@ async def adventure_validate(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/preview")
-async def adventure_preview(request: Request):
+def adventure_preview(request: Request, request_body: AdventurePreviewRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         setup = data.get("setup") if isinstance(data, dict) else None
         setup = setup if isinstance(setup, dict) else data
         result = preview_setup(setup)
@@ -109,9 +268,9 @@ async def adventure_preview(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/start")
-async def adventure_start(request: Request):
+def adventure_start(request: Request, request_body: AdventureStartRequestBody):
     try:
-        return start_adventure(await request.json())
+        return start_adventure(request_body.model_dump(exclude_unset=True, by_alias=True))
     except Exception as exc:
         return JSONResponse(
             {"success": False, "error": str(exc), "trace": traceback.format_exc()},
@@ -120,9 +279,9 @@ async def adventure_start(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate")
-async def adventure_regenerate(request: Request):
+def adventure_regenerate(request: Request, request_body: AdventureRegenerateRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         target = data.get("target", "")
         if not target:
             return JSONResponse(
@@ -145,9 +304,9 @@ async def adventure_regenerate(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate-item")
-async def adventure_regenerate_item(request: Request):
+def adventure_regenerate_item(request: Request, request_body: AdventureRegenerateItemRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         target = data.get("target", "")
         item_id = data.get("item_id", "")
         if not target or not item_id:
@@ -163,9 +322,9 @@ async def adventure_regenerate_item(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/regenerate-multiple")
-async def adventure_regenerate_multiple(request: Request):
+def adventure_regenerate_multiple(request: Request, request_body: AdventureRegenerateMultipleRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         target = data.get("target", "")
         item_ids = data.get("item_ids", [])
         if not target or not item_ids:
@@ -181,36 +340,36 @@ async def adventure_regenerate_multiple(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/inspect-world")
-async def adventure_inspect_world(request: Request):
+def adventure_inspect_world(request: Request, request_body: AdventureInspectWorldRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         return inspect_world(data.get("setup", {}))
     except Exception as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/inspect-world-snapshot")
-async def adventure_inspect_world_snapshot(request: Request):
+def adventure_inspect_world_snapshot(request: Request, request_body: AdventureInspectWorldSnapshotRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         return inspect_world_snapshot(data.get("setup", {}), label=data.get("label"))
     except Exception as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/compare-world")
-async def adventure_compare_world(request: Request):
+def adventure_compare_world(request: Request, request_body: AdventureCompareWorldRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         return compare_world(data.get("before_setup", {}), data.get("after_setup", {}))
     except Exception as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/compare-entity")
-async def adventure_compare_entity(request: Request):
+def adventure_compare_entity(request: Request, request_body: AdventureCompareEntityRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         entity_id = data.get("entity_id", "")
         if not entity_id:
             return JSONResponse(
@@ -232,9 +391,9 @@ async def adventure_compare_entity(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/simulate-step")
-async def adventure_simulate_step(request: Request):
+def adventure_simulate_step(request: Request, request_body: AdventureSimulateStepRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         setup = data.get("setup", {})
         tick = setup.get("simulation_tick", 0) + 1
         setup["simulation_tick"] = tick
@@ -249,9 +408,9 @@ async def adventure_simulate_step(request: Request):
 
 
 @rpg_adventure_bp.post("/api/rpg/adventure/simulation-state")
-async def adventure_simulation_state(request: Request):
+def adventure_simulation_state(request: Request, request_body: AdventureSimulationStateRequestBody):
     try:
-        data = await request.json()
+        data = request_body.model_dump(exclude_unset=True, by_alias=True)
         setup = data.get("setup", {})
         return {
             "success": True,

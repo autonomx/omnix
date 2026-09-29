@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 """Session reliability fixes and SHADOW-only strategy research overlays.
 
@@ -7,7 +8,6 @@ Canonical V2 and AUTO PAPER execution authority remain unchanged.
 
 import asyncio
 import copy
-import os
 import re
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
@@ -529,7 +529,7 @@ async def _collect_trend_signal(
     now: datetime,
 ) -> None:
     if not (
-        os.environ.get("OMNIX_TRADING_TREND_CONTINUATION_SHADOW", "1")
+        _env_str("OMNIX_TRADING_TREND_CONTINUATION_SHADOW", "1")
         .strip()
         .lower()
         in {"1", "true", "yes", "on"}

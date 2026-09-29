@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import (
@@ -80,7 +80,7 @@ def test_published_launch_applies_scenario_state_and_persists_starting_map() -> 
     session_id = ""
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         create_world_project(
             WorldProjectCreate(
                 world_id="world:published-map",

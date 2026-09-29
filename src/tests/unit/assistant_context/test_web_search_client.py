@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.assistant_context.web_search import (
+from app.research.web_search import (
     WebSearchClient,
     _playwright_duckduckgo_rows,
     _playwright_external_link_rows,

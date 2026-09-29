@@ -63,29 +63,21 @@ class RuntimeRequestMiddleware:
 
 def _durable_snapshot(services):
     from app.persistence.authority import AuthorityOperation, require_authority_operation
+    from app.persistence.unit_of_work import unit_of_work
 
     jobs = services.jobs
     database, workspace = jobs.database, jobs.context.workspace_id
-    with database.connection() as connection:
-        policy = require_authority_operation(connection, AuthorityOperation.DIAGNOSTIC_READ)
-        groups = connection.execute(
-            "SELECT resource_class, status, count(*), "
-            "COALESCE(max(EXTRACT(EPOCH FROM (clock_timestamp() - created_at))) FILTER (WHERE status = 'queued'), 0), "
-            "count(*) FILTER (WHERE lease_expires_at < clock_timestamp()) "
-            "FROM omnix_jobs WHERE workspace_id = %s GROUP BY resource_class, status",
+    with unit_of_work(database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ) as work:
+        policy = require_authority_operation(work.connection, AuthorityOperation.DIAGNOSTIC_READ)
+        snapshot = work.jobs.diagnostic_snapshot(jobs.context)
+        groups = snapshot["groups"]
+        events = snapshot["events"]
+        session_owners = snapshot["session_owners"]
+        dead_letters = work.connection.execute(
+            "SELECT count(*) FROM omnix_dead_letters WHERE workspace_id = %s AND resolved_at IS NULL",
             (workspace,),
-        ).fetchall()
-        dead_letters = connection.execute(
-            "SELECT count(*) FROM omnix_dead_letters WHERE workspace_id = %s AND resolved_at IS NULL", (workspace,),
         ).fetchone()[0]
-        events = connection.execute(
-            "SELECT event_type, count(*) FROM omnix_job_events WHERE workspace_id = %s "
-            "AND created_at > clock_timestamp() - INTERVAL '60 seconds' GROUP BY event_type", (workspace,),
-        ).fetchall()
-        session_owners = connection.execute(
-            "SELECT count(DISTINCT input_payload ->> 'session_id') FROM omnix_jobs "
-            "WHERE workspace_id = %s AND job_type = 'chat.generate' AND status = 'running'", (workspace,),
-        ).fetchone()[0]
+        work.rollback()
     return {
         "connectivity": True, "authority_state": policy.authority_state,
         "statement_timeout_ms": database.settings.statement_timeout_ms,
@@ -123,7 +115,8 @@ def runtime_diagnostics(gateway) -> RuntimeDiagnostics:
     if owner is not None:
         chat.update(owner.recovery_diagnostics())
         chat['execution_owner_healthy'] = owner.healthy
-    from app.gateway.tts_stream_diagnostics import runtime_stream_snapshot
+    tts_snapshot = getattr(gateway.state, "tts_stream_snapshot", None)
+    stream_snapshot = tts_snapshot() if callable(tts_snapshot) else {}
     resolver = getattr(gateway.state, 'live_voice_tts_provider_resolver', None)
     delivery = getattr(gateway.state, 'live_voice_delivery_persistence_worker', None)
     return RuntimeDiagnostics(
@@ -135,7 +128,7 @@ def runtime_diagnostics(gateway) -> RuntimeDiagnostics:
         background=background.diagnostics() if background is not None else {"role": config.gateway_role.value, "owns_lock": False},
         jobs=jobs, chat=chat,
         tts={"mode": 'remote' if config.use_remote_tts else 'local' if config.allow_local_tts else 'worker_routed',
-             "endpoint": config.tts.url if config.tts else None, **runtime_stream_snapshot(),
+             "endpoint": config.tts.url if config.tts else None, **stream_snapshot,
              "provider_refresh": resolver.diagnostics() if resolver is not None else {},
              "delivery_queue": delivery.diagnostics() if delivery is not None else {}},
         replicas={"known_origins": list(config.api_replica_origins), "local_runtime_started": gateway.state.runtime_started,

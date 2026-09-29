@@ -16,7 +16,7 @@ from app.persistence.capability_approval_repository import (
 )
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase, PostgresConstraintError
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -29,7 +29,7 @@ def database():
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
     assert urlsplit(url).path in {"/omnix_test", "/omnix_refactor_baseline"}
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     try:
         yield database, context
     finally:

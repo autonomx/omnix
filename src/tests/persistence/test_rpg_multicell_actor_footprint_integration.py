@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_actor_footprints import actor_footprint_cells
@@ -96,7 +96,7 @@ def _definition() -> GridMapDefinition:
 
 
 def _seed(database: PostgresDatabase) -> CampaignMapInstanceSnapshot:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     definition = _definition()
     revision = compile_world_revision(
         world_id=definition.world_id,
@@ -195,7 +195,7 @@ def test_multicell_actor_move_persists_replays_and_protects_non_anchor_cells() -
                 database=database,
             )
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             row = work.map_instances.get_instance(context, initial.map_instance_id)
             events = work.map_instances.list_events(context, initial.map_instance_id)

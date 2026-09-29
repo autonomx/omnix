@@ -1,5 +1,6 @@
 """Launcher-owned service credentials, protected by the local operating system."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str, environment as _environment
 
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import stat
 import sys
 import tempfile
 
-from app.persistence import provider_secret_store
+from app.security import provider_secret_store
 
 _WINDOWS_PREFIX = b"OMNIX_SERVICE_TOKEN_DPAPI_V1\n"
 
@@ -91,9 +92,9 @@ def load_or_create_service_token(path: Path | None = None) -> str:
 
 def initialize_service_token() -> str:
     """Initialize once in a launcher; children inherit this exact credential."""
-    configured = os.environ.get("OMNIX_SERVICE_TOKEN")
-    if configured is None and os.environ.get("OMNIX_AUTH_MODE", "local") != "local":
+    configured = _env_str("OMNIX_SERVICE_TOKEN")
+    if configured is None and _env_str("OMNIX_AUTH_MODE", "local") != "local":
         raise ServiceCredentialError("service_token_required_for_nonlocal_mode")
     token = _validate(configured) if configured is not None else load_or_create_service_token()
-    os.environ["OMNIX_SERVICE_TOKEN"] = token
+    _environment()["OMNIX_SERVICE_TOKEN"] = token
     return token

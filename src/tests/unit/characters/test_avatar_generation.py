@@ -19,7 +19,8 @@ from app.characters.voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.jobs import CompleteJobRequest, InMemoryJobStore
+from app.jobs import CompleteJobRequest
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _runtime(tmp_path: Path, monkeypatch):

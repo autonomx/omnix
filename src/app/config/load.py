@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from app.runtime.config import RuntimeConfig
-
 from .env import env_bool, env_int, env_str, env_url, environment
 from .models import DatabaseConfig, NetworkConfig, ObservabilityConfig, OmnixConfig
+from .runtime import RuntimeConfig
 
 
 def load_config(env: Mapping[str, str] | None = None) -> OmnixConfig:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .coding_skills import compile_coding_skills, trusted_skill_paths
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 from . import pi_runtime_core as _pi_runtime_core
 from .pi_runtime_core import (
     PiAgentRuntime as _CorePiAgentRuntime,

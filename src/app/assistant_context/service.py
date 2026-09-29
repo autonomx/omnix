@@ -9,10 +9,11 @@ from app.research.extraction import ReadablePageExtractor
 from app.research.policy import ResearchPolicy, research_policy_from_env
 from app.research.provider_chain import ProviderFallbackSearchClient, normalize_provider_chain
 from app.research.quick_search import QuickSearchService
+from app.research.web_search import WebSearchClient
+from app.conversation.contracts import AssistantContextItem
 
-from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
+from .models import AssistantContextBuildResult, AssistantContextChatRequest
 from .vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
-from .web_search import WebSearchClient
 
 
 class AssistantContextService:

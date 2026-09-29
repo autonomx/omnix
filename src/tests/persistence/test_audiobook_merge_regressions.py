@@ -15,7 +15,7 @@ from app.audiobook.worker import run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -37,7 +37,7 @@ def pipeline(tmp_path, monkeypatch):
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         yield database, context, blobs, AudiobookService(database, blobs)
     finally:

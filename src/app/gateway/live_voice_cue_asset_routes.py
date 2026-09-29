@@ -1,8 +1,8 @@
 """Voice-matched live cue pack discovery and browser-safe delivery."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 import re
 from functools import wraps
 from pathlib import Path
@@ -43,7 +43,7 @@ class LiveVoiceCueManifest(BaseModel):
 
 
 def live_voice_cue_root() -> Path:
-    override = str(os.environ.get("OMNIX_LIVE_VOICE_CUE_ROOT") or "").strip()
+    override = str(_env_str("OMNIX_LIVE_VOICE_CUE_ROOT") or "").strip()
     root = Path(override) if override else resources_data_root() / "voice_cues"
     root.mkdir(parents=True, exist_ok=True)
     return root
@@ -58,7 +58,6 @@ def register_live_voice_cue_asset_routes(gateway: FastAPI) -> None:
     @gateway.get(
         LIVE_VOICE_CUE_MANIFEST_PATH,
         response_model=LiveVoiceCueManifest,
-        include_in_schema=False,
     )
     def live_voice_cue_manifest(voice_id: str) -> LiveVoiceCueManifest:
         voice_dir = _voice_directory(voice_id)
@@ -93,7 +92,22 @@ def register_live_voice_cue_asset_routes(gateway: FastAPI) -> None:
             assets=assets,
         )
 
-    @gateway.get(LIVE_VOICE_CUE_FILE_PATH, include_in_schema=False)
+    @gateway.get(
+        LIVE_VOICE_CUE_FILE_PATH,
+        response_model=None,
+        response_class=FileResponse,
+        responses={
+            200: {
+                "description": "WAV audio asset bytes.",
+                "content": {
+                    "audio/wav": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            },
+            304: {"description": "The cached cue asset is current."},
+        },
+    )
     def live_voice_cue_file(
         voice_id: str,
         cue_id: str,

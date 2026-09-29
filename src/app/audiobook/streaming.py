@@ -77,7 +77,7 @@ def create_audiobook_streaming_router() -> APIRouter:
         except Exception as exc:  # pragma: no cover - defensive websocket cleanup.
             try:
                 await websocket.send_json({"type": "error", "message": str(exc) or "Audiobook websocket failed."})
-            except Exception:
+            except (WebSocketDisconnect, RuntimeError):
                 return
 
     return router

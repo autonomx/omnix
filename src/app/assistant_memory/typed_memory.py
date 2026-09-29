@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .models import (
+from app.memory_contracts import (
     MemoryCategory,
     MemoryKind,
     MemoryRecord,

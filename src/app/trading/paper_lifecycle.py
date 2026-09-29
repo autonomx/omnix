@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from app.persistence.errors import RevisionConflict
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .paper import PaperAccountSnapshot
@@ -26,7 +26,7 @@ class TradingPaperLifecycle:
         uow_factory: UnitOfWorkFactory = unit_of_work,
         repository_factory: Callable[[], TradingPaperRepository] | None = None,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
         self.repository_factory = repository_factory or (
             lambda: TradingPaperRepository(

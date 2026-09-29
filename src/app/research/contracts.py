@@ -5,7 +5,8 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
-ResearchMode = Literal["disabled", "quick", "deep"]
+from app.conversation.contracts import ResearchMode
+
 ResearchModeSource = Literal["turn", "conversation", "profile", "fallback"]
 ResearchStatus = Literal["completed", "partial", "failed", "canceled"]
 ResearchSectionKind = Literal["fact", "inference", "limitation", "recommendation"]

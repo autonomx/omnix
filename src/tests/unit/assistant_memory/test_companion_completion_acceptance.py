@@ -9,7 +9,7 @@ from app.assistant_memory.companion_context import (
     invalidate_companion_context,
 )
 from app.assistant_memory.lifecycle import resolve_snapshot_view
-from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.assistant_memory.temporal_retrieval import (

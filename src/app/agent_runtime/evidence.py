@@ -4,12 +4,12 @@ Pi owns execution strategy. Omnix owns the evidence contract, authority issued t
 the run, provenance receipts, and completion acceptance.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 import re
 from typing import Callable
 from urllib.parse import urlparse
@@ -149,7 +149,7 @@ def freshness_max_age_seconds(source_class: str) -> int | None:
     freshness deploy-time policy rather than classifier code.
     """
     key = "OMNIX_AGENT_EVIDENCE_MAX_AGE_" + re.sub(r"[^A-Z0-9]+", "_", source_class.upper())
-    raw = str(os.environ.get(key, "") or "").strip()
+    raw = str(_env_str(key, "") or "").strip()
     if raw:
         try:
             value = int(raw)
@@ -190,16 +190,16 @@ _SEMANTIC_SOURCE_CLASSES = frozenset(SOURCE_CAPABILITIES)
 
 
 def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision | None:
-    enabled = str(os.environ.get("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
+    enabled = str(_env_str("OMNIX_AGENT_EVIDENCE_SEMANTIC_ADVISER", "") or "").strip().casefold()
     if enabled not in {"1", "true", "yes", "hermes"}:
         return None
     try:
         from app.assist_core.hermes_client import HermesSidecarClient
 
         client = HermesSidecarClient(
-            base_url=str(os.environ.get("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
-            api_key=os.environ.get("OMNIX_HERMES_API_KEY"),
-            timeout=float(os.environ.get("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
+            base_url=str(_env_str("OMNIX_HERMES_URL", "http://127.0.0.1:8642")),
+            api_key=_env_str("OMNIX_HERMES_API_KEY"),
+            timeout=float(_env_str("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
         )
         payload = client.classify_agent_evidence(task, profile_id)
     except Exception:

@@ -353,6 +353,8 @@ class InMemoryJobStore:
             job = self._state.jobs.get(job_id)
             if job is None:
                 return None
+            if job.status in TERMINAL_STATUSES:
+                return deepcopy(job)
             value = deepcopy(job)
             now = _utcnow()
             value.status = JobStatus.COMPLETED
@@ -380,6 +382,8 @@ class InMemoryJobStore:
             job = self._state.jobs.get(job_id)
             if job is None:
                 return None
+            if job.status in TERMINAL_STATUSES:
+                return deepcopy(job)
             value = deepcopy(job)
             now = _utcnow()
             value.status = JobStatus.FAILED

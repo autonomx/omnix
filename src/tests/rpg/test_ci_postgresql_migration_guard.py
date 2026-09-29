@@ -21,7 +21,7 @@ LEGACY_MUTABLE_JSON_STORE_FILES = {
     "src/app/assistant_tools/config_store.py",
     "src/app/chat/prompt_store.py",
     "src/app/chat/store.py",
-    "src/app/gateway/live_chat_evaluation_store.py",
+    "src/app/chat/evaluation_store.py",
     "src/app/image/asset_store.py",
     "src/app/research/source_store.py",
     "src/app/rpg/npc_evolution/profile_store.py",

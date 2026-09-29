@@ -47,7 +47,7 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_memory_snapshots, omnix_memory_candidates, omnix_memory_events, "
             "omnix_memory_records, omnix_conversation_segments, "
             "omnix_character_versions, omnix_characters, omnix_asset_versions, "
-            "omnix_assets, omnix_settings, omnix_secret_references, "
+            "omnix_assets, omnix_settings_entries, omnix_settings, omnix_secret_references, "
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
@@ -71,7 +71,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.persistence.startup import bootstrap_postgresql_runtime
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 status = bootstrap_postgresql_runtime()
 assert status.ready is True
 assert status.backend == "postgresql"
@@ -81,26 +81,49 @@ connection = sqlite3.connect(":memory:")
 connection.close()
 # Production does not mutate the standard library. Domain factories remain PostgreSQL-only.
 
-from app import shared
+from app.persistence.database import default_database
+from app.security.tenant_context import current_tenant
+from app.settings.access import (
+    install_settings_service,
+    load_secrets,
+    load_settings,
+    save_secrets,
+    save_settings,
+)
+from app.settings.registry import core_setting_specs
+from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.settings.service import SettingsService
 
-shared.save_settings({"provider": "lmstudio", "lmstudio": {"model": "runtime-model"}})
-assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
-shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
-assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
-
-def add_runtime_session(current):
-    current["legacy:mutated"] = {"title": "Transactional runtime route"}
-
-shared.update_sessions(add_runtime_session)
-assert shared.load_sessions()["legacy:mutated"]["title"] == "Transactional runtime route"
-assert shared.load_secrets() == {
+settings_service = SettingsService(
+    default_database(), current_tenant, specs=core_setting_specs()
+)
+install_settings_service(settings_service)
+settings_service.register_specs((assistant_memory_setting_spec(),))
+save_settings({
+    "provider": "lmstudio",
+    "lmstudio": {
+        "base_url": "http://localhost:1234",
+        "direct": False,
+        "model": "runtime-model",
+    },
+})
+assert load_settings()["lmstudio"]["model"] == "runtime-model"
+with default_database().connection() as connection:
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_module_records "
+        "WHERE module = 'platform' AND record_type = 'settings'"
+    ).fetchone()[0] == 0
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_settings"
+    ).fetchone()[0] == 0
+assert load_secrets() == {
     "api_keys": {
         "openrouter": "runtime-openrouter-key",
         "cerebras": "runtime-cerebras-key",
     }
 }
-shared.save_secrets({"api_keys": {"openrouter": "environment-cannot-be-overridden"}})
-assert shared.load_secrets() == {
+save_secrets({"api_keys": {"openrouter": "environment-cannot-be-overridden"}})
+assert load_secrets() == {
     "api_keys": {
         "openrouter": "runtime-openrouter-key",
         "cerebras": "runtime-cerebras-key",
@@ -140,13 +163,21 @@ assert default_assistant_turn_coordinator().get(assistant_turn.assistant_turn_id
 
 from app.assistant_memory.settings import (
     AssistantMemorySettingsUpdate,
-    AssistantMemorySettingsStore,
 )
 
 from app.assistant_memory.settings import default_memory_settings_store
 memory_settings = default_memory_settings_store()
 memory_settings.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
 assert memory_settings.load_persisted().suggestions_enabled is True
+with default_database().connection() as connection:
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_settings_entries "
+        "WHERE key = 'assistant_memory.runtime'"
+    ).fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_module_records "
+        "WHERE module = 'assistant-memory' AND record_type = 'runtime-settings'"
+    ).fetchone()[0] == 0
 
 from app.characters.live_conversation_profile import (
     LiveConversationProfileUpdate,
@@ -170,7 +201,6 @@ assert load_assistant_tool_ledger().entries[0].execution_id == ledger_entry.exec
 
 for variable in (
     "OMNIX_ASSISTANT_TURN_STORE_PATH",
-    "OMNIX_CHAT_MEMORY_SETTINGS_PATH",
     "OMNIX_LIVE_CONVERSATION_PROFILE_PATH",
     "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH",
     "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH",
@@ -180,6 +210,10 @@ for variable in (
 
 from app.chat.models import ChatMessage, ChatSession
 from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.runtime.feature_catalog import load_feature
+from app.persistence.repository_registry import install_repository_specs
+
+install_repository_specs(tuple(load_feature("chat").repositories))
 
 now = datetime.now(timezone.utc).isoformat()
 chat_repository = PostgresChatRepositoryAdapter()
@@ -216,7 +250,7 @@ created_character = characters.create(CreateCharacterRequest(
 assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
-from app.assistant_memory.models import MemoryRecord
+from app.memory_contracts import MemoryRecord
 from app.assistant_memory.persistence.memory_compat import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
@@ -318,7 +352,6 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_p
             "OMNIX_PERSISTENCE_MODE": "postgresql",
             "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
             "OMNIX_ASSISTANT_TURN_STORE_PATH": str(tmp_path / "assistant-turns.json"),
-            "OMNIX_CHAT_MEMORY_SETTINGS_PATH": str(tmp_path / "memory-settings.json"),
             "OMNIX_LIVE_CONVERSATION_PROFILE_PATH": str(tmp_path / "conversation-profiles.json"),
             "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
             "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH": str(tmp_path / "assistant-tool-credentials.json"),

@@ -36,7 +36,6 @@ def get_task_graph_run(run_id: str) -> TaskGraphRunSnapshot:
 @router.get(
     "/{run_id}/optimization",
     response_model=TaskGraphOptimizationPlan,
-    include_in_schema=False,
 )
 def get_task_graph_optimization(run_id: str) -> TaskGraphOptimizationPlan:
     snapshot = default_task_graph_runtime().get_status(run_id)
@@ -93,7 +92,17 @@ def command_task_graph_run(
     raise HTTPException(status_code=422, detail="unsupported_task_graph_command")
 
 
-@router.get("/{run_id}/events/stream")
+@router.get(
+    "/{run_id}/events/stream",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Task graph run events as Server-Sent Events.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 async def stream_task_graph_events(
     run_id: str,
     after_sequence: int = 0,

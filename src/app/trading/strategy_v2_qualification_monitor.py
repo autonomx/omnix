@@ -1,8 +1,8 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -48,18 +48,18 @@ BarLoader = Callable[..., dict[str, list[object]]]
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_v2_qualification_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_V2_QUALIFICATION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_V2_QUALIFICATION", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS", "300"))
+        value = float(_env_str("OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS", "300"))
     except ValueError:
         value = 300.0
     return max(60.0, value)

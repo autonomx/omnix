@@ -9,7 +9,6 @@ from typing import Any
 
 from .models import ChatSession
 from .repository import ChatImportState, InMemoryChatRepository
-from .store import default_chat_store_path
 
 
 class LegacyChatImportError(RuntimeError):
@@ -69,9 +68,9 @@ def _validated_sessions(payload: dict[str, Any]) -> tuple[list[ChatSession], int
 
 def import_legacy_chat_json(
     repository: InMemoryChatRepository,
-    source_path: str | Path | None = None,
+    source_path: str | Path,
 ) -> ChatImportState | None:
-    path = Path(source_path) if source_path is not None else default_chat_store_path()
+    path = Path(source_path)
     if not path.is_file():
         return None
     raw = path.read_bytes()

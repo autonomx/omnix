@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSession
 from app.chat.history_search import SQLiteHistorySearchService
 from app.chat.repository import SQLiteChatRepository

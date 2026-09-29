@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat.provider_metrics import merge_provider_response_metrics
 from app.gateway import live_chat_live_voice_profile as live_voice_profile
 from app.gateway.live_chat_provider_metrics import (

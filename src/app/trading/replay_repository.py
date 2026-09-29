@@ -6,7 +6,7 @@ from contextlib import AbstractContextManager
 from decimal import Decimal
 from typing import Protocol
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .backtest import (
@@ -70,7 +70,7 @@ class TradingReplayRepository:
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
 
     def create_dataset(self, snapshot: FrozenDatasetSnapshot) -> FrozenDatasetSnapshot:

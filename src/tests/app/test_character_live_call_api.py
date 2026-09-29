@@ -5,8 +5,17 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.characters import api as character_api
+from app.gateway import character_integration_routes
 from app.gateway.main import create_gateway_app
+from app.chat.character_store import InMemoryChatSessionStore
+
+
+def _client() -> TestClient:
+    return TestClient(
+        create_gateway_app(chat_store_factory=InMemoryChatSessionStore),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
 
 
 def _create_character_session(client: TestClient) -> str:
@@ -45,7 +54,7 @@ def test_live_call_runtime_api_resolves_character_without_browser_prompt_data(
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     session_id = _create_character_session(client)
 
     response = client.get(
@@ -72,7 +81,7 @@ def test_live_call_greeting_stream_is_generated_and_transient(
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
     session_id = _create_character_session(client)
     before = client.get(f"/api/chat/sessions/{session_id}").json()
 
@@ -85,7 +94,7 @@ def test_live_call_greeting_stream_is_generated_and_transient(
             "metadata": {"purpose": "live_call_greeting", "transient": True},
         }
 
-    monkeypatch.setattr(character_api, "stream_live_call_greeting_chunks", fake_greeting_stream)
+    monkeypatch.setattr(character_integration_routes, "stream_live_call_greeting_chunks", fake_greeting_stream)
 
     response = client.post(
         f"/api/chat/sessions/{session_id}/live-call/greeting/stream",
@@ -112,7 +121,7 @@ def test_live_call_runtime_api_returns_404_for_missing_session(
 ) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
 
     response = client.get(
         "/api/chat/sessions/chat:missing/live-call/runtime"
@@ -127,7 +136,7 @@ def test_live_call_greeting_stream_returns_404_for_missing_session(
 ) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
     monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    client = TestClient(create_gateway_app())
+    client = _client()
 
     response = client.post(
         "/api/chat/sessions/chat:missing/live-call/greeting/stream",

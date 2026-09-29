@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import (
@@ -142,7 +142,7 @@ def _campaign_state() -> dict:
 
 
 def _seed(database: PostgresDatabase) -> str:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     definition = _definition()
     revision = compile_world_revision(
         world_id=definition.world_id,
@@ -284,7 +284,7 @@ def test_tactical_move_attack_and_idempotency_commit_across_ledgers() -> None:
         assert duplicate_attack["idempotent_replay"] is True
         assert duplicate_attack["campaign_revision"] == 2
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             campaign = work.rpg.get_campaign(context, "campaign:tactical")
             instance = work.map_instances.get_instance(context, map_instance_id)

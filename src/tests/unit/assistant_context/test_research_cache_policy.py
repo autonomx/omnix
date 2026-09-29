@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.assistant_context.models import AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
 from app.research.cache import ResearchCacheStore
 from app.research.extraction import ExtractedPage, ReadablePageExtractor
 from app.research.outbound_web import OutboundWebResponse

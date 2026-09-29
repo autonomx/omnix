@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 
 from .hermes_contract import HermesToolSpec
 

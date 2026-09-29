@@ -39,7 +39,7 @@ from app.rpg.narration.combat_contract import combat_contract_requires_llm
 from app.rpg.narration.combat_service import generate_combat_narration_sync
 from app.rpg.session.runtime import apply_turn
 from app.rpg.world.conversation_threads import has_pending_player_conversation_response
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 MANUAL_LOG_MAX_CHUNK_BYTES = 1_000_000
 MANUAL_LOG_CHUNK_SOFT_BYTES = 850_000
@@ -529,7 +529,7 @@ def _manual_call_combat_narration_provider_text(prompt: str) -> str:
     )
 
     try:
-        from app.shared import get_provider  # type: ignore
+        from app.providers.service import get_provider  # type: ignore
         provider = get_provider()
     except Exception as exc:
         raise RuntimeError(

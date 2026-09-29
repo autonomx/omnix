@@ -33,7 +33,7 @@ def test_create_new_game_session_builds_level_one_campaign(monkeypatch) -> None:
     assert result["ok"] is True
     assert result["status"] == "ready"
     assert result["session_id"].startswith("rpg_")
-    assert captured["compact"] is False
+    assert captured["compact"] is True
 
     session = captured["session"]
     state = session["state"]

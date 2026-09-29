@@ -46,18 +46,18 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
     from .feature_registry import FeatureLifecycle, register_feature_lifecycle
     register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
 
-    @gateway.get("/api/tts/runtime/status", include_in_schema=False)
+    @gateway.get("/api/tts/runtime/status")
     def status() -> dict[str, Any]:
         try:
             return snapshot(get_tts_provider())
         except Exception:
             return snapshot()
 
-    @gateway.post("/api/tts/runtime/warmup", include_in_schema=False)
+    @gateway.post("/api/tts/runtime/warmup")
     async def warmup() -> dict[str, Any]:
         return await asyncio.to_thread(warm_tts_runtime, "api")
 
-    @gateway.post("/api/tts/runtime/unload", include_in_schema=False)
+    @gateway.post("/api/tts/runtime/unload")
     async def unload() -> dict[str, Any]:
         return await asyncio.to_thread(unload_tts_runtime, "api")
 

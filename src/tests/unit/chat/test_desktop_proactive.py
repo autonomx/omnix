@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat.live_conversation_proactive import (
     ProactiveDeliveryRequest,
     commit_proactive_delivery,

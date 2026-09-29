@@ -8,12 +8,8 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import shared
-from app.assistant_context.models import (
-    AssistantContextBuildResult,
-    AssistantContextChatRequest,
-    AssistantContextItem,
-)
+from app.assistant_context.models import AssistantContextBuildResult, AssistantContextChatRequest
+from app.conversation.contracts import AssistantContextItem
 from app.assistant_context.routes import register_assistant_context_routes
 from app.assistant_context.service import AssistantContextService
 from app.assistant_context.vision import (
@@ -21,7 +17,7 @@ from app.assistant_context.vision import (
     DesktopVisionClient,
     default_desktop_vision_client,
 )
-from app.assistant_context.web_search import should_search_automatically
+from app.research.web_search import should_search_automatically
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from tests.support.in_memory_jobs import InMemoryJobStore
 
@@ -230,7 +226,7 @@ def test_codex_desktop_vision_uses_luna_app_server_image_input():
 
 def test_default_desktop_vision_routes_active_codex_profile_to_luna(monkeypatch):
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "global": {"providers": {"llm": "chatgpt_codex"}},
@@ -247,7 +243,7 @@ def test_default_desktop_vision_routes_active_codex_profile_to_luna(monkeypatch)
 
 def test_default_desktop_vision_recognizes_plain_luna_model_id(monkeypatch):
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "global": {"providers": {"llm": "lmstudio"}},
@@ -264,7 +260,7 @@ def test_default_desktop_vision_recognizes_plain_luna_model_id(monkeypatch):
 
 def test_default_desktop_vision_respects_explicit_local_model_override(monkeypatch):
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.settings.access.load_settings",
         lambda: {
             "settings_control_center": {
                 "global": {"providers": {"llm": "chatgpt_codex"}},

@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.narrative_engine import (
@@ -52,7 +52,7 @@ def test_hermes_research_is_append_only_campaign_scoped_and_idempotent() -> None
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         request = HermesResearchRequest(
             research_id="research:integration",
             campaign_id="campaign:hermes",

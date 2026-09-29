@@ -10,6 +10,19 @@ from pydantic import ValidationError
 from app.rpg.grid_runtime_performance import GridRuntimeBudget
 from app.rpg.grid_runtime_performance_service import profile_campaign_grid_runtime
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgGridPerformanceProfileRequestBody(_TypedRequestModel):
+    budget: _TypedRequestAny = None
+    observer_actor_id: _TypedRequestAny = None
+    path_probe_actor_id: _TypedRequestAny = None
+    path_probe_destination: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_grid_performance_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_grid_performance_route_hook_installed"
 
@@ -31,13 +44,12 @@ def register_rpg_grid_performance_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/map-instances/{map_instance_id}/performance-profile",
         tags=["rpg-grid-performance"],
-        include_in_schema=False,
     )
-    async def rpg_grid_performance_profile(
+    def rpg_grid_performance_profile(
         map_instance_id: str,
-        request: Request,
+        request: Request, request_body: RpgGridPerformanceProfileRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         destination = payload.get("path_probe_destination")
         if destination is not None:
             if not isinstance(destination, (list, tuple)) or len(destination) != 2:

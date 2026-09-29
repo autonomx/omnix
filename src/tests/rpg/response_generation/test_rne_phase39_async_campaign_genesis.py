@@ -208,7 +208,7 @@ def test_enqueue_persists_blocked_shell_and_one_durable_job(monkeypatch) -> None
 
     monkeypatch.setattr("app.rpg.session.service.save_session", save_session)
     monkeypatch.setattr(
-        "app.persistence.identity_service.bootstrap_local_tenant",
+        "app.persistence.identity_service.ensure_local_identity",
         lambda database: SimpleNamespace(workspace_id="workspace", user_id="user"),
     )
     unit_of_work_module = importlib.import_module("app.persistence.unit_of_work")

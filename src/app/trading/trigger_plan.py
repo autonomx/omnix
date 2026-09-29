@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -349,7 +349,7 @@ class TriggerPlanRepository:
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
 
     def create(self, plan: TriggerPlan) -> TriggerPlan:

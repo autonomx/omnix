@@ -7,10 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     BackgroundWorker, BackgroundOwnershipUnavailable, GatewayBackgroundRuntime,
     register_background_worker,
 )
+from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
 from app.gateway.feature_registry import FeatureLifecycle, register_feature_lifecycle
 from app.gateway.lifecycle import gateway_lifespan
 from app.runtime.config import RuntimeConfig, GatewayRole
@@ -33,38 +34,36 @@ def test_api_rejects_worker_only_feature_lifecycle():
 
 
 def test_gateway_rejects_undeclared_startup_hooks_before_api_can_run_them(monkeypatch):
-    from app.runtime import gateway_installer
-    from app.runtime.features import FeatureContext
+    from app.runtime import router_composition
 
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
 
     def registrar(gateway):
+        from fastapi import APIRouter
+
+        assert isinstance(gateway.router, APIRouter)
         gateway.router.on_startup.append(lambda: pytest.fail('undeclared worker startup ran'))
 
     monkeypatch.setattr(
-        gateway_installer,
+        router_composition,
         'import_module',
         lambda _: SimpleNamespace(register=registrar),
     )
-    context = FeatureContext(
-        feature_id='test',
-        config=None,
-        runtime=app.state.runtime_config,
-        capabilities=app.state.runtime_capabilities,
-        services=None,
-        logger=__import__('logging').getLogger('test.feature'),
-    )
-    with pytest.raises(RuntimeError, match='must use FeatureLifecycle or BackgroundWorker'):
-        gateway_installer.install_registrars(
-            app, context, (('test.feature', 'register'),)
+    with pytest.raises(RuntimeError, match='must declare a FeatureLifecycle'):
+        router_composition.compose_registrar_router(
+            (('test.feature', 'register'),), state=app.state
         )
 
 
 def test_api_lifespan_never_runs_recovery_or_worker_hooks():
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
+    app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
     calls = []
     monitor = SimpleNamespace(start=lambda: calls.append('worker'))
-    register_background_worker(app, BackgroundWorker('worker', monitor, (monitor.start,), ()))
+    register_background_worker(
+        app.state.background_registry,
+        BackgroundWorker('worker', monitor, (monitor.start,), ()),
+    )
     with pytest.raises(BackgroundOwnershipUnavailable):
         monitor.start()
 
@@ -74,6 +73,12 @@ def test_api_lifespan_never_runs_recovery_or_worker_hooks():
             assert app.state.runtime_started
     asyncio.run(run())
     assert calls == []
+
+
+def test_gateway_background_registry_adapter_implements_runtime_contract():
+    from app.runtime.background import BackgroundRegistry
+
+    assert issubclass(GatewayBackgroundRegistryAdapter, BackgroundRegistry)
 
 
 def test_feature_startup_shutdown_order_and_partial_failure():
@@ -97,14 +102,24 @@ def test_background_connection_loss_stops_workers_and_latches_authority(monkeypa
     calls = []
     owner = GatewayBackgroundRuntime(object(), 'test', poll_seconds=.01)
     owner.register('test', object(), (lambda: calls.append('started'),), (lambda: calls.append('stopped'),))
-    owner.connection = SimpleNamespace(execute=lambda *_: (_ for _ in ()).throw(OSError('private credentials')))
+    probes = []
+
+    def execute(*_):
+        probes.append('checked')
+        if len(probes) > 1:
+            raise OSError('private credentials')
+        return SimpleNamespace(fetchone=lambda: (1,))
+
+    owner.connection = SimpleNamespace(execute=execute, commit=lambda: None)
     owner.healthy = True
-    # Startup probes the authority before invoking callbacks.
+    # Startup probes the authority before invoking callbacks; later loss stops them.
+    asyncio.run(owner.startup())
+    assert calls == ['started']
     with pytest.raises(BackgroundOwnershipUnavailable):
-        asyncio.run(owner.startup())
+        owner.require_live()
     assert owner.healthy is False
     asyncio.run(owner.shutdown())
-    assert calls == ['stopped']
+    assert calls == ['started', 'stopped']
     with pytest.raises(BackgroundOwnershipUnavailable):
         owner.require_live()
 
@@ -128,7 +143,7 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
 
 
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):
-    from app.gateway.workers import WorkerHealthPayload
+    from app.runtime.worker_health import WorkerHealthPayload
     from app.platform import diagnostics
     from app.platform.runtime_diagnostics import RequestMetrics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))

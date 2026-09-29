@@ -7,7 +7,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import (
@@ -105,7 +105,7 @@ def _completed_generation(
     database: PostgresDatabase,
 ) -> tuple[Any, dict[str, Any]]:
     _reset(database)
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         work.world_scenarios.create_world(
             context,

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.characters import default_character_service, neutralize_legacy_system_prompt, resolve_system_session_identity
+from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
@@ -18,22 +19,6 @@ class PromptTurn(BaseModel):
     role: PromptRole
     content: str
     message_id: str | None = None
-
-
-class PromptMemoryItem(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    memory_id: str
-    content: str
-    scope: str
-    category: str
-    revision: int = Field(ge=1)
-    source: Literal[
-        "character",
-        "system",
-        "shared_system",
-        "memory_v2",
-        "shared_memory_v2",
-    ] = "system"
 
 
 class PromptHistoryItem(BaseModel):

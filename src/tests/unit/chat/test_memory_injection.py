@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.assistant_memory import (
     InMemoryMemoryRepository,
     MemoryService,
@@ -13,7 +13,7 @@ from app.assistant_memory import (
 )
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.chat.memory_prompt import resolve_prompt_memory
-from app.chat.memory_session import RefreshSessionMemoryRequest, refresh_session_memory
+from app.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
 from app.chat.store import ChatSessionStore as LegacyChatSessionStore
 
 

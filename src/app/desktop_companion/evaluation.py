@@ -119,6 +119,14 @@ class DesktopCompanionEvaluationRecord(DesktopCompanionEvaluationCreate):
     updated_at: str
 
 
+class DesktopCompanionEvaluationExport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    format_version: int
+    generated_at: str
+    evaluations: list[DesktopCompanionEvaluationRecord]
+
+
 class DesktopCompanionGateMetric(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

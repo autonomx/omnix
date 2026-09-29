@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .models import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
 
 
 class MemoryConflictError(RuntimeError):

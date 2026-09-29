@@ -8,6 +8,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Request, WebSocket
+from pydantic import BaseModel, ConfigDict
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
@@ -18,10 +19,39 @@ from app.security.service_token import service_headers
 _MAX_RESPONSE_BYTES = 512 * 1024
 
 
+class STTProxyResponse(BaseModel):
+    """Known fields in the configured STT service response, with forward compatibility."""
+
+    model_config = ConfigDict(extra="allow")
+
+    ok: bool | None = None
+    eligible: bool | None = None
+    mode: str | None = None
+    provider: str | None = None
+    reasons: list[str] | None = None
+    success: bool | None = None
+    text: str | None = None
+    segments: list[dict[str, object]] | None = None
+    duration: float | None = None
+    inference_ms: float | None = None
+
+
 
 def _stt_base_url() -> str:
     endpoint = get_runtime_config().stt
     return endpoint.url.removesuffix("/transcribe") if endpoint else "http://127.0.0.1:5201"
+
+
+def _ServiceConnect(uri: str, **kwargs):
+    """Create a client that rejects redirects to a new credential audience."""
+    from websockets.exceptions import SecurityError
+    from websockets.legacy.client import Connect
+
+    class ServiceConnect(Connect):
+        def handle_redirect(self, target_uri: str) -> None:
+            raise SecurityError("model_service_redirect_rejected")
+
+    return ServiceConnect(uri, **kwargs)
 
 
 def _error(status: int, code: str) -> JSONResponse:
@@ -46,7 +76,7 @@ class _UploadLimit(Exception):
     pass
 
 
-async def _proxy_http(request: Request, path: str, *, authority: bool = False) -> JSONResponse:
+async def _proxy_http(request: Request, path: str, *, authority: bool = False) -> STTProxyResponse | JSONResponse:
     try:
         query = _query(request, authority=authority)
     except ValueError:
@@ -100,7 +130,7 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
                 payload = json.loads(data)
                 if not isinstance(payload, dict):
                     return _error(502, "invalid_stt_response")
-                return JSONResponse(payload)
+                return STTProxyResponse.model_validate(payload)
     except _UploadLimit:
         return _error(413, "upload_too_large")
     except (httpx.HTTPError, ValueError):
@@ -108,13 +138,7 @@ async def _proxy_http(request: Request, path: str, *, authority: bool = False) -
 
 
 async def _proxy_websocket(socket: WebSocket) -> None:
-    from websockets.exceptions import ConnectionClosed, SecurityError
-    from websockets.legacy.client import Connect
-
-    class ServiceConnect(Connect):
-        def handle_redirect(self, uri: str) -> None:
-            # Even a same-origin redirect changes the configured credential audience.
-            raise SecurityError("model_service_redirect_rejected")
+    from websockets.exceptions import ConnectionClosed
     try:
         query = _query(socket)
         headers = service_headers()
@@ -130,7 +154,7 @@ async def _proxy_websocket(socket: WebSocket) -> None:
     try:
         # legacy Connect is supported by the repository's websockets>=12 floor,
         # does not use system proxies, and has an explicit redirect rejection.
-        async with ServiceConnect(uri, extra_headers=headers, compression=None,
+        async with _ServiceConnect(uri, extra_headers=headers, compression=None,
                                    max_size=limit, max_queue=8, open_timeout=10,
                                    close_timeout=2) as upstream:
             await socket.accept()
@@ -188,12 +212,12 @@ async def _proxy_websocket(socket: WebSocket) -> None:
 def register_stt_proxy_routes(gateway) -> None:
     router = APIRouter(prefix="/api/stt", tags=["speech"])
 
-    @router.get("/authorityz")
-    async def authority(request: Request):
+    @router.get("/authorityz", response_model=STTProxyResponse)
+    async def authority(request: Request) -> STTProxyResponse | JSONResponse:
         return await _proxy_http(request, "/authorityz", authority=True)
 
-    @router.post("/transcribe")
-    async def transcribe(request: Request):
+    @router.post("/transcribe", response_model=STTProxyResponse)
+    async def transcribe(request: Request) -> STTProxyResponse | JSONResponse:
         return await _proxy_http(request, "/transcribe")
 
     router.add_api_websocket_route("/ws/transcribe", _proxy_websocket)

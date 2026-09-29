@@ -10,6 +10,7 @@ from typing import Any
 from contextlib import asynccontextmanager
 
 from app.config.env import environment
+from app.config.env import env_bool, env_str
 
 from app.runtime.config import RuntimeConfig, get_runtime_config, install_runtime_config
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
@@ -41,7 +42,7 @@ def production_readiness(config: RuntimeConfig | None = None) -> dict:
     required.update(name for name in ("tts", "stt", "image") if (endpoint := getattr(config, name)) is not None and endpoint.required)
     unavailable = []
     if required:
-        from app.gateway.workers import get_worker_health_payload
+        from app.runtime.worker_health import get_worker_health_payload
 
         workers = {worker.id: worker for worker in get_worker_health_payload().workers}
         unavailable = sorted(
@@ -60,8 +61,39 @@ def production_readiness(config: RuntimeConfig | None = None) -> dict:
     }
 
 
+def maybe_apply_migrations_on_start(
+    config: RuntimeConfig,
+    *,
+    env: Any | None = None,
+    apply_migrations_fn=None,
+) -> bool:
+    """Apply release migrations only for an explicitly opted-in local worker."""
+    source = environment() if env is None else env
+    if not env_bool("OMNIX_MIGRATE_ON_START", False, env=source):
+        return False
+
+    auth_mode = (env_str("OMNIX_AUTH_MODE", "local", env=source) or "local").strip().lower()
+    deployment = (env_str("OMNIX_ENV", "development", env=source) or "development").strip().lower()
+    if (
+        config.gateway_role.value != "worker"
+        or auth_mode != "local"
+        or deployment != "development"
+    ):
+        raise RuntimeError(
+            "OMNIX_MIGRATE_ON_START is allowed only for a local-auth development worker"
+        )
+
+    if apply_migrations_fn is None:
+        from app.persistence.migrations import apply_migrations
+
+        apply_migrations_fn = apply_migrations
+    apply_migrations_fn()
+    return True
+
+
 def create_production_app(config: RuntimeConfig | None = None):
     config = config or RuntimeConfig.from_environment(environment())
+    maybe_apply_migrations_on_start(config)
     install_runtime_config(config)
     capabilities = RuntimeCapabilities.from_config(config)
     from app.persistence.startup import bootstrap_status_payload
@@ -71,14 +103,11 @@ def create_production_app(config: RuntimeConfig | None = None):
         raise RuntimeError("Production gateway requires ready PostgreSQL authority")
 
     from app.persistence.database import default_database
-    from app.persistence.identity_service import ensure_local_identity
-    from app.security.tenant_context import TenantProvider, install_process_tenant
+    from app.security.tenant_context import TenantProvider
     from app.settings.service import SettingsService
     from app.settings.registry import core_setting_specs
 
     database = default_database()
-    tenant_context = ensure_local_identity(database)
-    install_process_tenant(tenant_context)
     tenant_provider = TenantProvider()
     settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
     from app.settings.access import install_settings_service
@@ -90,7 +119,8 @@ def create_production_app(config: RuntimeConfig | None = None):
     # previously imported the provider-free gateway factory in this process.
     from app.assets import default_asset_store
     from app.chat import default_chat_store
-    from app.jobs import default_job_store, default_model_residency_store
+    from app.jobs import default_job_store
+    from app.runtime_composition import production_model_residency_store
     from app.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
@@ -101,7 +131,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         jobs=default_job_store(),
         assets=default_asset_store(),
         chat=default_chat_store(),
-        model_residency=default_model_residency_store(),
+        model_residency=production_model_residency_store(),
         database=database,
         tenant=tenant_provider,
         settings=settings_service,
@@ -162,7 +192,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         runtime_config=config,
         runtime_services=services,
     )
-    from app.jobs.durable_feature_worker import register_durable_feature_job_worker
+    from app.worker_runtime.durable_feature_worker import register_durable_feature_job_worker
 
     register_durable_feature_job_worker(gateway, services.jobs)
     gateway.state.persistence_startup = status

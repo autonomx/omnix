@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.rpg.persistence.rpg_item_description_repository import (
     PostgresRpgItemDescriptionRepository,
@@ -45,7 +45,7 @@ def test_item_descriptions_are_upserted_and_reused_by_context_key() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         key = "a" * 64
         context_hash = "b" * 64
 

@@ -28,7 +28,7 @@ def _settings() -> dict:
 
 
 def test_unchanged_audio_configuration_keeps_cached_instances(monkeypatch) -> None:
-    import app.shared as shared
+    from app.providers import service as provider_service
 
     tts = _Provider()
     stt = _Provider()
@@ -39,14 +39,14 @@ def test_unchanged_audio_configuration_keeps_cached_instances(monkeypatch) -> No
     settings = _settings()
 
     assert invalidate_changed_audio_caches(settings, dict(settings)) == (False, False)
-    assert shared._tts_provider_instance is tts
-    assert shared._stt_provider_instance is stt
+    assert provider_service._tts_provider_instance is tts
+    assert provider_service._stt_provider_instance is stt
     assert tts.stops == 0
     assert stt.stops == 0
 
 
 def test_tts_configuration_change_stops_and_clears_tts_only(monkeypatch) -> None:
-    import app.shared as shared
+    from app.providers import service as provider_service
 
     tts = _Provider()
     stt = _Provider()
@@ -59,15 +59,15 @@ def test_tts_configuration_change_stops_and_clears_tts_only(monkeypatch) -> None
     after["faster-qwen3-tts"] = {**after["faster-qwen3-tts"], "model_dir": "models/tts-v2", "chunk_size": 20}
 
     assert invalidate_changed_audio_caches(before, after) == (True, False)
-    assert shared._tts_provider_instance is None
-    assert shared._tts_provider_name is None
-    assert shared._stt_provider_instance is stt
+    assert provider_service._tts_provider_instance is None
+    assert provider_service._tts_provider_name is None
+    assert provider_service._stt_provider_instance is stt
     assert tts.stops == 1
     assert stt.stops == 0
 
 
 def test_stt_endpoint_change_stops_and_clears_stt_only(monkeypatch) -> None:
-    import app.shared as shared
+    from app.providers import service as provider_service
 
     tts = _Provider()
     stt = _Provider()
@@ -80,8 +80,8 @@ def test_stt_endpoint_change_stops_and_clears_stt_only(monkeypatch) -> None:
     after["parakeet"] = {"base_url": "http://localhost:5201"}
 
     assert invalidate_changed_audio_caches(before, after) == (False, True)
-    assert shared._tts_provider_instance is tts
-    assert shared._stt_provider_instance is None
-    assert shared._stt_provider_name is None
+    assert provider_service._tts_provider_instance is tts
+    assert provider_service._stt_provider_instance is None
+    assert provider_service._stt_provider_name is None
     assert tts.stops == 0
     assert stt.stops == 1

@@ -6,6 +6,7 @@ Omnix communicates with ``codex app-server`` over its supported stdio JSONL
 protocol and presents that transport through the normal BaseProvider interface.
 """
 from __future__ import annotations
+from app.config.env import environment_copy as _process_environment
 
 import atexit
 from collections import deque
@@ -313,7 +314,7 @@ class ChatGPTCodexProvider(BaseProvider):
         the conventional home only when the caller has not explicitly chosen
         one.
         """
-        environment = os.environ.copy()
+        environment = _process_environment()
         if not str(environment.get("CODEX_HOME") or "").strip():
             # Login may be the operation that creates ~/.codex. Always give
             # Codex a stable conventional home before that directory exists.

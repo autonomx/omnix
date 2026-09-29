@@ -2,29 +2,43 @@
 
 from __future__ import annotations
 
-from .core_services import (
-    Any,
-    ChatSession,
-    ChatSessionListResponse,
-    CreateChatSessionRequest,
-    CreateJobRequest,
-    DeleteChatSessionResponse,
-    HTTPException,
-    Query,
-    ResourceClass,
-    SendChatMessageRequest,
-    SendChatMessageResponse,
-    StreamingResponse,
-    _chat_message_image_data_urls,
-    asyncio,
+import asyncio
+import json
+from typing import Any
+
+from fastapi import HTTPException, Query
+from fastapi.responses import StreamingResponse
+
+from app.chat.generation_jobs import (
     chat_submission_lock,
     existing_chat_generation_turn,
     find_chat_generation_job,
     interrupt_active_chat_generation_jobs,
-    json,
     mark_chat_acceptance_failed,
     start_chat_generation_job,
 )
+from app.chat.models import (
+    ChatSession,
+    ChatSessionListResponse,
+    CreateChatSessionRequest,
+    DeleteChatSessionResponse,
+    SendChatMessageRequest,
+    SendChatMessageResponse,
+)
+from app.jobs.models import CreateJobRequest, ResourceClass
+
+
+def _chat_message_image_data_urls(metadata: object) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+    values: list[str] = []
+    raw = metadata.get("image_data_urls")
+    if isinstance(raw, list):
+        values.extend(value for value in raw if isinstance(value, str) and value)
+    legacy = metadata.get("image_data_url")
+    if isinstance(legacy, str) and legacy:
+        values.insert(0, legacy)
+    return list(dict.fromkeys(values))
 
 
 def register_core_chat_routes(gateway, *, get_chat_store, get_job_store):
@@ -182,7 +196,18 @@ def register_core_chat_routes(gateway, *, get_chat_store, get_job_store):
             session=session, user_message=user_message, job=job
         )
 
-    @gateway.post("/api/chat/sessions/{session_id}/messages/stream", tags=["chat"])
+    @gateway.post(
+        "/api/chat/sessions/{session_id}/messages/stream",
+        response_model=None,
+        response_class=StreamingResponse,
+        responses={
+            200: {
+                "description": "Chat generation events as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
+        tags=["chat"],
+    )
     async def stream_chat_message(
         session_id: str, request: SendChatMessageRequest
     ) -> StreamingResponse:

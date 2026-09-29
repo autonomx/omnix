@@ -6,9 +6,9 @@ This module keeps execution/protocol attempts separate from substantive
 repair attempts or masquerade as review findings.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 from collections.abc import Iterable
 
 from .coding_quality import review_payload_from_text
@@ -29,7 +29,7 @@ _TERMINAL = {"completed", "failed", "cancelled"}
 def review_runtime_retry_limit() -> int:
     """Number of retry generations after the initial reviewer execution."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_REVIEW_RUNTIME_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_REVIEW_RUNTIME_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:

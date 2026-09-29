@@ -82,7 +82,7 @@ def _route() -> SimpleNamespace:
 
 
 def _install_common(monkeypatch, world: dict[str, object], captured: dict[str, object]) -> None:
-    monkeypatch.setattr(library_service, "bootstrap_local_tenant", lambda value: object())
+    monkeypatch.setattr(library_service, "ensure_local_identity", lambda value: object())
     monkeypatch.setattr(library_service, "unit_of_work", _unit_of_work)
     monkeypatch.setattr(
         library_service,

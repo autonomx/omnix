@@ -130,6 +130,7 @@ class GatewayBackgroundRuntime:
 
             @wraps(original_start)
             def start(*args, **kwargs):
+                self.require_live()
                 with self._execution_scope(self):
                     result = original_start(*args, **kwargs)
                     service = getattr(monitor, "service", None)
@@ -154,6 +155,7 @@ class GatewayBackgroundRuntime:
         self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
         if self._started:
             raise RuntimeError("Background workers already started")
+        self.require_live()
         for worker in self._workers:
             started = time.monotonic()
             self._started.append(worker)

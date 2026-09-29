@@ -25,6 +25,28 @@ from tests.conftest_quarantine import apply_item_quarantine, collection_globs, s
 collect_ignore_glob = collection_globs()
 
 
+@pytest.fixture
+def legacy_test_persistence(monkeypatch):
+    """Opt one test module into the explicitly isolated legacy test adapters."""
+
+    from app.persistence.runtime import reset_persistence_mode_cache
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
+    try:
+        yield
+    finally:
+        reset_persistence_mode_cache()
+
+
+@pytest.fixture
+def service_token(monkeypatch):
+    token = "test-service-token-" + ("a" * 43)
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
+    return token
+
+
 def pytest_ignore_collect(collection_path: Path, config) -> bool:
     return should_ignore_collection(collection_path)
 
@@ -40,6 +62,7 @@ def isolated_runtime_configuration(monkeypatch):
     from app.security import tenant_context as tenant_runtime
     from app.settings import access as settings_access
     from app.settings.registry import core_setting_specs
+    from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
 
     monkeypatch.setattr(runtime_config, "_process_config", None)
 
@@ -80,10 +103,19 @@ def isolated_runtime_configuration(monkeypatch):
         def subscribe(self, key, callback):
             return lambda: None
 
+        def register_specs(self, specs):
+            for spec in specs:
+                if spec.key in self.specs and self.specs[spec.key] != spec:
+                    raise ValueError(f"duplicate setting spec: {spec.key}")
+                self.specs[spec.key] = spec
+                self.values.setdefault(spec.key, deepcopy(spec.default))
+                self.revisions.setdefault(spec.key, 0)
+
     tenant_runtime.reset_process_tenant_for_tests()
     tenant_runtime.install_process_tenant(tenant_runtime.local_tenant_context())
 
     test_service = _TestSettingsService()
+    test_service.register_specs((assistant_memory_setting_spec(),))
     settings_access.reset_settings_service_for_tests()
 
     def _install_test_settings_service(service):

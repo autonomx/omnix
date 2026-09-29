@@ -27,7 +27,6 @@ def register_character_avatar_routes(
         "/api/characters/{character_id}/avatar-pack/optional",
         response_model=CharacterAvatarPack | None,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def get_optional_character_avatar_pack(
         character_id: str,
@@ -41,7 +40,6 @@ def register_character_avatar_routes(
         "/api/characters/{character_id}/avatar-pack",
         response_model=CharacterAvatarPack,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def get_character_avatar_pack(character_id: str) -> CharacterAvatarPack:
         try:
@@ -53,7 +51,6 @@ def register_character_avatar_routes(
         "/api/characters/{character_id}/avatar-pack",
         response_model=CharacterAvatarPack,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def upsert_character_avatar_pack(
         character_id: str,
@@ -72,7 +69,6 @@ def register_character_avatar_routes(
         "/api/characters/{character_id}/avatar-pack",
         response_model=DeleteCharacterAvatarPackResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def delete_character_avatar_pack(
         character_id: str,

@@ -6,6 +6,7 @@ from app.config.env import env_str, environment
 import os
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.conversation.contracts import estimate_tokens
 
 from app.assistant_memory.settings import load_memory_runtime_settings
 
@@ -35,14 +36,6 @@ class PromptBudgetDiagnostics(BaseModel):
     usable_input_tokens: int = Field(default=0, ge=0)
     truncated_sections: list[str] = Field(default_factory=list)
     section_tokens: dict[str, int] = Field(default_factory=dict)
-
-
-def estimate_tokens(text: str) -> int:
-    """Stable conservative estimate suitable for provider-independent budgeting."""
-
-    if not text:
-        return 0
-    return max(1, (len(text.encode("utf-8")) + 3) // 4)
 
 
 def trim_to_token_budget(text: str, max_tokens: int, *, marker: str = "\n[truncated]") -> str:

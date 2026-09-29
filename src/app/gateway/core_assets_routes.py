@@ -2,18 +2,66 @@
 
 from __future__ import annotations
 
-from .core_services import (
-    AssetContentResponse,
+from pathlib import Path
+
+from fastapi import HTTPException
+
+from app.assets import (
     AssetLegacyImportDryRun,
     AssetListResponse,
     AssetMigrationPreview,
-    HTTPException,
+    AssetRecord,
+    SharedAssetStore,
+)
+from app.gateway.schemas import AssetContentResponse
+from app.gateway.story_asset_save import (
     SaveStoryAssetRequest,
     SavedStoryAssetResponse,
-    _asset_by_id,
-    _read_text_asset,
     save_story_asset,
 )
+
+
+def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
+    get_asset = getattr(asset_store, "get_asset", None)
+    if callable(get_asset):
+        return get_asset(asset_id)
+    return next(
+        (asset for asset in asset_store.list_assets().assets if asset.id == asset_id),
+        None,
+    )
+
+
+def _text_asset_supported(asset: AssetRecord) -> bool:
+    mime_type = asset.mime_type.lower().split(";", 1)[0]
+    return mime_type.startswith("text/") or mime_type in {
+        "application/json",
+        "application/x-subrip",
+        "text/html",
+        "text/markdown",
+        "text/plain",
+        "text/vtt",
+    }
+
+
+def _read_text_asset(asset: AssetRecord) -> AssetContentResponse:
+    if not _text_asset_supported(asset):
+        raise HTTPException(status_code=415, detail="asset_content_not_text")
+    path = Path(asset.storage_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="asset_file_not_found")
+    try:
+        size_bytes = path.stat().st_size
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+    if size_bytes > 2_000_000:
+        raise HTTPException(status_code=413, detail="asset_content_too_large")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=415, detail="asset_content_not_utf8") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+    return AssetContentResponse(asset=asset, content=content, size_bytes=size_bytes)
 
 
 def register_core_assets_routes(gateway, *, get_asset_store):
@@ -24,7 +72,6 @@ def register_core_assets_routes(gateway, *, get_asset_store):
     @gateway.get(
         "/api/assets/{asset_id}/content",
         response_model=AssetContentResponse,
-        include_in_schema=False,
     )
     async def asset_content(asset_id: str) -> AssetContentResponse:
         asset = _asset_by_id(get_asset_store(), asset_id)
@@ -35,7 +82,6 @@ def register_core_assets_routes(gateway, *, get_asset_store):
     @gateway.post(
         "/api/assets/story",
         response_model=SavedStoryAssetResponse,
-        include_in_schema=False,
     )
     async def save_story_asset_endpoint(
         request: SaveStoryAssetRequest,

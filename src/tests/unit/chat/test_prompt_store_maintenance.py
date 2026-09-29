@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import prompt_store
 from app.gateway import memory_job_offload
 from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest

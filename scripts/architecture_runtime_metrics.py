@@ -200,7 +200,7 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
             if mode == "boot":
                 before = set(sys.modules)
                 from app.production import create_production_app
-                from app.runtime_config import RuntimeConfig, GatewayRole
+                from app.runtime.config import RuntimeConfig, GatewayRole
                 from app.persistence.database import close_default_database
                 try:
                     application = create_production_app(RuntimeConfig(gateway_role=GatewayRole.API))

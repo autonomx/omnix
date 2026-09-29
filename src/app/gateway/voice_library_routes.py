@@ -24,7 +24,6 @@ def register_voice_library_route(gateway: FastAPI) -> None:
     @gateway.get(
         VOICE_LIBRARY_PATH,
         response_model=AssetListResponse,
-        include_in_schema=False,
     )
     def voice_library(response: Response) -> AssetListResponse:
         assets = discover_canonical_voice_clone_assets()

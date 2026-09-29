@@ -8,7 +8,7 @@ from fastapi import FastAPI, Query
 
 from app.jobs import JobListResponse, default_job_store
 
-from .job_summaries import voice_job_projections
+from app.jobs.projections import voice_job_projections
 
 _ROUTE_SENTINEL = "_omnix_voice_job_summaries_registered"
 _HOOK_SENTINEL = "_omnix_voice_job_summaries_hook_installed"
@@ -24,7 +24,7 @@ def register_voice_job_summary_routes(gateway: FastAPI) -> None:
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
-    @gateway.get(VOICE_JOB_SUMMARIES_PATH, response_model=JobListResponse, include_in_schema=False)
+    @gateway.get(VOICE_JOB_SUMMARIES_PATH, response_model=JobListResponse)
     def voice_job_summaries(
         limit: int = Query(default=DEFAULT_VOICE_JOB_LIMIT, ge=1, le=MAX_VOICE_JOB_LIMIT),
     ) -> JobListResponse:

@@ -8,11 +8,11 @@ import threading
 from contextvars import copy_context
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.runtime.paths import resources_data_root
 from app.runtime.background import (
     BackgroundOwnershipUnavailable, BackgroundWorker, register_background_worker,
@@ -45,6 +44,16 @@ _SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$
 _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
 _SERVICE_CONTEXT_LOCK = threading.Lock()
 _SERVICE_CONTEXT: tuple[Any, Any] | None = None
+_BINARY_SCHEMA = {"schema": {"type": "string", "format": "binary"}}
+
+
+def _binary_response(*media_types: str) -> dict[int, dict[str, Any]]:
+    return {
+        200: {
+            "description": "File content returned with its source media type.",
+            "content": {media_type: _BINARY_SCHEMA for media_type in media_types},
+        }
+    }
 
 
 class ClassificationRequest(BaseModel):
@@ -188,7 +197,6 @@ def _service_and_context() -> tuple["AudiobookService", Any]:
                 from .service import AudiobookService
 
                 database = default_database()
-                ensure_postgresql_runtime_ready(database)
                 context = current_tenant()
                 _SERVICE_CONTEXT = (AudiobookService(database, LocalBlobStore()), context)
     assert _SERVICE_CONTEXT is not None
@@ -334,6 +342,7 @@ def create_audiobook_router() -> APIRouter:
     @router.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
     async def upload_source(
         project_id: str, request: Request,
+        source_content: bytes = Body(..., media_type="application/octet-stream"),
         source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
         filename: str = Query(default="book"),
         exclude_pages: str | None = Query(default=None, max_length=500),
@@ -342,7 +351,7 @@ def create_audiobook_router() -> APIRouter:
 
         if int(request.headers.get("content-length", "0") or 0) > MAX_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="source is too large")
-        content = await request.body()
+        content = source_content
         if len(content) > MAX_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="source is too large")
         service, context = await asyncio.to_thread(_service_and_context)
@@ -391,7 +400,20 @@ def create_audiobook_router() -> APIRouter:
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.get("/api/audiobook/projects/{project_id}/source/download", tags=["audiobook"])
+    @router.get(
+        "/api/audiobook/projects/{project_id}/source/download",
+        response_model=None,
+        response_class=StreamingResponse,
+        responses=_binary_response(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/epub+zip",
+            "text/html",
+            "text/markdown",
+            "application/pdf",
+            "text/plain",
+        ),
+        tags=["audiobook"],
+    )
     def download_source(project_id: str) -> StreamingResponse:
         service, context = _service_and_context()
         try:
@@ -418,11 +440,14 @@ def create_audiobook_router() -> APIRouter:
         })
 
     @router.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
-    async def upload_cover(project_id: str, request: Request,
+    async def upload_cover(
+                           project_id: str,
+                           request: Request,
+                           cover_content: bytes = Body(..., media_type="application/octet-stream"),
                            filename: str = Query(default="cover")) -> dict[str, str]:
         if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="cover is too large")
-        content = await request.body()
+        content = cover_content
         if len(content) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="cover is too large")
         service, context = await asyncio.to_thread(_service_and_context)
@@ -435,7 +460,13 @@ def create_audiobook_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.get("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
+    @router.get(
+        "/api/audiobook/projects/{project_id}/cover",
+        response_model=None,
+        response_class=Response,
+        responses=_binary_response("image/jpeg", "image/png"),
+        tags=["audiobook"],
+    )
     def project_cover(project_id: str) -> Response:
         service, context = _service_and_context()
         try:
@@ -668,7 +699,13 @@ def create_audiobook_router() -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @router.get("/api/audiobook/projects/{project_id}/previews/{job_id}/audio", tags=["audiobook"])
+    @router.get(
+        "/api/audiobook/projects/{project_id}/previews/{job_id}/audio",
+        response_model=None,
+        response_class=Response,
+        responses=_binary_response("audio/wav"),
+        tags=["audiobook"],
+    )
     def preview_audio(project_id: str, job_id: str) -> Response:
         service, context = _service_and_context()
         try:
@@ -700,7 +737,15 @@ def create_audiobook_router() -> APIRouter:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @router.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
+    @router.get(
+        "/api/audiobook/projects/{project_id}/exports/{export_id}/download",
+        response_model=None,
+        response_class=StreamingResponse,
+        responses=_binary_response(
+            "audio/mp4", "audio/flac", "audio/wav", "audio/mpeg"
+        ),
+        tags=["audiobook"],
+    )
     def download_export(project_id: str, export_id: str) -> StreamingResponse:
         service, context = _service_and_context()
         try:
@@ -763,7 +808,7 @@ def create_audiobook_background_worker() -> BackgroundWorker:
             return
         service, context = runtime
         database = service.database
-        blobs = LocalBlobStore()
+        blobs = service.blobs
         worker_id = f"audiobook:ingest:{uuid4().hex}"
         while not stop.is_set():
             try:
@@ -801,7 +846,7 @@ def create_audiobook_background_worker() -> BackgroundWorker:
             return
         service, context = runtime
         database = service.database
-        blobs = LocalBlobStore()
+        blobs = service.blobs
         worker_id = f"audiobook:render:{uuid4().hex}"
         while not stop.is_set():
             try:
@@ -822,7 +867,7 @@ def create_audiobook_background_worker() -> BackgroundWorker:
             return
         service, context = runtime
         database = service.database
-        blobs = LocalBlobStore()
+        blobs = service.blobs
         worker_id = f"audiobook:preview:{uuid4().hex}"
         while not stop.is_set():
             try:

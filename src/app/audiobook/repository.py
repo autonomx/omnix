@@ -40,15 +40,17 @@ class PostgresAudiobookRepository:
         if project[0]:
             return str(project[0]) == job_id
         # Jobs created before request fencing was introduced have no pointer.
-        latest = self.connection.execute(
-            """SELECT id FROM omnix_jobs
-                WHERE workspace_id = %s AND module = 'audiobook'
-                  AND job_type = 'audiobook.ingest'
-                  AND input_payload->>'project_id' = %s
-                ORDER BY created_at DESC, id DESC LIMIT 1""",
-            (context.workspace_id, project_id),
-        ).fetchone()
-        return latest is not None and str(latest[0]) == job_id
+        from app.persistence.job_repository import PostgresJobRepository
+
+        latest = PostgresJobRepository(self.connection).query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.ingest",
+            input_fields=(("project_id", project_id),),
+            order_by="created_desc",
+            limit=1,
+        )
+        return bool(latest and str(latest[0]["id"]) == job_id)
 
     def create_project(
         self, context: TenantContext, *, project_id: str,
@@ -191,17 +193,17 @@ class PostgresAudiobookRepository:
             from app.persistence.job_repository import PostgresJobRepository
 
             jobs = PostgresJobRepository(self.connection)
-            rows = self.connection.execute(
-                """
-                SELECT id FROM omnix_jobs
-                 WHERE workspace_id = %s AND module = 'audiobook'
-                   AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                   AND input_payload->>'render_run_id' = %s
-                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
-                """, (context.workspace_id, str(active[0])),
-            ).fetchall()
+            rows = jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                input_fields=(("render_run_id", str(active[0])),),
+                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                limit=500,
+                for_update=True,
+            )
             for row in rows:
-                jobs.request_cancel(context, str(row[0]))
+                jobs.request_cancel(context, str(row["id"]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects

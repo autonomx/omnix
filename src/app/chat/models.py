@@ -9,17 +9,21 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.assistant_memory import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
-from app.characters import (
+from app.characters import character_mode_enabled
+from app.conversation.contracts import (
+    DEFAULT_PROFILE_ID,
+    DEFAULT_WORKSPACE_ID,
+    ChatMessage,
+    ChatMessageRole,
+    ChatSession,
+    ChatSessionSummary,
     InteractionMode,
+    ResearchMode,
     SharedMemoryAccess,
     TranscriptPolicy,
-    character_mode_enabled,
 )
 from app.jobs import JobRecord
-from app.research import ResearchMode
 
-ChatMessageRole = Literal["system", "user", "assistant"]
 _LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
 _MAX_CHAT_IMAGE_DATA_URL_CHARS = 8_000_000
 _MAX_CHAT_IMAGE_ATTACHMENTS = 8
@@ -82,14 +86,6 @@ def parse_explicit_research_command(content: str) -> tuple[str, ResearchMode] | 
 
 
 
-class ChatMessage(BaseModel):
-    id: str
-    role: ChatMessageRole
-    content: str
-    created_at: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class MessageContentPurpose(str, Enum):
     MODEL = "model"
     MEMORY = "memory"
@@ -142,39 +138,6 @@ def _bounded_content_end(value: object, maximum: int) -> int:
     except (TypeError, ValueError):
         return 0
     return max(0, min(maximum, parsed))
-
-
-class ChatSessionSummary(BaseModel):
-    id: str
-    title: str
-    provider_id: str | None = None
-    model_id: str | None = None
-    research_mode_override: ResearchMode | None = None
-    profile_id: str = DEFAULT_PROFILE_ID
-    workspace_id: str = DEFAULT_WORKSPACE_ID
-    project_id: str | None = None
-    memory_enabled: bool = False
-    memory_snapshot_id: str | None = None
-    memory_snapshot_revision: int | None = Field(default=None, ge=1)
-    memory_record_count: int = Field(default=0, ge=0)
-    memory_last_refreshed_at: str | None = None
-    interaction_mode: InteractionMode = "system"
-    character_id: str | None = Field(default=None, max_length=160)
-    voice_asset_id: str | None = Field(default=None, max_length=240)
-    read_memory: bool = False
-    write_memory: bool = False
-    shared_memory_access: SharedMemoryAccess = "none"
-    transcript_policy: TranscriptPolicy = "persistent"
-    active_segment_id: str | None = Field(default=None, max_length=200)
-    character_profile_version: int | None = Field(default=None, ge=1)
-    effective_identity_hash: str | None = Field(default=None, min_length=64, max_length=64)
-    message_count: int = 0
-    created_at: str
-    updated_at: str
-
-
-class ChatSession(ChatSessionSummary):
-    messages: list[ChatMessage] = Field(default_factory=list)
 
 
 class ChatSessionListResponse(BaseModel):

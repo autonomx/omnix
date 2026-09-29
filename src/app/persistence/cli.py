@@ -1,8 +1,8 @@
 from __future__ import annotations
+from app.config.env import environment_copy as _process_environment
 
 import argparse
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -73,7 +73,7 @@ def _tool_database_arguments(settings: DatabaseSettings) -> tuple[str, dict[str,
     user = f"{username}@" if username else ""
     port = f":{parsed.port}" if parsed.port else ""
     safe_url = urlunsplit((parsed.scheme, f"{user}{hostname}{port}", parsed.path, parsed.query, ""))
-    environment = dict(os.environ)
+    environment = _process_environment()
     environment.pop("OMNIX_DATABASE_URL", None)
     if parsed.password is not None:
         environment["PGPASSWORD"] = unquote(parsed.password)
@@ -108,7 +108,12 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("health", help="Check PostgreSQL connectivity")
     migrate = subparsers.add_parser("migrate", help="Apply pending migrations")
     migrate.add_argument("--allow-out-of-order", action="store_true")
-    subparsers.add_parser("status", help="Show migration state")
+    status = subparsers.add_parser("status", help="Show migration state as JSON")
+    status.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the machine-readable JSON migration report (the default output).",
+    )
     subparsers.add_parser("verify", help="Require healthy PostgreSQL and zero migration drift")
 
     backup = subparsers.add_parser("backup", help="Create a pg_dump custom-format backup")

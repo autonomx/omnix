@@ -5,6 +5,27 @@ from fastapi import APIRouter, Request
 from app.rpg.ai.dialogue import DialogueManager
 from app.rpg.player import ensure_player_state
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class DialogueStartRequestBody(_TypedRequestModel):
+    npc_id: _TypedRequestAny = None
+    scene_id: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DialogueMessageRequestBody(_TypedRequestModel):
+    message: _TypedRequestAny = None
+    npc_id: _TypedRequestAny = None
+    scene_id: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DialogueEndRequestBody(_TypedRequestModel):
+    setup_payload: _TypedRequestAny = None
+
+
 rpg_dialogue_bp = APIRouter()
 dialogue_manager = DialogueManager()
 
@@ -47,8 +68,8 @@ def _get_npc_and_mind(simulation_state, npc_id: str):
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/start")
-async def dialogue_start(request: Request):
-    data = await request.json() or {}
+def dialogue_start(request: Request, request_body: DialogueStartRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     scene_id = str(data.get("scene_id") or "")
@@ -65,8 +86,8 @@ async def dialogue_start(request: Request):
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/message")
-async def dialogue_message(request: Request):
-    data = await request.json() or {}
+def dialogue_message(request: Request, request_body: DialogueMessageRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     scene_id = str(data.get("scene_id") or "")
@@ -96,8 +117,8 @@ async def dialogue_message(request: Request):
 
 
 @rpg_dialogue_bp.post("/api/rpg/dialogue/end")
-async def dialogue_end(request: Request):
-    data = await request.json() or {}
+def dialogue_end(request: Request, request_body: DialogueEndRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import os
 import shutil
 import subprocess
 import time
@@ -13,6 +12,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from app.config.env import env_int, env_str
 from app.runtime.net import allowed_origins, bind_host
 from app.security.model_service import ModelServiceMiddleware
 
@@ -135,7 +135,7 @@ def _decode_audio(payload: bytes, filename: str) -> tuple[bytes, float]:
 
 
 def _ffmpeg_binary() -> str:
-    configured = os.environ.get("OMNIX_FFMPEG", "").strip()
+    configured = (env_str("OMNIX_FFMPEG", "") or "").strip()
     if configured and Path(configured).is_file():
         return configured
     executable = shutil.which("ffmpeg")
@@ -190,7 +190,7 @@ async def transcribe(
 
 def main() -> None:
     host = bind_host()
-    port = int(os.environ.get("OMNIX_STT_PORT", "5201"))
+    port = env_int("OMNIX_STT_PORT", 5201, minimum=1, maximum=65535)
     print(f"[STT] Starting {PROVIDER_NAME} on http://{host}:{port}")
     print("[STT] Nemotron is authoritative transcript; Parakeet Realtime EOU is endpoint-only")
     uvicorn.run(app, host=host, port=port)

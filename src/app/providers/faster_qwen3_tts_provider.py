@@ -4,10 +4,10 @@ Faster Qwen3 TTS Provider Plugin
 Implements the BaseTTSProvider interface for the faster-qwen3-tts library
 with CUDA graph acceleration for real-time voice cloning.
 """
+from app.config.env import env_str as _env_str
 
 import base64
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 import numpy as np
 from app.assets.voice_clone_identity import reference_transcript
 
-from ..shared import VOICE_CLONES_DIR
+from app.runtime.paths import VOICE_CLONES_DIR
 from .audio_base import (
     AudioProviderCapability,
     BaseTTSProvider,
@@ -106,11 +106,11 @@ def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
     """
     config = config or {}
 
-    env_model_dir = (os.environ.get("OMNIX_TTS_MODEL_DIR", "") or "").strip()
+    env_model_dir = (_env_str("OMNIX_TTS_MODEL_DIR", "") or "").strip()
     if env_model_dir:
         return env_model_dir
 
-    env_qwen3_model_dir = (os.environ.get("OMNIX_QWEN3_TTS_MODEL_DIR", "") or "").strip()
+    env_qwen3_model_dir = (_env_str("OMNIX_QWEN3_TTS_MODEL_DIR", "") or "").strip()
     if env_qwen3_model_dir:
         return env_qwen3_model_dir
 

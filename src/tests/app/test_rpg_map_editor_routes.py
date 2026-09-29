@@ -15,7 +15,11 @@ def _definition() -> dict[str, object]:
 
 
 def test_validate_and_apply_editor_routes() -> None:
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
 
     validated = client.post("/api/rpg/map-editor/validate", json={"definition": _definition()})
     assert validated.status_code == 200
@@ -43,7 +47,11 @@ def test_validate_and_apply_editor_routes() -> None:
 
 
 def test_export_route_is_canonical_and_attachment_safe() -> None:
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
 
     response = client.post(
         "/api/rpg/map-editor/export",
@@ -59,7 +67,11 @@ def test_export_route_is_canonical_and_attachment_safe() -> None:
 
 
 def test_invalid_operations_return_typed_error() -> None:
-    client = TestClient(create_gateway_app())
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
 
     response = client.post(
         "/api/rpg/map-editor/apply",

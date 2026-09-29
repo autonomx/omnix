@@ -22,10 +22,10 @@ from contextvars import ContextVar
 from functools import wraps
 from typing import Any
 
-from app.config.env import environment, env_str
+from app.config.env import environment
 from app.providers import service as provider_service
 from app.settings.access import current_settings_service
-from app.assistant_memory import settings as memory_settings_module
+from app.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
 from app.chat import context_budget as context_budget_module
 from app.chat import memory_prompt as memory_prompt_module
 from app.chat import retention_policy as retention_policy_module
@@ -36,8 +36,7 @@ from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_prompt_dependency_stages_installed"
 _MAX_SETTINGS_CACHE_ENTRIES = 8
-_MAX_GLOBAL_PROMPT_CACHE_ENTRIES = 8
-_DEFAULT_OVERRIDE_PROMPT_TTL_SECONDS = 60.0
+_MEMORY_SETTINGS_CACHE_TTL_SECONDS = 5.0
 _SETTINGS_ENV_NAMES = (
     "OMNIX_CHAT_MEMORY_ENABLED",
     "OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED",
@@ -82,12 +81,10 @@ _ACCOUNTED_STAGE_NAMES = tuple(
 )
 
 _CACHE_LOCK = threading.RLock()
-_MEMORY_SETTINGS_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
-_GLOBAL_SYSTEM_PROMPT_CACHE: OrderedDict[
-    tuple[Any, ...],
-    tuple[float, str],
+_MEMORY_SETTINGS_CACHE: OrderedDict[
+    tuple[Any, ...], tuple[float, Any]
 ] = OrderedDict()
-_GLOBAL_PROMPT_OVERRIDE_REVISION = 0
+_MEMORY_SETTINGS_OVERRIDE_REVISION = 0
 _DEPENDENCY_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_dependency_timings",
     default=None,
@@ -102,33 +99,17 @@ def _clone(value: Any) -> Any:
 
 
 def _settings_cache_key() -> tuple[Any, ...]:
-    path = memory_settings_module.default_memory_settings_path()
-    environment_values = tuple((name, environment().get(name)) for name in _SETTINGS_ENV_NAMES)
-    return (str(path), environment_values)
-
-
-def _global_prompt_override_ttl_seconds() -> float:
-    raw = env_str("OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS", None)
-    try:
-        return max(0.0, float(raw or _DEFAULT_OVERRIDE_PROMPT_TTL_SECONDS))
-    except (TypeError, ValueError):
-        return _DEFAULT_OVERRIDE_PROMPT_TTL_SECONDS
-
-
-def _global_prompt_cache_key() -> tuple[Any, ...]:
     try:
         service = current_settings_service()
+        service_key: tuple[Any, ...] = (
+            "service",
+            id(service),
+            _MEMORY_SETTINGS_OVERRIDE_REVISION,
+        )
     except RuntimeError:
-        return ("defaults", _GLOBAL_PROMPT_OVERRIDE_REVISION)
-    return ("service", id(service), _GLOBAL_PROMPT_OVERRIDE_REVISION)
-
-
-def _global_prompt_cache_entry_valid(
-    key: tuple[Any, ...],
-    cached_at: float,
-    now: float,
-) -> bool:
-    return (now - cached_at) <= _global_prompt_override_ttl_seconds()
+        service_key = ("unavailable", _MEMORY_SETTINGS_OVERRIDE_REVISION)
+    environment_values = tuple((name, environment().get(name)) for name in _SETTINGS_ENV_NAMES)
+    return (*service_key, environment_values)
 
 
 def _record_stage(name: str, elapsed_ms: float) -> None:
@@ -146,17 +127,23 @@ def _record_flag(name: str, value: Any) -> None:
 def _load_memory_runtime_settings_cached() -> Any:
     started = time.perf_counter()
     key = _settings_cache_key()
+    now = time.monotonic()
     with _CACHE_LOCK:
         cached = _MEMORY_SETTINGS_CACHE.get(key)
-        if cached is not None:
+        if (
+            cached is not None
+            and now - cached[0] <= _MEMORY_SETTINGS_CACHE_TTL_SECONDS
+        ):
             _MEMORY_SETTINGS_CACHE.move_to_end(key)
             _record_flag("settings_cache_hit", True)
             _record_stage("settings_ms", (time.perf_counter() - started) * 1000.0)
-            return _clone(cached)
+            return _clone(cached[1])
+        if cached is not None:
+            _MEMORY_SETTINGS_CACHE.pop(key, None)
 
     result = _ORIGINAL_LOAD_MEMORY_SETTINGS()
     with _CACHE_LOCK:
-        _MEMORY_SETTINGS_CACHE[key] = _clone(result)
+        _MEMORY_SETTINGS_CACHE[key] = (now, _clone(result))
         _MEMORY_SETTINGS_CACHE.move_to_end(key)
         while len(_MEMORY_SETTINGS_CACHE) > _MAX_SETTINGS_CACHE_ENTRIES:
             _MEMORY_SETTINGS_CACHE.popitem(last=False)
@@ -165,43 +152,11 @@ def _load_memory_runtime_settings_cached() -> Any:
     return _clone(result)
 
 
-def _get_global_system_prompt_cached() -> str:
-    started = time.perf_counter()
-    key = _global_prompt_cache_key()
-    now = time.monotonic()
-    mode = str(key[0]) if key else "unknown"
+def _invalidate_memory_settings_cache() -> None:
+    global _MEMORY_SETTINGS_OVERRIDE_REVISION
     with _CACHE_LOCK:
-        cached = _GLOBAL_SYSTEM_PROMPT_CACHE.get(key)
-        if cached is not None and _global_prompt_cache_entry_valid(
-            key,
-            cached[0],
-            now,
-        ):
-            _GLOBAL_SYSTEM_PROMPT_CACHE.move_to_end(key)
-            _record_flag("global_prompt_cache_hit", True)
-            _record_flag("global_prompt_cache_mode", mode)
-            _record_stage("global_prompt_ms", (time.perf_counter() - started) * 1000.0)
-            return cached[1]
-        if cached is not None:
-            _GLOBAL_SYSTEM_PROMPT_CACHE.pop(key, None)
-
-    result = str(_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT() or "")
-    with _CACHE_LOCK:
-        _GLOBAL_SYSTEM_PROMPT_CACHE[key] = (now, result)
-        _GLOBAL_SYSTEM_PROMPT_CACHE.move_to_end(key)
-        while len(_GLOBAL_SYSTEM_PROMPT_CACHE) > _MAX_GLOBAL_PROMPT_CACHE_ENTRIES:
-            _GLOBAL_SYSTEM_PROMPT_CACHE.popitem(last=False)
-    _record_flag("global_prompt_cache_hit", False)
-    _record_flag("global_prompt_cache_mode", mode)
-    _record_stage("global_prompt_ms", (time.perf_counter() - started) * 1000.0)
-    return result
-
-
-def _invalidate_global_prompt_cache() -> None:
-    global _GLOBAL_PROMPT_OVERRIDE_REVISION
-    with _CACHE_LOCK:
-        _GLOBAL_PROMPT_OVERRIDE_REVISION += 1
-        _GLOBAL_SYSTEM_PROMPT_CACHE.clear()
+        _MEMORY_SETTINGS_OVERRIDE_REVISION += 1
+        _MEMORY_SETTINGS_CACHE.clear()
 
 
 def _cached_compaction_enabled() -> bool:
@@ -304,11 +259,11 @@ def _install_dependency_wrappers() -> None:
         "diagnostics_ms",
         companion_context.record_companion_diagnostics,
     )
-    provider_service.get_global_system_prompt = _get_global_system_prompt_cached
     try:
-        current_settings_service().subscribe(
-            "global_system_prompt",
-            lambda _key, _value: _invalidate_global_prompt_cache(),
+        service = current_settings_service()
+        service.subscribe(
+            ASSISTANT_MEMORY_SETTINGS_KEY,
+            lambda _key, _value: _invalidate_memory_settings_cache(),
         )
     except RuntimeError:
         pass
@@ -331,6 +286,9 @@ def _install_builder_breakdown() -> None:
             return original_builder(self, session, user_message, context_items)
         finally:
             total_ms = (time.perf_counter() - started) * 1000.0
+            prompt_cache = provider_service.global_system_prompt_cache_state()
+            timings["global_prompt_cache_hit"] = prompt_cache["hit"]
+            timings["global_prompt_cache_mode"] = prompt_cache["mode"]
             _DEPENDENCY_TIMINGS.reset(token)
             accounted_ms = sum(
                 float(timings.get(name, 0.0) or 0.0)
@@ -356,11 +314,11 @@ def _install_builder_breakdown() -> None:
 
 
 def _reset_live_prompt_dependency_state_for_tests() -> None:
-    global _GLOBAL_PROMPT_OVERRIDE_REVISION
+    global _MEMORY_SETTINGS_OVERRIDE_REVISION
     with _CACHE_LOCK:
         _MEMORY_SETTINGS_CACHE.clear()
-        _GLOBAL_SYSTEM_PROMPT_CACHE.clear()
-        _GLOBAL_PROMPT_OVERRIDE_REVISION = 0
+        _MEMORY_SETTINGS_OVERRIDE_REVISION = 0
+    provider_service.invalidate_global_system_prompt_cache()
 
 
 def install_live_chat_prompt_dependency_stage_hook() -> None:
@@ -374,7 +332,6 @@ def install_live_chat_prompt_dependency_stage_hook() -> None:
 
 
 _ORIGINAL_LOAD_MEMORY_SETTINGS = companion_context.load_memory_runtime_settings
-_ORIGINAL_GET_GLOBAL_SYSTEM_PROMPT = provider_service.get_global_system_prompt
 
 
 __all__ = ["install_live_chat_prompt_dependency_stage_hook"]

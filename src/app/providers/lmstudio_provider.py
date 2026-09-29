@@ -1,8 +1,8 @@
 """LM Studio provider plugin."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import json
-import os
 import threading
 from typing import Any, Dict, Iterator, List, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
@@ -100,7 +100,7 @@ class LMStudioProvider(BaseProvider):
         """Return the configured LM Studio token without requiring one locally."""
 
         configured = str(self.config.api_key or "").strip()
-        return configured or os.environ.get("LM_API_TOKEN", "").strip()
+        return configured or _env_str("LM_API_TOKEN", "").strip()
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.config.base_url}{endpoint}"

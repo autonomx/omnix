@@ -1,7 +1,7 @@
 """Install deterministic companion packets on the bounded live-voice prompt path."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -23,13 +23,14 @@ from app.assistant_memory.rollout import companion_rollout_policy
 from app.assistant_memory.scope import resolve_session_memory_scope
 from app.assistant_memory.settings import load_memory_runtime_settings
 from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
+from app.conversation.contracts import PromptMemoryItem
 from app.characters.live_conversation_profile import (
     LiveConversationProfile,
     default_live_conversation_profile_store,
 )
 from app.chat.compaction import compaction_enabled
 from app.chat.memory_prompt import resolve_prompt_memory
-from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
+from app.chat.prompt_assembly import build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
 
 from . import live_chat_live_voice_profile as live_profile
@@ -134,11 +135,11 @@ def _build_companion_prompt(
             memory_service_factory(),
             scope_context,
             query,
-            timezone_name=os.environ.get("OMNIX_USER_TIMEZONE"),
+            timezone_name=_env_str("OMNIX_USER_TIMEZONE"),
             deadline_ms=float(
-                os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50
+                _env_str("OMNIX_LIVE_MEMORY_RETRIEVAL_DEADLINE_MS") or 50
             ),
-            limit=int(os.environ.get("OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT") or 12),
+            limit=int(_env_str("OMNIX_LIVE_MEMORY_RETRIEVAL_LIMIT") or 12),
         )
     temporal_memory = _temporal_prompt_memory(temporal_result) if temporal_result else []
     packet = build_companion_context_packet(

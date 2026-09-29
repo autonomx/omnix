@@ -144,6 +144,15 @@ class PresencePolicyVersion(BaseModel):
     created_at: str
 
 
+class LiveChatEvaluationExport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    format_version: int
+    generated_at: str
+    evaluations: list[VoiceSessionEvaluationRecord]
+    presence_policies: dict[str, PresencePolicyVersion]
+
+
 _DEFAULT_POLICIES: dict[PresencePreset, PresencePolicyValues] = {
     "quiet": PresencePolicyValues(
         silence_tolerance_ms=30_000,

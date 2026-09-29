@@ -1,8 +1,8 @@
 """Model service boundary: guarded hosts, service authentication and bounded uploads."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import logging
-import os
 import secrets
 
 from starlette.responses import JSONResponse
@@ -24,7 +24,7 @@ _ERROR_CODES = {
 
 
 def max_upload_bytes() -> int:
-    raw = os.environ.get("OMNIX_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
+    raw = _env_str("OMNIX_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
     if not raw.isascii() or not raw.isdecimal() or int(raw) <= 0:
         raise ValueError("OMNIX_MAX_UPLOAD_BYTES must be a positive integer")
     return int(raw)

@@ -1,7 +1,7 @@
 """Materialize approved Campaign Genesis into PostgreSQL and playable session state."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from typing import Any, Mapping
 
 from app.rpg.session.genesis.contract import CampaignGenesisContract
@@ -152,7 +152,7 @@ def persist_campaign_genesis(
     """
 
     required = (
-        os.environ.get("OMNIX_REQUIRE_POSTGRESQL_GENESIS", "").strip().casefold()
+        _env_str("OMNIX_REQUIRE_POSTGRESQL_GENESIS", "").strip().casefold()
         in {"1", "true", "yes", "on"}
         if required is None
         else required

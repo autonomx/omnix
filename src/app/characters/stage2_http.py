@@ -34,6 +34,20 @@ class HttpStage2Gateway(HttpStage1Gateway):
     def delete_session(self, session_id: str) -> dict[str, Any]:
         return self._json("DELETE", f"/api/chat/sessions/{self._encoded(session_id)}")
 
+    def list_memory(self, session_id: str) -> dict[str, Any]:
+        return self._json(
+            "GET",
+            "/api/assistant/memory",
+            params={"session_id": session_id},
+        )
+
+    def list_candidates(self, session_id: str) -> dict[str, Any]:
+        return self._json(
+            "GET",
+            "/api/assistant/memory/candidates",
+            params={"session_id": session_id},
+        )
+
     def create_memory(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json("POST", "/api/assistant/memory", payload=payload)
 

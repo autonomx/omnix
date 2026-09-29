@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from app.rpg_world_forge_provider import WorldForgeTopicResponse
+from app.rpg.worlds.providers.world_forge import WorldForgeTopicResponse
 
 _PRESENTATION_FIELDS = frozenset(
     {

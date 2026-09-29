@@ -83,7 +83,6 @@ def register_assistant_context_routes(
         @app.patch(
             "/api/assistant/context/research/jobs/{job_id}/plan",
             response_model=JobRecord,
-            include_in_schema=False,
             name=_PLAN_UPDATE_ROUTE_NAME,
         )
         async def update_deep_research_plan_endpoint(
@@ -119,7 +118,6 @@ def register_assistant_context_routes(
         @app.post(
             "/api/assistant/context/research/jobs/{job_id}/start",
             response_model=JobRecord,
-            include_in_schema=False,
             name=_PLAN_START_ROUTE_NAME,
         )
         async def start_deep_research_plan_endpoint(job_id: str) -> JobRecord:
@@ -150,7 +148,6 @@ def register_assistant_context_routes(
     @app.post(
         "/api/assistant/context/chat/sessions/{session_id}/messages",
         response_model=SendChatMessageResponse,
-        include_in_schema=False,
         name=_ROUTE_NAME,
     )
     def assistant_context_chat_message_endpoint(

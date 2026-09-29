@@ -7,6 +7,7 @@ from typing import Any
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
 from app.jobs.inline_execution_compat import require_execution_authority
+from app.rpg.presentation.visible_response import visible_response_text
 
 def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
     """Execute one leased RPG turn through the feature-owned handler."""
@@ -283,6 +284,10 @@ def _sync_runtime_player_state(session: dict[str, Any]) -> bool:
 
 
 def _rpg_turn_visible_text(result: dict[str, Any]) -> str | None:
+    canonical = visible_response_text(result)
+    if canonical:
+        return canonical
+
     nested = _dict_value(result.get("result"))
     authoritative = _dict_value(result.get("authoritative"))
     turn_contract = _dict_value(result.get("turn_contract"))

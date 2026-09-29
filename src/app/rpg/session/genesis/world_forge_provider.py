@@ -1,7 +1,7 @@
 """Compatibility exports for the production World Forge provider boundary."""
 from __future__ import annotations
 
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     FallbackWorldForgeTopicGenerator,
     ProviderWorldForgeTopicGenerator,
     UnavailableWorldForgeTopicGenerator,

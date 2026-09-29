@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from app.persistence.document_store import PostgresDocumentStore
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 
 
 def load_empty_assistant_tool_credentials(path: Path | None = None):

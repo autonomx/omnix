@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from app.assistant_tools.registry import default_assistant_tools
 from app.assist_core.hermes_catalog import hermes_catalog_specs
 

@@ -29,7 +29,7 @@ from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepositor
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -76,7 +76,7 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project_id = service.create_project(context, title="Delete Test")["id"]
@@ -160,7 +160,7 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="A Test Book")
@@ -197,7 +197,7 @@ def test_manual_interpretation_is_visible_before_classification(tmp_path, monkey
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Manual interpretation")
@@ -234,7 +234,7 @@ def test_analysis_resumes_prepared_chapters_before_publishing_review(tmp_path, m
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Analysis Resume")
@@ -276,7 +276,7 @@ def test_user_revises_span_without_changing_canonical_source(tmp_path, monkeypat
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Revision Book")
@@ -326,7 +326,7 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Classifier Book")
@@ -423,7 +423,7 @@ def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Roster refresh")
@@ -547,7 +547,7 @@ def test_identical_source_retries_style_discovery_after_provider_failure(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Style recovery")
@@ -633,7 +633,7 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Rejected character")
@@ -722,7 +722,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Character profile")
@@ -952,7 +952,7 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="The Yellow Wallpaper",
@@ -1019,7 +1019,7 @@ from app.audiobook import render_service as render
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 
 class Provider:
     def generate_audio_batch(self, requests):
@@ -1039,7 +1039,7 @@ render._save_render = crash_after_checkpoint
 database = PostgresDatabase(DatabaseSettings(url=sys.argv[1], pool_min=1, pool_max=2,
     connect_timeout_seconds=10, statement_timeout_ms=30000, lock_timeout_ms=5000,
     application_name="omnix-audiobook-golden-crash-test"))
-render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_tenant(database),
+render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_identity(database),
                        worker_id="test:golden-crashed-worker")
 """
         child_env = os.environ.copy()
@@ -1146,7 +1146,7 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Long chapter")
@@ -1230,7 +1230,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Render Recovery")
@@ -1601,7 +1601,7 @@ from app.audiobook import render_service as render
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 
 class Provider:
     def generate_audio_batch(self, requests):
@@ -1621,7 +1621,7 @@ render._save_render = crash_after_checkpoint
 database = PostgresDatabase(DatabaseSettings(url=sys.argv[1], pool_min=1, pool_max=2,
     connect_timeout_seconds=10, statement_timeout_ms=30000, lock_timeout_ms=5000,
     application_name="omnix-audiobook-crash-test"))
-render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_tenant(database),
+render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_identity(database),
                        worker_id="test:crashed-worker")
 """
         child_env = os.environ.copy()
@@ -1721,7 +1721,7 @@ def test_identical_source_resubmit_reuses_empty_style_discovery(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Stable no-style source")
@@ -1810,7 +1810,7 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Stable style source")
@@ -1872,7 +1872,7 @@ def test_identical_source_resubmit_reuses_revision_without_restarting_analysis(t
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Idempotent source")
@@ -1958,7 +1958,7 @@ def test_extract_quotes_rediscovers_styles_after_initial_classifier_outage(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Style rediscovery")
@@ -2069,7 +2069,7 @@ def test_extract_quotes_migrates_stale_detector_before_explicit_classification(
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Stale span migration")
@@ -2186,7 +2186,7 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Alias reconciliation")
@@ -2253,7 +2253,7 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Assembly recovery")
@@ -2361,7 +2361,7 @@ def test_stale_ingest_retry_is_rejected_after_canonical_source_exists(tmp_path, 
     ))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Stale ingest guard")

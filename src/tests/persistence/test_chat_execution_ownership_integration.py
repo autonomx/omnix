@@ -22,7 +22,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.gateway_runtime import GatewayRuntimeOwner
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
-from app.persistence.repositories import PostgresIdentityRepository
+from app.persistence.identity_service import PostgresIdentityRepository
 from app.persistence.runtime_coordination import (
     PostgresRuntimeCoordinationRepository,
     RuntimeNodeConflict,

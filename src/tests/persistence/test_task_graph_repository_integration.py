@@ -17,7 +17,7 @@ from app.agent_runtime.task_graph_repository import (
 )
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -46,7 +46,7 @@ def _database() -> PostgresDatabase:
 def test_task_graph_revision_rejects_stale_child_completion_and_claim() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"task-graph-{uuid.uuid4().hex}"
         original_node = TaskNode(
             id="research",
@@ -186,7 +186,7 @@ def test_task_graph_revision_rejects_stale_child_completion_and_claim() -> None:
 def test_task_graph_batch_claim_metadata_is_durable() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"task-graph-batch-{uuid.uuid4().hex}"
         node = TaskNode(
             id="release",
@@ -245,7 +245,7 @@ def test_terminal_task_graph_cannot_be_revised_or_resurrected(
 ) -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"task-graph-terminal-{uuid.uuid4().hex}"
         node = TaskNode(
             id="research",
@@ -324,7 +324,7 @@ def test_terminal_task_graph_cannot_be_revised_or_resurrected(
 def test_stale_run_status_cas_cannot_resurrect_cancelled_graph() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"task-graph-status-cas-{uuid.uuid4().hex}"
         node = TaskNode(
             id="research",

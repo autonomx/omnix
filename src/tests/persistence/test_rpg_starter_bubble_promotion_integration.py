@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.service import (
@@ -60,7 +60,7 @@ def test_promotion_creates_future_revision_without_rebinding_existing_campaign()
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         source_revision = compile_world_revision(
             world_id="world:starter",
             revision=1,

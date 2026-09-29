@@ -9,6 +9,8 @@ from app.chat.retention_policy import transcript_retention_allowed
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
+from app.persistence.repository_registry import install_repository_specs
+from app.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
 
 
 def _json(value: Any) -> str:
@@ -27,6 +29,7 @@ class PostgresChatRepositoryAdapter:
     """
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
+        install_repository_specs(CHAT_REPOSITORY_SPECS)
         self.database = database or default_database()
         self.context = current_tenant()
 

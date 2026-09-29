@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-import app.shared as shared
+from app.providers import service as provider_service
 from app.jobs import voice_inline
 
 

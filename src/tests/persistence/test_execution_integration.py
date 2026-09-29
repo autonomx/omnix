@@ -7,7 +7,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -66,7 +66,7 @@ def test_skip_locked_claims_distinct_jobs_and_completes() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:low", priority=1)
             _create_job(work, context, "job:high", priority=10)
@@ -139,7 +139,7 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:durable-feature")
             claimed = work.jobs.claim_next(
@@ -188,7 +188,7 @@ def test_expired_worker_cannot_fail_before_reclaim() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:expired-failure", max_attempts=3)
             claimed = work.jobs.claim_next(
@@ -226,7 +226,7 @@ def test_stale_worker_cannot_fail_successor_attempt() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:stale-failure", max_attempts=3)
             first = work.jobs.claim_next(
@@ -284,7 +284,7 @@ def test_record_only_job_transitions_without_worker_lease() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.jobs.create_job(
                 context,
@@ -339,7 +339,7 @@ def test_job_retry_then_dead_letter() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:retry", max_attempts=2)
             work.commit()
@@ -398,7 +398,7 @@ def test_claim_reconciles_a_stale_attempt_record() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:stale-attempt", max_attempts=2)
             work.connection.execute(
@@ -430,7 +430,7 @@ def test_cancel_queued_and_active_jobs() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:queued")
             _create_job(work, context, "job:active", priority=5)
@@ -453,7 +453,7 @@ def test_expired_cancel_requested_job_becomes_terminal_canceled() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_job(work, context, "job:cancel-expired")
             claimed = work.jobs.claim_next(
@@ -519,7 +519,7 @@ def test_outbox_is_transactional_claimable_and_retryable() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(RuntimeError):
             with unit_of_work(database) as work:
                 work.outbox.append(
@@ -582,7 +582,7 @@ def test_foreground_submission_reuses_committed_result() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             job = _create_job(work, context, "job:foreground")
             claim = work.foreground_submissions.claim(
@@ -635,7 +635,7 @@ def test_expired_pre_execution_submission_can_be_reclaimed() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             first = work.foreground_submissions.claim(
                 context,

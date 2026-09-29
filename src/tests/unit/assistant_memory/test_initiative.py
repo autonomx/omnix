@@ -10,7 +10,7 @@ from app.assistant_memory.initiative import (
     record_initiative_surface,
     reset_initiative_surface_history,
 )
-from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.temporal_retrieval import (
     TemporalRetrievalResult,
     rank_temporal_records,

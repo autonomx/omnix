@@ -11,7 +11,7 @@ from app.assistant_memory.controls import (
     undo_automatic_memory,
 )
 from app.assistant_memory.management_routes import register_memory_management_routes
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.observability import (
     memory_usage_snapshot,
     record_memory_usage,

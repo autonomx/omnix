@@ -6,6 +6,7 @@ waiting for the loop itself to recover. Stack payloads contain code locations
 only; frame locals and user content are never inspected.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import os
@@ -31,12 +32,12 @@ _DEFAULT_STACK_LIMIT = 10
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)) or default)
+        value = float(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, value)
@@ -44,7 +45,7 @@ def _env_float(name: str, default: float, *, minimum: float) -> float:
 
 def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
-        value = int(os.environ.get(name, str(default)) or default)
+        value = int(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, min(maximum, value))

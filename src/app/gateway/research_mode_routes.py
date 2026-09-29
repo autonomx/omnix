@@ -20,7 +20,6 @@ def register_research_mode_routes(gateway: FastAPI) -> None:
 
     @gateway.post(
         "/api/chat/sessions/{session_id}/research-mode",
-        include_in_schema=False,
     )
     def set_conversation_research_mode(
         session_id: str,

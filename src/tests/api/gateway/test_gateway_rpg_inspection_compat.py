@@ -15,7 +15,12 @@ if str(SRC_DIR) not in sys.path:
 def _client() -> TestClient:
     from app.gateway.main import create_gateway_app
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+        raise_server_exceptions=False,
+    )
 
 
 def test_gateway_rpg_inspect_timeline_returns_legacy_envelope() -> None:

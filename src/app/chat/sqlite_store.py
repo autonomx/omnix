@@ -35,7 +35,7 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         self._prompt_context_cache = OrderedDict()
         self._prompt_context_cache_lock = threading.Lock()
         self.import_state: ChatImportState | None = None
-        if import_legacy:
+        if import_legacy and legacy_json_path is not None:
             self.import_state = import_legacy_chat_json(
                 self.repository,
                 source_path=legacy_json_path,

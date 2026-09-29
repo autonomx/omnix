@@ -555,7 +555,6 @@ def register_character_live2d_avatar_routes(
         "/api/characters/{character_id}/live2d-models",
         response_model=Live2DModelCatalogResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def live2d_model_catalog(character_id: str) -> Live2DModelCatalogResponse:
         try:
@@ -567,7 +566,6 @@ def register_character_live2d_avatar_routes(
         "/api/characters/{character_id}/live2d-avatar",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def activate_live2d_avatar(
         character_id: str,
@@ -584,7 +582,6 @@ def register_character_live2d_avatar_routes(
         "/api/characters/{character_id}/live2d-avatar/disable",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
     async def disable_live2d_avatar(character_id: str) -> Live2DAvatarActionResponse:
         try:
@@ -594,8 +591,18 @@ def register_character_live2d_avatar_routes(
 
     @app.get(
         "/api/character-live2d/runtime/{filename}",
+        response_model=None,
+        response_class=FileResponse,
+        responses={
+            200: {
+                "description": "Live2D runtime script or binary content.",
+                "content": {
+                    "text/javascript": {"schema": {"type": "string", "format": "binary"}},
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                },
+            }
+        },
         tags=["characters"],
-        include_in_schema=False,
     )
     async def live2d_runtime_file(filename: str) -> FileResponse:
         try:
@@ -607,8 +614,20 @@ def register_character_live2d_avatar_routes(
 
     @app.get(
         "/api/character-live2d/assets/{asset_id}/{asset_path:path}",
+        response_model=None,
+        response_class=FileResponse,
+        responses={
+            200: {
+                "description": "Live2D model asset bytes with an extension-derived media type.",
+                "content": {
+                    "application/json": {"schema": {"type": "object", "additionalProperties": True}},
+                    "image/*": {"schema": {"type": "string", "format": "binary"}},
+                    "audio/*": {"schema": {"type": "string", "format": "binary"}},
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                },
+            }
+        },
         tags=["characters"],
-        include_in_schema=False,
     )
     async def live2d_model_file(asset_id: str, asset_path: str) -> FileResponse:
         try:

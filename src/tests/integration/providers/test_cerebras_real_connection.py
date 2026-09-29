@@ -190,10 +190,10 @@ class TestCerebrasIntegrationWithSettingsFile:
     def test_cerebras_provider_from_actual_settings(self):
         """Test creating Cerebras provider from the actual settings.json file."""
         # Import shared module to test settings loading
-        import app.shared as shared
+        from app.providers import service as provider_service
         
         # Load settings from the actual file
-        settings = shared.load_settings()
+        settings = provider_service.load_settings()
         assert 'provider' in settings
         assert 'cerebras' in settings
         
@@ -203,7 +203,7 @@ class TestCerebrasIntegrationWithSettingsFile:
             pytest.skip("Cerebras API key not configured in settings.json")
         
         # Test creating provider from settings
-        provider = shared.get_provider()
+        provider = provider_service.get_provider()
         assert provider is not None
         assert provider.provider_name == 'cerebras'
         assert provider.config.api_key == cerebras_config['api_key']
@@ -215,17 +215,17 @@ class TestCerebrasIntegrationWithSettingsFile:
     
     def test_cerebras_connection_from_settings(self):
         """Test Cerebras connection using the actual settings.json configuration."""
-        import app.shared as shared
+        from app.providers import service as provider_service
         
         # Load settings from the actual file
-        settings = shared.load_settings()
+        settings = provider_service.load_settings()
         cerebras_config = settings.get('cerebras', {})
         
         if not cerebras_config.get('api_key'):
             pytest.skip("Cerebras API key not configured in settings.json")
         
         # Create provider from settings
-        provider = shared.get_provider()
+        provider = provider_service.get_provider()
         if provider is None or provider.provider_name != 'cerebras':
             pytest.skip("Cerebras provider not properly configured")
         
@@ -243,17 +243,17 @@ class TestCerebrasIntegrationWithSettingsFile:
     
     def test_cerebras_models_from_settings(self):
         """Test Cerebras model retrieval using the actual settings.json configuration."""
-        import app.shared as shared
+        from app.providers import service as provider_service
         
         # Load settings from the actual file
-        settings = shared.load_settings()
+        settings = provider_service.load_settings()
         cerebras_config = settings.get('cerebras', {})
         
         if not cerebras_config.get('api_key'):
             pytest.skip("Cerebras API key not configured in settings.json")
         
         # Create provider from settings
-        provider = shared.get_provider()
+        provider = provider_service.get_provider()
         if provider is None or provider.provider_name != 'cerebras':
             pytest.skip("Cerebras provider not properly configured")
         

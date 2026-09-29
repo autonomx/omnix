@@ -6,8 +6,8 @@ request, commits certified canon, materializes the session, and opens the first-
 gate. Expired leases are reclaimed by the shared job repository after restart.
 """
 from __future__ import annotations
+from app.config.env import environment as _environment
 
-import os
 import threading
 from contextlib import nullcontext
 from contextvars import copy_context
@@ -62,7 +62,7 @@ def campaign_genesis_async_enabled(
 ) -> bool:
     """Use asynchronous Genesis in production while keeping deterministic CI explicit."""
 
-    env = environ or os.environ
+    env = environ or _environment()
     configured = str(env.get("OMNIX_RPG_CAMPAIGN_GENESIS_MODE") or "").strip().casefold()
     if configured:
         return configured not in {"sync", "synchronous", "disabled", "off", "test"}
@@ -74,7 +74,7 @@ def campaign_genesis_sync_fallback_allowed(
 ) -> bool:
     """Allow portable generation unless the operator explicitly requires async."""
 
-    env = environ or os.environ
+    env = environ or _environment()
     configured = str(env.get("OMNIX_RPG_CAMPAIGN_GENESIS_MODE") or "").strip().casefold()
     return configured not in {"async", "asynchronous", "required", "durable"}
 
@@ -469,7 +469,7 @@ def _run_campaign_expansion_job(
         }
         selected_generator = generator
         if selected_generator is None:
-            from app.rpg_world_forge_provider import (
+            from app.rpg.worlds.providers.world_forge import (
                 build_production_world_forge_generator,
             )
 
@@ -810,7 +810,7 @@ def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
 
     def run():
         global _worker_active
-        from app.gateway.background_runtime import BackgroundOwnershipUnavailable
+        from app.runtime.background import BackgroundOwnershipUnavailable
         try:
             with background_execution(owner) if owner is not None else nullcontext():
                 _worker_loop(database)

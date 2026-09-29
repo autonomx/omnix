@@ -1,7 +1,7 @@
 """Time-aware deterministic retrieval for companion memory."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
 import time
@@ -12,9 +12,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.conversation.contracts import PromptMemoryItem
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .owner_service import OwnerAwareMemoryService
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
@@ -88,7 +88,7 @@ class TemporalRetrievalResult(BaseModel):
 
 
 def resolve_companion_timezone(value: str | None = None) -> ZoneInfo:
-    configured = (value or os.environ.get("OMNIX_USER_TIMEZONE") or "UTC").strip()
+    configured = (value or _env_str("OMNIX_USER_TIMEZONE") or "UTC").strip()
     try:
         return ZoneInfo(configured)
     except ZoneInfoNotFoundError:

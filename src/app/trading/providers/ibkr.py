@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 """IBKR live-data and historical-repair provider.
 
@@ -7,7 +8,6 @@ methods and its catalog bindings are LIVE_DATA purpose, never EXECUTION purpose.
 """
 
 import hashlib
-import os
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -349,7 +349,7 @@ class IbkrEquityProvider:
         self.runtime.subscribe_quote(instrument_id, contract=contract)
         snapshot = self.runtime.wait_for_quote(
             instrument_id,
-            timeout_seconds=float(os.environ.get("OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS", "3")),
+            timeout_seconds=float(_env_str("OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS", "3")),
         )
         if snapshot is None or snapshot.last is None:
             request_health = self.runtime.subscription_health(instrument_id)

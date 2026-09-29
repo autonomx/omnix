@@ -1,9 +1,9 @@
 """Provider-free shadow generation for migration telemetry."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 from time import perf_counter
 from typing import Any, Mapping
 
@@ -31,7 +31,7 @@ def _first_text(*values: Any) -> str:
 
 
 def _sample_rate() -> float:
-    raw = os.environ.get("OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE", "1").strip()
+    raw = _env_str("OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE", "1").strip()
     try:
         return max(0.0, min(float(raw), 1.0))
     except ValueError:

@@ -13,6 +13,38 @@ from app.rpg.worlds.profile_aware_world_images import (
     update_world_image_target,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgWorldImageGenerationRequestBody(_TypedRequestModel):
+    height: _TypedRequestAny = None
+    no_cache: bool | None = False
+    prompts: _TypedRequestAny = None
+    provider_id: _TypedRequestAny = None
+    style: _TypedRequestAny = None
+    target_ids: _TypedRequestAny = None
+    width: _TypedRequestAny = None
+
+class RpgRegenerateWorldImagePromptsRequestBody(_TypedRequestModel):
+    target_ids: _TypedRequestAny = None
+
+class RpgUpdateWorldImageTargetRequestBody(_TypedRequestModel):
+    active_asset_id: _TypedRequestAny = None
+    review_state: _TypedRequestAny = None
+    suggested_prompt: _TypedRequestAny = None
+
+class RpgRegenerateWorldImageTargetRequestBody(_TypedRequestModel):
+    height: _TypedRequestAny = None
+    no_cache: bool | None = True
+    prompt: _TypedRequestAny = None
+    provider_id: _TypedRequestAny = None
+    style: _TypedRequestAny = None
+    width: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_image_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_image_route_hook_installed"
 
@@ -48,7 +80,6 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/worlds/{world_id}/image-targets",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_world_image_targets(world_id: str) -> dict[str, Any]:
         try:
@@ -60,13 +91,12 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/image-generation",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_world_image_generation(
+    def rpg_world_image_generation(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldImageGenerationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         target_ids = [
             str(value)
             for value in payload.get("target_ids") or ()
@@ -91,13 +121,12 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/image-prompts/regenerate",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_regenerate_world_image_prompts(
+    def rpg_regenerate_world_image_prompts(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgRegenerateWorldImagePromptsRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         target_ids_value = payload.get("target_ids")
         if target_ids_value is not None and not isinstance(target_ids_value, list):
             raise HTTPException(
@@ -118,14 +147,13 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
     @app.patch(
         "/api/rpg/worlds/{world_id}/image-targets/{target_id:path}",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_update_world_image_target(
+    def rpg_update_world_image_target(
         world_id: str,
         target_id: str,
-        request: Request,
+        request: Request, request_body: RpgUpdateWorldImageTargetRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return update_world_image_target(
                 world_id,
@@ -153,14 +181,13 @@ def register_rpg_world_image_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/image-targets/{target_id:path}/regenerate",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_regenerate_world_image_target(
+    def rpg_regenerate_world_image_target(
         world_id: str,
         target_id: str,
-        request: Request,
+        request: Request, request_body: RpgRegenerateWorldImageTargetRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         prompt = str(payload.get("prompt") or "").strip()
         try:
             return generate_world_images(

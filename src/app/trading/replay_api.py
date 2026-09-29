@@ -145,7 +145,6 @@ def create_trading_replay_router(
     @router.post(
         "/execution/detach",
         response_model=PaperAccountSnapshot,
-        include_in_schema=False,
     )
     async def detach_replay_account(request: ReplayAdvanceRequest):
         """Detach a production snapshot into replay-only state without creating fills."""
@@ -154,7 +153,6 @@ def create_trading_replay_router(
     @router.post(
         "/execution/advance",
         response_model=PaperAccountSnapshot,
-        include_in_schema=False,
     )
     async def advance_execution(request: ReplayAdvanceRequest):
         """Advance detached replay state through paper-execution-v2.
@@ -168,7 +166,6 @@ def create_trading_replay_router(
     @router.post(
         "/execution/orders",
         response_model=ReplayOrderResult,
-        include_in_schema=False,
     )
     async def place_execution_order(request: ReplayOrderRequest):
         return place_replay_order(request.snapshot, request.order, request.bar)

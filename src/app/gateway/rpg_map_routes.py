@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
 
 from app.rpg.map_actions import MapActionError, MapActionRequest, apply_map_action, map_action_error_payload
 from app.rpg.map_living_overlay import project_living_map_markers
@@ -18,6 +19,56 @@ from app.rpg.map_repository import MapDefinitionNotFound, default_map_repository
 from app.rpg.map_serialization import canonical_map_json
 from app.rpg.map_world_integration import MapWorldIntegrationError, map_repository_for_session
 from app.rpg.session.service import load_session, save_session
+
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+from typing import Literal
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgMapActionRequestBody(_TypedRequestModel):
+    action: Literal["travel", "inspect", "enter", "talk", "trade"]
+    target_object_id: str
+    definition_revision: str
+    overlay_revision: int = _typed_field(ge=0)
+
+
+class RpgMapDefinitionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    map_id: str
+    definition_revision: str
+    definition: dict[str, Any] | None
+
+
+class RpgMapOverlayResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ok: bool
+    map_id: str
+    definition_revision: str
+    overlay_revision: int
+    session_turn_index: int
+    overlay: dict[str, Any]
+
+
+class RpgMapActionResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    ok: bool
+    session_id: str
+    map_id: str
+    definition_revision: str
+    overlay_revision: int
+    session_turn_index: int
+    idempotent: bool
+    action_result: dict[str, Any]
+    session: dict[str, Any]
+    game: dict[str, Any]
+    overlay: dict[str, Any]
+
 
 _ROUTE_SENTINEL = "_omnix_rpg_map_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_map_route_hook_installed"
@@ -31,7 +82,11 @@ def register_rpg_map_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.get("/api/rpg/maps/{map_id}", tags=["rpg-map"], include_in_schema=False)
+    @app.get(
+        "/api/rpg/maps/{map_id}",
+        response_model=RpgMapDefinitionResponse,
+        tags=["rpg-map"],
+    )
     def rpg_map_definition(
         map_id: str,
         request: Request,
@@ -47,7 +102,11 @@ def register_rpg_map_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         return _definition_response(definition, request, known_definition_revision)
 
-    @app.get("/api/rpg/sessions/{session_id}/maps/{map_id}", tags=["rpg-map"], include_in_schema=False)
+    @app.get(
+        "/api/rpg/sessions/{session_id}/maps/{map_id}",
+        response_model=RpgMapDefinitionResponse,
+        tags=["rpg-map"],
+    )
     def rpg_session_map_definition(
         session_id: str,
         map_id: str,
@@ -62,7 +121,11 @@ def register_rpg_map_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail={"ok": False, "error": "map_definition_not_found", "map_id": map_id}) from exc
         return _definition_response(definition, request, known_definition_revision)
 
-    @app.get("/api/rpg/sessions/{session_id}/maps/{map_id}/overlay", tags=["rpg-map"], include_in_schema=False)
+    @app.get(
+        "/api/rpg/sessions/{session_id}/maps/{map_id}/overlay",
+        response_model=RpgMapOverlayResponse,
+        tags=["rpg-map"],
+    )
     def rpg_map_overlay(session_id: str, map_id: str) -> Response:
         session = _load_session_or_404(session_id)
         definition, overlay = _definition_and_overlay(session, map_id)
@@ -77,10 +140,14 @@ def register_rpg_map_routes(app: FastAPI) -> None:
             "overlay": overlay_payload,
         }, headers={"Cache-Control": MAP_OVERLAY_CACHE_CONTROL, "ETag": etag})
 
-    @app.post("/api/rpg/sessions/{session_id}/maps/{map_id}/map-actions", tags=["rpg-map"], include_in_schema=False)
-    async def rpg_map_action(session_id: str, map_id: str, request: Request) -> Response:
+    @app.post(
+        "/api/rpg/sessions/{session_id}/maps/{map_id}/map-actions",
+        response_model=RpgMapActionResponse,
+        tags=["rpg-map"],
+    )
+    def rpg_map_action(session_id: str, map_id: str, request: Request, request_body: RpgMapActionRequestBody) -> Response:
         session = _load_session_or_404(session_id)
-        action_request = _map_action_request(await request.json())
+        action_request = _map_action_request(request_body.model_dump(exclude_unset=True, by_alias=True))
         repository = _session_repository(session)
         try:
             result = apply_map_action(session, map_id, action_request, repository)

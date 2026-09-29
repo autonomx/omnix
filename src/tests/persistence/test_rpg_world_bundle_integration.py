@@ -8,7 +8,7 @@ import pytest
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import (
@@ -184,7 +184,7 @@ def test_world_bundle_exports_and_imports_world_maps_scenarios_and_images(tmp_pa
         )
         publish_world_revision(world, expected_revision=0, database=database)
         definition = _definition(source_world_id, asset_id=source_asset_id)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.map_instances.put_definition(
                 context,

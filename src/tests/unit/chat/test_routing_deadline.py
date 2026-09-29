@@ -7,7 +7,7 @@ from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_sec
 
 
 def test_provider_turn_deadline_uses_configured_provider_timeout(monkeypatch) -> None:
-    import app.shared as shared
+    from app.providers import service as provider_service
 
     monkeypatch.setattr(
         shared,
@@ -25,7 +25,7 @@ def test_provider_turn_deadline_uses_configured_provider_timeout(monkeypatch) ->
 
 
 def test_existing_deadline_is_preserved_without_provider_lookup(monkeypatch) -> None:
-    import app.shared as shared
+    from app.providers import service as provider_service
 
     monkeypatch.setattr(
         shared,

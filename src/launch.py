@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import uvicorn
 
 from main import HOST, PORT, app
+from app.config.env import env_bool
 from app.runtime.net import bind_host
 
 
@@ -36,7 +37,7 @@ def _is_port_available(host: str, port: int) -> bool:
 
 
 def _launcher_auto_kill_enabled() -> bool:
-    return os.environ.get("OMNIX_LAUNCHER_KILL_PORT", "").strip().lower() in {"1", "true", "yes", "on"}
+    return env_bool("OMNIX_LAUNCHER_KILL_PORT", False)
 
 
 def _find_port_owner_pids(port: int) -> list[int]:

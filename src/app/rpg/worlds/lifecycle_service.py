@@ -246,10 +246,15 @@ def delete_world_project(
             "WHERE workspace_id = %s AND world_id = %s",
             (context.workspace_id, world_id),
         )
-        work.connection.execute(
-            "DELETE FROM omnix_jobs WHERE workspace_id = %s AND job_type = %s "
-            "AND (metadata->>'world_id' = %s OR input_payload->>'world_id' = %s)",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, world_id, world_id),
+        work.jobs.delete_jobs(
+            context,
+            job_type=WORLD_TOPIC_JOB_TYPE,
+            input_fields=(("world_id", world_id),),
+        )
+        work.jobs.delete_jobs(
+            context,
+            job_type=WORLD_TOPIC_JOB_TYPE,
+            metadata_fields=(("world_id", world_id),),
         )
         work.connection.execute(
             "DELETE FROM omnix_rpg_campaigns WHERE workspace_id = %s AND id IN ("

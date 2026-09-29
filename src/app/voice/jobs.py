@@ -560,12 +560,9 @@ def _upsert_legacy_voice_manifest(voice_id: str, profile_name: str, payload: dic
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
         return
-    try:
-        import app.shared as shared
+    from app.runtime.paths import VOICE_CLONES_FILE
 
-        manifest_path = Path(shared.VOICE_CLONES_FILE)
-    except Exception:
-        manifest_path = _voice_clone_dir() / "voice_clones.json"
+    manifest_path = Path(VOICE_CLONES_FILE)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         raw = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
@@ -590,12 +587,9 @@ def _upsert_legacy_voice_manifest(voice_id: str, profile_name: str, payload: dic
 
 
 def _voice_clone_dir() -> Path:
-    try:
-        import app.shared as shared
+    from app.runtime.paths import VOICE_CLONES_DIR
 
-        return Path(shared.VOICE_CLONES_DIR)
-    except Exception:
-        return resources_data_root().parent / "voice_clones"
+    return Path(VOICE_CLONES_DIR)
 
 
 def _upsert_asset(asset: AssetRecord) -> AssetRecord:

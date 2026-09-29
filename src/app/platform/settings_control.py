@@ -119,7 +119,12 @@ def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
         if changed:
             service.patch(SettingsPatch(values=changed, revisions=revisions))
 
-        if codex_profile_changed:
+        provider_settings_changed = bool(
+            set(changed).intersection(
+                {"provider", "lmstudio", "openrouter", "cerebras"}
+            )
+        )
+        if codex_profile_changed or provider_settings_changed or secrets_changed:
             invalidate_provider_cache()
         invalidate_changed_audio_caches(previous_settings, settings)
     except (

@@ -1,9 +1,9 @@
 """Local-only provider-backed runner for the RPG dialogue quality matrix."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import argparse
 import json
-import os
 import sys
 import time
 import urllib.error
@@ -263,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             timeout_seconds=args.timeout_seconds,
             keep_fixture=args.keep_fixture,
-            env=os.environ,
+            env=_environment(),
         )
     except Exception as exc:
         print(str(exc), file=sys.stderr)

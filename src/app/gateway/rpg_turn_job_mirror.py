@@ -1,7 +1,7 @@
 """Record direct foreground RPG turns without scheduling a second execution."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import threading
 import uuid
 from contextlib import ExitStack
@@ -17,11 +17,11 @@ from app.gateway.rpg_foreground_turn_record import (
     build_foreground_turn_record,
 )
 from app.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
+from app.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID as _DIRECT_RPG_SUBMISSION_ID
 from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
 
 _DIRECT_RPG_TURN_ACTIVE: ContextVar[bool] = ContextVar("omnix_direct_rpg_turn_active", default=False)
-_DIRECT_RPG_SUBMISSION_ID: ContextVar[str] = ContextVar("omnix_direct_rpg_submission_id", default="")
 _HOOK_SENTINEL = "_omnix_rpg_turn_job_mirror_hook_installed"
 _MIDDLEWARE_SENTINEL = "_omnix_rpg_turn_job_mirror_middleware_installed"
 
@@ -51,13 +51,13 @@ def install_rpg_turn_job_mirror_hook(*, constructor_hook: bool = True) -> None:
     def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
         if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
-            _install_middleware(self)
+            install_rpg_turn_job_mirror_middleware(self)
 
     FastAPI.__init__ = patched_init  # type: ignore[method-assign]
     setattr(FastAPI, _HOOK_SENTINEL, True)
 
 
-def _install_middleware(app: FastAPI) -> None:
+def install_rpg_turn_job_mirror_middleware(app: FastAPI) -> None:
     if getattr(app.state, _MIDDLEWARE_SENTINEL, False):
         return
     setattr(app.state, _MIDDLEWARE_SENTINEL, True)
@@ -502,7 +502,7 @@ def _fail_durable_claim(durable_store: Any, claim: Any, error: str) -> None:
 
 
 def _submission_wait_seconds() -> float:
-    raw = os.environ.get("OMNIX_RPG_SUBMISSION_WAIT_SECONDS", "120")
+    raw = _env_str("OMNIX_RPG_SUBMISSION_WAIT_SECONDS", "120")
     try:
         return max(0.1, min(600.0, float(raw)))
     except (TypeError, ValueError):
@@ -510,7 +510,7 @@ def _submission_wait_seconds() -> float:
 
 
 def _submission_lease_seconds() -> float:
-    raw = os.environ.get("OMNIX_RPG_SUBMISSION_LEASE_SECONDS", "30")
+    raw = _env_str("OMNIX_RPG_SUBMISSION_LEASE_SECONDS", "30")
     try:
         return max(0.1, min(600.0, float(raw)))
     except (TypeError, ValueError):

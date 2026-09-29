@@ -2,15 +2,14 @@
 from __future__ import annotations
 
 from app.config.env import env_str, environment
+from app.conversation.contracts import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
 
 import os
 import re
 from typing import Any
 
-from .models import MemoryOwnerType, MemoryScope, MemoryScopeContext, SYSTEM_MEMORY_OWNER_ID
+from app.memory_contracts import MemoryOwnerType, MemoryScope, MemoryScopeContext, SYSTEM_MEMORY_OWNER_ID
 
-DEFAULT_PROFILE_ID = "profile:local"
-DEFAULT_WORKSPACE_ID = "workspace:default"
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")
 
 

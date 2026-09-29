@@ -1,5 +1,6 @@
 """Atomic local spools for World Forge provider and persistence phases."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
@@ -19,7 +20,7 @@ _SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 def _root() -> Path:
-    configured = str(os.environ.get("OMNIX_RPG_WORLD_GENERATION_SPOOL_DIR") or "").strip()
+    configured = str(_env_str("OMNIX_RPG_WORLD_GENERATION_SPOOL_DIR") or "").strip()
     return Path(configured or "resources/data/world-generation-spool")
 
 

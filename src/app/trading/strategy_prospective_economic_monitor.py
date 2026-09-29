@@ -9,10 +9,10 @@ It has no paper repository and can never create or authorize an order.
 """
 
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -53,18 +53,18 @@ _OUTCOME_EVENT_TYPE = "prospective_economic_outcome"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_prospective_economic_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(10.0, value)

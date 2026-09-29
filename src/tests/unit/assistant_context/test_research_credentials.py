@@ -5,7 +5,7 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.persistence import provider_secret_store as store
+from app.security import provider_secret_store as store
 from app.research.credential_routes import register_research_credential_routes
 
 

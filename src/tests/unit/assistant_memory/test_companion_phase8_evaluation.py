@@ -12,7 +12,7 @@ from app.assistant_memory.initiative import (
     plan_companion_initiative,
     reset_initiative_surface_history,
 )
-from app.assistant_memory.models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.observability import (
     companion_metrics_snapshot,
     record_companion_diagnostics,
@@ -27,7 +27,6 @@ from app.assistant_memory.paralinguistic_state import (
 from app.assistant_memory.rollout import companion_rollout_policy
 from app.assistant_memory.settings import (
     AssistantMemoryRuntimeSettings,
-    AssistantMemorySettingsStore,
     AssistantMemorySettingsUpdate,
 )
 from app.assistant_memory.settings_routes import register_memory_settings_routes
@@ -39,6 +38,7 @@ from app.assistant_memory.temporal_retrieval import (
 )
 from app.assistant_memory.typed_memory import supersede_typed_memory
 from app.characters.live_conversation_profile import LiveConversationProfile
+from tests.support.assistant_memory_settings import in_memory_assistant_memory_settings_store
 
 
 def _context(owner_id: str = "character:maya") -> MemoryScopeContext:
@@ -105,8 +105,7 @@ def test_rollout_is_reversible_and_master_disable_preserves_authority() -> None:
 
 
 def test_controls_persist_independently_and_environment_can_lock_stage(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "memory-settings.json"
-    store = AssistantMemorySettingsStore(path)
+    _service, store = in_memory_assistant_memory_settings_store()
     status = store.update(
         AssistantMemorySettingsUpdate(
             automatic_direct_assertion_memory=True,

@@ -6,31 +6,30 @@ from types import SimpleNamespace
 
 import pytest
 
-from app import shared
 from app.assistant_memory import (
     MemoryConflictError,
+    InMemoryMemoryRepository,
     MemoryService,
-    SQLiteMemoryRepository,
     resolve_chat_scope,
 )
 from app.assistant_memory.hermes_adapter import import_hermes_memory
 from app.assistant_memory.settings import (
-    AssistantMemoryRuntimeSettings,
-    AssistantMemorySettingsStore,
     AssistantMemorySettingsUpdate,
 )
 from app.chat import ChatMessage, ChatSession, ChatSessionStore, SendChatMessageRequest
-from app.chat.memory_session import (
+from app.chat import prompt_store
+from app.assistant_memory.session import (
     RefreshSessionMemoryRequest,
     SessionMemoryConflictError,
     refresh_session_memory,
 )
+from tests.support.assistant_memory_settings import in_memory_assistant_memory_settings_store
 
 NOW = "2026-07-08T00:00:00+00:00"
 
 
 def _runtime(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     store = ChatSessionStore(
         tmp_path / "chat.json",
         memory_service_factory=lambda: service,
@@ -115,7 +114,7 @@ def test_release_gate_blocks_cross_scope_pending_rejected_and_external_instructi
     )
     refresh_session_memory(store, service, session.id, RefreshSessionMemoryRequest())
     _set_memory_only(monkeypatch)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
 
     assembly, rendered = store.build_provider_prompt(
         store.get_session(session.id),
@@ -159,7 +158,7 @@ def test_forget_during_active_generation_invalidates_every_future_prompt(tmp_pat
     state = refresh_session_memory(store, service, session.id, RefreshSessionMemoryRequest())
     assert state is not None
     _set_memory_only(monkeypatch)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
 
     _, already_built = store.build_provider_prompt(
         store.get_session(session.id),
@@ -266,8 +265,8 @@ def test_stream_failure_preserves_recoverable_running_turn(tmp_path, monkeypatch
             assert stream is True
             return BrokenStream()
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: BrokenProvider())
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store, "get_provider", lambda provider_name=None: BrokenProvider())
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     appended = store.begin_user_message(
         session.id,
         SendChatMessageRequest(content="Persist this failed turn"),
@@ -313,9 +312,10 @@ def test_persisted_settings_disable_features_without_deleting_memory_and_hermes_
         "OMNIX_HERMES_MEMORY_SYNC_ENABLED",
     ):
         monkeypatch.delenv(name, raising=False)
-    settings_path = tmp_path / "settings.json"
-    monkeypatch.setenv("OMNIX_CHAT_MEMORY_SETTINGS_PATH", str(settings_path))
-    settings_store = AssistantMemorySettingsStore(settings_path)
+    settings_service, settings_store = in_memory_assistant_memory_settings_store()
+    import app.settings.access as settings_access
+
+    monkeypatch.setattr(settings_access, "current_settings_service", lambda: settings_service)
     settings_store.update(
         AssistantMemorySettingsUpdate(
             curated_memory_enabled=False,
@@ -334,7 +334,7 @@ def test_persisted_settings_disable_features_without_deleting_memory_and_hermes_
         provenance_id="msg:retained",
     )
     refresh_session_memory(store, service, session.id, RefreshSessionMemoryRequest())
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
 
     _, disabled = store.build_provider_prompt(store.get_session(session.id), _current_message(), [])
     assert record.content not in "\n".join(item.content for item in disabled.messages)
@@ -370,7 +370,7 @@ def test_voice_transcript_and_text_use_the_same_snapshot_and_serialized_prompt(
     )
     refresh_session_memory(store, service, session.id, RefreshSessionMemoryRequest())
     _set_memory_only(monkeypatch)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
     active = store.get_session(session.id)
     text_message = ChatMessage(
         id="msg:text",

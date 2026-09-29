@@ -66,12 +66,12 @@ class HermesRpgPlanRequest(BaseModel):
     enabled: bool | None = None
 
 
-@router.get("/status", include_in_schema=False)
+@router.get("/status")
 def hermes_status() -> dict[str, Any]:
     return hermes_diagnostics_status_payload()
 
 
-@router.post("/test", include_in_schema=False)
+@router.post("/test")
 def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     payload = request or HermesTestRequest()
     return hermes_diagnostics_test_payload(
@@ -84,52 +84,52 @@ def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
     )
 
 
-@router.get("/recent", include_in_schema=False)
+@router.get("/recent")
 def hermes_recent() -> dict[str, Any]:
     return {"ok": True, "items": [], "count": 0, "source": "not_configured"}
 
 
-@router.post("/adapter/preview", include_in_schema=False)
+@router.post("/adapter/preview")
 def hermes_adapter_preview(request: HermesAdapterPreviewRequest) -> dict[str, Any]:
     return hermes_adapter_preview_payload(request.model_dump())
 
 
-@router.get("/capabilities", include_in_schema=False)
+@router.get("/capabilities")
 def hermes_capabilities(mode: str | None = None) -> dict[str, Any]:
     return omnix_mode_policy_payload(mode)
 
 
-@router.get("/route-decision", include_in_schema=False)
+@router.get("/route-decision")
 def hermes_route_decision(mode: str | None = None) -> dict[str, Any]:
     return omnix_route_decision_payload(mode)
 
 
-@router.get("/candidate/demo", include_in_schema=False)
+@router.get("/candidate/demo")
 def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
     return hermes_demo_candidate(note=note)
 
 
-@router.post("/rpg/context", include_in_schema=False)
+@router.post("/rpg/context")
 def hermes_rpg_context(request: HermesRpgContextRequest) -> dict[str, Any]:
     return hermes_rpg_context_payload(request.model_dump())
 
 
-@router.post("/rpg/suggestions", include_in_schema=False)
+@router.post("/rpg/suggestions")
 def hermes_rpg_suggestions(request: HermesRpgSuggestionsRequest) -> dict[str, Any]:
     return hermes_rpg_suggestions_payload(request.model_dump())
 
 
-@router.post("/rpg/turn-readout", include_in_schema=False)
+@router.post("/rpg/turn-readout")
 def hermes_rpg_turn_readout(request: HermesRpgTurnReadoutRequest) -> dict[str, Any]:
     return hermes_rpg_turn_readout_payload(request.model_dump())
 
 
-@router.post("/plan", include_in_schema=False)
+@router.post("/plan")
 def hermes_rpg_plan(request: HermesRpgPlanRequest) -> dict[str, Any]:
     return hermes_rpg_plan_payload(request.model_dump())
 
 
-@router.post("/approve", include_in_schema=False)
+@router.post("/approve")
 def hermes_approve(request: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "ok": False,
@@ -140,7 +140,7 @@ def hermes_approve(request: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-@router.post("/lookup", include_in_schema=False)
+@router.post("/lookup")
 def hermes_lookup(request: HermesLookupRequest) -> dict[str, Any]:
     from .hermes_readouts import readout_payload
 

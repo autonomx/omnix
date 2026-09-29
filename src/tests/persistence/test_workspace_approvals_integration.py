@@ -12,7 +12,7 @@ from app.agent_runtime.contracts import AgentRunSpec, ModelRef
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 pytestmark = pytest.mark.skipif(
@@ -26,7 +26,7 @@ def run():
     url = os.environ["OMNIX_TEST_DATABASE_URL"]
     assert urlsplit(url).path in {"/omnix_test", "/omnix_refactor_baseline"}
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=4))
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     identifier = f"workspace-approval-{secrets.token_urlsafe(12)}"
     with unit_of_work(database) as work:
         repository = PostgresAgentRunRepository(work.connection, context)

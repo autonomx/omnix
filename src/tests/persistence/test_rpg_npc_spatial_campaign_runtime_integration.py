@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import (
@@ -125,7 +125,7 @@ def _seed(database: PostgresDatabase) -> tuple[
     CampaignMapInstanceSnapshot,
     CampaignMapInstanceSnapshot,
 ]:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     source_definition, target_definition = _definitions()
     revision = compile_world_revision(
         world_id="world:spatial-runtime",
@@ -309,7 +309,7 @@ def test_campaign_ticks_persist_portal_routine_replay_and_metrics() -> None:
         assert tick3["metrics"]["routine_goals_emitted"] == 1
         assert tick3["metrics"]["active_budget_used"] == 1
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             source_row = work.map_instances.get_instance(
                 context,

@@ -161,7 +161,6 @@ def register_rpg_narrative_delivery_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/narrative-responses/{response_id}/delivery",
         tags=["rpg-session"],
-        include_in_schema=False,
     )
     def rpg_narrative_delivery_status(
         response_id: str,
@@ -245,7 +244,6 @@ def register_rpg_narrative_delivery_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/narrative-responses/{response_id}/cancel",
         tags=["rpg-session"],
-        include_in_schema=False,
     )
     def rpg_narrative_delivery_cancel(
         response_id: str,

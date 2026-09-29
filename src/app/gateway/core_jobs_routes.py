@@ -4,24 +4,25 @@ from __future__ import annotations
 
 import logging
 
-from .internal_jobs_routes import register_internal_jobs_routes
+import asyncio
+from fastapi import Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from .core_services import (
+from app.chat.generation_jobs import cancel_chat_generation_job
+from app.jobs.models import (
     CancelJobRequest,
     CreateJobRequest,
-    HTTPException,
-    Header,
     JobListResponse,
     JobRecord,
-    Query,
-    StreamingResponse,
-    _live_job_event_stream,
-    _parse_event_id,
-    _sse_event,
-    asyncio,
-    cancel_chat_generation_job,
-    summarize_job,
 )
+from app.jobs.projections import summarize_job
+from .live_job_events import _parse_event_id, _sse_event, resilient_live_job_event_stream
+from .internal_jobs_routes import register_internal_jobs_routes
+
+
+class RetiredWorkerProtocolResponse(BaseModel):
+    detail: str
 
 
 def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
@@ -34,7 +35,7 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
         ):
             raise HTTPException(status_code=422, detail="job_execution_authority_is_server_owned")
         registry = getattr(gateway.state, "job_handler_registry", None)
-        if registry is not None and registry.get(request.type) is not None:
+        if registry is not None:
             request = registry.validate_submission(request)
         job_store = get_job_store()
         idempotency_key = str((request.compat or {}).get("idempotency_key") or "").strip()
@@ -57,7 +58,7 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
         last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
         return StreamingResponse(
-            _live_job_event_stream(
+                resilient_live_job_event_stream(
                 await asyncio.to_thread(get_job_store),
                 after_id=_parse_event_id(last_event_id, fallback=after_id),
             ),
@@ -65,7 +66,18 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
-    @gateway.get("/api/jobs/events", tags=["jobs"])
+    @gateway.get(
+        "/api/jobs/events",
+        response_model=None,
+        response_class=StreamingResponse,
+        responses={
+            200: {
+                "description": "Job lifecycle events as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
+        tags=["jobs"],
+    )
     def job_events(after_id: int = 0, limit: int = 100) -> StreamingResponse:
         events = get_job_store().list_events(after_id=after_id, limit=limit)
 
@@ -84,12 +96,30 @@ def register_core_jobs_routes(gateway, *, get_chat_store, get_job_store):
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
 
-    @gateway.post("/api/jobs/claim", tags=["jobs"], deprecated=True)
-    @gateway.post("/api/jobs/{job_id}/complete", tags=["jobs"], deprecated=True)
-    @gateway.post("/api/jobs/{job_id}/fail", tags=["jobs"], deprecated=True)
-    def retired_worker_protocol(job_id: str | None = None):
+    @gateway.post(
+        "/api/jobs/claim",
+        response_model=RetiredWorkerProtocolResponse,
+        status_code=410,
+        tags=["jobs"],
+        deprecated=True,
+    )
+    @gateway.post(
+        "/api/jobs/{job_id}/complete",
+        response_model=RetiredWorkerProtocolResponse,
+        status_code=410,
+        tags=["jobs"],
+        deprecated=True,
+    )
+    @gateway.post(
+        "/api/jobs/{job_id}/fail",
+        response_model=RetiredWorkerProtocolResponse,
+        status_code=410,
+        tags=["jobs"],
+        deprecated=True,
+    )
+    def retired_worker_protocol(job_id: str | None = None) -> RetiredWorkerProtocolResponse:
         logging.getLogger(__name__).warning("Retired public job worker endpoint requested")
-        raise HTTPException(status_code=410, detail="worker_protocol_moved_to_internal_jobs")
+        return RetiredWorkerProtocolResponse(detail="worker_protocol_moved_to_internal_jobs")
 
     @gateway.post("/api/jobs/{job_id}/cancel", response_model=JobRecord, tags=["jobs"])
     def cancel_job(job_id: str, request: CancelJobRequest) -> JobRecord:

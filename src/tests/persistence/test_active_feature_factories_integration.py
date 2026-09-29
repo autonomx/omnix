@@ -69,6 +69,18 @@ from types import SimpleNamespace
 
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
+from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.persistence.database import default_database
+from app.security.tenant_context import TenantProvider
+from app.settings.access import install_settings_service
+from app.settings.registry import core_setting_specs
+from app.settings.service import SettingsService
+settings_service = SettingsService(
+    default_database(),
+    TenantProvider().current,
+    specs=(*core_setting_specs(), assistant_memory_setting_spec()),
+)
+install_settings_service(settings_service)
 
 from app.characters import service as character_service
 assert character_service.CharacterRepository.__name__ == "InMemoryCharacterRepository"
@@ -76,8 +88,13 @@ assert character_service.default_character_service().repository.__class__.__name
 
 from app.characters.management import CharacterManagementService
 from app.assistant_memory.owner_defaults import default_memory_service
-from app.assistant_memory.models import MemoryScopeContext
-management = CharacterManagementService(character_service.default_character_service(), object())
+from app.runtime_composition import production_owner_memory_repository
+from app.memory_contracts import MemoryScopeContext
+management = CharacterManagementService(
+    character_service.default_character_service(),
+    object(),
+    production_owner_memory_repository(),
+)
 assert management.memory_repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
 memory = default_memory_service().create_explicit_memory(
     MemoryScopeContext(profile_id="profile:default", workspace_id="workspace:local",
@@ -146,7 +163,7 @@ config = config_store.load_assistant_tools_config()
 saved = config_store.save_assistant_tools_config(config)
 assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 
-from app.gateway import live_chat_evaluation_store as evaluations
+from app.chat import evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
 from app.gateway import live_chat_evaluation_routes as evaluation_routes
@@ -240,7 +257,7 @@ runtime_state = {
 persisted = profile_store.persist_npc_evolution_profiles(runtime_state=runtime_state)
 assert persisted["ok"] is True
 loaded = profile_store.load_npc_evolution_profiles_for_runtime(npc_ids=["npc:bran"])
-assert loaded["loaded_count"] == 1
+assert loaded["loaded_count"] == 1, (persisted, loaded)
 
 from app.chat import compaction, history_search
 from app.chat.models import ChatMessage, ChatSession
@@ -292,16 +309,30 @@ search = history_search.default_history_search_service().search(
 assert search.items and search.items[0].message_id == "message:factory"
 
 import app.chat as chat_package
-assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacterChatSessionStore"
+assert chat_package.default_chat_store().__class__.__name__ == "FastPathPostgresCharacterChatSessionStore"
 
 from app.jobs import default_job_store
 default_job_store()
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
-assert getattr(PostgresJobStoreAdapter, "_omnix_inline_feature_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_voice_studio_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_image_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_research_jobs_installed", False) is False
-assert getattr(PostgresJobStoreAdapter, "_omnix_rpg_turn_job_guard_installed", False) is True
+from app.runtime.feature_catalog import load_feature
+from app.jobs.handlers import registry_from_features
+from app.jobs.models import CreateJobRequest, ResourceClass
+from app.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
+rpg_registry = registry_from_features((load_feature("rpg"),))
+rpg_turn_policy = rpg_registry.require("rpg.turn").submission_policy
+assert callable(rpg_turn_policy)
+rpg_turn_request = rpg_turn_policy(CreateJobRequest(
+    module="rpg",
+    type="rpg.turn",
+    resource_class=ResourceClass.GPU_LLM,
+    input_ref={"session_id": "campaign:factory"},
+    input_payload={"submission_id": "submission:factory"},
+))
+assert rpg_turn_request.compat["idempotency_key"] == "rpg-turn:campaign:factory:submission:factory"
+assert rpg_turn_policy(rpg_turn_request).compat == rpg_turn_request.compat
 
 from app.persistence.document_store import PostgresDocumentStore
 records = PostgresDocumentStore().list(module="live-chat", record_type="evaluation-policy-store")

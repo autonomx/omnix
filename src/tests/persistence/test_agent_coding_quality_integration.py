@@ -27,7 +27,7 @@ from app.agent_runtime.quality_recovery import (
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -53,7 +53,7 @@ def _database() -> PostgresDatabase:
 def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-{uuid.uuid4().hex}"
         revision_id = f"revision-{uuid.uuid4().hex}"
         state = WorkspaceState(
@@ -206,7 +206,7 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
 def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-revision-{uuid.uuid4().hex}"
         old_revision = "revision-old"
         new_revision = "revision-new"
@@ -260,7 +260,7 @@ def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
 def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_retry() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"quality-parent-{uuid.uuid4().hex}"
         child_id = f"quality-reviewer-{uuid.uuid4().hex}"
 

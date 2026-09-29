@@ -6,9 +6,12 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_memory import MemoryService, resolve_session_memory_scope
-
-from .memory_session import RefreshSessionMemoryRequest, refresh_session_memory
+from app.assistant_memory import (
+    MemoryService,
+    RefreshSessionMemoryRequest,
+    refresh_session_memory,
+    resolve_session_memory_scope,
+)
 from .models import ChatSession
 from .retention_policy import explicit_memory_mutation_allowed
 

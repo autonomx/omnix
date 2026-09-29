@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 
+from app.config.env import environment_copy
+
 # Set paths based on platform
 if platform.system() == 'Windows':
     DEST_DIR = os.path.join(os.getcwd(), 'resources', 'models', 'server')
@@ -92,7 +94,7 @@ def build_llama_cpp():
         '-DLLAMA_SERVER=ON',   # Build server
     ]
     
-    env = os.environ.copy()
+    env = environment_copy()
     env['CUDA_VISIBLE_DEVICES'] = ''  # Hide CUDA devices for initial configure
     
     if not run_cmd(cmake_cmd, cwd=build_dir, env=env):

@@ -50,6 +50,21 @@ from app.rpg.api.rpg_presentation_common import (
     validate_visual_state,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class PreloadVisualProviderRouteRequestBody(_TypedRequestModel):
+    force_reload: bool = False
+
+class SwitchVisualProviderRouteRequestBody(_TypedRequestModel):
+    provider: str | None = None
+    enabled: bool = True
+    force_reload: bool = True
+
+
 router = APIRouter()
 
 
@@ -341,8 +356,8 @@ async def visual_provider_status_route(request: Request):
 
 
 @router.post("/api/rpg/visual/provider/preload")
-async def preload_visual_provider_route(request: Request):
-    data = await request.json() if request.method else {}
+def preload_visual_provider_route(request: Request, request_body: PreloadVisualProviderRouteRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) if request.method else {}
     force_reload = bool((data or {}).get("force_reload", False))
     provider = preload_image_provider(force_reload=force_reload)
     payload = get_visual_provider_status_payload()
@@ -356,8 +371,8 @@ async def preload_visual_provider_route(request: Request):
 
 
 @router.post("/api/rpg/visual/provider/switch")
-async def switch_visual_provider_route(request: Request):
-    data = await request.json()
+def switch_visual_provider_route(request: Request, request_body: SwitchVisualProviderRouteRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     provider_key = str((data or {}).get("provider") or "").strip().lower()
     enabled = bool((data or {}).get("enabled", True))
     force_reload = bool((data or {}).get("force_reload", True))

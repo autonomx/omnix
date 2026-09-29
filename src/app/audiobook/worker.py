@@ -53,24 +53,25 @@ def _pause_analysis_if_requested(
         return False
     if not bool((current.get("metadata") or {}).get("pause_requested")):
         return False
-    row = work.connection.execute(
-        """UPDATE omnix_jobs
-              SET status = 'paused', lease_owner = NULL, lease_token = NULL,
-                  lease_expires_at = NULL,
-                  metadata = (metadata - 'pause_requested') || %s::jsonb,
-                  updated_at = CURRENT_TIMESTAMP
-            WHERE workspace_id = %s AND id = %s
-              AND lease_owner = %s AND lease_token = %s
-              AND status IN ('leased', 'running')
-        RETURNING id""",
-        ('{"paused":true}', context.workspace_id, job_id, worker_id, lease_token),
-    ).fetchone()
-    if row is None:
+    updated = work.jobs.patch_job(
+        context,
+        job_id=job_id,
+        expected_statuses=("leased", "running"),
+        lease_owner=worker_id,
+        lease_token=lease_token,
+        status="paused",
+        metadata_set={"paused": True},
+        metadata_remove=("pause_requested",),
+        clear_lease=True,
+    )
+    if updated is None:
         return False
-    work.connection.execute(
-        """UPDATE omnix_job_attempts SET status = 'paused'
-            WHERE job_id = %s AND lease_token = %s AND status IN ('leased', 'running')""",
-        (job_id, lease_token),
+    work.jobs.update_attempt_status(
+        context,
+        job_id=job_id,
+        lease_token=lease_token,
+        expected_statuses=("leased", "running"),
+        status="paused",
     )
     return True
 

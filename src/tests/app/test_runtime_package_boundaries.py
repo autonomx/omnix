@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 SRC_APP = ROOT / "src" / "app"
 LEGACY_RUNTIME_IMPORTS = (
+    "app.config.access",
     "app.runtime_config",
     "app.runtime_capabilities",
     "app.runtime_contracts",

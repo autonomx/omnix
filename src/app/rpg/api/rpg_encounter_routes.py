@@ -24,6 +24,28 @@ from app.rpg.items import (
 from app.rpg.party import run_companion_turns
 from app.rpg.player import ensure_player_state
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class EncounterStartRequestBody(_TypedRequestModel):
+    scene: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class EncounterActionRequestBody(_TypedRequestModel):
+    action_type: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+    target_id: _TypedRequestAny = None
+
+class EncounterNpcTurnRequestBody(_TypedRequestModel):
+    setup_payload: _TypedRequestAny = None
+
+class EncounterEndRequestBody(_TypedRequestModel):
+    setup_payload: _TypedRequestAny = None
+
+
 rpg_encounter_bp = APIRouter()
 resolver = EncounterResolver()
 
@@ -44,9 +66,9 @@ def _write_simulation_state(setup_payload, simulation_state):
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/start")
-async def encounter_start(request: Request):
+def encounter_start(request: Request, request_body: EncounterStartRequestBody):
     """Start a new encounter from a scene."""
-    data = await request.json() or {}
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     scene = dict(data.get("scene") or {})
 
@@ -67,9 +89,9 @@ async def encounter_start(request: Request):
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/action")
-async def encounter_action(request: Request):
+def encounter_action(request: Request, request_body: EncounterActionRequestBody):
     """Apply a player action in the current encounter."""
-    data = await request.json() or {}
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     action_type = str(data.get("action_type") or "")
     target_id = str(data.get("target_id") or "")
@@ -126,9 +148,9 @@ async def encounter_action(request: Request):
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/npc_turn")
-async def encounter_npc_turn(request: Request):
+def encounter_npc_turn(request: Request, request_body: EncounterNpcTurnRequestBody):
     """Advance NPC turn in the current encounter."""
-    data = await request.json() or {}
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))
@@ -174,9 +196,9 @@ async def encounter_npc_turn(request: Request):
 
 
 @rpg_encounter_bp.post("/api/rpg/encounter/end")
-async def encounter_end(request: Request):
+def encounter_end(request: Request, request_body: EncounterEndRequestBody):
     """End the current encounter (abort)."""
-    data = await request.json() or {}
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
 
     state = ensure_player_state(_get_simulation_state(setup_payload))

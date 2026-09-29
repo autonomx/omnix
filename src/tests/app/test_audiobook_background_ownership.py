@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.audiobook import routes
 from app.runtime.background import BackgroundOwnershipUnavailable, GatewayBackgroundRuntime
 from app.runtime.config import GatewayRole, RuntimeConfig
+from app.persistence.background_authority import background_execution
 
 
 def test_api_audiobook_lifecycle_never_initializes_workers(monkeypatch):
@@ -27,7 +28,9 @@ def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypat
     from app.persistence.background_authority import require_background_owner
 
     app = FastAPI()
-    owner = GatewayBackgroundRuntime(object(), "workspace", role="worker")
+    owner = GatewayBackgroundRuntime(
+        object(), "workspace", role="worker", execution_scope=background_execution
+    )
     app.state.background_runtime = owner
     live = threading.Event()
     live.set()
@@ -53,7 +56,11 @@ def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypat
         return run
 
     monkeypatch.setattr(owner, "require_live", require_live)
-    monkeypatch.setattr(routes, "_service_and_context", lambda: (SimpleNamespace(database=object()), object()))
+    monkeypatch.setattr(
+        routes,
+        "_service_and_context",
+        lambda: (SimpleNamespace(database=object(), blobs=object()), object()),
+    )
     monkeypatch.setattr(worker, "run_ingest_once", poll(0))
     monkeypatch.setattr(render_service, "run_render_once", poll(1))
     monkeypatch.setattr(render_service, "run_preview_once", poll(2))

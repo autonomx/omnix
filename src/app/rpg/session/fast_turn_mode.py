@@ -1,6 +1,6 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -84,7 +84,7 @@ def fast_turn_enabled(performance_override: Mapping[str, Any] | None = None) -> 
         return _bool(override.get("fast_turn_mode"), False)
     if "enabled" in override:
         return _bool(override.get("enabled"), False)
-    return _bool(os.environ.get(FAST_TURN_ENV), False)
+    return _bool(_env_str(FAST_TURN_ENV), False)
 
 
 def resolve_fast_turn_settings(

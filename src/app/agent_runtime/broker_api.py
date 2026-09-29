@@ -1,5 +1,6 @@
 """Run-scoped PostgreSQL-authoritative broker for external agent capabilities."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
@@ -12,7 +13,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
@@ -818,7 +819,7 @@ def execute_agent_capability(
                 try:
                     retry_after = max(
                         1,
-                        int(os.environ.get("OMNIX_AGENT_READ_RETRY_AFTER_SECONDS", "30")),
+                        int(_env_str("OMNIX_AGENT_READ_RETRY_AFTER_SECONDS", "30")),
                     )
                 except ValueError:
                     retry_after = 30

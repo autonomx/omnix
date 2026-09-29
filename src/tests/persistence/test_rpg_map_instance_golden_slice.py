@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import (
@@ -102,7 +102,7 @@ def test_two_campaigns_share_definition_but_never_mutable_map_state() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         definition_v1 = _definition(world_revision=1, definition_revision=1)
         world_v1 = compile_world_revision(
             world_id="world:golden",

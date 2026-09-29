@@ -110,7 +110,7 @@ def profile_external_ceiling(profile: AgentProfile) -> set[str]:
     ceiling = set(profile.external_capabilities) | set(profile.optional_external_capabilities)
     if profile.id == "coding":
         try:
-            from .mcp_policy import configured_mcp_capability_ids
+            from app.capabilities.mcp_policy import configured_mcp_capability_ids
 
             ceiling.update(configured_mcp_capability_ids())
         except Exception:

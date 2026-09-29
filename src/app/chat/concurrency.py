@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 from functools import wraps
-from threading import RLock
+from app.conversation.concurrency import CHAT_MUTATION_LOCK
 from typing import Any, Callable, TypeVar, cast
-
-CHAT_MUTATION_LOCK = RLock()
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 

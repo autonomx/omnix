@@ -6,10 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat import ChatSessionStore
+from app.conversation.contracts import ChatSessionReader
 
 from .companion_context import invalidate_companion_context
-from .models import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
+from app.memory_contracts import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
 from .policy import is_visible_in_scope
 from .service import MemoryPolicyError, MemoryService
 from .temporal_retrieval import invalidate_temporal_retrieval
@@ -183,7 +183,7 @@ def export_owner_memory(service: MemoryService, context: MemoryScopeContext) -> 
 
 
 def reset_owner_memory(
-    store: ChatSessionStore,
+    store: ChatSessionReader,
     service: MemoryService,
     context: MemoryScopeContext,
 ) -> MemoryResetResponse:

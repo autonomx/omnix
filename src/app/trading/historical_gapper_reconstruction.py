@@ -1,6 +1,6 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -96,7 +96,7 @@ def _chunks(values: list[str], size: int) -> list[list[str]]:
 
 
 def _alpaca_assets(runtime: ProviderHttpRuntime, headers: dict[str, str]) -> list[dict[str, Any]]:
-    trading_url = (os.environ.get("OMNIX_ALPACA_TRADING_URL") or _DEFAULT_TRADING_URL).rstrip("/")
+    trading_url = (_env_str("OMNIX_ALPACA_TRADING_URL") or _DEFAULT_TRADING_URL).rstrip("/")
     response = runtime.get(
         f"{trading_url}/v2/assets",
         params={"status": "active", "asset_class": "us_equity"},
@@ -138,7 +138,7 @@ def _alpaca_bars(
     chunk_size: int,
     feed: Literal["iex", "sip"] = "iex",
 ) -> dict[str, list[dict[str, Any]]]:
-    data_url = (os.environ.get("OMNIX_ALPACA_DATA_URL") or ALPACA_DATA_URL).rstrip("/")
+    data_url = (_env_str("OMNIX_ALPACA_DATA_URL") or ALPACA_DATA_URL).rstrip("/")
     output: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for chunk in _chunks(symbols, chunk_size):
         page_token: str | None = None

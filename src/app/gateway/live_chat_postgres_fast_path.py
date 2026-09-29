@@ -14,26 +14,23 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from functools import wraps
 from threading import Lock, RLock
 from typing import Any
 
 from app.chat.assistant_turns import default_assistant_turn_coordinator
-from app.chat.character_store import _find_idempotent_user_turn, _start_assistant_turn
+from app.chat.character_store import _find_idempotent_user_turn, _start_assistant_turn, _store_database
 from app.chat.memory_commands import parse_memory_command
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.chat.retention_policy import transcript_retention_allowed
 from app.chat.store import _context_source_summaries
 from app.chat.persistence.chat_runtime_compat import (
     PostgresCharacterChatSessionStore,
-    PostgresChatSessionStore,
 )
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.transaction_binding import share_transaction, after_commit
 
 from .tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_live_chat_postgres_fast_path_installed"
 _SESSION_LOCKS_GUARD = Lock()
 _SESSION_LOCKS: dict[str, tuple[RLock, int]] = {}
 
@@ -373,7 +370,11 @@ def _begin_user_message_fast(
         message.metadata["memory_command"] = command.model_dump(mode="json")
 
     coordinator_started = time.perf_counter()
-    _start_assistant_turn(session, message, request)
+    database = _store_database(self)
+    if database is None:
+        _start_assistant_turn(session, message, request)
+    else:
+        _start_assistant_turn(session, message, request, database=database)
     message.metadata["segment_id"] = session.active_segment_id
     coordinator_ms = (time.perf_counter() - coordinator_started) * 1000.0
 
@@ -450,7 +451,12 @@ def _complete_streamed_reply_fast(
             or metadata.get("assistant_turn_id")
             or ""
         ).strip()
-        coordinator = default_assistant_turn_coordinator()
+        database = _store_database(self)
+        coordinator = (
+            default_assistant_turn_coordinator(database)
+            if database is not None
+            else default_assistant_turn_coordinator()
+        )
         turn = coordinator.get(assistant_turn_id) if assistant_turn_id else None
         if turn is not None and not turn.terminal:
             coordinator.try_complete(assistant_turn_id)
@@ -532,44 +538,56 @@ def _complete_streamed_reply_fast(
         raise
 
 
-def install_live_chat_postgres_fast_path() -> None:
-    """Install targeted session reads and turn persistence once."""
-    if getattr(PostgresCharacterChatSessionStore, _HOOK_SENTINEL, False):
-        return
+class FastPathPostgresCharacterChatSessionStore(PostgresCharacterChatSessionStore):
+    """PostgreSQL Chat adapter with typed, store-owned fast-path overrides."""
 
-    original_get_session = PostgresChatSessionStore.get_session
-    original_begin_user_message = PostgresCharacterChatSessionStore.begin_user_message
-    original_complete_streamed_reply = (
-        PostgresCharacterChatSessionStore.complete_streamed_reply
-    )
+    def get_session(self, session_id: str) -> ChatSession | None:
+        session = _load_single_session(self, session_id)
+        if session is not None:
+            from .live_chat_speculation import prime_live_speculation_session
 
-    @wraps(original_get_session)
-    def patched_get_session(
-        self: PostgresChatSessionStore,
-        session_id: str,
-    ) -> ChatSession | None:
-        return _load_single_session(self, session_id)
+            prime_live_speculation_session(session)
+        return session
 
-    @wraps(original_begin_user_message)
-    def patched_begin_user_message(
-        self: PostgresCharacterChatSessionStore,
+    def begin_user_message(
+        self,
         session_id: str,
         request: SendChatMessageRequest,
-        **kwargs: Any,
+        *,
+        context_items: list[dict[str, Any]] | None = None,
+        context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        with _durable_session_mutation(self, session_id):
-            return _begin_user_message_fast(self, session_id, request, **kwargs)
+        from .live_chat_provider_routing import route_postgres_begin_user_message
+        from .live_chat_speculation import prime_live_speculation_session
 
-    @wraps(original_complete_streamed_reply)
-    def patched_complete_streamed_reply(
-        self: PostgresCharacterChatSessionStore,
+        with _durable_session_mutation(self, session_id):
+            result = route_postgres_begin_user_message(
+                self,
+                session_id,
+                request,
+                persist=lambda routed_request: _begin_user_message_fast(
+                    self,
+                    session_id,
+                    routed_request,
+                    context_items=context_items,
+                    context_diagnostics=context_diagnostics,
+                ),
+            )
+        if result is not None:
+            prime_live_speculation_session(result[0])
+        return result
+
+    def complete_streamed_reply(
+        self,
         session_id: str,
         user_message_id: str,
         content: str,
         metadata: dict[str, Any],
     ) -> ChatSession | None:
+        from .live_chat_speculation import prime_live_speculation_session
+
         with _durable_session_mutation(self, session_id) as lock_wait_ms:
-            return _complete_streamed_reply_fast(
+            session = _complete_streamed_reply_fast(
                 self,
                 session_id,
                 user_message_id,
@@ -577,10 +595,6 @@ def install_live_chat_postgres_fast_path() -> None:
                 metadata,
                 lock_wait_ms=lock_wait_ms,
             )
-
-    PostgresChatSessionStore.get_session = patched_get_session
-    PostgresCharacterChatSessionStore.begin_user_message = patched_begin_user_message
-    PostgresCharacterChatSessionStore.complete_streamed_reply = (
-        patched_complete_streamed_reply
-    )
-    setattr(PostgresCharacterChatSessionStore, _HOOK_SENTINEL, True)
+        if session is not None:
+            prime_live_speculation_session(session)
+        return session

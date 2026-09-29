@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.rpg.persistence.rpg_world_forge_service import approve_world_forge_proposal
 from app.persistence.unit_of_work import unit_of_work
@@ -49,7 +49,7 @@ def test_world_forge_proposal_is_reviewed_and_applied_atomically() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             work.rpg.create_campaign(
                 context,

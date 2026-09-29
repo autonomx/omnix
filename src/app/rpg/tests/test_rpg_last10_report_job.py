@@ -6,9 +6,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.rpg.jobs.turn_executor import _execute_feature_job
+from app.jobs.handlers import JobExecutionContext, registry_from_features
 from app.jobs.models import JobRecord
 from app.rpg.jobs.last10_report import RPG_LAST10_REPORT_JOB_TYPE, build_rpg_last10_report_payload, write_rpg_last10_report
+from app.runtime.feature_catalog import load_feature
 
 
 class FakeJobStore:
@@ -135,13 +136,14 @@ def test_last10_report_includes_handoff_debug_payload(tmp_path: Path) -> None:
     assert "missing_dialogue_candidate" in html
 
 
-def test_last10_report_is_supported_by_inline_feature_dispatcher(tmp_path: Path, monkeypatch: Any) -> None:
+def test_last10_report_is_supported_by_rpg_feature_registry(tmp_path: Path, monkeypatch: Any) -> None:
     turn = _job(job_id="job:turn-01", kind="rpg.turn", session="session-live-1", offset=10, duration=3, command="Ask NPC", response="NPC answers")
     report = _job(job_id="job:report", kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
     store = FakeExecutableJobStore([turn])
     monkeypatch.setattr("app.rpg.jobs.last10_report.write_rpg_last10_report", lambda payload: write_rpg_last10_report(payload, output_root=tmp_path))
 
-    _execute_feature_job(store, report)
+    registry = registry_from_features((load_feature("rpg"),))
+    registry.execute(JobExecutionContext(job_store=store), report)
 
     assert store.running_job_ids == ["job:report"]
     assert store.failed_requests == []

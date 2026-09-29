@@ -75,6 +75,7 @@ AL_METRICS = {
 }
 PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json", "/favicon.ico"}
 VERBS = {"get", "post", "put", "patch", "delete", "head", "options", "request"}
+TRANSPORT_EXCEPTIONS_DOC = "docs/architecture/api-transport-exceptions.md"
 
 
 def finite_number(value: Any) -> bool:
@@ -146,6 +147,20 @@ def _route_internal(call: ast.Call, router_prefixes: dict[str, str]) -> bool:
     return (prefix + (path or "")).startswith("/internal/")
 
 
+def _documented_transport_exceptions(sources: dict[str, str]) -> set[tuple[str, str, str]]:
+    """Return exact (source, method, local path) entries from the reviewed inventory."""
+    source = sources.get(TRANSPORT_EXCEPTIONS_DOC, "")
+    result: set[tuple[str, str, str]] = set()
+    for line in source.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or not cells[0].startswith("src/app/"):
+            continue
+        result.add((cells[0], cells[1].upper(), cells[2]))
+    return result
+
+
 def _permission(value: ast.AST | None) -> bool:
     if value is None:
         return False
@@ -164,6 +179,7 @@ def _fastapi_class(bindings, node: ast.AST) -> bool:
 def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, Any]]:
     values: Counter = Counter({key: 0 for key in LOWER_TARGETS if key not in RUNTIME_METRICS})
     evidence: dict[str, Any] = {"python_syntax_errors": analysis.syntax_errors}
+    transport_exceptions = _documented_transport_exceptions(analysis.sources)
     violations = analysis.violations()
     for violation in violations:
         if violation.rule == "AL003" and not violation.path.startswith("src/app/"):
@@ -218,10 +234,40 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                 untyped = any(qualified_name(item.value if isinstance(item, ast.Subscript) else item, aliases) in {"dict", "typing.Dict", "Dict", "typing.Any", "Any"} for item in annotations)
                 for route in route_decorators(node):
                     internal = _route_internal(route, router_prefixes)
-                    values["untyped_body_routes"] += untyped
-                    if isinstance(keyword(route, "include_in_schema"), ast.Constant) and keyword(route, "include_in_schema").value is False and not internal:
+                    route_path = literal_string(route.args[0]) or "" if route.args else ""
+                    method = qualified_name(route.func).split(".")[-1].upper()
+                    raw_request_names = {
+                        arg.arg
+                        for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+                        if arg.annotation is not None
+                        and qualified_name(arg.annotation, aliases).split(".")[-1] == "Request"
+                    }
+                    raw_body = any(
+                        isinstance(item, ast.Call)
+                        and isinstance(item.func, ast.Attribute)
+                        and item.func.attr in {"json", "body"}
+                        and isinstance(item.func.value, ast.Name)
+                        and item.func.value.id in raw_request_names
+                        for item in ast.walk(node)
+                    )
+                    untyped_body = untyped or raw_body
+                    values["untyped_body_routes"] += untyped_body
+                    if untyped_body:
+                        evidence.setdefault("untyped_body_routes", []).append({
+                            "path": path,
+                            "line": node.lineno,
+                            "method": method,
+                            "route_path": route_path,
+                        })
+                    documented_transport = (path, method, route_path) in transport_exceptions
+                    if (
+                        isinstance(keyword(route, "include_in_schema"), ast.Constant)
+                        and keyword(route, "include_in_schema").value is False
+                        and not internal
+                        and not documented_transport
+                    ):
                         values["schema_excluded_routes"] += 1
-                    full_path = router_prefixes.get(qualified_name(route.func.value), "") + (literal_string(route.args[0]) or "" if route.args else "")
+                    full_path = router_prefixes.get(qualified_name(route.func.value), "") + route_path
                     if full_path not in PUBLIC_PATHS and not internal:
                         permitted = qualified_name(route.func.value) in router_permissions or _permission(keyword(route, "dependencies")) or any(_permission(default) for default in node.args.defaults + node.args.kw_defaults)
                         values["routes_without_permission"] += not permitted

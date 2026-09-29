@@ -557,7 +557,7 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.post("/api/live/speculation/tts-prefetch", include_in_schema=False)
+    @app.post("/api/live/speculation/tts-prefetch")
     async def prefetch_speculative_tts(
         payload: SpeculativeTtsPrefetchRequest,
     ) -> dict[str, Any]:
@@ -591,7 +591,6 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/live/speculation/tts-prefetch/{generation_id}/accept",
-        include_in_schema=False,
     )
     async def accept_speculative_tts(generation_id: str) -> dict[str, Any]:
         entry = _accept_entry(generation_id)
@@ -615,7 +614,6 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/live/speculation/tts-prefetch/{generation_id}/cancel",
-        include_in_schema=False,
     )
     async def cancel_speculative_tts(generation_id: str) -> dict[str, Any]:
         cancelled = _cancel_entry(generation_id)

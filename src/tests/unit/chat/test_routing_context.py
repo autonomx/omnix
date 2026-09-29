@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
 from app.chat.context_budget import PromptBudget
 from app.chat.history_search import InMemoryHistorySearchService, build_history_recall_query

@@ -8,7 +8,9 @@ from typing import Any, Callable, Literal
 
 import httpx
 
-from .models import AssistantContextItem, DesktopCaptureMode
+from app.conversation.contracts import AssistantContextItem
+
+from .models import DesktopCaptureMode
 
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 _DEFAULT_TIMEOUT_SECONDS = 25.0

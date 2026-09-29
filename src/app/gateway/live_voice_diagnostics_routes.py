@@ -61,7 +61,7 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
-    @gateway.post(LIVE_VOICE_DIAGNOSTICS_PATH, include_in_schema=False)
+    @gateway.post(LIVE_VOICE_DIAGNOSTICS_PATH)
     async def ingest_live_voice_diagnostics(batch: LiveVoiceDiagnosticBatch) -> dict[str, Any]:
         trace_id = normalize_trace_id(batch.trace_id)
         for item in batch.events:
@@ -78,14 +78,13 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
             "log_path": diagnostics_log_path(),
         }
 
-    @gateway.get(f"{LIVE_VOICE_DIAGNOSTICS_PATH}/status", include_in_schema=False)
+    @gateway.get(f"{LIVE_VOICE_DIAGNOSTICS_PATH}/status")
     async def live_voice_diagnostics_status() -> dict[str, Any]:
         return {"ready": True, "log_path": diagnostics_log_path()}
 
     @gateway.get(
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate",
         response_model=LiveVoiceReleaseGateReport,
-        include_in_schema=False,
     )
     async def live_voice_release_gate(
         hours: int = Query(default=24, ge=1, le=24 * 30),
@@ -105,7 +104,6 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
     @gateway.post(
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate/evaluate",
         response_model=LiveVoiceReleaseGateReport,
-        include_in_schema=False,
     )
     async def evaluate_live_voice_release_gate_payload(
         request: LiveVoiceReleaseGateEvaluationRequest,
@@ -118,7 +116,6 @@ def register_live_voice_diagnostics_routes(gateway: FastAPI) -> None:
     @gateway.post(
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate/v2/evaluate",
         response_model=LiveChatReleaseGateReport,
-        include_in_schema=False,
     )
     async def evaluate_live_chat_release_gate_payload(
         request: LiveChatReleaseGateEvaluationRequest,

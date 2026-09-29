@@ -346,7 +346,7 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     monkeypatch.setattr(
         fast_path,
         "default_assistant_turn_coordinator",
-        lambda: coordinator,
+        lambda *_args: coordinator,
     )
     monkeypatch.setattr(
         fast_path,
@@ -411,8 +411,10 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
             created_history.append(self)
 
     class FakeChatStore:
-        def __init__(self, *, history_search_factory) -> None:
+        def __init__(self, *, history_search_factory, memory_service_factory, memory_settings_factory) -> None:
             self.history_search_factory = history_search_factory
+            self.memory_service_factory = memory_service_factory
+            self.memory_settings_factory = memory_settings_factory
             created_stores.append(self)
 
     chat_runtime_compat.reset_default_chat_runtime_caches()

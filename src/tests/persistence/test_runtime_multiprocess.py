@@ -28,13 +28,13 @@ def _gateway_process(url, workspace, role, control):
                 await runtime.startup()
                 tts_remote = None
                 if role == 'api':
-                    from app import shared
+                    from app.providers import service as provider_service
                     from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
-                    shared.load_settings = lambda: {'audio_provider_tts': 'faster-qwen3-tts'}
+                    provider_service.load_settings = lambda: {'audio_provider_tts': 'faster-qwen3-tts'}
                     def forbidden_registry():
                         raise AssertionError('API attempted local GPU provider construction')
-                    shared.get_audio_registry = forbidden_registry
-                    tts_remote = isinstance(shared.get_tts_provider(), QwenHttpGatewayProvider)
+                    provider_service.get_audio_registry = forbidden_registry
+                    tts_remote = isinstance(provider_service.get_tts_provider(), QwenHttpGatewayProvider)
                 backend_pid = runtime.connection.info.backend_pid if runtime.connection is not None else None
                 control.send({'event': 'ready', 'role': role, 'workers_started': len(calls), 'owns_lock': runtime.healthy,
                               'backend_pid': backend_pid, 'tts_remote': tts_remote})
@@ -139,7 +139,7 @@ def _claim_chat_process(url, workspace, user, session, control):
     from app.persistence.database import PostgresDatabase
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.persistence.job_store import PostgresJobStoreAdapter
-    from app.persistence.repositories import PostgresIdentityRepository
+    from app.persistence.identity_service import PostgresIdentityRepository
     database = PostgresDatabase(DatabaseSettings(url=url))
     store = PostgresJobStoreAdapter(database)
     with database.connection() as connection:

@@ -1,9 +1,9 @@
 """Pure server-side Character Mode identity resolution."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 
 from .models import (
     SYSTEM_ASSISTANT_ID,
@@ -36,7 +36,7 @@ class CharacterResolutionError(CharacterInteractionError):
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
-    return (os.environ.get(name) or default).strip().lower() in {"1", "true", "yes", "on"}
+    return (_env_str(name) or default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def character_mode_enabled() -> bool:

@@ -6,7 +6,7 @@ import re
 from typing import Any, Callable, Dict, Mapping
 
 from app.providers.base import ChatMessage
-from app.shared import get_provider, load_settings
+from app.providers.service import get_provider, load_settings
 from rpg.interactive_cli_commerce_followup import infer_requested_service_kind, is_commerce_followup_question, is_purchase_intent
 
 LLM_INTENT_SOURCE = "interactive_cli_llm_intent_router_v3"

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.jobs.models import (
     CancelJobRequest,
     CompleteJobRequest,
@@ -145,12 +143,10 @@ class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapte
         return self.update_job_stages(job_id, stages) or record
 
     def latest_event_id(self) -> int:
-        with self.database.connection() as connection:
-            row = connection.execute(
-                "SELECT COALESCE(MAX(id), 0) FROM omnix_job_events WHERE workspace_id = %s",
-                (self.context.workspace_id,),
-            ).fetchone()
-        return int(row[0])
+        with unit_of_work(self.database) as work:
+            event_id = work.jobs.latest_event_id(self.context)
+            work.rollback()
+        return event_id
 
     def list_events(
         self,
@@ -158,31 +154,22 @@ class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapte
         limit: int = 100,
     ) -> list[JobEventRecord]:
         job_id = after_id if isinstance(after_id, str) else None
-        threshold = 0 if job_id is not None else max(0, int(after_id))
-        parameters: list[Any] = [self.context.workspace_id]
-        clauses = ["workspace_id = %s"]
-        if job_id is not None:
-            clauses.append("job_id = %s")
-            parameters.append(job_id)
-        else:
-            clauses.append("id > %s")
-            parameters.append(threshold)
-        parameters.append(max(1, min(int(limit), 1000)))
-        with self.database.connection() as connection:
-            rows = connection.execute(
-                "SELECT id, job_id, event_type, payload, created_at "
-                "FROM omnix_job_events WHERE "
-                + " AND ".join(clauses)
-                + " ORDER BY id ASC LIMIT %s",
-                tuple(parameters),
-            ).fetchall()
+        after_event_id = 0 if job_id is not None else max(0, int(after_id))
+        with unit_of_work(self.database) as work:
+            rows = work.jobs.list_events(
+                self.context,
+                after_id=after_event_id,
+                job_id=job_id,
+                limit=limit,
+            )
+            work.rollback()
         return [
             JobEventRecord(
-                id=int(row[0]),
-                job_id=str(row[1]),
-                event_type=str(row[2]),
-                payload=dict(row[3]),
-                created_at=row[4].isoformat(),
+                id=row["id"],
+                job_id=row["job_id"],
+                event_type=row["event_type"],
+                payload=row["payload"],
+                created_at=row["created_at"],
             )
             for row in rows
         ]

@@ -12,6 +12,56 @@ from fastapi.responses import JSONResponse
 from app.rpg.map_content_editor import MapContentEditError, apply_map_content_operations
 from app.rpg.map_content_validation import validate_map_content
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class ValidateDefinitionRequestBody(_TypedRequestModel):
+    definition: dict[str, Any] = _typed_field(default_factory=dict)
+    context: dict[str, list[str]] = _typed_field(default_factory=dict)
+
+class ApplyOperationsRequestBody(_TypedRequestModel):
+    definition: dict[str, Any] = _typed_field(default_factory=dict)
+    operations: list[dict[str, Any]] = _typed_field(default_factory=list)
+    context: dict[str, list[str]] = _typed_field(default_factory=dict)
+
+class ExportDefinitionRequestBody(_TypedRequestModel):
+    definition: dict[str, Any] = _typed_field(default_factory=dict)
+    context: dict[str, list[str]] = _typed_field(default_factory=dict)
+    filename: str | None = None
+
+
+class MapContentIssueResponse(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="forbid")
+
+    severity: str
+    code: str
+    path: str
+    detail: str = ""
+
+
+class MapContentReportResponse(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="forbid")
+
+    ok: bool
+    revision: str
+    canonical_json: str
+    issues: list[MapContentIssueResponse]
+
+
+class MapEditorValidationResponse(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="forbid")
+
+    ok: bool
+    report: MapContentReportResponse
+
+
+class MapEditorApplyResponse(MapEditorValidationResponse):
+    definition: dict[str, Any]
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_map_editor_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_map_editor_route_hook_installed"
 
@@ -21,15 +71,23 @@ def register_rpg_map_editor_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.post("/api/rpg/map-editor/validate", tags=["rpg-map-editor"], include_in_schema=False)
-    async def validate_definition(request: Request) -> Response:
-        payload = _payload(await request.json())
+    @app.post(
+        "/api/rpg/map-editor/validate",
+        response_model=MapEditorValidationResponse,
+        tags=["rpg-map-editor"],
+    )
+    def validate_definition(request: Request, request_body: ValidateDefinitionRequestBody) -> Response:
+        payload = _payload(request_body.model_dump(exclude_unset=True, by_alias=True))
         report = validate_map_content(payload.get("definition"), **_context(payload.get("context")))
         return JSONResponse({"ok": report.ok, "report": report.as_dict()})
 
-    @app.post("/api/rpg/map-editor/apply", tags=["rpg-map-editor"], include_in_schema=False)
-    async def apply_operations(request: Request) -> Response:
-        payload = _payload(await request.json())
+    @app.post(
+        "/api/rpg/map-editor/apply",
+        response_model=MapEditorApplyResponse,
+        tags=["rpg-map-editor"],
+    )
+    def apply_operations(request: Request, request_body: ApplyOperationsRequestBody) -> Response:
+        payload = _payload(request_body.model_dump(exclude_unset=True, by_alias=True))
         try:
             result = apply_map_content_operations(
                 payload.get("definition"),
@@ -48,9 +106,32 @@ def register_rpg_map_editor_routes(app: FastAPI) -> None:
             ) from exc
         return JSONResponse({"ok": result.report.ok, **result.as_dict()})
 
-    @app.post("/api/rpg/map-editor/export", tags=["rpg-map-editor"], include_in_schema=False)
-    async def export_definition(request: Request) -> Response:
-        payload = _payload(await request.json())
+    @app.post(
+        "/api/rpg/map-editor/export",
+        response_class=Response,
+        response_model=dict[str, Any],
+        responses={
+            200: {
+                "description": "Validated map definition exported as a JSON document.",
+                "content": {
+                    "application/json": {
+                        "schema": {"type": "object", "additionalProperties": True}
+                    }
+                },
+            },
+            422: {
+                "description": "Map definition failed validation.",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/MapEditorValidationResponse"}
+                    }
+                },
+            },
+        },
+        tags=["rpg-map-editor"],
+    )
+    def export_definition(request: Request, request_body: ExportDefinitionRequestBody) -> Response:
+        payload = _payload(request_body.model_dump(exclude_unset=True, by_alias=True))
         report = validate_map_content(payload.get("definition"), **_context(payload.get("context")))
         if not report.ok:
             return JSONResponse({"ok": False, "report": report.as_dict()}, status_code=422)

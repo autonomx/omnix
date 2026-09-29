@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 import re
 
-from app.gateway.workers import WorkerHealthPayload, get_worker_health_payload
+from app.runtime.worker_health import WorkerHealthPayload, get_worker_health_payload
 from app.jobs import ModelResidencyDiagnostics, ModelResidencyRecord, get_model_residency_diagnostics
 from app.providers.cache_status import ProviderModelCachePayload, get_provider_model_cache_status
 from .runtime_diagnostics import RuntimeDiagnostics
@@ -23,6 +23,18 @@ class DiagnosticsPayload(BaseModel):
 
 def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] | None = None) -> DiagnosticsPayload:
     workers = get_worker_health_payload()
+    try:
+        provider_model_cache = get_provider_model_cache_status()
+    except Exception as exc:
+        provider_model_cache = ProviderModelCachePayload(
+            status="unavailable",
+            diagnostics=[
+                {
+                    "code": "provider_model_cache_unavailable",
+                    "error_class": type(exc).__name__,
+                }
+            ],
+        )
     return DiagnosticsPayload(
         ok=workers.ok,
         status="ready" if workers.ok else "degraded",
@@ -33,7 +45,7 @@ def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] 
             "status": "available",
         },
         model_residency=get_model_residency_diagnostics(model_residency_records),
-        provider_model_cache=get_provider_model_cache_status(),
+        provider_model_cache=provider_model_cache,
         logs=[],
     )
 
@@ -51,7 +63,12 @@ def redact_diagnostics(value, key=''):
     return value
 
 
-def get_runtime_diagnostics_payload(gateway, *, model_residency_store_factory) -> DiagnosticsPayload:
+def get_runtime_diagnostics_payload(
+    gateway,
+    *,
+    model_residency_store_factory,
+    allow_offline_store: bool = False,
+) -> DiagnosticsPayload:
     """Keep local ownership diagnostics available when durable reads fail."""
     from app.jobs.residency import GpuResidencyPolicy
     from .runtime_diagnostics import runtime_diagnostics
@@ -59,7 +76,7 @@ def get_runtime_diagnostics_payload(gateway, *, model_residency_store_factory) -
     runtime = runtime_diagnostics(gateway)
     error_class = runtime.postgresql.get('error_class')
     payload = None
-    if runtime.postgresql.get('connectivity') is not False:
+    if runtime.postgresql.get("connectivity") is not False or allow_offline_store:
         try:
             payload = get_diagnostics_payload(model_residency_store_factory().list_records())
         except Exception as exc:

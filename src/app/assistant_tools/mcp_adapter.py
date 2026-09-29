@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.agent_runtime.mcp_policy import McpServerPolicy, McpToolPolicy, resolve_mcp_tool
+from app.capabilities.mcp_policy import McpServerPolicy, McpToolPolicy, resolve_mcp_tool
 
 from .models import AssistantToolRequest, AssistantToolResult
 
@@ -72,7 +72,7 @@ def mcporter_available() -> bool:
 
 
 def mcp_runtime_available() -> bool:
-    from app.agent_runtime.mcp_policy import configured_mcp_capability_ids
+    from app.capabilities.mcp_policy import configured_mcp_capability_ids
 
     return mcporter_available() and bool(configured_mcp_capability_ids())
 

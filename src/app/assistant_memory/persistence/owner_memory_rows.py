@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.assistant_memory.models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryRecord,
     MemorySnapshot,

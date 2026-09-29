@@ -4,10 +4,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assistant_memory import MemoryService, SQLiteMemoryRepository, resolve_chat_scope
+from app.assistant_memory import MemoryService, InMemoryMemoryRepository, resolve_chat_scope
 from app.assistant_memory.routes import register_assistant_memory_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.chat.memory_session import (
+from app.assistant_memory.session import (
     RefreshSessionMemoryRequest,
     SessionMemoryConflictError,
     get_session_memory_state,
@@ -15,9 +15,21 @@ from app.chat.memory_session import (
 )
 
 
+@pytest.fixture(autouse=True)
+def legacy_test_persistence(monkeypatch):
+    from app.persistence.runtime import reset_persistence_mode_cache
+
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
+    reset_persistence_mode_cache()
+    yield
+    reset_persistence_mode_cache()
+
+
 def setup_services(tmp_path):
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    memory_service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    memory_service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     session = chat_store.create_session(CreateChatSessionRequest(title="Memory lifecycle"))
     context = resolve_chat_scope(
         session.id,

@@ -1,30 +1,34 @@
-"""Chat and realtime feature declaration."""
-from app.persistence.repository_registry import RepositorySpec
+"""Chat feature declaration."""
 from app.runtime.features import FeatureModule
-from app.chat.persistence.repository import PostgresChatRepository
-from app.runtime.gateway_installer import install_registrars
+from app.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
+from app.runtime.router_composition import APIRouterHost
 
 
-def _install_gateway(gateway, context):
+def _chat_context_router(context):
     from app.persistence.runtime import uses_postgresql_runtime
+    from app.assistant_context import register_assistant_context_routes
+    from .live_material_context import create_live_material_context_router
+    from .live_observation_generation import create_live_observation_generation_router
+
     if uses_postgresql_runtime():
         from app.chat.persistence.legacy_sessions import install_postgresql_legacy_session_callbacks
         install_postgresql_legacy_session_callbacks()
-    install_registrars(
-        gateway,
-        context,
-        (
-            ("app.gateway.live_sse_transport", "_register_live_chat_sse_route_execution"),
-            ("app.gateway.realtime_routes", "register_realtime_routes"),
-            ("app.gateway.live_material_context", "register_live_material_context_routes"),
-            ("app.gateway.live_observation_generation", "register_live_observation_generation_routes"),
-        ),
+
+    host = APIRouterHost(state=context.runtime_state)
+    host.include_router(create_live_material_context_router(context.runtime_state))
+    host.include_router(create_live_observation_generation_router(context.runtime_state))
+    services = context.services
+    register_assistant_context_routes(
+        host,
+        chat_store_factory=lambda: services.chat,
+        job_store_factory=lambda: services.jobs,
     )
+    return host.router
 
 
 FEATURE = FeatureModule(
     id="chat",
     title="Chat and Realtime",
-    installers=(_install_gateway,),
-    repositories=(RepositorySpec(PostgresChatRepository, PostgresChatRepository, "chats"),),
+    routers=(_chat_context_router,),
+    repositories=CHAT_REPOSITORY_SPECS,
 )

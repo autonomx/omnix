@@ -5,12 +5,11 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from app.chat.models import SendChatMessageRequest
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _provider_key
-from app.chat.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
 
 from .live_voice_execution_lane import resolve_live_voice_chat_route
 from .tts_stream_diagnostics import stream_log
@@ -158,6 +157,35 @@ def _live_voice_affinity_for_current_provider(
     return None
 
 
+def route_postgres_begin_user_message(
+    store: Any,
+    session_id: str,
+    request: SendChatMessageRequest,
+    *,
+    persist: Callable[[SendChatMessageRequest], Any],
+) -> Any:
+    """Resolve provider affinity before a PostgreSQL store persists a user turn."""
+    implicit_provider_id = None
+    implicit_model_id = None
+    if _is_live_voice_request(request) and _normalized(request.provider_id) is None:
+        affinity = _live_voice_affinity_for_current_provider(session_id)
+        if affinity is not None:
+            implicit_provider_id, implicit_model_id = affinity
+    routed_request, route = route_chat_request(
+        request,
+        implicit_provider_id=implicit_provider_id,
+        implicit_model_id=implicit_model_id,
+    )
+    appended = persist(routed_request)
+    if appended is None:
+        return None
+    session, user_message = appended
+    _remember_turn_route(user_message.id, route)
+    session.provider_id = route.provider_id
+    session.model_id = route.model_id
+    return session, user_message
+
+
 def _remember_turn_route(message_id: str, route: _TurnProviderRoute) -> None:
     with _ROUTE_LOCK:
         _TURN_ROUTES[message_id] = route
@@ -254,7 +282,6 @@ def install_live_chat_provider_routing_hook() -> None:
     original_generate = PromptChatSessionStore._generate_provider_reply
     original_stream = PromptChatSessionStore.stream_provider_reply_chunks
     original_prompt_begin = PromptChatSessionStore.begin_user_message
-    original_postgres_begin = PostgresCharacterChatSessionStore.begin_user_message
 
     @wraps(original_generate_reply)
     def patched_generate_reply(
@@ -364,35 +391,18 @@ def install_live_chat_provider_routing_hook() -> None:
             context_items: list[dict[str, Any]] | None = None,
             context_diagnostics: dict[str, Any] | None = None,
         ):
-            implicit_provider_id = None
-            implicit_model_id = None
-            if _is_live_voice_request(request) and _normalized(request.provider_id) is None:
-                # Reuse prewarm affinity only while it still matches Settings.
-                # Changing the configured provider must take effect immediately,
-                # even when this chat session was previously stamped with another
-                # provider or an older live-call affinity is still within its TTL.
-                affinity = _live_voice_affinity_for_current_provider(session_id)
-                if affinity is not None:
-                    implicit_provider_id, implicit_model_id = affinity
-            routed_request, route = route_chat_request(
-                request,
-                implicit_provider_id=implicit_provider_id,
-                implicit_model_id=implicit_model_id,
-            )
-            appended = original_begin(
+            return route_postgres_begin_user_message(
                 self,
                 session_id,
-                routed_request,
-                context_items=context_items,
-                context_diagnostics=context_diagnostics,
+                request,
+                persist=lambda routed_request: original_begin(
+                    self,
+                    session_id,
+                    routed_request,
+                    context_items=context_items,
+                    context_diagnostics=context_diagnostics,
+                ),
             )
-            if appended is None:
-                return None
-            session, user_message = appended
-            _remember_turn_route(user_message.id, route)
-            session.provider_id = route.provider_id
-            session.model_id = route.model_id
-            return session, user_message
 
         return patched_begin
 
@@ -400,6 +410,5 @@ def install_live_chat_provider_routing_hook() -> None:
     PromptChatSessionStore._generate_provider_reply = patched_generate
     PromptChatSessionStore.stream_provider_reply_chunks = patched_stream
     PromptChatSessionStore.begin_user_message = wrap_begin(original_prompt_begin)
-    PostgresCharacterChatSessionStore.begin_user_message = wrap_begin(original_postgres_begin)
     _install_settings_cache_invalidation()
     setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)

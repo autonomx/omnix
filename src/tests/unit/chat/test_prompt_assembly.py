@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSession, ChatSessionStore
 from app.chat.context_budget import PromptBudget
 from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly

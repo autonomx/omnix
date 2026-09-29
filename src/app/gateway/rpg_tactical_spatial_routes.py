@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from functools import wraps
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
@@ -14,6 +14,32 @@ from app.rpg.tactical_spatial import (
     TacticalSpatialPolicy,
 )
 from app.rpg.tactical_spatial_service import attack_tactically, move_actor_tactically
+
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgTacticalMoveRequestBody(_TypedRequestModel):
+    submission_id: str = _typed_field(min_length=1)
+    command_id: str = _typed_field(min_length=1)
+    actor_id: str = _typed_field(min_length=1)
+    destination: tuple[int, int]
+    expected_map_state_revision: int = _typed_field(ge=0)
+    expected_campaign_revision: int = _typed_field(ge=0)
+    policy: TacticalSpatialPolicy | None = None
+
+class RpgTacticalAttackRequestBody(_TypedRequestModel):
+    submission_id: str = _typed_field(min_length=1)
+    command_id: str = _typed_field(min_length=1)
+    actor_id: str = _typed_field(min_length=1)
+    target_id: str = _typed_field(min_length=1)
+    action_type: Literal["melee_attack", "ranged_attack", "unarmed_attack"] = "melee_attack"
+    expected_campaign_revision: int = _typed_field(ge=0)
+    expected_map_state_revision: int = _typed_field(ge=0)
+    policy: TacticalSpatialPolicy | None = None
+
 
 _ROUTE_SENTINEL = "_omnix_rpg_tactical_spatial_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_tactical_spatial_route_hook_installed"
@@ -54,13 +80,12 @@ def register_rpg_tactical_spatial_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/map-instances/{map_instance_id}/tactical/move",
         tags=["rpg-tactical-spatial"],
-        include_in_schema=False,
     )
-    async def rpg_tactical_move(
+    def rpg_tactical_move(
         map_instance_id: str,
-        request: Request,
+        request: Request, request_body: RpgTacticalMoveRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         raw_policy = payload.pop("policy", None)
         try:
             command = TacticalMoveCommand.model_validate(payload)
@@ -78,13 +103,12 @@ def register_rpg_tactical_spatial_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/map-instances/{map_instance_id}/tactical/attack",
         tags=["rpg-tactical-spatial"],
-        include_in_schema=False,
     )
-    async def rpg_tactical_attack(
+    def rpg_tactical_attack(
         map_instance_id: str,
-        request: Request,
+        request: Request, request_body: RpgTacticalAttackRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         raw_policy = payload.pop("policy", None)
         expected_map_state_revision = payload.pop("expected_map_state_revision", None)
         if expected_map_state_revision is None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from app.agent_runtime.capabilities import Capability, default_capability_registry
+from app.capabilities import Capability, default_capability_registry
 
 from .models import (
     ApprovalPolicy,

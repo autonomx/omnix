@@ -166,7 +166,7 @@ def test_selected_provider_generates_saved_title_steps_and_operations(monkeypatc
                 )
             )
 
-    monkeypatch.setattr("app.shared.get_provider", lambda provider_name=None: FakeProvider())
+    monkeypatch.setattr("app.providers.service.get_provider", lambda provider_name=None: FakeProvider())
     decision = ResearchPlanner(
         prefer_hermes=False,
         provider_id="lmstudio",
@@ -194,7 +194,7 @@ def test_selected_provider_without_search_operation_falls_back_to_bounded_local_
                 )
             )
 
-    monkeypatch.setattr("app.shared.get_provider", lambda _provider=None: StopOnlyProvider())
+    monkeypatch.setattr("app.providers.service.get_provider", lambda _provider=None: StopOnlyProvider())
     decision = ResearchPlanner(
         use_provider=True,
         provider_id="chatgpt_codex",

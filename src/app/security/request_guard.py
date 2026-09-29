@@ -1,7 +1,7 @@
 """ASGI request guard for Host, browser Origin and unsafe HTTP methods."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from collections.abc import Sequence
 from urllib.parse import urlsplit
 
@@ -45,7 +45,7 @@ class RequestGuardMiddleware:
         self.app = app
         hosts = allowed_hosts
         if hosts is None:
-            extras = [v.strip() for v in os.environ.get("OMNIX_ALLOWED_HOSTS", "").split(",") if v.strip()]
+            extras = [v.strip() for v in _env_str("OMNIX_ALLOWED_HOSTS", "").split(",") if v.strip()]
             hosts = [*_DEFAULT_HOSTS, *extras]
         parsed_hosts = [_parse_host(host) for host in hosts]
         if any(host is None or "*" in host[0] for host in parsed_hosts):

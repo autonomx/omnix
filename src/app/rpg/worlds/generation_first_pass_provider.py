@@ -26,7 +26,7 @@ from app.rpg.worlds.generation_contract_bundle import (
 )
 from app.rpg.worlds.generation_strategy import world_forge_strategy_identity
 from app.rpg.worlds.generation_failure_artifact import build_failure_artifact
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     WorldForgeEntityRegistryItem,
     WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
@@ -34,7 +34,7 @@ from app.rpg_world_forge_provider import (
     _payload,
     _token_estimate,
 )
-from app.rpg_world_forge_single_pass_provider import (
+from app.rpg.worlds.providers.single_pass import (
     SinglePassProviderWorldForgeTopicGenerator,
     SinglePassWorldForgeProviderError,
     _field_contract,

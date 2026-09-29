@@ -1,6 +1,6 @@
 """Generalized Omnix agent/workflow runtime foundations."""
 
-from .capabilities import (
+from app.capabilities import (
     Capability,
     CapabilityEffect,
     CapabilityExecutionZone,

@@ -24,7 +24,7 @@ def test_load_qwen3_provider_passes_settings_config():
         }
     }
 
-    with patch("app.shared.load_settings", return_value=fake_settings):
+    with patch("app.providers.service.load_settings", return_value=fake_settings):
         with patch("app.providers.faster_qwen3_tts_provider.FasterQwen3TTSProvider", FakeProvider):
             provider = tts_server._load_qwen3_provider()
 

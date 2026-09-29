@@ -4,7 +4,7 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Response
 
 from app.rpg.worlds.world_bundle import MAX_WORLD_BUNDLE_BYTES
 from app.rpg.worlds.world_bundle_export import export_world_bundle
@@ -41,8 +41,19 @@ def register_rpg_world_bundle_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/worlds/{world_id}/export",
+        response_model=None,
+        response_class=Response,
+        responses={
+            200: {
+                "description": "Portable RPG world bundle archive.",
+                "content": {
+                    "application/zip": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                },
+            }
+        },
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_export_world_bundle(world_id: str) -> Response:
         try:
@@ -62,10 +73,10 @@ def register_rpg_world_bundle_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/import",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_import_world_bundle(
+    def rpg_import_world_bundle(
         request: Request,
+        bundle_content: bytes = Body(..., media_type="application/zip"),
         target_world_id: str | None = Query(default=None),
     ) -> dict[str, Any]:
         content_length = request.headers.get("content-length")
@@ -78,7 +89,7 @@ def register_rpg_world_bundle_routes(app: FastAPI) -> None:
                     )
             except ValueError:
                 pass
-        content = await request.body()
+        content = bundle_content
         try:
             return import_world_bundle(
                 content,

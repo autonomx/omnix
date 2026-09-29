@@ -6,9 +6,14 @@ from fastapi.testclient import TestClient
 
 
 def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> None:
-    from app import shared
-    from app.gateway.live_material_context import live_material_store
-    from app.gateway.main import create_gateway_app
+    from fastapi import FastAPI
+
+    from app.chat import live_observation_generation
+    from app.chat.live_material_context import (
+        create_live_material_context_router,
+        live_material_store,
+    )
+    from app.chat.live_observation_generation import create_live_observation_generation_router
 
     session_id = "observation-contract-test"
     live_material_store.clear(session_id)
@@ -19,11 +24,14 @@ def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> 
         return SimpleNamespace(content="Use 'fewer' for countable items.")
 
     monkeypatch.setattr(
-        shared,
+        live_observation_generation,
         "get_provider",
         lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion),
     )
-    client = TestClient(create_gateway_app(), raise_server_exceptions=False)
+    app = FastAPI()
+    app.include_router(create_live_material_context_router(app.state))
+    app.include_router(create_live_observation_generation_router(app.state))
+    client = TestClient(app, raise_server_exceptions=False)
     appended = client.post(
         f"/api/chat/sessions/{session_id}/live/material",
         json={
@@ -74,20 +82,28 @@ def test_live_observation_generation_uses_server_owned_material(monkeypatch) -> 
 
 
 def test_live_observation_generation_rejects_stale_context(monkeypatch) -> None:
-    from app import shared
-    from app.gateway.live_material_context import live_material_store
-    from app.gateway.main import create_gateway_app
+    from fastapi import FastAPI
+
+    from app.chat import live_observation_generation
+    from app.chat.live_material_context import (
+        create_live_material_context_router,
+        live_material_store,
+    )
+    from app.chat.live_observation_generation import create_live_observation_generation_router
 
     session_id = "observation-stale-test"
     live_material_store.clear(session_id)
     monkeypatch.setattr(
-        shared,
+        live_observation_generation,
         "get_provider",
         lambda provider_name=None: SimpleNamespace(
             chat_completion=lambda **kwargs: SimpleNamespace(content="Should not run")
         ),
     )
-    client = TestClient(create_gateway_app(), raise_server_exceptions=False)
+    app = FastAPI()
+    app.include_router(create_live_material_context_router(app.state))
+    app.include_router(create_live_observation_generation_router(app.state))
+    client = TestClient(app, raise_server_exceptions=False)
     appended = client.post(
         f"/api/chat/sessions/{session_id}/live/material",
         json={

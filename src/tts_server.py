@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
+from app.config.env import env_bool, env_int, env_str
 from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
@@ -156,12 +157,12 @@ def _preflight_tts_port(host: str, port: int) -> bool:
     if _can_bind_port(host, port):
         return True
 
-    should_kill = os.environ.get("OMNIX_LAUNCHER_KILL_PORT", "").strip().lower() in {"1", "true", "yes", "on"}
+    should_kill = env_bool("OMNIX_LAUNCHER_KILL_PORT", False)
     if should_kill and os.name == "nt":
         killed = _kill_windows_port_owners(port)
         if killed:
             print(f"[TTS SERVER] stopped stale process(es) on port {port}: {', '.join(map(str, killed))}")
-        wait_timeout_s = float(os.environ.get("OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT", "8") or 8)
+        wait_timeout_s = float(env_str("OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT", "8") or 8)
         if _wait_for_port_release(host, port, timeout_s=wait_timeout_s):
             return True
         remaining = _windows_port_owner_pids(port)
@@ -647,7 +648,7 @@ if __name__ == "__main__":
     import uvicorn
 
     host = bind_host()
-    port = int(os.environ.get("OMNIX_TTS_PORT", "5101"))
+    port = env_int("OMNIX_TTS_PORT", 5101, minimum=1, maximum=65535)
     if not _preflight_tts_port(host, port):
         sys.exit(1)
     uvicorn.run(app, host=host, port=port)

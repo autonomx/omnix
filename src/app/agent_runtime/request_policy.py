@@ -1,5 +1,6 @@
 """Validate public run requests against operator and profile authority ceilings."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -60,7 +61,7 @@ def allowed_workspace_root(value: str) -> str:
     configured roots are anchored to the repository, never the process cwd.
     """
     repository = Path(__file__).resolve().parents[3]
-    configured = os.environ.get("OMNIX_AGENT_WORKSPACE_ROOTS")
+    configured = _env_str("OMNIX_AGENT_WORKSPACE_ROOTS")
     if configured is None:
         roots = [repository, repository / "resources/agent_workspaces"]
     else:

@@ -1,8 +1,8 @@
 """Deterministic, bounded companion context for low-latency live generation."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 import re
 import threading
 import time
@@ -14,8 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat.context_budget import estimate_tokens
-from app.chat.prompt_assembly import PromptMemoryItem
+from app.conversation.contracts import PromptMemoryItem, estimate_tokens
 
 CompanionSection = Literal[
     "stable_profile",
@@ -226,12 +225,12 @@ def _cache_key(
     configured_timezone = (
         timezone_name
         or getattr(session, "timezone", None)
-        or os.environ.get("OMNIX_USER_TIMEZONE")
+        or _env_str("OMNIX_USER_TIMEZONE")
     )
     configured_locale = (
         locale
         or getattr(session, "locale", None)
-        or os.environ.get("OMNIX_USER_LOCALE")
+        or _env_str("OMNIX_USER_LOCALE")
     )
     resolved_timezone, time_bucket = _time_bucket(
         now,

@@ -154,7 +154,7 @@ def test_failed_certification_performs_no_durable_publication_writes(
     work = _Work()
     monkeypatch.setattr(
         certified,
-        "bootstrap_local_tenant",
+        "ensure_local_identity",
         lambda _database: SimpleNamespace(workspace_id="workspace:1"),
     )
     monkeypatch.setattr(certified, "unit_of_work", lambda _database: work)

@@ -49,9 +49,10 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app import production
     from app.persistence import startup, database as database_module, identity_service
     from app.gateway import main
+    from app.worker_runtime import durable_feature_worker
+    from app import runtime_composition
     from app import live_voice_hardware_policy
     from app import assets, chat, jobs
-    from app.jobs import durable_feature_worker
     from app.security import tenant_context
     from app.settings import access as settings_access
     from app.runtime.config import RuntimeConfig, GatewayRole, get_runtime_config
@@ -68,6 +69,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
     monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
     monkeypatch.setattr(jobs, "default_model_residency_store", lambda: stores[3])
+    monkeypatch.setattr(runtime_composition, "production_model_residency_store", lambda: stores[3])
     monkeypatch.setattr(database_module, "default_database", lambda: fake_database)
     monkeypatch.setattr(
         identity_service,
@@ -89,11 +91,13 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         "register_durable_feature_job_worker",
         lambda gateway, store: calls.append(("durable-worker", store is stores[0])),
     )
-    monkeypatch.setattr(
-        startup,
-        "bootstrap_status_payload",
-        lambda: calls.append("bootstrap") or {"ready": True, "backend": "postgresql"},
-    )
+    def bootstrap():
+        calls.append("bootstrap")
+        tenant = identity_service.ensure_local_identity(fake_database)
+        tenant_context.install_process_tenant(tenant)
+        return {"ready": True, "backend": "postgresql"}
+
+    monkeypatch.setattr(startup, "bootstrap_status_payload", bootstrap)
     monkeypatch.setattr(
         live_voice_hardware_policy,
         "install_live_voice_hardware_policy",
@@ -208,6 +212,7 @@ def test_production_application_composes_once_for_concurrent_requests(monkeypatc
 
 def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeypatch):
     from app.gateway import main
+    from app.gateway import app_factory
 
     calls = []
     lifecycle = []
@@ -227,7 +232,7 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
         calls.append(threading.get_ident())
         return 0
 
-    monkeypatch.setattr(main, "recover_abandoned_chat_generation_jobs", recover)
+    monkeypatch.setattr(app_factory, "recover_abandoned_chat_generation_jobs", recover)
     gateway = main.create_gateway_app(
         chat_store_factory=object,
         job_store_factory=object,
@@ -343,7 +348,7 @@ def test_job_read_does_not_block_health():
 
 
 def test_sse_store_poll_runs_outside_event_loop_thread():
-    from app.gateway.main import _live_job_event_stream
+    from app.gateway.live_job_events import resilient_live_job_event_stream
 
     threads = []
 
@@ -353,7 +358,7 @@ def test_sse_store_poll_runs_outside_event_loop_thread():
             return []
 
     async def run():
-        stream = _live_job_event_stream(Store())
+        stream = resilient_live_job_event_stream(Store())
         await anext(stream)
         try:
             assert "heartbeat" in await anext(stream)
@@ -414,7 +419,7 @@ def test_readiness_does_not_migrate_or_initialize_authority(monkeypatch):
 def test_required_worker_failure_and_missing_worker_gate_readiness(monkeypatch):
     from app import production
     from app.persistence import runtime
-    from app.gateway import workers
+    from app.runtime import worker_health as workers
 
     monkeypatch.setattr(
         runtime,
@@ -443,7 +448,7 @@ def test_required_worker_failure_and_missing_worker_gate_readiness(monkeypatch):
 
 
 def test_worker_health_probes_run_concurrently_and_keep_discovery_order(monkeypatch):
-    from app.gateway import workers
+    from app.runtime import worker_health as workers
 
     barrier = threading.Barrier(3)
     specs = [

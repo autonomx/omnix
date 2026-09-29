@@ -5,18 +5,18 @@ in-memory canonical repository with owner-aware filtering; no SQLite behavior
 or schema remains.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 from copy import deepcopy
 from pathlib import Path
 
-from .models import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
 from .repository import InMemoryMemoryRepository
 
 
 class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
     def __init__(self, db_path: str | Path | None = None) -> None:
-        override = (os.environ.get("OMNIX_ASSISTANT_MEMORY_DB_PATH") or "").strip()
+        override = (_env_str("OMNIX_ASSISTANT_MEMORY_DB_PATH") or "").strip()
         resolved = db_path if db_path is not None else (Path(override) if override else None)
         super().__init__(resolved)
 

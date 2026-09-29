@@ -18,7 +18,7 @@ from app.agent_runtime.repository import (
 )
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -42,7 +42,7 @@ def _database() -> PostgresDatabase:
 
 
 def _create_run(database: PostgresDatabase) -> tuple[object, str, int]:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     run_id = f"race-{uuid.uuid4().hex}"
     with unit_of_work(database) as work:
         repository = PostgresAgentRunRepository(work.connection, context)

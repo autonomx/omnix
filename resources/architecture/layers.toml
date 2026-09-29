@@ -1,5 +1,5 @@
 [layers.kernel]
-packages = ["app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.text"]
+packages = ["app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.memory_contracts", "app.memory_policy", "app.errors", "app.text"]
 may_import = ["kernel"]
 
 [layers.shared_services]
@@ -12,7 +12,7 @@ may_import = ["kernel", "shared_services"]
 feature_contract_module = "contracts"
 
 [layers.composition]
-packages = ["app.gateway", "app.production", "app.worker", "app.launcher", "app.runtime_composition"]
+packages = ["app.gateway", "app.production", "app.worker", "app.worker_runtime", "app.launcher", "app.runtime_composition"]
 may_import = ["*"]
 
 [owners]

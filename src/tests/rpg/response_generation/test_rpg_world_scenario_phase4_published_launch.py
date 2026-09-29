@@ -116,7 +116,7 @@ def test_published_scenario_launch_creates_bound_campaign_without_world_forge(
         lambda *_args, **_kwargs: {"status": "published"},
     )
     monkeypatch.setattr(
-        "app.rpg.worlds.published_launch.bootstrap_local_tenant",
+        "app.rpg.worlds.published_launch.ensure_local_identity",
         lambda _database: object(),
     )
     monkeypatch.setattr(

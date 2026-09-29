@@ -56,7 +56,7 @@ def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypa
 
 
 def test_manifest_asset_overrides_matching_legacy_voice_clone(tmp_path, monkeypatch) -> None:
-    import app.shared as shared
+    from app.runtime import paths as runtime_paths
 
     voice_dir = tmp_path / "voice_clones"
     voice_dir.mkdir()
@@ -65,8 +65,8 @@ def test_manifest_asset_overrides_matching_legacy_voice_clone(tmp_path, monkeypa
         json.dumps({"Narrator": {"voice_clone_id": "legacy-narrator"}}),
         encoding="utf-8",
     )
-    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(voice_dir))
-    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(voice_manifest))
+    monkeypatch.setattr(runtime_paths, "VOICE_CLONES_DIR", str(voice_dir))
+    monkeypatch.setattr(runtime_paths, "VOICE_CLONES_FILE", str(voice_manifest))
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
     store.upsert_asset(
@@ -199,7 +199,10 @@ def test_gateway_reads_shared_text_asset_content(tmp_path) -> None:
         )
     )
 
-    client = TestClient(create_gateway_app(asset_store_factory=lambda: store))
+    client = TestClient(
+        create_gateway_app(asset_store_factory=lambda: store),
+        base_url="http://localhost",
+    )
 
     response = client.get("/api/assets/asset:story/content")
 
@@ -228,7 +231,10 @@ def test_gateway_rejects_non_text_asset_content(tmp_path) -> None:
         )
     )
 
-    client = TestClient(create_gateway_app(asset_store_factory=lambda: store))
+    client = TestClient(
+        create_gateway_app(asset_store_factory=lambda: store),
+        base_url="http://localhost",
+    )
 
     response = client.get("/api/assets/asset:audio/content")
 

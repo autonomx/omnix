@@ -192,7 +192,7 @@ def test_worker_database_recovery_does_not_refund_attempts(monkeypatch) -> None:
 
     work = _Work()
     monkeypatch.setattr(
-        "app.persistence.identity_service.bootstrap_local_tenant",
+        "app.persistence.identity_service.ensure_local_identity",
         lambda database: type("_Context", (), {"workspace_id": "workspace:local"})(),
     )
     monkeypatch.setattr(

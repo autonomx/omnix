@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import json
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,21 +15,10 @@ class EnvironmentVariable:
     description: str
 
 
-VARIABLES: tuple[EnvironmentVariable, ...] = (
-    EnvironmentVariable("OMNIX_BIND_HOST", "host", "127.0.0.1", "kernel", "Gateway bind host."),
-    EnvironmentVariable("OMNIX_GATEWAY_PORT", "integer", "8001", "kernel", "Gateway port."),
-    EnvironmentVariable("OMNIX_DATABASE_URL", "url", None, "kernel", "Runtime PostgreSQL role URL."),
-    EnvironmentVariable("OMNIX_MIGRATION_DATABASE_URL", "url", None, "kernel", "DDL/migration PostgreSQL role URL."),
-    EnvironmentVariable("OMNIX_REQUIRE_ROLE_SEPARATION", "boolean", "false", "kernel", "Require distinct runtime and migration roles."),
-    EnvironmentVariable("OMNIX_ENV", "string", "development", "kernel", "Deployment environment."),
-    EnvironmentVariable("OMNIX_SOFTWARE_REVISION", "string", "unversioned", "kernel", "Build/software revision."),
-    EnvironmentVariable("OMNIX_FEATURES", "list", "all", "kernel", "Enabled optional feature ids."),
-    EnvironmentVariable("OMNIX_FEATURES_DISABLED", "list", "", "kernel", "Disabled optional feature ids."),
-    EnvironmentVariable("OMNIX_GATEWAY_BACKGROUND_ROLE", "enum", "worker", "kernel", "Gateway process role."),
-    EnvironmentVariable("OMNIX_GATEWAY_REQUIRED_WORKERS", "list", "", "kernel", "Required worker ids."),
-    EnvironmentVariable("OMNIX_TTS_URL", "url", None, "voice", "TTS worker endpoint."),
-    EnvironmentVariable("OMNIX_STT_URL", "url", None, "voice", "STT worker endpoint."),
-    EnvironmentVariable("OMNIX_IMAGE_URL", "url", None, "image", "Image worker endpoint."),
+_VARIABLES_PATH = Path(__file__).with_name("variables.json")
+VARIABLES: tuple[EnvironmentVariable, ...] = tuple(
+    EnvironmentVariable(**row)
+    for row in json.loads(_VARIABLES_PATH.read_text(encoding="utf-8"))
 )
 
 

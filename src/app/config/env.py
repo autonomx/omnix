@@ -1,7 +1,7 @@
 """Typed environment access. This is the only package allowed to read os.environ."""
 from __future__ import annotations
 
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
 import os
 from threading import Lock
 from urllib.parse import urlsplit
@@ -10,8 +10,47 @@ _READ_LOCK = Lock()
 _READ_NAMES: set[str] = set()
 
 
+class _EnvironmentAccess(MutableMapping[str, str]):
+    """Tracked mapping view for the few APIs that consume an environment map."""
+
+    def __getitem__(self, name: str) -> str:
+        _record(name)
+        return os.environ[name]
+
+    def __setitem__(self, name: str, value: str) -> None:
+        os.environ[name] = str(value)
+
+    def __delitem__(self, name: str) -> None:
+        del os.environ[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(tuple(os.environ))
+
+    def __len__(self) -> int:
+        return len(os.environ)
+
+    def copy(self) -> dict[str, str]:
+        return environment_copy()
+
+
+_ENVIRONMENT = _EnvironmentAccess()
+
+
 def environment() -> MutableMapping[str, str]:
-    return os.environ
+    """Return a mapping view that records every variable value accessed."""
+    return _ENVIRONMENT
+
+
+def environment_copy() -> dict[str, str]:
+    """Copy the process environment for a child process and record its keys."""
+    values = dict(os.environ)
+    for name in values:
+        _record(name)
+    return values
+
+
+def set_environment_value(name: str, value: str) -> None:
+    os.environ[name] = str(value)
 
 
 def _record(name: str) -> None:

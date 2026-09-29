@@ -9,7 +9,7 @@ import threading
 import pytest
 
 from app.agent_runtime.contracts import AgentEvent, AgentRunSpec, ModelRef, WorkspaceSpec
-from app.agent_runtime.debug_logging import (
+from app.observability.agent_logging import (
     _reset_agent_debug_logging_for_tests,
     configure_agent_debug_logging,
     log_agent_activity,

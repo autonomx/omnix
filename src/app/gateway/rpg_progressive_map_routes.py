@@ -13,6 +13,29 @@ from app.rpg.worlds.progressive_materialization_job_service import (
     schedule_predictive_materialization,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgMaterializeDeferredLocationRequestBody(_TypedRequestModel):
+    source_world_revision: _TypedRequestAny = None
+
+class RpgScheduleWorldMaterializationRequestBody(_TypedRequestModel):
+    current_location_id: _TypedRequestAny = None
+    kick_worker: bool | None = True
+    minimum_score: float | None = 0.35
+    route_intent_location_id: _TypedRequestAny = None
+    source_world_revision: _TypedRequestAny = None
+
+class RpgScheduleCampaignMaterializationRequestBody(_TypedRequestModel):
+    current_location_id: _TypedRequestAny = None
+    kick_worker: bool | None = True
+    minimum_score: float | None = 0.35
+    route_intent_location_id: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_progressive_map_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_progressive_map_route_hook_installed"
 
@@ -47,14 +70,13 @@ def register_rpg_progressive_map_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/deferred-locations/{location_id}/materialize",
-        include_in_schema=False,
     )
-    async def rpg_materialize_deferred_location(
+    def rpg_materialize_deferred_location(
         world_id: str,
         location_id: str,
-        request: Request,
+        request: Request, request_body: RpgMaterializeDeferredLocationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return materialize_deferred_location(
                 world_id=world_id,
@@ -67,13 +89,12 @@ def register_rpg_progressive_map_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/materialization-jobs/schedule",
-        include_in_schema=False,
     )
-    async def rpg_schedule_world_materialization(
+    def rpg_schedule_world_materialization(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgScheduleWorldMaterializationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         current_location_id = str(payload.get("current_location_id") or "").strip()
         if not current_location_id:
             raise HTTPException(
@@ -99,13 +120,12 @@ def register_rpg_progressive_map_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/materialization-signals",
-        include_in_schema=False,
     )
-    async def rpg_schedule_campaign_materialization(
+    def rpg_schedule_campaign_materialization(
         campaign_id: str,
-        request: Request,
+        request: Request, request_body: RpgScheduleCampaignMaterializationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         current_location_id = str(payload.get("current_location_id") or "").strip()
         if not current_location_id:
             raise HTTPException(
@@ -130,7 +150,6 @@ def register_rpg_progressive_map_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/worlds/{world_id}/materialization-jobs",
-        include_in_schema=False,
     )
     def rpg_materialization_telemetry(
         world_id: str,

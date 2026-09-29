@@ -42,6 +42,55 @@ from app.rpg.worlds.starter_bubble import (
 )
 from app.rpg.worlds.starter_bubble_service import promote_starter_bubble
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgWorldSaveMapBlueprintRequestBody(_TypedRequestModel):
+    document: _TypedRequestAny = None
+    expected_revision: _TypedRequestAny = None
+
+class RpgWorldSaveTopicRequestBody(_TypedRequestModel):
+    content: _TypedRequestAny = None
+    directives: _TypedRequestAny = None
+    status: _TypedRequestAny = None
+    topic_id: _TypedRequestAny = None
+
+class RpgWorldStartGenerationRequestBody(_TypedRequestModel):
+    background_expansion: bool | None = True
+    depth: _TypedRequestAny = None
+    directives: _TypedRequestAny = None
+    entity_manifest: _TypedRequestAny = None
+    generator_version: _TypedRequestAny = None
+    model: _TypedRequestAny = None
+    prompt_version: _TypedRequestAny = None
+    provider_route: _TypedRequestAny = None
+    replace_locked: bool | None = False
+    scope: _TypedRequestAny = None
+    starting_location: _TypedRequestAny = None
+    strategy: _TypedRequestAny = None
+    topic_directives: _TypedRequestAny = None
+
+class RpgWorldRepairForLaunchRequestBody(_TypedRequestModel):
+    scenario_id: _TypedRequestAny = None
+    starting_location_id: _TypedRequestAny = None
+
+class RpgWorldStarterBubblePromoteRequestBody(_TypedRequestModel):
+    neighboring_location_id: _TypedRequestAny = None
+    source_world_revision: _TypedRequestAny = None
+    starting_location_id: _TypedRequestAny = None
+
+class RpgWorldLaunchScenarioRequestBody(_TypedRequestModel):
+    features: _TypedRequestAny = None
+    gameplay: _TypedRequestAny = None
+    player: _TypedRequestAny = None
+    world_id: _TypedRequestAny = None
+    world_release: _TypedRequestAny = None
+    world_revision: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_library_routes_registered"
 
 
@@ -146,13 +195,13 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
         return
     setattr(app.state, _ROUTE_SENTINEL, True)
 
-    @app.get("/api/rpg/world-library", include_in_schema=False)
+    @app.get("/api/rpg/world-library")
     def rpg_world_library(
         limit: int = Query(default=100, ge=1, le=500),
     ) -> dict[str, Any]:
         return read_world_library(limit=limit)
 
-    @app.get("/api/rpg/worlds/{world_id}/library", include_in_schema=False)
+    @app.get("/api/rpg/worlds/{world_id}/library")
     def rpg_world_detail(world_id: str) -> dict[str, Any]:
         try:
             return read_world_detail(world_id)
@@ -162,7 +211,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/worlds/{world_id}/map-blueprints",
-        include_in_schema=False,
     )
     def rpg_world_map_blueprints(
         world_id: str,
@@ -182,7 +230,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/map-blueprints/materialize",
-        include_in_schema=False,
     )
     def rpg_world_materialize_map_blueprints(world_id: str) -> dict[str, Any]:
         try:
@@ -193,14 +240,13 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/map-blueprints/{map_id}",
-        include_in_schema=False,
     )
-    async def rpg_world_save_map_blueprint(
+    def rpg_world_save_map_blueprint(
         world_id: str,
         map_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldSaveMapBlueprintRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         document_payload = payload.get("document")
         if not isinstance(document_payload, Mapping):
             raise HTTPException(
@@ -222,12 +268,12 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
             _raise_domain_error(exc)
             raise
 
-    @app.post("/api/rpg/worlds/{world_id}/topics", include_in_schema=False)
-    async def rpg_world_save_topic(
+    @app.post("/api/rpg/worlds/{world_id}/topics")
+    def rpg_world_save_topic(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldSaveTopicRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         topic_id = str(payload.get("topic_id") or "").strip()
         content = payload.get("content")
         if not topic_id or not isinstance(content, Mapping):
@@ -257,12 +303,12 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
             _raise_domain_error(exc)
             raise
 
-    @app.post("/api/rpg/worlds/{world_id}/generation", include_in_schema=False)
-    async def rpg_world_start_generation(
+    @app.post("/api/rpg/worlds/{world_id}/generation")
+    def rpg_world_start_generation(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldStartGenerationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         diagnostic_id = new_rpg_trace_id("world-generation")
         scope = payload.get("scope") if isinstance(payload.get("scope"), Mapping) else {}
         log_world_generation_event(
@@ -331,7 +377,7 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
             )
             raise
 
-    @app.get("/api/rpg/world-generation/diagnostics", include_in_schema=False)
+    @app.get("/api/rpg/world-generation/diagnostics")
     def rpg_world_generation_diagnostics() -> dict[str, Any]:
         return {
             "ok": True,
@@ -342,7 +388,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/retry-failed",
-        include_in_schema=False,
     )
     def rpg_world_retry_failed_generation(run_id: str) -> dict[str, Any]:
         diagnostic_id = new_rpg_trace_id("world-generation-retry")
@@ -363,7 +408,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/continue",
-        include_in_schema=False,
     )
     def rpg_world_continue_generation(run_id: str) -> dict[str, Any]:
         diagnostic_id = new_rpg_trace_id("world-generation-continue")
@@ -382,7 +426,7 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
             )
             raise
 
-    @app.get("/api/rpg/world-generation/{run_id}", include_in_schema=False)
+    @app.get("/api/rpg/world-generation/{run_id}")
     def rpg_world_generation_status(
         run_id: str,
         reconcile: bool = Query(default=True),
@@ -401,7 +445,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/world-generation/{run_id}/publish",
-        include_in_schema=False,
     )
     def rpg_world_publish_generation(run_id: str) -> dict[str, Any]:
         try:
@@ -412,7 +455,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/worlds/{world_id}/starter-bubble/preview",
-        include_in_schema=False,
     )
     def rpg_world_starter_bubble_preview(
         world_id: str,
@@ -439,13 +481,12 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/repair-for-launch",
-        include_in_schema=False,
     )
-    async def rpg_world_repair_for_launch(
+    def rpg_world_repair_for_launch(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldRepairForLaunchRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return repair_world_for_launch(
                 world_id,
@@ -458,7 +499,6 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/prepare-openings-for-launch",
-        include_in_schema=False,
     )
     async def rpg_world_prepare_openings_for_launch(world_id: str) -> dict[str, Any]:
         try:
@@ -469,13 +509,12 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/worlds/{world_id}/starter-bubble/promote",
-        include_in_schema=False,
     )
-    async def rpg_world_starter_bubble_promote(
+    def rpg_world_starter_bubble_promote(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgWorldStarterBubblePromoteRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return promote_starter_bubble(
                 world_id=world_id,
@@ -493,14 +532,13 @@ def register_rpg_world_library_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/scenarios/{scenario_id}/revisions/{scenario_revision}/launch",
-        include_in_schema=False,
     )
-    async def rpg_world_launch_scenario(
+    def rpg_world_launch_scenario(
         scenario_id: str,
         scenario_revision: int,
-        request: Request,
+        request: Request, request_body: RpgWorldLaunchScenarioRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         try:
             return launch_published_scenario(
                 world_id=str(payload.get("world_id") or ""),

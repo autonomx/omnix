@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryPolicyDecision,
     MemoryRecord,

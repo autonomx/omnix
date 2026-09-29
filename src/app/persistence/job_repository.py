@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from .execution_repositories import JobClaimConflict
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
@@ -32,10 +32,744 @@ NOT EXISTS (
        AND owner.lease_expires_at > clock_timestamp()
 )
 """
+_UNSET = object()
+_JOB_ORDERINGS = {
+    "created_asc": "jobs.created_at ASC, jobs.id ASC",
+    "created_desc": "jobs.created_at DESC, jobs.id DESC",
+    "completed_desc": "jobs.completed_at DESC NULLS LAST, jobs.id DESC",
+    "updated_desc": "jobs.updated_at DESC, jobs.id DESC",
+}
 
 
 class PostgresJobRepository(_BaseJobRepository):
     """Job repository with explicitly qualified durable queue operations."""
+
+    def set_created_at_now(self, context: TenantContext, *, job_id: str) -> str | None:
+        row = self.connection.execute(
+            """UPDATE omnix_jobs SET created_at = clock_timestamp()
+                WHERE id = %s AND workspace_id = %s RETURNING created_at""",
+            (job_id, context.workspace_id),
+        ).fetchone()
+        return row[0].isoformat() if row is not None else None
+
+    def delete_job(self, context: TenantContext, *, job_id: str) -> bool:
+        cursor = self.connection.execute(
+            "DELETE FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
+            (job_id, context.workspace_id),
+        )
+        return cursor.rowcount > 0
+
+    def delete_claimed_job(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        lease_owner: str,
+        lease_token: str,
+    ) -> bool:
+        cursor = self.connection.execute(
+            """DELETE FROM omnix_jobs
+                WHERE id = %s AND workspace_id = %s
+                  AND lease_owner = %s AND lease_token = %s""",
+            (job_id, context.workspace_id, lease_owner, lease_token),
+        )
+        return cursor.rowcount > 0
+
+    def delete_job_ids(
+        self, context: TenantContext, *, job_ids: tuple[str, ...]
+    ) -> int:
+        if not job_ids:
+            return 0
+        cursor = self.connection.execute(
+            "DELETE FROM omnix_jobs WHERE workspace_id = %s AND id = ANY(%s)",
+            (context.workspace_id, list(job_ids)),
+        )
+        return int(cursor.rowcount)
+
+    def release_interrupted_job(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        status: str,
+        max_attempts: int,
+        error_code: str,
+        resume_policy: str,
+    ) -> bool:
+        retryable = status == "retrying"
+        row = self.connection.execute(
+            """UPDATE omnix_jobs
+                  SET status = %s,
+                      max_attempts = %s,
+                      available_at = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE available_at END,
+                      error = jsonb_build_object('code', %s::text, 'resume_policy', %s::text),
+                      lease_owner = NULL,
+                      lease_token = NULL,
+                      lease_expires_at = NULL,
+                      completed_at = CASE WHEN %s THEN NULL ELSE CURRENT_TIMESTAMP END,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s RETURNING id""",
+            (status, max_attempts, retryable, error_code, resume_policy,
+             retryable, context.workspace_id, job_id),
+        ).fetchone()
+        return row is not None
+
+    def set_max_attempts_to_current(self, context: TenantContext, *, job_id: str) -> bool:
+        row = self.connection.execute(
+            """UPDATE omnix_jobs SET max_attempts = attempt_count
+                WHERE workspace_id = %s AND id = %s RETURNING id""",
+            (context.workspace_id, job_id),
+        ).fetchone()
+        return row is not None
+
+    def import_job(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        item: dict[str, Any],
+    ) -> dict[str, Any]:
+        job = self.create_job(
+            context,
+            {
+                "id": job_id,
+                "module": item.get("module", "legacy"),
+                "job_type": item.get("job_type") or item.get("type") or "legacy",
+                "resource_class": item.get("resource_class", "cpu"),
+                "priority": item.get("priority", 0),
+                "max_attempts": item.get("max_attempts", 3),
+                "input_payload": item.get("input_payload") or {},
+                "metadata": {**dict(item.get("metadata") or {}), "legacy_import": True},
+            },
+        )
+        status = str(item.get("status") or "queued")
+        row = self.connection.execute(
+            """UPDATE omnix_jobs SET status = %s, output_refs = %s::jsonb,
+                      progress = %s::jsonb, error = %s::jsonb,
+                      attempt_count = %s, completed_at = %s::timestamptz,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND workspace_id = %s RETURNING id""",
+            (status, _json(item.get("output_refs") or []),
+             _json(item.get("progress") or {}),
+             _json(item.get("error")) if item.get("error") is not None else None,
+             int(item.get("attempt_count", 0)), item.get("completed_at"),
+             job["id"], context.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError(f"imported job was not persisted: {job_id}")
+        return self.get_job(context, job_id) or job
+
+    def import_job_history(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        item: dict[str, Any],
+    ) -> None:
+        for event in list(item.get("events") or []):
+            self.connection.execute(
+                """INSERT INTO omnix_job_events (
+                       workspace_id, job_id, event_type, payload, created_at
+                   ) VALUES (%s, %s, %s, %s::jsonb,
+                             COALESCE(%s::timestamptz, CURRENT_TIMESTAMP))""",
+                (context.workspace_id, job_id, event.get("event_type", "legacy.event"),
+                 _json(event.get("payload") or {}), event.get("created_at")),
+            )
+        attempt_count = int(item.get("attempt_count", 0))
+        lease = dict((item.get("metadata") or {}).get("lease") or {})
+        for attempt in range(1, attempt_count + 1):
+            token = str(lease.get("token") or lease.get("lease_token") or f"legacy:{job_id}:{attempt}")
+            worker = str(lease.get("worker_id") or lease.get("owner_id") or "worker:legacy")
+            status = "completed" if item.get("status") == "completed" else str(item.get("status") or "legacy")
+            self.connection.execute(
+                """INSERT INTO omnix_job_attempts (
+                       job_id, attempt, worker_id, lease_token, status,
+                       started_at, completed_at, error
+                   ) VALUES (%s, %s, %s, %s, %s,
+                             COALESCE(%s::timestamptz, CURRENT_TIMESTAMP),
+                             %s::timestamptz, %s::jsonb)
+                   ON CONFLICT (job_id, attempt) DO NOTHING""",
+                (job_id, attempt, worker, token, status, lease.get("claimed_at"),
+                 item.get("completed_at"),
+                 _json(item.get("error")) if item.get("error") is not None else None),
+            )
+
+    def job_exists(self, job_id: str) -> bool:
+        return self.connection.execute(
+            "SELECT EXISTS (SELECT 1 FROM omnix_jobs WHERE id = %s)", (job_id,)
+        ).fetchone()[0]
+
+    def diagnostic_snapshot(self, context: TenantContext) -> dict[str, Any]:
+        groups = self.connection.execute(
+            """SELECT resource_class, status, count(*),
+                      COALESCE(max(EXTRACT(EPOCH FROM (clock_timestamp() - created_at)))
+                          FILTER (WHERE status = 'queued'), 0),
+                      count(*) FILTER (WHERE lease_expires_at < clock_timestamp())
+                 FROM omnix_jobs WHERE workspace_id = %s
+                GROUP BY resource_class, status""",
+            (context.workspace_id,),
+        ).fetchall()
+        events = self.connection.execute(
+            """SELECT event_type, count(*) FROM omnix_job_events
+                WHERE workspace_id = %s
+                  AND created_at > clock_timestamp() - INTERVAL '60 seconds'
+                GROUP BY event_type""",
+            (context.workspace_id,),
+        ).fetchall()
+        session_owners = self.connection.execute(
+            """SELECT count(DISTINCT input_payload ->> 'session_id') FROM omnix_jobs
+                WHERE workspace_id = %s AND job_type = 'chat.generate' AND status = 'running'""",
+            (context.workspace_id,),
+        ).fetchone()[0]
+        return {
+            "groups": groups,
+            "events": events,
+            "session_owners": session_owners,
+        }
+
+    def set_cancel_compat(
+        self, context: TenantContext, *, job_id: str, payload: dict[str, Any]
+    ) -> None:
+        self.connection.execute(
+            """UPDATE omnix_jobs
+                  SET metadata = jsonb_set(metadata, '{compat_contract,cancel}', %s::jsonb, TRUE)
+                WHERE id = %s AND workspace_id = %s""",
+            (_json(payload), job_id, context.workspace_id),
+        )
+
+    def update_progress_compat(
+        self, context: TenantContext, *, job_id: str, progress: dict[str, Any]
+    ) -> bool:
+        row = self.connection.execute(
+            """UPDATE omnix_jobs
+                  SET progress = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND workspace_id = %s RETURNING id""",
+            (_json(progress), job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def update_input_compat(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        input_payload: dict[str, Any],
+        compat: dict[str, Any] | None = None,
+    ) -> bool:
+        compat_patch = _json(compat or {})
+        row = self.connection.execute(
+            """UPDATE omnix_jobs
+                  SET input_payload = %s::jsonb,
+                      metadata = CASE WHEN %s::boolean THEN
+                          jsonb_set(
+                              metadata,
+                              '{compat_contract,compat}',
+                              ((COALESCE(metadata #> '{compat_contract,compat}', '{}'::jsonb)
+                                  - 'execution_owner') || %s::jsonb ||
+                               CASE WHEN COALESCE(metadata #> '{compat_contract,compat}', '{}'::jsonb)
+                                             ? 'execution_owner'
+                                    THEN jsonb_build_object(
+                                        'execution_owner',
+                                        metadata #> '{compat_contract,compat}' -> 'execution_owner'
+                                    )
+                                    ELSE '{}'::jsonb END),
+                              TRUE
+                          )
+                      ELSE metadata END,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND workspace_id = %s RETURNING id""",
+            (_json(input_payload), compat is not None, compat_patch,
+             job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def update_stages_compat(
+        self, context: TenantContext, *, job_id: str, stages: list[dict[str, Any]]
+    ) -> bool:
+        row = self.connection.execute(
+            """UPDATE omnix_jobs
+                  SET metadata = jsonb_set(
+                          metadata, '{compat_contract,stages}', %s::jsonb, TRUE
+                      ),
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s AND workspace_id = %s RETURNING id""",
+            (_json(stages), job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def finalize_cancel_compat(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        reason: str,
+        now: str,
+    ) -> bool:
+        row = self.connection.execute(
+            """UPDATE omnix_jobs AS jobs
+                  SET status = 'canceled',
+                      lease_owner = NULL,
+                      lease_token = NULL,
+                      lease_expires_at = NULL,
+                      completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+                      updated_at = CURRENT_TIMESTAMP,
+                      metadata = jsonb_set(
+                          metadata,
+                          '{compat_contract,cancel}',
+                          jsonb_build_object(
+                              'requested', TRUE,
+                              'requested_at', COALESCE(
+                                  metadata #>> '{compat_contract,cancel,requested_at}', %s::text
+                              ),
+                              'acknowledged_at', %s::text,
+                              'reason', COALESCE(
+                                  metadata #>> '{compat_contract,cancel,reason}', %s::text
+                              )
+                          ),
+                          TRUE
+                      )
+                WHERE jobs.id = %s AND jobs.workspace_id = %s
+                  AND jobs.status NOT IN ('completed', 'failed', 'canceled', 'stale')
+                RETURNING jobs.id""",
+            (now, now, reason, job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def append_compat_logs(
+        self, context: TenantContext, *, job_id: str, logs: list[dict[str, Any]]
+    ) -> bool:
+        if not logs:
+            return True
+        row = self.connection.execute(
+            """WITH current_logs AS (
+                       SELECT COALESCE(metadata #> '{compat_contract,logs}', '[]'::jsonb)
+                                  || %s::jsonb AS value
+                         FROM omnix_jobs
+                        WHERE id = %s AND workspace_id = %s
+                   ), retained AS (
+                       SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb) AS value
+                         FROM (
+                               SELECT item, ordinal
+                                 FROM current_logs, jsonb_array_elements(current_logs.value)
+                                      WITH ORDINALITY AS entries(item, ordinal)
+                                ORDER BY ordinal DESC LIMIT 500
+                         ) recent
+                   )
+                  UPDATE omnix_jobs AS jobs
+                     SET metadata = jsonb_set(
+                             jobs.metadata, '{compat_contract,logs}', retained.value, TRUE
+                         )
+                    FROM retained
+                   WHERE jobs.id = %s AND jobs.workspace_id = %s
+                RETURNING jobs.id""",
+            (_json(logs), job_id, context.workspace_id, job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def list_job_events(self, context: TenantContext, *, job_id: str) -> list[Any]:
+        return self.connection.execute(
+            """SELECT id, job_id, event_type, payload, created_at
+                 FROM omnix_job_events
+                WHERE workspace_id = %s AND job_id = %s
+                ORDER BY id ASC""",
+            (context.workspace_id, job_id),
+        ).fetchall()
+
+    def count_job_events(self) -> int:
+        return int(self.connection.execute(
+            "SELECT count(*) FROM omnix_job_events"
+        ).fetchone()[0])
+
+    def query_jobs(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str | None = None,
+        module: str | None = None,
+        job_type: str | None = None,
+        job_types: tuple[str, ...] = (),
+        statuses: tuple[str, ...] = (),
+        input_fields: tuple[tuple[str, str], ...] = (),
+        metadata_fields: tuple[tuple[str, str], ...] = (),
+        lease_owner: str | None = None,
+        lease_owner_pattern: str | None = None,
+        after_created: tuple[str, str] | None = None,
+        order_by: Literal["created_asc", "created_desc", "completed_desc", "updated_desc"] = "created_desc",
+        limit: int = 100,
+        for_update: bool = False,
+        skip_locked: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Read job records through the kernel-owned table boundary."""
+        if order_by not in _JOB_ORDERINGS:
+            raise ValueError(f"unsupported job ordering: {order_by}")
+        clauses = ["jobs.workspace_id = %s"]
+        parameters: list[Any] = [context.workspace_id]
+        if job_id is not None:
+            clauses.append("jobs.id = %s")
+            parameters.append(job_id)
+        if module is not None:
+            clauses.append("jobs.module = %s")
+            parameters.append(module)
+        if job_type is not None:
+            clauses.append("jobs.job_type = %s")
+            parameters.append(job_type)
+        if job_types:
+            clauses.append("jobs.job_type = ANY(%s)")
+            parameters.append(list(job_types))
+        if statuses:
+            clauses.append("jobs.status = ANY(%s)")
+            parameters.append(list(statuses))
+        for key, value in input_fields:
+            clauses.append("jobs.input_payload ->> %s = %s")
+            parameters.extend((key, value))
+        for key, value in metadata_fields:
+            clauses.append("jobs.metadata ->> %s = %s")
+            parameters.extend((key, value))
+        if lease_owner is not None:
+            clauses.append("jobs.lease_owner = %s")
+            parameters.append(lease_owner)
+        if lease_owner_pattern is not None:
+            clauses.append("jobs.lease_owner LIKE %s")
+            parameters.append(lease_owner_pattern)
+        if after_created is not None:
+            if order_by != "created_asc":
+                raise ValueError("created cursor requires created_asc ordering")
+            clauses.append("(jobs.created_at, jobs.id) > (%s::timestamptz, %s)")
+            parameters.extend(after_created)
+        parameters.append(max(1, min(int(limit), 500)))
+        lock = " FOR UPDATE" if for_update else ""
+        if skip_locked:
+            if not for_update:
+                raise ValueError("skip_locked requires for_update")
+            lock += " SKIP LOCKED"
+        rows = self.connection.execute(
+            f"""SELECT {_QUALIFIED_JOB_COLUMNS} FROM omnix_jobs AS jobs
+                 WHERE {' AND '.join(clauses)}
+                 ORDER BY {_JOB_ORDERINGS[order_by]} LIMIT %s{lock}""",
+            tuple(parameters),
+        ).fetchall()
+        return [_job(row) for row in rows]
+
+    def patch_job(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        expected_statuses: tuple[str, ...] = (),
+        lease_owner: str | None = None,
+        lease_token: str | None = None,
+        status: str | None = None,
+        metadata_set: dict[str, Any] | None = None,
+        metadata_remove: tuple[str, ...] = (),
+        input_payload: dict[str, Any] | None = None,
+        output_refs: list[dict[str, Any]] | None = None,
+        progress: dict[str, Any] | None = None,
+        error: Any = _UNSET,
+        max_attempts: int | None = None,
+        available_at_now: bool = False,
+        clear_lease: bool = False,
+        completed_at_now: bool = False,
+    ) -> dict[str, Any] | None:
+        """Apply a constrained job mutation without exposing SQL to features."""
+        assignments: list[str] = ["updated_at = CURRENT_TIMESTAMP"]
+        parameters: list[Any] = []
+        if status is not None:
+            assignments.append("status = %s")
+            parameters.append(status)
+        if metadata_set is not None or metadata_remove:
+            assignments.append("metadata = (metadata - %s::text[]) || %s::jsonb")
+            parameters.extend((list(metadata_remove), _json(metadata_set or {})))
+        if input_payload is not None:
+            assignments.append("input_payload = %s::jsonb")
+            parameters.append(_json(input_payload))
+        if output_refs is not None:
+            assignments.append("output_refs = %s::jsonb")
+            parameters.append(_json(output_refs))
+        if progress is not None:
+            assignments.append("progress = %s::jsonb")
+            parameters.append(_json(progress))
+        if error is not _UNSET:
+            assignments.append("error = %s::jsonb")
+            parameters.append(None if error is None else _json(error))
+        if max_attempts is not None:
+            assignments.append("max_attempts = %s")
+            parameters.append(max(1, int(max_attempts)))
+        if available_at_now:
+            assignments.append("available_at = CURRENT_TIMESTAMP")
+        if clear_lease:
+            assignments.extend((
+                "lease_owner = NULL",
+                "lease_token = NULL",
+                "lease_expires_at = NULL",
+            ))
+        if completed_at_now:
+            assignments.append("completed_at = CURRENT_TIMESTAMP")
+        if len(assignments) == 1:
+            raise ValueError("job patch must change at least one field")
+        clauses = ["jobs.id = %s", "jobs.workspace_id = %s"]
+        parameters.extend((job_id, context.workspace_id))
+        if expected_statuses:
+            clauses.append("jobs.status = ANY(%s)")
+            parameters.append(list(expected_statuses))
+        if lease_owner is not None:
+            clauses.append("jobs.lease_owner = %s")
+            parameters.append(lease_owner)
+        if lease_token is not None:
+            clauses.append("jobs.lease_token = %s")
+            parameters.append(lease_token)
+        row = self.connection.execute(
+            f"""UPDATE omnix_jobs AS jobs
+                   SET {', '.join(assignments)}
+                 WHERE {' AND '.join(clauses)}
+                 RETURNING {_QUALIFIED_JOB_COLUMNS}""",
+            tuple(parameters),
+        ).fetchone()
+        return _job(row) if row is not None else None
+
+    def has_pending_higher_priority_tts(
+        self,
+        context: TenantContext,
+        *,
+        resource_classes: tuple[str, ...],
+    ) -> bool:
+        row = self.connection.execute(
+            """SELECT EXISTS (
+                   SELECT 1 FROM omnix_jobs
+                    WHERE workspace_id = %s AND resource_class = ANY(%s)
+                      AND (
+                          (status IN ('queued', 'waiting', 'retrying')
+                           AND available_at <= CURRENT_TIMESTAMP
+                           AND attempt_count < max_attempts)
+                          OR (status IN ('leased', 'running', 'cancel_requested')
+                              AND lease_expires_at > CURRENT_TIMESTAMP)
+                      )
+               )""",
+            (context.workspace_id, list(resource_classes)),
+        ).fetchone()
+        return bool(row[0])
+
+    def delete_jobs(
+        self,
+        context: TenantContext,
+        *,
+        module: str | None = None,
+        job_type: str | None = None,
+        job_types: tuple[str, ...] = (),
+        statuses: tuple[str, ...] = (),
+        input_fields: tuple[tuple[str, str], ...] = (),
+        metadata_fields: tuple[tuple[str, str], ...] = (),
+        job_ids: tuple[str, ...] = (),
+    ) -> int:
+        clauses = ["workspace_id = %s"]
+        parameters: list[Any] = [context.workspace_id]
+        if job_ids:
+            clauses.append("id = ANY(%s)")
+            parameters.append(list(job_ids))
+        if module is not None:
+            clauses.append("module = %s")
+            parameters.append(module)
+        if job_type is not None:
+            clauses.append("job_type = %s")
+            parameters.append(job_type)
+        if job_types:
+            clauses.append("job_type = ANY(%s)")
+            parameters.append(list(job_types))
+        if statuses:
+            clauses.append("status = ANY(%s)")
+            parameters.append(list(statuses))
+        for key, value in input_fields:
+            clauses.append("input_payload ->> %s = %s")
+            parameters.extend((key, value))
+        for key, value in metadata_fields:
+            clauses.append("metadata ->> %s = %s")
+            parameters.extend((key, value))
+        cursor = self.connection.execute(
+            "DELETE FROM omnix_jobs WHERE " + " AND ".join(clauses),
+            tuple(parameters),
+        )
+        return int(cursor.rowcount)
+
+    def update_attempt_status(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        status: str,
+        expected_statuses: tuple[str, ...] = (),
+        attempt: int | None = None,
+        lease_token: str | None = None,
+        error: Any = _UNSET,
+    ) -> int:
+        assignments = ["status = %s"]
+        parameters: list[Any] = [status]
+        if status in {"completed", "failed", "canceled"}:
+            assignments.append("completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)")
+        if error is not _UNSET:
+            assignments.append("error = %s::jsonb")
+            parameters.append(None if error is None else _json(error))
+        clauses = [
+            "attempts.job_id = %s",
+            "EXISTS (SELECT 1 FROM omnix_jobs AS jobs "
+            "WHERE jobs.id = attempts.job_id AND jobs.workspace_id = %s)",
+        ]
+        parameters.extend((job_id, context.workspace_id))
+        if expected_statuses:
+            clauses.append("attempts.status = ANY(%s)")
+            parameters.append(list(expected_statuses))
+        if attempt is not None:
+            clauses.append("attempts.attempt = %s")
+            parameters.append(int(attempt))
+        if lease_token is not None:
+            clauses.append("attempts.lease_token = %s")
+            parameters.append(lease_token)
+        cursor = self.connection.execute(
+            f"UPDATE omnix_job_attempts AS attempts SET {', '.join(assignments)} "
+            f"WHERE {' AND '.join(clauses)}",
+            tuple(parameters),
+        )
+        return int(cursor.rowcount)
+
+    def find_by_input(
+        self,
+        context: TenantContext,
+        *,
+        job_type: str,
+        input_fields: tuple[tuple[str, str], ...],
+        statuses: tuple[str, ...] | None = None,
+        limit: int = 1,
+    ) -> list[dict[str, Any]]:
+        clauses = ["jobs.workspace_id = %s", "jobs.job_type = %s"]
+        parameters: list[Any] = [context.workspace_id, job_type]
+        for key, value in input_fields:
+            clauses.append("jobs.input_payload ->> %s = %s")
+            parameters.extend((key, value))
+        if statuses is not None:
+            clauses.append("jobs.status = ANY(%s)")
+            parameters.append(list(statuses))
+        parameters.append(max(1, min(int(limit), 500)))
+        rows = self.connection.execute(
+            f"""SELECT {_QUALIFIED_JOB_COLUMNS} FROM omnix_jobs AS jobs
+                 WHERE {' AND '.join(clauses)}
+                 ORDER BY jobs.created_at, jobs.id LIMIT %s""",
+            tuple(parameters),
+        ).fetchall()
+        return [_job(row) for row in rows]
+
+    def has_earlier_by_input(
+        self,
+        context: TenantContext,
+        *,
+        job_type: str,
+        input_fields: tuple[tuple[str, str], ...],
+        statuses: tuple[str, ...],
+        before_created_at: str,
+        before_id: str,
+    ) -> bool:
+        clauses = [
+            "jobs.workspace_id = %s",
+            "jobs.job_type = %s",
+            "jobs.status = ANY(%s)",
+        ]
+        parameters: list[Any] = [context.workspace_id, job_type, list(statuses)]
+        for key, value in input_fields:
+            clauses.append("jobs.input_payload ->> %s = %s")
+            parameters.extend((key, value))
+        clauses.append("(jobs.created_at, jobs.id) < (%s::timestamptz, %s)")
+        parameters.extend((before_created_at, before_id))
+        row = self.connection.execute(
+            f"SELECT 1 FROM omnix_jobs AS jobs WHERE {' AND '.join(clauses)} LIMIT 1",
+            tuple(parameters),
+        ).fetchone()
+        return row is not None
+
+    def require_running_lease(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+    ) -> None:
+        row = self.connection.execute(
+            """SELECT id FROM omnix_jobs
+                 WHERE id = %s AND workspace_id = %s
+                   AND lease_owner = %s AND lease_token = %s
+                   AND status = 'running' AND cancel_requested_at IS NULL
+                   AND lease_expires_at > clock_timestamp()
+                 FOR UPDATE""",
+            (job_id, context.workspace_id, worker_id, lease_token),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"job lease lost or canceled: {job_id}")
+
+    def require_execution_lease(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+    ) -> None:
+        row = self.connection.execute(
+            """SELECT id FROM omnix_jobs
+                 WHERE id = %s AND workspace_id = %s
+                   AND lease_owner = %s AND lease_token = %s
+                   AND status IN ('leased', 'running')
+                   AND lease_expires_at > clock_timestamp()
+                 FOR UPDATE""",
+            (job_id, context.workspace_id, worker_id, lease_token),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"durable feature execution lease lost: {job_id}")
+
+    def lock_job(self, context: TenantContext, *, job_id: str) -> bool:
+        row = self.connection.execute(
+            "SELECT id FROM omnix_jobs WHERE id = %s AND workspace_id = %s FOR UPDATE",
+            (job_id, context.workspace_id),
+        ).fetchone()
+        return row is not None
+
+    def latest_event_id(self, context: TenantContext) -> int:
+        row = self.connection.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM omnix_job_events WHERE workspace_id = %s",
+            (context.workspace_id,),
+        ).fetchone()
+        return int(row[0])
+
+    def list_events(
+        self,
+        context: TenantContext,
+        *,
+        after_id: int = 0,
+        job_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses = ["workspace_id = %s"]
+        parameters: list[Any] = [context.workspace_id]
+        if job_id is not None:
+            clauses.append("job_id = %s")
+            parameters.append(job_id)
+        else:
+            clauses.append("id > %s")
+            parameters.append(max(0, int(after_id)))
+        parameters.append(max(1, min(int(limit), 1000)))
+        rows = self.connection.execute(
+            "SELECT id, job_id, event_type, payload, created_at "
+            "FROM omnix_job_events WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY id ASC LIMIT %s",
+            tuple(parameters),
+        ).fetchall()
+        return [
+            {
+                "id": int(row[0]),
+                "job_id": str(row[1]),
+                "event_type": str(row[2]),
+                "payload": dict(row[3]),
+                "created_at": row[4].isoformat(),
+            }
+            for row in rows
+        ]
 
     def list_recoverable_chat_jobs(self, context: TenantContext, *, limit: int = 100,
                                   after_created_at: str | None = None,

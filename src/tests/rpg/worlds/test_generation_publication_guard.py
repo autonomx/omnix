@@ -43,7 +43,7 @@ class _Work:
 
 
 def _install(monkeypatch: pytest.MonkeyPatch, results: list[dict], topics: list[dict]) -> None:
-    monkeypatch.setattr(guard, "bootstrap_local_tenant", lambda database: object())
+    monkeypatch.setattr(guard, "ensure_local_identity", lambda database: object())
     monkeypatch.setattr(guard, "unit_of_work", lambda database: _Work(results, topics))
 
 

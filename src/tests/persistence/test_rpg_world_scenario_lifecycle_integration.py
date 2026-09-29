@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicGraph, CampaignTopicNode
@@ -124,7 +124,7 @@ def _published_fixture(database: PostgresDatabase) -> tuple[str, str, str]:
         world_release=certified_release,
         scenario_revision=scenario,
     )
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         work.rpg.create_campaign(
             context,
@@ -146,7 +146,7 @@ def test_archive_preserves_published_authority_and_blocks_new_writes() -> None:
     try:
         _reset(database)
         world_id, scenario_id, campaign_id = _published_fixture(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
 
         archived_scenario = archive_scenario_project(scenario_id, database=database)
         archived_world = archive_world_project(world_id, database=database)

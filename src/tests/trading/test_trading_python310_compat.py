@@ -7,7 +7,7 @@ from pathlib import Path
 from app.trading.models import AdjustmentMode, AssetClass, FeedType, InstrumentType, UsageScope
 
 
-TRADING_ROUTES_PATH = Path("src/app/gateway/trading_routes.py")
+TRADING_ROUTES_PATH = Path("src/app/trading/route_registration.py")
 
 
 def test_string_enums_preserve_wire_values() -> None:

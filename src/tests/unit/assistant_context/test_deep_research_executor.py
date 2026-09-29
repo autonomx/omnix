@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from app.assistant_context.models import AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
 from app.research.contracts import ResearchSource, ResearchSourceSnapshot
 from app.research.executor import (
     DeepResearchExecutor,

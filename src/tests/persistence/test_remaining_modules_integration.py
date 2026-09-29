@@ -7,7 +7,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -56,7 +56,7 @@ def test_generic_module_records_are_revisioned_and_expiry_aware() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             created = work.module_records.put(
                 context,
@@ -117,7 +117,7 @@ def test_provider_configs_use_secret_references_and_expiring_status() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             secret = work.secret_references.register(
                 context,
@@ -177,7 +177,7 @@ def test_prompt_templates_are_tenant_scoped_and_revisioned() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             prompt = work.prompts.create(
                 context,
@@ -214,7 +214,7 @@ def test_research_reports_and_runtime_projections_are_durable_or_rebuildable() -
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             asset = work.assets.create(
                 context,
@@ -293,7 +293,7 @@ def test_remaining_module_writes_share_unit_of_work_rollback() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with pytest.raises(RuntimeError, match="rollback modules"):
             with unit_of_work(database) as work:
                 work.module_records.put(

@@ -23,7 +23,7 @@ from app.jobs.models import (
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
-from app.security.tenant_context import current_tenant
+from app.runtime.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
 
 
@@ -46,6 +46,10 @@ class PostgresJobStoreAdapter:
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
         self.context = current_tenant()
+        self.handler_registry = None
+
+    def configure_handler_registry(self, registry: Any) -> None:
+        self.handler_registry = registry
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
         return self._create_job(request)
@@ -57,6 +61,8 @@ class PostgresJobStoreAdapter:
         return self._create_job(request, job_id=f"job:idempotent:{identity}")
 
     def _create_job(self, request: CreateJobRequest, *, job_id: str | None = None) -> JobRecord:
+        if self.handler_registry is not None:
+            request = self.handler_registry.validate_submission(request)
         request_payload = request.model_dump(mode="json")
         stages = request.stages or []
         metadata = dict(request_payload.get("metadata") or {})
@@ -96,11 +102,9 @@ class PostgresJobStoreAdapter:
             if created and request.type == 'chat.generate':
                 # Admission can wait for another process's session lock. Order
                 # accepted jobs by insertion time, not transaction start time.
-                inserted = work.connection.execute(
-                    'UPDATE omnix_jobs SET created_at = clock_timestamp() WHERE id = %s RETURNING created_at',
-                    (record['id'],),
-                ).fetchone()
-                record['created_at'] = inserted[0].isoformat()
+                record['created_at'] = work.jobs.set_created_at_now(
+                    self.context, job_id=record['id']
+                ) or record['created_at']
             work.commit()
         return self._record(record)
 
@@ -120,12 +124,10 @@ class PostgresJobStoreAdapter:
         return self._record(record) if record is not None else None
 
     def delete_job(self, job_id: str) -> bool:
-        with self.database.transaction() as connection:
-            cursor = connection.execute(
-                "DELETE FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
-                (job_id, self.context.workspace_id),
-            )
-        return cursor.rowcount > 0
+        with unit_of_work(self.database) as work:
+            deleted = work.jobs.delete_job(self.context, job_id=job_id)
+            work.commit()
+        return deleted
 
     def claim_next(
         self,
@@ -309,44 +311,22 @@ class PostgresJobStoreAdapter:
             if record is None:
                 work.rollback()
                 return None
-            updated = work.jobs.request_cancel(self.context, job_id)
+            work.jobs.request_cancel(self.context, job_id)
             payload = request.model_dump(mode="json")
-            work.connection.execute(
-                """
-                UPDATE omnix_jobs
-                   SET metadata = jsonb_set(
-                       metadata,
-                       '{compat_contract,cancel}',
-                       %s::jsonb,
-                       TRUE
-                   )
-                 WHERE id = %s AND workspace_id = %s
-                """,
-                (
-                    self._json(payload),
-                    job_id,
-                    self.context.workspace_id,
-                ),
-            )
+            work.jobs.set_cancel_compat(self.context, job_id=job_id, payload=payload)
+            updated = work.jobs.get_job(self.context, job_id)
             work.commit()
-        return self._record(updated)
+        return self._record(updated) if updated is not None else None
 
     def update_progress(self, job_id: str, progress: JobProgress) -> JobRecord | None:
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                UPDATE omnix_jobs
-                   SET progress = %s::jsonb, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = %s AND workspace_id = %s
-                RETURNING id
-                """,
-                (
-                    self._json(progress.model_dump(mode="json")),
-                    job_id,
-                    self.context.workspace_id,
-                ),
-            ).fetchone()
-        return self.get_job(job_id) if row is not None else None
+        with unit_of_work(self.database) as work:
+            updated = work.jobs.update_progress_compat(
+                self.context,
+                job_id=job_id,
+                progress=progress.model_dump(mode="json"),
+            )
+            work.commit()
+        return self.get_job(job_id) if updated else None
 
     def update_job_input(
         self,
@@ -355,102 +335,34 @@ class PostgresJobStoreAdapter:
         *,
         compat: dict[str, Any] | None = None,
     ) -> JobRecord | None:
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
-                (job_id, self.context.workspace_id),
-            ).fetchone()
-            if row is None:
-                return None
-            metadata = dict(row[0] or {})
-            contract = dict(metadata.get("compat_contract") or {})
-            if compat is not None:
-                existing_owner = (contract.get("compat") or {}).get("execution_owner")
-                contract["compat"] = dict(compat)
-                if existing_owner:
-                    contract["compat"]["execution_owner"] = existing_owner
-            metadata["compat_contract"] = contract
-            updated = connection.execute(
-                """
-                UPDATE omnix_jobs
-                   SET input_payload = %s::jsonb,
-                       metadata = %s::jsonb,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE id = %s AND workspace_id = %s
-                RETURNING id
-                """,
-                (
-                    self._json(input_payload),
-                    self._json(metadata),
-                    job_id,
-                    self.context.workspace_id,
-                ),
-            ).fetchone()
-        return self.get_job(job_id) if updated is not None else None
+        with unit_of_work(self.database) as work:
+            updated = work.jobs.update_input_compat(
+                self.context,
+                job_id=job_id,
+                input_payload=input_payload,
+                compat=compat,
+            )
+            work.commit()
+        return self.get_job(job_id) if updated else None
 
     def update_job_stages(self, job_id: str, stages: list[JobStage]) -> JobRecord | None:
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
-                (job_id, self.context.workspace_id),
-            ).fetchone()
-            if row is None:
-                return None
-            metadata = dict(row[0] or {})
-            contract = dict(metadata.get("compat_contract") or {})
-            contract["stages"] = [stage.model_dump(mode="json") for stage in stages]
-            metadata["compat_contract"] = contract
-            updated = connection.execute(
-                """
-                UPDATE omnix_jobs
-                   SET metadata = %s::jsonb,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE id = %s AND workspace_id = %s
-                RETURNING id
-                """,
-                (self._json(metadata), job_id, self.context.workspace_id),
-            ).fetchone()
-        return self.get_job(job_id) if updated is not None else None
+        with unit_of_work(self.database) as work:
+            updated = work.jobs.update_stages_compat(
+                self.context,
+                job_id=job_id,
+                stages=[stage.model_dump(mode="json") for stage in stages],
+            )
+            work.commit()
+        return self.get_job(job_id) if updated else None
 
     def finalize_cancel(self, job_id: str, reason: str) -> JobRecord | None:
         now = _utcnow()
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                "SELECT metadata FROM omnix_jobs WHERE id = %s AND workspace_id = %s",
-                (job_id, self.context.workspace_id),
-            ).fetchone()
-            if row is None:
-                return None
-            metadata = dict(row[0] or {})
-            contract = dict(metadata.get("compat_contract") or {})
-            cancel = dict(contract.get("cancel") or {})
-            cancel.update(
-                {
-                    "requested": True,
-                    "requested_at": cancel.get("requested_at") or now,
-                    "acknowledged_at": now,
-                    "reason": cancel.get("reason") or reason,
-                }
+        with unit_of_work(self.database) as work:
+            updated = work.jobs.finalize_cancel_compat(
+                self.context, job_id=job_id, reason=reason, now=now
             )
-            contract["cancel"] = cancel
-            metadata["compat_contract"] = contract
-            updated = connection.execute(
-                """
-                UPDATE omnix_jobs
-                   SET status = 'canceled',
-                       lease_owner = NULL,
-                       lease_token = NULL,
-                       lease_expires_at = NULL,
-                       completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
-                       updated_at = CURRENT_TIMESTAMP,
-                       metadata = %s::jsonb
-                 WHERE id = %s AND workspace_id = %s
-                   AND status NOT IN ('completed', 'failed', 'canceled', 'stale')
-                RETURNING id
-                """,
-                (self._json(metadata), job_id, self.context.workspace_id),
-            ).fetchone()
-        return self.get_job(job_id) if updated is not None else None
+            work.commit()
+        return self.get_job(job_id) if updated else None
 
     def append_log(self, job_id: str, message: str) -> JobRecord | None:
         with unit_of_work(self.database) as work:
@@ -463,16 +375,9 @@ class PostgresJobStoreAdapter:
         return self.get_job(job_id)
 
     def list_events(self, job_id: str) -> list[JobEventRecord]:
-        with self.database.connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT id, job_id, event_type, payload, created_at
-                  FROM omnix_job_events
-                 WHERE workspace_id = %s AND job_id = %s
-                 ORDER BY id ASC
-                """,
-                (self.context.workspace_id, job_id),
-            ).fetchall()
+        with unit_of_work(self.database) as work:
+            rows = work.jobs.list_job_events(self.context, job_id=job_id)
+            work.rollback()
         return [
             _model(
                 JobEventRecord,
@@ -541,15 +446,10 @@ class PostgresJobStoreAdapter:
         record = work.jobs.get_job(self.context, job_id)
         if record is None:
             return
-        metadata = dict(record.get("metadata") or {})
-        contract = dict(metadata.get("compat_contract") or {})
-        existing = [self._compat_log(item) for item in contract.get("logs") or []]
-        existing.extend(self._compat_log(item) for item in logs)
-        contract["logs"] = existing[-500:]
-        metadata["compat_contract"] = contract
-        work.connection.execute(
-            "UPDATE omnix_jobs SET metadata = %s::jsonb WHERE id = %s AND workspace_id = %s",
-            (self._json(metadata), job_id, self.context.workspace_id),
+        work.jobs.append_compat_logs(
+            self.context,
+            job_id=job_id,
+            logs=[self._compat_log(item) for item in logs],
         )
 
     @staticmethod

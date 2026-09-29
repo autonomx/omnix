@@ -163,15 +163,16 @@ class AudiobookService:
             ).fetchone()
             if project is None:
                 raise KeyError(project_id)
-            jobs = work.connection.execute(
-                """SELECT id FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
-                (context.workspace_id, project_id),
-            ).fetchall()
-            for (job_id,) in jobs:
-                work.jobs.request_cancel(context, str(job_id))
+            jobs = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                input_fields=(("project_id", project_id),),
+                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                limit=500,
+                for_update=True,
+            )
+            for job in jobs:
+                work.jobs.request_cancel(context, str(job["id"]))
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
                       SET deleted_at = CURRENT_TIMESTAMP,
@@ -281,100 +282,88 @@ class AudiobookService:
                 {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
                 for row in pronunciation_rows
             ]
-            pipeline_rows = work.connection.execute(
-                """SELECT id, job_type, status, progress, error,
-                          attempt_count, max_attempts,
-                          input_payload->>'chapter_id', metadata
-                     FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type IN ('audiobook.ingest', 'audiobook.analyze',
-                                       'audiobook.assemble-chapter')
-                      AND input_payload->>'project_id' = %s
-                    ORDER BY created_at DESC LIMIT 30""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            pipeline_rows = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_types=("audiobook.ingest", "audiobook.analyze", "audiobook.assemble-chapter"),
+                input_fields=(("project_id", project_id),),
+                order_by="created_desc",
+                limit=30,
+            )
             project["pipeline_jobs"] = [
-                {"id": str(row[0]), "type": str(row[1]), "status": str(row[2]),
-                 "progress": dict(row[3] or {}),
-                 "error": dict(row[4]) if row[4] else None,
-                 "attempts": int(row[5]), "max_attempts": int(row[6]),
-                 "chapter_id": str(row[7]) if row[7] else None,
-                 "can_retry": (str(row[2]) in {"failed", "canceled", "stale"}
-                               and not dict(row[8] or {}).get("superseded_by")),
-                 "superseded_by": dict(row[8] or {}).get("superseded_by"),
-                 "reason": dict(row[8] or {}).get("reason"),
-                 "migration": dict(row[8] or {}).get("migration"),
-                 "pause_requested": bool(dict(row[8] or {}).get("pause_requested")),
-                 "paused": bool(dict(row[8] or {}).get("paused"))}
-                for row in pipeline_rows
+                {"id": str(job["id"]), "type": str(job["job_type"]), "status": str(job["status"]),
+                 "progress": dict(job["progress"] or {}),
+                 "error": dict(job["error"]) if job["error"] else None,
+                 "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
+                 "chapter_id": str((job["input_payload"] or {}).get("chapter_id") or "") or None,
+                 "can_retry": (str(job["status"]) in {"failed", "canceled", "stale"}
+                               and not dict(job["metadata"] or {}).get("superseded_by")),
+                 "superseded_by": dict(job["metadata"] or {}).get("superseded_by"),
+                 "reason": dict(job["metadata"] or {}).get("reason"),
+                 "migration": dict(job["metadata"] or {}).get("migration"),
+                 "pause_requested": bool(dict(job["metadata"] or {}).get("pause_requested")),
+                 "paused": bool(dict(job["metadata"] or {}).get("paused"))}
+                for job in pipeline_rows
             ]
-            run_row = work.connection.execute(
-                "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
-                (context.workspace_id, project_id),
-            ).fetchone()
-            render_run_id = str(run_row[0]) if run_row and run_row[0] else None
+            render_run_id = str(project_settings.get("current_render_run_id") or "") or None
             if render_run_id:
-                job_rows = work.connection.execute(
-                    """
-                    SELECT id, status, progress, error, attempt_count, max_attempts,
-                           input_payload->>'chapter_id'
-                      FROM omnix_jobs
-                     WHERE workspace_id = %s AND module = 'audiobook'
-                       AND job_type = 'audiobook.render-chapter'
-                       AND input_payload->>'render_run_id' = %s
-                     ORDER BY created_at, id
-                    """, (context.workspace_id, render_run_id),
-                ).fetchall()
+                job_rows = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_type="audiobook.render-chapter",
+                    input_fields=(("render_run_id", render_run_id),),
+                    order_by="created_asc",
+                    limit=500,
+                )
                 project["render_jobs"] = [
-                    {"id": str(row[0]), "status": str(row[1]),
-                     "progress": dict(row[2] or {}), "error": dict(row[3]) if row[3] else None,
-                     "attempts": int(row[4]), "max_attempts": int(row[5]),
-                     "chapter_id": str(row[6]),
-                     "can_retry": bool((dict(row[3] or {}).get("retryable", True))
-                                       and int(row[4]) < int(row[5]))}
-                    for row in job_rows
+                    {"id": str(job["id"]), "status": str(job["status"]),
+                     "progress": dict(job["progress"] or {}), "error": dict(job["error"]) if job["error"] else None,
+                     "attempts": int(job["attempt_count"]), "max_attempts": int(job["max_attempts"]),
+                     "chapter_id": str((job["input_payload"] or {}).get("chapter_id") or ""),
+                     "can_retry": bool((dict(job["error"] or {}).get("retryable", True))
+                                       and int(job["attempt_count"]) < int(job["max_attempts"]))}
+                    for job in job_rows
                 ]
+                render_job_ids = [str(job["id"]) for job in job_rows]
                 counts = work.connection.execute(
                     """
                     SELECT COALESCE(sum(jsonb_array_length(b.desired_keys)), 0),
                            COALESCE(sum(jsonb_array_length(b.completed_keys)), 0)
                       FROM omnix_audiobook_render_batches AS b
-                      JOIN omnix_jobs AS j ON j.id = b.job_id AND j.workspace_id = b.workspace_id
-                     WHERE b.workspace_id = %s AND j.input_payload->>'render_run_id' = %s
-                    """, (context.workspace_id, render_run_id),
+                     WHERE b.workspace_id = %s AND b.job_id = ANY(%s)
+                    """, (context.workspace_id, render_job_ids),
                 ).fetchone()
                 project["render_progress"] = {"total": int(counts[0]), "completed": int(counts[1])}
             else:
                 project["render_jobs"] = []
                 project["render_progress"] = {"total": 0, "completed": 0}
             export_rows = work.connection.execute(
-                """SELECT j.id, j.status, j.progress, j.error,
-                          m.format, m.id, m.manifest_hash
-                     FROM omnix_audiobook_export_manifests m
-                     JOIN omnix_jobs j ON j.id = m.job_id AND j.workspace_id = m.workspace_id
-                    WHERE m.workspace_id = %s AND m.project_id = %s
-                    ORDER BY m.created_at DESC LIMIT 20""",
+                """SELECT job_id, format, id, manifest_hash
+                     FROM omnix_audiobook_export_manifests
+                    WHERE workspace_id = %s AND project_id = %s
+                    ORDER BY created_at DESC LIMIT 20""",
                 (context.workspace_id, project_id),
             ).fetchall()
             project["export_jobs"] = [
-                {"id": row[0], "status": row[1], "progress": row[2],
-                 "error": row[3], "format": row[4], "manifest_id": row[5],
-                "manifest_hash": row[6]} for row in export_rows
+                {"id": job["id"], "status": job["status"], "progress": job["progress"],
+                 "error": job["error"], "format": str(row[1]), "manifest_id": str(row[2]),
+                "manifest_hash": str(row[3])}
+                for row in export_rows
+                if (job := work.jobs.get_job(context, str(row[0]))) is not None
             ]
-            preview_rows = work.connection.execute(
-                """SELECT id, status, progress, error, input_payload->>'span_id',
-                          output_refs
-                     FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type = 'audiobook.preview-span'
-                      AND input_payload->>'project_id' = %s
-                    ORDER BY created_at DESC LIMIT 40""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            preview_rows = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.preview-span",
+                input_fields=(("project_id", project_id),),
+                order_by="created_desc",
+                limit=40,
+            )
             project["preview_jobs"] = [
-                {"id": row[0], "status": row[1], "progress": row[2],
-                 "error": row[3], "span_id": row[4], "output_refs": row[5]}
-                for row in preview_rows
+                {"id": job["id"], "status": job["status"], "progress": job["progress"],
+                 "error": job["error"], "span_id": (job["input_payload"] or {}).get("span_id"),
+                 "output_refs": job["output_refs"]}
+                for job in preview_rows
             ]
             if project["current_source_revision_id"]:
                 text_rows = work.connection.execute(
@@ -632,18 +621,17 @@ class AudiobookService:
             if project is None:
                 raise KeyError(project_id)
             if project[1]:
-                rows = work.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter',
-                                           'audiobook.assemble-chapter')
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                         'running', 'paused', 'cancel_requested')""",
-                    (context.workspace_id, str(project[1])),
-                ).fetchall()
-                for (job_id,) in rows:
-                    work.jobs.request_cancel(context, str(job_id))
+                rows = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                    input_fields=(("render_run_id", str(project[1])),),
+                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                    limit=500,
+                    for_update=True,
+                )
+                for job in rows:
+                    work.jobs.request_cancel(context, str(job["id"]))
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
                       SET settings = jsonb_set(
@@ -721,18 +709,16 @@ class AudiobookService:
             )
             analysis_job_id: str | None = None
             if reanalysis_required:
-                active_analysis = work.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type = 'audiobook.analyze'
-                          AND input_payload->>'project_id' = %s
-                          AND input_payload->>'source_revision_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                         'running', 'paused', 'cancel_requested')
-                        LIMIT 1 FOR UPDATE""",
-                    (context.workspace_id, project_id, source_revision_id),
-                ).fetchone()
-                if active_analysis is not None:
+                active_analysis = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_type="audiobook.analyze",
+                    input_fields=(("project_id", project_id), ("source_revision_id", source_revision_id)),
+                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                    limit=1,
+                    for_update=True,
+                )
+                if active_analysis:
                     raise ValueError(
                         "document role cannot change while source analysis is active"
                     )
@@ -755,18 +741,17 @@ class AudiobookService:
                     "max_attempts": 3,
                 })
             if project[2]:
-                rows = work.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter',
-                                           'audiobook.assemble-chapter')
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                         'running', 'paused', 'cancel_requested')""",
-                    (context.workspace_id, str(project[2])),
-                ).fetchall()
-                for (job_id,) in rows:
-                    work.jobs.request_cancel(context, str(job_id))
+                rows = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                    input_fields=(("render_run_id", str(project[2])),),
+                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                    limit=500,
+                    for_update=True,
+                )
+                for job in rows:
+                    work.jobs.request_cancel(context, str(job["id"]))
             next_state = (
                 "analyzing"
                 if reanalysis_required
@@ -807,16 +792,17 @@ class AudiobookService:
     @staticmethod
     def _invalidate_speech_audio(work: Any, context: TenantContext, project_id: str, render_run_id: Any) -> None:
         if render_run_id:
-            jobs = work.connection.execute(
-                """SELECT id FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                      AND input_payload->>'render_run_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
-                (context.workspace_id, str(render_run_id)),
-            ).fetchall()
-            for (job_id,) in jobs:
-                work.jobs.request_cancel(context, str(job_id))
+            jobs = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                input_fields=(("render_run_id", str(render_run_id)),),
+                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                limit=500,
+                for_update=True,
+            )
+            for job in jobs:
+                work.jobs.request_cancel(context, str(job["id"]))
         work.connection.execute(
             """UPDATE omnix_audiobook_projects
                   SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
@@ -918,16 +904,17 @@ class AudiobookService:
                  canonical_json({"confirmed_by_user_id": context.user_id})),
             )
             if project[1]:
-                rows = work.connection.execute(
-                    """SELECT id FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
-                    (context.workspace_id, project[1]),
-                ).fetchall()
-                for (job_id,) in rows:
-                    work.jobs.request_cancel(context, str(job_id))
+                rows = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                    input_fields=(("render_run_id", str(project[1])),),
+                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                    limit=500,
+                    for_update=True,
+                )
+                for job in rows:
+                    work.jobs.request_cancel(context, str(job["id"]))
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
                       SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
@@ -1194,22 +1181,24 @@ class AudiobookService:
                    job_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            row = work.connection.execute(
-                """SELECT status, job_type FROM omnix_jobs
-                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s
-                    FOR UPDATE""",
-                (context.workspace_id, job_id, project_id),
-            ).fetchone()
-            if row is None:
+            rows = work.jobs.query_jobs(
+                context,
+                job_id=job_id,
+                module="audiobook",
+                input_fields=(("project_id", project_id),),
+                limit=1,
+                for_update=True,
+            )
+            if not rows:
                 raise KeyError(job_id)
+            job = rows[0]
             # Analysis cancellation is safe to finalize immediately: the
             # worker's chapter writes and lease renewal share one transaction,
             # so clearing ownership prevents any partial commit while a
             # provider call is still unwinding. Render jobs retain their
             # cooperative cancel path because providers may have external
             # encoder side effects.
-            if str(row[1]) == "audiobook.analyze" and str(row[0]) in {
+            if job["job_type"] == "audiobook.analyze" and job["status"] in {
                 "leased", "running", "cancel_requested",
             }:
                 work.jobs.cancel_active_job(context, job_id=job_id)
@@ -1223,37 +1212,38 @@ class AudiobookService:
         """Pause one audiobook job, releasing queued work or requesting a safe stop."""
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            row = work.connection.execute(
-                """SELECT status, job_type FROM omnix_jobs
-                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s FOR UPDATE""",
-                (context.workspace_id, job_id, project_id),
-            ).fetchone()
-            if row is None or str(row[1]) not in {"audiobook.render-chapter", "audiobook.analyze"}:
+            rows = work.jobs.query_jobs(
+                context,
+                job_id=job_id,
+                module="audiobook",
+                input_fields=(("project_id", project_id),),
+                limit=1,
+                for_update=True,
+            )
+            if not rows or rows[0]["job_type"] not in {"audiobook.render-chapter", "audiobook.analyze"}:
                 raise KeyError(job_id)
-            status = str(row[0])
+            status = str(rows[0]["status"])
             if status in {"completed", "failed", "canceled", "stale", "cancel_requested"}:
                 raise ValueError("only active audiobook jobs can be paused")
             if status == "paused":
                 work.rollback()
                 return {"job_id": job_id, "status": "paused", "paused": True}
             if status in {"queued", "waiting", "retrying"}:
-                work.connection.execute(
-                    """UPDATE omnix_jobs
-                          SET status = 'paused',
-                              metadata = (metadata - 'pause_requested') || %s::jsonb,
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    ('{"paused":true}', context.workspace_id, job_id),
+                work.jobs.patch_job(
+                    context,
+                    job_id=job_id,
+                    expected_statuses=(status,),
+                    status="paused",
+                    metadata_set={"paused": True},
+                    metadata_remove=("pause_requested",),
                 )
                 result_status = "paused"
             else:
-                work.connection.execute(
-                    """UPDATE omnix_jobs
-                          SET metadata = metadata || %s::jsonb,
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    ('{"pause_requested":true}', context.workspace_id, job_id),
+                work.jobs.patch_job(
+                    context,
+                    job_id=job_id,
+                    expected_statuses=(status,),
+                    metadata_set={"pause_requested": True},
                 )
                 result_status = "pause_requested"
             work.commit()
@@ -1263,32 +1253,35 @@ class AudiobookService:
                    job_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            row = work.connection.execute(
-                """SELECT status, job_type FROM omnix_jobs
-                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s FOR UPDATE""",
-                (context.workspace_id, job_id, project_id),
-            ).fetchone()
-            if row is None or str(row[1]) not in {"audiobook.render-chapter", "audiobook.analyze"}:
+            rows = work.jobs.query_jobs(
+                context,
+                job_id=job_id,
+                module="audiobook",
+                input_fields=(("project_id", project_id),),
+                limit=1,
+                for_update=True,
+            )
+            if not rows or rows[0]["job_type"] not in {"audiobook.render-chapter", "audiobook.analyze"}:
                 raise KeyError(job_id)
-            status = str(row[0])
+            status = str(rows[0]["status"])
             if status == "paused":
-                work.connection.execute(
-                    """UPDATE omnix_jobs
-                          SET status = 'queued', available_at = CURRENT_TIMESTAMP,
-                              metadata = metadata - 'paused' - 'pause_requested',
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, job_id),
+                work.jobs.patch_job(
+                    context,
+                    job_id=job_id,
+                    expected_statuses=(status,),
+                    status="queued",
+                    available_at_now=True,
+                    metadata_set={},
+                    metadata_remove=("paused", "pause_requested"),
                 )
                 result_status = "queued"
             elif status in {"leased", "running"}:
-                work.connection.execute(
-                    """UPDATE omnix_jobs
-                          SET metadata = metadata - 'pause_requested',
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, job_id),
+                work.jobs.patch_job(
+                    context,
+                    job_id=job_id,
+                    expected_statuses=(status,),
+                    metadata_set={},
+                    metadata_remove=("pause_requested",),
                 )
                 result_status = status
             elif status == "cancel_requested":
@@ -1303,55 +1296,56 @@ class AudiobookService:
         """Pause or resume every render chapter in the current project queue."""
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            rows = work.connection.execute(
-                """SELECT id, status FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type = 'audiobook.render-chapter'
-                      AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused')
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            rows = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.render-chapter",
+                input_fields=(("project_id", project_id),),
+                statuses=("queued", "waiting", "retrying", "leased", "running", "paused"),
+                limit=500,
+                for_update=True,
+            )
             changed = 0
-            for job_id, raw_status in rows:
-                status = str(raw_status)
+            for job in rows:
+                job_id = str(job["id"])
+                status = str(job["status"])
                 if resume:
                     if status == "paused":
-                        work.connection.execute(
-                            """UPDATE omnix_jobs
-                                  SET status = 'queued', available_at = CURRENT_TIMESTAMP,
-                                      metadata = metadata - 'paused' - 'pause_requested',
-                                      updated_at = CURRENT_TIMESTAMP
-                                WHERE workspace_id = %s AND id = %s""",
-                            (context.workspace_id, str(job_id)),
+                        work.jobs.patch_job(
+                            context,
+                            job_id=job_id,
+                            expected_statuses=(status,),
+                            status="queued",
+                            available_at_now=True,
+                            metadata_set={},
+                            metadata_remove=("paused", "pause_requested"),
                         )
                         changed += 1
                     elif status in {"leased", "running"}:
-                        work.connection.execute(
-                            """UPDATE omnix_jobs
-                                  SET metadata = metadata - 'pause_requested',
-                                      updated_at = CURRENT_TIMESTAMP
-                                WHERE workspace_id = %s AND id = %s""",
-                            (context.workspace_id, str(job_id)),
+                        work.jobs.patch_job(
+                            context,
+                            job_id=job_id,
+                            expected_statuses=(status,),
+                            metadata_set={},
+                            metadata_remove=("pause_requested",),
                         )
                         changed += 1
                 elif status in {"queued", "waiting", "retrying"}:
-                    work.connection.execute(
-                        """UPDATE omnix_jobs
-                              SET status = 'paused',
-                                  metadata = (metadata - 'pause_requested') || %s::jsonb,
-                                  updated_at = CURRENT_TIMESTAMP
-                            WHERE workspace_id = %s AND id = %s""",
-                        ('{"paused":true}', context.workspace_id, str(job_id)),
+                    work.jobs.patch_job(
+                        context,
+                        job_id=job_id,
+                        expected_statuses=(status,),
+                        status="paused",
+                        metadata_set={"paused": True},
+                        metadata_remove=("pause_requested",),
                     )
                     changed += 1
                 elif status in {"leased", "running"}:
-                    work.connection.execute(
-                        """UPDATE omnix_jobs
-                              SET metadata = metadata || %s::jsonb,
-                                  updated_at = CURRENT_TIMESTAMP
-                            WHERE workspace_id = %s AND id = %s""",
-                        ('{"pause_requested":true}', context.workspace_id, str(job_id)),
+                    work.jobs.patch_job(
+                        context,
+                        job_id=job_id,
+                        expected_statuses=(status,),
+                        metadata_set={"pause_requested": True},
                     )
                     changed += 1
             work.commit()
@@ -1360,17 +1354,17 @@ class AudiobookService:
     def stop_render_queue(self, context: TenantContext, *, project_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            rows = work.connection.execute(
-                """SELECT id FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
-                      AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchall()
-            for (job_id,) in rows:
-                work.jobs.request_cancel(context, str(job_id))
+            rows = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                input_fields=(("project_id", project_id),),
+                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                limit=500,
+                for_update=True,
+            )
+            for job in rows:
+                work.jobs.request_cancel(context, str(job["id"]))
             work.commit()
         return {"project_id": project_id, "stopped": len(rows)}
 
@@ -1385,24 +1379,23 @@ class AudiobookService:
         terminal = {"failed", "canceled", "stale"}
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
-            row = work.connection.execute(
-                """SELECT job_type, status, resource_class, priority,
-                          input_payload, max_attempts
-                     FROM omnix_jobs
-                    WHERE workspace_id = %s AND id = %s
-                      AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s
-                    FOR UPDATE""",
-                (context.workspace_id, job_id, project_id),
-            ).fetchone()
-            if row is None:
+            rows = work.jobs.query_jobs(
+                context,
+                job_id=job_id,
+                module="audiobook",
+                input_fields=(("project_id", project_id),),
+                limit=1,
+                for_update=True,
+            )
+            if not rows:
                 raise KeyError(job_id)
-            job_type, status = str(row[0]), str(row[1])
+            job = rows[0]
+            job_type, status = str(job["job_type"]), str(job["status"])
             if job_type not in allowed:
                 raise ValueError("this audiobook job type has its own retry flow")
             if status not in terminal:
                 raise ValueError("only terminal audiobook jobs can be retried")
-            payload = dict(row[4] or {})
+            payload = dict(job["input_payload"] or {})
             project = work.connection.execute(
                 """SELECT current_source_revision_id,
                           settings->>'current_render_run_id'
@@ -1428,19 +1421,17 @@ class AudiobookService:
                 "id": retry_id,
                 "module": "audiobook",
                 "job_type": job_type,
-                "resource_class": str(row[2]) or allowed[job_type],
-                "priority": int(row[3]),
+                "resource_class": str(job["resource_class"]) or allowed[job_type],
+                "priority": int(job["priority"]),
                 "input_payload": payload,
-                "max_attempts": max(3, int(row[5])),
+                "max_attempts": max(3, int(job["max_attempts"])),
                 "metadata": {"retry_of": job_id},
             })
-            work.connection.execute(
-                """UPDATE omnix_jobs
-                      SET metadata = metadata || %s::jsonb,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                ('{"superseded_by":"' + retry_id + '"}',
-                 context.workspace_id, job_id),
+            work.jobs.patch_job(
+                context,
+                job_id=job_id,
+                expected_statuses=(status,),
+                metadata_set={"superseded_by": retry_id},
             )
             if job_type == "audiobook.ingest":
                 next_state = "imported" if project[0] is None else None
@@ -1497,27 +1488,26 @@ class AudiobookService:
             if not source_revision_id:
                 raise ValueError("project has no canonical source")
 
-            active = work.connection.execute(
-                """SELECT id
-                     FROM omnix_jobs
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s
-                      AND (
-                          (
-                              job_type = 'audiobook.analyze'
-                              AND input_payload->>'source_revision_id' = %s
-                          )
-                          OR (
-                              job_type = 'audiobook.ingest'
-                          )
-                      )
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                     'running', 'paused', 'cancel_requested')
-                    LIMIT 1
-                    FOR UPDATE""",
-                (context.workspace_id, project_id, str(source_revision_id)),
-            ).fetchone()
-            if active is not None:
+            active_statuses = ("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested")
+            active_analysis = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.analyze",
+                input_fields=(("project_id", project_id), ("source_revision_id", str(source_revision_id))),
+                statuses=active_statuses,
+                limit=1,
+                for_update=True,
+            )
+            active_ingest = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.ingest",
+                input_fields=(("project_id", project_id),),
+                statuses=active_statuses,
+                limit=1,
+                for_update=True,
+            )
+            if active_analysis or active_ingest:
                 raise ValueError("classification is already running")
 
             stale_detector = bool(work.connection.execute(
@@ -1564,21 +1554,17 @@ class AudiobookService:
                 self._save_classification_rules(work, context, project_id, custom_rules)
             render_run_id = project[1]
             if render_run_id:
-                render_jobs = work.connection.execute(
-                    """SELECT id
-                         FROM omnix_jobs
-                        WHERE workspace_id = %s AND module = 'audiobook'
-                          AND job_type IN ('audiobook.render-chapter',
-                                           'audiobook.assemble-chapter')
-                          AND input_payload->>'project_id' = %s
-                          AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                         'running', 'paused', 'cancel_requested')
-                        FOR UPDATE""",
-                    (context.workspace_id, project_id, str(render_run_id)),
-                ).fetchall()
-                for (job_id,) in render_jobs:
-                    work.jobs.request_cancel(context, str(job_id))
+                render_jobs = work.jobs.query_jobs(
+                    context,
+                    module="audiobook",
+                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
+                    input_fields=(("project_id", project_id), ("render_run_id", str(render_run_id))),
+                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
+                    limit=500,
+                    for_update=True,
+                )
+                for job in render_jobs:
+                    work.jobs.request_cancel(context, str(job["id"]))
 
             if needs_reextract:
                 job_id = f"ab:reextract:{uuid4().hex}"
@@ -1777,28 +1763,53 @@ class AudiobookService:
                      job_id: str) -> bytes:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id)
-            row = work.connection.execute(
-                """SELECT a.storage_key, a.checksum_sha256
-                     FROM omnix_jobs j
-                     JOIN omnix_assets a
-                       ON a.id = j.output_refs->0->>'audio_asset_id'
-                      AND a.workspace_id = j.workspace_id
-                     LEFT JOIN omnix_audiobook_renders r
-                       ON r.id = j.output_refs->0->>'render_id'
-                      AND r.workspace_id = j.workspace_id
-                    WHERE j.workspace_id = %s AND j.id = %s
-                      AND j.module = 'audiobook' AND j.job_type = 'audiobook.preview-span'
-                      AND j.status = 'completed'
-                      AND j.input_payload->>'project_id' = %s
-                      AND a.module = 'audiobook' AND a.lifecycle_status = 'active'
-                      AND ((r.audio_asset_id = a.id AND a.checksum_sha256 = r.audio_checksum)
-                           OR (j.output_refs->0 ? 'render_ids' AND a.generation_job_id = j.id))""",
-                (context.workspace_id, job_id, project_id),
-            ).fetchone()
+            jobs = work.jobs.query_jobs(
+                context,
+                job_id=job_id,
+                module="audiobook",
+                job_type="audiobook.preview-span",
+                statuses=("completed",),
+                input_fields=(("project_id", project_id),),
+                limit=1,
+            )
+            job = jobs[0] if jobs else None
+            refs = job["output_refs"][0] if job and job["output_refs"] else {}
+            asset_id = refs.get("audio_asset_id")
+            asset = work.assets.get_asset(context, str(asset_id)) if asset_id else None
+            valid_render = False
+            render_id = refs.get("render_id")
+            if render_id and asset is not None:
+                render = work.connection.execute(
+                    """SELECT audio_asset_id, audio_checksum FROM omnix_audiobook_renders
+                        WHERE workspace_id = %s AND id = %s""",
+                    (context.workspace_id, str(render_id)),
+                ).fetchone()
+                valid_render = bool(
+                    render
+                    and str(render[0]) == asset["id"]
+                    and str(render[1]) == asset["checksum_sha256"]
+                )
+            valid_generation = bool(
+                job
+                and asset is not None
+                and "render_ids" in refs
+                and asset["generation_job_id"] == job["id"]
+            )
+            if not (
+                job
+                and asset
+                and asset["module"] == "audiobook"
+                and asset["lifecycle_status"] == "active"
+                and (valid_render or valid_generation)
+            ):
+                asset = None
             work.rollback()
-        if row is None:
+        if asset is None:
             raise KeyError(job_id)
-        return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1]))
+        return self.blobs.read_bytes(
+            str(asset["storage_key"]),
+            expected_checksum=str(asset["checksum_sha256"]),
+        )
 
     def start_export(self, context: TenantContext, *, project_id: str,
                      format: str = "m4b") -> dict[str, str]:

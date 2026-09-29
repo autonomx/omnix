@@ -11,7 +11,7 @@ from app.agent_runtime.service import AgentRunService
 from app.agent_runtime.service_core import AgentRunService as CoreAgentRunService
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -37,7 +37,7 @@ def _database() -> PostgresDatabase:
 def test_agent_run_state_commands_events_and_leases_are_durable() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-{uuid.uuid4().hex}"
         spec = AgentRunSpec(run_id=run_id, task="Inspect", model=ModelRef(provider_id="test", model_id="model"))
         with unit_of_work(database) as work:
@@ -69,7 +69,7 @@ def test_agent_run_state_commands_events_and_leases_are_durable() -> None:
 def test_recovery_start_failure_fails_run_instead_of_renewing_zombie_lease(monkeypatch) -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-recovery-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -122,7 +122,7 @@ def test_recovery_start_failure_fails_run_instead_of_renewing_zombie_lease(monke
 def test_terminal_agent_run_ignores_late_commands_and_runtime_events() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-terminal-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -192,7 +192,7 @@ def test_terminal_agent_run_ignores_late_commands_and_runtime_events() -> None:
 def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         parent_id = f"agent-parent-{uuid.uuid4().hex}"
         child_id = f"agent-child-{uuid.uuid4().hex}"
         parent_spec = AgentRunSpec(
@@ -244,7 +244,7 @@ def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
 def test_lease_renewal_preserves_token_and_requires_active_owner() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-renew-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -291,7 +291,7 @@ def test_lease_renewal_preserves_token_and_requires_active_owner() -> None:
 def test_lease_renewal_does_not_wait_for_authoritative_run_row_lock() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-renew-lock-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -331,7 +331,7 @@ def test_lease_renewal_does_not_wait_for_authoritative_run_row_lock() -> None:
 def test_service_heartbeat_renews_lease_without_appending_ordered_event() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-heartbeat-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -373,7 +373,7 @@ def test_service_heartbeat_renews_lease_without_appending_ordered_event() -> Non
 def test_supervisor_stops_local_runtime_when_lease_authority_is_lost(monkeypatch) -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-lease-loss-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -413,7 +413,7 @@ def test_supervisor_stops_local_runtime_when_lease_authority_is_lost(monkeypatch
 def test_transient_heartbeat_failure_does_not_skip_progress_supervision(monkeypatch) -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"agent-heartbeat-transient-{uuid.uuid4().hex}"
         worker_id = f"worker-transient-{uuid.uuid4().hex}"
         spec = AgentRunSpec(

@@ -1,7 +1,7 @@
 """Deterministic proactive-memory and tool-enrichment policy for live companion turns."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
 from datetime import datetime, timedelta, timezone
@@ -13,9 +13,9 @@ from app.assistant_tools.capability_dashboard import (
     AssistantCapabilityDashboard,
     build_assistant_capability_dashboard,
 )
-from app.characters.live_conversation_profile import LiveConversationProfile
+from app.conversation.live_profile import LiveConversationProfile
 
-from .models import MemoryRecord, MemoryScopeContext
+from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .temporal_retrieval import TemporalRetrievalItem, TemporalRetrievalResult
 
 InitiativeAction = Literal[
@@ -114,7 +114,7 @@ def build_trusted_capability_manifest(
             available.add("messages")
     configured = {
         item.strip().casefold()
-        for item in (os.environ.get(_TOOL_ENV) or "").split(",")
+        for item in (_env_str(_TOOL_ENV) or "").split(",")
         if item.strip()
     }
     available.update(

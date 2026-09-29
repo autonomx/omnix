@@ -6,6 +6,7 @@ Pi owns ordinary planning, validation, and self-review inside its coding loop;
 Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 from functools import lru_cache
 import hashlib
@@ -17,7 +18,7 @@ import tempfile
 from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
-from .capabilities import browser_capability_ids
+from app.capabilities import browser_capability_ids
 from .coding_quality import (
     CODING_INDEPENDENT_REVIEW_PHASE_ENABLED,
     CODING_VALIDATION_PHASE_ENABLED,
@@ -53,7 +54,7 @@ from .contracts import (
     SelfReviewResult,
     TaskRevision,
 )
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 from .evidence import EvidenceCompilationError, evaluate_evidence_set
 from .model_fidelity import resolve_run_model_fidelity
 from .planning_acceptance import evaluate_planning_acceptance
@@ -224,7 +225,7 @@ def _self_review_payload_is_protocol_valid(text: str, revision: TaskRevision) ->
 
 
 def _self_review_protocol_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -294,7 +295,7 @@ def _self_review_protocol_retry_count(
 
 
 def _validation_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_VALIDATION_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_VALIDATION_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -357,7 +358,7 @@ def _validation_failure_fingerprint(rows) -> str:
 
 
 def _implementation_candidate_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -2027,7 +2028,7 @@ class AgentRunService(_CoreAgentRunService):
         change_set = run_change_set_from_artifact(diff_artifact)
         if change_set is None:
             return self._quality_fail(repository, current, "quality_run_change_set_unavailable")
-        review_root = os.environ.get(
+        review_root = _env_str(
             "OMNIX_AGENT_REVIEW_ROOT",
             _default_review_root(current.spec),
         )

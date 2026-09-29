@@ -727,10 +727,8 @@ def _terminally_fail_job(
     lease_token: str,
     error: Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    work.connection.execute(
-        "UPDATE omnix_jobs SET max_attempts = attempt_count "
-        "WHERE workspace_id = %s AND id = %s",
-        (context.workspace_id, str(job["id"])),
+    work.jobs.set_max_attempts_to_current(
+        context, job_id=str(job["id"])
     )
     return work.jobs.fail(
         context,
@@ -899,7 +897,7 @@ def execute_claimed_world_topic_job(
                 f"world_topic_contract_mismatch_before_provider_call:{topic_id}"
             )
 
-        from app.rpg_world_forge_provider import attach_world_forge_progress_callback
+        from app.rpg.worlds.providers.world_forge import attach_world_forge_progress_callback
 
         def checkpoint_batch_progress(checkpoint: Mapping[str, Any]) -> None:
             token_usage = dict(checkpoint.get("token_usage") or {})

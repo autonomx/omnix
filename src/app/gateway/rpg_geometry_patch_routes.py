@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from app.rpg.map_geometry_patch import ApplyGeometryPatchCommand
 from app.rpg.map_geometry_patch_service import apply_campaign_geometry_patch
+from app.rpg.map_geometry_patch import ApplyGeometryPatchCommand
+
+RpgApplyGeometryPatchRequestBody = ApplyGeometryPatchCommand
+
 
 _ROUTE_SENTINEL = "_omnix_rpg_geometry_patch_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_geometry_patch_route_hook_installed"
@@ -46,15 +50,14 @@ def register_rpg_geometry_patch_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/map-instances/{map_instance_id}/geometry-patches",
-        include_in_schema=False,
     )
-    async def rpg_apply_geometry_patch(
+    def rpg_apply_geometry_patch(
         map_instance_id: str,
-        request: Request,
+        request: Request, request_body: RpgApplyGeometryPatchRequestBody,
     ) -> dict[str, Any]:
         try:
             command = ApplyGeometryPatchCommand.model_validate(
-                _body(await request.json())
+                _body(request_body.model_dump(exclude_unset=True, by_alias=True))
             )
             event, snapshot = apply_campaign_geometry_patch(
                 map_instance_id,

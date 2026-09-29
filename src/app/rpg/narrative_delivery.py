@@ -9,8 +9,7 @@ from threading import RLock
 from typing import Any, Callable, Mapping
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.tenant import TenantContext
+from app.runtime.tenant_context import TenantContext, current_tenant_for
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.narrative_engine.authority import DeliveryMode
 from app.rpg.narrative_engine.delivery import (
@@ -31,7 +30,7 @@ class PostgresNarrativeDeliveryRepositoryAdapter:
         self,
         database: PostgresDatabase | None = None,
         *,
-        context_provider: Callable[[PostgresDatabase], TenantContext] = bootstrap_local_tenant,
+        context_provider: Callable[[PostgresDatabase], TenantContext] = current_tenant_for,
         unit_of_work_factory: Callable[..., Any] = unit_of_work,
     ) -> None:
         self.database = database or default_database()

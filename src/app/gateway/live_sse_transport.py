@@ -1,8 +1,8 @@
 """Configure server-sent event responses for immediate incremental delivery."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import inspect
-import os
 import time
 import uuid
 from collections.abc import AsyncIterable, Iterable
@@ -37,7 +37,7 @@ _LIVE_CHAT_STREAM_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
 
 
 def _configured_preamble_bytes() -> int:
-    raw = os.environ.get("OMNIX_SSE_FLUSH_PREAMBLE_BYTES")
+    raw = _env_str("OMNIX_SSE_FLUSH_PREAMBLE_BYTES")
     try:
         value = int(raw) if raw is not None else _DEFAULT_PREAMBLE_BYTES
     except (TypeError, ValueError):

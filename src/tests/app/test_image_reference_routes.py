@@ -1,41 +1,37 @@
 from __future__ import annotations
 
+from io import BytesIO
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 
-from app.assets import AssetListResponse, AssetRecord, AssetType
-import app.gateway.image_reference_routes as routes
+from app.assets import SharedAssetStore
+from app.image.routes.references import create_image_reference_router
 
 
-def test_reference_routes_list_and_upload(monkeypatch) -> None:
-    asset = AssetRecord(
-        id="image-reference:test",
-        module="image-reference",
-        type=AssetType.IMAGE,
-        mime_type="image/png",
-        storage_path="reference.png",
-        metadata={"title": "reference.png", "width": 256, "height": 256},
-        created_at="2026-07-07T00:00:00+00:00",
-    )
-    monkeypatch.setattr(routes, "list_image_reference_assets", lambda limit=100: AssetListResponse(assets=[asset]))
-    monkeypatch.setattr(
-        routes,
-        "save_image_reference_upload",
-        lambda data, filename, mime_type: asset,
-    )
-
+def test_reference_routes_list_and_upload(tmp_path) -> None:
+    store = SharedAssetStore(tmp_path / "assets.json")
     app = FastAPI()
-    routes.register_image_reference_routes(app)
+    app.include_router(create_image_reference_router(store))
     client = TestClient(app)
 
-    listed = client.get("/api/image-generation/references")
+    listed_before = client.get("/api/image-generation/references")
+    image_bytes = BytesIO()
+    Image.new("RGB", (8, 8), (40, 80, 120)).save(image_bytes, format="PNG")
     uploaded = client.post(
         "/api/image-generation/references?filename=reference.png",
-        content=b"png-bytes",
+        content=image_bytes.getvalue(),
         headers={"Content-Type": "image/png"},
     )
+    listed_after = client.get("/api/image-generation/references")
 
-    assert listed.status_code == 200
-    assert listed.json()["assets"][0]["id"] == asset.id
+    assert listed_before.status_code == 200
+    assert listed_before.json()["assets"] == []
     assert uploaded.status_code == 200
-    assert uploaded.json()["asset"]["id"] == asset.id
+    assert uploaded.json()["ok"] is True
+    assert uploaded.json()["asset"]["metadata"]["filename"] == "reference.png"
+    assert listed_after.status_code == 200
+    assert [asset["id"] for asset in listed_after.json()["assets"]] == [
+        uploaded.json()["asset"]["id"]
+    ]

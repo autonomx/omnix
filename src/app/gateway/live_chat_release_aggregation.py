@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Iterable
 
-from .live_chat_evaluation_store import VoiceSessionEvaluationRecord
+from app.chat.evaluation_store import VoiceSessionEvaluationRecord
 from .live_chat_release_gate import (
     LiveChatEvidenceBundle,
     LiveChatEvidenceEvent,

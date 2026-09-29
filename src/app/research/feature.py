@@ -16,23 +16,22 @@ def _execute(context: JobExecutionContext, job):
 
 
 
-from app.runtime.gateway_installer import install_registrars
+from app.runtime.router_composition import compose_registrar_router
 
 
-def _install_gateway(gateway, context):
-    install_registrars(
-        gateway,
-        context,
+def _research_router(context):
+    return compose_registrar_router(
         (
             ("app.gateway.research_mode_routes", "register_research_mode_routes"),
             ("app.research.credential_routes", "register_research_credential_routes"),
         ),
+        state=context.runtime_state,
     )
 
 FEATURE = FeatureModule(
     id="research",
     title="Research",
-    installers=(_install_gateway,),
+    routers=(_research_router,),
     repositories=(
         RepositorySpec(PostgresResearchReportRepository, PostgresResearchReportRepository, "research_reports"),
     ),

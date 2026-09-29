@@ -10,7 +10,7 @@ from copy import deepcopy
 from threading import RLock
 from typing import Any
 
-from app.persistence.provider_secret_store import (
+from app.security.provider_secret_store import (
     load_provider_secrets,
     save_provider_secrets,
 )

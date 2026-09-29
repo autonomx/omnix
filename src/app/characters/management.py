@@ -6,8 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_memory import OwnerAwareInMemoryMemoryRepository
-
 from .models import CharacterProfile, CharacterProfileVersion
 from .service import CharacterService
 
@@ -81,17 +79,10 @@ class CharacterManagementService:
         self,
         character_service: CharacterService,
         chat_store: Any,
-        memory_repository: OwnerAwareInMemoryMemoryRepository | None = None,
+        memory_repository: Any,
     ) -> None:
         self.character_service = character_service
         self.chat_store = chat_store
-        if memory_repository is None:
-            from app.persistence.runtime import uses_postgresql_runtime
-            if uses_postgresql_runtime():
-                from app.runtime_composition import production_owner_memory_repository
-                memory_repository = production_owner_memory_repository()
-            else:
-                memory_repository = OwnerAwareInMemoryMemoryRepository()
         self.memory_repository = memory_repository
 
     def export(self, character_id: str) -> CharacterDataExport:

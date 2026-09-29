@@ -7,7 +7,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.rpg.persistence.rpg_turn_service import persist_foreground_turn
 from app.persistence.unit_of_work import unit_of_work
@@ -95,7 +95,7 @@ def _prepare(
     lease_job: bool,
     record_only: bool = False,
 ) -> tuple[str, dict]:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         work.rpg.create_campaign(
             context,

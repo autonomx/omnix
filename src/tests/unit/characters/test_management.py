@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from app.assistant_memory import default_memory_service, resolve_chat_scope
+from app.assistant_memory import (
+    OwnerAwareInMemoryMemoryRepository,
+    default_memory_service,
+    resolve_chat_scope,
+)
 from app.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
 from app.characters.management import CharacterDataActionRequest, CharacterManagementService
 from app.characters.service import default_character_service
@@ -16,6 +20,7 @@ def legacy_test_persistence(monkeypatch):
     from app.persistence.runtime import reset_persistence_mode_cache
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    monkeypatch.setenv("OMNIX_CHAT_SQLITE_STORE_ENABLED", "1")
     reset_persistence_mode_cache()
     yield
     reset_persistence_mode_cache()
@@ -66,9 +71,13 @@ def _seed(tmp_path: Path, monkeypatch):
     return store, session, memory
 
 
+def _memory_repository() -> OwnerAwareInMemoryMemoryRepository:
+    return OwnerAwareInMemoryMemoryRepository()
+
+
 def test_export_reports_only_character_owned_backend_state(tmp_path: Path, monkeypatch) -> None:
     store, session, memory = _seed(tmp_path, monkeypatch)
-    service = CharacterManagementService(default_character_service(), store)
+    service = CharacterManagementService(default_character_service(), store, _memory_repository())
 
     exported = service.export("maya")
 
@@ -91,7 +100,7 @@ def test_relationship_reset_deletes_memory_and_character_transcript_only(tmp_pat
         )
     )
     store._save_sessions([session])
-    service = CharacterManagementService(default_character_service(), store)
+    service = CharacterManagementService(default_character_service(), store, _memory_repository())
 
     result = service.apply(
         "maya",
@@ -113,7 +122,7 @@ def test_relationship_reset_deletes_memory_and_character_transcript_only(tmp_pat
 
 def test_destructive_actions_require_exact_character_confirmation(tmp_path: Path, monkeypatch) -> None:
     store, _, _ = _seed(tmp_path, monkeypatch)
-    service = CharacterManagementService(default_character_service(), store)
+    service = CharacterManagementService(default_character_service(), store, _memory_repository())
 
     with pytest.raises(ValueError, match="confirmation"):
         service.apply(
@@ -127,7 +136,7 @@ def test_destructive_actions_require_exact_character_confirmation(tmp_path: Path
 
 def test_profile_archive_is_independent_from_memory(tmp_path: Path, monkeypatch) -> None:
     store, _, _ = _seed(tmp_path, monkeypatch)
-    service = CharacterManagementService(default_character_service(), store)
+    service = CharacterManagementService(default_character_service(), store, _memory_repository())
 
     result = service.apply(
         "maya",

@@ -9,10 +9,10 @@ without bound. Turns carrying ephemeral external/retrieved context are never
 remembered for a later continuation.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 import threading
 import time
 from collections import OrderedDict
@@ -59,7 +59,7 @@ _RESPONSE_STATES: OrderedDict[str, _ResponseState] = OrderedDict()
 
 
 def stateful_responses_enabled() -> bool:
-    return (os.environ.get(_STATE_ENV) or "").strip().casefold() in {
+    return (_env_str(_STATE_ENV) or "").strip().casefold() in {
         "1",
         "true",
         "yes",
@@ -79,7 +79,7 @@ def _is_live_voice_user_message(user_message: Any) -> bool:
 
 
 def _state_ttl_seconds() -> float:
-    raw = (os.environ.get(_STATE_TTL_ENV) or "").strip()
+    raw = (_env_str(_STATE_TTL_ENV) or "").strip()
     try:
         parsed = float(raw) if raw else _DEFAULT_STATE_TTL_SECONDS
     except ValueError:
@@ -88,7 +88,7 @@ def _state_ttl_seconds() -> float:
 
 
 def _max_continuations() -> int:
-    raw = (os.environ.get(_MAX_CONTINUATIONS_ENV) or "").strip()
+    raw = (_env_str(_MAX_CONTINUATIONS_ENV) or "").strip()
     try:
         parsed = int(raw) if raw else _DEFAULT_MAX_CONTINUATIONS
     except ValueError:

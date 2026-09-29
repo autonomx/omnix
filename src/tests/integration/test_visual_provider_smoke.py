@@ -90,12 +90,12 @@ def test_unload_route_contract(monkeypatch):
 
     # force enabled first
     monkeypatch.setattr(
-        "app.shared.load_settings",
+        "app.rpg.api.rpg_presentation_visual_provider_routes.load_settings",
         lambda: {"rpg_visual": {"visual_provider": "flux_klein", "enabled": True}},
     )
 
     monkeypatch.setattr(
-        "app.shared.save_settings",
+        "app.rpg.api.rpg_presentation_visual_provider_routes.save_settings",
         lambda s: None,
     )
 

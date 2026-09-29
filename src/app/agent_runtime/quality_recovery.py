@@ -7,15 +7,15 @@ normal runtime/protocol retry path without teaching a failed first edit or a dea
 reviewer how to recover.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import threading
 from typing import Any
 
 from app.persistence.unit_of_work import unit_of_work
 
 from .coding_quality_repository import PostgresCodingQualityRepository
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 from .repository import AgentLeaseConflict, PostgresAgentRunRepository
 from .review_orchestration import (
     reconcile_review_progress_in_repository,
@@ -27,7 +27,7 @@ _TERMINAL = {"completed", "failed", "cancelled"}
 
 
 def _lease_heartbeat_interval_seconds() -> float:
-    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS", "20") or "20").strip()
+    raw = str(_env_str("OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS", "20") or "20").strip()
     try:
         value = float(raw)
     except ValueError:
@@ -36,7 +36,7 @@ def _lease_heartbeat_interval_seconds() -> float:
 
 
 def _lease_heartbeat_ttl_seconds() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS", "90") or "90").strip()
+    raw = str(_env_str("OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS", "90") or "90").strip()
     try:
         value = int(raw)
     except ValueError:

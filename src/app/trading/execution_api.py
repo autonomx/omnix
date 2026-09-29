@@ -7,12 +7,12 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.provider_secret_store import (
+from app.security.provider_secret_store import (
     load_trading_provider_secrets,
     save_trading_provider_secrets,
     trading_provider_credential_sources,
 )
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 
 from .execution import ExecutionObservation
 from .service import TradingMarketDataService, default_market_data_service

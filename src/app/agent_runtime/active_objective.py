@@ -5,10 +5,10 @@ chat turns so terse follow-ups can be interpreted semantically without replaying
 an unlimited transcript or relying on regexes to choose an execution lane.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 import re
 from typing import Any, Literal
 
@@ -232,7 +232,7 @@ def _workspace_name(value: str | None) -> str | None:
 def build_routing_environment(user_message: Any) -> RoutingEnvironment:
     metadata = getattr(user_message, "metadata", {}) or {}
     selected = str(metadata.get("workspace_root") or "").strip()
-    configured = str(os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "") or "").strip()
+    configured = str(_env_str("OMNIX_AGENT_DEFAULT_REPOSITORY", "") or "").strip()
     if selected:
         workspace = _workspace_name(selected)
         source = "turn_attachment"

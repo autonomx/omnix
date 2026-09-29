@@ -1,9 +1,9 @@
 """Runtime monitor for the AI-only SOL/USDT one-minute shadow strategy."""
 
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
-import os
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -63,17 +63,17 @@ class SolanaAIMonitorControlResponse(BaseModel):
 
 
 def _default_strategy_repository_factory() -> SolanaAIStrategyRepository | None:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return None
     return default_solana_ai_strategy_repository()
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def solana_ai_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS", "0")
     # The Solana AI loop is research-only and remains opt-in so an operator
     # can disable it for a session without it returning on gateway restart.
@@ -82,7 +82,7 @@ def solana_ai_monitor_enabled() -> bool:
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_SOLANA_AI_POLL_SECONDS", "5"))
+        value = float(_env_str("OMNIX_TRADING_SOLANA_AI_POLL_SECONDS", "5"))
     except ValueError:
         value = 5.0
     return max(2.0, min(value, 60.0))

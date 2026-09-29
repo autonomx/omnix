@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 """Research-only consolidated Alpaca SIP evidence adapter.
 
@@ -6,7 +7,6 @@ This adapter exists solely for retrospective/formal scoring. It is intentionally
 not registered as an execution provider and never produces execution authority.
 """
 
-import os
 from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -92,7 +92,7 @@ class AlpacaSipResearchProvider:
         )
         self.data_url = (
             data_url
-            or os.environ.get("OMNIX_ALPACA_DATA_URL")
+            or _env_str("OMNIX_ALPACA_DATA_URL")
             or ALPACA_DATA_URL
         ).rstrip("/")
         self.clock = clock or (lambda: datetime.now(timezone.utc))

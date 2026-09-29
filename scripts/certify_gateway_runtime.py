@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+from dataclasses import replace
 import socket
 import statistics
 import sys
@@ -54,20 +55,31 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
                           OMNIX_GATEWAY_BACKGROUND_ROLE=role, OMNIX_TTS_URL=tts_url,
                           OMNIX_GATEWAY_TTS_HTTP='1', OMNIX_TTS_STARTUP_WARMUP='0',
                           OMNIX_GATEWAY_REQUIRED_WORKERS='tts')
-        from app.gateway import feature_registry
-        feature_registry.FEATURES = tuple(feature for feature in feature_registry.FEATURES if feature.module in {
-            'app.gateway.live_voice_runtime_offload', 'app.gateway.event_loop_lag_monitor',
-            'app.gateway.tts_pcm_websocket', 'app.gateway.tts_runtime_routes',
-            'app.gateway.blocking_route_offload',
-        })
+        from app.config.env import environment
+        from app.runtime.config import RuntimeConfig
+        from app.runtime.feature_catalog import FEATURE_CATALOG, load_feature
+
+        enabled = {"chat", "voice"}
+        pending = list(enabled)
+        while pending:
+            feature = load_feature(pending.pop())
+            for dependency in feature.depends_on:
+                if dependency not in enabled:
+                    enabled.add(dependency)
+                    pending.append(dependency)
+        config = replace(
+            RuntimeConfig.from_environment(environment()),
+            enabled_features=tuple(sorted(enabled)),
+            disabled_features=tuple(sorted(set(FEATURE_CATALOG) - enabled)),
+        )
         from app.chat import generation_jobs
         generation_jobs._generate_reply = lambda *args, **kwargs: {'content': 'Certified deterministic reply.', 'metadata': {}}
-        from app import shared
+        from app.providers import audio_registry
         def no_local_registry():
             raise AssertionError('certification processes must use remote TTS')
-        shared.get_audio_registry = no_local_registry
+        audio_registry.get_audio_registry = no_local_registry
         from app.production import create_production_app
-        app = create_production_app()
+        app = create_production_app(config)
         # Failure certification can shorten observation deadlines without
         # changing durable checks or the production defaults.
         app.state.execution_owner.lease_seconds = ownership_lease_seconds

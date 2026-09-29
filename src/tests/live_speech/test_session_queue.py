@@ -5,7 +5,7 @@ import pytest
 from app.live_speech.session_queue import QueuedLiveSpeechSession
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_queued_session_starts_with_session_created() -> None:
     session = QueuedLiveSpeechSession()
 
@@ -15,7 +15,7 @@ async def test_queued_session_starts_with_session_created() -> None:
     assert [evt.type for evt in events] == ["session.created"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_queued_session_handles_text_response_flow() -> None:
     session = QueuedLiveSpeechSession()
 
@@ -30,7 +30,7 @@ async def test_queued_session_handles_text_response_flow() -> None:
     assert "response.done" in event_types
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_queued_session_ignores_messages_after_close() -> None:
     session = QueuedLiveSpeechSession()
     await session.close()

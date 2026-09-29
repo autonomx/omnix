@@ -5,13 +5,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.chat import ChatSession, ChatSessionStore
+from app.conversation.contracts import ChatSession, ChatSessionReader
 
-from .models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
     MemoryRecord,
+    MemorySensitivity,
     MemoryScope,
 )
 from .scope import resolve_session_memory_scope, scope_id_for
@@ -37,6 +38,7 @@ class CreateManagedMemoryRequest(BaseModel):
     session_id: str = Field(min_length=1, max_length=200)
     scope: MemoryScope
     category: MemoryCategory
+    sensitivity: MemorySensitivity = "normal"
     content: str = Field(min_length=1, max_length=4096)
     pinned: bool = False
 
@@ -82,7 +84,7 @@ class ForgetCandidateResponse(BaseModel):
     candidate_id: str
 
 
-def resolve_session_scope(store: ChatSessionStore, session_id: str):
+def resolve_session_scope(store: ChatSessionReader, session_id: str):
     session = store.get_session(session_id)
     if session is None:
         return None, None
@@ -95,7 +97,7 @@ def require_memory_write(session: ChatSession) -> None:
 
 
 def records_for_session(
-    store: ChatSessionStore,
+    store: ChatSessionReader,
     service: MemoryService,
     session_id: str,
     *,
@@ -135,7 +137,7 @@ def records_for_session(
 
 
 def candidates_for_session(
-    store: ChatSessionStore,
+    store: ChatSessionReader,
     service: MemoryService,
     session_id: str,
     *,

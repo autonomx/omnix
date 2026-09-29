@@ -13,15 +13,13 @@ from app.persistence.unit_of_work import unit_of_work
 class ChatExecutionTransactions:
     def find_job_by_submission(self, *, job_type, session_id, submission_id):
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                "SELECT id FROM omnix_jobs WHERE workspace_id = %s AND job_type = %s "
-                "AND input_payload ->> 'session_id' = %s AND input_payload ->> 'submission_id' = %s "
-                "ORDER BY created_at, id LIMIT 1",
-                (self.context.workspace_id, job_type, session_id, submission_id),
-            ).fetchone()
-            record = work.jobs.get_job(self.context, row[0]) if row else None
+            records = work.jobs.find_by_input(
+                self.context,
+                job_type=job_type,
+                input_fields=(("session_id", session_id), ("submission_id", submission_id)),
+            )
             work.rollback()
-        return self._record(record) if record else None
+        return self._record(records[0]) if records else None
 
     @contextmanager
     def chat_transaction(
@@ -45,10 +43,7 @@ class ChatExecutionTransactions:
             if session is None and job_id is not None:
                 raise EntityNotFound(session_id)
             if job_id is not None:
-                work.connection.execute(
-                    "SELECT id FROM omnix_jobs WHERE id = %s AND workspace_id = %s FOR UPDATE",
-                    (job_id, self.context.workspace_id),
-                )
+                work.jobs.lock_job(self.context, job_id=job_id)
             with share_transaction(work):
                 yield work
             work.commit()
@@ -71,13 +66,13 @@ class ChatExecutionTransactions:
 
     def list_active_chat_jobs(self, session_id: str):
         with unit_of_work(self.database) as work:
-            rows = work.connection.execute(
-                "SELECT id FROM omnix_jobs WHERE workspace_id = %s AND job_type = 'chat.generate' "
-                "AND input_payload ->> 'session_id' = %s "
-                "AND status IN ('queued', 'leased', 'running', 'waiting', 'retrying') ORDER BY created_at, id",
-                (self.context.workspace_id, session_id),
-            ).fetchall()
-            records = [work.jobs.get_job(self.context, row[0]) for row in rows]
+            records = work.jobs.find_by_input(
+                self.context,
+                job_type="chat.generate",
+                input_fields=(("session_id", session_id),),
+                statuses=("queued", "leased", "running", "waiting", "retrying"),
+                limit=500,
+            )
             work.rollback()
         return [self._record(record) for record in records]
 
@@ -97,13 +92,14 @@ class ChatExecutionTransactions:
             if current is None or current["status"] != "queued":
                 work.rollback()
                 return self._record(current) if current else None
-            earlier = work.connection.execute(
-                "SELECT 1 FROM omnix_jobs WHERE workspace_id = %s AND job_type = 'chat.generate' "
-                "AND input_payload ->> 'session_id' = %s "
-                "AND status IN ('queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested') "
-                "AND (created_at, id) < (%s::timestamptz, %s) LIMIT 1",
-                (self.context.workspace_id, session_id, current["created_at"], job_id),
-            ).fetchone()
+            earlier = work.jobs.has_earlier_by_input(
+                self.context,
+                job_type="chat.generate",
+                input_fields=(("session_id", session_id),),
+                statuses=("queued", "leased", "running", "waiting", "retrying", "cancel_requested"),
+                before_created_at=current["created_at"],
+                before_id=job_id,
+            )
             if earlier:
                 work.rollback()
                 return None

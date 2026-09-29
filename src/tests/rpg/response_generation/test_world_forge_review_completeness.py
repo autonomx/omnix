@@ -31,7 +31,7 @@ from app.rpg.worlds.generation_review_analytics import (
     world_generation_review_analytics,
 )
 from app.rpg.worlds.generation_worker import _topic_generator_for_job
-from app.rpg_world_forge_single_pass_provider import _entity_model
+from app.rpg.worlds.providers.single_pass import _entity_model
 
 
 def _graph() -> CampaignTopicGraph:
@@ -338,7 +338,9 @@ class _GuardWork:
 def test_publication_blocks_stale_transitive_dependent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(publication_guard, "bootstrap_local_tenant", lambda database: object())
+    from app.security.tenant_context import local_tenant_context
+
+    monkeypatch.setattr(publication_guard, "current_tenant", local_tenant_context)
     monkeypatch.setattr(publication_guard, "unit_of_work", lambda database: _GuardWork())
     report = publication_guard.publication_review_report("run:child")
     assert report["publishable"] is False

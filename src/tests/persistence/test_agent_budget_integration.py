@@ -11,7 +11,7 @@ from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.agent_runtime.resource_grants import PostgresResourceGrantRepository, ResourceGrantError
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -35,7 +35,7 @@ def _database() -> PostgresDatabase:
 
 
 def _run(database: PostgresDatabase, suffix: str, limits: RunLimits) -> str:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     run_id = f"budget-{suffix}-{uuid.uuid4().hex[:8]}"
     spec = AgentRunSpec(
         run_id=run_id,
@@ -58,7 +58,7 @@ def _run(database: PostgresDatabase, suffix: str, limits: RunLimits) -> str:
 def test_agent_budgets_are_durable_and_fail_closed() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         manager = AgentBudgetManager(database, context=context)
 
         step_run = _run(
@@ -116,7 +116,7 @@ def test_agent_budgets_are_durable_and_fail_closed() -> None:
 def test_parent_execution_budget_is_reduced_by_child_reservations() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         parent_id = f"budget-parent-{uuid.uuid4().hex[:8]}"
         child_id = f"budget-child-{uuid.uuid4().hex[:8]}"
         parent_spec = AgentRunSpec(
@@ -162,7 +162,7 @@ def test_parent_execution_budget_is_reduced_by_child_reservations() -> None:
 def test_resource_grant_replay_is_idempotent_but_conflicting_authority_fails_closed() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         parent_id = f"grant-parent-{uuid.uuid4().hex[:8]}"
         other_parent_id = f"grant-parent-other-{uuid.uuid4().hex[:8]}"
         child_id = f"grant-child-{uuid.uuid4().hex[:8]}"
@@ -229,7 +229,7 @@ def test_resource_grant_replay_is_idempotent_but_conflicting_authority_fails_clo
 def test_token_reporting_distinguishes_missing_from_reported_zero() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = _run(database, "reported-zero", RunLimits(max_steps=10, max_tool_calls=10))
         manager = AgentBudgetManager(database, context=context)
         before = manager.usage(run_id)

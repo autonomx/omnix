@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import os
@@ -18,7 +19,7 @@ class BlobIntegrityError(RuntimeError):
 
 
 def default_blob_root() -> Path:
-    override = (os.environ.get("OMNIX_BLOB_ROOT") or "").strip()
+    override = (_env_str("OMNIX_BLOB_ROOT") or "").strip()
     return Path(override) if override else resources_data_root() / "blobs"
 
 

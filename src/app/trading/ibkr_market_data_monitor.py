@@ -8,9 +8,9 @@ IBKR LIVE_DATA gate is explicitly enabled.
 """
 
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
-import os
 from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -45,18 +45,18 @@ _ET = ZoneInfo("America/New_York")
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ibkr_market_data_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_IBKR_MONITOR_IN_TESTS", "0")
     return load_ibkr_settings()[0].monitor_enabled
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
+        value = float(_env_str("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
     except ValueError:
         value = 5.0
     return max(1.0, value)
@@ -66,7 +66,7 @@ def _market_data_line_budget() -> int:
     """Conservative default leaves headroom under a typical 100-line allowance."""
 
     try:
-        value = int(os.environ.get("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
+        value = int(_env_str("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
     except ValueError:
         value = 80
     return max(1, value)

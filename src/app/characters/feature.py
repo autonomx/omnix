@@ -6,10 +6,9 @@ import logging
 from fastapi import APIRouter
 from typing import Any
 
-from app.persistence.repository_registry import RepositorySpec
 from app.runtime.features import FeatureContext, FeatureModule
 from app.runtime.hooks import RuntimeHookSpec
-from app.characters.persistence.repository import PostgresCharacterRepository
+from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 from .api import register_character_routes
 from .avatar_api import register_character_avatar_routes
@@ -26,7 +25,7 @@ def _router(context: FeatureContext) -> APIRouter:
     chat_kwargs = {}
     if context.services is not None and getattr(context.services, "chat", None) is not None:
         chat_kwargs["chat_store_factory"] = lambda: context.services.chat
-    register_character_routes(router, **chat_kwargs)  # type: ignore[arg-type]
+    register_character_routes(router)
     register_character_avatar_routes(router)  # type: ignore[arg-type]
     register_character_avatar_generation_routes(router)  # type: ignore[arg-type]
     register_character_avatar_viseme_routes(router)  # type: ignore[arg-type]
@@ -88,7 +87,7 @@ FEATURE = FeatureModule(
     title="Characters",
     depends_on=("chat", "assistant-memory", "companion-activity"),
     routers=(_router,),
-    repositories=(RepositorySpec(PostgresCharacterRepository, PostgresCharacterRepository, "characters"),),
+    repositories=CHARACTER_REPOSITORY_SPECS,
     hooks=(
         RuntimeHookSpec("image.character_avatar.stabilize", _stabilize_avatar_frame),
         RuntimeHookSpec("image.character_avatar.completed", _avatar_generation_completed),

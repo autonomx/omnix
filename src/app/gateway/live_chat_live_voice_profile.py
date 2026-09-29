@@ -1,7 +1,7 @@
 """Apply a bounded prompt and no-thinking policy to live voice turns."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import time
 from contextvars import ContextVar
 from functools import wraps
@@ -16,7 +16,7 @@ from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.provider_metrics import merge_provider_response_metrics
 from app.providers.lmstudio_provider import LMStudioProvider
 
-from .live_material_context import live_material_context_items
+from app.chat.live_material_context import live_material_context_items
 from .tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_live_voice_profile_installed"
@@ -33,7 +33,7 @@ _DEFAULT_EXTERNAL_CONTEXT_TOKEN_BUDGET = 2_048
 
 def _integer_setting(name: str, fallback: int, *, minimum: int = 0) -> int:
     try:
-        return max(minimum, int((os.environ.get(name) or fallback)))
+        return max(minimum, int((_env_str(name) or fallback)))
     except (TypeError, ValueError):
         return max(minimum, fallback)
 

@@ -24,7 +24,91 @@ from app.image.settings_api import (
     get_image_settings_payload,
     update_image_settings_payload,
 )
-from app.config.access import load_settings
+from app.settings.access import load_settings
+
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class ImageGenerateRouteRequestBody(_TypedRequestModel):
+    provider: str | None = None
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    width: int | None = _typed_field(default=None, ge=1, le=8192)
+    height: int | None = _typed_field(default=None, ge=1, le=8192)
+    seed: int | None = None
+    steps: int | None = _typed_field(default=None, ge=1, le=200)
+    guidance_scale: float | None = _typed_field(default=None, ge=0, le=50)
+    kind: str | None = None
+    source: str | None = None
+    style: str | None = None
+    reference_asset_ids: list[str] | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    metadata: dict[str, _TypedRequestAny] | None = None
+
+class EnqueueImageRequestBody(_TypedRequestModel):
+    provider: str | None = None
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    width: int | None = _typed_field(default=None, ge=1, le=8192)
+    height: int | None = _typed_field(default=None, ge=1, le=8192)
+    seed: int | None = None
+    steps: int | None = _typed_field(default=None, ge=1, le=200)
+    guidance_scale: float | None = _typed_field(default=None, ge=0, le=50)
+    kind: str | None = None
+    source: str | None = None
+    style: str | None = None
+    reference_asset_ids: list[str] | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    metadata: dict[str, _TypedRequestAny] | None = None
+
+class EnqueueChatRequestBody(_TypedRequestModel):
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    provider: str | None = None
+    width: int | None = _typed_field(default=None, ge=1, le=8192)
+    height: int | None = _typed_field(default=None, ge=1, le=8192)
+    seed: int | None = None
+    steps: int | None = _typed_field(default=None, ge=1, le=200)
+    guidance_scale: float | None = _typed_field(default=None, ge=0, le=50)
+    kind: str | None = None
+    style: str | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    metadata: dict[str, _TypedRequestAny] | None = None
+
+class EnqueueStoryRequestBody(_TypedRequestModel):
+    prompt: str | None = None
+    negative_prompt: str | None = None
+    provider: str | None = None
+    width: int | None = _typed_field(default=None, ge=1, le=8192)
+    height: int | None = _typed_field(default=None, ge=1, le=8192)
+    seed: int | None = None
+    steps: int | None = _typed_field(default=None, ge=1, le=200)
+    guidance_scale: float | None = _typed_field(default=None, ge=0, le=50)
+    kind: str | None = None
+    style: str | None = None
+    session_id: str | None = None
+    request_id: str | None = None
+    metadata: dict[str, _TypedRequestAny] | None = None
+
+class ImageSettingsPostRouteRequestBody(_TypedRequestModel):
+    enabled: bool | None = None
+    provider: str | None = None
+    auto_unload_on_disable: bool | None = None
+    chat: dict[str, _TypedRequestAny] | None = None
+    story: dict[str, _TypedRequestAny] | None = None
+
+class ImageProviderLoadRouteRequestBody(_TypedRequestModel):
+    provider: _TypedRequestAny = None
+
+class ImageProviderUnloadRouteRequestBody(_TypedRequestModel):
+    provider: _TypedRequestAny = None
+
 
 router = APIRouter()
 
@@ -58,8 +142,8 @@ async def flux_klein_status_route():
 
 
 @router.post("/api/image/generate")
-async def image_generate_route(request: Request):
-    payload = await request.json()
+def image_generate_route(request: Request, request_body: ImageGenerateRouteRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     response = generate_image(payload if isinstance(payload, dict) else {})
     return {
         "ok": response.ok,
@@ -77,17 +161,20 @@ async def image_generate_route(request: Request):
 
 
 @router.post("/api/image/jobs/enqueue")
-async def enqueue_image(payload: dict):
+async def enqueue_image(payload: EnqueueImageRequestBody):
+    payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_image_job(payload)
 
 
 @router.post("/api/image/chat/enqueue")
-async def enqueue_chat(payload: dict):
+async def enqueue_chat(payload: EnqueueChatRequestBody):
+    payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_chat_image(payload)
 
 
 @router.post("/api/image/story/enqueue")
-async def enqueue_story(payload: dict):
+async def enqueue_story(payload: EnqueueStoryRequestBody):
+    payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_story_image(payload)
 
 
@@ -117,8 +204,8 @@ async def image_settings_get_route():
 
 
 @router.post("/api/image/settings")
-async def image_settings_post_route(request: Request):
-    payload = await request.json()
+def image_settings_post_route(request: Request, request_body: ImageSettingsPostRouteRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     return update_image_settings_payload(payload if isinstance(payload, dict) else {})
 
 
@@ -138,8 +225,8 @@ async def image_providers_route():
 
 
 @router.post("/api/image/provider/load")
-async def image_provider_load_route(request: Request):
-    payload = await request.json()
+def image_provider_load_route(request: Request, request_body: ImageProviderLoadRouteRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     provider = ""
     if isinstance(payload, dict):
         provider = str(payload.get("provider") or "").strip()
@@ -147,8 +234,8 @@ async def image_provider_load_route(request: Request):
 
 
 @router.post("/api/image/provider/unload")
-async def image_provider_unload_route(request: Request):
-    payload = await request.json()
+def image_provider_unload_route(request: Request, request_body: ImageProviderUnloadRouteRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     provider = ""
     if isinstance(payload, dict):
         provider = str(payload.get("provider") or "").strip()

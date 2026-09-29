@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_geometry_patch import (
@@ -100,7 +100,7 @@ def _definition() -> GridMapDefinition:
 
 
 def _seed(database: PostgresDatabase) -> dict[str, CampaignMapInstanceSnapshot]:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     definition = _definition()
     revision = compile_world_revision(
         world_id=definition.world_id,
@@ -215,7 +215,7 @@ def test_geometry_patch_is_campaign_owned_persisted_and_replayable() -> None:
                 database=database,
             )
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             row_a = work.map_instances.get_instance(
                 context,

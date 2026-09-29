@@ -3,10 +3,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import threading
+import time
+import weakref
 from typing import Any, Optional
 
-from app.settings.access import load_secrets, load_settings
-from app.config.defaults import DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT
+from app.config.env import env_str
+from app.settings.access import current_settings_service, load_secrets, load_settings
+from app.config.defaults import DEFAULT_SYSTEM_PROMPT
 from app.runtime.config import GatewayRole, get_runtime_config
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 
@@ -15,10 +20,37 @@ from .registry import get_registry
 from .audio_registry import get_audio_registry
 
 _PROVIDER_CACHE: dict[str, Any] = {"key": None, "instance": None}
+_PROVIDER_SETTINGS_LOCK = threading.RLock()
+_PROVIDER_SETTINGS_SUBSCRIPTIONS: weakref.WeakSet[Any] = weakref.WeakSet()
 _tts_provider_instance: Any = None
 _tts_provider_name: str | None = None
 _stt_provider_instance: Any = None
 _stt_provider_name: str | None = None
+_LOG = logging.getLogger(__name__)
+_GLOBAL_PROMPT_LOCK = threading.RLock()
+_GLOBAL_PROMPT_CACHE: tuple[int, float, str] | None = None
+_GLOBAL_PROMPT_SUBSCRIPTIONS: set[int] = set()
+_GLOBAL_PROMPT_CACHE_HIT = False
+_GLOBAL_PROMPT_CACHE_MODE = "defaults"
+
+
+def _global_prompt_ttl_seconds() -> float:
+    raw = env_str("OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS", "60")
+    try:
+        return max(0.0, float(raw or "60"))
+    except (TypeError, ValueError):
+        return 60.0
+
+
+def invalidate_global_system_prompt_cache() -> None:
+    global _GLOBAL_PROMPT_CACHE
+    with _GLOBAL_PROMPT_LOCK:
+        _GLOBAL_PROMPT_CACHE = None
+
+
+def global_system_prompt_cache_state() -> dict[str, Any]:
+    with _GLOBAL_PROMPT_LOCK:
+        return {"hit": _GLOBAL_PROMPT_CACHE_HIT, "mode": _GLOBAL_PROMPT_CACHE_MODE}
 
 
 def _chatgpt_codex_settings(settings: dict[str, Any]) -> dict[str, Any]:
@@ -46,7 +78,7 @@ def _close(instance: Any) -> None:
         try:
             close()
         except Exception:
-            pass
+            _LOG.warning("Provider close failed; cached instance was still retired")
 
 
 def invalidate_provider_cache() -> None:
@@ -57,7 +89,26 @@ def invalidate_provider_cache() -> None:
         _close(instance)
 
 
+def _subscribe_provider_cache_invalidation() -> None:
+    try:
+        service = current_settings_service()
+    except RuntimeError:
+        return
+    with _PROVIDER_SETTINGS_LOCK:
+        if service in _PROVIDER_SETTINGS_SUBSCRIPTIONS:
+            return
+        _PROVIDER_SETTINGS_SUBSCRIPTIONS.add(service)
+        for key in (
+            "provider",
+            "lmstudio",
+            "openrouter",
+            "cerebras",
+        ):
+            service.subscribe(key, lambda _key, _value: invalidate_provider_cache())
+
+
 def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
+    _subscribe_provider_cache_invalidation()
     settings = load_settings()
     secrets = load_secrets()
     name = provider_name or str(settings.get("provider") or "lmstudio")
@@ -137,7 +188,33 @@ def get_provider_config() -> dict[str, Any]:
 
 
 def get_global_system_prompt() -> str:
-    return str(load_settings().get("global_system_prompt") or DEFAULT_SYSTEM_PROMPT)
+    global _GLOBAL_PROMPT_CACHE, _GLOBAL_PROMPT_CACHE_HIT, _GLOBAL_PROMPT_CACHE_MODE
+    try:
+        service = current_settings_service()
+    except RuntimeError:
+        service = None
+    service_id = id(service) if service is not None else 0
+    _GLOBAL_PROMPT_CACHE_MODE = "service" if service is not None else "defaults"
+    if service is not None:
+        with _GLOBAL_PROMPT_LOCK:
+            if service_id not in _GLOBAL_PROMPT_SUBSCRIPTIONS:
+                service.subscribe(
+                    "global_system_prompt",
+                    lambda _key, _value: invalidate_global_system_prompt_cache(),
+                )
+                _GLOBAL_PROMPT_SUBSCRIPTIONS.add(service_id)
+    now = time.monotonic()
+    ttl = _global_prompt_ttl_seconds()
+    with _GLOBAL_PROMPT_LOCK:
+        cached = _GLOBAL_PROMPT_CACHE
+        if cached is not None and cached[0] == service_id and now - cached[1] <= ttl:
+            _GLOBAL_PROMPT_CACHE_HIT = True
+            return cached[2]
+    prompt = str(load_settings().get("global_system_prompt") or DEFAULT_SYSTEM_PROMPT)
+    with _GLOBAL_PROMPT_LOCK:
+        _GLOBAL_PROMPT_CACHE = (service_id, now, prompt)
+        _GLOBAL_PROMPT_CACHE_HIT = False
+    return prompt
 
 
 def invalidate_audio_provider_cache(kind: str | None = None) -> None:
@@ -154,7 +231,7 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
             try:
                 stop()
             except Exception:
-                pass
+                _LOG.warning("Audio provider stop failed during cache invalidation")
     if kind in (None, "stt"):
         instance = _stt_provider_instance
         _stt_provider_instance = None
@@ -164,7 +241,7 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
             try:
                 stop()
             except Exception:
-                pass
+                _LOG.warning("Audio provider stop failed during cache invalidation")
 
 
 def get_tts_provider(provider_name: str | None = None) -> Any:
@@ -177,7 +254,7 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
     use_http = name == "faster-qwen3-tts" and runtime.use_remote_tts
     if name == "faster-qwen3-tts" and api_replica and not use_http:
         raise RuntimeError(
-            "API replicas cannot construct local GPU TTS; configure OMNIX_TTS_URL"
+            "API replicas cannot construct the local GPU TTS provider; configure OMNIX_TTS_URL"
         )
     if use_http:
         from .qwen_http_gateway import QwenHttpGatewayProvider
@@ -198,7 +275,7 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
             try:
                 stop()
             except Exception:
-                pass
+                _LOG.warning("TTS provider stop failed during replacement")
     provider_settings = dict(settings.get(name) or {})
     if name == "faster-qwen3-tts":
         config = provider_settings
@@ -231,7 +308,7 @@ def get_stt_provider(provider_name: str | None = None) -> Any:
             try:
                 stop()
             except Exception:
-                pass
+                _LOG.warning("STT provider stop failed during replacement")
     cfg = dict(settings.get(name) or {})
     instance = get_audio_registry().create_stt_provider(
         name,

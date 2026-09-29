@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.memory_policy import Sensitivity, TrustLevel
+
 SYSTEM_MEMORY_OWNER_ID = "system-assistant"
 
 MemoryOwnerType = Literal["system", "character"]
@@ -27,14 +29,6 @@ MemoryDomain = Literal[
     "affect",
     "routine",
     "instruction",
-]
-Sensitivity = Literal["normal", "sensitive", "secret"]
-TrustLevel = Literal[
-    "user_explicit",
-    "system_trusted",
-    "assistant_inference",
-    "external_untrusted",
-    "imported_unverified",
 ]
 ObservationEventType = Literal[
     "user_said",

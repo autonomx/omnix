@@ -25,6 +25,28 @@ from app.image.lifecycle import (
 from app.image.providers.registry import get_image_provider_definition, list_image_providers
 from app.image.service import generate_image_local
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class ProviderDownloadRequestBody(_TypedRequestModel):
+    hf_token: _TypedRequestAny = None
+    provider: _TypedRequestAny = None
+
+class GenerateRequestBody(_TypedRequestModel):
+    num_inference_steps: _TypedRequestAny = None
+    provider: _TypedRequestAny = None
+    steps: _TypedRequestAny = None
+
+class ProviderLoadRequestBody(_TypedRequestModel):
+    provider: _TypedRequestAny = None
+
+class ProviderUnloadRequestBody(_TypedRequestModel):
+    provider: _TypedRequestAny = None
+
+
 app = FastAPI(title="Omnix Image Service")
 app.add_middleware(ModelServiceMiddleware)
 
@@ -259,10 +281,10 @@ async def provider_status(provider: str = ""):
 
 
 @app.post("/provider/download")
-async def provider_download(request: Request):
+async def provider_download(request: Request, request_body: ProviderDownloadRequestBody):
     if not is_image_generation_enabled():
         raise HTTPException(status_code=503, detail="model_unavailable")
-    payload = await request.json()
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     payload = payload if isinstance(payload, dict) else {}
     provider = _provider_name(payload.get("provider"))
     hf_token = str(payload.get("hf_token") or "").strip()
@@ -285,8 +307,8 @@ async def provider_download(request: Request):
 
 
 @app.post("/generate")
-async def generate(request: Request):
-    payload = await request.json()
+async def generate(request: Request, request_body: GenerateRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     payload = payload if isinstance(payload, dict) else {}
     request_id = _request_id(payload)
     provider = _provider_name(payload.get("provider") or get_active_image_provider_name())
@@ -339,10 +361,10 @@ async def generate_progress(request_id: str):
 
 
 @app.post("/provider/load")
-async def provider_load(request: Request):
+async def provider_load(request: Request, request_body: ProviderLoadRequestBody):
     if not is_image_generation_enabled():
         raise HTTPException(status_code=503, detail="model_unavailable")
-    payload = await request.json()
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     provider = _provider_name(payload.get("provider") if isinstance(payload, dict) else None)
     _set_model_operation("loading", provider)
     try:
@@ -366,8 +388,8 @@ async def provider_load(request: Request):
 
 
 @app.post("/provider/unload")
-async def provider_unload(request: Request):
-    payload = await request.json()
+async def provider_unload(request: Request, request_body: ProviderUnloadRequestBody):
+    payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     provider = _provider_name(payload.get("provider") if isinstance(payload, dict) else None)
     _set_model_operation("unloading", provider)
     try:

@@ -7,7 +7,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.rpg.persistence.rpg_repository import (
     CompactTurnResponseTooLarge,
@@ -99,7 +99,7 @@ def test_campaign_creation_hash_and_participant() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             campaign = _create_campaign(work, context)
             work.commit()
@@ -128,7 +128,7 @@ def test_turn_commit_is_atomic_revisioned_hashed_and_snapshot_backed() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             work.commit()
@@ -190,7 +190,7 @@ def test_same_submission_returns_exact_committed_turn_without_second_effect() ->
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             first = work.rpg.commit_turn(
@@ -247,7 +247,7 @@ def test_stale_revision_cannot_overwrite_campaign() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             work.rpg.commit_turn(
@@ -299,7 +299,7 @@ def test_turn_transaction_rolls_back_ledger_state_interaction_and_outbox() -> No
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             work.commit()
@@ -353,7 +353,7 @@ def test_compact_replay_record_has_hard_size_ceiling() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             with pytest.raises(CompactTurnResponseTooLarge):
@@ -381,7 +381,7 @@ def test_snapshot_rejects_mismatched_state_hash() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             _create_campaign(work, context)
             with pytest.raises(StateHashConflict):

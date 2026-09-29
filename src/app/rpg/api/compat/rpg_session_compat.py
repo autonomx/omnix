@@ -503,4 +503,6 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     session = load_runtime_session(session_id)
     if not session:
         return {"ok": False, "error": "session_not_found", "session_id": session_id}
-    return build_frontend_bootstrap_payload(session)
+    game = _safe_dict(build_frontend_bootstrap_payload(session))
+    game["session_id"] = session_id
+    return {"ok": True, "game": game}

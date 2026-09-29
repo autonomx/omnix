@@ -38,7 +38,7 @@ def test_initialize_tts_provider_passes_config(monkeypatch):
     def fake_load_settings():
         return fake_settings
 
-    monkeypatch.setattr("app.shared.load_settings", fake_load_settings, raising=False)
+    monkeypatch.setattr("app.providers.service.load_settings", fake_load_settings, raising=False)
     monkeypatch.setattr(
         "app.providers.faster_qwen3_tts_provider.FasterQwen3TTSProvider",
         FakeProvider,

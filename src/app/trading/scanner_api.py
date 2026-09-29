@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
@@ -22,6 +23,12 @@ class ScannerRunListResponse(BaseModel):
 
 class ScannerResultListResponse(BaseModel):
     results: list[TradingScannerResult]
+
+
+class ScannerRunCancelResponse(BaseModel):
+    ok: Literal[True]
+    run_id: str
+    status: Literal["cancellation_requested"]
 
 
 RepositoryFactory = Callable[[], TradingScannerRepository]
@@ -82,10 +89,16 @@ def create_trading_scanner_router(
             runs=repository_factory().list_runs(scanner_id=scanner_id, limit=limit)
         )
 
-    @router.post("/runs/{run_id}/cancel", status_code=202)
-    async def cancel_run(run_id: str):
+    @router.post(
+        "/runs/{run_id}/cancel",
+        response_model=ScannerRunCancelResponse,
+        status_code=202,
+    )
+    async def cancel_run(run_id: str) -> ScannerRunCancelResponse:
         await manager_factory().cancel_run(run_id)
-        return {"ok": True, "run_id": run_id, "status": "cancellation_requested"}
+        return ScannerRunCancelResponse(
+            ok=True, run_id=run_id, status="cancellation_requested"
+        )
 
     @router.get("/runs/{run_id}/results", response_model=ScannerResultListResponse)
     async def list_results(

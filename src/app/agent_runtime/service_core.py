@@ -1,5 +1,6 @@
 """Durable orchestration service for generalized agent runs."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -18,7 +19,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.assistant_tools.repo_adapter import _github_repository_from_remote
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
 from .active_objective import RoutingEnvironment, make_active_objective
@@ -47,7 +48,7 @@ from .contracts import (
     RunChangeSet,
     WorkspaceSpec,
 )
-from .debug_logging import configure_agent_debug_logging, log_agent_activity
+from app.observability.agent_logging import configure_agent_debug_logging, log_agent_activity
 from .pi_runtime import PiAgentRuntime
 from .repository import AgentLeaseConflict, PostgresAgentRunRepository
 from .semantic_task_parser import (
@@ -121,7 +122,7 @@ class _DiffFileStat(TypedDict):
 
 
 def _acceptance_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", "2") or "2").strip()
     try:
         return max(0, min(int(raw), 5))
     except ValueError:
@@ -142,7 +143,7 @@ def _progress_idle_timeout_seconds() -> int:
     # A live worker heartbeat is not agent progress. Keep the recovery window
     # short enough that a Pi turn which ended without a terminal event cannot
     # leave the run looking active for several minutes.
-    raw = str(os.environ.get("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "120") or "120").strip()
+    raw = str(_env_str("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "120") or "120").strip()
     try:
         return max(60, min(int(raw), 86_400))
     except ValueError:
@@ -150,7 +151,7 @@ def _progress_idle_timeout_seconds() -> int:
 
 
 def _stalled_recovery_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_STALLED_RECOVERY_LIMIT", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_STALLED_RECOVERY_LIMIT", "2") or "2").strip()
     try:
         return max(0, min(int(raw), 5))
     except ValueError:
@@ -231,7 +232,7 @@ class AgentRunService:
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
         self.blob_store = blob_store or LocalBlobStore()
         self.runtime = PiAgentRuntime(
-            pi_path=pi_path or os.environ.get("OMNIX_PI_PATH", "pi"),
+            pi_path=pi_path or _env_str("OMNIX_PI_PATH", "pi"),
             event_sink=self._persist_runtime_event,
         )
         self.budgets = AgentBudgetManager(self.database, context=self.context)
@@ -2673,7 +2674,7 @@ class AgentRunService:
         if not workspace.repository or workspace.worktree:
             return spec
         root = Path(
-            os.environ.get(
+            _env_str(
                 "OMNIX_AGENT_WORKTREE_ROOT",
                 str(Path(tempfile.gettempdir()) / "omnix-agent-worktrees"),
             )

@@ -6,11 +6,11 @@ authority; it only derives requirements, captures workspace truth, classifies
 validation evidence and parses structured review evidence.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -252,7 +252,7 @@ def compile_task_engineering_contract(
 
 
 def quality_attempt_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_QUALITY_MAX_ATTEMPTS", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_QUALITY_MAX_ATTEMPTS", "2") or "2").strip()
     try:
         return max(1, min(int(raw), 4))
     except ValueError:

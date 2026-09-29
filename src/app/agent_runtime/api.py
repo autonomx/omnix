@@ -97,7 +97,7 @@ def _service() -> AgentRunService:
     return default_agent_run_service()
 
 
-@router.post("/workspace-picker", response_model=LocalWorkspacePickResponse, include_in_schema=False)
+@router.post("/workspace-picker", response_model=LocalWorkspacePickResponse)
 def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
     host = request.client.host if request.client is not None else None
     origin = request.headers.get("origin")
@@ -242,14 +242,14 @@ def list_agent_artifacts(run_id: str) -> list[AgentArtifact]:
     return _service().artifacts(run_id)
 
 
-@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision], include_in_schema=False)
+@router.get("/{run_id}/task-revisions", response_model=list[TaskRevision])
 def list_agent_task_revisions(run_id: str) -> list[TaskRevision]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().task_revisions(run_id)
 
 
-@router.get("/{run_id}/quality", response_model=dict[str, object], include_in_schema=False)
+@router.get("/{run_id}/quality", response_model=dict[str, object])
 def get_agent_quality_state(run_id: str) -> dict[str, object]:
     try:
         return _service().quality_state(run_id) or {}
@@ -257,35 +257,35 @@ def get_agent_quality_state(run_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
 
 
-@router.get("/{run_id}/quality/validations", response_model=list[ValidationResult], include_in_schema=False)
+@router.get("/{run_id}/quality/validations", response_model=list[ValidationResult])
 def list_agent_validation_results(run_id: str) -> list[ValidationResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().validation_results(run_id)
 
 
-@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult], include_in_schema=False)
+@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult])
 def list_agent_self_review_results(run_id: str) -> list[SelfReviewResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().self_review_results(run_id)
 
 
-@router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult], include_in_schema=False)
+@router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult])
 def list_agent_review_results(run_id: str) -> list[ReviewResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().review_results(run_id)
 
 
-@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt], include_in_schema=False)
+@router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt])
 def list_agent_evidence_receipts(run_id: str) -> list[EvidenceReceipt]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().evidence_receipts(run_id)
 
 
-@router.get("/{run_id}/evidence", response_model=EvidenceSet, include_in_schema=False)
+@router.get("/{run_id}/evidence", response_model=EvidenceSet)
 def get_agent_evidence_set(run_id: str) -> EvidenceSet:
     try:
         return _service().evidence_set(run_id)
@@ -293,7 +293,17 @@ def get_agent_evidence_set(run_id: str) -> EvidenceSet:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
 
 
-@router.get("/{run_id}/events/stream")
+@router.get(
+    "/{run_id}/events/stream",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Agent run events as Server-Sent Events.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 async def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingResponse:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")

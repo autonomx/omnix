@@ -317,7 +317,7 @@ def test_page_regeneration_uses_direction_and_commits_a_new_revision(monkeypatch
         lambda: object(),
     )
     monkeypatch.setattr(
-        "app.rpg.session.genesis.campaign_lore_store.bootstrap_local_tenant",
+        "app.rpg.session.genesis.campaign_lore_store.ensure_local_identity",
         lambda _database: object(),
     )
     monkeypatch.setattr(

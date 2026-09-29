@@ -16,15 +16,27 @@ if str(SRC_DIR) not in sys.path:
 def _client() -> TestClient:
     from app.gateway.main import create_gateway_app
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+        raise_server_exceptions=False,
+    )
 
 
 def test_gateway_rpg_session_list_returns_legacy_envelope() -> None:
-    with patch("app.rpg.session.service.list_sessions", return_value=[{"session_id": "rpg-1"}]):
+    with (
+        patch("app.rpg.session.service.list_sessions", return_value=[{"session_id": "rpg-1"}]),
+        patch("app.rpg.session.new_game.list_rpg_presets", return_value={"presets": []}),
+    ):
         response = _client().post("/api/rpg/session/list")
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True, "sessions": [{"session_id": "rpg-1"}]}
+    assert response.json() == {
+        "ok": True,
+        "sessions": [{"session_id": "rpg-1"}],
+        "presets": [],
+    }
 
 
 def test_gateway_rpg_session_get_requires_session_id() -> None:

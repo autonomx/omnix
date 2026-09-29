@@ -9,10 +9,10 @@ small async bridge that executes the original handler on a worker thread and
 therefore keeps WebSocket frame delivery responsive.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import inspect
-import os
 import time
 from functools import wraps
 from typing import Any, Callable
@@ -47,7 +47,7 @@ BLOCKING_ROUTE_PATHS = frozenset(BLOCKING_ROUTE_METHODS)
 def _log_threshold_ms() -> float:
     try:
         value = float(
-            os.environ.get(
+            _env_str(
                 "OMNIX_BLOCKING_ROUTE_OFFLOAD_LOG_THRESHOLD_MS",
                 str(_DEFAULT_LOG_THRESHOLD_MS),
             )

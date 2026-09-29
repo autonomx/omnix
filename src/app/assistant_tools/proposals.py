@@ -10,8 +10,7 @@ from app.persistence.capability_approval_repository import (
     CapabilityApprovalConflict, CapabilityProposal, PostgresCapabilityApprovalRepository,
 )
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.tenant import TenantContext
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .gate import review_assistant_tool_request
@@ -148,4 +147,4 @@ class AssistantToolProposalService:
 @lru_cache(maxsize=1)
 def default_tool_proposal_service() -> AssistantToolProposalService:
     database = default_database()
-    return AssistantToolProposalService(database, bootstrap_local_tenant(database))
+    return AssistantToolProposalService(database, current_tenant())

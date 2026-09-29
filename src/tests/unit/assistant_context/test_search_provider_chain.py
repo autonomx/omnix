@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.assistant_context.models import AssistantContextItem
+from app.conversation.contracts import AssistantContextItem
 from app.research.policy import ResearchPolicy
 from app.research.provider_chain import (
     ProviderFallbackSearchClient,

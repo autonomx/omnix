@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from functools import wraps
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import ValidationError
@@ -18,8 +18,63 @@ from app.rpg.npc_spatial_campaign_contracts import (
     CampaignNpcSpatialPolicy,
     CampaignNpcSpatialRoutine,
     CampaignSpatialTickRequest,
+    NpcSpatialRoutineStep,
 )
 from app.rpg.npc_spatial_campaign_runtime import advance_campaign_spatial_tick
+
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgSaveCampaignSpatialGoalRequestBody(_TypedRequestModel):
+    goal_id: str = _typed_field(min_length=1)
+    goal_revision: int = _typed_field(default=1, ge=1)
+    actor_id: str = _typed_field(min_length=1)
+    map_instance_id: str = _typed_field(min_length=1)
+    goal_type: Literal["move_to_cell", "transition_via_portal"]
+    target_cell: tuple[int, int] | None = None
+    portal_id: str | None = None
+    target_map_instance_id: str | None = None
+    priority: int = 0
+    issued_tick: int = _typed_field(default=0, ge=0)
+    not_before_tick: int = _typed_field(default=0, ge=0)
+    expires_after_tick: int | None = _typed_field(default=None, ge=0)
+    status: Literal["active", "completed", "blocked", "canceled", "expired"] = "active"
+    routine_id: str | None = None
+    blocked_attempts: int = _typed_field(default=0, ge=0)
+    last_decision: dict[str, Any] = _typed_field(default_factory=dict)
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+    expected_revision: int = _typed_field(default=0, ge=0)
+
+class RpgSaveCampaignSpatialRoutineRequestBody(_TypedRequestModel):
+    routine_id: str = _typed_field(min_length=1)
+    routine_revision: int = _typed_field(default=1, ge=1)
+    actor_id: str = _typed_field(min_length=1)
+    enabled: bool = True
+    interval_ticks: int = _typed_field(default=1, ge=1)
+    steps: tuple[NpcSpatialRoutineStep, ...] = _typed_field(min_length=1)
+    next_step_index: int = _typed_field(default=0, ge=0)
+    emission_count: int = _typed_field(default=0, ge=0)
+    next_due_tick: int = _typed_field(default=0, ge=0)
+    last_issued_tick: int | None = _typed_field(default=None, ge=0)
+    metadata: dict[str, Any] = _typed_field(default_factory=dict)
+    expected_revision: int = _typed_field(default=0, ge=0)
+
+class RpgConfigureCampaignSpatialPolicyRequestBody(_TypedRequestModel):
+    expected_world_tick: int = _typed_field(ge=0)
+    active_actor_budget: int = _typed_field(default=16, ge=1)
+    coarse_actor_budget: int = _typed_field(default=4, ge=1)
+    coarse_tick_interval: int = _typed_field(default=5, ge=1)
+    transition_actor_budget: int = _typed_field(default=4, ge=1)
+    max_blocked_attempts: int = _typed_field(default=3, ge=1)
+
+class RpgAdvanceCampaignSpatialTickRequestBody(_TypedRequestModel):
+    expected_world_tick: int = _typed_field(ge=0)
+    active_map_instance_ids: tuple[str, ...] = ()
+    coarse_map_instance_ids: tuple[str, ...] = ()
+
 
 _ROUTE_SENTINEL = "_omnix_rpg_npc_spatial_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_npc_spatial_route_hook_installed"
@@ -57,13 +112,12 @@ def register_rpg_npc_spatial_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-goals",
-        include_in_schema=False,
     )
-    async def rpg_save_campaign_spatial_goal(
+    def rpg_save_campaign_spatial_goal(
         campaign_id: str,
-        request: Request,
+        request: Request, request_body: RpgSaveCampaignSpatialGoalRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         payload["campaign_id"] = campaign_id
         expected_revision = int(payload.pop("expected_revision", 0))
         try:
@@ -78,13 +132,12 @@ def register_rpg_npc_spatial_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-routines",
-        include_in_schema=False,
     )
-    async def rpg_save_campaign_spatial_routine(
+    def rpg_save_campaign_spatial_routine(
         campaign_id: str,
-        request: Request,
+        request: Request, request_body: RpgSaveCampaignSpatialRoutineRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         payload["campaign_id"] = campaign_id
         expected_revision = int(payload.pop("expected_revision", 0))
         try:
@@ -99,13 +152,12 @@ def register_rpg_npc_spatial_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-policy",
-        include_in_schema=False,
     )
-    async def rpg_configure_campaign_spatial_policy(
+    def rpg_configure_campaign_spatial_policy(
         campaign_id: str,
-        request: Request,
+        request: Request, request_body: RpgConfigureCampaignSpatialPolicyRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         expected_world_tick = int(payload.pop("expected_world_tick", -1))
         if expected_world_tick < 0:
             raise HTTPException(
@@ -125,15 +177,14 @@ def register_rpg_npc_spatial_routes(app: FastAPI) -> None:
 
     @app.post(
         "/api/rpg/campaigns/{campaign_id}/spatial-ticks",
-        include_in_schema=False,
     )
-    async def rpg_advance_campaign_spatial_tick(
+    def rpg_advance_campaign_spatial_tick(
         campaign_id: str,
-        request: Request,
+        request: Request, request_body: RpgAdvanceCampaignSpatialTickRequestBody,
     ) -> dict[str, Any]:
         try:
             tick_request = CampaignSpatialTickRequest.model_validate(
-                _body(await request.json())
+                _body(request_body.model_dump(exclude_unset=True, by_alias=True))
             )
             return advance_campaign_spatial_tick(campaign_id, tick_request)
         except Exception as exc:
@@ -142,7 +193,6 @@ def register_rpg_npc_spatial_routes(app: FastAPI) -> None:
 
     @app.get(
         "/api/rpg/campaigns/{campaign_id}/spatial-state",
-        include_in_schema=False,
     )
     def rpg_read_campaign_spatial_state(
         campaign_id: str,

@@ -83,6 +83,50 @@ from app.rpg.api.rpg_world_routes import (
     update_world_behavior as update_world_behavior,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class GetRpgSessionRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+
+class ExecuteRpgSessionTurnRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, _TypedRequestAny] | None = None
+    runtime_settings: dict[str, _TypedRequestAny] | None = None
+
+class ExecuteRpgSessionTurnStreamRequestBody(_TypedRequestModel):
+    session_id: str | None = None
+    player_input: str | None = None
+    action: dict[str, _TypedRequestAny] | None = None
+    runtime_settings: dict[str, _TypedRequestAny] | None = None
+    performance: dict[str, _TypedRequestAny] | None = None
+
+class ProcessRpgSessionNarrationRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+
+class GetRpgSessionNarrationStatusRequestBody(_TypedRequestModel):
+    session_id: _TypedRequestAny = None
+    turn_id: _TypedRequestAny = None
+
+class PollRpgSessionRequestBody(_TypedRequestModel):
+    after_seq: int | None = 0
+    limit: int | None = 8
+    session_id: _TypedRequestAny = None
+
+class ResumeRpgSessionRequestBody(_TypedRequestModel):
+    elapsed_seconds: int | None = 0
+    session_id: _TypedRequestAny = None
+
+class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
+    conversation_id: _TypedRequestAny = None
+    option_id: _TypedRequestAny = None
+    session_id: _TypedRequestAny = None
+
+
 rpg_session_bp = APIRouter()
 _logger = logging.getLogger(__name__)
 _LIVE_FIRST_DRAFT_TIMEOUT_S = 12.0
@@ -420,8 +464,8 @@ register_rpg_world_routes(rpg_session_bp)
 
 
 @rpg_session_bp.post("/api/rpg/session/get")
-async def get_rpg_session(request: Request):
-    data = await request.json()
+def get_rpg_session(request: Request, request_body: GetRpgSessionRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
@@ -444,8 +488,8 @@ async def get_rpg_session(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/turn")
-async def execute_rpg_session_turn(request: Request):
-    data = await request.json()
+def execute_rpg_session_turn(request: Request, request_body: ExecuteRpgSessionTurnRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
     player_input = _safe_str(normalized.get("player_input")).strip()
@@ -479,8 +523,8 @@ async def execute_rpg_session_turn(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/turn/stream")
-async def execute_rpg_session_turn_stream(request: Request):
-    data = await request.json()
+def execute_rpg_session_turn_stream(request: Request, request_body: ExecuteRpgSessionTurnStreamRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     normalized = _normalize_turn_request(data)
     session_id = _safe_str(normalized.get("session_id")).strip()
     player_input = _safe_str(normalized.get("player_input")).strip()
@@ -812,8 +856,8 @@ async def execute_rpg_session_turn_stream(request: Request):
 # ── Character Card API routes (Bundle BJ-BK-BL) ──────────────────────────────
 
 @rpg_session_bp.post("/api/rpg/session/process_narration")
-async def process_rpg_session_narration(request: Request):
-    data = await request.json()
+def process_rpg_session_narration(request: Request, request_body: ProcessRpgSessionNarrationRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id_required"}, status_code=400)
@@ -823,8 +867,8 @@ async def process_rpg_session_narration(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/narration_status")
-async def get_rpg_session_narration_status(request: Request):
-    data = await request.json()
+def get_rpg_session_narration_status(request: Request, request_body: GetRpgSessionNarrationStatusRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     turn_id = _safe_str(data.get("turn_id")).strip()
 
@@ -977,9 +1021,9 @@ async def get_rpg_session_narration_status(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/poll")
-async def poll_rpg_session(request: Request):
+def poll_rpg_session(request: Request, request_body: PollRpgSessionRequestBody):
     """Poll for pending ambient updates by sequence number."""
-    data = await request.json()
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     after_seq = int(data.get("after_seq", 0) or 0)
     limit = int(data.get("limit", 8) or 8)
@@ -1118,9 +1162,9 @@ async def stream_rpg_session_narration_events(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/resume")
-async def resume_rpg_session(request: Request):
+def resume_rpg_session(request: Request, request_body: ResumeRpgSessionRequestBody):
     """Resume a session with bounded catch-up for elapsed time."""
-    data = await request.json()
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id")).strip()
     elapsed_seconds = int(data.get("elapsed_seconds", 0) or 0)
 
@@ -1225,8 +1269,8 @@ async def resume_rpg_session(request: Request):
 
 
 @rpg_session_bp.post("/api/rpg/session/conversation/intervene")
-async def rpg_session_conversation_intervene(request: Request):
-    data = await request.json()
+def rpg_session_conversation_intervene(request: Request, request_body: RpgSessionConversationInterveneRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True)
     session_id = _safe_str(data.get("session_id"))
     conversation_id = _safe_str(data.get("conversation_id"))
     option_id = _safe_str(data.get("option_id"))

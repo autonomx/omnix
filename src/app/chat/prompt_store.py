@@ -1,12 +1,10 @@
 """Chat store adapter that routes provider generation through PromptAssembly."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-from app.providers.service import get_global_system_prompt, get_provider
-
-from app.providers.service import get_global_system_prompt, get_provider
+from app.providers import service as provider_service
 
 import logging
-import os
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -304,7 +302,7 @@ class ChatSessionStore(JsonChatSessionStore):
         assembly = build_prompt_assembly(
             session,
             user_message,
-            global_system_prompt=get_global_system_prompt(),
+            global_system_prompt=provider_service.get_global_system_prompt(),
             context_items=context_items or [],
             approved_memory=approved_memory,
             retrieved_history=history_result.items if history_result is not None else [],
@@ -594,7 +592,7 @@ class ChatSessionStore(JsonChatSessionStore):
             )
             return agent_provider_boundary_reply(user_message)
 
-        provider = get_provider(_provider_key(provider_id))
+        provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
@@ -692,7 +690,7 @@ class ChatSessionStore(JsonChatSessionStore):
             existing_deadline_at=routing_deadline_at,
         )
 
-        provider = get_provider(_provider_key(provider_id))
+        provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
         assembly, rendered = self.build_provider_prompt(
@@ -770,21 +768,9 @@ class ChatSessionStore(JsonChatSessionStore):
 
 
 def chat_sqlite_store_enabled() -> bool:
-    return (os.environ.get("OMNIX_CHAT_SQLITE_STORE_ENABLED") or "").strip().lower() in {
+    return (_env_str("OMNIX_CHAT_SQLITE_STORE_ENABLED") or "").strip().lower() in {
         "1",
         "true",
         "yes",
         "on",
     }
-
-
-def default_chat_store() -> ChatSessionStore:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_composition import production_chat_store
-        return production_chat_store()
-    if chat_sqlite_store_enabled():
-        from .sqlite_store import InMemoryChatSessionStore
-
-        return InMemoryChatSessionStore()
-    return ChatSessionStore()

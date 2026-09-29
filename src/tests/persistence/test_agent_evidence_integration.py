@@ -26,7 +26,7 @@ from app.agent_runtime.semantic_task import (
 )
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -113,7 +113,7 @@ def _database() -> PostgresDatabase:
 def test_task_revisions_and_evidence_receipts_are_durable_and_recomputable() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"evidence-{uuid.uuid4().hex}"
         policy = EvidencePolicy(
             requirement="required",
@@ -187,7 +187,7 @@ def test_task_revisions_and_evidence_receipts_are_durable_and_recomputable() -> 
 def test_receipt_rolls_back_with_local_capability_transaction() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"rollback-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -229,7 +229,7 @@ def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkey
     )
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"steer-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -297,7 +297,7 @@ def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authorit
     )
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"steer-latest-authority-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -340,7 +340,7 @@ def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authorit
 def test_task_revision_source_command_is_idempotent() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         run_id = f"revision-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
@@ -382,7 +382,7 @@ def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
     database = _database()
     if database is None:
         pytest.skip("requires PostgreSQL integration database")
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     run_id = f"supersede-steer-{uuid.uuid4().hex}"
     initial = AgentRunSpec(
         run_id=run_id,

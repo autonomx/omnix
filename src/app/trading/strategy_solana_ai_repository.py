@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .strategy_repository import StrategyEvent
@@ -33,7 +33,7 @@ class SolanaAIStrategyRepository:
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context or current_tenant()
         self.uow_factory = uow_factory
 
     def _upsert_strategy(self, connection, *, enabled: bool) -> None:

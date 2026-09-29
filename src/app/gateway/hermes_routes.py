@@ -12,7 +12,7 @@ from app.assist_core.hermes_rpg_approved_routes import hermes_rpg_approved_bp
 
 def register_hermes_routes(app: FastAPI) -> None:
     app.include_router(hermes_router)
-    app.include_router(hermes_rpg_approved_bp, include_in_schema=False)
+    app.include_router(hermes_rpg_approved_bp)
 
 
 __all__ = ["register_hermes_routes"]

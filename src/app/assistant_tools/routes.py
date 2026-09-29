@@ -52,7 +52,6 @@ _ASSISTANT_TOOL_ROUTE_NAMES = {
     "assistant_tool_google_callback_endpoint",
     "assistant_tool_github_callback_endpoint",
     "hermes_assistant_tool_review_endpoint",
-    "hermes_assistant_tool_execute_endpoint",
     "propose_assistant_tool_endpoint",
 }
 
@@ -113,11 +112,25 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     async def assistant_tool_oauth_client_endpoint(request: Request, tool_id: str, payload: AssistantToolOAuthClientPayload) -> AssistantToolConnectionStartPayload:
         return save_assistant_tool_oauth_client(tool_id, payload, str(request.base_url).rstrip("/"))
 
-    @app.get("/api/assistant/tools/connect/google/callback", tags=["assistant-tools"])
+    @app.get(
+        "/api/assistant/tools/connect/google/callback",
+        response_model=None,
+        response_class=RedirectResponse,
+        status_code=303,
+        responses={303: {"description": "OAuth result redirect back to the web client."}},
+        tags=["assistant-tools"],
+    )
     async def assistant_tool_google_callback_endpoint(request: Request, code: str = "", state: str = "gmail") -> RedirectResponse:
         return _assistant_tool_connection_redirect(complete_google_connection(code, state, str(request.base_url).rstrip("/")))
 
-    @app.get("/api/assistant/tools/connect/github/callback", tags=["assistant-tools"])
+    @app.get(
+        "/api/assistant/tools/connect/github/callback",
+        response_model=None,
+        response_class=RedirectResponse,
+        status_code=303,
+        responses={303: {"description": "OAuth result redirect back to the web client."}},
+        tags=["assistant-tools"],
+    )
     async def assistant_tool_github_callback_endpoint(request: Request, code: str = "", state: str = "github") -> RedirectResponse:
         return _assistant_tool_connection_redirect(complete_github_connection(code, state, str(request.base_url).rstrip("/")))
 
@@ -125,17 +138,36 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
     async def hermes_assistant_tool_review_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolReviewPayload:
         return hermes_assistant_tool_review_payload(request.user_request, request.request)
 
-    @app.post("/api/hermes/assistant/tools/execute", response_model=HermesAssistantToolExecutePayload, tags=["internal"], include_in_schema=False, dependencies=[Depends(require_service_token)])
-    async def hermes_assistant_tool_execute_endpoint(request: HermesAssistantToolRequestEnvelope, service: AssistantToolProposalService = Depends(default_tool_proposal_service)) -> HermesAssistantToolExecutePayload:
+
+
+def register_assistant_tool_internal_routes(app: FastAPI) -> None:
+    if any(getattr(route, "name", "") == "hermes_assistant_tool_execute_endpoint" for route in app.routes):
+        return
+
+    @app.post(
+        "/api/hermes/assistant/tools/execute",
+        response_model=HermesAssistantToolExecutePayload,
+        tags=["internal"],
+        dependencies=[Depends(require_service_token)],
+    )
+    async def hermes_assistant_tool_execute_endpoint(
+        request: HermesAssistantToolRequestEnvelope,
+        service: AssistantToolProposalService = Depends(default_tool_proposal_service),
+    ) -> HermesAssistantToolExecutePayload:
         # Browser actions can navigate to the gateway itself. Keep the
         # synchronous adapter and ledger work off the event loop so that
         # browser.open cannot deadlock while waiting for this gateway to serve
         # the target page.
         if not request.request.proposal_id:
             raise HTTPException(status_code=422, detail="proposal_id_required")
-        return await asyncio.to_thread(_proposal_operation, lambda: service.execute(
-            request.request.proposal_id, expected_request=request.request, user_request=request.user_request,
-        ))
+        return await asyncio.to_thread(
+            _proposal_operation,
+            lambda: service.execute(
+                request.request.proposal_id,
+                expected_request=request.request,
+                user_request=request.user_request,
+            ),
+        )
 
 
 def _proposal_operation(operation):

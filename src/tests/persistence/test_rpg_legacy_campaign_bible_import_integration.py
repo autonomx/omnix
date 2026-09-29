@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.contracts import (
@@ -171,7 +171,7 @@ def test_persisted_campaign_bible_imports_once_without_rebinding_campaign() -> N
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         campaign_id = "campaign:legacy-import"
         document = _bible_document(campaign_id)
         completeness = dict(document["completeness"])

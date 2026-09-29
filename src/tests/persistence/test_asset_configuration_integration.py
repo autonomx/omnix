@@ -18,7 +18,7 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 
@@ -57,7 +57,7 @@ def test_asset_metadata_and_blob_lifecycle(tmp_path: Path) -> None:
     store = LocalBlobStore(tmp_path / "blobs")
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         asset = create_asset(
             database,
             store,
@@ -97,7 +97,7 @@ def test_asset_queries_are_tenant_scoped(tmp_path: Path) -> None:
     store = LocalBlobStore(tmp_path / "blobs")
     try:
         _reset(database)
-        local = bootstrap_local_tenant(database)
+        local = ensure_local_identity(database)
         create_asset(
             database,
             store,
@@ -136,7 +136,7 @@ def test_settings_are_revisioned_and_secret_values_are_not_stored() -> None:
     database = _database()
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         created = put_setting(
             database,
             context,
@@ -214,7 +214,7 @@ def test_legacy_manifest_import_is_idempotent_and_reports_missing(tmp_path: Path
     )
     try:
         _reset(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         preview = import_legacy_asset_manifest(
             database, store, context, manifest, dry_run=True
         )

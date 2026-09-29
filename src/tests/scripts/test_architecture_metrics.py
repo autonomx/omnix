@@ -87,6 +87,50 @@ def test_each_source_metric_detector(key, sources, expected):
     assert result["metrics"][key]["value"] == expected
 
 
+def test_only_exact_documented_stream_route_is_exempt_from_schema_metric():
+    source = {
+        APP + "gateway/events.py": "@app.get('/events', include_in_schema=False)\ndef events():\n    return response",
+        "docs/architecture/api-transport-exceptions.md": (
+            "| Source | Method | Route path | Transport |\n"
+            "|---|---|---|---|\n"
+            "| `src/app/gateway/events.py` | GET | `/events` | Server-Sent Events |\n"
+        ),
+    }
+    result = observed(source)
+    assert result["metrics"]["schema_excluded_routes"]["value"] == 0
+
+    source["docs/architecture/api-transport-exceptions.md"] = source[
+        "docs/architecture/api-transport-exceptions.md"
+    ].replace("GET", "POST")
+    result = observed(source)
+    assert result["metrics"]["schema_excluded_routes"]["value"] == 1
+
+
+def test_raw_request_body_parsing_is_not_a_typed_body_contract():
+    result = observed({
+        APP + "gateway/a.py": (
+            "from fastapi import Request\n"
+            "@app.post('/api/a')\n"
+            "async def route(request: Request):\n"
+            "    return await request.json()\n"
+        ),
+    })
+    assert result["metrics"]["untyped_body_routes"]["value"] == 1
+
+    result = observed({
+        APP + "gateway/a.py": (
+            "from fastapi import Request\n"
+            "from pydantic import BaseModel\n"
+            "class Payload(BaseModel):\n"
+            "    value: int\n"
+            "@app.post('/api/a')\n"
+            "async def route(request: Request, payload: Payload):\n"
+            "    return payload\n"
+        ),
+    })
+    assert result["metrics"]["untyped_body_routes"]["value"] == 0
+
+
 def test_scorecard_covers_every_roadmap_metric():
     roadmap = (SCRIPTS.parent / "docs/ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md").read_text(encoding="utf-8")
     appendix = roadmap.split("### Appendix E", 1)[1].split("### Appendix F", 1)[0]

@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import (
@@ -97,7 +97,7 @@ def _put_topic(
     draft_revision: int,
     label: str,
 ) -> dict:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     content = {
         "topic_id": "realm",
         "documents": [],
@@ -128,7 +128,7 @@ def _finish_run(
     database: PostgresDatabase,
     run_id: str,
 ) -> dict:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     with unit_of_work(database) as work:
         completed = work.world_generation.update(
             context,
@@ -251,7 +251,7 @@ def test_topic_drafts_are_preserved_restorable_and_link_generation_runs() -> Non
         assert history2[0]["content_hash"] == changed["content_hash"]
         assert history3[0]["content"]["label"] == "original"
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             current_world = work.world_scenarios.get_world(context, world_id)
             current_topics = work.world_generation.list_topics(

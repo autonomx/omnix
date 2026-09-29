@@ -11,9 +11,9 @@ from app.gateway.rpg_turn_job_mirror import (
     _apply_turn_with_job_mirror,
     _submission_lock_count,
 )
-from app.jobs.rpg_last10_report_debug import build_turn_debug_payload
-from app.jobs.store import InMemoryJobStore
+from app.rpg.jobs.last10_report_debug import build_turn_debug_payload
 from app.rpg.presentation.turn_response import build_turn_response_v2
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 _FORBIDDEN_GRAPH_KEYS = {
     "session",

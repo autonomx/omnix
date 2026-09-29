@@ -7,13 +7,20 @@ from PIL import Image
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
 from app.gateway.main import create_gateway_app
-import app.gateway.image_asset_routes as image_asset_routes
 
 
 def _store_with_asset(tmp_path, asset: AssetRecord) -> SharedAssetStore:
     store = SharedAssetStore(tmp_path / "assets.json")
     store.upsert_asset(asset)
     return store
+
+
+def _client(app):
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
 
 
 def test_image_asset_file_is_served_by_asset_id_with_cache_headers(tmp_path, monkeypatch) -> None:
@@ -30,8 +37,7 @@ def test_image_asset_file_is_served_by_asset_id_with_cache_headers(tmp_path, mon
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(asset_store_factory=lambda: store))
 
     response = client.get("/api/assets/image:test/file")
 
@@ -74,8 +80,7 @@ def test_browser_preview_normalizes_transparent_png_without_changing_download(tm
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(asset_store_factory=lambda: store))
 
     preview = client.get("/api/assets/image:z-transparent/file?preview=true")
 
@@ -115,9 +120,9 @@ def test_image_asset_file_uses_direct_lookup_beyond_list_page(tmp_path, monkeypa
         def get_asset(self, asset_id: str):
             return asset if asset_id == asset.id else None
 
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", PaginatedStore)
-
-    response = TestClient(create_gateway_app()).get("/api/assets/image:older-avatar/file")
+    response = _client(
+        create_gateway_app(asset_store_factory=PaginatedStore)
+    ).get("/api/assets/image:older-avatar/file")
 
     assert response.status_code == 200
     assert response.content == b"OLDAVATAR"
@@ -138,9 +143,9 @@ def test_immutable_asset_uses_long_lived_cache_policy(tmp_path, monkeypatch) -> 
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
-
-    response = TestClient(create_gateway_app()).get("/api/assets/image:immutable/file")
+    response = _client(
+        create_gateway_app(asset_store_factory=lambda: store)
+    ).get("/api/assets/image:immutable/file")
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
@@ -160,8 +165,7 @@ def test_image_asset_file_allows_only_trusted_svg(tmp_path, monkeypatch) -> None
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: untrusted)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(asset_store_factory=lambda: untrusted))
 
     rejected = client.get("/api/assets/image:svg-untrusted/file")
 
@@ -180,7 +184,7 @@ def test_image_asset_file_allows_only_trusted_svg(tmp_path, monkeypatch) -> None
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: trusted)
+    client = _client(create_gateway_app(asset_store_factory=lambda: trusted))
     accepted = client.get("/api/assets/image:svg-trusted/file")
 
     assert accepted.status_code == 200
@@ -202,9 +206,9 @@ def test_image_asset_file_allows_legacy_curated_svg(tmp_path, monkeypatch) -> No
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
-
-    response = TestClient(create_gateway_app()).get("/api/assets/image:legacy-curated-map/file")
+    response = _client(
+        create_gateway_app(asset_store_factory=lambda: store)
+    ).get("/api/assets/image:legacy-curated-map/file")
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/svg+xml"
@@ -224,8 +228,7 @@ def test_image_asset_file_rejects_non_image(tmp_path, monkeypatch) -> None:
             created_at="2026-01-01T00:00:00+00:00",
         ),
     )
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: store)
-    client = TestClient(create_gateway_app())
+    client = _client(create_gateway_app(asset_store_factory=lambda: store))
 
     response = client.get("/api/assets/audio:test/file")
 

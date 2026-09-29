@@ -7,7 +7,6 @@ from collections.abc import Callable
 from functools import lru_cache
 from typing import Any
 
-from app.assistant_memory import MemoryService, default_memory_service
 from app.chat.character_store import _CharacterSessionMixin
 from app.chat.compaction import ConversationSummary
 from app.chat.history_search import HistorySearchResult, HistorySearchStatus
@@ -146,14 +145,16 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self,
         path: Any = None,
         *,
-        memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+        memory_service_factory: Callable[[], Any] | None = None,
+        memory_settings_factory: Callable[[], Any] | None = None,
         history_search_factory: Callable[[], PostgresHistorySearchService] = PostgresHistorySearchService,
         summary_repository_factory: Callable[[], PostgresConversationSummaryRepository] = PostgresConversationSummaryRepository,
     ) -> None:
         if path is not None:
             raise RuntimeError("file-backed chat authority is retired; use the legacy importer")
         self.path = None
-        self.memory_service_factory = memory_service_factory
+        self.memory_service_factory = memory_service_factory or _missing_memory_service
+        self.memory_settings_factory = memory_settings_factory or _missing_memory_settings
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
         self._repository = PostgresChatRepositoryAdapter()
@@ -163,13 +164,12 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         return self._repository.load_sessions()
 
     def transcript_retention_allowed(self, session):
-        from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
         from app.chat.retention_policy import transcript_retention_allowed
 
-        documents = PostgresDocumentStore(self._repository.database, context=self._repository.context)
-        payload = documents.read(module='assistant-memory', record_type='runtime-settings', default={})
-        settings = AssistantMemoryRuntimeSettings.model_validate(payload or {})
-        return transcript_retention_allowed(session, settings=settings)
+        return transcript_retention_allowed(
+            session,
+            settings=self.memory_settings_factory(),
+        )
 
     def list_sessions(self) -> ChatSessionListResponse:
         return ChatSessionListResponse(
@@ -226,11 +226,26 @@ def default_history_search_service() -> PostgresHistorySearchService:
 
 
 @lru_cache(maxsize=1)
-def default_chat_store() -> PostgresCharacterChatSessionStore:
+def default_chat_store(
+    *,
+    store_class: type[PostgresCharacterChatSessionStore] | None = None,
+    memory_service_factory: Callable[[], Any] | None = None,
+    memory_settings_factory: Callable[[], Any] | None = None,
+) -> PostgresCharacterChatSessionStore:
     """Reuse the authoritative chat store instead of re-running startup checks per request."""
-    return PostgresCharacterChatSessionStore(
+    return (store_class or PostgresCharacterChatSessionStore)(
         history_search_factory=default_history_search_service,
+        memory_service_factory=memory_service_factory,
+        memory_settings_factory=memory_settings_factory,
     )
+
+
+def _missing_memory_service() -> Any:
+    raise RuntimeError("assistant-memory service was not supplied by the composition root")
+
+
+def _missing_memory_settings() -> Any:
+    raise RuntimeError("assistant-memory settings were not supplied by the composition root")
 
 
 def reset_default_chat_runtime_caches() -> None:

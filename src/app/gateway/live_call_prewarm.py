@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from app.config.access import load_settings
+from app.settings.access import load_settings
 from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSessionStore, default_chat_store
 from app.chat.store import _model_key, _provider_key
@@ -136,7 +136,6 @@ def register_live_call_prewarm_routes(
 
     @app.post(
         "/api/live-call/sessions/{session_id}/prewarm",
-        include_in_schema=False,
     )
     async def prewarm_live_call(
         session_id: str,

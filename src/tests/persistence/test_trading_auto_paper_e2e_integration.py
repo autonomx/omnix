@@ -15,7 +15,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.trading import strategy_monitor as strategy_monitor_module
 from app.trading import trading_data_hardening as hardening_module
@@ -387,7 +387,7 @@ def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_posit
 
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
 
         def uow_factory():
             return unit_of_work(database)

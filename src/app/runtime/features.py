@@ -14,7 +14,7 @@ from .config import RuntimeConfig
 from .hooks import RuntimeHookSpec
 
 if TYPE_CHECKING:
-    from app.runtime.contracts import AssetService, ChatService, JobService, ModelResidencyService
+    from app.runtime.contracts import KernelServices
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,13 +31,13 @@ class FeatureContext:
     config: BaseModel | None
     runtime: RuntimeConfig
     capabilities: RuntimeCapabilities
-    services: Any
+    services: "KernelServices"
     logger: logging.Logger
+    runtime_state: Any = None
 
 
 RouterFactory = Callable[[FeatureContext], APIRouter]
-BackgroundWorkerFactory = Callable[[FeatureContext], BackgroundWorker]
-GatewayInstaller = Callable[[Any, FeatureContext], None]
+BackgroundWorkerFactory = Callable[[FeatureContext], BackgroundWorker | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +48,6 @@ class FeatureModule:
     depends_on: tuple[str, ...] = ()
     config_model: type[BaseModel] | None = None
     routers: tuple[RouterFactory, ...] = ()
-    installers: tuple[GatewayInstaller, ...] = ()
     internal_routers: tuple[RouterFactory, ...] = ()
     job_handlers: tuple[Any, ...] = ()
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()

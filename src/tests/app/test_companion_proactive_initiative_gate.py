@@ -5,9 +5,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.characters import api as character_api
-from app.characters.api import register_character_routes
 from app.companion_activity.initiative import CompanionInitiativeAuthority
+from app.gateway import character_integration_routes
 
 
 class FakeChatStore:
@@ -24,7 +23,7 @@ class FakeChatStore:
 
 def client(authority: CompanionInitiativeAuthority) -> TestClient:
     app = FastAPI()
-    register_character_routes(
+    character_integration_routes.register_character_integration_routes(
         app,
         chat_store_factory=FakeChatStore,
         initiative_authority_factory=lambda: authority,
@@ -53,7 +52,7 @@ def fake_stream(_store, _session, *, initiative_reason: str, **_kwargs):
 
 def test_proactive_generation_is_serialized_and_critical_can_preempt(monkeypatch) -> None:
     authority = CompanionInitiativeAuthority()
-    monkeypatch.setattr(character_api, "stream_proactive_turn_chunks", fake_stream)
+    monkeypatch.setattr(character_integration_routes, "stream_proactive_turn_chunks", fake_stream)
     http = client(authority)
 
     first = http.post(

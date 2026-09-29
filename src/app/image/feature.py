@@ -1,37 +1,59 @@
-"""Image feature declaration."""
+"""Image FeatureModule declaration."""
 from __future__ import annotations
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerSpec
 from app.jobs.image_contracts import ImageGenerateInput
-from app.jobs.models import ResourceClass
-from app.runtime.features import FeatureModule
+from app.jobs.models import CreateJobRequest, ResourceClass
+from app.platform.effective_defaults import apply_job_defaults
+from app.runtime.features import FeatureContext, FeatureModule
 
 from .jobs import execute_image_job
+from .routes.assets import create_image_asset_file_router
+from .routes.models import create_image_model_router
+from .routes.references import create_image_reference_router
+from .routes.workspace import create_image_workspace_router
 
 
 def _execute(context: JobExecutionContext, job):
     return execute_image_job(context.job_store, job)
 
 
-
-from app.runtime.gateway_installer import install_registrars
-
-
-def _install_gateway(gateway, context):
-    install_registrars(
-        gateway,
-        context,
-        (
-            ("app.gateway.image_asset_routes", "register_image_asset_file_route"),
-            ("app.gateway.image_reference_routes", "register_image_reference_routes"),
-            ("app.gateway.image_workspace_routes", "register_image_workspace_routes"),
-        ),
+def _submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
+    return CreateJobRequest.model_validate(
+        apply_job_defaults(request.model_dump(mode="python"))
     )
+
+
+def _model_router(_context: FeatureContext):
+    return create_image_model_router()
+
+
+def _asset_file_router(context: FeatureContext):
+    assets = context.services.assets
+    if assets is None:
+        raise RuntimeError("image feature requires the asset service")
+    return create_image_asset_file_router(assets)
+
+
+def _reference_router(context: FeatureContext):
+    assets = context.services.assets
+    if assets is None:
+        raise RuntimeError("image feature requires the asset service")
+    return create_image_reference_router(assets)
+
+
+def _workspace_router(context: FeatureContext):
+    assets = context.services.assets
+    jobs = context.services.jobs
+    if assets is None or jobs is None:
+        raise RuntimeError("image feature requires asset and job services")
+    return create_image_workspace_router(jobs, assets)
+
 
 FEATURE = FeatureModule(
     id="image",
     title="Images",
-    installers=(_install_gateway,),
+    routers=(_model_router, _asset_file_router, _reference_router, _workspace_router),
     job_handlers=(
         JobHandlerSpec(
             type="image.generate",
@@ -40,6 +62,7 @@ FEATURE = FeatureModule(
             resource_class=ResourceClass.GPU_IMAGE,
             timeout_seconds=600,
             max_attempts=3,
+            submission_policy=_submission_defaults,
         ),
     ),
 )

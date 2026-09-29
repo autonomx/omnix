@@ -49,16 +49,21 @@ def chat_store(database, store, monkeypatch):
     monkeypatch.setattr(
         fast,
         "default_assistant_turn_coordinator",
-        lambda: SimpleNamespace(get=lambda _: None),
+        lambda *_args: SimpleNamespace(get=lambda _: None),
     )
 
-    def begin(session, message, request):
+    def begin(session, message, request, **_kwargs):
         message.metadata["user_turn_id"] = request.user_turn_id
 
     monkeypatch.setattr(fast, "_start_assistant_turn", begin)
-    chat = PostgresCharacterChatSessionStore.__new__(PostgresCharacterChatSessionStore)
+    chat = fast.FastPathPostgresCharacterChatSessionStore.__new__(
+        fast.FastPathPostgresCharacterChatSessionStore
+    )
     chat._repository = PostgresChatRepositoryAdapter(database)
     chat._repository.context = store.context
+    from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+
+    chat.memory_settings_factory = AssistantMemoryRuntimeSettings
     chat._run_post_turn_maintenance = lambda *args: None
     chat._generate_reply = lambda *args, **kwargs: {
         "content": "A durable reply",
@@ -137,12 +142,22 @@ def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
 
 def test_runtime_schema_verification_does_not_acquire_migration_lock_in_chat_transaction(runtime, monkeypatch):
     from app.persistence import migrations
+    from app.persistence.runtime import ensure_postgresql_runtime_ready
 
     database, _, _ = runtime
-    monkeypatch.setattr(migrations, '_acquire_migration_lock', lambda _: (_ for _ in ()).throw(AssertionError('migration lock in domain transaction')))
+    monkeypatch.setattr(
+        migrations,
+        "apply_migrations",
+        lambda *_args, **_kwargs: pytest.fail("runtime readiness attempted schema mutation"),
+    )
     with unit_of_work(database) as work:
         with share_transaction(work):
-            assert migrations.apply_migrations(database)['applied_now'] == []
+            status = ensure_postgresql_runtime_ready(
+                database,
+                auto_initialize_fresh_install=False,
+                apply_schema_changes=False,
+            )
+            assert status.ready is True
         work.rollback()
 
 

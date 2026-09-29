@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.assistant_memory.persistence import settings_store as memory_store
-from app.assistant_memory.settings import AssistantMemorySettingsUpdate
 from app.assistant_tools.ledger import AssistantToolLedgerEntry
 from app.assistant_tools.persistence import runtime_documents as tool_documents
 from app.assist_core.persistence import house_state as house_state_store
 from app.characters.live_conversation_profile import LiveConversationProfileUpdate
 from app.characters.persistence import live_profile_store
 from app.chat.persistence import assistant_turn_store, legacy_sessions
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 
 
 class _Documents:
@@ -52,7 +50,6 @@ def test_feature_owned_runtime_documents(monkeypatch) -> None:
     monkeypatch.setattr(legacy_sessions, "PostgresDocumentStore", lambda: documents)
     monkeypatch.setattr(house_state_store, "PostgresDocumentStore", lambda: documents)
     monkeypatch.setattr(assistant_turn_store, "PostgresDocumentStore", lambda: documents)
-    monkeypatch.setattr(memory_store, "PostgresDocumentStore", lambda: documents)
     monkeypatch.setattr(live_profile_store, "PostgresDocumentStore", lambda: documents)
     monkeypatch.setattr(tool_documents, "PostgresDocumentStore", lambda: documents)
 
@@ -74,10 +71,6 @@ def test_feature_owned_runtime_documents(monkeypatch) -> None:
         record_type="assistant-turn",
         record_id=turn.assistant_turn_id,
     )
-
-    memory = memory_store.PostgresAssistantMemorySettingsStore()
-    memory.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
-    assert memory.load_persisted().suggestions_enabled is True
 
     profiles = live_profile_store.PostgresLiveConversationProfileStore()
     profiles.update_defaults(LiveConversationProfileUpdate(talkativeness=61))

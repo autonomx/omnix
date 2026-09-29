@@ -5,6 +5,8 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
+from app.memory_policy import sensitivity_allows, strongest_sensitivity, weakest_trust
+
 from .contracts import (
     DerivedPolicyEnvelope,
     Observation,
@@ -13,18 +15,6 @@ from .contracts import (
     VisibilityScope,
 )
 
-_SENSITIVITY_RANK: dict[Sensitivity, int] = {
-    "normal": 0,
-    "sensitive": 1,
-    "secret": 2,
-}
-_TRUST_RANK: dict[TrustLevel, int] = {
-    "external_untrusted": 0,
-    "imported_unverified": 1,
-    "assistant_inference": 2,
-    "user_explicit": 3,
-    "system_trusted": 3,
-}
 _SCOPE_RANK = {"global": 0, "workspace": 1, "project": 2, "session": 3}
 
 
@@ -61,43 +51,6 @@ def visibility_satisfied(
 
     available = {(scope.kind, scope.scope_id) for scope in visible}
     return all((scope.kind, scope.scope_id) in available for scope in required)
-
-
-def sensitivity_allows(candidate: Sensitivity, maximum: Sensitivity) -> bool:
-    return _SENSITIVITY_RANK[candidate] <= _SENSITIVITY_RANK[maximum]
-
-
-def weakest_trust(
-    values: Iterable[TrustLevel],
-    *,
-    cap_derived_at_assistant_inference: bool = False,
-) -> TrustLevel:
-    """Return the least trusted input under the canonical Memory v2 ordering.
-
-    When ``cap_derived_at_assistant_inference`` is true, even exclusively explicit/trusted
-    inputs produce at most assistant-inference trust. This is the rule used for semantic
-    derivations. Direct independently sourced propositions can leave the cap disabled.
-    """
-
-    candidates = tuple(values)
-    if not candidates:
-        return "assistant_inference"
-    weakest = min(candidates, key=lambda item: _TRUST_RANK[item])
-    if (
-        cap_derived_at_assistant_inference
-        and _TRUST_RANK[weakest] > _TRUST_RANK["assistant_inference"]
-    ):
-        return "assistant_inference"
-    return weakest
-
-
-def strongest_sensitivity(values: Iterable[Sensitivity]) -> Sensitivity:
-    """Return the most restrictive sensitivity under the canonical Memory v2 ordering."""
-
-    candidates = tuple(values)
-    if not candidates:
-        return "normal"
-    return max(candidates, key=lambda item: _SENSITIVITY_RANK[item])
 
 
 def _effective_trust(

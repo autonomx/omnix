@@ -12,7 +12,7 @@ from .hermes_rpg_approved_routes import hermes_rpg_approved_bp
 def _router(_context: FeatureContext) -> APIRouter:
     router = APIRouter()
     router.include_router(hermes_router)
-    router.include_router(hermes_rpg_approved_bp, include_in_schema=False)
+    router.include_router(hermes_rpg_approved_bp)
     return router
 
 

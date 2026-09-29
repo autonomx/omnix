@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.worlds.contracts import WorldReleaseDocument, WorldRevisionDocument
@@ -70,7 +70,7 @@ def _seed_campaign(
     world_id: str,
     campaign_id: str,
 ) -> None:
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     source_revision = compile_world_revision(
         world_id=world_id,
         revision=1,
@@ -303,7 +303,7 @@ def test_materialization_worker_retries_then_dead_letters_terminal_failure() -> 
         assert telemetry["failed_location_ids"] == [
             "location:old-road:frontier"
         ]
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             attempts = work.connection.execute(
                 "SELECT status FROM omnix_job_attempts ORDER BY attempt"

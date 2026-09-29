@@ -26,6 +26,61 @@ from app.rpg.creator.world_replay import (
 )
 from app.rpg.creator.world_simulation import step_simulation_state
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class DebugNpcRequestBody(_TypedRequestModel):
+    npc_id: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugFactionRequestBody(_TypedRequestModel):
+    faction_id: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugStepRequestBody(_TypedRequestModel):
+    count: int | None = 1
+    setup_payload: _TypedRequestAny = None
+
+class DebugInjectEventRequestBody(_TypedRequestModel):
+    event: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugSeedRumorRequestBody(_TypedRequestModel):
+    rumor: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugForceAllianceRequestBody(_TypedRequestModel):
+    alliance: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugForceFactionPositionRequestBody(_TypedRequestModel):
+    faction_id: _TypedRequestAny = None
+    position: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+
+class DebugForceNpcBeliefRequestBody(_TypedRequestModel):
+    belief_patch: _TypedRequestAny = None
+    npc_id: _TypedRequestAny = None
+    setup_payload: _TypedRequestAny = None
+    target_id: _TypedRequestAny = None
+
+class DebugSnapshotRequestBody(_TypedRequestModel):
+    setup_payload: _TypedRequestAny = None
+    snapshot_id: _TypedRequestAny = None
+
+class DebugRollbackRequestBody(_TypedRequestModel):
+    setup_payload: _TypedRequestAny = None
+    snapshot_id: _TypedRequestAny = None
+
+class RpgLogEndpointRequestBody(_TypedRequestModel):
+    payload: _TypedRequestAny = None
+    tag: str | None = 'frontend_log'
+    timestamp: _TypedRequestAny = None
+
+
 rpg_debug_bp = APIRouter()
 
 
@@ -62,8 +117,8 @@ async def debug_state(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/npc")
-async def debug_npc(request: Request):
-    data = await request.json() or {}
+def debug_npc(request: Request, request_body: DebugNpcRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     state = _get_simulation_state(setup_payload)
@@ -71,8 +126,8 @@ async def debug_npc(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/faction")
-async def debug_faction(request: Request):
-    data = await request.json() or {}
+def debug_faction(request: Request, request_body: DebugFactionRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     faction_id = str(data.get("faction_id") or "")
     state = _get_simulation_state(setup_payload)
@@ -80,8 +135,8 @@ async def debug_faction(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/step")
-async def debug_step(request: Request):
-    data = await request.json() or {}
+def debug_step(request: Request, request_body: DebugStepRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     count = int(data.get("count", 1) or 1)
     result = step_ticks(setup_payload, step_simulation_state, count=count)
@@ -90,8 +145,8 @@ async def debug_step(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/inject_event")
-async def debug_inject_event(request: Request):
-    data = await request.json() or {}
+def debug_inject_event(request: Request, request_body: DebugInjectEventRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     event = dict(data.get("event") or {})
     state = _get_simulation_state(setup_payload)
@@ -101,8 +156,8 @@ async def debug_inject_event(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/seed_rumor")
-async def debug_seed_rumor(request: Request):
-    data = await request.json() or {}
+def debug_seed_rumor(request: Request, request_body: DebugSeedRumorRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     rumor = dict(data.get("rumor") or {})
     state = _get_simulation_state(setup_payload)
@@ -112,8 +167,8 @@ async def debug_seed_rumor(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/force_alliance")
-async def debug_force_alliance(request: Request):
-    data = await request.json() or {}
+def debug_force_alliance(request: Request, request_body: DebugForceAllianceRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     alliance = dict(data.get("alliance") or {})
     state = _get_simulation_state(setup_payload)
@@ -123,8 +178,8 @@ async def debug_force_alliance(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/force_faction_position")
-async def debug_force_faction_position(request: Request):
-    data = await request.json() or {}
+def debug_force_faction_position(request: Request, request_body: DebugForceFactionPositionRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     faction_id = str(data.get("faction_id") or "")
     position = dict(data.get("position") or {})
@@ -135,8 +190,8 @@ async def debug_force_faction_position(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/force_npc_belief")
-async def debug_force_npc_belief(request: Request):
-    data = await request.json() or {}
+def debug_force_npc_belief(request: Request, request_body: DebugForceNpcBeliefRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     npc_id = str(data.get("npc_id") or "")
     target_id = str(data.get("target_id") or "")
@@ -155,8 +210,8 @@ async def debug_snapshots(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/snapshot")
-async def debug_snapshot(request: Request):
-    data = await request.json() or {}
+def debug_snapshot(request: Request, request_body: DebugSnapshotRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     snapshot_id = str(data.get("snapshot_id") or "")
     state = _get_simulation_state(setup_payload)
@@ -164,8 +219,8 @@ async def debug_snapshot(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/debug/rollback")
-async def debug_rollback(request: Request):
-    data = await request.json() or {}
+def debug_rollback(request: Request, request_body: DebugRollbackRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     setup_payload = dict(data.get("setup_payload") or {})
     snapshot_id = str(data.get("snapshot_id") or "")
     state = _get_simulation_state(setup_payload)
@@ -175,8 +230,8 @@ async def debug_rollback(request: Request):
 
 
 @rpg_debug_bp.post("/api/rpg/log")
-async def rpg_log_endpoint(request: Request):
-    data = await request.json() or {}
+def rpg_log_endpoint(request: Request, request_body: RpgLogEndpointRequestBody):
+    data = request_body.model_dump(exclude_unset=True, by_alias=True) or {}
     write_rpg_log(
         message=data.get("tag", "frontend_log"),
         extra={

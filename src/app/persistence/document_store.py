@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from .database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.runtime.tenant_context import current_tenant
 
 
 def _json(value: Any) -> str:

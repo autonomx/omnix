@@ -11,8 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_memory_v2.contracts import Sensitivity, TrustLevel
-from app.assistant_memory_v2.policy import strongest_sensitivity, weakest_trust
+from app.memory_policy import Sensitivity, TrustLevel, strongest_sensitivity, weakest_trust
 
 EvidenceRelation = Literal[
     "supports",

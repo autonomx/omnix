@@ -14,7 +14,7 @@ from app.jobs import (
     default_job_store,
 )
 
-from .models import MemoryCandidate, MemoryRecord
+from app.memory_contracts import MemoryCandidate, MemoryRecord
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope
@@ -25,7 +25,7 @@ from .structured_extraction import extract_structured_memory_proposals
 from .structured_provider import StructuredProposalProvider
 
 if TYPE_CHECKING:
-    from app.chat import ChatSessionStore
+    from app.conversation.contracts import ChatSessionReader
 
 MEMORY_SUGGEST_JOB_TYPE = "assistant.memory.suggest"
 MEMORY_IMPORT_JOB_TYPE = "assistant.memory.import"
@@ -147,7 +147,7 @@ def _complete_result(
 def process_memory_suggestion_job(
     job: JobRecord,
     *,
-    chat_store: ChatSessionStore,
+    chat_store: ChatSessionReader,
     memory_service: MemoryService | None = None,
     job_store: Any | None = None,
     proposal_provider: StructuredProposalProvider | None = None,

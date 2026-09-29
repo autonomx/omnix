@@ -5,8 +5,8 @@ failed before yielding any text. Retries are deliberately disabled after the
 first text chunk so a partially delivered answer can never be duplicated.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import time
 from collections.abc import Callable, Iterator
 from functools import wraps
@@ -33,7 +33,7 @@ class EmptyProviderStreamError(RuntimeError):
 def _stream_attempts() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_LIVE_CHAT_STREAM_ATTEMPTS",
                 str(_DEFAULT_STREAM_ATTEMPTS),
             )
@@ -46,7 +46,7 @@ def _stream_attempts() -> int:
 
 def _configured_delay_ms(name: str, default: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)) or default)
+        value = float(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(0.0, min(_MAX_CONFIGURED_DELAY_MS, value))

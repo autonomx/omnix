@@ -1,10 +1,10 @@
 """End-to-end profile-first World Forge pipeline used before campaign launch."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import copy
 import hashlib
 import json
-import os
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
@@ -128,7 +128,7 @@ def _profile_from_graph_or_compiled(
 
 
 def _deterministic_test_mode() -> bool:
-    return str(os.environ.get("RPG_TEST_MODE") or "").strip().casefold() in {
+    return str(_env_str("RPG_TEST_MODE") or "").strip().casefold() in {
         "deterministic",
         "test",
         "offline",
@@ -141,7 +141,7 @@ def _default_generator() -> WorldForgeTopicGenerator:
         from .world_forge_deterministic import DeterministicWorldForgeGenerator
 
         return ReferenceSafeWorldForgeGenerator(DeterministicWorldForgeGenerator())
-    from app.rpg_world_forge_provider import build_production_world_forge_generator
+    from app.rpg.worlds.providers.world_forge import build_production_world_forge_generator
 
     return build_production_world_forge_generator()
 

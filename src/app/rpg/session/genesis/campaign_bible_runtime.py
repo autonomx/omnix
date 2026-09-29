@@ -56,11 +56,11 @@ def _portable_snapshot(
 
 def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
     try:
-        from app.persistence.tenant import local_tenant_context
+        from app.security.tenant_context import current_tenant
         from app.persistence.unit_of_work import unit_of_work
 
         with unit_of_work() as work:
-            record = work.campaign_bibles.get(local_tenant_context(), campaign_id)
+            record = work.campaign_bibles.get(current_tenant(), campaign_id)
             work.rollback()
         if record is not None:
             snapshot = CampaignBibleSnapshot.from_record(record)

@@ -18,6 +18,30 @@ from app.rpg.worlds.dossier_regeneration_preview import (
     preview_world_entity_dossier_regeneration,
 )
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgEnrichWorldDossiersRequestBody(_TypedRequestModel):
+    all_candidates: bool | None = False
+    candidates: _TypedRequestAny = None
+    directives: _TypedRequestAny = None
+    dry_run: bool | None = True
+    limit: _TypedRequestAny = None
+
+class RpgUpdateWorldEntityDossierRequestBody(_TypedRequestModel):
+    dossier: _TypedRequestAny = None
+    short_summary: _TypedRequestAny = None
+
+class RpgPreviewWorldEntityDossierRegenerationRequestBody(_TypedRequestModel):
+    directives: _TypedRequestAny = None
+
+class RpgRegenerateWorldEntityDossierRequestBody(_TypedRequestModel):
+    directives: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_dossier_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_dossier_route_hook_installed"
 
@@ -67,7 +91,6 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/worlds/{world_id}/dossier-quality",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_world_dossier_quality(world_id: str) -> dict[str, Any]:
         try:
@@ -79,13 +102,12 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/enrich-dossiers",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_enrich_world_dossiers(
+    def rpg_enrich_world_dossiers(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgEnrichWorldDossiersRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         directives = payload.get("directives")
         if directives is not None and not isinstance(directives, Mapping):
             raise HTTPException(
@@ -120,15 +142,14 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
     @app.patch(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/dossier",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_update_world_entity_dossier(
+    def rpg_update_world_entity_dossier(
         world_id: str,
         topic_id: str,
         entity_id: str,
-        request: Request,
+        request: Request, request_body: RpgUpdateWorldEntityDossierRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         revision, content_hash = _expected(payload)
         dossier = payload.get("dossier")
         if not isinstance(dossier, Mapping):
@@ -153,15 +174,14 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate-dossier-preview",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_preview_world_entity_dossier_regeneration(
+    def rpg_preview_world_entity_dossier_regeneration(
         world_id: str,
         topic_id: str,
         entity_id: str,
-        request: Request,
+        request: Request, request_body: RpgPreviewWorldEntityDossierRegenerationRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         revision, content_hash = _expected(payload)
         directives = payload.get("directives")
         if directives is not None and not isinstance(directives, Mapping):
@@ -185,15 +205,14 @@ def register_rpg_world_dossier_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/topics/{topic_id}/entities/{entity_id}/regenerate-dossier",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_regenerate_world_entity_dossier(
+    def rpg_regenerate_world_entity_dossier(
         world_id: str,
         topic_id: str,
         entity_id: str,
-        request: Request,
+        request: Request, request_body: RpgRegenerateWorldEntityDossierRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         revision, content_hash = _expected(payload)
         directives = payload.get("directives")
         if directives is not None and not isinstance(directives, Mapping):

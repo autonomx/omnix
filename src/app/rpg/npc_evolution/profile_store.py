@@ -1,7 +1,7 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import json
-import os
 import re
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -38,7 +38,7 @@ def _slug(value: str) -> str:
 
 def default_profile_root() -> Path:
     return Path(
-        os.environ.get(
+        _env_str(
             "RPG_NPC_PROFILE_ROOT",
             "resources/data/rpg_npc_profiles",
         )

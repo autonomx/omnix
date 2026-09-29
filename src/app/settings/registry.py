@@ -1,24 +1,34 @@
 """Typed user-setting registry for the browser settings service."""
 from __future__ import annotations
 
+from copy import deepcopy
+
+from app.config.defaults import DEFAULT_SETTINGS
+
 from .service import SettingSpec
 
+
+_OPENROUTER_DEFAULT = deepcopy(DEFAULT_SETTINGS["openrouter"])
+_OPENROUTER_DEFAULT.pop("api_key", None)
+_CEREBRAS_DEFAULT = deepcopy(DEFAULT_SETTINGS["cerebras"])
+_CEREBRAS_DEFAULT.pop("api_key", None)
+
 CORE_SETTING_SPECS: tuple[SettingSpec, ...] = (
-    SettingSpec("provider", str, "lmstudio"),
-    SettingSpec("global_system_prompt", str, ""),
-    SettingSpec("lmstudio", dict, {"base_url": "http://localhost:1234", "direct": False}),
-    SettingSpec("openrouter", dict, {"model": "openai/gpt-4o-mini", "context_size": 128000, "thinking_budget": 0}),
-    SettingSpec("cerebras", dict, {"model": "llama-3.3-70b-versatile"}),
-    SettingSpec("llamacpp", dict, {"base_url": "http://localhost:8080", "model": "", "download_location": "server", "auto_start": False}),
-    SettingSpec("audio_provider_tts", str, "faster-qwen3-tts"),
-    SettingSpec("audio_provider_stt", str, "parakeet"),
+    SettingSpec("provider", str, DEFAULT_SETTINGS["provider"]),
+    SettingSpec("global_system_prompt", str, DEFAULT_SETTINGS["global_system_prompt"]),
+    SettingSpec("lmstudio", dict, deepcopy(DEFAULT_SETTINGS["lmstudio"])),
+    SettingSpec("openrouter", dict, _OPENROUTER_DEFAULT),
+    SettingSpec("cerebras", dict, _CEREBRAS_DEFAULT),
+    SettingSpec("llamacpp", dict, deepcopy(DEFAULT_SETTINGS["llamacpp"])),
+    SettingSpec("audio_provider_tts", str, DEFAULT_SETTINGS["audio_provider_tts"]),
+    SettingSpec("audio_provider_stt", str, DEFAULT_SETTINGS["audio_provider_stt"]),
     SettingSpec("tts_worker_url", str, ""),
     SettingSpec("stt_worker_url", str, ""),
     SettingSpec("image_worker_url", str, ""),
-    SettingSpec("faster-qwen3-tts", dict, {}),
-    SettingSpec("parakeet", dict, {"base_url": "http://127.0.0.1:5201"}),
-    SettingSpec("image", dict, {"enabled": False, "provider": "flux_klein"}),
-    SettingSpec("rpg_visual", dict, {"enabled": False, "provider": "mock"}),
+    SettingSpec("faster-qwen3-tts", dict, deepcopy(DEFAULT_SETTINGS["faster-qwen3-tts"])),
+    SettingSpec("parakeet", dict, deepcopy(DEFAULT_SETTINGS["parakeet"])),
+    SettingSpec("image", dict, deepcopy(DEFAULT_SETTINGS["image"])),
+    SettingSpec("rpg_visual", dict, deepcopy(DEFAULT_SETTINGS["rpg_visual"])),
     SettingSpec("settings_control_center", dict, {}),
 )
 

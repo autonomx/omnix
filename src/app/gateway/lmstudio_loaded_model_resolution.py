@@ -7,8 +7,8 @@ native model-management API before each chat request, with a very short cache to
 avoid duplicate discovery during speculative/final request pairs.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
 import time
@@ -65,7 +65,7 @@ _DISCOVERY_CACHE: WeakKeyDictionary[LMStudioProvider, _CacheEntry] = WeakKeyDict
 
 
 def _float_setting(name: str, fallback: float, *, minimum: float, maximum: float) -> float:
-    raw = (os.environ.get(name) or "").strip()
+    raw = (_env_str(name) or "").strip()
     try:
         value = float(raw) if raw else fallback
     except ValueError:

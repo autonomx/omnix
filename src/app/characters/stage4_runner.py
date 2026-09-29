@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from app.assistant_memory import default_memory_service, resolve_chat_scope
-
 from .stage4_contracts import (
     Stage4Check,
     Stage4Checkpoint,
@@ -101,17 +99,12 @@ def _create_sessions(gateway: Stage4Gateway, config: Stage4PrepareConfig):
     }
 
 
-def _system_context(session: dict[str, Any]):
-    return resolve_chat_scope(
-        str(session["id"]), profile_id=session.get("profile_id"),
-        workspace_id=session.get("workspace_id"), project_id=session.get("project_id"),
-    )
-
-
-def _fixture_records(config: Stage4PrepareConfig, setup: dict[str, Any], shared: dict[str, Any]):
-    setup_context = _system_context(setup)
-    shared_context = _system_context(shared)
-    service = default_memory_service()
+def _fixture_records(
+    config: Stage4PrepareConfig,
+    gateway: Stage4Gateway,
+    setup: dict[str, Any],
+    shared: dict[str, Any],
+):
     definitions = {
         "allowed_fact": ("global", "fact", "normal"),
         "blocked_category": ("global", "instruction", "normal"),
@@ -120,17 +113,25 @@ def _fixture_records(config: Stage4PrepareConfig, setup: dict[str, Any], shared:
     }
     records = {}
     for label, (scope, category, sensitivity) in definitions.items():
-        context = shared_context if label == "blocked_session" else setup_context
+        session_id = str(shared["id"] if label == "blocked_session" else setup["id"])
         content = marker_memory(config.run_id, label)
-        matches = [record for record in service.list_active(context) if record.content == content]
+        listed = gateway.list_memory(session_id)
+        existing = listed.get("records") if isinstance(listed, dict) else None
+        matches = [record for record in existing or [] if record.get("content") == content]
         if len(matches) > 1:
             raise RuntimeError(f"duplicate Stage 4 fixture records exist: {label}")
-        records[label] = matches[0] if matches else service.create_explicit_memory(
-            context, scope=scope, category=category, content=content,
-            provenance_id=f"stage4:{config.run_id}:{label}", pinned=True, sensitivity=sensitivity,
+        records[label] = matches[0] if matches else gateway.create_memory(
+            {
+                "session_id": session_id,
+                "scope": scope,
+                "category": category,
+                "sensitivity": sensitivity,
+                "content": content,
+                "pinned": True,
+            }
         )
     return records, "Synthetic shared-memory policy fixtures are active.", {
-        "fixture_memory_ids": {label: record.id for label, record in records.items()},
+        "fixture_memory_ids": {label: record["id"] for label, record in records.items()},
         "fixture_count": len(records),
     }
 
@@ -152,11 +153,14 @@ def _verify_selection(gateway: Stage4Gateway, config: Stage4PrepareConfig, sessi
     context = _memory_context(metadata)
     if context is None:
         raise RuntimeError("shared session returned no memory diagnostics")
-    expected = {records["allowed_fact"].id}
+    expected = {records["allowed_fact"]["id"]}
     selected = set(context.get("shared_selected_memory_ids") or [])
     if selected != expected:
         raise RuntimeError("shared selection did not contain exactly the allowlisted normal System Assistant record")
-    forbidden = {records[label].id for label in ("blocked_category", "blocked_sensitive", "blocked_session")}
+    forbidden = {
+        records[label]["id"]
+        for label in ("blocked_category", "blocked_sensitive", "blocked_session")
+    }
     if forbidden & set(context.get("selected_memory_ids") or []):
         raise RuntimeError("a blocked System Assistant record entered the character prompt")
     excluded = context.get("shared_excluded_reason_counts") or {}
@@ -236,7 +240,7 @@ def prepare_stage4(gateway: Stage4Gateway, config: Stage4PrepareConfig, *, check
     if sessions is None:
         return _report(config, checks, metrics, mode="prepare", session_id=None)
     setup, shared, control = sessions
-    records = _check(checks, "fixtures.system_memory", lambda: _fixture_records(config, setup, shared))
+    records = _check(checks, "fixtures.system_memory", lambda: _fixture_records(config, gateway, setup, shared))
     session_id = str(shared["id"])
     if records is None:
         return _report(config, checks, metrics, mode="prepare", session_id=session_id)
@@ -246,11 +250,11 @@ def prepare_stage4(gateway: Stage4Gateway, config: Stage4PrepareConfig, *, check
     metrics.first_token_ms = selection
     metrics.shared_selected_count = 1
     metrics.shared_excluded_count = 3
-    if _check(checks, "shared.read_only", lambda: _verify_read_only(gateway, session_id, records["allowed_fact"].id)) is None:
+    if _check(checks, "shared.read_only", lambda: _verify_read_only(gateway, session_id, records["allowed_fact"]["id"])) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=session_id)
     if _check(checks, "shared.off_control", lambda: _verify_off_control(gateway, config, str(control["id"]))) is None:
         return _report(config, checks, metrics, mode="prepare", session_id=session_id)
-    restored = _check(checks, "shared.segment_reset", lambda: _toggle_bridge(gateway, config, shared, records["allowed_fact"].id))
+    restored = _check(checks, "shared.segment_reset", lambda: _toggle_bridge(gateway, config, shared, records["allowed_fact"]["id"]))
     if restored is None:
         return _report(config, checks, metrics, mode="prepare", session_id=session_id)
     metrics.segment_switch_count = 2
@@ -260,7 +264,7 @@ def prepare_stage4(gateway: Stage4Gateway, config: Stage4PrepareConfig, *, check
         run_id=config.run_id, character_id=config.character_id, shared_session_id=session_id,
         control_session_id=str(control["id"]), system_setup_session_id=str(setup["id"]),
         shared_segment_id=str(restored["active_segment_id"]), shared_identity_hash=str(restored["effective_identity_hash"]),
-        fixture_memory_ids={label: record.id for label, record in records.items()},
+        fixture_memory_ids={label: record["id"] for label, record in records.items()},
         prepare_checks=checks, prepare_metrics=metrics,
     )
     target = Path(checkpoint_path)
@@ -288,16 +292,19 @@ def _verify_restart(gateway: Stage4Gateway, config: Stage4PrepareConfig, checkpo
 
 
 def _cleanup(gateway: Stage4Gateway, checkpoint: Stage4Checkpoint):
-    service = default_memory_service()
-    setup_context = _system_context(gateway.get_session(checkpoint.system_setup_session_id))
-    shared_context = _system_context(gateway.get_session(checkpoint.shared_session_id))
     deleted = 0
     for label, record_id in checkpoint.fixture_memory_ids.items():
-        record = service.repository.get_record(record_id)
+        session_id = (
+            checkpoint.shared_session_id
+            if label == "blocked_session"
+            else checkpoint.system_setup_session_id
+        )
+        listed = gateway.list_memory(session_id)
+        records = listed.get("records") if isinstance(listed, dict) else None
+        record = next((item for item in records or [] if item.get("id") == record_id), None)
         if record is None:
             raise RuntimeError(f"Stage 4 fixture record is unavailable during cleanup: {record_id}")
-        context = shared_context if label == "blocked_session" else setup_context
-        service.forget_memory(context, record_id, expected_revision=record.revision)
+        gateway.delete_memory(record_id, session_id, int(record["revision"]))
         deleted += 1
     gateway.set_interaction(checkpoint.shared_session_id, {
         "interaction_mode": "character", "character_id": checkpoint.character_id,

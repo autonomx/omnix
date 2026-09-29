@@ -434,6 +434,6 @@ def test_paper_authority_is_relational_and_no_live_execution_path_exists() -> No
     assert "paper-reference" not in monitor
     assert "server_authoritative_protection" in monitor
 
-    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    gateway = Path("src/app/trading/route_registration.py").read_text()
     assert "create_trading_paper_router" in gateway
     assert "register_trading_paper_monitor" in gateway

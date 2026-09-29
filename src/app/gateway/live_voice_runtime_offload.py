@@ -1,7 +1,7 @@
 """Keep live-voice persistence and provider lookup off the gateway event loop."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import queue
 import threading
 import time
@@ -32,7 +32,7 @@ def _provider_refresh_enabled_for_process(config=None) -> bool:
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)) or default)
+        value = float(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, value)
@@ -40,7 +40,7 @@ def _env_float(name: str, default: float, *, minimum: float) -> float:
 
 def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     try:
-        value = int(os.environ.get(name, str(default)) or default)
+        value = int(_env_str(name, str(default)) or default)
     except (TypeError, ValueError):
         value = default
     return max(minimum, min(maximum, value))

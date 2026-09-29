@@ -2,23 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any, Literal
 
-
-class ToolRiskLevel(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    SIMULATION_TRUTH = "simulation_truth"
-
-
-@dataclass
-class ToolCall:
-    name: str
-    args: dict[str, Any] = field(default_factory=dict)
-    risk: ToolRiskLevel = ToolRiskLevel.LOW
-    reason: str = ""
+from app.capabilities.tool_call import ToolCall, ToolRiskLevel
 
 
 @dataclass

@@ -79,7 +79,6 @@ def register_live_chat_speculation_handshake_routes(
 
     @app.post(
         "/api/live/speculation/sessions/{session_id}/start",
-        include_in_schema=False,
     )
     async def start_live_speculation(
         session_id: str,
@@ -210,7 +209,6 @@ def register_live_chat_speculation_handshake_routes(
 
     @app.post(
         "/api/live/speculation/sessions/{session_id}/{generation_id}/cancel",
-        include_in_schema=False,
     )
     async def cancel_started_live_speculation(
         session_id: str,

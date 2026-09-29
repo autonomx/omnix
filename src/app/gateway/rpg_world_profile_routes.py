@@ -13,6 +13,21 @@ from app.rpg.worlds.profile_authoring import (
 )
 from app.rpg.worlds.profile_generation_jobs import retry_world_profile_creation
 
+from pydantic import BaseModel as _TypedRequestBaseModel, ConfigDict as _TypedRequestConfigDict, Field as _typed_field
+from typing import Any as _TypedRequestAny
+
+class _TypedRequestModel(_TypedRequestBaseModel):
+    model_config = _TypedRequestConfigDict(extra="allow", populate_by_name=True)
+
+class RpgUpdateWorldGenreProfileRequestBody(_TypedRequestModel):
+    expected_profile_revision: _TypedRequestAny = None
+    profile: _TypedRequestAny = None
+
+class RpgApproveWorldGenreProfileRequestBody(_TypedRequestModel):
+    approved_by: _TypedRequestAny = None
+    expected_profile_revision: _TypedRequestAny = None
+
+
 _ROUTE_SENTINEL = "_omnix_rpg_world_profile_routes_registered"
 _HOOK_SENTINEL = "_omnix_rpg_world_profile_route_hook_installed"
 
@@ -48,7 +63,6 @@ def register_rpg_world_profile_routes(app: FastAPI) -> None:
     @app.get(
         "/api/rpg/worlds/{world_id}/genre-profile",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_read_world_genre_profile(world_id: str) -> dict[str, Any]:
         try:
@@ -60,13 +74,12 @@ def register_rpg_world_profile_routes(app: FastAPI) -> None:
     @app.patch(
         "/api/rpg/worlds/{world_id}/genre-profile",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_update_world_genre_profile(
+    def rpg_update_world_genre_profile(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgUpdateWorldGenreProfileRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         expected_revision = int(payload.get("expected_profile_revision") or 0)
         profile = payload.get("profile")
         if expected_revision < 1:
@@ -92,13 +105,12 @@ def register_rpg_world_profile_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/genre-profile/approve",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
-    async def rpg_approve_world_genre_profile(
+    def rpg_approve_world_genre_profile(
         world_id: str,
-        request: Request,
+        request: Request, request_body: RpgApproveWorldGenreProfileRequestBody,
     ) -> dict[str, Any]:
-        payload = dict(_body(await request.json()))
+        payload = dict(_body(request_body.model_dump(exclude_unset=True, by_alias=True)))
         expected_revision = int(payload.get("expected_profile_revision") or 0)
         if expected_revision < 1:
             raise HTTPException(
@@ -118,7 +130,6 @@ def register_rpg_world_profile_routes(app: FastAPI) -> None:
     @app.post(
         "/api/rpg/worlds/{world_id}/genre-profile/retry",
         tags=["rpg-world"],
-        include_in_schema=False,
     )
     def rpg_retry_world_genre_profile(world_id: str) -> dict[str, Any]:
         try:

@@ -1,43 +1,59 @@
-"""Regression coverage for foreground RPG player turns."""
+"""Regression coverage for feature-owned foreground RPG job handling."""
 
-import os
-import sys
+from types import SimpleNamespace
 
-# Match the lightweight path setup used by the existing unit tests.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-
-def test_rpg_turn_jobs_are_not_background_inline_jobs():
-    import app.rpg.jobs.turn_executor as inline_feature_jobs
-
-    assert "rpg.turn" in inline_feature_jobs.INLINE_FEATURE_JOB_TYPES
-    assert "rpg.turn" not in inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES
-    assert inline_feature_jobs.RPG_LAST10_REPORT_JOB_TYPE in inline_feature_jobs.BACKGROUND_INLINE_FEATURE_JOB_TYPES
+from app.jobs.handlers import registry_from_features
+from app.rpg.jobs import turn_executor
+from app.runtime.feature_catalog import load_feature
 
 
-def test_foreground_rpg_turn_visible_text_has_fallback_text():
-    import app.jobs  # noqa: F401
-    import app.rpg.jobs.turn_executor as inline_feature_jobs
+def test_rpg_turn_jobs_are_registered_by_the_rpg_feature() -> None:
+    registry = registry_from_features((load_feature("rpg"),))
 
-    result = {"player_input": "I ask Bran how he is doing"}
-    visible = inline_feature_jobs._rpg_turn_visible_text(result)
+    turn = registry.require("rpg.turn")
+    report = registry.require("rpg.report.last10")
+
+    assert turn.input_model.__name__ == "RpgTurnJobInput"
+    assert report.input_model.__name__ == "RpgReportJobInput"
+    assert registry.types() == ("rpg.report.last10", "rpg.turn")
+
+
+def test_foreground_rpg_turn_visible_text_has_deterministic_fallback() -> None:
+    result = {"player_input": "I ask Bran how business is going"}
+
+    visible = turn_executor._rpg_turn_visible_text(result)
 
     assert visible
-    assert "I ask Bran how he is doing" in visible
-    assert "accepted" in visible.lower()
+    assert "Bran" in visible
+    assert "Steady enough" in visible
 
 
-def test_foreground_social_turn_bypasses_provider_runtime():
-    import app.jobs  # noqa: F401
-    import app.rpg.jobs.turn_executor as inline_feature_jobs
+def test_authoritative_social_turn_does_not_call_provider(monkeypatch) -> None:
+    command = "I ask Bran how business is going"
+    authoritative = {
+        "ok": True,
+        "player_input": command,
+        "final_narration": "Bran explains that the tavern is doing well.",
+    }
 
-    result = inline_feature_jobs._apply_authoritative_rpg_turn(
-        "missing-session-is-ok-for-fast-social-turn",
-        "i ask bran how he is",
+    monkeypatch.setattr(
+        turn_executor,
+        "_apply_authoritative_rpg_turn",
+        lambda session_id, player_command: authoritative,
     )
 
-    assert result is not None
-    assert result["ok"] is True
-    assert result["foreground_fast_turn"] is True
-    assert result["llm_called"] is False
-    assert "Bran" in result["final_narration"]
+    def unexpected_provider_call(*args, **kwargs):
+        raise AssertionError("authoritative RPG turns must not call the provider")
+
+    monkeypatch.setattr(turn_executor, "_call_chat_provider", unexpected_provider_call)
+    job = SimpleNamespace(
+        id="job:rpg-turn",
+        type="rpg.turn",
+        input_payload={"command": command},
+        input_ref={"session_id": "session:1"},
+        module="rpg",
+    )
+
+    result = turn_executor._render_job(job, job_store=object())
+
+    assert result["content"] == authoritative["final_narration"]

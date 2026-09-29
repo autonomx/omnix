@@ -26,6 +26,7 @@ from .context import (
 )
 from .evaluation import (
     DesktopCompanionEvaluationCreate,
+    DesktopCompanionEvaluationExport,
     DesktopCompanionEvaluationRecord,
     DesktopCompanionEvaluationStore,
     DesktopCompanionReleaseGateReport,
@@ -144,7 +145,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/operational-status",
         response_model=DesktopCompanionOperationalStatus,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def desktop_companion_operations() -> DesktopCompanionOperationalStatus:
         return operational_status_factory()
@@ -153,7 +153,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/build-identity",
         response_model=DesktopCompanionBuildIdentity,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def desktop_companion_build_identity() -> DesktopCompanionBuildIdentity:
         return build_identity_factory()
@@ -162,7 +161,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/preflight",
         response_model=DesktopCompanionPreflightResult,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def preflight_desktop_companion(
         request: DesktopCompanionPreflightRequest,
@@ -180,7 +178,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/observe",
         response_model=DesktopCompanionObserveResponse,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def observe_desktop_companion(
         request: DesktopCompanionObserveRequest,
@@ -232,7 +229,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/context",
         response_model=DesktopCompanionContextSnapshot | None,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def desktop_companion_context(
         session_id: str = Query(min_length=1, max_length=160),
@@ -243,7 +239,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/activity",
         response_model=DesktopCompanionActivitySnapshot | None,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def desktop_companion_activity(
         session_id: str = Query(min_length=1, max_length=160),
@@ -254,7 +249,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/reset",
         response_model=DesktopCompanionResetResponse,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     def reset_desktop_companion(
         request: DesktopCompanionResetRequest,
@@ -268,7 +262,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/evaluations",
         response_model=DesktopCompanionEvaluationRecord,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     async def upsert_desktop_companion_evaluation(
         request: DesktopCompanionEvaluationCreate,
@@ -279,7 +272,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/evaluations",
         response_model=list[DesktopCompanionEvaluationRecord],
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     async def list_desktop_companion_evaluations(
         limit: int = Query(default=100, ge=1, le=1_000),
@@ -289,12 +281,13 @@ def register_desktop_companion_routes(
 
     @app.get(
         "/api/desktop-companion/evaluations/export",
-        response_model=dict,
+        response_model=DesktopCompanionEvaluationExport,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
-    async def export_desktop_companion_evaluations() -> dict:
-        return evaluation_store_factory().export()
+    async def export_desktop_companion_evaluations() -> DesktopCompanionEvaluationExport:
+        return DesktopCompanionEvaluationExport.model_validate(
+            evaluation_store_factory().export()
+        )
 
     def evidence_partition(
         *,
@@ -319,7 +312,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/release-gate",
         response_model=DesktopCompanionReleaseGateReport,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     async def desktop_companion_release_gate(
         stage: RolloutStage = "text",
@@ -348,7 +340,6 @@ def register_desktop_companion_routes(
         "/api/desktop-companion/rollout-status",
         response_model=DesktopCompanionRolloutStatus,
         tags=["desktop-companion"],
-        include_in_schema=False,
     )
     async def desktop_companion_rollout_status(
         requested_stage: RolloutStage = "disabled",

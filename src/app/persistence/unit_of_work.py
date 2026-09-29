@@ -15,6 +15,7 @@ from .asset_repository import (
     PostgresSecretReferenceRepository,
     PostgresSettingsRepository,
 )
+from .audit import PostgresAuditRepository
 from .database import PostgresDatabase, default_database
 from .execution_repositories import PostgresForegroundSubmissionRepository
 from .job_repository import PostgresJobRepository
@@ -23,11 +24,8 @@ from .outbox_repository import (
     PostgresOutboxRepository,
     PostgresSideEffectRepository,
 )
-from .repositories import (
-    PostgresAuditRepository,
-    PostgresIdempotencyRepository,
-    PostgresIdentityRepository,
-)
+from .identity_service import PostgresIdentityRepository
+from .repositories import PostgresIdempotencyRepository
 from .repository_registry import repository_spec, repository_spec_by_alias
 from .transaction_policy import transaction_scope
 

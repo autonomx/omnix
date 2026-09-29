@@ -23,8 +23,16 @@ def _session() -> dict[str, object]:
     }
 
 
+def _client() -> TestClient:
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://localhost",
+        headers={"X-Omnix-Client": "web"},
+    )
+
+
 def test_map_definition_is_cacheable_and_revision_aware() -> None:
-    client = TestClient(create_gateway_app())
+    client = _client()
     path = f"/api/rpg/maps/{FROST_HAVEN_MAP_ID}"
     response = client.get(path)
 
@@ -43,7 +51,7 @@ def test_map_definition_is_cacheable_and_revision_aware() -> None:
 
 def test_map_overlay_is_live_and_not_cacheable(monkeypatch) -> None:
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: _session())
-    client = TestClient(create_gateway_app())
+    client = _client()
     response = client.get(f"/api/rpg/sessions/session:test/maps/{FROST_HAVEN_MAP_ID}/overlay")
 
     assert response.status_code == 200
@@ -60,7 +68,7 @@ def test_map_action_returns_authoritative_mutation_envelope(monkeypatch) -> None
     stored = _session()
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: deepcopy(stored))
     monkeypatch.setattr(rpg_map_routes, "save_session", lambda session, compact=False: session)
-    client = TestClient(create_gateway_app())
+    client = _client()
     overlay = client.get(f"/api/rpg/sessions/session:test/maps/{FROST_HAVEN_MAP_ID}/overlay").json()
 
     response = client.post(
@@ -88,7 +96,7 @@ def test_map_action_rejects_stale_and_locked_requests(monkeypatch) -> None:
     stored = _session()
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: deepcopy(stored))
     monkeypatch.setattr(rpg_map_routes, "save_session", lambda session, compact=False: session)
-    client = TestClient(create_gateway_app())
+    client = _client()
     overlay = client.get(f"/api/rpg/sessions/session:test/maps/{FROST_HAVEN_MAP_ID}/overlay").json()
     path = f"/api/rpg/sessions/session:test/maps/{FROST_HAVEN_MAP_ID}/map-actions"
 
@@ -117,7 +125,7 @@ def test_map_action_rejects_stale_and_locked_requests(monkeypatch) -> None:
 
 def test_map_overlay_reports_missing_session(monkeypatch) -> None:
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: None)
-    client = TestClient(create_gateway_app())
+    client = _client()
     response = client.get(f"/api/rpg/sessions/missing/maps/{FROST_HAVEN_MAP_ID}/overlay")
     assert response.status_code == 404
     assert response.json()["detail"]["error"] == "session_not_found"
@@ -125,7 +133,7 @@ def test_map_overlay_reports_missing_session(monkeypatch) -> None:
 
 def test_unknown_map_returns_typed_not_found(monkeypatch) -> None:
     monkeypatch.setattr(rpg_map_routes, "load_session", lambda session_id: _session())
-    client = TestClient(create_gateway_app())
+    client = _client()
     definition = client.get("/api/rpg/maps/map:missing")
     overlay = client.get("/api/rpg/sessions/session:test/maps/map:missing/overlay")
     assert definition.status_code == 404

@@ -5,28 +5,58 @@ the process-owned services exposed to routes, rather than transaction objects.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from collections.abc import Callable
+from typing import Any, Generic, Protocol, TypeVar
 
-if TYPE_CHECKING:
-    from app.assets.models import AssetRecord, AssetListResponse
-    from app.jobs.models import CreateJobRequest, JobRecord
-    from app.jobs.residency import ModelResidencyRecord
-    from app.persistence.database import PostgresDatabase
-    from app.persistence.tenant import TenantContext
+_ServiceT = TypeVar("_ServiceT")
+
+
+class LazyServiceProxy(Generic[_ServiceT]):
+    """Resolve a composed service on its first operation, then reuse it."""
+
+    def __init__(self, factory: Callable[[], _ServiceT]) -> None:
+        self._factory = factory
+        self._service: _ServiceT | None = None
+        self._handler_registry: Any = None
+
+    def _get_service(self) -> _ServiceT:
+        service = self._service
+        if service is None:
+            service = self._factory()
+            self._service = service
+            configure = getattr(service, "configure_handler_registry", None)
+            if self._handler_registry is not None and configure is not None:
+                configure(self._handler_registry)
+        return service
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._get_service(), name)
+
+    def configure_handler_registry(self, registry: Any) -> None:
+        self._handler_registry = registry
+        service = self._service
+        if service is None:
+            return
+        configure = getattr(service, "configure_handler_registry", None)
+        if configure is not None:
+            configure(registry)
 
 
 class JobService(Protocol):
-    database: PostgresDatabase
-    context: TenantContext
+    database: Any
+    context: Any
 
-    def create_job(self, request: CreateJobRequest) -> JobRecord: ...
-    def get_job(self, job_id: str) -> JobRecord | None: ...
+    def configure_handler_registry(self, registry: Any) -> None: ...
+    def create_job(self, request: Any) -> Any: ...
+    def get_job(self, job_id: str) -> Any | None: ...
+    def list_jobs(self, *, limit: int = 100) -> list[Any]: ...
+    def delete_job(self, job_id: str) -> bool: ...
 
 
 class AssetService(Protocol):
-    def list_assets(self) -> AssetListResponse: ...
-    def get_asset(self, asset_id: str) -> AssetRecord | None: ...
-    def upsert_asset(self, asset: AssetRecord) -> AssetRecord: ...
+    def list_assets(self) -> Any: ...
+    def get_asset(self, asset_id: str) -> Any | None: ...
+    def upsert_asset(self, asset: Any) -> Any: ...
     def delete_asset(self, asset_id: str, *, delete_file: bool = True) -> dict[str, Any]: ...
 
 
@@ -37,6 +67,18 @@ class ChatService(Protocol):
 
 
 class ModelResidencyService(Protocol):
-    def list_records(self) -> list[ModelResidencyRecord]: ...
-    def upsert_record(self, record: ModelResidencyRecord) -> ModelResidencyRecord: ...
+    def list_records(self) -> list[Any]: ...
+    def upsert_record(self, record: Any) -> Any: ...
     def delete_record(self, model_id: str) -> bool: ...
+
+
+class KernelServices(Protocol):
+    """Process services offered to feature factories by the composition root."""
+
+    jobs: JobService | None
+    assets: AssetService | None
+    chat: ChatService | None
+    model_residency: ModelResidencyService | None
+    database: Any | None
+    tenant: Any | None
+    settings: Any | None

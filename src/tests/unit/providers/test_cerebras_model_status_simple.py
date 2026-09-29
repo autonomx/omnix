@@ -1,8 +1,6 @@
 """Simple test for Cerebras model status and connection using settings.json API key."""
 
-import json
 import os
-import tempfile
 from unittest.mock import Mock, patch
 
 import pytest
@@ -211,108 +209,54 @@ class TestCerebrasModelStatusSimple:
             assert headers['Content-Type'] == 'application/json'
 
 
-class TestCerebrasIntegrationWithSettings:
-    """Integration tests for Cerebras provider using settings.json."""
-    
-    def setup_method(self):
-        """Setup for integration tests."""
-        # Create a temporary settings file
-        self.temp_settings_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_settings_path = self.temp_settings_file.name
-        self.temp_settings_file.close()
-        
-        # Store original environment
-        self.original_env = os.environ.get('SETTINGS_FILE_PATH')
-        os.environ['SETTINGS_FILE_PATH'] = self.temp_settings_path
-    
-    def teardown_method(self):
-        """Cleanup after integration tests."""
-        # Clean up temporary file
-        if os.path.exists(self.temp_settings_path):
-            os.unlink(self.temp_settings_path)
-        
-        # Restore original environment
-        if self.original_env:
-            os.environ['SETTINGS_FILE_PATH'] = self.original_env
-        elif 'SETTINGS_FILE_PATH' in os.environ:
-            del os.environ['SETTINGS_FILE_PATH']
-    
-    def test_cerebras_provider_from_settings(self):
-        """Test creating Cerebras provider from settings.json."""
-        # Create test settings
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'api_key': 'test-api-key-from-settings',
-                'model': 'llama-3.3-70b-versatile'
-            }
+class TestCerebrasProviderServiceSettings:
+    """Provider construction uses typed settings and the secret-store port."""
+
+    def _install(self, monkeypatch, settings, secrets):
+        from app.providers import service as provider_service
+
+        monkeypatch.setattr(provider_service, "load_settings", lambda: settings)
+        monkeypatch.setattr(provider_service, "load_secrets", lambda: secrets)
+        provider_service.invalidate_provider_cache()
+        return provider_service
+
+    def test_provider_uses_settings_and_secret_store(self, monkeypatch):
+        settings = {
+            "provider": "cerebras",
+            "cerebras": {"model": "llama-3.3-70b-versatile"},
         }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        # Import shared module to test settings loading
-        import app.shared as shared
-        
-        # Mock the load_settings function to use our test file
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            assert settings['provider'] == 'cerebras'
-            assert settings['cerebras']['api_key'] == 'test-api-key-from-settings'
-            assert settings['cerebras']['model'] == 'llama-3.3-70b-versatile'
-            
-            # Test creating provider from settings
-            provider = shared.get_provider()
-            assert provider is not None
-            assert provider.provider_name == 'cerebras'
-            assert provider.config.api_key == 'test-api-key-from-settings'
-            assert provider.config.model == 'llama-3.3-70b-versatile'
-    
-    def test_cerebras_provider_with_missing_api_key_in_settings(self):
-        """Test handling of missing API key in settings.json."""
-        # Create test settings without API key
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'model': 'llama-3.3-70b-versatile'
-                # Missing api_key
-            }
-        }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        import app.shared as shared
-        
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            # This should not raise an error during provider creation
-            # but the provider should be None or handle the missing key gracefully
-            provider = shared.get_provider()
-            # The exact behavior depends on the implementation, but it should not crash
-            assert provider is None or provider.config.api_key == ''
-    
-    def test_cerebras_provider_with_empty_settings(self):
-        """Test Cerebras provider with empty settings.json."""
-        # Create empty settings
-        test_settings = {}
+        provider_service = self._install(
+            monkeypatch,
+            settings,
+            {"api_keys": {"cerebras": "test-api-key-from-secret-store"}},
+        )
 
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
+        provider = provider_service.get_provider()
 
-        import app.shared as shared
+        assert provider is not None
+        assert provider.provider_name == "cerebras"
+        assert provider.config.api_key == "test-api-key-from-secret-store"
+        assert provider.config.model == "llama-3.3-70b-versatile"
 
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            # Should return default settings
-            assert 'provider' in settings
-            assert 'cerebras' in settings
-            
-            # Creating provider should work but may not be functional
-            # Note: When settings are empty, it defaults to 'lmstudio'
-            provider = shared.get_provider()
-            assert provider is not None
-            # The provider will be 'lmstudio' by default, not 'cerebras'
-            assert provider.provider_name in ['lmstudio', 'cerebras']
+    def test_missing_secret_does_not_read_a_fallback_file(self, monkeypatch):
+        from app.providers.exceptions import ProviderRegistrationError
+
+        provider_service = self._install(
+            monkeypatch,
+            {"provider": "cerebras", "cerebras": {"model": "llama-3.3-70b-versatile"}},
+            {"api_keys": {}},
+        )
+
+        with pytest.raises(ProviderRegistrationError, match="Cerebras requires an API key"):
+            provider_service.get_provider()
+
+    def test_empty_settings_use_kernel_defaults(self, monkeypatch):
+        provider_service = self._install(monkeypatch, {}, {"api_keys": {}})
+
+        provider = provider_service.get_provider()
+
+        assert provider is not None
+        assert provider.provider_name == "lmstudio"
 
 
 class TestCerebrasModelStatusEndToEnd:

@@ -1,8 +1,8 @@
 """Resolve the concrete provider route stored with a durable World Forge run."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import json
-import os
 from dataclasses import dataclass, replace
 from typing import Any, Mapping
 from urllib.request import urlopen
@@ -11,7 +11,7 @@ from app.providers.registry import get_provider
 from app.rpg.session.genesis.world_forge_default import ReferenceSafeWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_deterministic import DeterministicWorldForgeGenerator
 from app.rpg.session.genesis.world_forge_generation import WorldForgeTopicGenerator
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     UnavailableWorldForgeTopicGenerator,
     WorldForgeProviderConfig,
 )
@@ -110,7 +110,7 @@ def resolve_world_forge_route(
 ) -> ResolvedWorldForgeRoute:
     """Resolve one concrete provider or fail before a durable run is created."""
 
-    env = environ if environ is not None else os.environ
+    env = environ if environ is not None else _environment()
     test_mode = deterministic_world_forge_test_mode(env)
     requested_provider = _provider_key(provider_route)
     requested_model = _model_key(model)

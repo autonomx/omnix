@@ -1,5 +1,6 @@
 """Pi RPC implementation of the generalized AgentRuntime contract."""
 from __future__ import annotations
+from app.config.env import environment_copy as _process_environment
 
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -16,10 +17,10 @@ from typing import Any
 import uuid
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
-from .debug_logging import configure_agent_debug_logging, log_agent_activity
+from app.observability.agent_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
 from .isolation import launch_agent_process
-from .process_environment import bounded_process_environment, normalize_windows_process_environment
+from app.runtime.process_environment import bounded_process_environment, normalize_windows_process_environment
 
 
 class PiRuntimeError(RuntimeError):
@@ -116,7 +117,7 @@ def build_agent_environment(
     parent_environment: dict[str, str] | None = None,
     model_session_id: str | None = None,
 ) -> dict[str, str]:
-    source = parent_environment if parent_environment is not None else dict(os.environ)
+    source = parent_environment if parent_environment is not None else _process_environment()
     if spec.execution.environment_policy != "minimal":
         raise PiRuntimeError(
             f"unsupported agent environment policy: {spec.execution.environment_policy}"

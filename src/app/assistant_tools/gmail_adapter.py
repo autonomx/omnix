@@ -1,9 +1,9 @@
 """Gmail runtime adapter foundation for assistant tools."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import base64
 import json
-import os
 import uuid
 from dataclasses import dataclass, field
 from email.message import EmailMessage
@@ -234,8 +234,8 @@ def _base64url_message(*, to: str, subject: str, body: str) -> str:
 def _refresh_google_credential(credential: AssistantToolCredentialRecord) -> AssistantToolCredentialRecord:
     if not credential.refresh_token:
         return credential
-    client_id = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
-    client_secret = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+    client_id = _env_str("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = _env_str("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
     if not client_id or not client_secret:
         return credential
     payload = _post_form_json(

@@ -1,18 +1,12 @@
 """Trading feature declaration."""
 from app.runtime.features import FeatureModule
-from app.runtime.gateway_installer import install_registrars
 
-
-def _install_gateway(gateway, context):
-    install_registrars(
-        gateway,
-        context,
-        (("app.gateway.trading_routes", "register_trading_routes"),),
-    )
+from .route_registration import create_trading_router, trading_background_worker_factories
 
 
 FEATURE = FeatureModule(
     id="trading",
     title="Trading",
-    installers=(_install_gateway,),
+    routers=(create_trading_router,),
+    background_workers=trading_background_worker_factories(),
 )

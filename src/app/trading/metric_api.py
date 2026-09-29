@@ -48,7 +48,7 @@ def create_trading_metric_router(
     # The indicator scheduler consumes the typed payload directly, so keep it
     # out of the shared public gateway contract until metric subscriptions are
     # promoted to a versioned external API.
-    @router.get("/metrics", response_model=MarketMetricResponse, include_in_schema=False)
+    @router.get("/metrics", response_model=MarketMetricResponse)
     async def metric_series(
         instrument_id: str = Query(min_length=3, max_length=200),
         metric: str = Query(min_length=3, max_length=120),

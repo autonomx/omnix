@@ -7,6 +7,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.config.env import env_bool, env_str
+from app.errors import LegacyPersistenceRetired
 
 from .authority import (
     AuthorityOperation,
@@ -22,10 +23,6 @@ class PersistenceMode(str, Enum):
     POSTGRESQL = "postgresql"
     LEGACY_TEST = "legacy_test"
     LEGACY_IMPORT = "legacy_import"
-
-
-class LegacyPersistenceRetired(RuntimeError):
-    """Raised when normal runtime attempts to use retired SQLite/JSON authority."""
 
 
 class PersistenceReadinessError(RuntimeError):
