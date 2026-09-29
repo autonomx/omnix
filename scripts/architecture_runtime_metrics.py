@@ -28,6 +28,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from architecture_analysis import AnalysisError, SourceAnalysis, included_path, is_test, load_layers, qualified_name, source_digest, tracked_sources
 
 ROOT = Path(__file__).resolve().parents[1]
+TEST_ONLY_BOOT_PACKAGES = (
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pytest-playwright",
+    "pytest-base-url",
+    "playwright",
+    "mypy",
+    "ruff",
+    "pip-tools",
+    "pip-audit",
+)
 
 
 def active_collection_paths(root: Path, test_paths: list[str]) -> list[str]:
@@ -97,9 +109,8 @@ def measurement_profile() -> dict:
     import importlib.metadata
     import platform
 
-    names = ("pytest", "aiohttp", "fastapi", "uvicorn", "httpx", "pydantic", "requests",
-             "python-multipart", "pillow", "playwright", "numpy", "psutil",
-             "psycopg", "psycopg-pool", "rich", "websockets")
+    names = (*TEST_ONLY_BOOT_PACKAGES, "aiohttp", "fastapi", "uvicorn", "httpx", "pydantic", "requests",
+             "python-multipart", "pillow", "numpy", "psutil", "psycopg", "psycopg-pool", "rich", "websockets")
     versions = {}
     for name in names:
         try:
@@ -124,8 +135,14 @@ def validate_boot_measurement(report: dict, expected_source_digest: str) -> tupl
     dependencies = profile.get("dependencies") if isinstance(profile, dict) else None
     if type(boot_count) is not int or boot_count < 0 or not isinstance(names, list) or len(names) != boot_count:
         raise ValueError("boot measurement is missing its imported-module evidence")
-    if not isinstance(dependencies, dict) or dependencies.get("aiohttp") is not None:
-        raise ValueError("boot measurement must use the production profile without test-only aiohttp")
+    if not isinstance(dependencies, dict):
+        raise ValueError("boot measurement is missing its dependency profile")
+    test_only = [name for name in TEST_ONLY_BOOT_PACKAGES if dependencies.get(name) is not None]
+    if test_only:
+        raise ValueError(
+            "boot measurement must use the production profile without test-only tooling: "
+            + ", ".join(test_only)
+        )
     if report.get("errors"):
         raise ValueError("boot measurement contains probe errors")
     return {"boot_imported_modules": boot_count}, {"boot": boot}

@@ -52,7 +52,12 @@ def test_boot_measurement_requires_production_profile_and_matching_source():
         "evidence": {
             "boot": {
                 "boot_module_names": ["app", "fastapi"],
-                "measurement_profile": {"dependencies": {"aiohttp": None}},
+                "measurement_profile": {
+                    "dependencies": {
+                        **{name: None for name in runtime.TEST_ONLY_BOOT_PACKAGES},
+                        "aiohttp": "3.14.3",
+                    }
+                },
             }
         },
     }
@@ -67,9 +72,12 @@ def test_boot_measurement_requires_production_profile_and_matching_source():
         runtime.validate_boot_measurement(report, "source-digest")
 
     report["source_digest"] = "source-digest"
-    report["evidence"]["boot"]["measurement_profile"]["dependencies"]["aiohttp"] = "3.13.4"
-    with pytest.raises(ValueError, match="without test-only aiohttp"):
-        runtime.validate_boot_measurement(report, "source-digest")
+    dependencies = report["evidence"]["boot"]["measurement_profile"]["dependencies"]
+    for package in runtime.TEST_ONLY_BOOT_PACKAGES:
+        dependencies[package] = "1.0"
+        with pytest.raises(ValueError, match="without test-only tooling"):
+            runtime.validate_boot_measurement(report, "source-digest")
+        dependencies[package] = None
 
 
 def test_guard_enforces_real_filesystem_network_and_subprocess_audits(tmp_path):
