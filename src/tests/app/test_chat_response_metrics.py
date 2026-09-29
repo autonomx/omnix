@@ -10,6 +10,9 @@ from app.chat.live_chat_provider_metrics import (
     _is_lmstudio,
     _stream_lmstudio_reply,
 )
+from app.chat.lmstudio_loaded_model_resolution import (
+    install_lmstudio_loaded_model_resolution_hook,
+)
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
 from app.providers import service as provider_service
 
@@ -93,6 +96,7 @@ def _provider() -> LMStudioProvider:
 
 
 def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     calls: list[tuple[str, str, dict[str, Any]]] = []
     provider = _provider()
     stream_response = _StreamResponse()
@@ -132,6 +136,7 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
 
 
 def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -> None:
+    install_lmstudio_loaded_model_resolution_hook()
     calls: list[tuple[str, dict[str, Any]]] = []
     provider = _provider()
     stream_response = _StreamResponse()
