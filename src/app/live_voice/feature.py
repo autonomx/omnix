@@ -7,6 +7,7 @@ from app.runtime.features import FeatureContext, FeatureModule
 
 
 def _live_voice_router(context: FeatureContext) -> APIRouter:
+    from .prompt.cache import ensure_character_snapshot_observers
     from .speech.runtime_offload import register_live_voice_runtime_offload
     from .speech.speculative_tts import register_live_voice_execution_lane_routes
     from .transport.capabilities import register_tts_live_capability_routes
@@ -18,6 +19,7 @@ def _live_voice_router(context: FeatureContext) -> APIRouter:
     state = context.runtime_state
     if state is None:
         raise RuntimeError("live_voice_runtime_state_required")
+    ensure_character_snapshot_observers()
     register_live_voice_runtime_offload(router, state)
     provider_resolver = getattr(state, "live_voice_tts_provider_resolver", None)
     if provider_resolver is None:

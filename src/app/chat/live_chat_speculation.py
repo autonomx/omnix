@@ -27,7 +27,7 @@ from app.chat import (
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 
-from app.chat import live_chat_live_voice_profile as live_voice_profile
+from app.live_voice.prompt import profile as live_voice_profile
 from .live_chat_low_latency_stream import LowLatencyTextChunker
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log

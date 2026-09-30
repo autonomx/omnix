@@ -8,22 +8,15 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.gateway.hooks.live_chat_companion_context import install_live_chat_companion_context_hook
-from app.chat.live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
+from app.live_voice.prompt.profile import install_live_chat_live_voice_profile_hook
 from app.chat.live_chat_lmstudio_diagnostics import (
     install_live_chat_lmstudio_diagnostics_hook,
 )
 from app.chat.live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
 from app.chat.live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
-from app.gateway.hooks.live_chat_prompt_cache import install_live_chat_prompt_cache_hook
-from app.gateway.hooks.live_chat_prompt_dependency_stages import (
-    install_live_chat_prompt_dependency_stage_hook,
-)
-from app.chat.live_chat_prompt_window import install_live_chat_prompt_window_hook
 from app.chat.live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
 from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
-from app.chat.live_voice_spoken_style import install_live_voice_spoken_style_hook
 from app.chat.lmstudio_loaded_model_resolution import (
     install_lmstudio_loaded_model_resolution_hook,
 )
@@ -121,12 +114,7 @@ def initialize_gateway_runtime_hooks():
     install_live_chat_provider_metrics_hook()
     install_live_chat_stream_retry_hook()
     install_live_chat_provider_routing_hook()
-    install_live_chat_prompt_window_hook()
     install_live_chat_live_voice_profile_hook()
     install_lmstudio_loaded_model_resolution_hook()
     install_live_chat_lmstudio_responses_hook()
-    install_live_voice_spoken_style_hook()
-    install_live_chat_companion_context_hook()
-    install_live_chat_prompt_cache_hook()
-    install_live_chat_prompt_dependency_stage_hook()
     install_live_chat_lmstudio_diagnostics_hook()

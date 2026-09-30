@@ -146,9 +146,6 @@ def test_prompt_uses_verified_summary_and_recent_turns_only(monkeypatch, tmp_pat
 
 
 def test_compaction_enabled_without_persisted_summary_builds_bounded_ephemeral_summary(monkeypatch, tmp_path):
-    from app.chat.live_chat_prompt_window import install_live_chat_prompt_window_hook
-
-    install_live_chat_prompt_window_hook()
     session = long_session(count=50)
     summary_repository = InMemoryConversationSummaryRepository(tmp_path / "summaries")
     store = ChatSessionStore(

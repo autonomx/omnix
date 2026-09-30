@@ -1,6 +1,10 @@
 """Persisted server-enforced Chat memory settings and content-free diagnostics."""
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from app.config.env import environment
 
 from typing import Literal, Protocol
@@ -29,6 +33,9 @@ _COMPANION_STAGES: tuple[CompanionRolloutStage, ...] = (
     "active_initiative",
     "paralinguistic_pilot",
 )
+_RUNTIME_SETTINGS_LOADER: ContextVar[
+    Callable[[], "AssistantMemoryRuntimeSettings"] | None
+] = ContextVar("assistant_memory_runtime_settings_loader", default=None)
 
 
 class AssistantMemoryRuntimeSettings(BaseModel):
@@ -184,7 +191,22 @@ def default_memory_settings_store():
 
 
 def load_memory_runtime_settings() -> AssistantMemoryRuntimeSettings:
+    loader = _RUNTIME_SETTINGS_LOADER.get()
+    if loader is not None:
+        return loader()
     return load_memory_runtime_status().settings
+
+
+@contextmanager
+def use_memory_runtime_settings(
+    loader: Callable[[], AssistantMemoryRuntimeSettings],
+) -> Iterator[None]:
+    """Bind a request-local settings loader without changing module globals."""
+    token = _RUNTIME_SETTINGS_LOADER.set(loader)
+    try:
+        yield
+    finally:
+        _RUNTIME_SETTINGS_LOADER.reset(token)
 
 
 __all__ = [
@@ -195,4 +217,5 @@ __all__ = [
     "CompanionRolloutStage",
     "load_memory_runtime_settings",
     "load_memory_runtime_status",
+    "use_memory_runtime_settings",
 ]

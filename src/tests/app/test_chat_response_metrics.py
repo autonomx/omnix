@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.provider_metrics import merge_provider_response_metrics
-from app.chat import live_chat_live_voice_profile as live_voice_profile
+from app.live_voice.prompt import profile as live_voice_profile
 from app.chat.live_chat_provider_metrics import (
     _LowLatencyTextChunker,
     _is_lmstudio,

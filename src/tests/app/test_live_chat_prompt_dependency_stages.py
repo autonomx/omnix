@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
-from app.chat import context_budget as context_budget_module
-from app.chat import memory_prompt as memory_prompt_module
 from app.chat import retention_policy as retention_policy_module
 from app.chat.models import ChatSession
-from app.gateway.hooks import live_chat_companion_context as companion_context
-from app.gateway.hooks import live_chat_prompt_dependency_stages as dependency_stages
+from app.live_voice.prompt import companion_context
+from app.live_voice.prompt import dependency_stages
 from app.providers import service as provider_service
 
 
@@ -80,13 +78,11 @@ def test_memory_prompt_loader_uses_settings_service_cache(monkeypatch):
         return AssistantMemoryRuntimeSettings(curated_memory_enabled=True)
 
     _use_test_settings(monkeypatch, fake_load)
-    monkeypatch.setattr(
-        memory_prompt_module,
-        "load_memory_runtime_settings",
-        dependency_stages._load_memory_runtime_settings_cached,
-    )
-    assert memory_prompt_module.chat_memory_enabled() is True
-    assert memory_prompt_module.chat_memory_enabled() is True
+    from app.chat.memory_prompt import chat_memory_enabled
+
+    with dependency_stages.use_cached_memory_runtime_settings():
+        assert chat_memory_enabled() is True
+        assert chat_memory_enabled() is True
     assert calls == 1
 
 
@@ -103,25 +99,18 @@ def test_retention_and_prompt_budget_use_settings_service_cache(monkeypatch):
         )
 
     _use_test_settings(monkeypatch, fake_load)
-    monkeypatch.setattr(
-        retention_policy_module,
-        "load_memory_runtime_settings",
-        dependency_stages._load_memory_runtime_settings_cached,
-    )
-    monkeypatch.setattr(
-        context_budget_module,
-        "load_memory_runtime_settings",
-        dependency_stages._load_memory_runtime_settings_cached,
-    )
     session = ChatSession(
         id="chat:retention-cache",
         title="Retention cache",
         created_at="2026-08-25T00:00:00+00:00",
         updated_at="2026-08-25T00:00:00+00:00",
     )
-    assert retention_policy_module.transcript_retention_allowed(session) is True
-    first = context_budget_module.prompt_budget_from_env()
-    second = context_budget_module.prompt_budget_from_env()
+    from app.chat.context_budget import prompt_budget_from_env
+
+    with dependency_stages.use_cached_memory_runtime_settings():
+        assert retention_policy_module.transcript_retention_allowed(session) is True
+        first = prompt_budget_from_env()
+        second = prompt_budget_from_env()
     assert first.memory_tokens == second.memory_tokens == 321
     assert first.history_tokens == second.history_tokens == 654
     assert calls == 1

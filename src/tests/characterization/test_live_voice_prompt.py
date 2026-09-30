@@ -3,13 +3,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from app.chat import live_chat_live_voice_profile as live_voice_profile
-from app.chat import prompt_assembly
+from app.live_voice.pipeline import build_live_voice_prompt
+from app.live_voice.prompt import profile as live_voice_profile
+from app.live_voice.prompt import cache as prompt_cache
 from app.chat.context_budget import PromptBudget
-from app.chat.live_voice_spoken_style import apply_live_voice_spoken_style
+from app.live_voice.prompt.spoken_style import apply_live_voice_spoken_style
 from app.chat.models import ChatMessage, ChatSession
 from app.conversation.contracts import PromptMemoryItem
-from app.gateway.hooks import live_chat_companion_context as companion_context
+from app.live_voice.prompt import companion_context
 from app.providers import service as provider_service
 from tests.characterization.harness import capture
 
@@ -92,16 +93,14 @@ def test_live_voice_prompt_matches_pre_refactor_golden(monkeypatch) -> None:
             current_message,
         ],
     )
-    monkeypatch.setattr(
-        prompt_assembly,
-        "resolve_system_session_identity",
-        lambda _session: _ResolvedCharacterIdentity(),
+    prompt_cache._reset_live_prompt_cache_for_tests()
+    prompt_cache.cache_character_snapshot(
+        SimpleNamespace(id="character:sofia", version=3)
     )
-    # The runtime hook installer replaces this function during application boot.
-    # Bind that production builder explicitly so the scenario remains isolated
-    # when pytest imports the characterization package without gateway startup.
     monkeypatch.setattr(
-        live_voice_profile, "_build_live_voice_prompt", companion_context._build_companion_prompt
+        prompt_cache,
+        "resolve_interaction_context",
+        lambda _selection, *, character: _ResolvedCharacterIdentity(),
     )
     monkeypatch.setattr(
         provider_service,
@@ -192,7 +191,7 @@ def test_live_voice_prompt_matches_pre_refactor_golden(monkeypatch) -> None:
     )
 
     def scenario() -> dict[str, Any]:
-        assembly, rendered = live_voice_profile._build_live_voice_prompt(
+        assembly, rendered = build_live_voice_prompt(
             SimpleNamespace(
                 memory_service_factory=lambda: None,
                 summary_repository_factory=lambda: None,

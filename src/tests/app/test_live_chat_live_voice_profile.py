@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from contextvars import copy_context
-from types import SimpleNamespace
 from typing import Any, Iterator
 
 import pytest
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.chat import live_chat_live_voice_profile as profile
+from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.live_voice import pipeline as live_voice_pipeline
+from app.live_voice.prompt import profile
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import LMStudioProvider, ProviderConfig
-from app.providers import service as provider_service
 
 
 def _session_with_long_history() -> tuple[ChatSession, ChatMessage]:
@@ -60,45 +60,44 @@ def test_browser_live_turn_marker_derives_existing_request_ids() -> None:
     assert request.speech_segment_id == "voice-segment:voice-turn:12345"
 
 
-def test_live_voice_prompt_bounds_history_and_skips_cross_session_recall(monkeypatch) -> None:
+def test_prompt_store_selects_feature_pipeline_for_live_voice(monkeypatch) -> None:
     session, current = _session_with_long_history()
-    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
-    monkeypatch.setattr(
-        profile,
-        "resolve_prompt_memory",
-        lambda session, memory_service_factory: ([], {"memory_enabled": False}),
-    )
-    monkeypatch.setattr(profile, "compaction_enabled", lambda: False)
-    store = SimpleNamespace(
-        memory_service_factory=lambda: None,
-        summary_repository_factory=lambda: (_ for _ in ()).throw(
-            AssertionError("summary lookup should be disabled")
-        ),
-    )
+    expected = (object(), object())
+    observed: list[tuple[object, object, object, object]] = []
 
-    assembly, rendered = profile._build_live_voice_prompt(
+    def build(store, routed_session, user_message, context_items):
+        observed.append((store, routed_session, user_message, context_items))
+        return expected
+
+    monkeypatch.setattr(live_voice_pipeline, "build_live_voice_prompt", build)
+    store = object()
+
+    result = PromptChatSessionStore.build_provider_prompt(
         store,
         session,
         current,
         [],
     )
 
-    latency = assembly.diagnostics["latency_profile"]
-    assert latency["name"] == "live_voice"
-    assert latency["recent_message_limit"] == 12
-    assert latency["max_input_tokens"] == 12_288
-    assert latency["history_tokens"] == 0
-    assert assembly.diagnostics["recent_message_count"] == 12
-    assert assembly.diagnostics["history_recall"] == {
-        "enabled": False,
-        "retrieved_count": 0,
-        "reason": "live_voice_latency_profile",
-    }
-    assert rendered.diagnostics.estimated_tokens <= latency["max_input_tokens"]
-    assert rendered.messages[-1].content == "Answer quickly."
+    assert result is expected
+    assert observed == [(store, session, current, [])]
+
+
+def test_live_voice_prompt_policy_bounds_history_budget() -> None:
+    assert profile._live_voice_recent_message_limit() == 12
+
+    budget = profile._live_voice_prompt_budget()
+
+    assert budget.max_input_tokens == 12_288
+    assert budget.reserved_output_tokens == 1_024
+    assert budget.memory_tokens <= 1_000
+    assert budget.summary_tokens <= 2_000
+    assert budget.history_tokens == 0
+    assert budget.external_context_tokens <= 2_048
 
 
 def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monkeypatch) -> None:
+    profile._install_lmstudio_thinking_policy()
     provider = LMStudioProvider(
         ProviderConfig(
             provider_type="lmstudio",

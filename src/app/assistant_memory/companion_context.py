@@ -10,6 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
+from collections.abc import Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -219,6 +220,8 @@ def _cache_key(
     timezone_name: str | None,
     now: datetime | None,
     time_bucket_minutes: int,
+    category_section_overrides: Mapping[str, CompanionSection] | None,
+    category_score_overrides: Mapping[str, int] | None,
 ) -> str:
     session_id, owner_type, owner_id = _session_identity(session)
     snapshot_id, snapshot_revision = _snapshot_identity(session)
@@ -245,6 +248,18 @@ def _cache_key(
             )
         ).encode("utf-8")
     ).hexdigest()[:20]
+    category_signature = "|".join(
+        [
+            *(
+                f"section:{key}:{value}"
+                for key, value in sorted((category_section_overrides or {}).items())
+            ),
+            *(
+                f"score:{key}:{value}"
+                for key, value in sorted((category_score_overrides or {}).items())
+            ),
+        ]
+    )
     return "\x1f".join(
         [
             session_id,
@@ -261,6 +276,7 @@ def _cache_key(
             resolved_timezone,
             time_bucket,
             signature,
+            category_signature,
         ]
     )
 
@@ -269,14 +285,28 @@ def _terms(value: str) -> frozenset[str]:
     return frozenset(term.casefold() for term in _TERM_PATTERN.findall(value))
 
 
-def _section(item: PromptMemoryItem) -> CompanionSection:
-    return _CATEGORY_SECTION.get(item.category, "stable_profile")
+def _section(
+    item: PromptMemoryItem,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+) -> CompanionSection:
+    return (category_section_overrides or {}).get(
+        item.category,
+        _CATEGORY_SECTION.get(item.category, "stable_profile"),
+    )
 
 
-def _baseline_item(item: PromptMemoryItem) -> CompanionContextItem:
-    section = _section(item)
+def _baseline_item(
+    item: PromptMemoryItem,
+    *,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+    category_score_overrides: Mapping[str, int] | None = None,
+) -> CompanionContextItem:
+    section = _section(item, category_section_overrides)
     score = (
-        _CATEGORY_BASE.get(item.category, 250)
+        (category_score_overrides or {}).get(
+            item.category,
+            _CATEGORY_BASE.get(item.category, 250),
+        )
         + _SCOPE_BASE.get(item.scope, 0)
         + (10 if item.source == "character" else 5 if item.source == "shared_system" else 0)
     )
@@ -300,6 +330,8 @@ def _baseline(
     timezone_name: str | None,
     now: datetime | None,
     time_bucket_minutes: int,
+    category_section_overrides: Mapping[str, CompanionSection] | None,
+    category_score_overrides: Mapping[str, int] | None,
 ) -> tuple[_CachedBaseline, bool]:
     key = _cache_key(
         session,
@@ -309,6 +341,8 @@ def _baseline(
         timezone_name=timezone_name,
         now=now,
         time_bucket_minutes=time_bucket_minutes,
+        category_section_overrides=category_section_overrides,
+        category_score_overrides=category_score_overrides,
     )
     with _cache_lock:
         cached = _baseline_cache.get(key)
@@ -316,7 +350,14 @@ def _baseline(
             return cached, True
     values = tuple(
         sorted(
-            (_baseline_item(item) for item in approved_memory),
+            (
+                _baseline_item(
+                    item,
+                    category_section_overrides=category_section_overrides,
+                    category_score_overrides=category_score_overrides,
+                )
+                for item in approved_memory
+            ),
             key=lambda item: (
                 -item.activation_score,
                 item.section,
@@ -352,6 +393,8 @@ def build_companion_context_packet(
     timezone_name: str | None = None,
     now: datetime | None = None,
     time_bucket_minutes: int = _DEFAULT_BUCKET_MINUTES,
+    category_section_overrides: Mapping[str, CompanionSection] | None = None,
+    category_score_overrides: Mapping[str, int] | None = None,
 ) -> CompanionContextPacket:
     """Select a bounded packet without transcript or history scans."""
 
@@ -365,6 +408,8 @@ def build_companion_context_packet(
         timezone_name=timezone_name,
         now=now,
         time_bucket_minutes=time_bucket_minutes,
+        category_section_overrides=category_section_overrides,
+        category_score_overrides=category_score_overrides,
     )
     query_terms = _terms(str(getattr(user_message, "content", "") or ""))
     scored: list[CompanionContextItem] = []

@@ -79,6 +79,31 @@ def test_packet_is_bounded_sectioned_and_query_relevant() -> None:
     assert packet.prompt_memory[0].memory_id == "memory:1"
 
 
+def test_feature_category_overrides_are_per_call_and_cache_keyed() -> None:
+    invalidate_companion_context()
+    memories = [_item(20, "routine", "water the balcony plants", scope="global")]
+    message = SimpleNamespace(content="hello")
+    overrides = {"routine": "due_routines"}
+
+    live_voice_packet = build_companion_context_packet(
+        _session(),
+        message,
+        memories,
+        token_budget=100,
+        category_section_overrides=overrides,
+        category_score_overrides={"routine": 575},
+    )
+    ordinary_packet = build_companion_context_packet(
+        _session(),
+        message,
+        memories,
+        token_budget=100,
+    )
+
+    assert live_voice_packet.sections["due_routines"][0].activation_score == 605
+    assert ordinary_packet.sections["stable_profile"][0].memory_id == "memory:20"
+
+
 def test_packet_cache_is_content_safe_and_fast() -> None:
     invalidate_companion_context()
     memories = [

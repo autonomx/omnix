@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from app.assets import (
     AssetRecord,
@@ -29,6 +31,40 @@ from .repository import (
 from .voice_consent import governance_from_asset
 
 LOGGER = logging.getLogger("uvicorn.error")
+_SNAPSHOT_CACHE_LOCK = threading.RLock()
+_SNAPSHOT_CACHE_WRITERS: set[Callable[[Any], None]] = set()
+_SNAPSHOT_CACHE_INVALIDATORS: set[Callable[[str], None]] = set()
+
+
+def subscribe_character_snapshot_cache(
+    *,
+    on_resolve: Callable[[Any], None],
+    on_change: Callable[[str], None],
+) -> None:
+    """Register bounded-cache ports for immutable snapshots and mutations."""
+    with _SNAPSHOT_CACHE_LOCK:
+        _SNAPSHOT_CACHE_WRITERS.add(on_resolve)
+        _SNAPSHOT_CACHE_INVALIDATORS.add(on_change)
+
+
+def _publish_snapshot(snapshot: Any) -> None:
+    with _SNAPSHOT_CACHE_LOCK:
+        writers = tuple(_SNAPSHOT_CACHE_WRITERS)
+    for writer in writers:
+        try:
+            writer(snapshot)
+        except Exception:
+            LOGGER.warning("character snapshot cache observer failed", exc_info=True)
+
+
+def _invalidate_snapshot_caches(character_id: str) -> None:
+    with _SNAPSHOT_CACHE_LOCK:
+        invalidators = tuple(_SNAPSHOT_CACHE_INVALIDATORS)
+    for invalidate in invalidators:
+        try:
+            invalidate(character_id)
+        except Exception:
+            LOGGER.warning("character snapshot cache invalidator failed", exc_info=True)
 
 
 class CharacterVoiceAssetError(ValueError):
@@ -67,23 +103,31 @@ class CharacterService:
         asset = self._validate_voice_asset(request.default_voice_asset_id)
         if asset is not None and request.default_voice_asset_id != asset.id:
             request = request.model_copy(update={"default_voice_asset_id": asset.id})
-        return self.repository.create(request)
+        result = self.repository.create(request)
+        _invalidate_snapshot_caches(result.id)
+        return result
 
     def update(self, character_id: str, request: UpdateCharacterRequest) -> CharacterProfile:
         if request.default_voice_asset_id is not None:
             asset = self._validate_voice_asset(request.default_voice_asset_id)
             if asset is not None and request.default_voice_asset_id != asset.id:
                 request = request.model_copy(update={"default_voice_asset_id": asset.id})
-        return self.repository.update(character_id, request)
+        result = self.repository.update(character_id, request)
+        _invalidate_snapshot_caches(character_id)
+        return result
 
     def archive(self, character_id: str) -> ArchiveCharacterResponse:
-        return ArchiveCharacterResponse(character=self.repository.archive(character_id))
+        result = ArchiveCharacterResponse(character=self.repository.archive(character_id))
+        _invalidate_snapshot_caches(character_id)
+        return result
 
     def versions(self, character_id: str) -> CharacterVersionListResponse:
         return CharacterVersionListResponse(versions=self.repository.versions(character_id))
 
     def resolve_snapshot(self, character_id: str):
-        return self.get(character_id).snapshot()
+        snapshot = self.get(character_id).snapshot()
+        _publish_snapshot(snapshot)
+        return snapshot
 
     def resolve_voice_asset(self, asset_id: str | None) -> AssetRecord | None:
         """Resolve a voice from the shared store or canonical clone directory.
@@ -164,4 +208,5 @@ __all__ = [
     "CharacterService",
     "CharacterVoiceAssetError",
     "default_character_service",
+    "subscribe_character_snapshot_cache",
 ]

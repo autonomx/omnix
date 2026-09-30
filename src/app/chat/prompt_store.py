@@ -33,6 +33,7 @@ from .memory_prompt import resolve_prompt_memory
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
+from app.live_voice.prompt.window import build_prompt_assembly_with_window
 from .routing_context import ChatRoutingContext, build_chat_routing_context
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from .store import (
@@ -298,7 +299,8 @@ class ChatSessionStore(JsonChatSessionStore):
             if summary_record is not None
             else None
         )
-        assembly = build_prompt_assembly(
+        assembly = build_prompt_assembly_with_window(
+            build_prompt_assembly,
             session,
             user_message,
             global_system_prompt=provider_service.get_global_system_prompt(),
@@ -388,6 +390,18 @@ class ChatSessionStore(JsonChatSessionStore):
         user_message: ChatMessage,
         context_items: list[dict[str, Any]] | None = None,
     ) -> tuple[PromptAssembly, RenderedPrompt]:
+        from app.live_voice.pipeline import (
+            build_live_voice_prompt,
+            is_live_voice_message,
+        )
+
+        if is_live_voice_message(user_message):
+            return build_live_voice_prompt(
+                self,
+                session,
+                user_message,
+                context_items,
+            )
         assembly = (
             self._pop_cached_prompt_context(session, user_message)
             or self.build_prompt_context(session, user_message, context_items)

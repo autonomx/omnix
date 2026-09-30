@@ -5,25 +5,21 @@ replaying an unbounded transcript makes prompt processing progressively slower
 and can exceed a small model's loaded context.  Keep a configurable recent tail
 and replace older eligible turns with an exact deterministic summary.
 
-This hook patches the prompt-store module's imported assembly function.  The
-live-voice profile imports the canonical assembly function directly and keeps
-its separate 12-message latency policy.
+Ordinary Chat applies this feature-owned stage before canonical prompt
+rendering. The live-voice profile keeps its separate 12-message latency policy.
 """
 from __future__ import annotations
 
 from app.config.env import environment
 from collections.abc import Callable
-from functools import wraps
 from typing import Any
 
-from app.chat import prompt_store as prompt_store_runtime
 from app.chat.compaction import build_deterministic_summary
 from app.chat.models import ChatMessage, ChatSession
 from app.chat.prompt_assembly import PromptAssembly
 
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_normal_chat_prompt_window_installed"
 _DEFAULT_RECENT_MESSAGE_LIMIT = 24
 _MIN_RECENT_MESSAGE_LIMIT = 2
 _MAX_RECENT_MESSAGE_LIMIT = 200
@@ -114,7 +110,7 @@ def _exact_window_summary(
     )
 
 
-def _build_prompt_assembly_with_window(
+def build_prompt_assembly_with_window(
     original_build: Callable[..., PromptAssembly],
     session: ChatSession,
     user_message: ChatMessage,
@@ -202,31 +198,8 @@ def _build_prompt_assembly_with_window(
     return assembly
 
 
-def install_live_chat_prompt_window_hook() -> None:
-    """Install bounded rolling context for ordinary text/character Chat."""
-    if getattr(prompt_store_runtime, _HOOK_SENTINEL, False):
-        return
-    original_build = prompt_store_runtime.build_prompt_assembly
-
-    @wraps(original_build)
-    def patched_build(
-        session: ChatSession,
-        user_message: ChatMessage,
-        **kwargs: Any,
-    ) -> PromptAssembly:
-        return _build_prompt_assembly_with_window(
-            original_build,
-            session,
-            user_message,
-            **kwargs,
-        )
-
-    prompt_store_runtime.build_prompt_assembly = patched_build
-    setattr(prompt_store_runtime, _HOOK_SENTINEL, True)
-
-
 __all__ = [
-    "install_live_chat_prompt_window_hook",
+    "build_prompt_assembly_with_window",
     "normal_chat_prompt_window_enabled",
     "normal_chat_recent_message_limit",
 ]

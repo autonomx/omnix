@@ -1,6 +1,7 @@
 """Typed, trust-separated provider prompt assembly."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -85,10 +86,11 @@ def build_prompt_assembly(
     assistant_identity: list[str] | None = None,
     budget: PromptBudget | None = None,
     recent_message_limit: int | None = None,
+    identity_resolver: Callable[[ChatSession], Any] | None = None,
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
-    interaction = resolve_system_session_identity(session)
+    interaction = (identity_resolver or resolve_system_session_identity)(session)
     session_system_messages = [
         neutralize_legacy_system_prompt(message.content)
         for message in session.messages
