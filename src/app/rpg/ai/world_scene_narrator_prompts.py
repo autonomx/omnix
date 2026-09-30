@@ -1,12 +1,59 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
 from app.rpg.ai.memory_narration_grounding import memory_narration_prompt_block
+from app.rpg.ai.world_scene_survival_grounding_bridge import (
+    append_survival_grounding_to_prompt,
+)
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
-from app.rpg.ai.world_scene_narrator_payloads import *
-from app.rpg.ai.world_scene_narrator_structured import *
+from app.rpg.ai.world_scene_narrator_structured import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+    sanitize_memory_narration_payload as sanitize_memory_narration_payload, _merge_bs1_sanitized_payload as _merge_bs1_sanitized_payload,
+    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
+    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
+    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
+    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
+    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
+    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
+    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural, _strip_basic_markdown as _strip_basic_markdown,
+    _travel_result_from_context as _travel_result_from_context, _grounded_travel_narration as _grounded_travel_narration, _grounded_travel_action as _grounded_travel_action,
+    _final_grounded_service_action_text as _final_grounded_service_action_text, _service_grounded_action_result as _service_grounded_action_result,
+    _service_grounded_npc_line as _service_grounded_npc_line, _normalized_text_for_compare as _normalized_text_for_compare,
+    _fallback_non_service_narration as _fallback_non_service_narration, _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
+    _naturalize_service_debug_language as _naturalize_service_debug_language, _service_grounded_narration_text as _service_grounded_narration_text,
+    _service_narration_needs_grounding as _service_narration_needs_grounding, _service_claim_needs_grounding as _service_claim_needs_grounding,
+    _service_purchase_is_applied as _service_purchase_is_applied, _selected_service_offer as _selected_service_offer,
+    _service_extract_price_tokens as _service_extract_price_tokens, _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
+    _ground_action_result_text as _ground_action_result_text, _player_input_action_text as _player_input_action_text,
+    _build_authoritative_action_line as _build_authoritative_action_line, _build_action_result_line as _build_action_result_line, _build_rewards_block as _build_rewards_block,
+    _titleize_action as _titleize_action, _first_nonempty as _first_nonempty, _extract_text_lines as _extract_text_lines, _normalize_speaker_block as _normalize_speaker_block,
+    _build_safe_prompt_context as _build_safe_prompt_context, _build_speaker_turns as _build_speaker_turns, _extract_json_object_from_text as _extract_json_object_from_text,
+    _normalize_narration_json as _normalize_narration_json, _parse_llm_narration_payload as _parse_llm_narration_payload, _strict_narration_payload as _strict_narration_payload,
+    _recent_authoritative_facts as _recent_authoritative_facts, _extract_continuity_price_facts as _extract_continuity_price_facts,
+    _extract_present_actor_names as _extract_present_actor_names, _extract_price_tokens as _extract_price_tokens, _sanitize_narration_text as _sanitize_narration_text,
+    _authoritative_action_text as _authoritative_action_text, _authoritative_reward_text as _authoritative_reward_text, _allowed_npc_speakers as _allowed_npc_speakers,
+    _sanitize_npc_block as _sanitize_npc_block, _desystemify_text as _desystemify_text, _strip_meta_narration as _strip_meta_narration,
+    _fallback_in_world_narration as _fallback_in_world_narration, _enforce_npc_behavior as _enforce_npc_behavior, _sanitize_narration_payload as _sanitize_narration_payload,
+    _render_narration_text_from_json as _render_narration_text_from_json, _recover_narration_from_raw_text as _recover_narration_from_raw_text,
+    _structured_fallback_response as _structured_fallback_response, _build_scene_summary as _build_scene_summary, _build_combat_facts_block as _build_combat_facts_block,
+    _pick_npc_reply_text as _pick_npc_reply_text, _build_npc_reply_block as _build_npc_reply_block, _collect_emphasis_markers as _collect_emphasis_markers,
+    apply_narration_emphasis as apply_narration_emphasis, build_structured_narration as build_structured_narration,
+)
+
+
 from app.rpg.session.memory_prompt import (
     build_relevant_memory_context_from_runtime,
     build_relevant_memory_prompt_block,
@@ -16,6 +63,7 @@ from app.rpg.session.memory_prompt import (
 @dataclass
 class NPCReaction:
     """An NPC's reaction to a scene event."""
+
     npc_id: str = ""
     npc_name: str = ""
     reaction: str = ""
@@ -27,6 +75,7 @@ class NPCReaction:
 @dataclass
 class NarrativeResult:
     """Complete result from scene narration."""
+
     narrative: str
     choices: List[Dict[str, Any]] = field(default_factory=list)
     npc_reactions: List[NPCReaction] = field(default_factory=list)
@@ -37,6 +86,7 @@ class NarrativeResult:
 # ---------------------------------------------------------------------------
 # Prompt builders
 # ---------------------------------------------------------------------------
+
 
 def _normalize_response_length(value: Any) -> str:
     value = str(value or "").strip().lower()
@@ -52,7 +102,7 @@ def _response_length_prompt_rules(response_length: str) -> str:
         return (
             "NARRATOR: 5 to 7 sentences describing the scene.\n"
             "ACTION: 5 to 7 sentences describing the result of the player's action.\n"
-            "NPC: <npc_name>: \"no restrictions on length\" (omit if none)\n"
+            'NPC: <npc_name>: "no restrictions on length" (omit if none)\n'
             "REWARD: <xp/items if any, else omit>"
         )
 
@@ -60,19 +110,21 @@ def _response_length_prompt_rules(response_length: str) -> str:
         return (
             "NARRATOR: 3 to 5 sentences describing the scene.\n"
             "ACTION: 3 to 5 sentences describing the result of the player's action.\n"
-            "NPC: <npc_name>: \"3 to 5 short sentences\" (omit if none)\n"
+            'NPC: <npc_name>: "3 to 5 short sentences" (omit if none)\n'
             "REWARD: <xp/items if any, else omit>"
         )
 
     return (
         "NARRATOR: 2 to 3 short sentence describing the scene.\n"
         "ACTION: 2 to 3 short sentence describing the result of the player's action.\n"
-        "NPC: <npc_name>: \"2 - 3 short reply\" (omit if none)\n"
+        'NPC: <npc_name>: "2 - 3 short reply" (omit if none)\n'
         "REWARD: <xp/items if any, else omit>"
     )
 
 
-def _current_turn_semantic_visible_response(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+def _current_turn_semantic_visible_response(
+    narration_context: Dict[str, Any],
+) -> Dict[str, Any]:
     """Return visible-response guidance bound to the current turn only."""
     narration_context = _safe_dict(narration_context)
     turn_contract = _safe_dict(narration_context.get("turn_contract"))
@@ -89,16 +141,43 @@ def _current_turn_semantic_visible_response(narration_context: Dict[str, Any]) -
     )
 
     candidates = (
-        ("turn_contract.current_turn_visible_response", turn_contract.get("current_turn_visible_response")),
-        ("turn_contract.semantic_visible_response", turn_contract.get("semantic_visible_response")),
-        ("turn_contract.semantic_action.visible_response", semantic_action.get("visible_response")),
-        ("turn_contract.semantic_action.semantic_visible_response", semantic_action.get("semantic_visible_response")),
+        (
+            "turn_contract.current_turn_visible_response",
+            turn_contract.get("current_turn_visible_response"),
+        ),
+        (
+            "turn_contract.semantic_visible_response",
+            turn_contract.get("semantic_visible_response"),
+        ),
+        (
+            "turn_contract.semantic_action.visible_response",
+            semantic_action.get("visible_response"),
+        ),
+        (
+            "turn_contract.semantic_action.semantic_visible_response",
+            semantic_action.get("semantic_visible_response"),
+        ),
         ("resolved_result.visible_response", resolved.get("visible_response")),
-        ("turn_contract.resolved_result.visible_response", contract_resolved.get("visible_response")),
-        ("resolved_result.semantic_action.visible_response", resolved_semantic_action.get("visible_response")),
-        ("action.metadata.semantic_action.visible_response", metadata_semantic_action.get("visible_response")),
-        ("action.metadata.semantic_action.semantic_visible_response", metadata_semantic_action.get("semantic_visible_response")),
-        ("action.metadata.visible_response_if_no_runtime_needed", action_metadata.get("visible_response_if_no_runtime_needed")),
+        (
+            "turn_contract.resolved_result.visible_response",
+            contract_resolved.get("visible_response"),
+        ),
+        (
+            "resolved_result.semantic_action.visible_response",
+            resolved_semantic_action.get("visible_response"),
+        ),
+        (
+            "action.metadata.semantic_action.visible_response",
+            metadata_semantic_action.get("visible_response"),
+        ),
+        (
+            "action.metadata.semantic_action.semantic_visible_response",
+            metadata_semantic_action.get("semantic_visible_response"),
+        ),
+        (
+            "action.metadata.visible_response_if_no_runtime_needed",
+            action_metadata.get("visible_response_if_no_runtime_needed"),
+        ),
     )
 
     for source, value in candidates:
@@ -126,7 +205,12 @@ def _compact_prompt_json(value: Any, max_chars: int, fallback: Any = None) -> st
     if fallback is None:
         fallback = {}
     try:
-        text = json.dumps(value if value is not None else fallback, ensure_ascii=False, separators=(",", ":"), default=str)
+        text = json.dumps(
+            value if value is not None else fallback,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )
     except Exception:
         text = _safe_str(value)
     if len(text) > max_chars:
@@ -148,20 +232,26 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         Prompt string for the LLM.
     """
     # ✅ Apply scene grounding FIRST before any prompt construction
-    from app.rpg.session.runtime import (
-        _apply_grounded_scene_overlay,
-        _derive_grounded_scene_context,
-        _normalize_prompt_location_name,
+    from app.rpg.session.combat_intent import (
+        _apply_grounded_scene_overlay as _apply_grounded_scene_overlay,
+        _derive_grounded_scene_context as _derive_grounded_scene_context,
+        _normalize_prompt_location_name as _normalize_prompt_location_name,
     )
+
     simulation_state = narration_context.get("simulation_state") or {}
     runtime_state = narration_context.get("runtime_state") or {}
     turn_result = narration_context.get("resolved_result") or {}
 
-    grounded = _derive_grounded_scene_context(simulation_state, runtime_state, turn_result)
+    grounded = _derive_grounded_scene_context(
+        simulation_state, runtime_state, turn_result
+    )
     scene = _apply_grounded_scene_overlay(scene, grounded)
 
     # ✅ Get final values from authoritative grounded state
-    title = _safe_str(scene.get("title") or grounded.get("scene_title")).strip() or "Current Scene"
+    title = (
+        _safe_str(scene.get("title") or grounded.get("scene_title")).strip()
+        or "Current Scene"
+    )
     summary = _safe_str(scene.get("summary") or grounded.get("scene_summary")).strip()
 
     # ✅ Normalize actors: convert dicts to names, always have safe fallback
@@ -178,8 +268,15 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
     if not actors:
         actors = ["Other people nearby"]
 
-    raw_location = _safe_str(scene.get("location_name") or turn_result.get("location_name")).strip()
-    location = _normalize_prompt_location_name(raw_location, _safe_str(grounded.get("location_name"))) or "Current Location"
+    raw_location = _safe_str(
+        scene.get("location_name") or turn_result.get("location_name")
+    ).strip()
+    location = (
+        _normalize_prompt_location_name(
+            raw_location, _safe_str(grounded.get("location_name"))
+        )
+        or "Current Location"
+    )
     stakes = scene.get("stakes", "much is at stake")
     tension = scene.get("tension", "moderate")
 
@@ -215,13 +312,17 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         conversation_threads_block = "none"
 
     recent_authoritative_facts = _recent_authoritative_facts(narration_context)
-    recent_facts_block = "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
+    recent_facts_block = (
+        "\n".join(f"- {fact}" for fact in recent_authoritative_facts[:3]) or "- none"
+    )
     combat_facts_block = _build_combat_facts_block(narration_context)
     current_turn_prompt_contract = build_runtime_current_turn_prompt_contract(
         scene=scene,
         narration_context=narration_context,
     )
-    current_turn_visible_response = _current_turn_semantic_visible_response(narration_context)
+    current_turn_visible_response = _current_turn_semantic_visible_response(
+        narration_context
+    )
     compact_turn = _safe_dict(current_turn_prompt_contract.get("turn_contract"))
     compact_interpreted = _safe_dict(compact_turn.get("interpreted_action"))
     visible_npc = _safe_dict(current_turn_visible_response.get("npc"))
@@ -248,10 +349,14 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
             "relevant_memory": relevant_memory_context,
         }
     )
-    runtime_guardrails_block = build_runtime_presentation_guardrails_block(narration_context)
+    runtime_guardrails_block = build_runtime_presentation_guardrails_block(
+        narration_context
+    )
     npc_behavior_context = _safe_dict(
         narration_context.get("npc_behavior_context")
-        or _safe_dict(narration_context.get("turn_contract")).get("npc_behavior_context")
+        or _safe_dict(narration_context.get("turn_contract")).get(
+            "npc_behavior_context"
+        )
     )
     npc_state_summary = {
         "mood": npc_behavior_context.get("mood"),
@@ -261,15 +366,25 @@ def build_scene_prompt(scene, narration_context, tone="dramatic"):
         "recent_memories": _safe_list(npc_behavior_context.get("recent_memories"))[:4],
     }
     safe_context_block = _compact_prompt_json(safe_context, 1400)
-    turn_contract_block = _compact_prompt_json(_safe_dict(narration_context.get("turn_contract")), 5200)
-    current_turn_contract_block = _compact_prompt_json(current_turn_prompt_contract, 3600)
-    npc_response_architecture_block = _compact_prompt_json(npc_response_architecture, 3200)
-    current_turn_visible_response_block = _compact_prompt_json(current_turn_visible_response or {"present": False}, 1200)
+    turn_contract_block = _compact_prompt_json(
+        _safe_dict(narration_context.get("turn_contract")), 5200
+    )
+    current_turn_contract_block = _compact_prompt_json(
+        current_turn_prompt_contract, 3600
+    )
+    npc_response_architecture_block = _compact_prompt_json(
+        npc_response_architecture, 3200
+    )
+    current_turn_visible_response_block = _compact_prompt_json(
+        current_turn_visible_response or {"present": False}, 1200
+    )
     npc_state_summary_block = _compact_prompt_json(npc_state_summary, 1200)
     npc_behavior_context_block = _compact_prompt_json(npc_behavior_context, 1800)
 
     grounding_settings = normalize_grounding_settings(
-        _safe_dict(_safe_dict(narration_context.get("runtime_settings")).get("grounding"))
+        _safe_dict(
+            _safe_dict(narration_context.get("runtime_settings")).get("grounding")
+        )
         or _safe_dict(_safe_dict(narration_context.get("settings")).get("grounding"))
     )
     use_safe_fallback_candidate = bool(
@@ -460,7 +575,10 @@ Actors present:
 Stakes: {stakes}
 """
     logger.debug("[RPG PROMPT] Final prompt length: %d", len(prompt))
-    return prompt
+    return append_survival_grounding_to_prompt(
+        prompt,
+        _safe_dict(narration_context),
+    )
 
 
 def build_npc_reaction_prompt(
@@ -499,18 +617,50 @@ def build_npc_reaction_prompt(
     goals_info = f"Goals: {npc_goals}" if npc_goals else ""
     relation_info = f"Relation to player: {npc_relation}" if npc_relation else ""
     memory_info = f"Recent memory: {npc_memory}" if npc_memory else ""
-    beliefs_info = f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}" if npc_beliefs else ""
-    relationships_info = f"Relationships: {npc_relationships}" if npc_relationships else ""
-    rumor_info = f"Rumors in circulation: {scene.get('active_rumors', [])}" if scene.get("active_rumors") else ""
-    alliance_info = f"Active alliances: {scene.get('active_alliances', [])}" if scene.get("active_alliances") else ""
-    faction_position_info = f"Faction positions: {scene.get('faction_positions', {})}" if scene.get("faction_positions") else ""
+    beliefs_info = (
+        f"Current beliefs: {', '.join(str(v) for v in npc_beliefs.values())}"
+        if npc_beliefs
+        else ""
+    )
+    relationships_info = (
+        f"Relationships: {npc_relationships}" if npc_relationships else ""
+    )
+    rumor_info = (
+        f"Rumors in circulation: {scene.get('active_rumors', [])}"
+        if scene.get("active_rumors")
+        else ""
+    )
+    alliance_info = (
+        f"Active alliances: {scene.get('active_alliances', [])}"
+        if scene.get("active_alliances")
+        else ""
+    )
+    faction_position_info = (
+        f"Faction positions: {scene.get('faction_positions', {})}"
+        if scene.get("faction_positions")
+        else ""
+    )
     # Phase 8.3: Add sandbox context to scene prompt
-    sandbox_info = f"Sandbox summary: {scene.get('sandbox_summary', {})}" if scene.get("sandbox_summary") else ""
-    world_consequence_info = f"Recent world consequences: {scene.get('world_consequences', [])}" if scene.get("world_consequences") else ""
+    sandbox_info = (
+        f"Sandbox summary: {scene.get('sandbox_summary', {})}"
+        if scene.get("sandbox_summary")
+        else ""
+    )
+    world_consequence_info = (
+        f"Recent world consequences: {scene.get('world_consequences', [])}"
+        if scene.get("world_consequences")
+        else ""
+    )
     goals_list_info = f"Active goals: {npc_active_goals}" if npc_active_goals else ""
-    last_decision_info = f"Last decision: {npc_last_decision}" if npc_last_decision else ""
+    last_decision_info = (
+        f"Last decision: {npc_last_decision}" if npc_last_decision else ""
+    )
     # Phase 7: Add debug context info for explainability
-    debug_context_info = f"Scene debug context: {scene.get('debug_context', {})}" if scene.get("debug_context") else ""
+    debug_context_info = (
+        f"Scene debug context: {scene.get('debug_context', {})}"
+        if scene.get("debug_context")
+        else ""
+    )
 
     prompt = f"""You are generating NPC reactions for an RPG.
 
@@ -631,6 +781,7 @@ Respond ONLY in JSON format:
 # Response parsers
 # ---------------------------------------------------------------------------
 
+
 def parse_scene_response(text: str) -> Dict[str, Any]:
     """Parse a raw LLM narrative response.
 
@@ -658,12 +809,15 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
 
     # Clean up the text
     text = _safe_str(text).strip()
-    logger.debug("[RPG PARSE] Cleaned text: %r", text[:200] + "..." if len(text) > 200 else text)
+    logger.debug(
+        "[RPG PARSE] Cleaned text: %r", text[:200] + "..." if len(text) > 200 else text
+    )
 
     # Try JSON format first
     if text.startswith("{"):
         try:
             import json
+
             parsed_json = json.loads(text)
             if isinstance(parsed_json, dict):
                 # Map JSON fields to result fields
@@ -673,7 +827,10 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
                 npc = parsed_json.get("npc")
                 if isinstance(npc, dict):
                     result["npc"] = {
-                        "speaker_id": _safe_str(npc.get("speaker")).strip().replace(" ", "_").lower(),
+                        "speaker_id": _safe_str(npc.get("speaker"))
+                        .strip()
+                        .replace(" ", "_")
+                        .lower(),
                         "name": _safe_str(npc.get("speaker")).strip(),
                         "text": _bound_text(npc.get("line"), 180),
                         "emotion": "",
@@ -682,29 +839,41 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
 
                 result["reward"] = ""
 
-                logger.debug("[RPG PARSE] Parsed JSON format: narrator=%r, action=%r, npc_text=%r",
-                             result["narrator"][:50], result["action"][:50], result["npc"]["text"][:50])
+                logger.debug(
+                    "[RPG PARSE] Parsed JSON format: narrator=%r, action=%r, npc_text=%r",
+                    result["narrator"][:50],
+                    result["action"][:50],
+                    result["npc"]["text"][:50],
+                )
                 return result
         except Exception:
-            logger.debug("[RPG PARSE] JSON parsing failed, falling back to text parsing")
+            logger.debug(
+                "[RPG PARSE] JSON parsing failed, falling back to text parsing"
+            )
 
-    import re
+    import re  # noqa: F811 - this function uses a local parser import
 
     # Look for patterns anywhere in the text
     # NARRATOR pattern
-    narrator_match = re.search(r'NARRATOR:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    narrator_match = re.search(
+        r"NARRATOR:\s*(.+?)(?=\n[A-Z]+:|\n*$)", text, re.DOTALL | re.IGNORECASE
+    )
     if narrator_match:
         result["narrator"] = narrator_match.group(1).strip()
         logger.debug("[RPG PARSE] Found NARRATOR: %r", result["narrator"])
 
     # ACTION pattern
-    action_match = re.search(r'ACTION:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    action_match = re.search(
+        r"ACTION:\s*(.+?)(?=\n[A-Z]+:|\n*$)", text, re.DOTALL | re.IGNORECASE
+    )
     if action_match:
         result["action"] = action_match.group(1).strip()
         logger.debug("[RPG PARSE] Found ACTION: %r", result["action"])
 
     # NPC pattern
-    npc_match = re.search(r'NPC:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    npc_match = re.search(
+        r"NPC:\s*(.+?)(?=\n[A-Z]+:|\n*$)", text, re.DOTALL | re.IGNORECASE
+    )
     if npc_match:
         npc_text = npc_match.group(1).strip()
         logger.debug("[RPG PARSE] Found NPC text: %r", npc_text)
@@ -718,7 +887,11 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
                 "emotion": "",
                 "portrait": "",
             }
-            logger.debug("[RPG PARSE] Parsed NPC: name=%r, text=%r", npc_name, result["npc"]["text"])
+            logger.debug(
+                "[RPG PARSE] Parsed NPC: name=%r, text=%r",
+                npc_name,
+                result["npc"]["text"],
+            )
         else:
             result["npc"] = {
                 "speaker_id": "",
@@ -727,18 +900,25 @@ def parse_scene_response(text: str) -> Dict[str, Any]:
                 "emotion": "",
                 "portrait": "",
             }
-            logger.debug("[RPG PARSE] Parsed NPC without name: text=%r", result["npc"]["text"])
+            logger.debug(
+                "[RPG PARSE] Parsed NPC without name: text=%r", result["npc"]["text"]
+            )
 
     # REWARD pattern
-    reward_match = re.search(r'REWARD:\s*(.+?)(?=\n[A-Z]+:|\n*$)', text, re.DOTALL | re.IGNORECASE)
+    reward_match = re.search(
+        r"REWARD:\s*(.+?)(?=\n[A-Z]+:|\n*$)", text, re.DOTALL | re.IGNORECASE
+    )
     if reward_match:
         result["reward"] = _bound_text(reward_match.group(1).strip(), 120)
         logger.debug("[RPG PARSE] Found REWARD: %r", result["reward"])
 
     # Fallback: if no structured format found, try to extract from plain text
     if not result["narrator"] and not result["action"]:
-        lines = text.split('\n')
-        logger.debug("[RPG PARSE] No structured format found, using fallback with %d lines", len(lines))
+        lines = text.split("\n")
+        logger.debug(
+            "[RPG PARSE] No structured format found, using fallback with %d lines",
+            len(lines),
+        )
         if lines:
             # Assume first line is narrator
             result["narrator"] = lines[0].strip()
@@ -769,8 +949,13 @@ def _is_valid_scene_response(parsed: Dict[str, Any]) -> bool:
     else:
         is_valid = True
 
-    logger.warning("[RPG VALIDATE] narrator=%r, action=%r, npc_text=%r -> valid=%s",
-                narrator[:50], action[:50], npc_text[:50], is_valid)
+    logger.warning(
+        "[RPG VALIDATE] narrator=%r, action=%r, npc_text=%r -> valid=%s",
+        narrator[:50],
+        action[:50],
+        npc_text[:50],
+        is_valid,
+    )
     return is_valid
 
 
@@ -829,13 +1014,13 @@ def parse_npc_reaction(text: str, npc_id: str = "", npc_name: str = "") -> NPCRe
     for line in text.split("\n"):
         line = line.strip()
         if line.startswith("REACTION:"):
-            reaction = line[len("REACTION:"):].strip()
+            reaction = line[len("REACTION:") :].strip()
         elif line.startswith("DIALOGUE:"):
-            dialogue = line[len("DIALOGUE:"):].strip().strip('"')
+            dialogue = line[len("DIALOGUE:") :].strip().strip('"')
         elif line.startswith("EMOTION:"):
-            emotion = line[len("EMOTION:"):].strip().lower()
+            emotion = line[len("EMOTION:") :].strip().lower()
         elif line.startswith("INTENT:"):
-            intent = line[len("INTENT:"):].strip().lower()
+            intent = line[len("INTENT:") :].strip().lower()
 
     return NPCReaction(
         npc_id=npc_id,
@@ -875,15 +1060,17 @@ def parse_choices(text: str, source: str = "") -> List[Dict[str, Any]]:
             for i, c in enumerate(choices_data):
                 if isinstance(c, dict):
                     action = c.get("action", {})
-                    choices.append({
-                        "id": f"choice_{i+1}",
-                        "text": c.get("text", ""),
-                        "type": c.get("type", "action"),
-                        "action": {
-                            "type": action.get("type", "intervene_thread"),
-                            "target_id": action.get("target_id", source),
-                        },
-                    })
+                    choices.append(
+                        {
+                            "id": f"choice_{i + 1}",
+                            "text": c.get("text", ""),
+                            "type": c.get("type", "action"),
+                            "action": {
+                                "type": action.get("type", "intervene_thread"),
+                                "target_id": action.get("target_id", source),
+                            },
+                        }
+                    )
             if choices:
                 return choices
     except (json.JSONDecodeError, TypeError):
@@ -901,20 +1088,36 @@ def parse_choices(text: str, source: str = "") -> List[Dict[str, Any]]:
             idx = len(choices) + 1
             choice_type = choice_types[idx % len(choice_types)]
             action_type = action_types[idx % len(action_types)]
-            choices.append({
-                "id": f"choice_{idx}",
-                "text": choice_text,
-                "type": choice_type,
-                "action": {
-                    "type": action_type,
-                    "target_id": source,
-                },
-            })
+            choices.append(
+                {
+                    "id": f"choice_{idx}",
+                    "text": choice_text,
+                    "type": choice_type,
+                    "action": {
+                        "type": action_type,
+                        "target_id": source,
+                    },
+                }
+            )
 
-    return choices if choices else [
-        {"id": "choice_1", "text": "Take action", "type": "action", "action": {"type": "intervene_thread", "target_id": source}},
-        {"id": "choice_2", "text": "Wait and observe", "type": "observe", "action": {"type": "observe_situation", "target_id": source}},
-    ]
+    return (
+        choices
+        if choices
+        else [
+            {
+                "id": "choice_1",
+                "text": "Take action",
+                "type": "action",
+                "action": {"type": "intervene_thread", "target_id": source},
+            },
+            {
+                "id": "choice_2",
+                "text": "Wait and observe",
+                "type": "observe",
+                "action": {"type": "observe_situation", "target_id": source},
+            },
+        ]
+    )
 
 
 def apply_hooks_to_choices(
@@ -950,4 +1153,13 @@ def apply_hooks_to_choices(
 # Scene narration service
 # ---------------------------------------------------------------------------
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = (
+    "annotations memory_narration_prompt_block append_survival_grounding_to_prompt json logging re traceback dataclass field Any Callable Dict List Optional normalize_grounding_settings select_grounded_narration_candidate memory_reference_is_backed build_runtime_npc_response_architecture build_runtime_current_turn_prompt_contract format_runtime_prompt_contract_block build_runtime_presentation_guardrails_block sanitize_unsupported_combat_payload parse_runtime_provider_payload "
+    "build_encounter_view logger _ACTIVE_NARRATIONS NARRATION_JSON_FORMAT_VERSION NARRATION_JSON_SCHEMA_HINT _extract_llm_text _llm_text _attach_social_context _safe_str_p6 _attach_npc_mind_context _NARRATION_MAX_MARKDOWN _safe_str _safe_dict _safe_list _title_case_token _force_live_llm_required sanitize_memory_narration_payload _merge_bs1_sanitized_payload _build_ambient_conversation_line _bound_text _clean_npc_dialogue_line _is_accommodation_request "
+    "_has_authoritative_accommodation_offer _ground_accommodation_npc_line _service_result_from_context _recalled_service_memories_from_context _format_recalled_service_memories_for_prompt _recalled_npc_memories_from_context _format_recalled_npc_memories_for_prompt _conversation_result_from_context _format_conversation_beat_for_prompt _apply_grounded_conversation_beat _line_has_prior_memory_reference _memory_reference_is_backed _strip_unbacked_memory_reference_from_npc_line "
+    "_strip_service_meta_language _service_offer_label_with_price _join_natural _strip_basic_markdown _travel_result_from_context _grounded_travel_narration _grounded_travel_action _final_grounded_service_action_text _service_grounded_action_result _service_grounded_npc_line _normalized_text_for_compare _fallback_non_service_narration _sanitize_repeated_player_input_narration _naturalize_service_debug_language _service_grounded_narration_text _service_narration_needs_grounding "
+    "_service_claim_needs_grounding _service_purchase_is_applied _selected_service_offer _service_extract_price_tokens _successful_service_purchase_text_needs_grounding _ground_action_result_text _player_input_action_text _build_authoritative_action_line _build_action_result_line _build_rewards_block _titleize_action _first_nonempty _extract_text_lines _normalize_speaker_block _build_safe_prompt_context _build_speaker_turns _extract_json_object_from_text _normalize_narration_json "
+    "_parse_llm_narration_payload _strict_narration_payload _recent_authoritative_facts _extract_continuity_price_facts _extract_present_actor_names _extract_price_tokens _sanitize_narration_text _authoritative_action_text _authoritative_reward_text _allowed_npc_speakers _sanitize_npc_block _desystemify_text _strip_meta_narration _fallback_in_world_narration _enforce_npc_behavior _sanitize_narration_payload _render_narration_text_from_json _recover_narration_from_raw_text "
+    "_structured_fallback_response _build_scene_summary _build_combat_facts_block _pick_npc_reply_text _build_npc_reply_block _collect_emphasis_markers apply_narration_emphasis build_structured_narration build_relevant_memory_context_from_runtime build_relevant_memory_prompt_block NPCReaction NarrativeResult _normalize_response_length _response_length_prompt_rules _current_turn_semantic_visible_response _compact_prompt_json _compact_prompt_text build_scene_prompt "
+    "build_npc_reaction_prompt build_choice_prompt parse_scene_response _is_valid_scene_response _with_scene_response_defaults parse_npc_reaction parse_choices apply_hooks_to_choices "
+).split()

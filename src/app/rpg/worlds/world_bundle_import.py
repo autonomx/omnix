@@ -128,7 +128,7 @@ def _prepare_assets(
     return created, reused, asset_map
 
 
-def _install_assets(store: SharedAssetStore, assets: Iterable[AssetRecord]) -> list[str]:
+def _register_assets(store: SharedAssetStore, assets: Iterable[AssetRecord]) -> list[str]:
     installed: list[str] = []
     try:
         for asset in assets:
@@ -449,7 +449,7 @@ def import_world_bundle(
         existing_run_ids=existing["run"],
     )
     created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, store)
-    installed_assets = _install_assets(store, created_assets)
+    installed_assets = _register_assets(store, created_assets)
     try:
         with unit_of_work(database) as work:
             if work.world_scenarios.get_world(context, target) is not None:

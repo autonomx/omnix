@@ -2,10 +2,9 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
 from app.rpg.map_observer_runtime import ObserverPerceptionPolicy
@@ -27,7 +26,6 @@ class RpgObserveMapRequestBody(_TypedRequestModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_observer_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_observer_route_hook_installed"
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -100,20 +98,3 @@ def register_rpg_observer_routes(router: APIRouter, state) -> None:
         except Exception as exc:
             _raise_domain_error(exc)
             raise
-
-
-def install_rpg_observer_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (
-            args and args[0] == "Omnix Web Gateway"
-        ):
-            register_rpg_observer_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

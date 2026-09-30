@@ -9,7 +9,6 @@ from typing import Any
 from app.rpg.foreground_turn_record import FOREGROUND_TURN_RECORD_MAX_BYTES
 from app.rpg.jobs.turn_job_mirror import (
     _apply_turn_with_job_mirror,
-    _submission_lock_count,
 )
 from app.rpg.jobs.last10_report_debug import build_turn_debug_payload
 from app.rpg.presentation.turn_response import build_turn_response_v2
@@ -132,7 +131,7 @@ def test_compact_replay_is_projection_stable(monkeypatch: Any, tmp_path: Path) -
     assert "Bran" in projected["visible_response"]["plain_text"]
 
 
-def test_submission_lock_entries_are_released_after_concurrent_replay(
+def test_concurrent_replay_uses_submission_claim_without_process_local_lock(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
@@ -160,10 +159,11 @@ def test_submission_lock_entries_are_released_after_concurrent_replay(
 
     assert calls == 1
     assert {result["interaction_id"] for result in results} == {"interaction:7"}
-    assert _submission_lock_count() == 0
+    source = Path("src/app/rpg/jobs/turn_job_mirror.py").read_text(encoding="utf-8")
+    assert "_SUBMISSION_LOCKS" not in source
 
 
-def test_unique_submission_locks_do_not_accumulate(monkeypatch: Any, tmp_path: Path) -> None:
+def test_unique_submissions_create_records_without_process_local_lock(monkeypatch: Any, tmp_path: Path) -> None:
     store = InMemoryJobStore(tmp_path / "jobs")
     monkeypatch.setattr("app.jobs.store.default_job_store", lambda: store)
 
@@ -176,7 +176,8 @@ def test_unique_submission_locks_do_not_accumulate(monkeypatch: Any, tmp_path: P
         )
 
     assert len(store.list_jobs()) == 20
-    assert _submission_lock_count() == 0
+    source = Path("src/app/rpg/jobs/turn_job_mirror.py").read_text(encoding="utf-8")
+    assert "_SUBMISSION_LOCKS" not in source
 
 
 def test_source_no_longer_writes_synthetic_or_raw_turn_graphs() -> None:

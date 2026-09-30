@@ -537,7 +537,7 @@ if __name__ != "__main__":
 
 if __name__ == "__main__":
     _register_autoplay_runtime_aliases()
-    from app.rpg.autoplay_report_materialization_guard import install_report_materialization_size_guard_from_argv
+    from tests.rpg.report_materialization_guard import activate_report_materialization_guard_from_argv
     from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
     from tests.rpg.autoplay.live_manual_turn_timing import configure_live_manual_turn_timing_from_argv
     from tests.rpg.autoplay.probe_source_map import configure_probe_source_map_from_argv
@@ -555,7 +555,7 @@ if __name__ == "__main__":
     install_turn_error_diagnostics_hook_from_argv(sys.argv[1:])
     install_deepcopy_recursion_guard_from_argv(sys.argv[1:])
     install_runtime_apply_chain_probe_from_argv(sys.argv[1:])
-    install_report_materialization_size_guard_from_argv(sys.argv[1:])
+    activate_report_materialization_guard_from_argv(sys.argv[1:])
     _install_essential_mirror_member_filter()
     install_force_exit_report_size_guard(sys.argv[1:])
     _load_autoplay_campaign_runtime()

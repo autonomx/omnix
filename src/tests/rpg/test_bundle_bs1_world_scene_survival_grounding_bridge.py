@@ -4,9 +4,10 @@ import json
 
 from app.rpg.ai.world_scene_survival_grounding_bridge import (
     append_survival_grounding_to_prompt,
-    force_patch_world_scene_narrator,
     sanitize_world_scene_survival_payload,
 )
+from app.rpg.ai.world_scene_narrator_payloads import _sanitize_narration_payload
+from app.rpg.ai.world_scene_narrator_prompts import build_scene_prompt
 
 
 def _scene():
@@ -100,12 +101,9 @@ def test_bundle_bs1_payload_bridge_blocks_success_claim_for_blocked_survival_act
     assert sanitized["survival_narration_grounding"]["ok"] is True
 
 
-def test_bundle_bs1_force_patch_world_scene_narrator_prompt_and_sanitize_paths() -> None:
-    narrator = force_patch_world_scene_narrator()
-    assert getattr(narrator, "_BS1_SURVIVAL_GROUNDING_PATCHED") is True
-
+def test_bundle_bs1_direct_narrator_prompt_and_sanitize_paths() -> None:
     context = _context(effects={"thirst_delta": -30}, inventory_delta={"water": -1})
-    prompt = narrator.build_scene_prompt(_scene(), context)
+    prompt = build_scene_prompt(_scene(), context)
     assert "Survival grounding contract" in prompt
     assert "drink_water" in prompt
 
@@ -117,7 +115,7 @@ def test_bundle_bs1_force_patch_world_scene_narrator_prompt_and_sanitize_paths()
         "reward": "",
         "followup_hooks": [],
     }
-    sanitized = narrator._sanitize_narration_payload(payload, _scene(), context)
+    sanitized = _sanitize_narration_payload(payload, _scene(), context)
     assert "thirst eases" in sanitized["narration"]
     assert "warm bed" not in sanitized["narration"]
     assert sanitized["survival_narration_grounding"]["ok"] is True

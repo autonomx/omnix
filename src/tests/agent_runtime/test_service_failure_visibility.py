@@ -82,8 +82,8 @@ def test_claimed_command_is_applied_while_runtime_events_are_serialized(monkeypa
         return snapshot
 
     service._apply_claimed_command = apply_claimed
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", _Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = _Repository
 
     service.command(command)
 
@@ -126,8 +126,8 @@ def test_command_failure_terminalizes_cancel_request(monkeypatch) -> None:
     service.worker_id = "worker-1"
     service.runtime = runtime
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", _Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = _Repository
     monkeypatch.setattr(service, "_cancel_descendants", lambda _run_id: None)
 
     command = AgentRunCommand(run_id="run-1", command_type="cancel")
@@ -176,8 +176,8 @@ def test_runtime_failure_cancels_desired_state_and_closes_runtime(monkeypatch) -
     service.runtime = SimpleNamespace(close_run=closed)
     service._lock = _TrackingLock()
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(
@@ -223,8 +223,8 @@ def test_late_event_closes_stale_terminal_runtime(monkeypatch) -> None:
     service.runtime = SimpleNamespace(close_run=closed)
     service._lock = _TrackingLock()
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(run_id=spec.run_id, event_type="run.started")
@@ -271,8 +271,8 @@ def test_terminal_acceptance_closes_runtime_after_settled_event(monkeypatch) -> 
         status="completed",
     )
 
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: _FakeWork())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _FakeWork()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(
         AgentEvent(run_id=spec.run_id, event_type="run.settled")
@@ -346,8 +346,8 @@ def test_stalled_coding_run_records_advisory_without_interrupting_pi(monkeypatch
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repository
 
     service._supervise_stalled_run(spec.run_id)
     service._supervise_stalled_run(spec.run_id)
@@ -419,8 +419,8 @@ def test_stalled_run_terminalizes_after_recovery_limit(monkeypatch) -> None:
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
-    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
-    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: Work()
+    service.repository_factory = Repository
 
     service._supervise_stalled_run(spec.run_id)
 

@@ -118,31 +118,43 @@ def create_production_app(config: RuntimeConfig | None = None):
     # Resolve adapters after bootstrap, including when a schema exporter or test
     # previously imported the provider-free gateway factory in this process.
     from app.assets import default_asset_store
-    from app.chat import default_chat_store
     from app.runtime_composition import (
+        production_chat_store,
         production_job_store,
         production_model_residency_store,
     )
     from app.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
-    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
-    from app.chat.generation_jobs import _ChatGenerationDispatcher
+    from app.chat.generation_jobs import (
+        _ChatGenerationDispatcher,
+        recover_abandoned_chat_generation_jobs,
+    )
     from app.runtime.background import GatewayBackgroundRuntime
 
+    tenant_context = tenant_provider.current()
+    owner = GatewayRuntimeOwner(database, tenant_context.workspace_id, config=config)
+    dispatcher = _ChatGenerationDispatcher()
+    capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
+    jobs = production_job_store(
+        database=database,
+        context=tenant_context,
+        chat_execution_owner=owner,
+        chat_dispatcher=dispatcher,
+    )
+    from app.chat.live_agent_store import default_live_agent_planner
+
     services = GatewayRuntimeServices(
-        jobs=production_job_store(),
+        jobs=jobs,
         assets=default_asset_store(),
-        chat=default_chat_store(),
+        chat=production_chat_store(
+            job_service=jobs,
+            live_agent_planner=default_live_agent_planner(),
+        ),
         model_residency=production_model_residency_store(),
         database=database,
         tenant=tenant_provider,
         settings=settings_service,
     )
-    owner = GatewayRuntimeOwner(services.jobs.database, services.jobs.context.workspace_id, config=config)
-    services.jobs.chat_execution_owner = owner
-    dispatcher = _ChatGenerationDispatcher()
-    capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
-    services.jobs.chat_dispatcher = dispatcher
     from app.persistence.authority import AuthorityOperation, require_authority_operation
     from app.persistence.background_authority import background_execution
 

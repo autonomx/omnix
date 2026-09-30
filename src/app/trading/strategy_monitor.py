@@ -3,6 +3,7 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
+import sys
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -17,14 +18,15 @@ from app.runtime.features import FeatureContext
 
 from .binding_authority import require_execution_binding
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
-from .gapper_dataset import GapperCandidate
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .market_data_recovery import latest_clean_bars
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackResult, StochRsi5mConfig
 from .strategy_repository import (
     StrategyEvent,
@@ -35,6 +37,12 @@ from .strategy_repository import (
 )
 from .strategy_data_integrity import assess_universe_integrity
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
+from .strategy_evaluability import (
+    assess_bar_coverage,
+    assess_session_evaluability,
+    candidate_morning_evidence_eligible,
+    resolve_causal_equity_bars,
+)
 from .strategy_managed_finviz_shadow import (
     managed_finviz_shadow_autoprovision_enabled,
     provision_managed_finviz_shadow_strategy,
@@ -71,6 +79,9 @@ from .strategy_v2_qualification import (
     evaluate_v2_prospective_qualification,
     v2_profile_fingerprint,
 )
+from .strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
+from .market_evidence_guards import _AuthorizedStrategyPaperRepository
+from . import strategy_v2_qualification as _strategy_v2_qualification
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -79,6 +90,7 @@ from .strategy_v2_management import (
 )
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
+from . import strategy_session_evidence as _session_evidence
 
 
 _ET = ZoneInfo("America/New_York")
@@ -105,22 +117,20 @@ def _current_session_1m_integrity(
     session_date: date,
     observed_at: datetime,
 ) -> tuple[bool, str]:
-    observed_et = observed_at.astimezone(_ET)
-    if observed_et.date() < session_date or (
-        observed_et.date() == session_date and observed_et.time() < _REGULAR_OPEN
-    ):
-        return False, "CURRENT_SESSION_NOT_STARTED"
-    regular = [
-        bar
-        for bar in bars
-        if _REGULAR_OPEN <= bar.start_time.astimezone(_ET).time() < time(16, 0)
-    ]
-    if not regular:
-        return False, "CURRENT_SESSION_1M_UNAVAILABLE"
-    first = regular[0].start_time.astimezone(_ET)
-    if first.time() > _REGULAR_OPEN:
-        return False, "OPENING_1M_HISTORY_INCOMPLETE"
-    return True, "CURRENT_SESSION_1M_READY"
+    assessment = assess_bar_coverage(
+        list(bars),
+        session_date=session_date,
+        observed_at=observed_at,
+        provider="configured_history",
+    )
+    if assessment.ready:
+        return True, "CURRENT_SESSION_1M_READY"
+    return (
+        False,
+        assessment.reason_codes[0]
+        if assessment.reason_codes
+        else "CURRENT_SESSION_1M_UNAVAILABLE",
+    )
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -1210,6 +1220,44 @@ class TradingStrategyMonitor:
         market_service: TradingMarketDataService,
         universe,
     ) -> list[_EntryProposal]:
+        now = datetime.now(timezone.utc)
+        universe_session_date = getattr(universe, "session_date", None)
+        if config.mode == "shadow" and (
+            universe_session_date is None
+            or universe_session_date == now.astimezone(_ET).date()
+        ):
+            market_service = _session_evidence._CurrentSessionMarketDataProxy(
+                market_service,
+                session_date=universe_session_date or now.astimezone(_ET).date(),
+                observed_at=now,
+            )
+        market_service = _session_evidence._FullSessionMarketServiceProxy(
+            market_service,
+            session_date=getattr(
+                universe,
+                "session_date",
+                now.astimezone(_ET).date(),
+            ),
+            observed_at=now,
+            allow_shadow_fallback=config.mode == "shadow",
+        )
+        if isinstance(universe, GapperUniverseSnapshot):
+            session_assessment = assess_session_evaluability(universe, config.config)
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id="__universe__",
+                event_type="session_evaluability",
+                state=session_assessment.status,
+                reason_code="SESSION_EVALUABILITY_ASSESSED",
+                observed_at=universe.evaluation_time,
+                payload={
+                    **session_assessment.model_dump(mode="json"),
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         evaluated_any = False
@@ -2275,7 +2323,141 @@ class TradingStrategyMonitor:
                     for proposal in proposals
                 ],
             )
+        if isinstance(universe, GapperUniverseSnapshot):
+            await self._record_diagnostic_v2_candidates(
+                config,
+                strategy_repository,
+                market_service,
+                universe,
+            )
+        if hasattr(universe, "session_date") and hasattr(universe, "candidates"):
+            await _session_evidence._collect_trend_signal(
+                self,
+                config,
+                strategy_repository,
+                market_service,
+                universe,
+                now=now,
+            )
         return proposals
+
+    async def _record_diagnostic_v2_candidates(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+        universe,
+    ) -> None:
+        if config.config.strategy_version != "2.0.0" or config.mode != "shadow":
+            return
+
+        for candidate in universe.candidates:
+            morning_ok, morning_reasons = candidate_morning_evidence_eligible(
+                candidate,
+                config.config,
+            )
+            if morning_ok:
+                continue
+            now = datetime.now(timezone.utc)
+            bars, coverage, primary_error = await asyncio.to_thread(
+                resolve_causal_equity_bars,
+                market_service,
+                candidate,
+                session_date=universe.session_date,
+                observed_at=now,
+                allow_shadow_fallback=True,
+            )
+            if not coverage.ready:
+                continue
+            diagnostic_candidate = candidate.model_copy(
+                update={
+                    "market_data_complete": True,
+                    "data_quality_flags": (),
+                    "premarket_dollar_volume": max(
+                        candidate.premarket_dollar_volume,
+                        config.config.minimum_premarket_dollar_volume,
+                    ),
+                    "tod_rvol": max(
+                        candidate.tod_rvol or Decimal("0"),
+                        config.config.minimum_tod_rvol,
+                    ),
+                    "spread_bps": Decimal("0"),
+                }
+            )
+            diagnostic_config = config.config.model_copy(
+                update={
+                    "minimum_gap_pct": min(
+                        config.config.minimum_gap_pct,
+                        candidate.gap_pct,
+                    ),
+                    "minimum_price": min(
+                        config.config.minimum_price,
+                        candidate.premarket_price,
+                    ),
+                    "maximum_price": max(
+                        config.config.maximum_price,
+                        candidate.premarket_price,
+                    ),
+                    "minimum_premarket_dollar_volume": Decimal("0"),
+                    "minimum_tod_rvol": Decimal("0"),
+                    "maximum_spread_bps": max(
+                        config.config.maximum_spread_bps,
+                        Decimal("100000"),
+                    ),
+                    "require_catalyst_evidence": False,
+                    "reject_dilution_flags": (),
+                    "float_preference_mode": "ignore",
+                }
+            )
+            structure = resample_final_bars(
+                bars,
+                diagnostic_config.structure_interval,
+            )
+            if not structure:
+                continue
+            result = evaluate_gap_pullback_v2(
+                diagnostic_candidate,
+                structure,
+                diagnostic_config,
+            )
+            result = result.model_copy(
+                update={
+                    "features": result.features.model_copy(
+                        update={
+                            "spread_bps": candidate.spread_bps,
+                            "tod_rvol": candidate.tod_rvol,
+                        }
+                    )
+                }
+            )
+            observed_at = structure[-1].end_time
+            persisted = await self._event(
+                strategy_repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="diagnostic_state",
+                state=result.state,
+                reason_code=result.reason_code,
+                observed_at=observed_at,
+                payload={
+                    "universe_id": universe.universe_id,
+                    "qualification_eligible": False,
+                    "morning_evidence_reason_codes": list(morning_reasons),
+                    "bar_coverage": coverage.model_dump(mode="json"),
+                    "primary_bar_error": primary_error,
+                    "features": result.features.model_dump(mode="json"),
+                    "transitions": list(result.transitions),
+                    "signal": result.signal.model_dump(mode="json")
+                    if result.signal
+                    else None,
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
+            if persisted:
+                self.diagnostic_evaluation_count = (
+                    getattr(self, "diagnostic_evaluation_count", 0) + 1
+                )
 
     async def _evaluate_stoch_rsi_5m_candidates(
         self,
@@ -2554,6 +2736,15 @@ class TradingStrategyMonitor:
         paper_repository: TradingPaperRepository,
         market_service: TradingMarketDataService,
     ) -> None:
+        paper_repository = _AuthorizedStrategyPaperRepository(
+            delegate=paper_repository,
+            monitor=self,
+            config=config,
+            strategy_repository=strategy_repository,
+            market_service=market_service,
+            monitor_module=sys.modules[__name__],
+            qualification_module=_strategy_v2_qualification,
+        )
         cycle_started_at = datetime.now(timezone.utc)
         log_cycle_heartbeat = self._should_log_diagnostic(
             ("strategy_cycle_heartbeat", config.strategy_id),

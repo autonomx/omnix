@@ -1,4 +1,4 @@
-"""Backend tests for Phase 1.3 — Creator UX Partial Regeneration.
+"""Backend tests for Phase 1.3 â€” Creator UX Partial Regeneration.
 
 Tests the new regeneration endpoint and service logic for targeted
 section regeneration (factions, locations, NPCs, opening, threads).
@@ -33,7 +33,7 @@ def _minimal_setup(**overrides):
 
 
 def _preview_and_apply(payload, target):
-    """Two-step preview → apply using the new strict token contract."""
+    """Two-step preview â†’ apply using the new strict token contract."""
     from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
     # Step 1: Preview to get a valid token
@@ -41,7 +41,7 @@ def _preview_and_apply(payload, target):
     assert preview["success"] is True
     token = preview["apply_token"]
 
-    # Step 2: Apply using the token — use mode="apply" explicitly
+    # Step 2: Apply using the token â€” use mode="apply" explicitly
     return regenerate_setup_section(
         payload, target, mode="apply", apply_token=token,
     )
@@ -70,9 +70,9 @@ def _assert_core_fields_preserved(before, after):
     assert after["premise"] == before["premise"]
 
 
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Service-level tests
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestRegenerateSetupSection:
@@ -194,13 +194,19 @@ class TestRegenerateSetupSection:
     def test_blocking_validation_returns_error(self):
         from app.rpg.services.adventure_builder_service import regenerate_setup_section
 
-        # Missing title which is required — should cause blocking validation
-        payload = _minimal_setup(title="")
-        result = regenerate_setup_section(payload, "factions")
+        # Missing title which is required â€” should cause blocking validation
+        payload = _minimal_setup(
+            factions=[
+                {"faction_id": "faction-duplicate", "name": "One", "description": "d"},
+                {"faction_id": "faction-duplicate", "name": "Two", "description": "d"},
+            ]
+        )
+        result = regenerate_setup_section(payload, "factions", mode="preview")
 
         assert result["success"] is False
         assert result["error"] == "Setup has blocking validation issues"
         assert result["validation"]["blocking"] is True
+        assert any(issue["code"] == "duplicate_id" for issue in result["validation"]["issues"])
 
     def test_invalid_preview_token_returns_error(self):
         from app.rpg.services.adventure_builder_service import regenerate_setup_section
@@ -219,7 +225,7 @@ class TestRegenerateSetupSection:
         preview = regenerate_setup_section(_minimal_setup(), "factions", mode="preview")
         token = preview["apply_token"]
 
-        # Try to apply it for locations — should fail
+        # Try to apply it for locations â€” should fail
         result = regenerate_setup_section(
             _minimal_setup(), "locations", mode="apply", apply_token=token
         )
@@ -301,152 +307,26 @@ class TestApplyRegeneratedSection:
             _apply_regenerated_section(_minimal_setup(), "bogus", [])
 
 
-# ─────────────────────────────────────────────────────────────
-# Endpoint-level tests
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Endpoint route retirement check
+# The current setup-generation service has no Flask endpoint; active and retired
+# RPG route contracts are checked through the composed gateway.
 
+class TestRegenerateEndpointRetirement:
+    def test_legacy_endpoint_is_absent_from_gateway(self):
+        from app.gateway.main import create_gateway_app
 
-class TestRegenerateEndpoint:
-    """Tests for the ``POST /api/rpg/adventure/regenerate`` endpoint."""
-
-    @pytest.fixture
-    def client(self):
-        """Return a minimal Flask test client for the regenerate endpoint."""
-        from flask import Flask, jsonify, request
-
-        from app.rpg.services.adventure_builder_service import regenerate_setup_section
-
-        app = Flask(__name__)
-        app.config["TESTING"] = True
-
-        @app.route("/api/rpg/adventure/regenerate", methods=["POST"])
-        def regenerate():
-            data = request.get_json()
-            if data is None:
-                return jsonify({"success": False, "error": "Request must be JSON"}), 400
-            target = data.get("target")
-            if not target:
-                return jsonify({"success": False, "error": "Missing target", "validation": {"blocking": False}}), 400
-            setup = data.get("setup", {})
-            # Support preview → apply flow
-            mode = data.get("mode", "apply")
-            apply_token = data.get("apply_token")
-            result = regenerate_setup_section(setup, target, mode=mode, apply_token=apply_token)
-            http_status = 200 if result["success"] else 400
-            return jsonify(result), http_status
-
-        with app.test_client() as client:
-            yield client
-
-    def _preview_then_apply(self, client, target, setup=None):
-        """Helper to perform the two-step preview => apply contract via endpoint.
-
-        Uses the same setup payload for both calls so setup_id matches.
-        """
-        setup = setup or _minimal_setup()
-        # Step 1: Preview
-        preview_resp = client.post("/api/rpg/adventure/regenerate", json={
-            "target": target,
-            "setup": setup,
-            "mode": "preview",
-        })
-        assert preview_resp.status_code == 200, preview_resp.get_data(as_text=True)
-        preview_data = preview_resp.get_json()
-        assert "apply_token" in preview_data
-
-        # Step 2: Apply with token — reuse same setup object
-        apply_resp = client.post("/api/rpg/adventure/regenerate", json={
-            "target": target,
-            "setup": setup,
-            "mode": "apply",
-            "apply_token": preview_data["apply_token"],
-        })
-        assert apply_resp.status_code == 200, apply_resp.get_data(as_text=True)
-        return apply_resp.get_json()
-
-    def test_regenerate_factions_via_endpoint(self, client):
-        data = self._preview_then_apply(client, "factions")
-        _assert_success_contract(data, "factions")
-        assert isinstance(data["updated_setup"].get("factions"), list)
-
-    def test_regenerate_locations_via_endpoint(self, client):
-        data = self._preview_then_apply(client, "locations")
-        _assert_success_contract(data, "locations")
-        assert isinstance(data["updated_setup"].get("locations"), list)
-
-    def test_regenerate_npc_seeds_via_endpoint(self, client):
-        data = self._preview_then_apply(client, "npc_seeds")
-        _assert_success_contract(data, "npc_seeds")
-        assert isinstance(data["updated_setup"].get("npc_seeds"), list)
-
-    def test_regenerate_opening_via_endpoint(self, client):
-        data = self._preview_then_apply(client, "opening")
-        _assert_success_contract(data, "opening")
-        metadata = data["updated_setup"].get("metadata", {})
-        assert "regenerated_opening" in metadata
-
-    def test_regenerate_threads_via_endpoint(self, client):
-        data = self._preview_then_apply(client, "threads")
-        _assert_success_contract(data, "threads")
-        assert data["updated_setup"]["metadata"]["regenerated_threads"] == data["regenerated"]
-
-    def test_invalid_target_returns_400(self, client):
-        payload = {
-            "target": "bogus",
-            "setup": _minimal_setup(),
+        app = create_gateway_app()
+        routes = {
+            (method, route.path)
+            for route in app.routes
+            if hasattr(route, "path")
+            for method in getattr(route, "methods", ())
         }
-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert data["success"] is False
+        assert ("POST", "/api/rpg/adventure/regenerate") not in routes
 
-    def test_missing_target_returns_400(self, client):
-        payload = {
-            "setup": _minimal_setup(),
-        }
-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert data["success"] is False
-
-    def test_missing_json_body_returns_400(self, client):
-        resp = client.post(
-            "/api/rpg/adventure/regenerate",
-            content_type="application/json",
-        )
-        assert resp.status_code == 400
-
-    def test_preview_mode_returns_token(self, client):
-        payload = {
-            "target": "factions",
-            "setup": _minimal_setup(),
-            "mode": "preview",
-        }
-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "apply_token" in data
-        assert "before" in data
-        assert "after" in data
-        assert "diff" in data
-
-    def test_apply_with_invalid_token_returns_400(self, client):
-        payload = {
-            "target": "factions",
-            "setup": _minimal_setup(),
-            "mode": "apply",
-            "apply_token": "invalid",
-        }
-        resp = client.post("/api/rpg/adventure/regenerate", json=payload)
-        assert resp.status_code == 400
-        data = resp.get_json()
-        assert data["success"] is False
-        assert "Invalid or expired apply_token" in data["error"]
-
-
-# ─────────────────────────────────────────────────────────────
 # Merge semantics tests
-# ─────────────────────────────────────────────────────────────
+# â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestMergeSemantics:

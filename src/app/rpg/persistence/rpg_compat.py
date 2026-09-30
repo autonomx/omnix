@@ -9,7 +9,7 @@ from app.security.tenant_context import current_tenant
 from .rpg_repository import canonical_json, state_hash
 from .rpg_session_save_policy import session_save_deferred
 from app.persistence.unit_of_work import unit_of_work
-from app.persistence.repository_registry import install_repository_specs
+from app.persistence.repository_registry import register_repository_specs
 
 
 def _database() -> PostgresDatabase:
@@ -20,7 +20,7 @@ def _context(database: PostgresDatabase):
     del database
     from .feature_repositories import RPG_REPOSITORY_SPECS
 
-    install_repository_specs(RPG_REPOSITORY_SPECS)
+    register_repository_specs(RPG_REPOSITORY_SPECS)
     return current_tenant()
 
 

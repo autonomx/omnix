@@ -20,6 +20,7 @@ _KIND_BY_FAMILY = {
     "social": "social_probe",
     "unsupported_mechanic": "mechanic_candidate",
     "diegetic_noop": "diegetic_action",
+    "hypothetical": "hypothetical",
 }
 
 
@@ -95,6 +96,8 @@ def _confidence_for_intent(intent: str) -> str:
 
 
 def _verification_for_intent(intent: str) -> str:
+    if intent == "hypothetical_counterfactual":
+        return "counterfactual"
     if intent in _CLAIM_INTENTS:
         return "unverified"
     if intent == "observation_request":
@@ -109,6 +112,8 @@ def _verification_for_intent(intent: str) -> str:
 
 
 def _plausibility_for_intent(intent: str) -> str:
+    if intent == "hypothetical_counterfactual":
+        return "possible"
     if intent == "lore_conflict_claim":
         return "contradictory"
     if intent in {"npc_capability_request", "unsupported_mechanic_request"}:
@@ -129,10 +134,14 @@ def _actionability_for_intent(intent: str) -> str:
 
 
 def _physical_result_for_intent(intent: str) -> str:
+    if intent == "hypothetical_counterfactual":
+        return "not_applied"
     return "unlikely" if intent in {"npc_capability_request", "unsupported_mechanic_request"} else "none"
 
 
 def _social_result_for_intent(intent: str) -> str:
+    if intent == "hypothetical_counterfactual":
+        return "speculative_answer"
     if intent == "social_probe":
         return "relationship_question"
     if intent in _CLAIM_INTENTS:
@@ -143,6 +152,8 @@ def _social_result_for_intent(intent: str) -> str:
 
 
 def _lore_result_for_intent(intent: str) -> str:
+    if intent == "hypothetical_counterfactual":
+        return "not_asserted"
     if intent == "lore_conflict_claim":
         return "inconsistent_or_unverified"
     return "not_applicable" if intent else "unknown"

@@ -45,3 +45,10 @@ frames through the accepted TTS lane using `FakeTTS`.
 idle and fast-path conflict resolution. The golden stores each turn's visible
 response, emitted events, director feedback, arc updates and simulation-state
 hash; the test replays the same recorded inputs before comparing it.
+
+## Trading evaluation scenario
+
+`trading-evaluate` replays a fixed, reviewed market-bar fixture through the
+strategy monitor. It records the entry proposal, paper authorization decision,
+submitted paper order, fill, protection state, and strategy events. The golden
+was captured before folding the import-time trading overlays into their owners.

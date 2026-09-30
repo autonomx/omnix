@@ -29,6 +29,7 @@ from app.rpg.validation.integrity import (
     assert_session_integrity,
     validate_session_integrity,
 )
+from app.rpg.performance_trace import rpg_pipeline_span_if_active
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -72,6 +73,33 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+    manifest = _safe_dict(_safe_dict(session).get("manifest"))
+    session_id = str(
+        manifest.get("session_id")
+        or manifest.get("id")
+        or _safe_dict(session).get("session_id")
+        or _safe_dict(session).get("id")
+        or ""
+    )
+    with rpg_pipeline_span_if_active(
+        "session.save_total",
+        fields={"session_id": session_id, "compact": compact},
+    ) as span:
+        saved = _save_session(session, compact=compact)
+        if span is not None:
+            saved_manifest = _safe_dict(saved.get("manifest"))
+            runtime_state = _safe_dict(saved.get("runtime_state"))
+            span["session_id"] = str(
+                saved_manifest.get("session_id")
+                or saved_manifest.get("id")
+                or session_id
+            )
+            span["interaction_seq"] = runtime_state.get("interaction_seq")
+            span["state_revision"] = runtime_state.get("state_revision")
+        return saved
+
+
+def _save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
     session = _safe_dict(session)
     manifest = _safe_dict(session.get("manifest"))
     session_id = str(
@@ -108,6 +136,53 @@ def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str,
 
 
 def load_session(session_id: str) -> Dict[str, Any]:
+    with rpg_pipeline_span_if_active(
+        "session.load_total",
+        fields={"session_id": session_id},
+    ) as span:
+        session = _load_session(session_id)
+        if not isinstance(session, dict):
+            return session
+        from .interaction_event_store import load_and_replay_interaction_events
+
+        session = load_and_replay_interaction_events(session_id, session)
+        from .interaction_lifecycle import recover_pending_interaction_narration
+
+        try:
+            recovered = recover_pending_interaction_narration(session_id, session)
+        except Exception as exc:
+            from app.rpg.debug_logging import log_rpg_event
+
+            log_rpg_event(
+                "turn.stage.degraded",
+                category="performance",
+                level="warning",
+                session_id=session_id,
+                fields={
+                    "metric": "rpg_turn_stage_degraded",
+                    "stage": "interaction_narration_recovery",
+                    "degraded_stage_count": 1,
+                    "error_type": type(exc).__name__,
+                },
+                error=exc,
+            )
+        else:
+            if span is not None:
+                span["pending_narration_recovered"] = recovered
+        if span is not None:
+            manifest = _safe_dict(session.get("manifest"))
+            runtime_state = _safe_dict(session.get("runtime_state"))
+            span["session_id"] = str(
+                manifest.get("session_id")
+                or manifest.get("id")
+                or session_id
+            )
+            span["interaction_seq"] = runtime_state.get("interaction_seq")
+            span["state_revision"] = runtime_state.get("state_revision")
+        return session
+
+
+def _load_session(session_id: str) -> Dict[str, Any]:
     session = load_session_from_disk(session_id)
     if session is None:
         return None
@@ -132,6 +207,17 @@ def list_sessions() -> List[Dict[str, Any]]:
 def list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
     """Return bounded session list rows without normalizing full payloads."""
 
+    with rpg_pipeline_span_if_active(
+        "session.list_summaries_total",
+        fields={"operation": "list_session_summaries"},
+    ) as span:
+        out = _list_session_summaries(limit=limit)
+        if span is not None:
+            span["result_count"] = len(out)
+        return out
+
+
+def _list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
     out = []
     for item in list_session_summaries_from_disk(limit=limit):
         integrity = validate_session_integrity(item)

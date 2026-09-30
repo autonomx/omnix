@@ -1,7 +1,7 @@
-from app.rpg.session.autoplay_runtime_guards import (
+from tests.rpg.autoplay_runtime_guards import (
     HTML_PROMPT_GUARD_FLAG,
     _is_prompt_only_html_transcript_marker_error,
-    install_html_transcript_prompt_marker_guard,
+    enable_html_transcript_prompt_marker_guard,
 )
 
 
@@ -27,7 +27,7 @@ def test_phase13_10_guard_records_turn_contract_reason():
         raise RuntimeError("campaign_report_html_contains_meta_text_in_transcript:markers=['turn contract']")
 
     namespace["_assert_html_report_matches_final_transcript_rows"] = original
-    assert install_html_transcript_prompt_marker_guard(namespace) is True
+    assert enable_html_transcript_prompt_marker_guard(namespace) is True
     guarded = namespace["_assert_html_report_matches_final_transcript_rows"]
     assert guarded() is None
     assert namespace[HTML_PROMPT_GUARD_FLAG]["applied"] is True
@@ -41,7 +41,7 @@ def test_phase13_10_guard_reraises_unapproved_marker():
         raise RuntimeError("campaign_report_html_contains_meta_text_in_transcript:markers=['developer']")
 
     namespace["_assert_html_report_matches_final_transcript_rows"] = original
-    assert install_html_transcript_prompt_marker_guard(namespace) is True
+    assert enable_html_transcript_prompt_marker_guard(namespace) is True
     guarded = namespace["_assert_html_report_matches_final_transcript_rows"]
     try:
         guarded()

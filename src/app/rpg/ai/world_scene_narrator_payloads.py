@@ -1,14 +1,45 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
 from app.rpg.ai.memory_narration_grounding import sanitize_memory_narration_payload
+from app.rpg.ai.world_scene_survival_grounding_bridge import (
+    _merge_bs1_sanitized_payload,
+)
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
-from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str
-from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
-from app.rpg.ai.world_scene_narrator_service_grounding import *
-
+from app.rpg.ai.world_scene_narrator_service_grounding import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
+    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
+    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
+    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
+    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
+    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
+    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural,
+    _travel_result_from_context as _travel_result_from_context, _grounded_travel_narration as _grounded_travel_narration, _grounded_travel_action as _grounded_travel_action,
+    _final_grounded_service_action_text as _final_grounded_service_action_text, _service_grounded_action_result as _service_grounded_action_result,
+    _service_grounded_npc_line as _service_grounded_npc_line, _normalized_text_for_compare as _normalized_text_for_compare,
+    _fallback_non_service_narration as _fallback_non_service_narration, _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
+    _naturalize_service_debug_language as _naturalize_service_debug_language, _service_grounded_narration_text as _service_grounded_narration_text,
+    _service_narration_needs_grounding as _service_narration_needs_grounding, _service_claim_needs_grounding as _service_claim_needs_grounding,
+    _service_purchase_is_applied as _service_purchase_is_applied, _selected_service_offer as _selected_service_offer,
+    _service_extract_price_tokens as _service_extract_price_tokens, _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
+    _ground_action_result_text as _ground_action_result_text, _player_input_action_text as _player_input_action_text,
+    _build_authoritative_action_line as _build_authoritative_action_line, _build_action_result_line as _build_action_result_line, _build_rewards_block as _build_rewards_block,
+    _titleize_action as _titleize_action, _first_nonempty as _first_nonempty,
+)
 
 def _extract_text_lines(text: str) -> List[str]:
     lines = []
@@ -20,9 +51,15 @@ def _extract_text_lines(text: str) -> List[str]:
 
 
 def _normalize_speaker_block(npc_value: Any) -> Dict[str, Any]:
-    npc_value = _safe_dict(npc_value) if isinstance(npc_value, dict) else {"text": _safe_str(npc_value).strip()}
+    npc_value = (
+        _safe_dict(npc_value)
+        if isinstance(npc_value, dict)
+        else {"text": _safe_str(npc_value).strip()}
+    )
     return {
-        "speaker_id": _safe_str(npc_value.get("speaker_id") or npc_value.get("npc_id")).strip(),
+        "speaker_id": _safe_str(
+            npc_value.get("speaker_id") or npc_value.get("npc_id")
+        ).strip(),
         "name": _safe_str(npc_value.get("name")).strip(),
         "text": _bound_text(npc_value.get("text"), 180),
         "emotion": _safe_str(npc_value.get("emotion")).strip(),
@@ -31,7 +68,9 @@ def _normalize_speaker_block(npc_value: Any) -> Dict[str, Any]:
     }
 
 
-def _build_safe_prompt_context(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
+def _build_safe_prompt_context(
+    scene: Dict[str, Any], narration_context: Dict[str, Any]
+) -> Dict[str, Any]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
@@ -55,7 +94,12 @@ def _build_safe_prompt_context(scene: Dict[str, Any], narration_context: Dict[st
             resolved.get("npc_name"),
             resolved.get("target_id"),
         ),
-        "damage": int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0),
+        "damage": int(
+            _safe_dict(resolved.get("combat_result")).get(
+                "damage", resolved.get("damage", 0)
+            )
+            or 0
+        ),
         "player_xp": int(xp_result.get("player_xp", 0) or 0),
         "skill_xp_awards": {
             k: int(v or 0)
@@ -64,7 +108,9 @@ def _build_safe_prompt_context(scene: Dict[str, Any], narration_context: Dict[st
         },
         "level_up": bool(_safe_list(narration_context.get("level_up"))),
         "scene_title": _safe_str(scene.get("title")).strip(),
-        "location_name": _first_nonempty(scene.get("location_name"), scene.get("location_id"), scene.get("scene_id")),
+        "location_name": _first_nonempty(
+            scene.get("location_name"), scene.get("location_id"), scene.get("scene_id")
+        ),
     }
 
 
@@ -83,11 +129,13 @@ def _build_speaker_turns(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
         )
     ).strip()
     if narrator_text:
-        turns.append({
-            "speaker_id": "narrator",
-            "name": "Narrator",
-            "text": _bound_text(narrator_text, 180),
-        })
+        turns.append(
+            {
+                "speaker_id": "narrator",
+                "name": "Narrator",
+                "text": _bound_text(narrator_text, 180),
+            }
+        )
     if npc.get("text"):
         turns.append(npc)
     return turns
@@ -135,7 +183,7 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:
-        candidate = text[start:end + 1]
+        candidate = text[start : end + 1]
         candidate_variants = [candidate]
         normalized_candidate = candidate.replace("\\'", "'")
         if normalized_candidate != candidate:
@@ -155,7 +203,8 @@ def _normalize_narration_json(payload: Dict[str, Any]) -> Dict[str, Any]:
     npc = _safe_dict(payload.get("npc"))
 
     return {
-        "format_version": _safe_str(payload.get("format_version")).strip() or NARRATION_JSON_FORMAT_VERSION,
+        "format_version": _safe_str(payload.get("format_version")).strip()
+        or NARRATION_JSON_FORMAT_VERSION,
         "narration": _safe_str(payload.get("narration")).strip(),
         "action": _safe_str(payload.get("action")).strip(),
         "npc": {
@@ -232,12 +281,16 @@ def _extract_continuity_price_facts(narration_context: Dict[str, Any]) -> List[s
     hits: List[str] = []
     for fact in facts:
         lower = fact.lower()
-        if "room" in lower and ("gold" in lower or "silver" in lower or "copper" in lower):
+        if "room" in lower and (
+            "gold" in lower or "silver" in lower or "copper" in lower
+        ):
             hits.append(fact)
     return hits
 
 
-def _extract_present_actor_names(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
+def _extract_present_actor_names(
+    scene: Dict[str, Any], narration_context: Dict[str, Any]
+) -> List[str]:
     names: List[str] = []
     seen = set()
 
@@ -257,7 +310,9 @@ def _extract_present_actor_names(scene: Dict[str, Any], narration_context: Dict[
         else:
             _add(actor)
 
-    for actor in _safe_list(_safe_dict(narration_context.get("grounded")).get("present_actor_names")):
+    for actor in _safe_list(
+        _safe_dict(narration_context.get("grounded")).get("present_actor_names")
+    ):
         _add(actor)
 
     resolved = _safe_dict(narration_context.get("resolved_result"))
@@ -269,8 +324,12 @@ def _extract_present_actor_names(scene: Dict[str, Any], narration_context: Dict[
 
 
 def _extract_price_tokens(text: str) -> set:
-    number_pattern = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
-    return set(re.findall(rf"\b{number_pattern}\s*(gold|silver|copper)\b", text.lower()))
+    number_pattern = (
+        r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    )
+    return set(
+        re.findall(rf"\b{number_pattern}\s*(gold|silver|copper)\b", text.lower())
+    )
 
 
 def _sanitize_narration_text(
@@ -282,7 +341,10 @@ def _sanitize_narration_text(
     if not text:
         return ""
 
-    allowed_names = {name.lower(): name for name in _extract_present_actor_names(scene, narration_context)}
+    allowed_names = {
+        name.lower(): name
+        for name in _extract_present_actor_names(scene, narration_context)
+    }
     continuity_price_facts = _extract_continuity_price_facts(narration_context)
 
     banned_generic_terms = (
@@ -310,29 +372,44 @@ def _sanitize_narration_text(
         lower = sentence.lower()
 
         # Reject raw JSON leakage or partial structured output.
-        if sentence.startswith("{") or '"format_version"' in sentence or '"narration"' in sentence:
+        if (
+            sentence.startswith("{")
+            or '"format_version"' in sentence
+            or '"narration"' in sentence
+        ):
             continue
 
         # Reject invented off-scene enforcement / faction actors unless they are present.
         if any(term in lower for term in banned_generic_terms):
             # allow passive mentions, reject active invention
-            if not re.search(r"\b(call|calls|called|signal|signals|signaled|summon|summons|summoned|order|orders|ordered|arrive|arrives|arrived|rush|rushes|rushed|draw|draws|drew|attack|attacks|attacked|spread|spreads|spreads)\b", lower):
+            if not re.search(
+                r"\b(call|calls|called|signal|signals|signaled|summon|summons|summoned|order|orders|ordered|arrive|arrives|arrived|rush|rushes|rushed|draw|draws|drew|attack|attacks|attacked|spread|spreads|spreads)\b",
+                lower,
+            ):
                 kept.append(sentence)
                 continue
             else:
                 continue
 
         # If a recent authoritative room price exists, reject contradictory new price narration.
-        if continuity_price_facts and "room" in lower and ("gold" in lower or "silver" in lower or "copper" in lower):
+        if (
+            continuity_price_facts
+            and "room" in lower
+            and ("gold" in lower or "silver" in lower or "copper" in lower)
+        ):
             prior_price_tokens = set()
             for fact in continuity_price_facts:
                 prior_price_tokens.update(_extract_price_tokens(fact))
             current_price_tokens = _extract_price_tokens(sentence)
-            if current_price_tokens and not current_price_tokens.issubset(prior_price_tokens):
+            if current_price_tokens and not current_price_tokens.issubset(
+                prior_price_tokens
+            ):
                 continue
 
         # Reject named actor mentions that are not present/grounded.
-        candidate_names = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b", sentence)
+        candidate_names = re.findall(
+            r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}\b", sentence
+        )
         unknown_name = False
         for raw_name in candidate_names:
             key = raw_name.strip().lower()
@@ -358,7 +435,11 @@ def _sanitize_narration_text(
             or resolved.get("summary")
             or _authoritative_action_text(narration_context)
         )
-        if fallback.strip().lower() in {"action: you act.", "you act.", "action: you act"}:
+        if fallback.strip().lower() in {
+            "action: you act.",
+            "you act.",
+            "action: you act",
+        }:
             fallback = "The action changes the scene, and the people nearby react according to what just happened."
         return _bound_text(fallback, 220)
 
@@ -375,7 +456,9 @@ def _authoritative_reward_text(narration_context: Dict[str, Any]) -> str:
     return _strip_basic_markdown(_build_rewards_block(narration_context))
 
 
-def _allowed_npc_speakers(scene: Dict[str, Any], narration_context: Dict[str, Any]) -> List[str]:
+def _allowed_npc_speakers(
+    scene: Dict[str, Any], narration_context: Dict[str, Any]
+) -> List[str]:
     return _extract_present_actor_names(scene, narration_context)
 
 
@@ -496,9 +579,7 @@ def _fallback_in_world_narration(narration_context: Dict[str, Any]) -> str:
 
     intent = _safe_str(interpreted.get("intent")).lower()
     target_name = _safe_str(
-        npc_behavior.get("target_name")
-        or interpreted.get("target_name")
-        or "Bran"
+        npc_behavior.get("target_name") or interpreted.get("target_name") or "Bran"
     )
 
     if intent == "service":
@@ -513,7 +594,9 @@ def _fallback_in_world_narration(narration_context: Dict[str, Any]) -> str:
     return "The room shifts around your action, attention turning toward you as the moment changes."
 
 
-def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
+def _enforce_npc_behavior(
+    payload: Dict[str, Any], narration_context: Dict[str, Any]
+) -> Dict[str, Any]:
     turn_contract = _safe_dict(narration_context.get("turn_contract"))
     interpreted = _safe_dict(turn_contract.get("interpreted_action"))
     npc_behavior = _safe_dict(
@@ -523,9 +606,7 @@ def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, 
 
     target_id = _safe_str(interpreted.get("target_id"))
     target_name = _safe_str(
-        npc_behavior.get("target_name")
-        or interpreted.get("target_name")
-        or target_id
+        npc_behavior.get("target_name") or interpreted.get("target_name") or target_id
     )
 
     if not (target_id and target_name):
@@ -537,17 +618,27 @@ def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, 
 
     if not _safe_str(npc.get("line")):
         tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
-        action_kind = _safe_str(
-            interpreted.get("intent") or interpreted.get("action_type")
-        ).strip().lower()
+        action_kind = (
+            _safe_str(interpreted.get("intent") or interpreted.get("action_type"))
+            .strip()
+            .lower()
+        )
 
         if tone == "hostile":
-            npc["line"] = "You have made your point. Now get out before this gets worse."
+            npc["line"] = (
+                "You have made your point. Now get out before this gets worse."
+            )
         elif tone == "afraid":
             npc["line"] = "Stay back. I do not want any more trouble."
         elif tone == "friendly":
             npc["line"] = "All right, I am listening. What do you need?"
-        elif action_kind in {"ask", "dialogue", "social", "social_activity", "conversation"}:
+        elif action_kind in {
+            "ask",
+            "dialogue",
+            "social",
+            "social_activity",
+            "conversation",
+        }:
             npc["line"] = ""
         else:
             npc["line"] = "I hear you. Give me a moment to answer that plainly."
@@ -556,9 +647,13 @@ def _enforce_npc_behavior(payload: Dict[str, Any], narration_context: Dict[str, 
     recent_lines = []
     for thread in _safe_list(narration_context.get("conversation_threads")):
         for recent in _safe_list(_safe_dict(thread).get("recent_lines")):
-            recent_lines.append(_safe_str(_safe_dict(recent).get("text")).strip().lower())
+            recent_lines.append(
+                _safe_str(_safe_dict(recent).get("text")).strip().lower()
+            )
 
-    if any(_safe_str(npc.get("line")).strip().lower()[:40] in line for line in recent_lines):
+    if any(
+        _safe_str(npc.get("line")).strip().lower()[:40] in line for line in recent_lines
+    ):
         tone = _safe_str(npc_behavior.get("reaction_tone") or "wary")
 
         if tone == "hostile":
@@ -583,6 +678,7 @@ def _sanitize_narration_payload(
     narration_context: Dict[str, Any],
     authoritative_action: str | None = None,
 ) -> Dict[str, Any]:
+    original_payload = _safe_dict(payload)
     payload = _normalize_narration_json(payload)
 
     if authoritative_action is None:
@@ -600,14 +696,16 @@ def _sanitize_narration_payload(
 
     # Action and reward are authoritative-only.
     llm_action = _safe_str(payload.get("action")).strip()
-    normalized = _normalize_narration_json({
-        "format_version": NARRATION_JSON_FORMAT_VERSION,
-        "narration": narration_text,
-        "action": llm_action,
-        "npc": sanitized_npc,
-        "reward": _safe_str(payload.get("reward")).strip(),
-        "followup_hooks": [],
-    })
+    normalized = _normalize_narration_json(
+        {
+            "format_version": NARRATION_JSON_FORMAT_VERSION,
+            "narration": narration_text,
+            "action": llm_action,
+            "npc": sanitized_npc,
+            "reward": _safe_str(payload.get("reward")).strip(),
+            "followup_hooks": [],
+        }
+    )
 
     reward_text = _desystemify_text(_safe_str(normalized.get("reward")))
     authoritative_reward = _authoritative_reward_text(narration_context)
@@ -628,12 +726,12 @@ def _sanitize_narration_payload(
     )
     target_id = _safe_str(interpreted.get("target_id"))
     target_name = _safe_str(
-        npc_behavior.get("target_name")
-        or interpreted.get("target_name")
-        or target_id
+        npc_behavior.get("target_name") or interpreted.get("target_name") or target_id
     )
     if target_id and target_name:
-        narration = _safe_str(normalized.get("narrator") or normalized.get("narration")).strip()
+        narration = _safe_str(
+            normalized.get("narrator") or normalized.get("narration")
+        ).strip()
         if target_name.lower() not in narration.lower():
             intent = _safe_str(interpreted.get("intent") or "").lower()
             if "attack" in intent:
@@ -649,7 +747,9 @@ def _sanitize_narration_payload(
                 elif tone == "afraid":
                     prefix = f"{target_name} recoils, instinctively putting space between you. "
                 elif tone == "friendly":
-                    prefix = f"{target_name} shifts, reacting to you with a hint of warmth. "
+                    prefix = (
+                        f"{target_name} shifts, reacting to you with a hint of warmth. "
+                    )
                 else:
                     prefix = f"{target_name} stiffens, clearly affected by what just happened. "
             normalized["narration"] = prefix + narration
@@ -659,21 +759,30 @@ def _sanitize_narration_payload(
 
     service_result = _service_result_from_context(narration_context)
     service_action_override = ""
-    if service_result.get("matched") and not _service_purchase_is_applied(service_result, narration_context):
+    if service_result.get("matched") and not _service_purchase_is_applied(
+        service_result, narration_context
+    ):
         service_action_override = _service_grounded_action_result(narration_context)
     grounded_narration = _service_grounded_narration_text(narration_context)
-    if service_result.get("matched") and grounded_narration and (
-        not _service_purchase_is_applied(service_result, narration_context)
-        or _successful_service_purchase_text_needs_grounding(narration_clean, narration_context)
+    if (
+        service_result.get("matched")
+        and grounded_narration
+        and (
+            not _service_purchase_is_applied(service_result, narration_context)
+            or _successful_service_purchase_text_needs_grounding(
+                narration_clean, narration_context
+            )
+        )
     ):
         narration_clean = grounded_narration
 
-    if service_result.get("matched") and _service_narration_needs_grounding(narration_clean):
-        if (
-            grounded_narration
-            and (
-                not _service_purchase_is_applied(service_result, narration_context)
-                or _successful_service_purchase_text_needs_grounding(narration_clean, narration_context)
+    if service_result.get("matched") and _service_narration_needs_grounding(
+        narration_clean
+    ):
+        if grounded_narration and (
+            not _service_purchase_is_applied(service_result, narration_context)
+            or _successful_service_purchase_text_needs_grounding(
+                narration_clean, narration_context
             )
         ):
             narration_clean = grounded_narration
@@ -684,7 +793,9 @@ def _sanitize_narration_payload(
 
     narration_clean = _strip_service_meta_language(narration_clean, narration_context)
     normalized["narration"] = narration_clean
-    normalized["narration"] = _naturalize_service_debug_language(normalized["narration"])
+    normalized["narration"] = _naturalize_service_debug_language(
+        normalized["narration"]
+    )
     _sanitize_repeated_player_input_narration(normalized, narration_context)
     action_raw = _safe_str(normalized.get("action"))
 
@@ -720,7 +831,9 @@ def _sanitize_narration_payload(
         npc["line"] = _naturalize_service_debug_language(_safe_str(npc.get("line")))
         normalized["npc"] = npc
     npc["speaker"] = _desystemify_text(_safe_str(npc.get("speaker")))
-    npc["line"] = _clean_npc_dialogue_line(_desystemify_text(_safe_str(npc.get("line"))))
+    npc["line"] = _clean_npc_dialogue_line(
+        _desystemify_text(_safe_str(npc.get("line")))
+    )
 
     service_result = _service_result_from_context(narration_context)
     service_purchase = _safe_dict(service_result.get("purchase"))
@@ -730,44 +843,48 @@ def _sanitize_narration_payload(
         service_application.get("blocked_reason")
         or service_purchase.get("blocked_reason")
     )
-    service_purchase_applied = (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and (
-            service_status == "purchased"
-            or bool(service_purchase.get("applied"))
-            or bool(service_application.get("applied"))
-        )
+    service_purchase_applied = _safe_str(
+        service_result.get("kind")
+    ) == "service_purchase" and (
+        service_status == "purchased"
+        or bool(service_purchase.get("applied"))
+        or bool(service_application.get("applied"))
     )
-    service_purchase_offer_not_found = (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and (
-            service_status == "purchase_offer_not_found"
-            or blocked_reason == "offer_not_found"
-        )
+    service_purchase_offer_not_found = _safe_str(
+        service_result.get("kind")
+    ) == "service_purchase" and (
+        service_status == "purchase_offer_not_found"
+        or blocked_reason == "offer_not_found"
     )
 
     if not service_result.get("matched"):
         continuity_price_facts = _extract_continuity_price_facts(narration_context)
         npc_lower = _safe_str(npc.get("line")).lower()
-        if continuity_price_facts and ("gold" in npc_lower or "silver" in npc_lower or "copper" in npc_lower):
+        if continuity_price_facts and (
+            "gold" in npc_lower or "silver" in npc_lower or "copper" in npc_lower
+        ):
             prior_price_tokens = set()
             for fact in continuity_price_facts:
                 prior_price_tokens.update(_extract_price_tokens(fact))
             current_price_tokens = _extract_price_tokens(npc["line"])
-            if current_price_tokens and not current_price_tokens.issubset(prior_price_tokens):
-                resolved_dialogue = _safe_str(_safe_dict(narration_context.get("resolved_result")).get("dialogue")).strip()
+            if current_price_tokens and not current_price_tokens.issubset(
+                prior_price_tokens
+            ):
+                resolved_dialogue = _safe_str(
+                    _safe_dict(narration_context.get("resolved_result")).get("dialogue")
+                ).strip()
                 npc["line"] = _clean_npc_dialogue_line(resolved_dialogue)
 
-    preserve_backed_memory_reference = (
-        _line_has_prior_memory_reference(npc["line"])
-        and _memory_reference_is_backed(npc["line"], narration_context)
-    )
+    preserve_backed_memory_reference = _line_has_prior_memory_reference(
+        npc["line"]
+    ) and _memory_reference_is_backed(npc["line"], narration_context)
 
     if (
         service_result.get("matched")
         and not preserve_backed_memory_reference
         and (
-            service_status in {
+            service_status
+            in {
                 "offers_available",
                 "no_registered_offers",
                 "blocked",
@@ -777,7 +894,9 @@ def _sanitize_narration_payload(
             or service_purchase_offer_not_found
             or (
                 service_purchase_applied
-                and _successful_service_purchase_text_needs_grounding(npc["line"], narration_context)
+                and _successful_service_purchase_text_needs_grounding(
+                    npc["line"], narration_context
+                )
             )
             or (
                 not service_purchase_applied
@@ -802,13 +921,19 @@ def _sanitize_narration_payload(
         original_npc = _safe_dict(payload.get("npc"))
         if _safe_str(original_npc.get("line")):
             npc = _safe_dict(normalized.get("npc"))
-            npc["speaker"] = _safe_str(npc.get("speaker") or original_npc.get("speaker")).strip()
+            npc["speaker"] = _safe_str(
+                npc.get("speaker") or original_npc.get("speaker")
+            ).strip()
             restored_line = _clean_npc_dialogue_line(original_npc.get("line"))
             service_result = _service_result_from_context(narration_context)
-            if service_result.get("matched") and _service_claim_needs_grounding(restored_line):
+            if service_result.get("matched") and _service_claim_needs_grounding(
+                restored_line
+            ):
                 restored_line = _service_grounded_npc_line(narration_context)
             else:
-                restored_line = _ground_accommodation_npc_line(restored_line, narration_context)
+                restored_line = _ground_accommodation_npc_line(
+                    restored_line, narration_context
+                )
             restored_line = _strip_unbacked_memory_reference_from_npc_line(
                 restored_line,
                 narration_context,
@@ -829,8 +954,13 @@ def _sanitize_narration_payload(
     conversation = _conversation_result_from_context(narration_context)
     if conversation.get("triggered"):
         normalized["action"] = "Ambient conversation continues nearby."
-        if not _safe_str(normalized.get("narration")) or "success" in _safe_str(normalized.get("narration")).lower():
-            normalized["narration"] = "Nearby voices continue in the living world around you."
+        if (
+            not _safe_str(normalized.get("narration"))
+            or "success" in _safe_str(normalized.get("narration")).lower()
+        ):
+            normalized["narration"] = (
+                "Nearby voices continue in the living world around you."
+            )
 
     normalized = sanitize_memory_narration_payload(
         normalized,
@@ -840,7 +970,11 @@ def _sanitize_narration_payload(
         },
     )
 
-    return normalized
+    return _merge_bs1_sanitized_payload(
+        original_payload=original_payload,
+        legacy_payload=normalized,
+        narration_context=_safe_dict(narration_context),
+    )
 
 
 def _render_narration_text_from_json(payload: Dict[str, Any]) -> str:
@@ -904,20 +1038,24 @@ def _recover_narration_from_raw_text(text: str) -> Dict[str, Any]:
         else:
             narration_parts.append(line)
 
-    return _normalize_narration_json({
-        "format_version": NARRATION_JSON_FORMAT_VERSION,
-        "narration": " ".join(narration_parts).strip(),
-        "action": " ".join(action_parts).strip(),
-        "npc": {
-            "speaker": npc_speaker,
-            "line": npc_line,
-        },
-        "reward": reward,
-        "followup_hooks": [],
-    })
+    return _normalize_narration_json(
+        {
+            "format_version": NARRATION_JSON_FORMAT_VERSION,
+            "narration": " ".join(narration_parts).strip(),
+            "action": " ".join(action_parts).strip(),
+            "npc": {
+                "speaker": npc_speaker,
+                "line": npc_line,
+            },
+            "reward": reward,
+            "followup_hooks": [],
+        }
+    )
 
 
-def _structured_fallback_response(narration_context: Dict[str, Any] | None = None) -> str:
+def _structured_fallback_response(
+    narration_context: Dict[str, Any] | None = None,
+) -> str:
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
     visible_response = _safe_dict(resolved.get("visible_response"))
@@ -946,4 +1084,12 @@ def _structured_fallback_response(narration_context: Dict[str, Any] | None = Non
             parts.append(f'NPC: "{_bound_text(npc_line, 180)}"')
     return "\n".join(parts)
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+
+__all__ = (
+    "annotations sanitize_memory_narration_payload _merge_bs1_sanitized_payload json logging re traceback dataclass field Any Callable Dict List Optional normalize_grounding_settings select_grounded_narration_candidate memory_reference_is_backed build_runtime_npc_response_architecture build_runtime_current_turn_prompt_contract format_runtime_prompt_contract_block build_runtime_presentation_guardrails_block sanitize_unsupported_combat_payload parse_runtime_provider_payload "
+    "build_encounter_view logger _ACTIVE_NARRATIONS NARRATION_JSON_FORMAT_VERSION NARRATION_JSON_SCHEMA_HINT _extract_llm_text _llm_text _attach_social_context _safe_str_p6 _attach_npc_mind_context _NARRATION_MAX_MARKDOWN _safe_str _safe_dict _safe_list _title_case_token _force_live_llm_required _build_ambient_conversation_line _bound_text _clean_npc_dialogue_line _is_accommodation_request _has_authoritative_accommodation_offer _ground_accommodation_npc_line "
+    "_service_result_from_context _recalled_service_memories_from_context _format_recalled_service_memories_for_prompt _recalled_npc_memories_from_context _format_recalled_npc_memories_for_prompt _conversation_result_from_context _format_conversation_beat_for_prompt _apply_grounded_conversation_beat _line_has_prior_memory_reference _memory_reference_is_backed _strip_unbacked_memory_reference_from_npc_line _strip_service_meta_language _service_offer_label_with_price _join_natural "
+    "_strip_basic_markdown _travel_result_from_context _grounded_travel_narration _grounded_travel_action _final_grounded_service_action_text _service_grounded_action_result _service_grounded_npc_line _normalized_text_for_compare _fallback_non_service_narration _sanitize_repeated_player_input_narration _naturalize_service_debug_language _service_grounded_narration_text _service_narration_needs_grounding _service_claim_needs_grounding _service_purchase_is_applied "
+    "_selected_service_offer _service_extract_price_tokens _successful_service_purchase_text_needs_grounding _ground_action_result_text _player_input_action_text _build_authoritative_action_line _build_action_result_line _build_rewards_block _titleize_action _first_nonempty _extract_text_lines _normalize_speaker_block _build_safe_prompt_context _build_speaker_turns _extract_json_object_from_text _normalize_narration_json _parse_llm_narration_payload _strict_narration_payload "
+    "_recent_authoritative_facts _extract_continuity_price_facts _extract_present_actor_names _extract_price_tokens _sanitize_narration_text _authoritative_action_text _authoritative_reward_text _allowed_npc_speakers _sanitize_npc_block _desystemify_text _strip_meta_narration _fallback_in_world_narration _enforce_npc_behavior _sanitize_narration_payload _render_narration_text_from_json _recover_narration_from_raw_text _structured_fallback_response "
+).split()

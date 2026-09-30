@@ -7,21 +7,22 @@ preserve capability/completion authority.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 from .coding_skills import compile_coding_skills, trusted_skill_paths
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from app.observability.agent_logging import log_agent_activity
-from . import pi_runtime_core as _pi_runtime_core
 from .pi_runtime_core import (
     PiAgentRuntime as _CorePiAgentRuntime,
     PiRpcSession,
     agent_path_roots,
     build_agent_environment,
+    normalize_pi_event as _core_normalize_pi_event,
     pi_broker_extension_path,
     pi_guard_extension_path,
     pi_model_provider_extension_path,
-    pi_rpc_argv as _imported_core_pi_rpc_argv,
+    pi_rpc_argv as _core_pi_rpc_argv,
 )
 from .repository_guidance import compile_repository_guidance
 
@@ -67,16 +68,8 @@ def _mandatory_browser_validation_prompt(spec: AgentRunSpec) -> str:
 # active. Pi's --tools flag filters extension tools as well as built-ins, so the
 # broker extension registering omnix_plan is insufficient unless argv includes
 # it. This adds no capability authority: every plan decision remains server-side.
-_CORE_PI_RPC_ARGV = getattr(
-    _pi_runtime_core,
-    "_omnix_base_pi_rpc_argv",
-    _imported_core_pi_rpc_argv,
-)
-_pi_runtime_core._omnix_base_pi_rpc_argv = _CORE_PI_RPC_ARGV
-
-
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
-    argv = list(_CORE_PI_RPC_ARGV(spec, pi_path=pi_path))
+    argv = list(_core_pi_rpc_argv(spec, pi_path=pi_path))
     for skill_path in trusted_skill_paths(profile=spec.profile):
         argv.extend(["--skill", str(skill_path)])
     planning_enabled = (
@@ -99,21 +92,12 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     return argv
 
 
-_pi_runtime_core.pi_rpc_argv = pi_rpc_argv
-
-
 # Pi can report provider failures inside message_end/turn_end rather than through
 # a top-level error event. The core normalizer historically treated those turns
 # as ordinary assistant messages, allowing a usage/quota failure to look like a
 # successful settle and later consume stalled-run recovery attempts. Keep the
 # core implementation stable, but install a narrow public-runtime normalization
 # hook that turns terminal provider failures into explicit run failures.
-_CORE_NORMALIZE_PI_EVENT = getattr(
-    _pi_runtime_core,
-    "_omnix_base_normalize_pi_event",
-    _pi_runtime_core.normalize_pi_event,
-)
-_pi_runtime_core._omnix_base_normalize_pi_event = _CORE_NORMALIZE_PI_EVENT
 _LAST_PROVIDER_FAILURE: dict[str, str] = {}
 
 
@@ -220,21 +204,29 @@ def normalize_pi_event(
     # apparent successful settle.
     if str(payload.get("type") or "") == "agent_settled" and run_id in _LAST_PROVIDER_FAILURE:
         return None
-    return _CORE_NORMALIZE_PI_EVENT(
+    return _core_normalize_pi_event(
         run_id,
         payload,
         task_revision_id=task_revision_id,
     )
 
 
-# PiRpcSession resolves normalize_pi_event from pi_runtime_core at execution
-# time, so bind the public hardened normalizer there as well. This preserves the
-# split core/wrapper architecture while making every Pi session observe the same
-# provider-failure semantics.
-_pi_runtime_core.normalize_pi_event = normalize_pi_event
-
-
 class PiAgentRuntime(_CorePiAgentRuntime):
+    def __init__(
+        self,
+        *,
+        pi_path: str = "pi",
+        event_sink: Callable[[AgentEvent], None] | None = None,
+        argv_builder: Callable[..., list[str]] = pi_rpc_argv,
+        event_normalizer: Callable[..., AgentEvent | None] = normalize_pi_event,
+    ) -> None:
+        super().__init__(
+            pi_path=pi_path,
+            event_sink=event_sink,
+            argv_builder=argv_builder,
+            event_normalizer=event_normalizer,
+        )
+
     @staticmethod
     def _initial_prompt(
         spec: AgentRunSpec,

@@ -26,7 +26,21 @@ from app.agent_runtime.semantic_classifier import (
 )
 from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+from app.chat.assistant_turns import AssistantTurnCoordinator
+import app.chat.character_store as character_store
+from app.characters.repository import InMemoryCharacterRepository
+from app.characters.service import CharacterService
 from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
+
+
+def _use_memory_character_service(tmp_path, monkeypatch) -> None:
+    service = CharacterService(InMemoryCharacterRepository(tmp_path / "characters.sqlite3"))
+    monkeypatch.setattr(character_store, "default_character_service", lambda: service)
+    monkeypatch.setattr(
+        character_store,
+        "default_assistant_turn_coordinator",
+        lambda _database=None: AssistantTurnCoordinator(tmp_path / "assistant-turns.json"),
+    )
 
 
 class _StructuredFakeProvider:
@@ -895,6 +909,7 @@ def test_non_streaming_chat_uses_generalized_semantic_router(
     monkeypatch,
     tmp_path,
 ) -> None:
+    _use_memory_character_service(tmp_path, monkeypatch)
     semantic = SemanticTask(
         intent="repository_change",
         subjects=[SemanticSubject(target="workspace", reference="current repository")],

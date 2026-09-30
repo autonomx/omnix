@@ -1,100 +1,159 @@
-"""Canonical RPG session runtime facade.
+"""Explicit RPG session API and responsibility-module ownership metadata."""
 
-The implementation is split across runtime_partXX modules to keep file sizes
-manageable while preserving the historical app.rpg.session.runtime import path.
-"""
-from __future__ import annotations
+from .action_execution import (
+    build_frontend_bootstrap_payload as build_frontend_bootstrap_payload,
+)
 
-import sys as _sys
-from importlib import import_module as _import_module
-from types import ModuleType as _ModuleType
+from .session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+    save_runtime_session as save_runtime_session,
+)
 
-_PART_MODULE_NAMES = [
-    'runtime_part01',
-    'runtime_part02',
-    'runtime_part03',
-    'runtime_part04',
-    'runtime_part05',
-    'runtime_part06',
-    'runtime_part07',
-    'runtime_part08',
-    'runtime_part09',
-    'runtime_part10',
-    'runtime_part11',
-    'runtime_part12',
-    'runtime_part13',
-    'runtime_part14',
-    'runtime_part15',
-    'runtime_part16',
-    'runtime_part17',
-    'runtime_part18',
-    'runtime_part19',
-    'runtime_part20',
-    'runtime_part21',
-    'runtime_part22',
-    'runtime_part23',
-    'runtime_part24',
-    'runtime_part25',
-    'runtime_part26',
-    'runtime_part27',
-    'runtime_part28',
-    'runtime_part29',
-    'runtime_part30',
-    'runtime_part31',
-    'runtime_part32',
-    'runtime_part33',
-    'runtime_part34',
-    'runtime_part35',
-    'runtime_part36',
-    'runtime_part37',
-    'runtime_part38',
-    'runtime_part39',
-    'runtime_part40',
-]
-_PART_MODULES = [
-    _import_module(f"{__package__}.{name}") for name in _PART_MODULE_NAMES
-]
-_RUNTIME_GLOBALS = {}
-for _module in _PART_MODULES:
-    _RUNTIME_GLOBALS.update(
-        {
-            _name: _value
-            for _name, _value in _module.__dict__.items()
-            if not _name.startswith("__") and not _name.startswith("_base_")
-        }
-    )
+from .narration_jobs import (
+    process_next_narration_job as process_next_narration_job,
+)
+
+from .idle_narration_delivery import (
+    apply_idle_ticks as apply_idle_ticks,
+    apply_resume_catchup as apply_resume_catchup,
+)
+
+from .turn_response_composition import (
+    apply_turn as apply_turn,
+)
+
 
 _RUNTIME_WRAPPER_MANIFEST = {
-    "part_modules": list(_PART_MODULE_NAMES),
-    "final_apply_turn_authoritative_module": _RUNTIME_GLOBALS.get("_apply_turn_authoritative").__module__,
-    "final_apply_attack_combat_action_module": _RUNTIME_GLOBALS.get("_apply_attack_combat_action").__module__,
+    "runtime_modules": [
+        "visible_response_selection",
+        "companion_turn_runtime",
+        "narration_queue_runtime",
+        "semantic_interaction_runtime",
+        "player_activity_runtime",
+        "world_consequence_runtime",
+        "semantic_state_changes",
+        "combat_intent",
+        "action_execution",
+        "session_runtime_store",
+        "combat_result_reconciliation",
+        "combat_action_reconciliation",
+        "combat_turn_actions",
+        "special_combat_turns",
+        "combat_action_runtime",
+        "turn_apply",
+        "narration_jobs",
+        "companion_turn_enrichment",
+        "player_turn_execution",
+        "idle_resume_runtime",
+        "idle_narration_delivery",
+        "combat_xp_projection",
+        "attack_reward_runtime",
+        "combat_reward_narrative",
+        "combat_quest_progress",
+        "combat_quest_narrative",
+        "turn_payload_projection",
+        "visible_narration_fallback",
+        "travel_panel_response",
+        "complete_narration_fallback",
+        "llm_narration_projection",
+        "deferred_narration_persistence",
+        "visible_response_sync",
+        "narration_payload_validation",
+        "semantic_response_projection",
+        "semantic_response_identity",
+        "turn_bound_narration",
+        "semantic_direct_response",
+        "turn_authoritative_guards",
+        "turn_response_composition",
+        "visible_response_core",
+        "turn_action_resolution",
+        "turn_combat_resolution",
+        "turn_world_resolution",
+        "turn_finalization",
+        "state_normalization",
+    ],
+    "final_apply_turn_authoritative_module": "app.rpg.session.turn_authoritative_guards",
+    "final_apply_attack_combat_action_module": "app.rpg.session.attack_reward_runtime",
     "combat_contract_modules": [
-        "app.rpg.session.runtime_part22",
-        "app.rpg.session.runtime_part23",
-        "app.rpg.session.runtime_part24",
-        "app.rpg.session.runtime_part25",
-        "app.rpg.session.runtime_part26",
+        "combat_xp_projection",
+        "attack_reward_runtime",
+        "combat_reward_narrative",
+        "combat_quest_progress",
+        "combat_quest_narrative",
     ],
 }
+
 _EXPECTED_RUNTIME_WRAPPER_MANIFEST = {
-    "combat_contract_modules": [
-        "app.rpg.session.runtime_part22",
-        "app.rpg.session.runtime_part23",
-        "app.rpg.session.runtime_part24",
-        "app.rpg.session.runtime_part25",
-        "app.rpg.session.runtime_part26",
+    "runtime_modules": [
+        "visible_response_selection",
+        "companion_turn_runtime",
+        "narration_queue_runtime",
+        "semantic_interaction_runtime",
+        "player_activity_runtime",
+        "world_consequence_runtime",
+        "semantic_state_changes",
+        "combat_intent",
+        "action_execution",
+        "session_runtime_store",
+        "combat_result_reconciliation",
+        "combat_action_reconciliation",
+        "combat_turn_actions",
+        "special_combat_turns",
+        "combat_action_runtime",
+        "turn_apply",
+        "narration_jobs",
+        "companion_turn_enrichment",
+        "player_turn_execution",
+        "idle_resume_runtime",
+        "idle_narration_delivery",
+        "combat_xp_projection",
+        "attack_reward_runtime",
+        "combat_reward_narrative",
+        "combat_quest_progress",
+        "combat_quest_narrative",
+        "turn_payload_projection",
+        "visible_narration_fallback",
+        "travel_panel_response",
+        "complete_narration_fallback",
+        "llm_narration_projection",
+        "deferred_narration_persistence",
+        "visible_response_sync",
+        "narration_payload_validation",
+        "semantic_response_projection",
+        "semantic_response_identity",
+        "turn_bound_narration",
+        "semantic_direct_response",
+        "turn_authoritative_guards",
+        "turn_response_composition",
+        "visible_response_core",
+        "turn_action_resolution",
+        "turn_combat_resolution",
+        "turn_world_resolution",
+        "turn_finalization",
+        "state_normalization",
     ],
-    "final_apply_turn_authoritative_module": "app.rpg.session.runtime_part39",
-    "final_apply_attack_combat_action_module": "app.rpg.session.runtime_part23",
+    "final_apply_turn_authoritative_module": "app.rpg.session.turn_authoritative_guards",
+    "final_apply_attack_combat_action_module": "app.rpg.session.attack_reward_runtime",
+    "combat_contract_modules": [
+        "combat_xp_projection",
+        "attack_reward_runtime",
+        "combat_reward_narrative",
+        "combat_quest_progress",
+        "combat_quest_narrative",
+    ],
 }
 
 
 def get_runtime_wrapper_manifest(_manifest: dict = _RUNTIME_WRAPPER_MANIFEST) -> dict:
-    """Return the deterministic session runtime wrapper/load manifest."""
+    """Return the static responsibility-module and wrapper ownership manifest."""
     return {
-        "part_modules": list(_manifest["part_modules"]),
-        "final_apply_turn_authoritative_module": _manifest["final_apply_turn_authoritative_module"],
-        "final_apply_attack_combat_action_module": _manifest["final_apply_attack_combat_action_module"],
+        "runtime_modules": list(_manifest["runtime_modules"]),
+        "final_apply_turn_authoritative_module": _manifest[
+            "final_apply_turn_authoritative_module"
+        ],
+        "final_apply_attack_combat_action_module": _manifest[
+            "final_apply_attack_combat_action_module"
+        ],
         "combat_contract_modules": list(_manifest["combat_contract_modules"]),
     }
 
@@ -103,54 +162,56 @@ def get_runtime_wrapper_drift_report(
     _manifest: dict = _RUNTIME_WRAPPER_MANIFEST,
     _expected: dict = _EXPECTED_RUNTIME_WRAPPER_MANIFEST,
 ) -> dict:
-    """Return a JSON-safe report describing runtime wrapper manifest drift."""
-    current_modules = list(_manifest["combat_contract_modules"])
-    expected_modules = list(_expected["combat_contract_modules"])
+    """Compare explicit RPG wrapper ownership with the recorded architecture contract."""
+    actual = get_runtime_wrapper_manifest(_manifest)
+    expected = get_runtime_wrapper_manifest(_expected)
+    actual_modules = list(actual["combat_contract_modules"])
+    expected_modules = list(expected["combat_contract_modules"])
     return {
-        "ok": (
-            current_modules == expected_modules
-            and _manifest["final_apply_turn_authoritative_module"]
-            == _expected["final_apply_turn_authoritative_module"]
-            and _manifest["final_apply_attack_combat_action_module"]
-            == _expected["final_apply_attack_combat_action_module"]
-        ),
+        "ok": actual == expected,
+        "expected_runtime_modules": expected["runtime_modules"],
+        "actual_runtime_modules": actual["runtime_modules"],
+        "missing_runtime_modules": [
+            item
+            for item in expected["runtime_modules"]
+            if item not in actual["runtime_modules"]
+        ],
+        "unexpected_runtime_modules": [
+            item
+            for item in actual["runtime_modules"]
+            if item not in expected["runtime_modules"]
+        ],
         "expected_combat_contract_modules": expected_modules,
-        "actual_combat_contract_modules": current_modules,
+        "actual_combat_contract_modules": actual_modules,
         "missing_combat_contract_modules": [
-            module for module in expected_modules if module not in current_modules
+            item for item in expected_modules if item not in actual_modules
         ],
         "unexpected_combat_contract_modules": [
-            module for module in current_modules if module not in expected_modules
+            item for item in actual_modules if item not in expected_modules
         ],
-        "final_apply_turn_authoritative_module": _manifest[
+        "final_apply_turn_authoritative_module": actual[
             "final_apply_turn_authoritative_module"
         ],
-        "expected_final_apply_turn_authoritative_module": _expected[
+        "expected_final_apply_turn_authoritative_module": expected[
             "final_apply_turn_authoritative_module"
         ],
-        "final_apply_attack_combat_action_module": _manifest[
+        "final_apply_attack_combat_action_module": actual[
             "final_apply_attack_combat_action_module"
         ],
-        "expected_final_apply_attack_combat_action_module": _expected[
+        "expected_final_apply_attack_combat_action_module": expected[
             "final_apply_attack_combat_action_module"
         ],
     }
 
 
-globals().update(_RUNTIME_GLOBALS)
-
-# Mirror the final facade globals back into every split module so functions whose
-# global namespace lives in runtime_partXX can resolve helpers defined by other
-# parts. This intentionally skips dunder/private base aliases used by wrappers.
-for _module in _PART_MODULES:
-    if not isinstance(_module, _ModuleType):
-        continue
-    for _name, _value in _RUNTIME_GLOBALS.items():
-        if _name.startswith("__") or _name.startswith("_base_"):
-            continue
-        setattr(_module, _name, _value)
-
-# Preserve historical module identity in introspection-heavy tests.
-_sys.modules[__name__] = _sys.modules[__name__]
-
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = [
+    "apply_idle_ticks",
+    "apply_resume_catchup",
+    "apply_turn",
+    "build_frontend_bootstrap_payload",
+    "get_runtime_wrapper_drift_report",
+    "get_runtime_wrapper_manifest",
+    "load_runtime_session",
+    "process_next_narration_job",
+    "save_runtime_session",
+]

@@ -3,11 +3,11 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from app.rpg.autoplay_report_materialization_guard import (
+from tests.rpg.report_materialization_guard import (
     MATERIALIZATION_GUARD_SOURCE,
     SUMMARY_NAME,
     cap_report_materialization_bytes,
-    install_report_materialization_size_guard,
+    activate_report_materialization_guard,
 )
 from app.rpg.autoplay_report_size_guard import REPORT_JSON_NAME
 
@@ -22,7 +22,7 @@ def test_phase13_11_materialization_bytes_are_capped(monkeypatch):
 
 def test_phase13_11_path_write_text_caps_after_materialization(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES", "64")
-    install_report_materialization_size_guard(output_dir=tmp_path)
+    activate_report_materialization_guard(output_dir=tmp_path)
     report = tmp_path / REPORT_JSON_NAME
 
     report.write_text(json.dumps({"rows": ["x" * 200]}), encoding="utf-8")
@@ -36,7 +36,7 @@ def test_phase13_11_path_write_text_caps_after_materialization(tmp_path: Path, m
 
 def test_phase13_11_copyfile_caps_report_destination(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES", "64")
-    install_report_materialization_size_guard(output_dir=tmp_path)
+    activate_report_materialization_guard(output_dir=tmp_path)
     source = tmp_path / "source.json"
     destination = tmp_path / REPORT_JSON_NAME
     source.write_text(json.dumps({"rows": ["x" * 200]}), encoding="utf-8")
@@ -50,7 +50,7 @@ def test_phase13_11_copyfile_caps_report_destination(tmp_path: Path, monkeypatch
 
 def test_phase13_11_zip_writestr_caps_report_member(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("RPG_AUTOPLAY_MAX_REPORT_JSON_BYTES", "64")
-    install_report_materialization_size_guard(output_dir=tmp_path)
+    activate_report_materialization_guard(output_dir=tmp_path)
     zip_path = tmp_path / "autoplay-campaign-results.zip"
 
     with zipfile.ZipFile(zip_path, "w") as zf:

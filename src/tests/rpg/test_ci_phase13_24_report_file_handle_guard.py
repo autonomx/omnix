@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from app.rpg.autoplay_report_materialization_guard import (
+from tests.rpg.report_materialization_guard import (
     REPORT_JSON_NAME,
     _GuardedReportFile,
-    install_report_materialization_size_guard,
+    activate_report_materialization_guard,
 )
 
 
@@ -35,7 +35,7 @@ def test_phase13_24_report_file_handle_allows_small_text_write(tmp_path: Path):
 
 
 def test_phase13_25_installed_guard_caps_path_open_write(tmp_path: Path):
-    install_report_materialization_size_guard(output_dir=tmp_path)
+    activate_report_materialization_guard(output_dir=tmp_path)
     path = tmp_path / REPORT_JSON_NAME
     with path.open("w", encoding="utf-8") as handle:
         handle.write('{"rows": [')

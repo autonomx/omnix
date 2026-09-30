@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.trading import ai_shadow_reliability
+import pytest
+
+from app.trading import strategy_ai_shadow_provider as provider
 from app.trading import strategy_evaluability
 from app.trading.providers import alpaca_iex
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
 from app.trading.strategy_ai_shadow_v2_monitor import TradingAIShadowV2Monitor
-from app.trading.strategy_runtime_reliability_fixes import (
-    _CurrentShadowSessionProxy,
-    _outcome_is_valid,
-)
+from app.trading.strategy_outcome_quality import outcome_is_valid as _outcome_is_valid
+from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 class _Response:
@@ -159,7 +158,7 @@ def test_shadow_proxy_drops_previous_session_bars_before_open() -> None:
             raise AssertionError("pre-open current-session filter must not request regular fallback")
 
     observed = datetime(2026, 9, 11, 13, 20, 35, tzinfo=timezone.utc)  # 09:20 ET
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         Delegate(),
         session_date=observed.astimezone(timezone(timedelta(hours=-4))).date(),
         observed_at=observed,
@@ -185,7 +184,7 @@ def test_shadow_proxy_recovers_primary_history_exception_with_complete_iex_prefi
             return current_session
 
     observed = datetime(2026, 9, 11, 14, 51, 30, tzinfo=timezone.utc)
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         Delegate(),
         session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
         observed_at=observed,
@@ -210,7 +209,7 @@ def test_shadow_proxy_keeps_incomplete_fallback_non_actionable() -> None:
             return partial
 
     observed = datetime(2026, 9, 11, 13, 33, 30, tzinfo=timezone.utc)
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         Delegate(),
         session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
         observed_at=observed,
@@ -237,9 +236,10 @@ def test_preopen_opportunity_outcome_is_excluded_from_metrics() -> None:
     assert _outcome_is_valid(valid) is True
 
 
-def test_v2_monitor_does_not_reenter_provider_path_while_circuit_open() -> None:
+@pytest.mark.anyio
+async def test_v2_monitor_does_not_reenter_provider_path_while_circuit_open() -> None:
     async def scenario() -> None:
-        circuit = ai_shadow_reliability._CIRCUIT
+        circuit = provider._CIRCUIT
         circuit.success()
         circuit.failure_count = 1
         circuit.open_until_monotonic = time.monotonic() + 60
@@ -258,10 +258,11 @@ def test_v2_monitor_does_not_reenter_provider_path_while_circuit_open() -> None:
         finally:
             circuit.success()
 
-    asyncio.run(scenario())
+    await scenario()
 
 
-def test_identical_gap_events_are_heartbeat_throttled() -> None:
+@pytest.mark.anyio
+async def test_identical_gap_events_are_heartbeat_throttled() -> None:
     async def scenario() -> None:
         repository = _Repository()
         monitor = TradingAIShadowMonitor()
@@ -288,4 +289,4 @@ def test_identical_gap_events_are_heartbeat_throttled() -> None:
         assert len(repository.events) == 2
         assert repository.events[0].payload["gap_sampling"] == "state_or_periodic_heartbeat"
 
-    asyncio.run(scenario())
+    await scenario()

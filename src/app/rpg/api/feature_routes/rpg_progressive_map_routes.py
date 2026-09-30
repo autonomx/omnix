@@ -2,10 +2,9 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import HTTPException, Query, Request
 
 from app.rpg.worlds.progressive_materialization import materialize_deferred_location
 from app.rpg.worlds.progressive_materialization_job_service import (
@@ -38,7 +37,6 @@ class RpgScheduleCampaignMaterializationRequestBody(_TypedRequestModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_progressive_map_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_progressive_map_route_hook_installed"
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -160,20 +158,3 @@ def register_rpg_progressive_map_routes(router: APIRouter, state) -> None:
             world_id=world_id,
             source_world_revision=source_world_revision,
         )
-
-
-def install_rpg_progressive_map_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (
-            args and args[0] == "Omnix Web Gateway"
-        ):
-            register_rpg_progressive_map_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

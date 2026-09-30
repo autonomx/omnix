@@ -30,7 +30,7 @@ from .strategy_ai_shadow_v2 import (
     alpha_prompt_snapshot,
     build_market_structure_snapshot,
     derive_catalyst_influence,
-    deterministic_risk_geometry,
+    deterministic_risk_geometry as _base_deterministic_risk_geometry,
     evaluate_opportunity_episode,
     evidence_fingerprint,
     trigger_satisfied,
@@ -44,6 +44,7 @@ from .strategy_repository import (
 )
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
 
 _ET = ZoneInfo("America/New_York")
@@ -55,10 +56,40 @@ _ARMS: tuple[AIShadowV2Arm, ...] = (
 _EVENT_TYPES = (
     "ai_v2_catalyst_snapshot", "ai_v2_research_refresh", "ai_v2_decision",
     "ai_v2_fill", "ai_v2_opportunity_episode", "ai_v2_session_summary",
+    "ai_v2_catalyst_freeze", "ai_v2_catalyst_lift_summary",
+    "ai_v2_alpha_error", "ai_v2_alpha_policy_veto", "ai_v2_decision_outcome",
+    "ai_v2_arm_unavailable",
 )
 _PREMARKET_START_ET = time(6, 0)
 _REGULAR_SESSION_START_ET = time(9, 30)
 _FULL_SESSION_LAST_ENTRY_ET = time(15, 30)
+AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT = Decimal("8")
+
+
+def deterministic_risk_geometry(
+    decision,
+    *,
+    entry_reference: Decimal,
+    estimated_cost_bps: Decimal,
+    minimum_net_r: Decimal,
+):
+    geometry = _base_deterministic_risk_geometry(
+        decision,
+        entry_reference=entry_reference,
+        estimated_cost_bps=estimated_cost_bps,
+        minimum_net_r=minimum_net_r,
+    )
+    if geometry.risk_per_share is None or entry_reference <= 0:
+        return geometry
+    risk_pct = geometry.risk_per_share / entry_reference * Decimal("100")
+    if risk_pct <= AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT:
+        return geometry
+    return geometry.model_copy(
+        update={
+            "valid": False,
+            "reason": "maximum_structural_risk_pct_exceeded",
+        }
+    )
 
 
 class V2PositionState(BaseModel):
@@ -236,51 +267,21 @@ def _research_selection_is_due(
 
 
 def _historical_episodes(repository: TradingStrategyRepository, strategy_id: str) -> list[dict[str, object]]:
-    try:
-        recent = repository.recent_events(strategy_id, 50_000)
-    except Exception:
-        return []
-    return [
-        dict(e.payload["outcome"]) for e in recent
-        if e.event_type == "ai_v2_opportunity_episode"
-        and e.payload.get("arm") in {"morning_catalyst", "full_session_catalyst"}
-        and isinstance(e.payload.get("outcome"), dict)
-    ]
+    from .strategy_ai_shadow_v2_roadmap_policy import _historical_episodes_policy
+
+    return _historical_episodes_policy(repository, strategy_id)
 
 
 def _persistence_calibration(episodes: list[dict[str, object]], persistence: str) -> tuple[Decimal | None, int]:
-    values = [
-        row for row in episodes
-        if row.get("catalyst_persistence_class") == persistence
-        and row.get("plus_two_r_before_minus_one_r") is not None
-    ]
-    if len(values) < 30:
-        return None, len(values)
-    wins = sum(row.get("plus_two_r_before_minus_one_r") is True for row in values)
-    return Decimal(wins) / Decimal(len(values)), len(values)
+    from .strategy_ai_shadow_v2_roadmap_policy import _persistence_calibration_policy
+
+    return _persistence_calibration_policy(episodes, persistence)
 
 
 def _setup_calibration(episodes: list[dict[str, object]], persistence: str) -> dict[str, dict[str, object]]:
-    result: dict[str, dict[str, object]] = {}
-    for setup in (
-        "trend_continuation", "failed_selloff_reclaim", "first_pullback",
-        "squeeze_continuation", "gap_hold", "distribution", "unresolved",
-    ):
-        values = [
-            row for row in episodes
-            if row.get("catalyst_persistence_class") == persistence
-            and row.get("setup_family") == setup
-            and row.get("plus_two_r_before_minus_one_r") is not None
-        ]
-        wins = sum(row.get("plus_two_r_before_minus_one_r") is True for row in values)
-        result[setup] = {
-            "sample_size": len(values),
-            "two_r_before_minus_one_r_rate": (
-                str(Decimal(wins) / Decimal(len(values))) if len(values) >= 30 else None
-            ),
-            "calibrated": len(values) >= 30,
-        }
-    return result
+    from .strategy_ai_shadow_v2_roadmap_policy import _setup_calibration_policy
+
+    return _setup_calibration_policy(episodes, persistence)
 
 
 def _apply_fill(state: V2PositionState, side: str, units: Decimal, price: Decimal, at: datetime, trade_id: str) -> V2PositionState:
@@ -378,7 +379,7 @@ class TradingAIShadowV2Monitor:
             and start_et.astimezone(timezone.utc) <= e.observed_at.astimezone(timezone.utc) < end.astimezone(timezone.utc)
         ]
 
-    async def _refresh_catalyst(
+    async def _refresh_catalyst_core(
         self, *, candidate, config: TradingStrategyConfigDocument,
         strategy_repository: TradingStrategyRepository,
         research_repository: TradingResearchRepository,
@@ -452,6 +453,31 @@ class TradingAIShadowV2Monitor:
             identity=(candidate.instrument_id, snapshot.evidence_fingerprint),
         )
         return snapshot
+
+    async def _refresh_catalyst(
+        self,
+        *,
+        candidate,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        research_repository: TradingResearchRepository,
+        events: list[StrategyEvent],
+        now: datetime,
+        history: list[dict[str, object]],
+    ) -> CatalystIntelligenceSnapshot:
+        from .strategy_ai_shadow_v2_roadmap_policy import _refresh_catalyst_policy
+
+        return await _refresh_catalyst_policy(
+            self,
+            candidate=candidate,
+            config=config,
+            strategy_repository=strategy_repository,
+            research_repository=research_repository,
+            events=events,
+            now=now,
+            history=history,
+            original=self._refresh_catalyst_core,
+        )
 
     async def _microstructure(self, market_service: TradingMarketDataService, candidate) -> dict[str, object] | None:
         try:
@@ -587,7 +613,7 @@ class TradingAIShadowV2Monitor:
                 idempotency_key=_key(arm, decision.instrument_id, at, "local"), payload=fill_payload,
             ))
 
-    async def _run_arm(
+    async def _run_arm_core(
         self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]],
         config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent],
@@ -651,6 +677,37 @@ class TradingAIShadowV2Monitor:
                     trigger_reasons=reasons_by_id.get(decision.instrument_id, ()),
                 )
 
+    async def _run_arm(
+        self,
+        *,
+        arm: AIShadowV2Arm,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+    ) -> None:
+        from . import strategy_ai_shadow_provider as reliability
+
+        now = reliability.time.monotonic()
+        circuit = reliability._CIRCUIT
+        if circuit.is_open(now):
+            self.last_error = (
+                "ai_shadow_v2_provider_circuit_open:"
+                f"retry_after_seconds={circuit.retry_after(now)};"
+                f"failure_count={circuit.failure_count}"
+            )
+            return None
+        from .strategy_ai_shadow_v2_roadmap_policy import _run_arm_policy
+
+        await _run_arm_policy(
+            self,
+            arm=arm,
+            rows=rows,
+            config=config,
+            repository=repository,
+            events=events,
+        )
+
     async def _force_flat(
         self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
@@ -673,7 +730,7 @@ class TradingAIShadowV2Monitor:
                     events=events, trigger_reasons=("force_flat",),
                 )
 
-    async def _label_episodes(
+    async def _label_episodes_core(
         self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
     ) -> None:
@@ -740,7 +797,27 @@ class TradingAIShadowV2Monitor:
                     ):
                         self.episode_count += 1
 
-    async def _summary(
+    async def _label_episodes(
+        self,
+        *,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        now: datetime,
+    ) -> None:
+        from .strategy_ai_shadow_v2_roadmap_policy import _label_episodes_policy
+
+        await _label_episodes_policy(
+            self,
+            rows=rows,
+            config=config,
+            repository=repository,
+            events=events,
+            now=now,
+        )
+
+    async def _summary_core(
         self, *, config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent], session_date, now: datetime,
     ) -> None:
@@ -787,11 +864,36 @@ class TradingAIShadowV2Monitor:
             identity=(session_date.isoformat(), _key(payload["arms"])),
         )
 
+    async def _summary(
+        self,
+        *,
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        session_date,
+        now: datetime,
+    ) -> None:
+        from .strategy_ai_shadow_v2_roadmap_policy import _summary_policy
+
+        await _summary_policy(
+            self,
+            config=config,
+            repository=repository,
+            events=events,
+            session_date=session_date,
+            now=now,
+        )
+
     async def _run_config(
         self, config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         research_repository: TradingResearchRepository, market_service: TradingMarketDataService,
         *, now: datetime,
     ) -> None:
+        market_service = _CurrentSessionMarketDataProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+        )
         universe = await asyncio.to_thread(resolve_v2_shadow_archive, config, repository, now=now)
         if universe is None:
             return

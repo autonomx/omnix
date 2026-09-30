@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import RLock
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -84,6 +85,72 @@ class FinvizLiveLeaderSource:
         return tuple(rows)
 
 
+class PersistedCatalystIntelligenceSource:
+    """Replay causal AI-shadow Catalyst Intelligence into discovery observations."""
+
+    name = "persisted_catalyst_intelligence_v2"
+    _exchange_timezone = ZoneInfo("America/New_York")
+
+    def capture(self, *, observed_at: datetime) -> tuple[CausalMarketObservation, ...]:
+        from .strategy_ai_shadow_v2 import CatalystIntelligenceSnapshot
+        from .strategy_dynamic_discovery import INTERDAY_TRADING_STRATEGY_ID
+        from .strategy_repository import default_strategy_repository
+
+        repo = default_strategy_repository()
+        try:
+            configs = repo.list_configs(active_only=False)
+        except Exception:
+            return ()
+        strategy_ids = {
+            item.strategy_id
+            for item in configs
+            if item.strategy_id == INTERDAY_TRADING_STRATEGY_ID
+            or item.parent_strategy_id == INTERDAY_TRADING_STRATEGY_ID
+        }
+        latest = {}
+        session_date = observed_at.astimezone(self._exchange_timezone).date()
+        for strategy_id in strategy_ids:
+            try:
+                events = repo.recent_events(strategy_id, 20_000)
+            except Exception:
+                continue
+            for event in events:
+                if (
+                    event.event_type != "ai_v2_catalyst_snapshot"
+                    or event.observed_at > observed_at
+                    or event.observed_at.astimezone(self._exchange_timezone).date()
+                    != session_date
+                    or not isinstance(event.payload.get("snapshot"), dict)
+                ):
+                    continue
+                prior = latest.get(event.instrument_id)
+                if prior is None or (event.observed_at, event.event_id) > (
+                    prior.observed_at,
+                    prior.event_id,
+                ):
+                    latest[event.instrument_id] = event
+        rows = []
+        for instrument_id, event in latest.items():
+            try:
+                snapshot = CatalystIntelligenceSnapshot.model_validate(
+                    event.payload["snapshot"]
+                )
+            except Exception:
+                continue
+            rows.append(
+                CausalMarketObservation(
+                    instrument_id=instrument_id,
+                    session_date=session_date,
+                    observed_at=event.observed_at,
+                    source=self.name,
+                    source_locator="omnix:ai-v2-catalyst-snapshot",
+                    catalyst_payload=snapshot.model_dump(mode="json"),
+                    catalyst_known=True,
+                )
+            )
+        return tuple(rows)
+
+
 _SOURCE_LOCK = RLock()
 _REGISTERED_SOURCES: dict[str, DiscoveryAcquisitionSource] = {}
 
@@ -108,8 +175,10 @@ def registered_discovery_sources() -> tuple[DiscoveryAcquisitionSource, ...]:
 
 def install_default_discovery_sources() -> None:
     with _SOURCE_LOCK:
-        if FinvizLiveLeaderSource.name not in _REGISTERED_SOURCES:
-            _REGISTERED_SOURCES[FinvizLiveLeaderSource.name] = FinvizLiveLeaderSource()
+        defaults = (FinvizLiveLeaderSource(), PersistedCatalystIntelligenceSource())
+        for source in defaults:
+            if source.name not in _REGISTERED_SOURCES:
+                _REGISTERED_SOURCES[source.name] = source
 
 
 def capture_discovery_observations(*, observed_at: datetime) -> tuple[CausalMarketObservation, ...]:
@@ -124,6 +193,7 @@ __all__ = [
     "CausalMarketObservation",
     "DiscoveryAcquisitionSource",
     "FinvizLiveLeaderSource",
+    "PersistedCatalystIntelligenceSource",
     "capture_discovery_observations",
     "install_default_discovery_sources",
     "register_discovery_acquisition_source",

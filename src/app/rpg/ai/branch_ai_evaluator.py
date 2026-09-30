@@ -28,6 +28,7 @@ from ..core.determinism import DeterminismConfig
 from ..core.event_bus import Event
 from ..core.llm_boundary import LLMGateway
 from ..core.llm_recording import LLMRecorder
+from .llm_gateway_adapter import adapt_base_provider
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class AIBranchEvaluator:
         self.llm = None
         self.llm_gateway = None
         if llm_client is not None:
+            llm_client = adapt_base_provider(llm_client)
             self.llm_gateway = LLMGateway(
                 llm_client=llm_client,
                 recorder=self.recorder,

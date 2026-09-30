@@ -6,7 +6,17 @@ from typing import Any, Dict, List
 
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 from app.providers.base import ChatMessage
-from app.rpg.session import runtime as runtime_mod
+from app.rpg.session.semantic_state_changes import (
+    _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS,
+    preview_semantic_state_change_prompt,
+)
+from app.rpg.session.state_normalization import _normalize_active_interactions
+from app.rpg.session.world_consequence_runtime import (
+    _ensure_semantic_pipeline_state,
+    _safe_actor_states,
+    _stable_semantic_state_change_proposal_id,
+    record_semantic_llm_capture,
+)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -32,7 +42,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _extract_actor_states_from_simulation(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
     # Keep capture actor extraction aligned with runtime validator source of truth.
-    return runtime_mod._safe_actor_states(simulation_state)
+    return _safe_actor_states(simulation_state)
 
 
 def _infer_actor_from_text(proposal: Dict[str, Any], simulation_state: Dict[str, Any]) -> str:
@@ -76,7 +86,7 @@ def normalize_semantic_state_change_llm_output(
         return []
 
     simulation_state = _safe_dict(simulation_state)
-    runtime_state = runtime_mod._ensure_semantic_pipeline_state(_safe_dict(runtime_state))
+    runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
 
     normalized: List[Dict[str, Any]] = []
     for proposal in proposals:
@@ -108,7 +118,7 @@ def normalize_semantic_state_change_llm_output(
         }
         normalized_proposal["proposal_id"] = (
             _safe_str(normalized_proposal.get("proposal_id"))
-            or runtime_mod._stable_semantic_state_change_proposal_id(
+            or _stable_semantic_state_change_proposal_id(
                 normalized_proposal,
                 simulation_state,
                 runtime_state,
@@ -165,7 +175,7 @@ def _extract_json_payload(raw_text: str) -> str:
 
 def _current_authoritative_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> int:
     simulation_state = _safe_dict(simulation_state)
-    runtime_state = runtime_mod._ensure_semantic_pipeline_state(_safe_dict(runtime_state))
+    runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
     tick = (
         _safe_int(simulation_state.get("current_tick", 0), 0)
         or _safe_int(simulation_state.get("tick", 0), 0)
@@ -178,7 +188,7 @@ def _current_authoritative_tick(simulation_state: Dict[str, Any], runtime_state:
 
 def _get_llm_provider():
     try:
-        from app.providers.service import get_provider
+        from app.rpg.provider_access import get_provider
         return get_provider()
     except Exception:
         return None
@@ -208,7 +218,7 @@ def should_capture_semantic_state_change_proposals(
     runtime_state: Dict[str, Any],
 ) -> bool:
     simulation_state = _safe_dict(simulation_state)
-    runtime_state = runtime_mod._ensure_semantic_pipeline_state(_safe_dict(runtime_state))
+    runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
 
     # Allow low-frequency continuous behavior generation. Only suppress when
     # the queue is already meaningfully populated.
@@ -223,7 +233,7 @@ def should_capture_semantic_state_change_proposals(
     # activity proposals because NPCs should not appear idle during them.
     # We still require at least one actor state and enforce cooldown below.
 
-    actor_states = runtime_mod._safe_actor_states(simulation_state)
+    actor_states = _safe_actor_states(simulation_state)
 
     if not actor_states:
         actor_states = _extract_actor_states_from_simulation(simulation_state)
@@ -235,7 +245,7 @@ def should_capture_semantic_state_change_proposals(
 
     tick = _current_authoritative_tick(simulation_state, runtime_state)
     last_tick = _safe_int(runtime_state.get("last_semantic_llm_tick", -999999), -999999)
-    cooldown_ok = (tick - last_tick) >= runtime_mod._SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS
+    cooldown_ok = (tick - last_tick) >= _SEMANTIC_LLM_PROPOSAL_COOLDOWN_TICKS
 
     print("SEMANTIC CAPTURE sim.tick =", simulation_state.get("tick"))
     print("SEMANTIC CAPTURE sim.current_tick =", simulation_state.get("current_tick"))
@@ -243,7 +253,7 @@ def should_capture_semantic_state_change_proposals(
     print("SEMANTIC CAPTURE resolved tick =", tick)
     print("SEMANTIC CAPTURE last_tick =", last_tick)
     print("SEMANTIC CAPTURE actor_count =", len(actor_states))
-    print("SEMANTIC CAPTURE interaction_count =", len(runtime_mod._normalize_active_interactions(simulation_state, runtime_state)))
+    print("SEMANTIC CAPTURE interaction_count =", len(_normalize_active_interactions(simulation_state, runtime_state)))
     print("SEMANTIC CAPTURE queued =", len(runtime_state.get("semantic_state_change_proposals") or []))
     print("SEMANTIC CAPTURE recorded =", len(runtime_state.get("recorded_semantic_llm_proposals") or []))
     print("SEMANTIC CAPTURE cooldown_ok =", cooldown_ok)
@@ -267,13 +277,13 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
     print("SEMANTIC CAPTURE entered")
     session = _safe_dict(session)
     simulation_state = _safe_dict(session.get("simulation_state"))
-    runtime_state = runtime_mod._ensure_semantic_pipeline_state(_safe_dict(session.get("runtime_state")))
+    runtime_state = _ensure_semantic_pipeline_state(_safe_dict(session.get("runtime_state")))
     print("SEMANTIC CAPTURE session has npc_states =", bool((simulation_state.get("npc_states") or [])))
     print("SEMANTIC CAPTURE session has actor_states =", bool((simulation_state.get("actor_states") or [])))
     print("SEMANTIC CAPTURE last_semantic_llm_tick =", runtime_state.get("last_semantic_llm_tick"))
     tick = _current_authoritative_tick(simulation_state, runtime_state)
 
-    actor_states = runtime_mod._safe_actor_states(simulation_state)
+    actor_states = _safe_actor_states(simulation_state)
     if not actor_states:
         actor_states = _extract_actor_states_from_simulation(simulation_state)
     simulation_state["actor_states"] = actor_states
@@ -290,7 +300,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
         session["runtime_state"] = runtime_state
         return session
 
-    prompt = runtime_mod.preview_semantic_state_change_prompt(simulation_state, runtime_state)
+    prompt = preview_semantic_state_change_prompt(simulation_state, runtime_state)
     print("SEMANTIC CAPTURE prompt_present =", bool(prompt))
     raw_output: Any = ""
 
@@ -386,7 +396,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
             p["actor_id"] = inferred
 
     # Reduce passive filler when no interaction is active.
-    interactions = runtime_mod._normalize_active_interactions(simulation_state, runtime_state)
+    interactions = _normalize_active_interactions(simulation_state, runtime_state)
     if not interactions:
         for p in normalized:
             action = _safe_str(p.get("semantic_action"))
@@ -401,7 +411,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
 
     # Deterministic fallback if normalization returns empty
     if not normalized:
-        actor_states = runtime_mod._safe_actor_states(simulation_state)
+        actor_states = _safe_actor_states(simulation_state)
         if not actor_states:
             actor_states = _extract_actor_states_from_simulation(simulation_state)
 
@@ -430,7 +440,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
     recent = runtime_state.get("recent_semantic_actions", [])
 
     # Add action variety boost
-    interactions = runtime_mod._normalize_active_interactions(simulation_state, runtime_state)
+    interactions = _normalize_active_interactions(simulation_state, runtime_state)
 
     if not interactions:
         for p in normalized:
@@ -452,7 +462,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
                 p["priority"] = 1  # almost ignore
 
     # Verify interaction actor filtering
-    interactions = runtime_mod._normalize_active_interactions(simulation_state, runtime_state)
+    interactions = _normalize_active_interactions(simulation_state, runtime_state)
     if interactions:
         allowed = set()
         for row in interactions:
@@ -471,7 +481,7 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
     print("SEMANTIC CAPTURE final actor_ids =", [p.get("actor_id") for p in normalized])
     print("SEMANTIC CAPTURE npc_index_keys =", list(_safe_dict(simulation_state.get("npc_index")).keys())[:5])
 
-    runtime_state = runtime_mod.record_semantic_llm_capture(
+    runtime_state = record_semantic_llm_capture(
         runtime_state,
         simulation_state,
         prompt=prompt,

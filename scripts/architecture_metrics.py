@@ -438,7 +438,7 @@ def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
     roots = {name for name in graph if name in {"app.production", "app.worker", "launch", "main"} or analysis.modules[name].endswith("/__main__.py")}
     # Scripts and registered literal module names are additional entry points.
     for path, tree in analysis.trees.items():
-        if path.startswith("scripts/") or path in {"src/sitecustomize.py", "src/usercustomize.py"}:
+        if path.startswith("scripts/"):
             aliases = import_aliases(tree, path)
             for target in aliases.values():
                 roots.update(name for name in graph if target == name or target.startswith(name + "."))

@@ -2,15 +2,10 @@
 from __future__ import annotations
 from app.config.env import env_str as _env_str
 
-import threading
 import uuid
 from contextlib import ExitStack
-from contextvars import ContextVar
 from copy import deepcopy
-from functools import wraps
 from typing import Any, Callable
-
-from fastapi import FastAPI, Request
 
 from app.rpg.foreground_turn_record import (
     FOREGROUND_TURN_RECORD_VERSION,
@@ -21,78 +16,7 @@ from app.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID as _DIRECT_
 from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
 
-_DIRECT_RPG_TURN_ACTIVE: ContextVar[bool] = ContextVar("omnix_direct_rpg_turn_active", default=False)
-_MIDDLEWARE_SENTINEL = "_omnix_rpg_turn_job_mirror_middleware_installed"
-
-
-class _SubmissionLockEntry:
-    def __init__(self) -> None:
-        self.lock = threading.RLock()
-        self.users = 0
-
-
-_SUBMISSION_LOCKS: dict[str, _SubmissionLockEntry] = {}
-_SUBMISSION_LOCKS_GUARD = threading.RLock()
-
-
-def install_rpg_turn_job_mirror_hook() -> None:
-    """Install record-only job mirroring for the direct web turn route."""
-
-    _install_apply_turn_wrapper()
-
-
-def install_rpg_turn_job_mirror_middleware(app: FastAPI) -> None:
-    if getattr(app.state, _MIDDLEWARE_SENTINEL, False):
-        return
-    setattr(app.state, _MIDDLEWARE_SENTINEL, True)
-
-    @app.middleware("http")
-    async def mirror_direct_rpg_turns(request: Request, call_next: Callable[..., Any]) -> Any:
-        if request.method.upper() == "POST" and _is_direct_turn_path(request.url.path):
-            active_token = _DIRECT_RPG_TURN_ACTIVE.set(True)
-            submission_id = request.headers.get("x-omnix-rpg-submission-id", "").strip() or f"submit:{uuid.uuid4().hex}"
-            submission_token = _DIRECT_RPG_SUBMISSION_ID.set(submission_id)
-            try:
-                response = await call_next(request)
-                response.headers["X-Omnix-Rpg-Submission-Id"] = submission_id
-                return response
-            finally:
-                _DIRECT_RPG_SUBMISSION_ID.reset(submission_token)
-                _DIRECT_RPG_TURN_ACTIVE.reset(active_token)
-        return await call_next(request)
-
-
-def _is_direct_turn_path(path: str) -> bool:
-    parts = [part for part in path.split("/") if part]
-    return len(parts) == 5 and parts[:3] == ["api", "rpg", "sessions"] and parts[4] == "turn"
-
-
-def _install_apply_turn_wrapper() -> None:
-    from app.rpg.session import interactive_first_call_runtime
-
-    if getattr(interactive_first_call_runtime, "_omnix_rpg_turn_job_mirror_installed", False):
-        return
-
-    original_apply_turn = interactive_first_call_runtime.apply_turn
-
-    @wraps(original_apply_turn)
-    def mirrored_apply_turn(session_id: str, command: str, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        if not _DIRECT_RPG_TURN_ACTIVE.get(False):
-            return original_apply_turn(session_id, command, *args, **kwargs)
-        return _apply_turn_with_job_mirror(
-            original_apply_turn,
-            session_id,
-            command,
-            *args,
-            submission_id=_DIRECT_RPG_SUBMISSION_ID.get("") or None,
-            **kwargs,
-        )
-
-    interactive_first_call_runtime.apply_turn = mirrored_apply_turn
-    interactive_first_call_runtime._omnix_rpg_turn_job_mirror_installed = True
-
-
-def _apply_turn_with_job_mirror(
+def execute_turn_with_job_mirror(
     apply_turn: Callable[..., dict[str, Any]],
     session_id: str,
     command: str,
@@ -105,13 +29,8 @@ def _apply_turn_with_job_mirror(
     from app.jobs.store import default_job_store
 
     resolved_submission_id = str(submission_id or f"submit:{uuid.uuid4().hex}").strip()
-    lock = _reserve_submission_lock(resolved_submission_id)
     execution_scope = ExitStack()
-    with rpg_pipeline_span(
-        "turn.submission_lock_wait",
-        fields={"submission_id": resolved_submission_id},
-    ):
-        lock.acquire()
+    submission_token = _DIRECT_RPG_SUBMISSION_ID.set(resolved_submission_id)
     try:
         store = default_job_store()
         durable_store = submission_store_for_job_store(store)
@@ -311,33 +230,10 @@ def _apply_turn_with_job_mirror(
         return result
     finally:
         execution_scope.close()
-        _release_submission_lock(resolved_submission_id, lock)
+        _DIRECT_RPG_SUBMISSION_ID.reset(submission_token)
 
 
-def _reserve_submission_lock(submission_id: str) -> threading.RLock:
-    with _SUBMISSION_LOCKS_GUARD:
-        entry = _SUBMISSION_LOCKS.get(submission_id)
-        if entry is None:
-            entry = _SubmissionLockEntry()
-            _SUBMISSION_LOCKS[submission_id] = entry
-        entry.users += 1
-        return entry.lock
-
-
-def _release_submission_lock(submission_id: str, lock: threading.RLock) -> None:
-    lock.release()
-    with _SUBMISSION_LOCKS_GUARD:
-        entry = _SUBMISSION_LOCKS.get(submission_id)
-        if entry is None or entry.lock is not lock:
-            return
-        entry.users = max(0, entry.users - 1)
-        if entry.users == 0:
-            _SUBMISSION_LOCKS.pop(submission_id, None)
-
-
-def _submission_lock_count() -> int:
-    with _SUBMISSION_LOCKS_GUARD:
-        return len(_SUBMISSION_LOCKS)
+_apply_turn_with_job_mirror = execute_turn_with_job_mirror
 
 
 def _find_submission_record(store: Any, session_id: str, submission_id: str) -> Any | None:

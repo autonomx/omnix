@@ -176,12 +176,12 @@ def test_bound_executor_cannot_finalize_a_different_job(client):
         bound.complete_job("other-job", CompleteJobRequest())
 
 
-def test_local_executor_keeps_claim_credentials(client):
-    import asyncio
+@pytest.mark.anyio
+async def test_local_executor_keeps_claim_credentials(client):
     from app.jobs.executor import LocalJobExecutor
     job = _job(client)
     executor = LocalJobExecutor(client.store, {"diagnostics.fencing": lambda _: {"output_refs": [{"done": True}]}})
-    completed = asyncio.run(executor.run_once([ResourceClass.CPU]))
+    completed = await executor.run_once([ResourceClass.CPU])
     assert completed.id == job.id
     assert completed.status.value == "completed"
 

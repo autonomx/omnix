@@ -15,7 +15,9 @@ from app.rpg.profiles.character_cards import (
     reject_character_card_draft,
     update_character_card,
 )
-from app.rpg.session.runtime import load_runtime_session
+from app.rpg.session.session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+)
 from app.rpg.world.npc_biography_registry import list_npc_biographies
 
 

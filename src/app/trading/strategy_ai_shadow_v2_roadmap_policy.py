@@ -27,18 +27,16 @@ from typing import Any
 from . import strategy_ai_shadow_v2_hardening as hardening
 from . import strategy_ai_shadow_v2_monitor as monitor
 from .research.contracts import TradingEvidence
-from .strategy_ai_shadow_v2 import AIShadowV2AlphaDecision, CatalystIntelligenceSnapshot
+from .strategy_ai_shadow_v2 import (
+    AI_SHADOW_V2_POLICY_VERSION,
+    AIShadowV2AlphaDecision,
+    CatalystIntelligenceSnapshot,
+)
 from .strategy_repository import StrategyEvent
 
-AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-2"
 _ALPHA_ERROR_COOLDOWN = timedelta(seconds=60)
 _OUTCOME_HORIZON = timedelta(minutes=60)
 _SUPPLY_ONLY_FORMS = {"S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"}
-
-_INSTALLED = False
-_BASE_REFRESH_CATALYST = None
-_BASE_CATALYST_ASSESS = None
-
 
 def _known_by(item: TradingEvidence, as_of: datetime) -> bool:
     cutoff = as_of.astimezone(timezone.utc)
@@ -104,10 +102,10 @@ def _catalyst_assess_policy(
     morning_context=None,
     empirical_persistence_rate=None,
     empirical_sample_size: int = 0,
+    original,
 ):
-    assert _BASE_CATALYST_ASSESS is not None
     causal = _causal_evidence(evidence, as_of=as_of)
-    snapshot = _BASE_CATALYST_ASSESS(
+    snapshot = original(
         self,
         instrument_id=instrument_id,
         as_of=as_of,
@@ -157,10 +155,9 @@ async def _refresh_catalyst_policy(
     events,
     now,
     history,
+    original,
 ):
-    assert _BASE_REFRESH_CATALYST is not None
-    snapshot = await _BASE_REFRESH_CATALYST(
-        self,
+    snapshot = await original(
         candidate=candidate,
         config=config,
         strategy_repository=strategy_repository,
@@ -401,14 +398,17 @@ def _paired_arm(arm: str) -> str | None:
 
 
 def _previous_trigger_satisfied(previous: StrategyEvent | None, *, structure: monitor.MarketStructureSnapshot) -> bool:
-    if previous is None:
+    if previous is None or previous.payload.get("effective_state") != "armed":
         return False
     decision = previous.payload.get("decision")
-    if not isinstance(decision, dict) or decision.get("state") != "armed":
+    if not isinstance(decision, dict):
         return False
     try:
         trigger = monitor.StructuredAlphaTrigger.model_validate(decision.get("trigger"))
     except Exception:
+        return False
+    structure_at = structure.observed_at.astimezone(previous.observed_at.tzinfo)
+    if structure_at > previous.observed_at + timedelta(minutes=trigger.expiry_minutes):
         return False
     prior = None
     feature = previous.payload.get("feature_snapshot")
@@ -457,6 +457,7 @@ def _due_reasons(
     instrument_id: str,
     at: datetime,
     structure: monitor.MarketStructureSnapshot,
+    current_catalyst_fingerprint: str | None = None,
 ) -> tuple[str, ...]:
     own = monitor._previous_decision(events, arm, instrument_id)
     pair = monitor._previous_decision(events, paired_arm, instrument_id) if paired_arm is not None else None
@@ -471,6 +472,34 @@ def _due_reasons(
         oldest = min(item.observed_at.astimezone(at.tzinfo) for item in previous)
         if at - oldest >= timedelta(minutes=5):
             reasons.append("paired_five_minute_heartbeat" if paired_arm is not None else "five_minute_heartbeat")
+
+    if arm.startswith("full_session_") and paired_arm is not None:
+        catalyst_decision = monitor._previous_decision(
+            events,
+            "full_session_catalyst",
+            instrument_id,
+        )
+        feature = (
+            catalyst_decision.payload.get("feature_snapshot")
+            if catalyst_decision is not None
+            else None
+        )
+        catalyst = (
+            feature.get("catalyst_intelligence")
+            if isinstance(feature, dict)
+            else None
+        )
+        previous_fingerprint = (
+            str(catalyst.get("evidence_fingerprint"))
+            if isinstance(catalyst, dict) and catalyst.get("evidence_fingerprint")
+            else None
+        )
+        if (
+            current_catalyst_fingerprint is not None
+            and previous_fingerprint is not None
+            and current_catalyst_fingerprint != previous_fingerprint
+        ):
+            reasons.append("paired_catalyst_evidence_changed")
 
     if reasons and _pair_has_recent_error(
         events,
@@ -654,6 +683,11 @@ async def _run_arm_policy(
             instrument_id=instrument_id,
             at=at,
             structure=row["structure"],
+            current_catalyst_fingerprint=getattr(
+                row.get("catalyst"),
+                "evidence_fingerprint",
+                None,
+            ),
         )
         if not reasons:
             continue
@@ -984,6 +1018,8 @@ async def _label_episodes_policy(
 
 
 def _historical_episodes_policy(repository, strategy_id: str) -> list[dict[str, object]]:
+    from .strategy_outcome_quality import outcome_is_valid_compat
+
     try:
         recent = repository.recent_events(strategy_id, 50_000)
     except Exception:
@@ -996,6 +1032,7 @@ def _historical_episodes_policy(repository, strategy_id: str) -> list[dict[str, 
             or event.payload.get("arm") != "full_session_catalyst"
             or event.payload.get("policy_version") != AI_SHADOW_V2_POLICY_VERSION
             or not isinstance(event.payload.get("outcome"), dict)
+            or not outcome_is_valid_compat(event.payload["outcome"])
         ):
             continue
         episode_id = str(event.payload.get("episode_id") or event.event_id)
@@ -1054,13 +1091,49 @@ def _setup_calibration_policy(
 
 
 def _decision_outcome_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]:
-    rows = [
-        event.payload
+    from .strategy_outcome_quality import outcome_is_valid_compat
+
+    paired_arm = _paired_arm(arm)
+    paired_decision_ids: set[str] | None = None
+    if paired_arm is not None:
+        def decision_keys(decision_arm: str) -> dict[tuple[str, str], set[str]]:
+            result: dict[tuple[str, str], set[str]] = {}
+            for event in events:
+                if event.event_type != "ai_v2_decision" or event.payload.get("arm") != decision_arm:
+                    continue
+                feature = event.payload.get("feature_snapshot")
+                if not isinstance(feature, dict):
+                    continue
+                if feature.get("experiment_policy_version") != AI_SHADOW_V2_POLICY_VERSION:
+                    continue
+                key = (event.instrument_id, event.observed_at.astimezone(timezone.utc).isoformat())
+                result.setdefault(key, set()).add(event.event_id)
+            return result
+
+        own_decisions = decision_keys(arm)
+        pair_decisions = decision_keys(paired_arm)
+        shared_keys = own_decisions.keys() & pair_decisions.keys()
+        paired_decision_ids = {
+            event_id
+            for key in shared_keys
+            for event_id in own_decisions[key]
+        }
+    relevant = [
+        event
         for event in events
         if event.event_type == "ai_v2_decision_outcome"
         and event.payload.get("arm") == arm
-        and event.payload.get("policy_version") == AI_SHADOW_V2_POLICY_VERSION
+    ]
+    rows = [
+        event.payload
+        for event in relevant
+        if event.payload.get("policy_version") == AI_SHADOW_V2_POLICY_VERSION
         and isinstance(event.payload.get("outcome"), dict)
+        and outcome_is_valid_compat(event.payload["outcome"])
+        and (
+            paired_decision_ids is None
+            or str(event.payload.get("decision_event_id") or "") in paired_decision_ids
+        )
     ]
     avoids = [row for row in rows if row.get("alpha_state") == "avoid"]
     regretted = [row for row in avoids if row["outcome"].get("positive_opportunity") is True]
@@ -1069,13 +1142,22 @@ def _decision_outcome_metrics(events: list[StrategyEvent], arm: str) -> dict[str
         for row in avoids
         if row["outcome"].get("mfe_pct") is not None
     ]
-    return {
+    result: dict[str, object] = {
         "decision_outcome_count": len(rows),
         "avoid_decision_count": len(avoids),
         "avoid_positive_opportunity_count": len(regretted),
         "avoid_regret_rate": str(Decimal(len(regretted)) / Decimal(len(avoids))) if avoids else None,
         "avoid_mean_mfe_pct": str(sum(avoid_mfe, Decimal("0")) / Decimal(len(avoid_mfe))) if avoid_mfe else None,
+        "data_quality_excluded_decision_outcome_count": sum(
+            isinstance(event.payload.get("outcome"), dict)
+            and not outcome_is_valid_compat(event.payload["outcome"])
+            for event in relevant
+        ),
     }
+    if paired_decision_ids is not None:
+        result["paired_decision_count"] = len(paired_decision_ids)
+        result["paired_only"] = True
+    return result
 
 
 def _paired_observation_stats(
@@ -1226,39 +1308,3 @@ async def _summary_policy(
             "catalyst-lift",
         ),
     )
-
-
-def install_ai_shadow_v2_roadmap_policy() -> None:
-    global _INSTALLED, _BASE_REFRESH_CATALYST, _BASE_CATALYST_ASSESS
-    if _INSTALLED:
-        return
-
-    _BASE_REFRESH_CATALYST = hardening._ORIGINAL_REFRESH_CATALYST
-    _BASE_CATALYST_ASSESS = monitor.CatalystIntelligenceAnalyzer.assess
-
-    monitor.CatalystIntelligenceAnalyzer.assess = _catalyst_assess_policy
-    monitor._historical_episodes = _historical_episodes_policy
-    monitor._persistence_calibration = _persistence_calibration_policy
-    monitor._setup_calibration = _setup_calibration_policy
-    monitor._EVENT_TYPES = tuple(
-        dict.fromkeys(
-            (
-                *monitor._EVENT_TYPES,
-                "ai_v2_alpha_error",
-                "ai_v2_alpha_policy_veto",
-                "ai_v2_decision_outcome",
-                "ai_v2_arm_unavailable",
-            )
-        )
-    )
-    monitor.TradingAIShadowV2Monitor._refresh_catalyst = _refresh_catalyst_policy
-    monitor.TradingAIShadowV2Monitor._run_arm = _run_arm_policy
-    monitor.TradingAIShadowV2Monitor._label_episodes = _label_episodes_policy
-    monitor.TradingAIShadowV2Monitor._summary = _summary_policy
-    _INSTALLED = True
-
-
-__all__ = [
-    "AI_SHADOW_V2_POLICY_VERSION",
-    "install_ai_shadow_v2_roadmap_policy",
-]

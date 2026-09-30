@@ -4,10 +4,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading.strategy_ai_shadow_v2 import MarketStructureSnapshot, StructuredAlphaTrigger
-from app.trading.strategy_ai_shadow_v2_schedule_policy import (
-    _CURRENT_CATALYST_FINGERPRINTS,
-    _due_reasons_with_catalyst_event,
-    _effective_armed_trigger_satisfied,
+from app.trading.strategy_ai_shadow_v2_roadmap_policy import (
+    _due_reasons,
+    _previous_trigger_satisfied as _effective_armed_trigger_satisfied,
 )
 from app.trading.strategy_repository import StrategyEvent
 
@@ -118,26 +117,24 @@ def test_changed_catalyst_fingerprint_triggers_both_paired_arms() -> None:
             fingerprint="a" * 64,
         ),
     ]
-    token = _CURRENT_CATALYST_FINGERPRINTS.set({INSTRUMENT: "b" * 64})
-    try:
-        control_reasons = _due_reasons_with_catalyst_event(
-            events,
-            arm="full_session_control",
-            paired_arm="full_session_catalyst",
-            instrument_id=INSTRUMENT,
-            at=AT,
-            structure=_structure(),
-        )
-        catalyst_reasons = _due_reasons_with_catalyst_event(
-            events,
-            arm="full_session_catalyst",
-            paired_arm="full_session_control",
-            instrument_id=INSTRUMENT,
-            at=AT,
-            structure=_structure(),
-        )
-    finally:
-        _CURRENT_CATALYST_FINGERPRINTS.reset(token)
+    control_reasons = _due_reasons(
+        events,
+        arm="full_session_control",
+        paired_arm="full_session_catalyst",
+        instrument_id=INSTRUMENT,
+        at=AT,
+        structure=_structure(),
+        current_catalyst_fingerprint="b" * 64,
+    )
+    catalyst_reasons = _due_reasons(
+        events,
+        arm="full_session_catalyst",
+        paired_arm="full_session_control",
+        instrument_id=INSTRUMENT,
+        at=AT,
+        structure=_structure(),
+        current_catalyst_fingerprint="b" * 64,
+    )
 
     assert "paired_catalyst_evidence_changed" in control_reasons
     assert "paired_catalyst_evidence_changed" in catalyst_reasons
@@ -159,17 +156,14 @@ def test_unchanged_catalyst_fingerprint_does_not_create_spurious_event() -> None
             observed_at=AT - timedelta(minutes=1),
         ),
     ]
-    token = _CURRENT_CATALYST_FINGERPRINTS.set({INSTRUMENT: "a" * 64})
-    try:
-        reasons = _due_reasons_with_catalyst_event(
-            events,
-            arm="full_session_control",
-            paired_arm="full_session_catalyst",
-            instrument_id=INSTRUMENT,
-            at=AT,
-            structure=_structure(),
-        )
-    finally:
-        _CURRENT_CATALYST_FINGERPRINTS.reset(token)
+    reasons = _due_reasons(
+        events,
+        arm="full_session_control",
+        paired_arm="full_session_catalyst",
+        instrument_id=INSTRUMENT,
+        at=AT,
+        structure=_structure(),
+        current_catalyst_fingerprint="a" * 64,
+    )
 
     assert "paired_catalyst_evidence_changed" not in reasons

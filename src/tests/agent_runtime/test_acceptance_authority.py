@@ -76,9 +76,9 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
         def list_artifacts(self, _run_id):
             return list(self.artifacts)
 
-    monkeypatch.setattr("app.agent_runtime.service.WorkspaceAuthority", FakeAuthority)
     service = object.__new__(AgentRunService)
     service.context = SimpleNamespace(workspace_id="workspace-1")
+    service.workspace_authority_factory = FakeAuthority
     service.blob_store = FakeBlobStore()
     repository = FakeRepository()
     spec = AgentRunSpec(

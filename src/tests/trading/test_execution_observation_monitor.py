@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import asyncio
+import pytest
+
 
 from app.trading.execution_observation_plane import ExecutionObservationPlane
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
@@ -20,7 +21,8 @@ class FailingMarketService:
         raise RuntimeError("429 fixture")
 
 
-def test_execution_observation_capture_backs_off_after_provider_failure():
+@pytest.mark.anyio
+async def test_execution_observation_capture_backs_off_after_provider_failure():
     service = FailingMarketService()
     monitor = TradingExecutionObservationMonitor(
         plane=ExecutionObservationPlane(),
@@ -32,13 +34,11 @@ def test_execution_observation_capture_backs_off_after_provider_failure():
         binding_id="alpaca:TEST",
     )
 
-    asyncio.run(monitor._capture_one(service, candidate, now=NOW))
-    asyncio.run(
-        monitor._capture_one(
-            service,
-            candidate,
-            now=NOW + timedelta(seconds=1),
-        )
+    await monitor._capture_one(service, candidate, now=NOW)
+    await monitor._capture_one(
+        service,
+        candidate,
+        now=NOW + timedelta(seconds=1),
     )
 
     assert service.calls == 1

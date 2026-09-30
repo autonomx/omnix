@@ -25,7 +25,7 @@ from .models import MarketBar
 from .paper import PaperExecutionPolicy
 from .research.fact_repository import default_fact_repository
 from .research.outcome_dataset import persist_backtest_trade_outcomes
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import (
     GapPullbackConfig,
     GapPullbackResult,

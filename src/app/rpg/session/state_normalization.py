@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 from typing import Any, Dict, List
 
@@ -62,6 +63,23 @@ def _copy_dict(value: Any) -> Dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _merge_stepped_simulation_state(
+    authoritative_state: Dict[str, Any],
+    stepped_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Merge stepped world state over the authoritative turn state."""
+
+    authoritative_state = _ensure_simulation_state(_safe_dict(authoritative_state))
+    stepped_state = _safe_dict(stepped_state)
+    if not stepped_state:
+        return authoritative_state
+
+    merged_state = deepcopy(authoritative_state)
+    for key, value in stepped_state.items():
+        merged_state[key] = deepcopy(value)
+    return _ensure_simulation_state(merged_state)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app import image_service_app
+from app import image_service_runtime as image_service_app
 from app.image import lifecycle, service
 from app.image.models import ImageGenerationRequest
 from app.image.providers.base import ImageGenerationResult

@@ -20,6 +20,7 @@ from .jobs.handlers import (
     execute_rpg_report_job,
     execute_rpg_turn_job,
 )
+from .jobs.debug_observer import rpg_debug_job_observer
 
 
 def _turn(context: JobExecutionContext, job):
@@ -79,6 +80,7 @@ FEATURE = FeatureModule(
     title="RPG",
     routers=(_rpg_routes_router, _compatibility_router),
     repositories=RPG_REPOSITORY_SPECS,
+    job_observers=(rpg_debug_job_observer,),
     background_workers=(_campaign_genesis_worker,),
     job_handlers=(
         JobHandlerSpec(

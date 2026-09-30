@@ -482,11 +482,13 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
             memory_service_factory,
             memory_settings_factory,
             job_service,
+            live_agent_planner,
         ) -> None:
             self.history_search_factory = history_search_factory
             self.memory_service_factory = memory_service_factory
             self.memory_settings_factory = memory_settings_factory
             self.job_service = job_service
+            self.live_agent_planner = live_agent_planner
             created_stores.append(self)
 
     chat_runtime_compat.reset_default_chat_runtime_caches()

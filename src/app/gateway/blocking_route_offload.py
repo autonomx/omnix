@@ -23,7 +23,6 @@ from starlette.concurrency import run_in_threadpool
 
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_blocking_route_offload_hook_installed"
 _ROUTE_SENTINEL = "_omnix_blocking_route_offload_registered"
 _CALL_SENTINEL = "_omnix_blocking_route_offloaded"
 _DEFAULT_LOG_THRESHOLD_MS = 25.0
@@ -144,21 +143,3 @@ def register_blocking_route_offload(gateway: FastAPI) -> None:
 
     from .feature_registry import FeatureLifecycle, register_feature_lifecycle
     register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,)))
-
-
-def install_blocking_route_offload_hook() -> None:
-    """Register the offload scan for the composed Omnix gateway."""
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-
-    original_init = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        is_gateway = kwargs.get("title") == "Omnix Web Gateway"
-        if is_gateway or (args and args[0] == "Omnix Web Gateway"):
-            register_blocking_route_offload(self)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

@@ -44,6 +44,36 @@ _LOGIN_URL_RE = re.compile(r"https://auth\.openai\.com/oauth/authorize\?[^\s\x1b
 _LOGIN_URL_CAPTURE_TIMEOUT_SECONDS = 2.0
 
 
+def _schema_from_response_format(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    response_type = str(value.get("type") or "").strip().casefold()
+    if response_type != "json_schema":
+        # ``json_object`` intentionally has no field-level contract. Sending an
+        # empty native Codex object schema could reject every non-empty result.
+        return None
+    wrapper = value.get("json_schema")
+    if isinstance(wrapper, dict) and isinstance(wrapper.get("schema"), dict):
+        return dict(wrapper["schema"])
+    return None
+
+
+def _will_retry(event: dict[str, Any]) -> bool:
+    if str(event.get("method") or "") != "error":
+        return False
+    params = event.get("params") if isinstance(event.get("params"), dict) else {}
+    error = params.get("error") if isinstance(params.get("error"), dict) else {}
+    return any(
+        value is True
+        for value in (
+            params.get("willRetry"),
+            params.get("will_retry"),
+            error.get("willRetry"),
+            error.get("will_retry"),
+        )
+    )
+
+
 class ChatGPTCodexProvider(BaseProvider):
     """Use Codex authenticated with a ChatGPT account as an Omnix LLM provider."""
 
@@ -429,6 +459,9 @@ class ChatGPTCodexProvider(BaseProvider):
                 conversation_id=conversation_id,
                 tools=tools,
                 request_timeout_seconds=request_timeout,
+                output_schema=_schema_from_response_format(
+                    kwargs.get("response_format")
+                ),
             )
             if stream:
                 def traced_stream() -> Iterator[ChatResponse]:
@@ -477,6 +510,7 @@ class ChatGPTCodexProvider(BaseProvider):
         conversation_id: str | None,
         tools: list[dict[str, Any]],
         request_timeout_seconds: float,
+        output_schema: dict[str, Any] | None,
     ) -> Iterator[ChatResponse]:
         deadline_at = time.monotonic() + request_timeout_seconds
         system_instructions = self._system_instructions(messages)
@@ -546,6 +580,7 @@ class ChatGPTCodexProvider(BaseProvider):
                             max(0.25, deadline_at - time.monotonic()),
                             60.0,
                         ),
+                        output_schema=output_schema,
                     )
                 except ConnectionError:
                     if time.monotonic() >= deadline_at:
@@ -1027,7 +1062,18 @@ class ChatGPTCodexProvider(BaseProvider):
             if text:
                 self._stderr_tail.append(text)
 
-    def _request(self, method: str, params: dict[str, Any], *, timeout: float) -> dict[str, Any]:
+    def _request(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout: float,
+        output_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if method == "turn/start":
+            if output_schema:
+                params = dict(params)
+                params.setdefault("outputSchema", output_schema)
         self._request_id += 1
         request_id = self._request_id
         self._write_message({"id": request_id, "method": method, "params": params})
@@ -1065,6 +1111,10 @@ class ChatGPTCodexProvider(BaseProvider):
                 self._deny_server_request(message)
                 continue
             if "method" in message:
+                if _will_retry(message):
+                    if time.monotonic() >= deadline:
+                        raise ConnectionError("Timed out waiting for Codex event")
+                    continue
                 return message
             if time.monotonic() >= deadline:
                 raise ConnectionError("Timed out waiting for Codex event")

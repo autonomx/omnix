@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.trading.ai_shadow_reliability import (
+from app.trading.strategy_ai_shadow_provider import (
     get_trading_research_provider,
     reset_ai_shadow_reliability_state,
 )

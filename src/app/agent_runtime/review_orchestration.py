@@ -14,14 +14,12 @@ from .candidate_test_validation import (
     missing_candidate_test_execution,
     reconcile_candidate_test_validation_results,
 )
-from .coding_quality_repository import PostgresCodingQualityRepository
 from .contracts import AgentEvent
 from .repository import PostgresAgentRunRepository
 
 
-# Explicit aliases preserve the existing import surface. The reconciliation
-# wrapper below temporarily mirrors monkeypatched facade attributes into the core
-# module so existing recovery tests retain their isolation semantics.
+# Explicit aliases preserve the existing import surface without mutating the
+# implementation module at call time.
 review_snapshot_id_from_child = _core.review_snapshot_id_from_child
 consume_terminal_reviewer_in_repository = _core.consume_terminal_reviewer_in_repository
 finalize_reviewer_child_in_repository = _core.finalize_reviewer_child_in_repository
@@ -57,10 +55,8 @@ def _redirect_missing_candidate_tests_before_review(
     action: tuple | None = None
     redirected = False
     with service._lock:
-        from app.persistence.unit_of_work import unit_of_work
-
-        with unit_of_work(service.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, service.context)
+        with service.unit_of_work(service.database) as work:
+            repository = service.repository_factory(work.connection, service.context)
             locked = work.connection.execute(
                 """
                 SELECT run_id
@@ -84,7 +80,7 @@ def _redirect_missing_candidate_tests_before_review(
                 work.rollback()
                 return False
 
-            quality = PostgresCodingQualityRepository(work.connection, service.context)
+            quality = service.quality_repository_factory(work.connection, service.context)
             snapshot = quality.get_review_snapshot(parent_run_id, snapshot_id)
             revision = service._current_revision(repository, parent_run_id)
             stage = quality.get_stage(parent_run_id) or {}
@@ -208,14 +204,10 @@ def reconcile_review_progress_in_repository(
     repository: PostgresAgentRunRepository,
     parent_run_id: str,
 ):
-    """Delegate reconciliation while preserving monkeypatch-compatible globals."""
+    """Delegate reconciliation with the service's constructed collaborators."""
 
-    prior_quality = _core.PostgresCodingQualityRepository
-    prior_consume = _core.consume_terminal_reviewer_in_repository
-    try:
-        _core.PostgresCodingQualityRepository = PostgresCodingQualityRepository
-        _core.consume_terminal_reviewer_in_repository = consume_terminal_reviewer_in_repository
-        return _core.reconcile_review_progress_in_repository(service, repository, parent_run_id)
-    finally:
-        _core.PostgresCodingQualityRepository = prior_quality
-        _core.consume_terminal_reviewer_in_repository = prior_consume
+    return _core.reconcile_review_progress_in_repository(
+        service,
+        repository,
+        parent_run_id,
+    )

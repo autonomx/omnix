@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 
@@ -17,6 +17,7 @@ from .research import _call_provider, _json_payload, _provider_identity, default
 from .research.contracts import TradingEvidence, TradingResearchReport
 
 AI_SHADOW_V2_VERSION = "ai-shadow-v2"
+AI_SHADOW_V2_POLICY_VERSION = "ai-shadow-v2-roadmap-2"
 AIShadowV2Arm = Literal[
     "morning_control",
     "morning_catalyst",
@@ -349,16 +350,53 @@ def evidence_fingerprint(evidence: list[TradingEvidence] | tuple[TradingEvidence
 def deterministic_evidence_quality(evidence: list[TradingEvidence] | tuple[TradingEvidence, ...]) -> tuple[EvidenceQuality, bool, int]:
     if not evidence:
         return "unresolved", False, 0
-    primary = [item for item in evidence if item.source_type in {"sec", "company_ir"}]
-    authority = [item for item in evidence if item.source_authority_tier <= 2]
+    reference = max(
+        item.omnix_known_at or item.captured_at
+        for item in evidence
+    )
+    lower = reference - timedelta(hours=72)
+    relevant = []
+    supply_only_forms = {
+        "S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"
+    }
+    for item in evidence:
+        if item.source_type in {"news", "web", "manual"}:
+            relevant.append(item)
+            continue
+        published = (
+            item.source_published_at
+            or item.source_available_at
+            or item.captured_at
+        )
+        if published < lower:
+            continue
+        if item.source_type == "company_ir":
+            relevant.append(item)
+            continue
+        if item.source_type == "sec":
+            form = str(item.metadata.get("form") or "").upper()
+            if form not in supply_only_forms:
+                relevant.append(item)
+    if not relevant:
+        return "unresolved", False, 0
+    primary = [
+        item
+        for item in relevant
+        if item.source_authority_tier == 1
+        and item.source_type in {"sec", "company_ir"}
+    ]
     verified = bool(primary)
-    if primary and len(authority) == len(evidence):
+    if verified and all(item.source_authority_tier <= 2 for item in relevant):
         quality: EvidenceQuality = "primary_verified"
-    elif primary:
+    elif verified:
         quality = "mixed"
     else:
         quality = "secondary_only"
-    score = round(sum(max(0, 5 - int(item.source_authority_tier)) for item in evidence) / (len(evidence) * 4) * 100)
+    score = round(
+        sum(max(0, 5 - int(item.source_authority_tier)) for item in relevant)
+        / (len(relevant) * 4)
+        * 100
+    )
     return quality, verified, min(100, score)
 
 
@@ -419,11 +457,27 @@ def derive_catalyst_influence(
     )
 
 
+def normalize_catalyst_provenance(
+    snapshot: CatalystIntelligenceSnapshot,
+) -> CatalystIntelligenceSnapshot:
+    if snapshot.primary_source_verified:
+        return snapshot
+    if not snapshot.evidence_ids:
+        quality: EvidenceQuality = "unresolved"
+    elif snapshot.evidence_quality == "primary_verified":
+        quality = "mixed"
+    else:
+        quality = snapshot.evidence_quality
+    if quality == snapshot.evidence_quality:
+        return snapshot
+    return snapshot.model_copy(update={"evidence_quality": quality})
+
+
 class CatalystIntelligenceAnalyzer:
     def __init__(self, provider_factory=default_research_provider) -> None:
         self.provider_factory = provider_factory
 
-    def assess(
+    def _assess_core(
         self,
         *,
         instrument_id: str,
@@ -574,6 +628,32 @@ class CatalystIntelligenceAnalyzer:
             "influence": influence.model_dump(mode="json"),
         })
 
+    def assess(
+        self,
+        *,
+        instrument_id: str,
+        as_of: datetime,
+        report: TradingResearchReport | None,
+        evidence: list[TradingEvidence],
+        morning_context: dict[str, object] | None = None,
+        empirical_persistence_rate: Decimal | None = None,
+        empirical_sample_size: int = 0,
+    ) -> CatalystIntelligenceSnapshot:
+        from .strategy_ai_shadow_v2_roadmap_policy import _catalyst_assess_policy
+
+        snapshot = _catalyst_assess_policy(
+            self,
+            instrument_id=instrument_id,
+            as_of=as_of,
+            report=report,
+            evidence=evidence,
+            morning_context=morning_context,
+            empirical_persistence_rate=empirical_persistence_rate,
+            empirical_sample_size=empirical_sample_size,
+            original=self._assess_core,
+        )
+        return normalize_catalyst_provenance(snapshot)
+
 
 def alpha_prompt_snapshot(
     *,
@@ -606,6 +686,16 @@ class AIShadowV2Analyzer:
         self.provider_factory = provider_factory
 
     def assess(self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]]) -> tuple[AIShadowV2AlphaDecision, ...]:
+        from .strategy_ai_shadow_provider import assess_ai_shadow_v2_with_shared_circuit
+
+        return assess_ai_shadow_v2_with_shared_circuit(
+            self,
+            arm=arm,
+            rows=rows,
+            original=type(self)._assess_core,
+        )
+
+    def _assess_core(self, *, arm: AIShadowV2Arm, rows: list[dict[str, object]]) -> tuple[AIShadowV2AlphaDecision, ...]:
         if not rows:
             return ()
         provider = self.provider_factory()
@@ -780,6 +870,10 @@ def evaluate_opportunity_episode(
     entered: bool,
     catalyst_persistence_class: PersistenceClass | None,
 ) -> OpportunityEpisodeOutcome:
+    from .strategy_outcome_quality import episode_reference_is_valid
+
+    if not episode_reference_is_valid(started_at=started_at, ended_at=ended_at):
+        raise ValueError("opportunity_episode_requires_current_regular_session_reference")
     regular = sorted(
         [bar for bar in bars if bar.is_final and bar.session == "regular" and bar.end_time >= started_at and bar.start_time <= ended_at],
         key=lambda item: item.end_time,

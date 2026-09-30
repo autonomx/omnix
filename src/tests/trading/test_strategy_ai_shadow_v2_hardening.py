@@ -4,7 +4,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading.models import MarketBar
-from app.trading.strategy_ai_shadow_v2 import CatalystIntelligenceSnapshot, derive_catalyst_influence
+from app.trading.strategy_ai_shadow_v2 import (
+    AI_SHADOW_V2_POLICY_VERSION,
+    CatalystIntelligenceSnapshot,
+    derive_catalyst_influence,
+)
 from app.trading.strategy_ai_shadow_v2_hardening import (
     _active_stop_price,
     _lift_metrics,
@@ -203,6 +207,7 @@ def _episode_event(
         suffix=suffix,
         payload={
             "arm": arm,
+            "policy_version": AI_SHADOW_V2_POLICY_VERSION,
             "outcome": {
                 "entered": entered,
                 "positive_opportunity": positive,
@@ -231,6 +236,50 @@ def test_postclose_lift_metrics_compare_catalyst_to_identical_control() -> None:
         _episode_event(
             "full_session_catalyst", entered=True, positive=True, two_r=True,
             peak_r="2.2", mae="-1", suffix="fa",
+        ),
+        _event(
+            event_type="ai_v2_decision",
+            at=AT + timedelta(minutes=10),
+            payload={
+                "arm": "morning_control",
+                "feature_snapshot": {
+                    "experiment_policy_version": AI_SHADOW_V2_POLICY_VERSION,
+                },
+            },
+            suffix="mc-decision",
+        ),
+        _event(
+            event_type="ai_v2_decision",
+            at=AT + timedelta(minutes=10),
+            payload={
+                "arm": "morning_catalyst",
+                "feature_snapshot": {
+                    "experiment_policy_version": AI_SHADOW_V2_POLICY_VERSION,
+                },
+            },
+            suffix="ma-decision",
+        ),
+        _event(
+            event_type="ai_v2_decision",
+            at=AT + timedelta(minutes=20),
+            payload={
+                "arm": "full_session_control",
+                "feature_snapshot": {
+                    "experiment_policy_version": AI_SHADOW_V2_POLICY_VERSION,
+                },
+            },
+            suffix="fc-decision",
+        ),
+        _event(
+            event_type="ai_v2_decision",
+            at=AT + timedelta(minutes=20),
+            payload={
+                "arm": "full_session_catalyst",
+                "feature_snapshot": {
+                    "experiment_policy_version": AI_SHADOW_V2_POLICY_VERSION,
+                },
+            },
+            suffix="fa-decision",
         ),
     ]
 

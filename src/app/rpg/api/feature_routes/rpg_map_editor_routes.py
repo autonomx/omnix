@@ -3,11 +3,10 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
 import json
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.rpg.map_content_editor import MapContentEditError, apply_map_content_operations
@@ -63,7 +62,6 @@ class MapEditorApplyResponse(MapEditorValidationResponse):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_map_editor_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_map_editor_route_hook_installed"
 
 
 def register_rpg_map_editor_routes(router: APIRouter, state) -> None:
@@ -178,18 +176,3 @@ def _safe_filename(value: str) -> str:
 
 def _text(value: object) -> str:
     return str(value).strip() if value is not None else ""
-
-
-def install_rpg_map_editor_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
-            register_rpg_map_editor_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

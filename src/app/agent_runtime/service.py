@@ -15,7 +15,6 @@ import os
 from pathlib import Path
 import tempfile
 
-from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
 from app.capabilities import browser_capability_ids
@@ -68,11 +67,8 @@ from .review_orchestration import (
     review_snapshot_id_from_child,
 )
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
-from .semantic_task_parser import default_semantic_task_parser
-from .workspace import WorkspaceAuthority
 from .run_change_set import run_change_set_from_artifact
 from .workspace_promotion import WorkspacePromotionError
-from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
     _acceptance_failures_retryable,
@@ -546,33 +542,8 @@ def _self_review_response_from_repository(
     return response if marker_seen else ""
 
 
-def _sync_core_compat() -> None:
-    """Keep Phase 1-19 patch/test seams anchored at the public service module.
-
-    Before the quality facade existed, tests and local integrations patched
-    ``app.agent_runtime.service.unit_of_work``, repository/workspace authority,
-    and the semantic parser directly. The implementation now lives in
-    ``service_core``; mirror the public facade's current bindings before
-    executing inherited code so the split is behaviorally transparent rather
-    than a compatibility break.
-    """
-
-    _service_core.unit_of_work = unit_of_work
-    _service_core.PostgresAgentRunRepository = PostgresAgentRunRepository
-    _service_core.WorkspaceAuthority = WorkspaceAuthority
-    _service_core.default_semantic_task_parser = default_semantic_task_parser
-
-
 class AgentRunService(_CoreAgentRunService):
     """Durable generalized Agent service with coding completion acceptance."""
-
-    def __getattribute__(self, name: str):
-        # Synchronize on every public/inherited method lookup. This also covers
-        # tests that construct the service with object.__new__ and therefore do
-        # not run __init__ before exercising a recovery helper.
-        if name not in {"__class__", "__dict__", "__getattribute__"}:
-            _sync_core_compat()
-        return super().__getattribute__(name)
 
     @staticmethod
     def _quality_enabled(spec: AgentRunSpec) -> bool:
@@ -642,8 +613,8 @@ class AgentRunService(_CoreAgentRunService):
         initial_parent = self.get(parent_run_id)
         if initial_parent is None:
             raise KeyError(parent_run_id)
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             locked = work.connection.execute(
                 """
                 SELECT run_id
@@ -712,7 +683,7 @@ class AgentRunService(_CoreAgentRunService):
             )
             persist_task_revision_contract(repository.connection, self.context, revision)
             if self._quality_enabled(issued):
-                quality = PostgresCodingQualityRepository(repository.connection, self.context)
+                quality = self.quality_repository_factory(repository.connection, self.context)
                 quality.set_stage(
                     issued.run_id,
                     stage="implementing",
@@ -737,8 +708,8 @@ class AgentRunService(_CoreAgentRunService):
         if snapshot is None:
             return None
         try:
-            with unit_of_work(self.database) as work:
-                quality = PostgresCodingQualityRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                quality = self.quality_repository_factory(work.connection, self.context)
                 stage = quality.get_stage(run_id)
                 work.rollback()
         except Exception:
@@ -754,8 +725,8 @@ class AgentRunService(_CoreAgentRunService):
         )
 
     def task_revisions(self, run_id: str) -> list[TaskRevision]:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = hydrate_task_revisions(
                 work.connection,
                 self.context,
@@ -765,42 +736,42 @@ class AgentRunService(_CoreAgentRunService):
         return rows
 
     def quality_state(self, run_id: str) -> dict[str, object] | None:
-        with unit_of_work(self.database) as work:
-            if PostgresAgentRunRepository(work.connection, self.context).get_run(run_id) is None:
+        with self.unit_of_work(self.database) as work:
+            if self.repository_factory(work.connection, self.context).get_run(run_id) is None:
                 work.rollback()
                 raise KeyError(run_id)
-            row = PostgresCodingQualityRepository(work.connection, self.context).get_stage(run_id)
+            row = self.quality_repository_factory(work.connection, self.context).get_stage(run_id)
             work.rollback()
         return row
 
     def validation_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_validation_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_validation_results(run_id)
             work.rollback()
         return rows
 
     def self_review_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_self_review_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_self_review_results(run_id)
             work.rollback()
         return rows
 
     def review_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_review_results(run_id)
             work.rollback()
         return rows
 
     def review_attempts(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_attempts(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_review_attempts(run_id)
             work.rollback()
         return rows
 
     def run_change_set(self, run_id: str) -> tuple[RunChangeSet, str]:
         """Return the one authoritative run-owned subject for parent or reviewer."""
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(run_id)
             if current is None:
                 work.rollback()
@@ -811,7 +782,7 @@ class AgentRunService(_CoreAgentRunService):
                 if not snapshot_id:
                     work.rollback()
                     raise RuntimeError("review_run_change_set_snapshot_unavailable")
-                quality = PostgresCodingQualityRepository(work.connection, self.context)
+                quality = self.quality_repository_factory(work.connection, self.context)
                 review_snapshot = quality.get_review_snapshot(current.spec.parent_run_id, snapshot_id)
                 if review_snapshot is None or not review_snapshot.run_change_set_id:
                     work.rollback()
@@ -834,7 +805,7 @@ class AgentRunService(_CoreAgentRunService):
                 if state is None:
                     work.rollback()
                     raise RuntimeError("agent_run_change_set_workspace_unavailable")
-                PostgresCodingQualityRepository(work.connection, self.context).add_workspace_state(state)
+                self.quality_repository_factory(work.connection, self.context).add_workspace_state(state)
                 change_set = self._capture_diff(
                     repository,
                     current.spec,
@@ -870,8 +841,8 @@ class AgentRunService(_CoreAgentRunService):
             return result
 
         stale_reviewers: list[str] = []
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(command.run_id)
             revision = repository.latest_task_revision(command.run_id)
             if current is not None and revision is not None:
@@ -890,7 +861,7 @@ class AgentRunService(_CoreAgentRunService):
                 )
                 persist_task_revision_contract(work.connection, self.context, revision)
                 if self._quality_enabled(current.spec) and current.status not in _TERMINAL:
-                    quality = PostgresCodingQualityRepository(work.connection, self.context)
+                    quality = self.quality_repository_factory(work.connection, self.context)
                     quality.set_stage(
                         current.run_id,
                         stage="implementing",
@@ -987,7 +958,7 @@ class AgentRunService(_CoreAgentRunService):
                 "reason": reason,
             },
         )
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         quality.set_stage(
             run_id,
             stage=stage,
@@ -1042,8 +1013,8 @@ class AgentRunService(_CoreAgentRunService):
                 fields={"reason": "missing_tool_call_id"},
             )
             return
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(event.run_id)
             if current is None or current.status in _TERMINAL or not self._quality_enabled(current.spec):
                 log_agent_activity(
@@ -1073,7 +1044,7 @@ class AgentRunService(_CoreAgentRunService):
             args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
             command = str(args.get("command") or "")
             capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
-            quality = PostgresCodingQualityRepository(work.connection, self.context)
+            quality = self.quality_repository_factory(work.connection, self.context)
             mutating_or_validation = (
                 tool in {"edit", "write", "bash", "powershell"}
                 or validation_kind_for_command(command) is not None
@@ -1268,10 +1239,10 @@ class AgentRunService(_CoreAgentRunService):
         )
         quality_message_settle = False
         if _is_terminal_self_review_message(event):
-            with unit_of_work(self.database) as probe:
-                current = PostgresAgentRunRepository(probe.connection, self.context).get_run(event.run_id)
+            with self.unit_of_work(self.database) as probe:
+                current = self.repository_factory(probe.connection, self.context).get_run(event.run_id)
                 if current is not None and self._quality_enabled(current.spec):
-                    stage = PostgresCodingQualityRepository(probe.connection, self.context).get_stage(event.run_id)
+                    stage = self.quality_repository_factory(probe.connection, self.context).get_stage(event.run_id)
                     quality_message_settle = _terminal_message_settles_quality_stage(
                         event,
                         str((stage or {}).get("stage") or ""),
@@ -1285,8 +1256,8 @@ class AgentRunService(_CoreAgentRunService):
             self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
             return
 
-        with unit_of_work(self.database) as probe:
-            current = PostgresAgentRunRepository(probe.connection, self.context).get_run(event.run_id)
+        with self.unit_of_work(self.database) as probe:
+            current = self.repository_factory(probe.connection, self.context).get_run(event.run_id)
             probe.rollback()
         if current is None or not self._quality_enabled(current.spec):
             super()._persist_runtime_event(event)
@@ -1295,8 +1266,8 @@ class AgentRunService(_CoreAgentRunService):
 
         post_action: tuple | None = None
         with self._lock:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(event.run_id)
                 if current is None:
                     work.rollback()
@@ -1775,7 +1746,7 @@ class AgentRunService(_CoreAgentRunService):
                 last_error="quality_task_revision_unavailable",
             )
             return None
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage_state = quality.get_stage(current.run_id) or {
             "stage": "inspect",
             "attempt": 1,
@@ -2111,8 +2082,8 @@ class AgentRunService(_CoreAgentRunService):
         targets: list[str] = []
         pending: list[AgentRunCommand] = []
         try:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 snapshot = repository.get_run(run_id)
                 if snapshot is not None:
                     targets.append(snapshot.run_id)
@@ -2208,7 +2179,7 @@ class AgentRunService(_CoreAgentRunService):
         bounded repair loop.
         """
 
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage = quality.get_stage(current.run_id) or {"attempt": 1}
         attempt = max(1, int(stage.get("attempt") or 1))
         validations = quality.list_validation_results(
@@ -2276,7 +2247,7 @@ class AgentRunService(_CoreAgentRunService):
         *,
         failures: list[str],
     ) -> tuple | None:
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage = quality.get_stage(current.run_id) or {"attempt": 1, "workspace_state_id": None}
         attempt = max(1, int(stage.get("attempt") or 1))
         if attempt >= quality_attempt_limit():
@@ -2398,7 +2369,7 @@ class AgentRunService(_CoreAgentRunService):
                 payload={"source": "omnix", "task_revision_id": revision_id},
             )
         )
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
@@ -2425,7 +2396,7 @@ class AgentRunService(_CoreAgentRunService):
             evidence_set=evidence_set,
         )
 
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         acceptance_stage = quality.get_stage(current.run_id) or {}
         reviewed_workspace_state_id = (
             str(acceptance_stage.get("workspace_state_id") or "").strip() or None

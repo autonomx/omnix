@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import os
@@ -18,7 +17,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.trading import strategy_monitor as strategy_monitor_module
-from app.trading import trading_data_hardening as hardening_module
+from app.trading import market_evidence_guards as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.market_evidence import (
@@ -29,7 +28,7 @@ from app.trading.market_evidence import (
 from app.trading.models import MarketBar
 from app.trading.paper import PaperAccountCreate, PaperMarketObservation
 from app.trading.paper_repository import TradingPaperRepository
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_data_integrity import finviz_atomic_source_locator
 from app.trading.strategy_monitor import TradingStrategyMonitor
@@ -272,7 +271,8 @@ class ReplayMarketService:
         return self.execution
 
 
-def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_position(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_position(monkeypatch) -> None:
     fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     selected = fixture["selected"]
     assumptions = fixture["execution_assumptions"]
@@ -432,7 +432,7 @@ def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_posit
             interval_seconds=5,
         )
 
-        submitted = asyncio.run(monitor.run_once())
+        submitted = await monitor.run_once()
         assert submitted == 1
         before_fill = paper_repository.snapshot(account_id)
         assert len(before_fill.open_orders) == 1

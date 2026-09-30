@@ -1,17 +1,10 @@
 from __future__ import annotations
 
-import importlib
-import sys
-
-from app.rpg.session.fast_combat_narration_skip import (
-    force_install_fast_combat_narration_skip_for_tests,
-)
+from app.rpg.session.fast_combat_narration_skip import fast_combat_narration_scope
 from app.rpg.session import runtime
 
 
 def test_ce2121_fast_combat_narration_skip_bypasses_provider(monkeypatch):
-    force_install_fast_combat_narration_skip_for_tests()
-
     def fail_provider(*args, **kwargs):  # pragma: no cover - asserted by absence of raise
         raise AssertionError("combat narration provider should not be called in fast mode")
 
@@ -39,8 +32,6 @@ def test_ce2121_fast_combat_narration_skip_bypasses_provider(monkeypatch):
 
 
 def test_ce2122_matrix_shaped_fast_direct_marker_bypasses_provider(monkeypatch):
-    force_install_fast_combat_narration_skip_for_tests()
-
     def fail_provider(*args, **kwargs):  # pragma: no cover - asserted by absence of raise
         raise AssertionError("combat narration provider should not be called for matrix fast-direct marker")
 
@@ -70,8 +61,6 @@ def test_ce2122_matrix_shaped_fast_direct_marker_bypasses_provider(monkeypatch):
 
 
 def test_pr01_fast_combat_damage_delta_replaces_stale_no_injury_summary(monkeypatch):
-    force_install_fast_combat_narration_skip_for_tests()
-
     def fail_provider(*args, **kwargs):  # pragma: no cover - asserted by absence of raise
         raise AssertionError("combat narration provider should not be called for damage delta fast mode")
 
@@ -106,8 +95,6 @@ def test_pr01_fast_combat_damage_delta_replaces_stale_no_injury_summary(monkeypa
 
 
 def test_pr01_fast_combat_defeat_summary_uses_delta_contract(monkeypatch):
-    force_install_fast_combat_narration_skip_for_tests()
-
     def fail_provider(*args, **kwargs):  # pragma: no cover - asserted by absence of raise
         raise AssertionError("combat narration provider should not be called for defeat fast mode")
 
@@ -139,24 +126,6 @@ def test_pr01_fast_combat_defeat_summary_uses_delta_contract(monkeypatch):
     assert "no injury is resolved" not in result["narration"]
 
 
-def test_ce2123_install_before_runtime_import_patches_after_runtime_load():
-    import app.rpg.session.fast_combat_narration_skip as hook
-
-    runtime_module = importlib.import_module("app.rpg.session.runtime")
-    original = getattr(runtime_module, hook._ORIGINAL_ATTR, None)
-    if callable(original):
-        setattr(runtime_module, "_apply_combat_narration_if_needed", original)
-    if hasattr(runtime_module, hook._PATCH_ATTR):
-        setattr(runtime_module, hook._PATCH_ATTR, False)
-
-    sys.modules.pop("app.rpg.session.runtime", None)
-    setattr(sys, hook._POST_IMPORT_FINDER_ATTR, False)
-    hook.install_fast_combat_narration_skip()
-
-    reloaded_runtime = importlib.import_module("app.rpg.session.runtime")
-    assert getattr(reloaded_runtime, hook._PATCH_ATTR, False) is True
-
-
 def test_ce2124_fast_combat_action_detection_and_flag_injection():
     import app.rpg.session.fast_combat_narration_skip as hook
 
@@ -184,7 +153,7 @@ def test_ce2124_fast_combat_action_detection_and_flag_injection():
 
 
 def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypatch):
-    force_install_fast_combat_narration_skip_for_tests()
+    from app.rpg.session import runtime_part01_legacy
     called = {"value": False}
 
     def fake_requires_llm(combat_result):
@@ -200,8 +169,8 @@ def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypa
             "payload": {},
         }
 
-    monkeypatch.setattr(runtime, "combat_contract_requires_llm", fake_requires_llm)
-    monkeypatch.setattr(runtime, "generate_combat_narration_sync", fake_provider)
+    monkeypatch.setattr(runtime_part01_legacy, "combat_contract_requires_llm", fake_requires_llm)
+    monkeypatch.setattr(runtime_part01_legacy, "generate_combat_narration_sync", fake_provider)
 
     result = runtime._apply_combat_narration_if_needed(
         {},
@@ -213,9 +182,10 @@ def test_ce2121_non_fast_combat_narration_still_calls_original_provider(monkeypa
     assert result.get("combat_narration_skipped_for_fast_mode") is not True
 
 
-def test_ce2121_fast_combat_narration_skip_installs_idempotently():
-    first = force_install_fast_combat_narration_skip_for_tests()
-    second = force_install_fast_combat_narration_skip_for_tests()
-
-    assert first is True
-    assert second is True
+def test_ce2125_fast_combat_scope_injects_flags_for_one_turn():
+    action = {"action_type": "combat", "metadata": {"source": "ce212_fast_direct_runtime_budget_v1"}}
+    with fast_combat_narration_scope(action, {"fast_turn_mode": True}) as (scoped_action, performance):
+        assert performance["skip_sync_combat_narration"] is True
+        assert performance["fast_direct_runtime"] is True
+        assert scoped_action["metadata"]["skip_sync_combat_narration"] is True
+        assert scoped_action["metadata"]["fast_direct_runtime"] is True

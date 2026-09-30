@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 import tests.rpg.autoplay_llm_campaign as base
-from app.rpg.autoplay_report_materialization_guard import install_report_materialization_size_guard_from_argv
+from tests.rpg.report_materialization_guard import activate_report_materialization_guard_from_argv
 from tests.rpg.autoplay.deepcopy_recursion_guard import install_deepcopy_recursion_guard_from_argv
 from tests.rpg.autoplay.item_endurance_action_hook import install_item_endurance_action_hook_from_argv
 from tests.rpg.autoplay.live_manual_turn_timing import configure_live_manual_turn_timing_from_argv
@@ -35,7 +35,7 @@ def main(argv: list[str] | None = None) -> object:
     install_deepcopy_recursion_guard_from_argv(args)
     if _runtime_apply_chain_probe_enabled(args):
         install_runtime_apply_chain_probe_from_argv(args)
-    install_report_materialization_size_guard_from_argv(args)
+    activate_report_materialization_guard_from_argv(args)
     base._install_essential_mirror_member_filter()
     install_force_exit_report_size_guard(args)
     base._load_autoplay_campaign_runtime()

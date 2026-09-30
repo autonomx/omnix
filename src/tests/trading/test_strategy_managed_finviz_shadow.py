@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+
+import pytest
 
 from fastapi import FastAPI
 
@@ -351,7 +352,8 @@ def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
         raise AssertionError("missing explicit account should fail closed")
 
 
-def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
     app = FastAPI()
     worker = _strategy_monitor_worker(app)
     assert worker is not None
@@ -389,7 +391,7 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
     )
 
     startup = worker.startup[0]
-    asyncio.run(startup())
+    await startup()
 
     assert calls == [(strategy_repo, paper_repo)]
     assert monitor.managed_finviz_shadow_provision == {
@@ -404,7 +406,8 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
     assert monitor._task is None
 
 
-def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
+@pytest.mark.anyio
+async def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
     app = FastAPI()
     worker = _strategy_monitor_worker(app)
     assert worker is not None
@@ -433,7 +436,7 @@ def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> No
     )
 
     startup = worker.startup[0]
-    asyncio.run(startup())
+    await startup()
 
     assert monitor.managed_finviz_shadow_provision is None
     assert (

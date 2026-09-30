@@ -4,6 +4,8 @@ from copy import deepcopy
 import re
 from typing import Any, Dict, List
 
+from .visible_response_contract import validate_first_call_selection
+
 
 _STATEFUL_ACTION_TYPES = {
     "attack_melee", "attack_ranged", "attack_unarmed", "block", "dodge", "parry",
@@ -238,7 +240,7 @@ def choose_first_call_visible_response(
         rejection = _visible_response_rejection(advisory, visible_response) if visible_response else ""
         if rejection:
             rejection_reasons.append(f"{source}:{rejection}")
-        return {
+        return validate_first_call_selection({
             "consumable": True,
             "reason": "canonical_non_stateful_dialogue_intent",
             "source": source,
@@ -256,7 +258,7 @@ def choose_first_call_visible_response(
             "first_call_grounding_diagnostics": deepcopy(_d(advisory.get("first_call_grounding_diagnostics"))),
             "advisory": deepcopy(advisory),
             "format_version": "canonical_dialogue_intent_v1",
-        }
+        })
     return {
         "consumable": False,
         "reason": "no_safe_non_stateful_dialogue_intent",
@@ -317,8 +319,52 @@ def build_non_stateful_dialogue_result(
     intent["selection"] = deepcopy(selected)
     intent["first_call_visible_response_selection"] = deepcopy(selected)
     intent["turn_id"] = _s(intent.get("turn_id")) or _s(runtime_state.get("turn_id"))
-    return canonicalize_direct_dialogue_result(
+    result = canonicalize_direct_dialogue_result(
         intent,
         session_id=_session_id(session),
         player_input=_s(player_input),
     )
+    if result.get("consumed") is not True or result.get("ok") is not True:
+        return result
+
+    try:
+        from app.rpg.session.dialogue_focus import record_direct_dialogue_exchange
+
+        turn_id = _s(result.get("turn_id"))
+        if not turn_id:
+            try:
+                from app.rpg.session.companion_turn_runtime import _build_turn_id
+
+                turn_id = _s(_build_turn_id(runtime_state))
+            except Exception:
+                turn_id = f"turn:{int(runtime_state.get('tick', 0) or 0)}"
+        record_direct_dialogue_exchange(
+            session=session,
+            player_input=_s(player_input),
+            result=result,
+            tick=int(runtime_state.get("tick", 0) or 0),
+            turn_id=turn_id,
+            persist=True,
+        )
+    except Exception as exc:
+        from app.rpg.debug_logging import log_rpg_event
+
+        result["conversation_thread_record"] = {
+            "recorded": False,
+            "reason": "dialogue_focus_record_failed",
+            "error": f"{type(exc).__name__}: {exc}",
+            "source": "direct_dialogue_focus_v1",
+        }
+        log_rpg_event(
+            "turn.stage.degraded",
+            session_id=_session_id(session),
+            turn_id=_s(result.get("turn_id")),
+            fields={
+                "metric": "rpg_turn_stage_degraded",
+                "stage": "direct_dialogue_focus",
+                "degraded_stage_count": 1,
+                "error_type": type(exc).__name__,
+            },
+            error=exc,
+        )
+    return result

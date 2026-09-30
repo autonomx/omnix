@@ -442,8 +442,8 @@ def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[
     session_id = _safe_str(runtime_state.get("session_id")).strip()
     if session_id:
         try:
-            from app.rpg.session.runtime import (
-                _maybe_enqueue_latest_ambient_conversation_narration,
+            from app.rpg.session.companion_turn_runtime import (
+                _maybe_enqueue_latest_ambient_conversation_narration as _maybe_enqueue_latest_ambient_conversation_narration,
             )
             ambient_result = _maybe_enqueue_latest_ambient_conversation_narration(
                 session_id,

@@ -13,7 +13,7 @@ from app.rpg.session.bundle_a_artifacts import (  # noqa: E402
 from app.rpg.session.bundle_a_manifest_repair import (  # noqa: E402
     repair_bundle_a_manifest as _bundle_a_repair_manifest,
 )
-from app.rpg.session.bundle_ab_late_manifest_hook import (  # noqa: E402
+from tests.rpg.bundle_ab_late_manifest_repair import (  # noqa: E402
     register_late_manifest_repair as _bundle_ab_register_late_manifest_repair,
     run_late_manifest_repair as _bundle_ab_run_late_manifest_repair,
 )

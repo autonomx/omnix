@@ -2,7 +2,7 @@ from app.rpg.modding.content_packs import (
     apply_content_pack,
     build_pack_application_preview,
     ensure_content_pack_state,
-    install_content_pack,
+    add_content_pack,
     list_content_packs,
 )
 
@@ -15,7 +15,7 @@ def test_ensure_content_pack_state():
 
 def test_install_and_list_content_packs():
     simulation_state = {"presentation_state": {}}
-    simulation_state = install_content_pack(
+    simulation_state = add_content_pack(
         simulation_state,
         {
             "manifest": {"id": "pack:test", "title": "Test Pack"},
@@ -55,7 +55,7 @@ def test_normalize_pack_manifest_defaults():
     pack = {
         "manifest": {},
     }
-    simulation_state = install_content_pack({"presentation_state": {}}, pack)
+    simulation_state = add_content_pack({"presentation_state": {}}, pack)
     packs = list_content_packs(simulation_state)
     assert len(packs) == 1
     manifest = packs[0]["manifest"]
@@ -67,11 +67,11 @@ def test_normalize_pack_manifest_defaults():
 
 def test_packs_sorted_by_title():
     simulation_state = {"presentation_state": {}}
-    simulation_state = install_content_pack(
+    simulation_state = add_content_pack(
         simulation_state,
         {"manifest": {"id": "b", "title": "Beta Pack"}, "characters": []},
     )
-    simulation_state = install_content_pack(
+    simulation_state = add_content_pack(
         simulation_state,
         {"manifest": {"id": "a", "title": "Alpha Pack"}, "characters": []},
     )
@@ -84,7 +84,7 @@ def test_packs_sorted_by_title():
 def test_packs_limited_to_max():
     simulation_state = {"presentation_state": {}}
     for i in range(50):
-        simulation_state = install_content_pack(
+        simulation_state = add_content_pack(
             simulation_state,
             {"manifest": {"id": f"pack:{i}", "title": f"Pack {i}"}, "characters": []},
         )

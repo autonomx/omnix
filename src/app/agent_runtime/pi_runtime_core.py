@@ -504,10 +504,14 @@ class PiRpcSession:
         pi_path: str = "pi",
         on_event: Callable[[AgentEvent], None] | None = None,
         process_factory: Callable[..., subprocess.Popen[str]] | None = None,
+        argv_builder: Callable[..., list[str]] | None = None,
+        event_normalizer: Callable[..., AgentEvent | None] | None = None,
     ) -> None:
         configure_agent_debug_logging()
         self.spec = spec
         self.on_event = on_event
+        self._argv_builder = argv_builder or pi_rpc_argv
+        self._event_normalizer = event_normalizer or normalize_pi_event
         self._events: deque[AgentEvent] = deque(maxlen=10_000)
         self._responses: queue.Queue[dict[str, Any]] = queue.Queue()
         self._task_revision_id: str | None = None
@@ -539,7 +543,7 @@ class PiRpcSession:
                 cwd,
                 model_session_id=uuid.uuid4().hex,
             )
-            argv = pi_rpc_argv(spec, pi_path=pi_path)
+            argv = self._argv_builder(spec, pi_path=pi_path)
             log_agent_activity(
                 "pi.process.launch_requested",
                 category="lifecycle",
@@ -930,7 +934,7 @@ class PiRpcSession:
                 revision_id = self._tool_revision_ids[tool_call_id]
             elif event_type in {"tool_execution_update", "tool_execution_end"} and tool_call_id:
                 revision_id = self._tool_revision_ids.get(tool_call_id)
-            event = normalize_pi_event(
+            event = self._event_normalizer(
                 self.spec.run_id,
                 payload,
                 task_revision_id=revision_id,
@@ -1007,10 +1011,19 @@ class PiRpcSession:
 class PiAgentRuntime(AgentRuntime):
     """Process-local Pi runtime. Durable orchestration is layered above this class."""
 
-    def __init__(self, *, pi_path: str = "pi", event_sink: Callable[[AgentEvent], None] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        pi_path: str = "pi",
+        event_sink: Callable[[AgentEvent], None] | None = None,
+        argv_builder: Callable[..., list[str]] | None = None,
+        event_normalizer: Callable[..., AgentEvent | None] | None = None,
+    ) -> None:
         configure_agent_debug_logging()
         self.pi_path = pi_path
         self.event_sink = event_sink
+        self.argv_builder = argv_builder or pi_rpc_argv
+        self.event_normalizer = event_normalizer or normalize_pi_event
         self._sessions: dict[str, PiRpcSession] = {}
         self._snapshots: dict[str, AgentRunSnapshot] = {}
         self._artifacts: dict[str, list[AgentArtifact]] = {}
@@ -1051,7 +1064,13 @@ class PiAgentRuntime(AgentRuntime):
             self._snapshots[spec.run_id] = snapshot
             session: PiRpcSession | None = None
             try:
-                session = PiRpcSession(spec, pi_path=self.pi_path, on_event=self._on_event)
+                session = PiRpcSession(
+                    spec,
+                    pi_path=self.pi_path,
+                    on_event=self._on_event,
+                    argv_builder=self.argv_builder,
+                    event_normalizer=self.event_normalizer,
+                )
                 self._sessions[spec.run_id] = session
                 observed = self._snapshots.get(spec.run_id, snapshot)
                 if observed.status in {"failed", "cancelled", "completed"}:

@@ -12,7 +12,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import threading
-from typing import TypedDict
+from typing import Any, Callable, TypedDict
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
@@ -22,6 +22,7 @@ from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
+from .coding_quality_repository import PostgresCodingQualityRepository
 from .active_objective import RoutingEnvironment, make_active_objective
 from .evidence import (
     EvidenceCompilationError,
@@ -51,6 +52,7 @@ from .contracts import (
 from app.observability.agent_logging import configure_agent_debug_logging, log_agent_activity
 from .pi_runtime import PiAgentRuntime
 from .repository import AgentLeaseConflict, PostgresAgentRunRepository
+from .review_orchestration_core import consume_terminal_reviewer_in_repository
 from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
@@ -225,10 +227,26 @@ class AgentRunService:
         pi_path: str | None = None,
         worker_id: str | None = None,
         blob_store: LocalBlobStore | None = None,
+        unit_of_work_fn: Callable[..., Any] | None = None,
+        repository_factory: Callable[..., Any] | None = None,
+        quality_repository_factory: Callable[..., Any] | None = None,
+        workspace_authority_factory: Callable[..., Any] | None = None,
+        semantic_task_parser: Callable[..., Any] | None = None,
+        terminal_reviewer_consumer: Callable[..., Any] | None = None,
     ) -> None:
         configure_agent_debug_logging()
         self.database = database or default_database()
         self.context = current_tenant()
+        self.unit_of_work = unit_of_work_fn or unit_of_work
+        self.repository_factory = repository_factory or PostgresAgentRunRepository
+        self.quality_repository_factory = (
+            quality_repository_factory or PostgresCodingQualityRepository
+        )
+        self.workspace_authority_factory = workspace_authority_factory or WorkspaceAuthority
+        self.semantic_task_parser = semantic_task_parser or default_semantic_task_parser
+        self.terminal_reviewer_consumer = (
+            terminal_reviewer_consumer or consume_terminal_reviewer_in_repository
+        )
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
         self.blob_store = blob_store or LocalBlobStore()
         self.runtime = PiAgentRuntime(
@@ -328,8 +346,8 @@ class AgentRunService:
             fields={"workspace": issued.workspace.model_dump(mode="json") if issued.workspace else None},
         )
         try:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 snapshot = self._persist_starting_run(repository, issued)
                 work.commit()
         except Exception as exc:
@@ -365,8 +383,8 @@ class AgentRunService:
         initial_parent = self.get(parent_run_id)
         if initial_parent is None:
             raise KeyError(parent_run_id)
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             locked = work.connection.execute(
                 """
                 SELECT run_id
@@ -464,8 +482,8 @@ class AgentRunService:
                 include_traceback=True,
             )
             self.runtime.close_run(issued.run_id)
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(issued.run_id)
                 if current is not None:
                     repository.update_state(
@@ -489,8 +507,8 @@ class AgentRunService:
 
     def get(self, run_id: str) -> AgentRunSnapshot | None:
         self._ensure_supervisor()
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             snapshot = repository.get_run(run_id)
             work.rollback()
             return snapshot
@@ -563,8 +581,8 @@ class AgentRunService:
                     **({"reference_images": reference_images} if reference_images else {}),
                 )
             revision = steering["revision"]
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 repository.add_task_revision(revision)
                 work.commit()
             command = command.model_copy(update={
@@ -575,8 +593,8 @@ class AgentRunService:
                     "evidence_policy": revision.evidence_decision.policy.model_dump(mode="json"),
                 }
             })
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             stored, status = repository.enqueue_command_with_status(command)
             current = repository.get_run(command.run_id)
             if current is None:
@@ -641,16 +659,16 @@ class AgentRunService:
             self._mark_command_failed(stored, exc)
             raise
         else:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 repository.complete_command(stored.run_id, stored.command_id)
                 work.commit()
 
         if stored.command_type == "cancel":
             self._cancel_descendants(stored.run_id)
         if current.status in {"completed", "failed", "cancelled"}:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 self._maybe_finalize_parent_in_repository(repository, stored.run_id)
                 work.commit()
         result = self.get(stored.run_id) or current
@@ -764,8 +782,8 @@ class AgentRunService:
         reference_context = str(reference_context or "").strip()
         if not message:
             raise ValueError("steering message is required")
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             revisions = repository.list_task_revisions(current.run_id)
             work.rollback()
         latest = revisions[-1] if revisions else None
@@ -827,7 +845,7 @@ class AgentRunService:
                 run_id=current.run_id,
             )
             semantic_task = classify_semantic_task_safely(
-                default_semantic_task_parser(
+                self.semantic_task_parser(
                     provider_id=current.spec.model.provider_id,
                     model_id=current.spec.model.model_id,
                 ),
@@ -991,8 +1009,8 @@ class AgentRunService:
             self._bind_github_repository_authority(replacement_spec)
         )
 
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             locked = work.connection.execute(
                 """
                 SELECT superseded_by_run_id
@@ -1064,8 +1082,8 @@ class AgentRunService:
         self.runtime.close_run(command.run_id)
         terminal_status = "cancelled" if command.command_type == "cancel" else "failed"
         desired_state = "cancelled"
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(command.run_id)
             if current is not None and current.status not in {"completed", "failed", "cancelled"}:
                 repository.update_state(
@@ -1090,8 +1108,8 @@ class AgentRunService:
     ) -> AgentRunSnapshot:
         runtime_command = stored
         approval_request = None
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(stored.run_id)
             if current is None:
                 raise KeyError(stored.run_id)
@@ -1188,8 +1206,8 @@ class AgentRunService:
                 send_runtime_command()
             runtime_status = self.runtime.get_status(stored.run_id)
             if runtime_status is not None:
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                with self.unit_of_work(self.database) as work:
+                    repository = self.repository_factory(work.connection, self.context)
                     persisted = repository.get_run(stored.run_id)
                     if persisted is not None:
                         current = repository.update_state(
@@ -1200,8 +1218,8 @@ class AgentRunService:
                         )
                     work.commit()
         elif stored.command_type == "cancel":
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 persisted = repository.get_run(stored.run_id)
                 if persisted is not None and persisted.status != "cancelled":
                     current = repository.update_state(
@@ -1214,8 +1232,8 @@ class AgentRunService:
         return current
 
     def _cancel_descendants(self, run_id: str) -> None:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             children = repository.list_children(run_id)
             work.rollback()
         for child in children:
@@ -1231,43 +1249,43 @@ class AgentRunService:
             )
 
     def events(self, run_id: str, *, after_sequence: int = 0) -> list[AgentEvent]:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = repository.list_events(run_id, after_sequence=after_sequence)
             work.rollback()
             return rows
 
     def approvals(self, run_id: str, *, state: str | None = None):
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = repository.list_approvals(run_id, state=state)
             work.rollback()
             return rows
 
     def artifacts(self, run_id: str) -> list[AgentArtifact]:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = repository.list_artifacts(run_id)
             work.rollback()
             return rows
 
     def task_revisions(self, run_id: str) -> list[TaskRevision]:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = repository.list_task_revisions(run_id)
             work.rollback()
             return rows
 
     def evidence_receipts(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = repository.list_evidence_receipts(run_id)
             work.rollback()
             return rows
 
     def evidence_set(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             snapshot = repository.get_run(run_id)
             if snapshot is None:
                 work.rollback()
@@ -1489,8 +1507,8 @@ class AgentRunService:
             },
         )
         with self._lock:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(event.run_id)
                 if current is None:
                     log_agent_activity(
@@ -1637,7 +1655,7 @@ class AgentRunService:
         if spec.workspace is None or "diff" not in spec.expected_artifacts:
             return
         root = spec.workspace.worktree or spec.workspace.root
-        baseline = WorkspaceAuthority(root).provenance_snapshot()
+        baseline = self.workspace_authority_factory(root).provenance_snapshot()
         dirty_paths = list(baseline["dirty_paths"])
         dirty_digests = {str(key): str(value) for key, value in dict(baseline["dirty_digests"]).items()}
         baseline_id = baseline_identity(str(baseline["head"]), dirty_paths, dirty_digests)
@@ -1670,7 +1688,7 @@ class AgentRunService:
         repository_root = Path(workspace.repository or workspace.root).expanduser().resolve()
         if worktree_root == repository_root:
             return []
-        workspace_authority = authority or WorkspaceAuthority(worktree_root)
+        workspace_authority = authority or self.workspace_authority_factory(worktree_root)
         quarantined = workspace_authority.quarantine_generated_windows_cache_contamination()
         if not quarantined:
             return []
@@ -1711,7 +1729,7 @@ class AgentRunService:
             return None
         root = spec.workspace.worktree or spec.workspace.root
         try:
-            authority = WorkspaceAuthority(root)
+            authority = self.workspace_authority_factory(root)
             baseline_artifact = next(
                 (
                     artifact
@@ -1865,7 +1883,7 @@ class AgentRunService:
     def recover_orphaned_runs(self) -> list[str]:
         """Re-acquire expired/unowned non-terminal runs and resume from workspace truth."""
         recovered: list[str] = []
-        with unit_of_work(self.database) as work:
+        with self.unit_of_work(self.database) as work:
             rows = work.connection.execute(
                 """
                 SELECT run.run_id
@@ -1887,8 +1905,8 @@ class AgentRunService:
             if snapshot is None or self.runtime.get_status(run_id) is not None:
                 continue
             try:
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                with self.unit_of_work(self.database) as work:
+                    repository = self.repository_factory(work.connection, self.context)
                     repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=90)
                     repository.reset_processing_commands(run_id)
                     current = repository.get_run(run_id)
@@ -1901,8 +1919,8 @@ class AgentRunService:
                         )
                     work.commit()
                 self.runtime.start(snapshot.spec)
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                with self.unit_of_work(self.database) as work:
+                    repository = self.repository_factory(work.connection, self.context)
                     pending = repository.list_pending_commands(run_id)
                     latest_revision = repository.latest_task_revision(run_id)
                     work.rollback()
@@ -1940,7 +1958,7 @@ class AgentRunService:
 
     def _fail_recovery(self, run_id: str, exc: Exception) -> None:
         self.runtime.close_run(run_id)
-        with unit_of_work(self.database) as work:
+        with self.unit_of_work(self.database) as work:
             locked = work.connection.execute(
                 """
                 SELECT run_id
@@ -1953,7 +1971,7 @@ class AgentRunService:
             if locked is None:
                 work.rollback()
                 return
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(run_id)
             if current is not None and current.status not in {"completed", "failed", "cancelled"}:
                 repository.update_state(
@@ -1996,7 +2014,7 @@ class AgentRunService:
             self._supervisor_stop.wait(30.0)
 
     def _supervise_once(self) -> None:
-        with unit_of_work(self.database) as work:
+        with self.unit_of_work(self.database) as work:
             rows = work.connection.execute(
                 """
                 SELECT run_id
@@ -2069,7 +2087,7 @@ class AgentRunService:
                 )
                 continue
 
-        with unit_of_work(self.database) as work:
+        with self.unit_of_work(self.database) as work:
             terminal_parents = work.connection.execute(
                 """
                 SELECT DISTINCT parent.run_id
@@ -2090,7 +2108,7 @@ class AgentRunService:
 
         active_ids = self.runtime.active_run_ids()
         if active_ids:
-            with unit_of_work(self.database) as work:
+            with self.unit_of_work(self.database) as work:
                 terminal_runtime_rows = work.connection.execute(
                     """
                     SELECT run_id
@@ -2131,8 +2149,8 @@ class AgentRunService:
         progress_event: AgentEvent | None = None
 
         with self._lock:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(run_id)
                 if (
                     current is None
@@ -2386,8 +2404,8 @@ class AgentRunService:
                     payload={"message": recovery_message, "recovery_attempt": attempt},
                     idempotency_key=f"stalled-recovery:{run_id}:{attempt}",
                 ))
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                with self.unit_of_work(self.database) as work:
+                    repository = self.repository_factory(work.connection, self.context)
                     persisted = repository.get_run(run_id)
                     if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
                         repository.update_state(
@@ -2422,8 +2440,8 @@ class AgentRunService:
                     include_traceback=True,
                 )
                 self.runtime.close_run(run_id)
-                with unit_of_work(self.database) as work:
-                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                with self.unit_of_work(self.database) as work:
+                    repository = self.repository_factory(work.connection, self.context)
                     persisted = repository.get_run(run_id)
                     if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
                         repository.append_event(AgentEvent(
@@ -2449,8 +2467,8 @@ class AgentRunService:
             run_id=run_id,
             fields={"ttl_seconds": ttl_seconds, "worker_id": self.worker_id},
         )
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             lease = repository.renew_lease(
                 run_id,
                 worker_id=self.worker_id,
@@ -2663,8 +2681,7 @@ class AgentRunService:
             "paths": list(result.paths),
         }
 
-    @staticmethod
-    def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
+    def _prepare_workspace(self, spec: AgentRunSpec) -> AgentRunSpec:
         workspace = spec.workspace
         if workspace is None:
             # Read-only research and other non-workspace profiles retain an
@@ -2681,7 +2698,7 @@ class AgentRunService:
         ).expanduser().resolve()
         root.mkdir(parents=True, exist_ok=True)
         target = root / spec.run_id
-        authority = WorkspaceAuthority.create_worktree(
+        authority = self.workspace_authority_factory.create_worktree(
             workspace.repository,
             target,
             base_ref=workspace.base_ref,
@@ -2690,7 +2707,7 @@ class AgentRunService:
             prepare_project_dependencies(repository=workspace.repository, worktree=authority.root)
         except Exception:
             try:
-                WorkspaceAuthority.remove_worktree(workspace.repository, authority.root)
+                self.workspace_authority_factory.remove_worktree(workspace.repository, authority.root)
             except Exception:
                 # Preserve the actionable dependency error; the supervisor can
                 # reconcile an orphaned temporary worktree on its next pass.

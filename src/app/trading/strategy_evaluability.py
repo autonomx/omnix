@@ -39,11 +39,11 @@ def _minute_floor(value: datetime) -> datetime:
 
 def _expected_latest_start(observed_at: datetime, session_date: date) -> datetime | None:
     observed_et = observed_at.astimezone(_ET)
-    if observed_et.date() != session_date or observed_et.time() <= _REGULAR_OPEN:
+    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
+    if observed_et.date() != session_date or observed_et < opening + timedelta(minutes=1):
         return None
     floor = _minute_floor(observed_et)
     expected = floor - timedelta(minutes=1)
-    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
     close = datetime.combine(session_date, _REGULAR_CLOSE, tzinfo=_ET)
     return min(max(expected, opening), close - timedelta(minutes=1)).astimezone(timezone.utc)
 

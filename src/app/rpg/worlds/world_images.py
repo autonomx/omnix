@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from app.jobs import default_job_store
 from app.security.tenant_context import current_tenant
@@ -944,10 +944,11 @@ def generate_world_images(
     style: str = "",
     no_cache: bool = False,
     database: Any | None = None,
+    target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
     from .world_image_jobs import create_world_image_job
 
-    materialized = read_world_image_targets(world_id, database=database)
+    materialized = target_reader(world_id, database=database)
     selected = _selected_targets(materialized["targets"], target_ids)
     context = current_tenant()
     jobs: list[dict[str, Any]] = []
@@ -1034,6 +1035,7 @@ def update_world_image_target(
     active_asset_id: str | None = None,
     suggested_prompt: str | None = None,
     database: Any | None = None,
+    target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
     if review_state is not None and review_state not in {"pending", "approved", "rejected"}:
         raise ValueError(f"invalid_image_review_state:{review_state}")
@@ -1100,7 +1102,7 @@ def update_world_image_target(
                 ),
             )
         work.commit()
-    return read_world_image_targets(world_id, database=database)
+    return target_reader(world_id, database=database)
 
 
 def approved_world_asset_bindings(

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import inspect
 import re
 from typing import Any, Dict, List
+
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 
 FORBIDDEN_EFFECT_KEYS = {
     "quest_started",
@@ -158,18 +161,21 @@ async def try_generate_npc_roleplay_line(
             "error": "provider_unavailable",
         }
 
+    provider = adapt_base_provider(provider)
     prompt = build_npc_roleplay_prompt(profile)
     try:
         if hasattr(provider, "generate"):
-            raw = await provider.generate(prompt) if callable(provider.generate) else ""
+            raw = provider.generate(prompt) if callable(provider.generate) else ""
         elif hasattr(provider, "complete"):
-            raw = await provider.complete(prompt) if callable(provider.complete) else ""
+            raw = provider.complete(prompt) if callable(provider.complete) else ""
         else:
             return {
                 "ok": False,
                 "roleplay_source": "llm_unavailable",
                 "error": "provider_has_no_generate_method",
             }
+        if inspect.isawaitable(raw):
+            raw = await raw
     except Exception as exc:
         return {
             "ok": False,

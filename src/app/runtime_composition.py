@@ -4,18 +4,40 @@ from functools import lru_cache
 
 
 def _register_feature_repositories(feature_id: str) -> None:
-    from app.persistence.repository_registry import install_repository_specs
+    from app.persistence.repository_registry import register_repository_specs
     from app.runtime.feature_catalog import load_feature
 
     feature = load_feature(feature_id)
-    install_repository_specs(tuple(feature.repositories))
+    register_repository_specs(tuple(feature.repositories))
+
+
+def production_job_store(
+    *,
+    database=None,
+    context=None,
+    chat_execution_owner=None,
+    chat_dispatcher=None,
+):
+    from app.chat.persistence.job_store import PostgresJobStoreAdapter
+
+    if all(
+        value is None
+        for value in (database, context, chat_execution_owner, chat_dispatcher)
+    ):
+        return _default_production_job_store()
+    # Feature execution and submission policy are registry-owned.
+    return PostgresJobStoreAdapter(
+        database=database,
+        context=context,
+        chat_execution_owner=chat_execution_owner,
+        chat_dispatcher=chat_dispatcher,
+    )
 
 
 @lru_cache(maxsize=1)
-def production_job_store():
+def _default_production_job_store():
     from app.chat.persistence.job_store import PostgresJobStoreAdapter
 
-    # Feature execution and submission policy are registry-owned.
     return PostgresJobStoreAdapter()
 
 
@@ -25,27 +47,29 @@ def production_asset_store():
     return PostgresSharedAssetStoreAdapter()
 
 
-def production_chat_store():
+def production_chat_store(*, job_service=None, live_agent_planner=None):
     _register_feature_repositories("chat")
     from app.chat.persistence.chat_runtime_compat import (
         PostgresCharacterChatSessionStore,
         default_chat_store,
     )
-    from app.chat.live_agent_store import install_live_agent_store_hooks
+    from app.chat.live_agent_store import default_live_agent_planner
     from app.assistant_memory import default_memory_service
     from app.assistant_memory.settings import load_memory_runtime_settings
     from app.desktop_companion.chat_activity import record_accepted_chat_activity
     from app.live_voice.chat_integration import create_live_voice_chat_port
 
-    install_live_agent_store_hooks(
-        PostgresCharacterChatSessionStore,
-    )
+    if job_service is None:
+        job_service = production_job_store()
+    if live_agent_planner is None:
+        live_agent_planner = default_live_agent_planner()
     return default_chat_store(
         store_class=PostgresCharacterChatSessionStore,
         memory_service_factory=default_memory_service,
         memory_settings_factory=load_memory_runtime_settings,
-        job_service=production_job_store(),
+        job_service=job_service,
         live_voice_chat_port=create_live_voice_chat_port(),
+        live_agent_planner=live_agent_planner,
         accepted_chat_activity_recorder=record_accepted_chat_activity,
     )
 

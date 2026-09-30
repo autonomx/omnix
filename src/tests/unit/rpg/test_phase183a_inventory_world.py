@@ -189,10 +189,8 @@ class TestItemRegistry:
         assert bow["combat_stats"]["damage"] == 15
 
 
-from app.rpg.session.runtime import (
-    _apply_action_resource_requirements,
-    _apply_starting_resources_to_player_state,
-)
+from app.rpg.session.action_execution import _apply_action_resource_requirements
+from app.rpg.session.state_normalization import _apply_starting_resources_to_player_state
 
 
 class TestCanonicalResources:

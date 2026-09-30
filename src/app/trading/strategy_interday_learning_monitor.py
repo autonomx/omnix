@@ -55,7 +55,7 @@ def _same_session(event_time: datetime, session_date) -> bool:
     return event_time.astimezone(_ET).date() == session_date
 
 
-async def run_interday_learning_once(
+async def _run_interday_learning_once_core(
     *,
     now: datetime | None = None,
     repository: TradingStrategyRepository | None = None,
@@ -214,6 +214,25 @@ async def run_interday_learning_once(
         "labeled": labeled,
         "qualified": bool(qualification_persisted),
     }
+
+
+async def run_interday_learning_once(
+    *,
+    now: datetime | None = None,
+    repository: TradingStrategyRepository | None = None,
+    market_service: TradingMarketDataService | None = None,
+) -> dict[str, int | bool]:
+    """Run interday lifecycle work and append complete post-close evidence."""
+
+    from .strategy_dynamic_discovery_runtime import (
+        _run_interday_learning_once_complete,
+    )
+
+    return await _run_interday_learning_once_complete(
+        now=now,
+        repository=repository,
+        market_service=market_service,
+    )
 
 
 class InterdayLearningMonitor:

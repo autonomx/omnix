@@ -127,12 +127,13 @@ def test_upstream_errors_and_redirects_are_not_forwarded(setup, monkeypatch, sta
     assert "location" not in response.headers
 
 
-def test_service_websocket_rejects_redirects_without_reporting_uri():
+@pytest.mark.anyio
+async def test_service_websocket_rejects_redirects_without_reporting_uri():
     async def check():
         connection = proxy._ServiceConnect("ws://127.0.0.1:5201/ws/transcribe")
         with pytest.raises(SecurityError, match="^model_service_redirect_rejected$"):
             connection.handle_redirect("ws://evil.test/private")
-    asyncio.run(check())
+    await check()
 
 
 def test_websocket_proxy_uses_private_headers_and_cleans_up_on_disconnect(setup, monkeypatch):

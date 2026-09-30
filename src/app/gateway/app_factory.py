@@ -19,9 +19,6 @@ from app.jobs import (
 from app.providers.facade import ProviderFacade, default_provider_facade
 from app.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
 
-from . import _install_required_rpg_turn_hooks
-
-
 _LOCAL_BROWSER_ORIGINS = (
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -71,7 +68,6 @@ def create_gateway_app(
     from app.runtime.capabilities import RuntimeCapabilities
 
     runtime_config = runtime_config or get_runtime_config()
-    _install_required_rpg_turn_hooks()
     from app.chat.delivery_sync import persist_live_voice_delivery
     from app.live_voice.diagnostics import configure_delivery_checkpoint_recorder
 
@@ -115,11 +111,9 @@ def create_gateway_app(
         lifespan=gateway_lifespan,
     )
     _install_local_browser_cors(gateway)
-    from app.rpg.api.feature_routes import install_rpg_debug_middleware
-    from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_middleware
+    from app.rpg.api.feature_routes import add_rpg_debug_middleware
 
-    install_rpg_debug_middleware(gateway)
-    install_rpg_turn_job_mirror_middleware(gateway)
+    add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False
     gateway.state.background_runtime = background_runtime
     gateway.state.runtime_config = runtime_config

@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pytest
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -136,7 +138,8 @@ class FixtureAnalyzer:
         )
 
 
-def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
+@pytest.mark.anyio
+async def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
     market = FixtureMarket(_bars())
     analyzer = FixtureAnalyzer()
     monitor = TradingSolanaAIMonitor(
@@ -147,10 +150,8 @@ def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
         interval_seconds=2,
     )
 
-    import asyncio
-
-    assert asyncio.run(monitor.run_once()) == 1
-    assert asyncio.run(monitor.run_once()) == 0
+    assert await monitor.run_once() == 1
+    assert await monitor.run_once() == 0
     assert market.bar_calls == 2
     assert analyzer.calls == 1
     assert monitor.ai_call_count == 1
@@ -195,7 +196,8 @@ class FixtureStrategyRepository:
         return (len(self.events), signals)
 
 
-def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
+@pytest.mark.anyio
+async def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
     market = FixtureMarket(_bars())
     analyzer = FixtureAnalyzer()
     repository = FixtureStrategyRepository()
@@ -207,9 +209,7 @@ def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
         interval_seconds=2,
     )
 
-    import asyncio
-
-    assert asyncio.run(monitor.run_once()) == 1
+    assert await monitor.run_once() == 1
     assert len(repository.events) == 1
     event = repository.events[0]
     assert event.strategy_id == "solana-ai-1m-shadow"

@@ -1,4 +1,4 @@
-from app.rpg.session.runtime import _merge_stepped_simulation_state
+from app.rpg.session.state_normalization import _merge_stepped_simulation_state
 
 
 def test_merge_stepped_simulation_state_preserves_authoritative_turn_roots():

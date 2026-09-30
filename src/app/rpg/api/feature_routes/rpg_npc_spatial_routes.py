@@ -2,10 +2,9 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Literal, Mapping
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
 from app.rpg.npc_spatial_campaign_authoring import (
@@ -77,7 +76,6 @@ class RpgAdvanceCampaignSpatialTickRequestBody(_TypedRequestModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_npc_spatial_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_npc_spatial_route_hook_installed"
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -206,20 +204,3 @@ def register_rpg_npc_spatial_routes(router: APIRouter, state) -> None:
         except Exception as exc:
             _raise_domain_error(exc)
             raise
-
-
-def install_rpg_npc_spatial_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (
-            args and args[0] == "Omnix Web Gateway"
-        ):
-            register_rpg_npc_spatial_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

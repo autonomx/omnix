@@ -28,6 +28,7 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         live_voice_chat_port: LiveVoiceChatPort | None = None,
+        live_agent_planner: object | None = None,
         accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         self.repository = InMemoryChatRepository(db_path)
@@ -36,6 +37,11 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
         self.live_voice_chat_port = live_voice_chat_port
+        if live_agent_planner is None:
+            from .live_agent_store import default_live_agent_planner
+
+            live_agent_planner = default_live_agent_planner()
+        self.live_agent_planner = live_agent_planner
         self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._prompt_context_cache = OrderedDict()
         self._prompt_context_cache_lock = threading.Lock()

@@ -188,10 +188,8 @@ def launch_reviewer_children(
     while True:
         launch: tuple[AgentRunSpec, AgentRunSnapshot] | None = None
         with service._lock:
-            from app.persistence.unit_of_work import unit_of_work
-
-            with unit_of_work(service.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, service.context)
+            with service.unit_of_work(service.database) as work:
+                repository = service.repository_factory(work.connection, service.context)
                 locked = work.connection.execute(
                     """
                     SELECT run_id
@@ -212,7 +210,7 @@ def launch_reviewer_children(
                 ):
                     work.rollback()
                     return
-                quality = PostgresCodingQualityRepository(work.connection, service.context)
+                quality = service.quality_repository_factory(work.connection, service.context)
                 snapshot = quality.get_review_snapshot(parent_run_id, snapshot_id)
                 revision = service._current_revision(repository, parent_run_id)
                 stage = quality.get_stage(parent_run_id) or {}
@@ -616,7 +614,7 @@ def reconcile_review_progress_in_repository(
         or not service._quality_enabled(parent.spec)
     ):
         return None
-    quality = PostgresCodingQualityRepository(repository.connection, service.context)
+    quality = service.quality_repository_factory(repository.connection, service.context)
     stage = quality.get_stage(parent_run_id)
     if stage is None or str(stage.get("stage") or "") != "reviewing":
         return None
@@ -647,7 +645,7 @@ def reconcile_review_progress_in_repository(
             and review_snapshot_id_from_child(child) == snapshot.snapshot_id
             and child.status in _TERMINAL
         ):
-            consume_terminal_reviewer_in_repository(
+            service.terminal_reviewer_consumer(
                 service,
                 repository,
                 child,

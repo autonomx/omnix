@@ -8,14 +8,13 @@ post-hoc chart interpretation, reports any gaps, and can replay the existing
 versioned evaluator over prefixes to locate the first causal entry signal.
 """
 
-from datetime import timedelta
 from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .gapper_dataset import GapperCandidate
 from .models import MarketBar
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
 from .strategy_repository import StrategyEvent
 

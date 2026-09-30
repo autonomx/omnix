@@ -45,6 +45,8 @@ class LazyServiceProxy(Generic[_ServiceT]):
 class JobService(Protocol):
     database: Any
     context: Any
+    chat_execution_owner: Any | None
+    chat_dispatcher: Any | None
 
     def configure_handler_registry(self, registry: Any) -> None: ...
     def create_job(self, request: Any) -> Any: ...

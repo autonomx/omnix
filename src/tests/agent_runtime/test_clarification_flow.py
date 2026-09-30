@@ -96,8 +96,8 @@ def test_clarification_event_pauses_run_for_user_input(monkeypatch) -> None:
     service.context = object()
     service.worker_id = "worker-1"
     service._lock = _Lock()
-    monkeypatch.setattr("app.agent_runtime.service_core.unit_of_work", lambda _database: _Work())
-    monkeypatch.setattr("app.agent_runtime.service_core.PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _Work()
+    service.repository_factory = Repository
 
     service._persist_runtime_event(_event("CLARIFICATION_REQUIRED: Which header control should move?"))
 

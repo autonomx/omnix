@@ -203,7 +203,7 @@ class TestCharacterCreation:
         assert ps["stats"]["strength"] == 5  # unchanged, over budget
 
 
-from app.rpg.session.runtime import _award_progression
+from app.rpg.session.action_execution import _award_progression
 
 
 class TestRuntimeAwardProgression:

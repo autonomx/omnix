@@ -656,6 +656,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         summary_repository_factory: Callable[[], PostgresConversationSummaryRepository] = PostgresConversationSummaryRepository,
         job_service: Any | None = None,
         live_voice_chat_port: LiveVoiceChatPort | None = None,
+        live_agent_planner: Any | None = None,
         accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         if path is not None:
@@ -667,6 +668,11 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self.summary_repository_factory = summary_repository_factory
         self.job_service = job_service
         self.live_voice_chat_port = live_voice_chat_port
+        if live_agent_planner is None:
+            from app.chat.live_agent_store import default_live_agent_planner
+
+            live_agent_planner = default_live_agent_planner()
+        self.live_agent_planner = live_agent_planner
         self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._repository = PostgresChatRepositoryAdapter()
         self._initialize_prompt_context_cache()
@@ -856,6 +862,7 @@ def default_chat_store(
     memory_settings_factory: Callable[[], Any] | None = None,
     job_service: Any | None = None,
     live_voice_chat_port: LiveVoiceChatPort | None = None,
+    live_agent_planner: Any | None = None,
     accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
 ) -> PostgresCharacterChatSessionStore:
     """Reuse the authoritative chat store instead of re-running startup checks per request."""
@@ -864,6 +871,7 @@ def default_chat_store(
         "memory_service_factory": memory_service_factory,
         "memory_settings_factory": memory_settings_factory,
         "job_service": job_service,
+        "live_agent_planner": live_agent_planner,
     }
     if live_voice_chat_port is not None:
         store_kwargs["live_voice_chat_port"] = live_voice_chat_port

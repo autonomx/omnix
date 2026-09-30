@@ -126,6 +126,23 @@ def evaluate_gap_pullback(
     gates evaluated here.
     """
     active = config or GapPullbackConfig()
+    if active.strategy_version == "2.0.0":
+        from .failed_selloff_v2 import evaluate_gap_pullback_v2
+
+        adjusted = candidate
+        if candidate.spread_bps is None or candidate.spread_bps > active.maximum_spread_bps:
+            adjusted = candidate.model_copy(update={"spread_bps": Decimal("0")})
+        result = evaluate_gap_pullback_v2(adjusted, bars, active)
+        if adjusted is not candidate:
+            result = result.model_copy(
+                update={
+                    "features": result.features.model_copy(
+                        update={"spread_bps": candidate.spread_bps}
+                    )
+                }
+            )
+        return result
+
     regular = _regular_bars(bars)
     transitions: list[GapPullbackState] = ["discovered"]
 

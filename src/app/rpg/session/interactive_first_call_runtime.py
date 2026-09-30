@@ -12,9 +12,14 @@ from app.rpg.ai.compact_dialogue import (
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
 from app.rpg.session.public_state_bridge import hydrate_simulation_player
 from app.rpg.session.semantic_interaction import attach_semantic_interaction
-from app.rpg.session import runtime as canonical_runtime
+from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.session.companion_turn_runtime import _build_turn_id
+from app.rpg.session.service_runtime import service_action_from_result
+from app.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
+from app.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
 
 _FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
 _RECURSION_LIMIT_FLOOR = 10000
@@ -89,7 +94,7 @@ def _select_session(session_id: str, session_override: Dict[str, Any] | None = N
     if manual:
         return manual
 
-    loaded = canonical_runtime.load_runtime_session(session_id)
+    loaded = load_runtime_session(session_id)
     return _d(loaded)
 
 
@@ -176,8 +181,8 @@ def _prepare_stateful_runtime_session(
         manifest["session_id"] = session_id
         manifest.setdefault("id", session_id)
         session_to_save["manifest"] = manifest
-        canonical_runtime.save_runtime_session(session_to_save)
-        loaded = canonical_runtime.load_runtime_session(session_id)
+        save_runtime_session(session_to_save)
+        loaded = load_runtime_session(session_id)
         if isinstance(loaded, dict):
             loaded_runtime = _d(loaded.get("runtime_state"))
             loaded_runtime["narration_mode"] = narration_mode
@@ -185,7 +190,7 @@ def _prepare_stateful_runtime_session(
             if narration_mode in {"deferred", "deterministic", "disabled"}:
                 loaded_runtime["deferred_runtime_narration"] = True
             loaded["runtime_state"] = loaded_runtime
-            canonical_runtime.save_runtime_session(loaded)
+            save_runtime_session(loaded)
     except Exception:
         return
 
@@ -514,6 +519,7 @@ def _should_safe_fallback_nonstateful_dialogue(
     selection: Dict[str, Any],
     *,
     player_input: str = "",
+    service_matched: bool = False,
 ) -> bool:
     if _d(selection).get("consumable"):
         return False
@@ -527,7 +533,16 @@ def _should_safe_fallback_nonstateful_dialogue(
         return True
     if _d(selection).get("reason") != "no_safe_non_stateful_visible_response":
         return False
-    return _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory)
+    if _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory):
+        return True
+    from app.rpg.session.interpretive_adjudication import should_use_interpretive_adjudication
+
+    return should_use_interpretive_adjudication(
+        player_input=player_input,
+        semantic_advisory=_d(semantic_advisory) or _d(action_advisory),
+        selection=_d(selection),
+        service_matched=service_matched,
+    )
 
 
 def _direct_dialogue_fallback_topic(player_input: str) -> str:
@@ -640,7 +655,13 @@ def _safe_dialogue_fallback_line(
         if example:
             return (topic, example)
 
-    return (topic, "Ask that plainly again, and I will answer as best I can.")
+    return repair_dialogue_fallback(
+        topic=topic,
+        line="Ask that plainly again, and I will answer as best I can.",
+        speaker=speaker,
+        profile=profile,
+        player_input=player_input,
+    )
 
 
 def _safe_dialogue_fallback_result(
@@ -652,7 +673,29 @@ def _safe_dialogue_fallback_result(
     action_advisory: Dict[str, Any],
     semantic_advisory: Dict[str, Any],
     selection: Dict[str, Any],
+    service_matched: bool = False,
 ) -> Dict[str, Any]:
+    from app.rpg.session.interpretive_adjudication import (
+        build_interpretive_adjudication_result,
+        should_use_interpretive_adjudication,
+    )
+
+    if should_use_interpretive_adjudication(
+        player_input=player_input,
+        semantic_advisory=_d(semantic_advisory) or _d(action_advisory),
+        selection=_d(selection),
+        service_matched=service_matched,
+    ):
+        return build_interpretive_adjudication_result(
+            session=session,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            player_input=player_input,
+            action_advisory=action_advisory,
+            semantic_advisory=semantic_advisory,
+            selection=selection,
+        )
+
     diagnostics = _first_call_diagnostics(action_advisory, semantic_advisory)
     packet = _packet_from_diagnostics(diagnostics)
     profile = _addressed_profile(packet)
@@ -696,7 +739,7 @@ def _safe_dialogue_fallback_result(
         "grounding_validation": deepcopy(grounding_validation),
         "source": "first_call_dialogue_safe_fallback_v1",
     }
-    return {
+    result = {
         "consumed": True,
         "ok": True,
         "result": deepcopy(resolved_result),
@@ -721,9 +764,24 @@ def _safe_dialogue_fallback_result(
         "player_input": _s(player_input),
         "source": "first_call_dialogue_safe_fallback_v1",
     }
+    from .narrative_engine_bridge import canonicalize_direct_dialogue_result
+
+    manifest = _d(session.get("manifest"))
+    session_id = _s(
+        manifest.get("session_id")
+        or manifest.get("id")
+        or session.get("session_id")
+        or session.get("id")
+        or "runtime"
+    )
+    return canonicalize_direct_dialogue_result(
+        result,
+        session_id=session_id,
+        player_input=_s(player_input),
+    )
 
 
-def apply_turn(
+def _apply_turn_core(
     session_id: str,
     player_input: str,
     action: Dict[str, Any] | None = None,
@@ -767,7 +825,7 @@ def apply_turn(
         _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
         timing["state_snapshot_ms"] += _ms_since(prepare_start)
         runtime_start = perf_counter()
-        result = canonical_runtime.apply_turn(
+        result = _apply_composed_turn(
             session_id=session_id,
             player_input=_s(player_input),
             action=fast_direct_action,
@@ -798,7 +856,7 @@ def apply_turn(
         return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
 
     try:
-        service_match = canonical_runtime.resolve_service_turn(
+        service_match = resolve_service_turn(
             player_input=_s(player_input),
             action=candidate_action,
             resolved_action={},
@@ -846,7 +904,7 @@ def apply_turn(
     )
     timing["grounding_validation_ms"] += _ms_since(validation_start)
     if non_stateful_result.get("consumed"):
-        non_stateful_result["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
+        non_stateful_result["turn_id"] = _build_turn_id(runtime_state)
         non_stateful_result["tick"] = int(runtime_state.get("tick", 0) or 0)
         non_stateful_result["first_call_action_advisory"] = action_advisory
         non_stateful_result["first_call_semantic_advisory"] = semantic_advisory
@@ -865,6 +923,7 @@ def apply_turn(
         semantic_advisory,
         selection,
         player_input=_s(player_input),
+        service_matched=service_matched,
     )
     timing["repair_ms"] += _ms_since(repair_start)
     if should_fallback:
@@ -877,9 +936,10 @@ def apply_turn(
             action_advisory=action_advisory,
             semantic_advisory=semantic_advisory,
             selection=selection,
+            service_matched=service_matched,
         )
         timing["repair_ms"] += _ms_since(repair_start)
-        fallback["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
+        fallback["turn_id"] = _build_turn_id(runtime_state)
         fallback["tick"] = int(runtime_state.get("tick", 0) or 0)
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return _attach_manual_stage_timing(fallback, timing)
@@ -888,7 +948,7 @@ def apply_turn(
     if not first_call_action:
         first_call_action = candidate_action
     if service_matched:
-        first_call_action = canonical_runtime.service_action_from_result(
+        first_call_action = service_action_from_result(
             _s(player_input),
             first_call_action,
             service_match,
@@ -906,7 +966,7 @@ def apply_turn(
     timing["state_snapshot_ms"] += _ms_since(prepare_start)
 
     runtime_start = perf_counter()
-    result = canonical_runtime.apply_turn(
+    result = _apply_composed_turn(
         session_id=session_id,
         player_input=_s(player_input),
         action=first_call_action,
@@ -933,6 +993,35 @@ def apply_turn(
         timing["deferred_enqueue_ms"] = _safe_deferred_enqueue_ms(result)
     timing["manual_turn_ms"] = _ms_since(manual_start)
     return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
+
+
+def apply_turn(
+    session_id: str,
+    player_input: str,
+    action: Dict[str, Any] | None = None,
+    *,
+    performance_override: Dict[str, Any] | None = None,
+    session_override: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Run the interactive turn through the explicit ordered stage pipeline."""
+
+    from app.rpg.session.pipeline import TurnContext, run_turn_pipeline
+
+    context = TurnContext(
+        session_id=session_id,
+        player_input=player_input,
+        action=action,
+        performance_override=performance_override,
+        session_override=session_override,
+        execute_core=lambda: _apply_turn_core(
+            session_id,
+            player_input,
+            action,
+            performance_override=performance_override,
+            session_override=session_override,
+        ),
+    )
+    return run_turn_pipeline(context).result
 
 
 def _safe_deferred_enqueue_ms(result: Dict[str, Any]) -> float:

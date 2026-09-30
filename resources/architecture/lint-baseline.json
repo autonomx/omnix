@@ -312,7 +312,7 @@
       "count": 1,
       "fingerprint": "default_chat_store:app.runtime_composition",
       "lines": [
-        333
+        350
       ],
       "path": "src/app/chat/character_store.py",
       "rule": "AL001"
@@ -330,7 +330,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
       "lines": [
-        21
+        20
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -339,7 +339,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.kasa_plan",
       "lines": [
-        22
+        21
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -348,7 +348,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.live_agent_proposals",
       "lines": [
-        23
+        22
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -357,16 +357,16 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        27
+        26
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
     },
     {
       "count": 1,
-      "fingerprint": "install_live_agent_store_hooks.wrapped:app.agent_runtime.chat_bridge",
+      "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
       "lines": [
-        93
+        142
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -793,3436 +793,6 @@
       ],
       "path": "src/app/trading/research/adapters/generic_web.py",
       "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.pi_runtime_core._omnix_base_normalize_pi_event",
-      "lines": [
-        116
-      ],
-      "path": "src/app/agent_runtime/pi_runtime.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.pi_runtime_core._omnix_base_pi_rpc_argv",
-      "lines": [
-        75
-      ],
-      "path": "src/app/agent_runtime/pi_runtime.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.pi_runtime_core.normalize_pi_event",
-      "lines": [
-        234
-      ],
-      "path": "src/app/agent_runtime/pi_runtime.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.agent_runtime.pi_runtime_core.pi_rpc_argv",
-      "lines": [
-        102
-      ],
-      "path": "src/app/agent_runtime/pi_runtime.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "reconcile_review_progress_in_repository:app.agent_runtime.review_orchestration_core.PostgresCodingQualityRepository",
-      "lines": [
-        216,
-        220
-      ],
-      "path": "src/app/agent_runtime/review_orchestration.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "reconcile_review_progress_in_repository:app.agent_runtime.review_orchestration_core.consume_terminal_reviewer_in_repository",
-      "lines": [
-        217,
-        221
-      ],
-      "path": "src/app/agent_runtime/review_orchestration.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.PostgresAgentRunRepository",
-      "lines": [
-        561
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.WorkspaceAuthority",
-      "lines": [
-        562
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.default_semantic_task_parser",
-      "lines": [
-        563
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_sync_core_compat:app.agent_runtime.service_core.unit_of_work",
-      "lines": [
-        560
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_openapi_filter:fastapi.FastAPI.openapi",
-      "lines": [
-        55
-      ],
-      "path": "src/app/assistant_tools/openapi.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_route_registrar:fastapi.FastAPI.__init__",
-      "lines": [
-        71
-      ],
-      "path": "src/app/assistant_tools/openapi.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_agent_store_hooks:store_class.<dynamic>",
-      "lines": [
-        274
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_agent_store_hooks:store_class.stream_provider_reply_chunks",
-      "lines": [
-        273
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_blocking_route_offload_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        164
-      ],
-      "path": "src/app/gateway/blocking_route_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_blocking_route_offload_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        163
-      ],
-      "path": "src/app/gateway/blocking_route_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_event_loop_lag_monitor_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        398
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_event_loop_lag_monitor_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        397
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:sys.modules[]",
-      "lines": [
-        12
-      ],
-      "path": "src/app/image_service_app.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_codex_reliability:app.providers.chatgpt_codex_provider.ChatGPTCodexProvider._next_event",
-      "lines": [
-        147
-      ],
-      "path": "src/app/providers/codex_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_codex_reliability:app.providers.chatgpt_codex_provider.ChatGPTCodexProvider._request",
-      "lines": [
-        148
-      ],
-      "path": "src/app/providers/codex_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_codex_reliability:app.providers.chatgpt_codex_provider.ChatGPTCodexProvider.chat_completion",
-      "lines": [
-        149
-      ],
-      "path": "src/app/providers/codex_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:sys.modules[]",
-      "lines": [
-        33
-      ],
-      "path": "src/app/rpg/ai/planner/__init__.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_world_scene_survival_grounding_hook:sys.<dynamic>",
-      "lines": [
-        208
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_world_scene_survival_grounding_hook:sys.meta_path.insert",
-      "lines": [
-        207
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 3,
-      "fingerprint": "patch_world_scene_narrator_module:module.<dynamic>",
-      "lines": [
-        143,
-        144,
-        170
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "patch_world_scene_narrator_module:module._sanitize_narration_payload",
-      "lines": [
-        169
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "patch_world_scene_narrator_module:module.build_scene_prompt",
-      "lines": [
-        168
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_debug_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        49
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_debug_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_debug_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        48
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_debug_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_geometry_patch_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        90
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_geometry_patch_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_geometry_patch_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        89
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_geometry_patch_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_grid_performance_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        105
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_grid_performance_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_grid_performance_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        104
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_grid_performance_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_map_editor_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        195
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_editor_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_map_editor_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        194
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_editor_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_map_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        270
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_map_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        269
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_npc_spatial_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        225
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_npc_spatial_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_npc_spatial_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        224
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_npc_spatial_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_observer_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        119
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_observer_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_observer_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        118
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_observer_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_progressive_map_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        179
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_progressive_map_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_progressive_map_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        178
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_progressive_map_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        528
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_session_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        527
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_tactical_spatial_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        148
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_tactical_spatial_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_tactical_spatial_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        147
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_tactical_spatial_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_authoring_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        315
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_authoring_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_authoring_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        314
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_authoring_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_bundle_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        118
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_bundle_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_bundle_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        117
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_bundle_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_deletion_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        111
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_deletion_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_deletion_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        110
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_deletion_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_dossier_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        252
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_dossier_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_dossier_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        251
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_dossier_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_generation_review_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        346
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_generation_review_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_generation_review_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        345
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_generation_review_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_image_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        223
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_image_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_image_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        222
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_image_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_profile_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        157
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_profile_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_profile_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        156
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_profile_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_route_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        445
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_world_route_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        444
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_routes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:builtins.open",
-      "lines": [
-        378
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:io.open",
-      "lines": [
-        379
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:pathlib.Path.write_bytes",
-      "lines": [
-        373
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:pathlib.Path.write_text",
-      "lines": [
-        372
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:shutil.copy2",
-      "lines": [
-        375
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:shutil.copyfile",
-      "lines": [
-        374
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:zipfile.ZipFile.write",
-      "lines": [
-        376
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_report_materialization_size_guard:zipfile.ZipFile.writestr",
-      "lines": [
-        377
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_runtime_debug_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        93
-      ],
-      "path": "src/app/rpg/debug_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_rpg_runtime_debug_hook:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        92
-      ],
-      "path": "src/app/rpg/debug_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_apply_turn_wrapper:app.rpg.session.interactive_first_call_runtime._omnix_rpg_turn_job_mirror_installed",
-      "lines": [
-        92
-      ],
-      "path": "src/app/rpg/jobs/turn_job_mirror.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_apply_turn_wrapper:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        91
-      ],
-      "path": "src/app/rpg/jobs/turn_job_mirror.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:sys.modules[]",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/models/__init__.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_test_result_artifact_write_parent_guard:pathlib.Path.write_text",
-      "lines": [
-        42
-      ],
-      "path": "src/app/rpg/session/autoplay_runtime_guards.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_empty_manifest_write_guard:builtins.open",
-      "lines": [
-        174
-      ],
-      "path": "src/app/rpg/session/bundle_ab_late_manifest_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_empty_manifest_write_guard:pathlib.Path.write_text",
-      "lines": [
-        173
-      ],
-      "path": "src/app/rpg/session/bundle_ab_late_manifest_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_contract_attachment:app.rpg.session.interpretive_adjudication.<dynamic>",
-      "lines": [
-        81
-      ],
-      "path": "src/app/rpg/session/contract_attachment.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_contract_attachment:app.rpg.session.interpretive_adjudication.build_interpretive_adjudication_result",
-      "lines": [
-        80
-      ],
-      "path": "src/app/rpg/session/contract_attachment.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_prompt_contract:app.rpg.ai.semantic_action_intelligence.<dynamic>",
-      "lines": [
-        72
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_prompt_contract:app.rpg.ai.semantic_action_intelligence.build_semantic_action_prompt",
-      "lines": [
-        71
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dialogue_quality_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        56
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dialogue_quality_hook:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        55
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_diegetic_fallback_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        35
-      ],
-      "path": "src/app/rpg/session/diegetic_fallback_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_diegetic_fallback_hook:app.rpg.session.interactive_first_call_runtime._safe_dialogue_fallback_line",
-      "lines": [
-        34
-      ],
-      "path": "src/app/rpg/session/diegetic_fallback_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.<dynamic>",
-      "lines": [
-        382
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.meta_path.insert",
-      "lines": [
-        381
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 3,
-      "fingerprint": "_patch_runtime_module:runtime_module.<dynamic>",
-      "lines": [
-        319,
-        344,
-        347
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_module:runtime_module._apply_combat_narration_if_needed",
-      "lines": [
-        320
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_module:runtime_module.apply_turn",
-      "lines": [
-        345
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_fast_combat_narration_skip_for_tests:runtime_module.<dynamic>",
-      "lines": [
-        405
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_fast_combat_narration_skip_for_tests:runtime_module._apply_combat_narration_if_needed",
-      "lines": [
-        400
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_fast_combat_narration_skip_for_tests:runtime_module.apply_turn",
-      "lines": [
-        403
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_fast_combat_presentation_hook_for_tests:runtime_module.<dynamic>",
-      "lines": [
-        107
-      ],
-      "path": "src/app/rpg/session/fast_combat_presentation_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_fast_combat_presentation_hook_for_tests:runtime_module._select_final_visible_presentation",
-      "lines": [
-        105
-      ],
-      "path": "src/app/rpg/session/fast_combat_presentation_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "install_fast_combat_presentation_hook:runtime_module.<dynamic>",
-      "lines": [
-        93,
-        95
-      ],
-      "path": "src/app/rpg/session/fast_combat_presentation_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_fast_combat_presentation_hook:runtime_module._select_final_visible_presentation",
-      "lines": [
-        94
-      ],
-      "path": "src/app/rpg/session/fast_combat_presentation_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_fast_visible_dialogue_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        97
-      ],
-      "path": "src/app/rpg/session/fast_visible_dialogue_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_fast_visible_dialogue_hook:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        96
-      ],
-      "path": "src/app/rpg/session/fast_visible_dialogue_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_first_call_dialogue_placeholder_guard:app.rpg.session.first_call_dialogue.<dynamic>",
-      "lines": [
-        54
-      ],
-      "path": "src/app/rpg/session/first_call_dialogue_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_first_call_dialogue_placeholder_guard:app.rpg.session.first_call_dialogue.choose_first_call_visible_response",
-      "lines": [
-        53
-      ],
-      "path": "src/app/rpg/session/first_call_dialogue_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.interpretive_adjudication.<dynamic>",
-      "lines": [
-        104
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.interpretive_adjudication._line_for_intent",
-      "lines": [
-        97
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.interpretive_adjudication._narration_for_intent",
-      "lines": [
-        98
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.interpretive_adjudication.classify_interpretive_intent",
-      "lines": [
-        96
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.world_reasoning_adapter._lore_result_for_intent",
-      "lines": [
-        103
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.world_reasoning_adapter._physical_result_for_intent",
-      "lines": [
-        101
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.world_reasoning_adapter._plausibility_for_intent",
-      "lines": [
-        100
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.world_reasoning_adapter._social_result_for_intent",
-      "lines": [
-        102
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_hypothetical_world_resolution:app.rpg.session.world_reasoning_adapter._verification_for_intent",
-      "lines": [
-        99
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interaction_event_store_hook:app.rpg.session.service.<dynamic>",
-      "lines": [
-        28
-      ],
-      "path": "src/app/rpg/session/interaction_event_store_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interaction_event_store_hook:app.rpg.session.service.load_session",
-      "lines": [
-        27
-      ],
-      "path": "src/app/rpg/session/interaction_event_store_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_load_recovery_hook:app.rpg.session.service.<dynamic>",
-      "lines": [
-        110
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_load_recovery_hook:app.rpg.session.service.load_session",
-      "lines": [
-        109
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_runtime_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        68
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_runtime_hook:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        67
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_worker_hook:app.rpg.session.runtime.<dynamic>",
-      "lines": [
-        89
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_worker_hook:app.rpg.session.runtime.process_next_narration_job",
-      "lines": [
-        88
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interaction_timeline_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        197
-      ],
-      "path": "src/app/rpg/session/interaction_timeline_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interaction_timeline_hook:app.rpg.session.interactive_first_call_runtime.apply_turn",
-      "lines": [
-        196
-      ],
-      "path": "src/app/rpg/session/interaction_timeline_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.<dynamic>",
-      "lines": [
-        142
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.meta_path.insert",
-      "lines": [
-        141
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_patch_interactive_module:module.<dynamic>",
-      "lines": [
-        105,
-        107
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_interactive_module:module.apply_turn",
-      "lines": [
-        106
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_interactive_fast_combat_result_hook_for_tests:module.<dynamic>",
-      "lines": [
-        161
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_interactive_fast_combat_result_hook_for_tests:module.apply_turn",
-      "lines": [
-        159
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interpretive_adjudication_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        332
-      ],
-      "path": "src/app/rpg/session/interpretive_adjudication.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interpretive_adjudication_hook:app.rpg.session.interactive_first_call_runtime._safe_dialogue_fallback_result",
-      "lines": [
-        331
-      ],
-      "path": "src/app/rpg/session/interpretive_adjudication.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_interpretive_adjudication_hook:app.rpg.session.interactive_first_call_runtime._should_safe_fallback_nonstateful_dialogue",
-      "lines": [
-        330
-      ],
-      "path": "src/app/rpg/session/interpretive_adjudication.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_first_call_wrapper:app.rpg.session.first_call_dialogue.build_non_stateful_dialogue_result",
-      "lines": [
-        44
-      ],
-      "path": "src/app/rpg/session/narrative_engine_direct_dialogue_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_npc_dialogue_repair_hook:app.rpg.ai.semantic_action_intelligence.build_semantic_action_prompt",
-      "lines": [
-        109
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_npc_dialogue_repair_hook:app.rpg.ai.semantic_action_intelligence.normalize_semantic_action_advisory",
-      "lines": [
-        110
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_npc_dialogue_repair_hook:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        113
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_npc_dialogue_repair_hook:app.rpg.session.interactive_first_call_runtime._safe_dialogue_fallback_line",
-      "lines": [
-        111
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_npc_dialogue_repair_hook:app.rpg.session.interactive_first_call_runtime.build_non_stateful_dialogue_result",
-      "lines": [
-        112
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.<dynamic>",
-      "lines": [
-        168
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_post_import_finder:sys.meta_path.insert",
-      "lines": [
-        167
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_patch_interactive_module:module.<dynamic>",
-      "lines": [
-        131,
-        133
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_interactive_module:module.apply_turn",
-      "lines": [
-        132
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_player_agency_runtime_hook_for_tests:module.<dynamic>",
-      "lines": [
-        187
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "force_install_player_agency_runtime_hook_for_tests:module.apply_turn",
-      "lines": [
-        185
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 2,
-      "fingerprint": "assert_phase7_save_load_replay_roundtrip_ready:app.rpg.session.durable_store._SESSION_DIR",
-      "lines": [
-        176,
-        180
-      ],
-      "path": "src/app/rpg/session/replay_persistence_roundtrip_v2.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:sys.modules[]",
-      "lines": [
-        154
-      ],
-      "path": "src/app/rpg/session/runtime.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part17._generate_turn_narration_artifact",
-      "lines": [
-        189
-      ],
-      "path": "src/app/rpg/session/runtime_part32.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part31_existing_completed_narration",
-      "lines": [
-        127
-      ],
-      "path": "src/app/rpg/session/runtime_part34.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03._enqueue_narration_request",
-      "lines": [
-        524
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04._compile_semantic_action_record",
-      "lines": [
-        525
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part31_existing_completed_narration",
-      "lines": [
-        526
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part31_should_sync_narration",
-      "lines": [
-        527
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04._compile_semantic_action_record",
-      "lines": [
-        241
-      ],
-      "path": "src/app/rpg/session/runtime_part36.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._compile_semantic_action_record",
-      "lines": [
-        243
-      ],
-      "path": "src/app/rpg/session/runtime_part36.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._phase8_part35_persist_semantic_artifact",
-      "lines": [
-        244
-      ],
-      "path": "src/app/rpg/session/runtime_part36.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._phase8_part35_semantic_visible_response_fields",
-      "lines": [
-        242
-      ],
-      "path": "src/app/rpg/session/runtime_part36.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part34_has_structured_llm_payload",
-      "lines": [
-        237
-      ],
-      "path": "src/app/rpg/session/runtime_part37.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part34._phase8_part34_has_structured_llm_payload",
-      "lines": [
-        236
-      ],
-      "path": "src/app/rpg/session/runtime_part37.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._phase8_part34_has_structured_llm_payload",
-      "lines": [
-        238
-      ],
-      "path": "src/app/rpg/session/runtime_part37.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part31_existing_completed_narration",
-      "lines": [
-        345
-      ],
-      "path": "src/app/rpg/session/runtime_part38.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31._phase8_part31_should_sync_narration",
-      "lines": [
-        346
-      ],
-      "path": "src/app/rpg/session/runtime_part38.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._phase8_part35_direct_response_safe",
-      "lines": [
-        347
-      ],
-      "path": "src/app/rpg/session/runtime_part38.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35._phase8_part35_semantic_visible_response_fields",
-      "lines": [
-        348
-      ],
-      "path": "src/app/rpg/session/runtime_part38.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.durable_store.load_session_from_disk",
-      "lines": [
-        30
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.durable_store.save_session_to_disk",
-      "lines": [
-        31
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.<dynamic>",
-      "lines": [
-        48
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.list_session_summaries",
-      "lines": [
-        43
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.load_session",
-      "lines": [
-        33
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.load_session_from_disk",
-      "lines": [
-        28
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.save_session",
-      "lines": [
-        38
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_session_performance_hook:app.rpg.session.service.save_session_to_disk",
-      "lines": [
-        29
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_visible_response_runtime_guard:app.rpg.ai.semantic_action_intelligence.<dynamic>",
-      "lines": [
-        34
-      ],
-      "path": "src/app/rpg/session/visible_response_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_visible_response_runtime_guard:app.rpg.session.first_call_dialogue.<dynamic>",
-      "lines": [
-        42
-      ],
-      "path": "src/app/rpg/session/visible_response_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_visible_response_runtime_guard:app.rpg.session.interactive_first_call_runtime.<dynamic>",
-      "lines": [
-        50
-      ],
-      "path": "src/app/rpg/session/visible_response_runtime_hook.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.worlds.world_images.read_world_image_targets",
-      "lines": [
-        166
-      ],
-      "path": "src/app/rpg/worlds/profile_aware_world_images.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_persistent_ai_shadow_circuit:app.trading.ai_shadow_reliability._CIRCUIT",
-      "lines": [
-        159
-      ],
-      "path": "src/app/trading/ai_shadow_circuit_persistence.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_reliability:app.trading.strategy_ai_shadow.AIShadowPolicyAnalyzer.assess",
-      "lines": [
-        489
-      ],
-      "path": "src/app/trading/ai_shadow_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_reliability:app.trading.strategy_ai_shadow._default_provider",
-      "lines": [
-        488
-      ],
-      "path": "src/app/trading/ai_shadow_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:sys.modules[]",
-      "lines": [
-        22
-      ],
-      "path": "src/app/trading/research/__init__.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.trading.strategies.gap_pullback.evaluate_gap_pullback",
-      "lines": [
-        31
-      ],
-      "path": "src/app/trading/strategies/__init__.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_catalyst_consistency:app.trading.strategy_ai_shadow_v2.CatalystIntelligenceAnalyzer.assess",
-      "lines": [
-        113
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_catalyst_provenance.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_catalyst_provenance:app.trading.strategy_ai_shadow_v2.deterministic_evidence_quality",
-      "lines": [
-        102
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_catalyst_provenance.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_circuit_guard:app.trading.strategy_ai_shadow_v2.AIShadowV2Analyzer.assess",
-      "lines": [
-        88
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_circuit_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_circuit_guard:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._run_arm",
-      "lines": [
-        89
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_circuit_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._label_episodes",
-      "lines": [
-        566
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._refresh_catalyst",
-      "lines": [
-        564
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._run_arm",
-      "lines": [
-        565
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._summary",
-      "lines": [
-        567
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor._EVENT_TYPES",
-      "lines": [
-        554
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_hardening:app.trading.strategy_ai_shadow_v2_monitor.deterministic_risk_geometry",
-      "lines": [
-        563
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_metrics_policy:app.trading.strategy_ai_shadow_v2_hardening._episode_metrics",
-      "lines": [
-        139
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_metrics_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_metrics_policy:app.trading.strategy_ai_shadow_v2_hardening._lift_metrics",
-      "lines": [
-        140
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_metrics_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_metrics_policy:app.trading.strategy_ai_shadow_v2_roadmap_policy._decision_outcome_metrics",
-      "lines": [
-        141
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_metrics_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_risk_policy:app.trading.strategy_ai_shadow_v2_monitor.deterministic_risk_geometry",
-      "lines": [
-        56
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_risk_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor.CatalystIntelligenceAnalyzer.assess",
-      "lines": [
-        1239
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._label_episodes",
-      "lines": [
-        1256
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._refresh_catalyst",
-      "lines": [
-        1254
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._run_arm",
-      "lines": [
-        1255
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._summary",
-      "lines": [
-        1257
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor._EVENT_TYPES",
-      "lines": [
-        1243
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor._historical_episodes",
-      "lines": [
-        1240
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor._persistence_calibration",
-      "lines": [
-        1241
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_roadmap_policy:app.trading.strategy_ai_shadow_v2_monitor._setup_calibration",
-      "lines": [
-        1242
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_schedule_policy:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._run_arm",
-      "lines": [
-        156
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_schedule_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_schedule_policy:app.trading.strategy_ai_shadow_v2_roadmap_policy._due_reasons",
-      "lines": [
-        155
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_schedule_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_ai_shadow_v2_schedule_policy:app.trading.strategy_ai_shadow_v2_roadmap_policy._previous_trigger_satisfied",
-      "lines": [
-        154
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_schedule_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_discovery_acquisition.install_default_discovery_sources",
-      "lines": [
-        2515
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_discovery_replay.replay_dynamic_discovery",
-      "lines": [
-        2501
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.ShadowQualificationEvidence",
-      "lines": [
-        2481
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.TrendDurabilityOutcome",
-      "lines": [
-        2482
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.apply_strategy_rankings",
-      "lines": [
-        2491
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.build_opportunity_characterization",
-      "lines": [
-        2490
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.catalyst_discovery_event",
-      "lines": [
-        2488
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.evaluate_shadow_qualification",
-      "lines": [
-        2492
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.merge_discovery_event",
-      "lines": [
-        2487
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery.tier_candidates",
-      "lines": [
-        2489
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.apply_strategy_rankings",
-      "lines": [
-        2498
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.build_opportunity_characterization",
-      "lines": [
-        2497
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.catalyst_discovery_event",
-      "lines": [
-        2495
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.install_default_discovery_sources",
-      "lines": [
-        2516
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.merge_discovery_event",
-      "lines": [
-        2494
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.run_dynamic_discovery_once",
-      "lines": [
-        2499
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_monitor.tier_candidates",
-      "lines": [
-        2496
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_dynamic_discovery_repository.ShadowQualificationEvidence",
-      "lines": [
-        2483
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_attribution.bridge_strategy_events",
-      "lines": [
-        2502
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_learning_monitor.bridge_strategy_events",
-      "lines": [
-        2503
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_learning_monitor.label_candidate_outcome",
-      "lines": [
-        2508
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_learning_monitor.qualification_from_persisted_evidence",
-      "lines": [
-        2509
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_learning_monitor.run_interday_learning_once",
-      "lines": [
-        2512
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_postclose.ShadowQualificationEvidence",
-      "lines": [
-        2484
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_postclose.TrendDurabilityOutcome",
-      "lines": [
-        2485
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_postclose.label_candidate_outcome",
-      "lines": [
-        2504
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_interday_postclose.qualification_from_persisted_evidence",
-      "lines": [
-        2505
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:app.trading.strategy_shadow_universe._dynamic_shadow_union",
-      "lines": [
-        2514
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_patch_runtime_modules:module.DynamicCandidate",
-      "lines": [
-        2480
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_discovery_replay.replay_dynamic_discovery",
-      "lines": [
-        701
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery.build_opportunity_characterization",
-      "lines": [
-        698
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery.evaluate_shadow_qualification",
-      "lines": [
-        697
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._build_complete_characterization",
-      "lines": [
-        693
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._complete_evaluate_shadow_qualification",
-      "lines": [
-        691
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._complete_opportunity_characterization",
-      "lines": [
-        692
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._persist_automatic_replay",
-      "lines": [
-        695
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._replay_dynamic_discovery_complete",
-      "lines": [
-        690
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._run_dynamic_discovery_once_complete",
-      "lines": [
-        689
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness._union_complete",
-      "lines": [
-        694
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_completeness.apply_discovery_scan",
-      "lines": [
-        688
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_dynamic_discovery_monitor.run_dynamic_discovery_once",
-      "lines": [
-        700
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_interday_learning_monitor.qualification_from_persisted_evidence",
-      "lines": [
-        705
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_interday_learning_monitor.run_interday_learning_once",
-      "lines": [
-        708
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_interday_postclose.qualification_from_persisted_evidence",
-      "lines": [
-        702
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_dynamic_discovery_completeness_refinements:app.trading.strategy_shadow_universe._dynamic_shadow_union",
-      "lines": [
-        709
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_intraday_llm_reliability:app.trading.ai_shadow_reliability._chat_call",
-      "lines": [
-        83
-      ],
-      "path": "src/app/trading/strategy_intraday_llm_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_intraday_llm_reliability:app.trading.strategy_intraday_llm.IntradayLLMAnalyzer.assess",
-      "lines": [
-        80
-      ],
-      "path": "src/app/trading/strategy_intraday_llm_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_ai_shadow_v2.deterministic_evidence_quality",
-      "lines": [
-        345
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_ai_shadow_v2_hardening._episode_metrics",
-      "lines": [
-        347
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_ai_shadow_v2_hardening._lift_metrics",
-      "lines": [
-        348
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_deep_recovery_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config",
-      "lines": [
-        351
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_monitor.TradingStrategyMonitor._evaluate_candidates",
-      "lines": [
-        350
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_runtime_reliability_fixes._outcome_is_valid",
-      "lines": [
-        346
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.strategy_shadow_universe.resolve_v2_shadow_archive",
-      "lines": [
-        352
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_compatibility_fixes:app.trading.trading_session_reliability._collect_trend_signal",
-      "lines": [
-        349
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.providers.alpaca_iex.AlpacaIexExecutionProvider.execution_observation",
-      "lines": [
-        551
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._append",
-      "lines": [
-        558
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._run_config",
-      "lines": [
-        560
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2.AIShadowV2Analyzer.assess",
-      "lines": [
-        552
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2_hardening._episode_metrics",
-      "lines": [
-        554
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2_monitor.TradingAIShadowV2Monitor._run_config",
-      "lines": [
-        559
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2_monitor._historical_episodes",
-      "lines": [
-        555
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2_monitor.evaluate_opportunity_episode",
-      "lines": [
-        553
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_ai_shadow_v2_roadmap_policy._decision_outcome_metrics",
-      "lines": [
-        556
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_deep_recovery_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config",
-      "lines": [
-        561
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_strategy_runtime_reliability_fixes:app.trading.strategy_monitor.TradingStrategyMonitor._evaluate_candidates",
-      "lines": [
-        562
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_shadow_data_gap_guard:app.trading.providers.alpaca_iex.AlpacaIexExecutionProvider.indicator_bars_as_of",
-      "lines": [
-        269
-      ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_shadow_data_gap_guard:app.trading.strategy_evaluability._expected_latest_start",
-      "lines": [
-        264
-      ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_shadow_data_gap_guard:app.trading.strategy_runtime_reliability_fixes._CurrentShadowSessionProxy.bars",
-      "lines": [
-        265
-      ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_shadow_data_gap_guard:app.trading.strategy_runtime_reliability_fixes._CurrentShadowSessionProxy.bars_for_requirement",
-      "lines": [
-        266
-      ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategies.evaluate_gap_pullback",
-      "lines": [
-        475
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategies.failed_selloff_v2.evaluate_gap_pullback_v2",
-      "lines": [
-        474
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategies.gap_pullback.evaluate_gap_pullback",
-      "lines": [
-        473
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow.event_trigger_reasons",
-      "lines": [
-        645
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._comparison_summary",
-      "lines": [
-        792
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._run_policy",
-      "lines": [
-        756
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._session_summary",
-      "lines": [
-        791
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow_monitor._EVENT_TYPES",
-      "lines": [
-        648
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_ai_shadow_monitor.event_trigger_reasons",
-      "lines": [
-        646
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_backtest.evaluate_gap_pullback",
-      "lines": [
-        477
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_causal_replay.evaluate_gap_pullback",
-      "lines": [
-        478
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_deep_recovery_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config",
-      "lines": [
-        810
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_monitor.TradingStrategyMonitor._evaluate_candidates",
-      "lines": [
-        592
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_monitor.TradingStrategyMonitor._run_config",
-      "lines": [
-        614
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_monitor._current_session_1m_integrity",
-      "lines": [
-        493
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_hardening:app.trading.strategy_monitor.evaluate_gap_pullback",
-      "lines": [
-        476
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._run_policy",
-      "lines": [
-        299
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.strategy_api.evaluate_gap_pullback",
-      "lines": [
-        140
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.strategy_evaluability.candidate_morning_evidence_eligible",
-      "lines": [
-        57
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.strategy_monitor.TradingStrategyMonitor._evaluate_candidates",
-      "lines": [
-        87
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.trading_data_hardening._CoverageMarketService.bars",
-      "lines": [
-        138
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_data_runtime_refinements:app.trading.trading_data_hardening.candidate_morning_evidence_eligible",
-      "lines": [
-        58
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.providers.alpaca_iex._parse_timestamp",
-      "lines": [
-        694
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_ai_shadow_monitor.TradingAIShadowMonitor._run_config",
-      "lines": [
-        734
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_deep_recovery.evaluate_deep_recovery_shadow",
-      "lines": [
-        703
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_deep_recovery_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config",
-      "lines": [
-        719
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_deep_recovery_monitor.evaluate_deep_recovery_shadow",
-      "lines": [
-        704
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_intraday_llm._default_provider",
-      "lines": [
-        693
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_trading_session_reliability:app.trading.strategy_monitor.TradingStrategyMonitor._evaluate_candidates",
-      "lines": [
-        762
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:builtins.opening_bonus",
-      "lines": [
-        19
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_rpg_lmstudio_gateway_compat:app.providers.lmstudio_provider.LMStudioProvider.call",
-      "lines": [
-        88
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_rpg_lmstudio_gateway_compat:app.providers.lmstudio_provider.LMStudioProvider.generate",
-      "lines": [
-        57
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_rpg_lmstudio_gateway_compat:app.providers.lmstudio_provider.LMStudioProvider.generate_stream",
-      "lines": [
-        78
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_openapi_filter",
-      "lines": [
-        39
-      ],
-      "path": "src/app/assistant_tools/openapi.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_route_registrar",
-      "lines": [
-        58
-      ],
-      "path": "src/app/assistant_tools/openapi.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_agent_store_hooks",
-      "lines": [
-        45
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_blocking_route_offload_hook",
-      "lines": [
-        149
-      ],
-      "path": "src/app/gateway/blocking_route_offload.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_event_loop_lag_monitor_hook",
-      "lines": [
-        385
-      ],
-      "path": "src/app/gateway/event_loop_lag_monitor.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_codex_reliability",
-      "lines": [
-        143
-      ],
-      "path": "src/app/providers/codex_reliability.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_world_scene_survival_grounding_hook",
-      "lines": [
-        200
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:patch_world_scene_narrator_module",
-      "lines": [
-        133
-      ],
-      "path": "src/app/rpg/ai/world_scene_survival_grounding_bridge.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_debug_route_hook",
-      "lines": [
-        35
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_debug_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_geometry_patch_route_hook",
-      "lines": [
-        76
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_geometry_patch_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_grid_performance_route_hook",
-      "lines": [
-        91
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_grid_performance_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_map_editor_route_hook",
-      "lines": [
-        183
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_editor_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_map_route_hook",
-      "lines": [
-        258
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_map_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_npc_spatial_route_hook",
-      "lines": [
-        211
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_npc_spatial_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_observer_route_hook",
-      "lines": [
-        105
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_observer_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_progressive_map_route_hook",
-      "lines": [
-        165
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_progressive_map_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_session_route_hook",
-      "lines": [
-        509
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_session_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_tactical_spatial_route_hook",
-      "lines": [
-        134
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_tactical_spatial_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_authoring_route_hook",
-      "lines": [
-        301
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_authoring_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_bundle_route_hook",
-      "lines": [
-        104
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_bundle_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_deletion_route_hook",
-      "lines": [
-        97
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_deletion_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_dossier_route_hook",
-      "lines": [
-        238
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_dossier_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_generation_review_hook",
-      "lines": [
-        332
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_generation_review_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_image_route_hook",
-      "lines": [
-        209
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_image_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_profile_route_hook",
-      "lines": [
-        143
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_profile_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_world_route_hook",
-      "lines": [
-        431
-      ],
-      "path": "src/app/rpg/api/feature_routes/rpg_world_routes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_report_materialization_size_guard",
-      "lines": [
-        366
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_rpg_runtime_debug_hook",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/debug_runtime_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_apply_turn_wrapper",
-      "lines": [
-        70
-      ],
-      "path": "src/app/rpg/jobs/turn_job_mirror.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_test_result_artifact_write_parent_guard",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/autoplay_runtime_guards.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_empty_manifest_write_guard",
-      "lines": [
-        149
-      ],
-      "path": "src/app/rpg/session/bundle_ab_late_manifest_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_contract_attachment",
-      "lines": [
-        66
-      ],
-      "path": "src/app/rpg/session/contract_attachment.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_prompt_contract",
-      "lines": [
-        59
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_dialogue_quality_hook",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/dialogue_quality_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_diegetic_fallback_hook",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/diegetic_fallback_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_post_import_finder",
-      "lines": [
-        378
-      ],
-      "path": "src/app/rpg/session/fast_combat_narration_skip.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_fast_combat_presentation_hook",
-      "lines": [
-        49
-      ],
-      "path": "src/app/rpg/session/fast_combat_presentation_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_fast_visible_dialogue_hook",
-      "lines": [
-        61
-      ],
-      "path": "src/app/rpg/session/fast_visible_dialogue_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_first_call_dialogue_placeholder_guard",
-      "lines": [
-        26
-      ],
-      "path": "src/app/rpg/session/first_call_dialogue_guard.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_hypothetical_world_resolution",
-      "lines": [
-        23
-      ],
-      "path": "src/app/rpg/session/hypothetical_world_resolution.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_interaction_event_store_hook",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/interaction_event_store_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_load_recovery_hook",
-      "lines": [
-        92
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_runtime_hook",
-      "lines": [
-        25
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_worker_hook",
-      "lines": [
-        71
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_interaction_timeline_hook",
-      "lines": [
-        27
-      ],
-      "path": "src/app/rpg/session/interaction_timeline_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_post_import_finder",
-      "lines": [
-        138
-      ],
-      "path": "src/app/rpg/session/interactive_fast_combat_result_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_interpretive_adjudication_hook",
-      "lines": [
-        289
-      ],
-      "path": "src/app/rpg/session/interpretive_adjudication.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_first_call_wrapper",
-      "lines": [
-        24
-      ],
-      "path": "src/app/rpg/session/narrative_engine_direct_dialogue_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_npc_dialogue_repair_hook",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/npc_dialogue_repair_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_post_import_finder",
-      "lines": [
-        164
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_session_performance_hook",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/session_performance_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_visible_response_runtime_guard",
-      "lines": [
-        20
-      ],
-      "path": "src/app/rpg/session/visible_response_runtime_hook.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_persistent_ai_shadow_circuit",
-      "lines": [
-        155
-      ],
-      "path": "src/app/trading/ai_shadow_circuit_persistence.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_reliability",
-      "lines": [
-        484
-      ],
-      "path": "src/app/trading/ai_shadow_reliability.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_catalyst_consistency",
-      "lines": [
-        106
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_catalyst_provenance.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_catalyst_provenance",
-      "lines": [
-        98
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_catalyst_provenance.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_circuit_guard",
-      "lines": [
-        83
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_circuit_guard.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_hardening",
-      "lines": [
-        550
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_metrics_policy",
-      "lines": [
-        135
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_metrics_policy.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_risk_policy",
-      "lines": [
-        48
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_risk_policy.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_roadmap_policy",
-      "lines": [
-        1231
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_ai_shadow_v2_schedule_policy",
-      "lines": [
-        148
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_schedule_policy.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_dynamic_discovery_completeness_refinements",
-      "lines": [
-        677
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_intraday_llm_reliability",
-      "lines": [
-        74
-      ],
-      "path": "src/app/trading/strategy_intraday_llm_reliability.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_strategy_runtime_compatibility_fixes",
-      "lines": [
-        335
-      ],
-      "path": "src/app/trading/strategy_runtime_compatibility_fixes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_strategy_runtime_reliability_fixes",
-      "lines": [
-        528
-      ],
-      "path": "src/app/trading/strategy_runtime_reliability_fixes.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_shadow_data_gap_guard",
-      "lines": [
-        256
-      ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_trading_data_hardening",
-      "lines": [
-        433
-      ],
-      "path": "src/app/trading/trading_data_hardening.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_trading_data_runtime_refinements",
-      "lines": [
-        45
-      ],
-      "path": "src/app/trading/trading_data_runtime_refinements.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_trading_session_reliability",
-      "lines": [
-        667
-      ],
-      "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_rpg_lmstudio_gateway_compat",
-      "lines": [
-        22
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL004"
     },
     {
       "count": 1,
@@ -5245,7 +1815,7 @@
       "count": 1,
       "fingerprint": "register_rpg_debug_routes:rpg_debug_status",
       "lines": [
-        59
+        40
       ],
       "path": "src/app/rpg/api/feature_routes/rpg_debug_routes.py",
       "rule": "AL005"
@@ -5416,7 +1986,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session",
       "lines": [
-        1015
+        1033
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -5425,7 +1995,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_rpg_session_narration_events",
       "lines": [
-        1088
+        1106
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
@@ -6275,7 +2845,7 @@
       "count": 1,
       "fingerprint": "_extract_json_payload:print",
       "lines": [
-        162
+        172
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6284,7 +2854,7 @@
       "count": 1,
       "fingerprint": "_resolve_runtime_actor_id:print",
       "lines": [
-        144
+        154
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6293,30 +2863,30 @@
       "count": 24,
       "fingerprint": "capture_semantic_state_change_proposals_for_session:print",
       "lines": [
-        267,
-        271,
-        272,
-        273,
+        277,
+        281,
         282,
-        287,
-        289,
-        294,
+        283,
+        292,
+        297,
         299,
-        303,
-        306,
+        304,
+        309,
         313,
-        314,
-        318,
-        322,
-        326,
-        333,
-        334,
-        341,
-        382,
-        427,
-        470,
-        471,
-        472
+        316,
+        323,
+        324,
+        328,
+        332,
+        336,
+        343,
+        344,
+        351,
+        392,
+        437,
+        480,
+        481,
+        482
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6325,22 +2895,22 @@
       "count": 16,
       "fingerprint": "should_capture_semantic_state_change_proposals:print",
       "lines": [
-        216,
-        219,
-        232,
-        233,
-        240,
-        241,
+        226,
+        229,
         242,
         243,
-        244,
-        245,
-        246,
-        247,
-        248,
-        249,
+        250,
+        251,
         252,
-        255
+        253,
+        254,
+        255,
+        256,
+        257,
+        258,
+        259,
+        262,
+        265
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6349,13 +2919,13 @@
       "count": 7,
       "fingerprint": "_llm_text:print",
       "lines": [
-        111,
-        124,
-        127,
-        134,
-        135,
-        149,
-        152
+        115,
+        128,
+        131,
+        140,
+        141,
+        155,
+        162
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_common.py",
       "rule": "AL008"
@@ -6364,9 +2934,9 @@
       "count": 3,
       "fingerprint": "_generate_live_narrative:print",
       "lines": [
-        408,
-        410,
-        451
+        578,
+        580,
+        636
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
       "rule": "AL008"
@@ -6375,17 +2945,17 @@
       "count": 11,
       "fingerprint": "narrate_scene:print",
       "lines": [
-        543,
-        588,
-        609,
-        635,
-        636,
-        649,
-        658,
-        706,
-        707,
-        708,
-        717
+        749,
+        801,
+        825,
+        859,
+        860,
+        883,
+        905,
+        959,
+        960,
+        961,
+        983
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
       "rule": "AL008"
@@ -6426,10 +2996,10 @@
       "count": 4,
       "fingerprint": "_run_semantic_capture_background._worker:print",
       "lines": [
-        187,
-        188,
-        189,
-        202
+        193,
+        194,
+        195,
+        208
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL008"
@@ -6438,8 +3008,8 @@
       "count": 2,
       "fingerprint": "_run_semantic_capture_background:print",
       "lines": [
-        160,
-        166
+        166,
+        172
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL008"
@@ -6448,13 +3018,13 @@
       "count": 7,
       "fingerprint": "idle_tick_rpg_session:print",
       "lines": [
-        335,
-        352,
-        359,
-        372,
-        377,
-        378,
-        397
+        341,
+        358,
+        367,
+        380,
+        385,
+        386,
+        405
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL008"
@@ -6463,7 +3033,7 @@
       "count": 1,
       "fingerprint": "get_rpg_session:print",
       "lines": [
-        440
+        458
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL008"
@@ -6552,33 +3122,6 @@
         399
       ],
       "path": "src/app/rpg/session/narration_runtime.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "compile_semantic_state_change_to_canonical_delta:print",
-      "lines": [
-        93
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "process_semantic_state_change_proposals:print",
-      "lines": [
-        272
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_log_interaction_trace:print",
-      "lines": [
-        247
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL008"
     },
     {
@@ -6733,7 +3276,7 @@
       "count": 1,
       "fingerprint": "PiRpcSession.close:except",
       "lines": [
-        747
+        751
       ],
       "path": "src/app/agent_runtime/pi_runtime_core.py",
       "rule": "AL009"
@@ -6788,7 +3331,7 @@
       "count": 1,
       "fingerprint": "launch_reviewer_children:except",
       "lines": [
-        347
+        345
       ],
       "path": "src/app/agent_runtime/review_orchestration_core.py",
       "rule": "AL009"
@@ -6842,7 +3385,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._dispatch_pending_quality_commands:except",
       "lines": [
-        2130
+        2101
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -6851,7 +3394,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._execute_quality_action:except",
       "lines": [
-        2103
+        2074
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -6860,7 +3403,7 @@
       "count": 1,
       "fingerprint": "AgentRunService.command_with_context:except",
       "lines": [
-        929
+        900
       ],
       "path": "src/app/agent_runtime/service.py",
       "rule": "AL009"
@@ -6869,7 +3412,7 @@
       "count": 1,
       "fingerprint": "AgentRunService._prepare_workspace:except",
       "lines": [
-        2694
+        2711
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL009"
@@ -7226,7 +3769,7 @@
       "count": 1,
       "fingerprint": "ChatGPTCodexProvider._reset_process_state:except",
       "lines": [
-        1165
+        1215
       ],
       "path": "src/app/providers/chatgpt_codex_provider.py",
       "rule": "AL009"
@@ -7269,15 +3812,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:except",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/ai/__init__.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_extract_json_object:except",
       "lines": [
         29
@@ -7289,7 +3823,7 @@
       "count": 1,
       "fingerprint": "_extract_json_object:except",
       "lines": [
-        54
+        57
       ],
       "path": "src/app/rpg/ai/npc_roleplay.py",
       "rule": "AL009"
@@ -7307,7 +3841,7 @@
       "count": 1,
       "fingerprint": "_get_llm_provider:except",
       "lines": [
-        183
+        193
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL009"
@@ -7316,7 +3850,7 @@
       "count": 1,
       "fingerprint": "narrate_ambient_update:except",
       "lines": [
-        116
+        130
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_ambient.py",
       "rule": "AL009"
@@ -7325,9 +3859,9 @@
       "count": 3,
       "fingerprint": "_extract_json_object_from_text:except",
       "lines": [
-        111,
-        131,
-        147
+        159,
+        179,
+        195
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_payloads.py",
       "rule": "AL009"
@@ -7336,7 +3870,7 @@
       "count": 1,
       "fingerprint": "SceneNarrator._generate_choices:except",
       "lines": [
-        220
+        277
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
       "rule": "AL009"
@@ -7345,7 +3879,7 @@
       "count": 1,
       "fingerprint": "SceneNarrator._generate_narrative:except",
       "lines": [
-        150
+        200
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
       "rule": "AL009"
@@ -7361,18 +3895,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "_resolve_authoritative_runtime_state:except",
-      "lines": [
-        791
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_common.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_mark_semantic_capture_worker:except",
       "lines": [
-        142
+        148
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL009"
@@ -7381,7 +3906,7 @@
       "count": 1,
       "fingerprint": "_parse_iso_datetime:except",
       "lines": [
-        73
+        79
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL009"
@@ -7390,7 +3915,7 @@
       "count": 1,
       "fingerprint": "_run_semantic_capture_background._worker:except",
       "lines": [
-        199
+        205
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL009"
@@ -7399,7 +3924,7 @@
       "count": 1,
       "fingerprint": "_run_semantic_capture_background:except",
       "lines": [
-        178
+        184
       ],
       "path": "src/app/rpg/api/rpg_session_management_routes.py",
       "rule": "AL009"
@@ -7408,8 +3933,8 @@
       "count": 2,
       "fingerprint": "resume_rpg_session:except",
       "lines": [
-        1159,
-        1205
+        1177,
+        1223
       ],
       "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL009"
@@ -7418,7 +3943,7 @@
       "count": 1,
       "fingerprint": "_parse_iso_datetime:except",
       "lines": [
-        32
+        35
       ],
       "path": "src/app/rpg/api/rpg_world_routes.py",
       "rule": "AL009"
@@ -7448,33 +3973,6 @@
         57
       ],
       "path": "src/app/rpg/autoplay_performance_artifacts.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_GuardedReportFile.write:except",
-      "lines": [
-        175
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_guarded_copyfile:except",
-      "lines": [
-        305
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_guarded_zip_write:except",
-      "lines": [
-        361
-      ],
-      "path": "src/app/rpg/autoplay_report_materialization_guard.py",
       "rule": "AL009"
     },
     {
@@ -7527,7 +4025,7 @@
       "count": 1,
       "fingerprint": "WorldSimulationLoop._step_arcs_update:except",
       "lines": [
-        397
+        399
       ],
       "path": "src/app/rpg/core/world_loop.py",
       "rule": "AL009"
@@ -7536,7 +4034,7 @@
       "count": 1,
       "fingerprint": "WorldSimulationLoop._step_plan:except",
       "lines": [
-        323
+        325
       ],
       "path": "src/app/rpg/core/world_loop.py",
       "rule": "AL009"
@@ -7600,8 +4098,8 @@
       "count": 2,
       "fingerprint": "_find_submission_record:except",
       "lines": [
-        352,
-        356
+        248,
+        252
       ],
       "path": "src/app/rpg/jobs/turn_job_mirror.py",
       "rule": "AL009"
@@ -7720,8 +4218,8 @@
       "count": 2,
       "fingerprint": "_rss_bytes:except",
       "lines": [
-        325,
-        351
+        340,
+        366
       ],
       "path": "src/app/rpg/performance_trace.py",
       "rule": "AL009"
@@ -7773,15 +4271,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_try_install_optional_hook:except",
-      "lines": [
-        73
-      ],
-      "path": "src/app/rpg/session/__init__.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_read_json:except",
       "lines": [
         62
@@ -7818,9 +4307,18 @@
     },
     {
       "count": 1,
+      "fingerprint": "_phase8_part30_json_objects_from_text:except",
+      "lines": [
+        148
+      ],
+      "path": "src/app/rpg/session/complete_narration_fallback.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
       "fingerprint": "_replace_with_retry:except",
       "lines": [
-        107
+        109
       ],
       "path": "src/app/rpg/session/durable_store.py",
       "rule": "AL009"
@@ -7829,7 +4327,7 @@
       "count": 1,
       "fingerprint": "_first_present_int:except",
       "lines": [
-        50
+        42
       ],
       "path": "src/app/rpg/session/fast_combat_narration_skip.py",
       "rule": "AL009"
@@ -7863,112 +4361,57 @@
     },
     {
       "count": 1,
-      "fingerprint": "_install_load_recovery_hook.load_session_with_pending_recovery:except",
-      "lines": [
-        105
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle_hook.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_prepare_stateful_runtime_session:except",
       "lines": [
-        189
+        194
       ],
       "path": "src/app/rpg/session/interactive_first_call_runtime.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "_optional_flavor_provider:except",
-      "lines": [
-        61
-      ],
-      "path": "src/app/rpg/session/player_agency_runtime_hook.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_enqueue_narration_request_old:except",
       "lines": [
-        127
+        162
       ],
-      "path": "src/app/rpg/session/runtime_part03.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_log_interaction_trace:except",
-      "lines": [
-        248
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_safe_parse_mapping_payload:except",
-      "lines": [
-        709
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
+      "path": "src/app/rpg/session/narration_queue_runtime.py",
       "rule": "AL009"
     },
     {
       "count": 1,
       "fingerprint": "apply_turn:except",
       "lines": [
-        492
+        582
       ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_phase8_part30_json_objects_from_text:except",
-      "lines": [
-        145
-      ],
-      "path": "src/app/rpg/session/runtime_part30.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_phase8_part35_persist_semantic_artifact:except",
-      "lines": [
-        366,
-        401
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_phase8_part37_persist_llm_artifact:except",
-      "lines": [
-        144,
-        181
-      ],
-      "path": "src/app/rpg/session/runtime_part37.py",
+      "path": "src/app/rpg/session/player_turn_execution.py",
       "rule": "AL009"
     },
     {
       "count": 1,
       "fingerprint": "_phase8_part38_patch_semantic_visible:except",
       "lines": [
-        321
+        334
       ],
-      "path": "src/app/rpg/session/runtime_part38.py",
+      "path": "src/app/rpg/session/semantic_direct_response.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 2,
+      "fingerprint": "_phase8_part35_persist_semantic_artifact:except",
+      "lines": [
+        388,
+        423
+      ],
+      "path": "src/app/rpg/session/semantic_response_projection.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "_iter_sources:except",
+      "fingerprint": "_safe_parse_mapping_payload:except",
       "lines": [
-        108
+        767
       ],
-      "path": "src/app/rpg/session/runtime_part39.py",
+      "path": "src/app/rpg/session/session_runtime_store.py",
       "rule": "AL009"
     },
     {
@@ -7987,6 +4430,25 @@
         470
       ],
       "path": "src/app/rpg/session/survival_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_iter_sources:except",
+      "lines": [
+        119
+      ],
+      "path": "src/app/rpg/session/turn_authoritative_guards.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 2,
+      "fingerprint": "_phase8_part37_persist_llm_artifact:except",
+      "lines": [
+        174,
+        211
+      ],
+      "path": "src/app/rpg/session/turn_bound_narration.py",
       "rule": "AL009"
     },
     {
@@ -8086,33 +4548,6 @@
         148
       ],
       "path": "src/app/rpg/worlds/world_bundle_import.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PersistentCircuitState._hydrate:except",
-      "lines": [
-        106
-      ],
-      "path": "src/app/trading/ai_shadow_circuit_persistence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_persist:except",
-      "lines": [
-        86
-      ],
-      "path": "src/app/trading/ai_shadow_circuit_persistence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_close_provider:except",
-      "lines": [
-        94
-      ],
-      "path": "src/app/trading/ai_shadow_reliability.py",
       "rule": "AL009"
     },
     {
@@ -8255,9 +4690,36 @@
       "count": 1,
       "fingerprint": "_decimal:except",
       "lines": [
-        128
+        159
       ],
       "path": "src/app/trading/strategy_ai_shadow_monitor.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "PersistentCircuitState._hydrate:except",
+      "lines": [
+        153
+      ],
+      "path": "src/app/trading/strategy_ai_shadow_provider.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_close_provider:except",
+      "lines": [
+        226
+      ],
+      "path": "src/app/trading/strategy_ai_shadow_provider.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_persist_circuit_state:except",
+      "lines": [
+        133
+      ],
+      "path": "src/app/trading/strategy_ai_shadow_provider.py",
       "rule": "AL009"
     },
     {
@@ -8270,20 +4732,10 @@
       "rule": "AL009"
     },
     {
-      "count": 2,
-      "fingerprint": "_label_episodes_hardened:except",
-      "lines": [
-        446,
-        482
-      ],
-      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
-      "rule": "AL009"
-    },
-    {
       "count": 1,
       "fingerprint": "_metric_delta:except",
       "lines": [
-        235
+        249
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
       "rule": "AL009"
@@ -8292,25 +4744,35 @@
       "count": 1,
       "fingerprint": "_morning_snapshot:except",
       "lines": [
-        55
+        54
+      ],
+      "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 2,
+      "fingerprint": "label_opportunity_episodes:except",
+      "lines": [
+        494,
+        530
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "_run_arm_hardened:except",
+      "fingerprint": "run_arm_with_risk_guards:except",
       "lines": [
-        337
+        384
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_hardening.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "TradingAIShadowV2Monitor._label_episodes:except",
+      "fingerprint": "TradingAIShadowV2Monitor._label_episodes_core:except",
       "lines": [
-        730
+        787
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
       "rule": "AL009"
@@ -8319,16 +4781,16 @@
       "count": 1,
       "fingerprint": "TradingAIShadowV2Monitor._microstructure:except",
       "lines": [
-        461
+        487
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
       "rule": "AL009"
     },
     {
       "count": 1,
-      "fingerprint": "TradingAIShadowV2Monitor._run_arm:except",
+      "fingerprint": "TradingAIShadowV2Monitor._run_arm_core:except",
       "lines": [
-        618
+        644
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
       "rule": "AL009"
@@ -8337,7 +4799,7 @@
       "count": 1,
       "fingerprint": "_latest_snapshot:except",
       "lines": [
-        192
+        223
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_monitor.py",
       "rule": "AL009"
@@ -8346,7 +4808,7 @@
       "count": 1,
       "fingerprint": "_delta:except",
       "lines": [
-        1111
+        1193
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
       "rule": "AL009"
@@ -8355,7 +4817,7 @@
       "count": 1,
       "fingerprint": "_run_arm_policy:except",
       "lines": [
-        570
+        599
       ],
       "path": "src/app/trading/strategy_ai_shadow_v2_roadmap_policy.py",
       "rule": "AL009"
@@ -8391,7 +4853,7 @@
       "count": 1,
       "fingerprint": "recover_causal_1m_bars:except",
       "lines": [
-        62
+        61
       ],
       "path": "src/app/trading/strategy_causal_replay.py",
       "rule": "AL009"
@@ -8400,91 +4862,91 @@
       "count": 2,
       "fingerprint": "PersistedCatalystIntelligenceSource.capture:except",
       "lines": [
-        1213,
-        1236
+        115,
+        138
       ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_attribution_transition:except",
-      "lines": [
-        1938
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_dynamic_pairs_from_events:except",
-      "lines": [
-        2064
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_observations_for_session:except",
-      "lines": [
-        2193
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_persist_parent_exposure:except",
-      "lines": [
-        2279
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_relationships_from_snapshot:except",
-      "lines": [
-        972
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_run_dynamic_discovery_once_complete:except",
-      "lines": [
-        1498
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_session_return:except",
-      "lines": [
-        945
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_union_complete:except",
-      "lines": [
-        2439
-      ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness.py",
+      "path": "src/app/trading/strategy_discovery_acquisition.py",
       "rule": "AL009"
     },
     {
       "count": 1,
       "fingerprint": "_union_refined:except",
       "lines": [
-        446
+        476
       ],
-      "path": "src/app/trading/strategy_dynamic_discovery_completeness_refinements.py",
+      "path": "src/app/trading/strategy_dynamic_discovery_quality.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_attribution_transition:except",
+      "lines": [
+        1643
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_dynamic_pairs_from_events:except",
+      "lines": [
+        1769
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_observations_for_session:except",
+      "lines": [
+        1898
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_persist_parent_exposure:except",
+      "lines": [
+        1924
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_relationships_from_snapshot:except",
+      "lines": [
+        880
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_run_dynamic_discovery_once_complete:except",
+      "lines": [
+        1327
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_session_return:except",
+      "lines": [
+        853
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_union_complete:except",
+      "lines": [
+        2092
+      ],
+      "path": "src/app/trading/strategy_dynamic_discovery_runtime.py",
       "rule": "AL009"
     },
     {
@@ -8498,7 +4960,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "run_interday_learning_once:except",
+      "fingerprint": "_run_interday_learning_once_core:except",
       "lines": [
         176
       ],
@@ -8507,18 +4969,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "qualification_from_persisted_evidence:except",
-      "lines": [
-        180
-      ],
-      "path": "src/app/trading/strategy_interday_postclose.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "session_outcomes:except",
       "lines": [
-        145
+        104
       ],
       "path": "src/app/trading/strategy_interday_postclose.py",
       "rule": "AL009"
@@ -8554,18 +5007,9 @@
       "count": 1,
       "fingerprint": "_shared_recovery:except",
       "lines": [
-        118
+        74
       ],
-      "path": "src/app/trading/strategy_shadow_data_gap_guard.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_dynamic_shadow_union:except",
-      "lines": [
-        65
-      ],
-      "path": "src/app/trading/strategy_shadow_universe.py",
+      "path": "src/app/trading/strategy_shadow_recovery.py",
       "rule": "AL009"
     },
     {
@@ -8671,15 +5115,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_install_rpg_lmstudio_gateway_compat:except",
-      "lines": [
-        35
-      ],
-      "path": "src/sitecustomize.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_kill_windows_port_owners:except",
       "lines": [
         151
@@ -8707,2223 +5142,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_ambient.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_dialogue_grounding.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_payloads.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_dialogue_grounding",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_payloads.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_service_grounding",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_payloads.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_prompts.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_payloads",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_prompts.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_structured",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_prompts.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_dialogue_grounding",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_payloads",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_prompts",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_service_grounding",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_structured",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_service_grounding.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_dialogue_grounding",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_service_grounding.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_common",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_structured.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.ai.world_scene_narrator_payloads",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_structured.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part02.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part03.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part03.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part04.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part04.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part04.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part05.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part05.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part05.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part05.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part06.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part06.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part06.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part06.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part06.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part07.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part09.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part10.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part11.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part12.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part13.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part14.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part15.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part16.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part16",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/runtime_part17.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part16",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part17",
-      "lines": [
-        20
-      ],
-      "path": "src/app/rpg/session/runtime_part18.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        20
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part16",
-      "lines": [
-        21
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part17",
-      "lines": [
-        22
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part18",
-      "lines": [
-        23
-      ],
-      "path": "src/app/rpg/session/runtime_part19.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part16",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part17",
-      "lines": [
-        20
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part18",
-      "lines": [
-        21
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part19",
-      "lines": [
-        22
-      ],
-      "path": "src/app/rpg/session/runtime_part20.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part01",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part02",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part03",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part04",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part05",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part06",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part07",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part08",
-      "lines": [
-        11
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part09",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part10",
-      "lines": [
-        13
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part11",
-      "lines": [
-        14
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part12",
-      "lines": [
-        15
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part13",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part14",
-      "lines": [
-        17
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part15",
-      "lines": [
-        18
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part16",
-      "lines": [
-        19
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part17",
-      "lines": [
-        20
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part18",
-      "lines": [
-        21
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part19",
-      "lines": [
-        22
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part20",
-      "lines": [
-        23
-      ],
-      "path": "src/app/rpg/session/runtime_part21.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part21",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part22.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part22",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/session/runtime_part23.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part23",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part24.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part24",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part25.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part25",
-      "lines": [
-        5
-      ],
-      "path": "src/app/rpg/session/runtime_part26.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part26",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/session/runtime_part27.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part27",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part28.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part29",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part30.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part29",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part31.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part31",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part32.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part32",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part33.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part33",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part34.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part34",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/runtime_part35.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part35",
-      "lines": [
-        12
-      ],
-      "path": "src/app/rpg/session/runtime_part36.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part36",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part37.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part37",
-      "lines": [
-        10
-      ],
-      "path": "src/app/rpg/session/runtime_part38.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.session.runtime_part38",
-      "lines": [
-        21
-      ],
-      "path": "src/app/rpg/session/runtime_part39.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.rpg.travel.travel_system",
-      "lines": [
-        2
-      ],
-      "path": "src/app/rpg/travel/__init__.py",
-      "rule": "AL010"
-    },
-    {
-      "count": 1,
       "fingerprint": "AgentRunService.__init__:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        233
+        251
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL011"

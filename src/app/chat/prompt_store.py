@@ -238,6 +238,7 @@ class ChatSessionStore(JsonChatSessionStore):
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         job_service: Any | None = None,
         live_voice_chat_port: LiveVoiceChatPort | None = None,
+        live_agent_planner: Any | None = None,
         accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         super().__init__(path)
@@ -246,6 +247,11 @@ class ChatSessionStore(JsonChatSessionStore):
         self.summary_repository_factory = summary_repository_factory
         self.job_service = job_service
         self.live_voice_chat_port = live_voice_chat_port
+        if live_agent_planner is None:
+            from .live_agent_store import default_live_agent_planner
+
+            live_agent_planner = default_live_agent_planner()
+        self.live_agent_planner = live_agent_planner
         self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._initialize_prompt_context_cache()
 

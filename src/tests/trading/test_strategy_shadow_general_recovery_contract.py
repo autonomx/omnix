@@ -9,7 +9,7 @@ from app.trading.market_data_recovery import (
     reconcile_recovery,
 )
 from app.trading.models import MarketBar
-from app.trading.strategy_runtime_reliability_fixes import _CurrentShadowSessionProxy
+from app.trading.strategy_session_evidence import _CurrentSessionMarketDataProxy
 
 
 OPEN = datetime(2026, 9, 16, 13, 30, tzinfo=timezone.utc)  # 09:30 ET
@@ -76,7 +76,7 @@ def test_default_shadow_bars_fail_closed_for_gappy_five_minute_tape() -> None:
     bars = [_bar(index * 5, interval="5m") for index in range(3)]
     bars += [_bar(index * 5, interval="5m") for index in range(5, 9)]
     as_of = bars[-1].end_time
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         _RecoveredDelegate(bars, interval="5m", as_of=as_of),
         session_date=SESSION_DATE,
         observed_at=as_of,
@@ -96,7 +96,7 @@ def test_explicit_rolling_requirement_can_resume_on_clean_suffix() -> None:
     bars = [_bar(index, interval="1m") for index in range(10)]
     bars += [_bar(index, interval="1m") for index in range(30, 100)]
     as_of = bars[-1].end_time
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         _RecoveredDelegate(bars, interval="1m", as_of=as_of),
         session_date=SESSION_DATE,
         observed_at=as_of,
@@ -124,7 +124,7 @@ def test_explicit_rolling_requirement_stays_blocked_during_warmup() -> None:
     bars = [_bar(index, interval="1m") for index in range(10)]
     bars += [_bar(index, interval="1m") for index in range(30, 79)]
     as_of = bars[-1].end_time
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         _RecoveredDelegate(bars, interval="1m", as_of=as_of),
         session_date=SESSION_DATE,
         observed_at=as_of,
@@ -149,7 +149,7 @@ def test_explicit_rolling_requirement_stays_blocked_during_warmup() -> None:
 def test_requirement_interval_must_match_requested_interval() -> None:
     bars = [_bar(index, interval="1m") for index in range(60)]
     as_of = bars[-1].end_time
-    proxy = _CurrentShadowSessionProxy(
+    proxy = _CurrentSessionMarketDataProxy(
         _RecoveredDelegate(bars, interval="1m", as_of=as_of),
         session_date=SESSION_DATE,
         observed_at=as_of,

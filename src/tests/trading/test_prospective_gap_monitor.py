@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
+
+import pytest
 
 
 from app.trading.prospective_gap_monitor import ProspectiveGapMonitor
@@ -49,14 +50,15 @@ class _Runtime:
         return SimpleNamespace()
 
 
-def test_monitor_waits_for_late_premarket_before_ingesting_handoff() -> None:
+@pytest.mark.anyio
+async def test_monitor_waits_for_late_premarket_before_ingesting_handoff() -> None:
     runtime = _Runtime()
     monitor = ProspectiveGapMonitor(runtime_factory=lambda: runtime)
 
     # 09:23 ET / 13:23 UTC is intentionally too early.
-    result = asyncio.run(monitor.run_once(
-        now=datetime(2026, 9, 24, 13, 23, tzinfo=timezone.utc)
-    ))
+    result = await monitor.run_once(
+    now=datetime(2026, 9, 24, 13, 23, tzinfo=timezone.utc)
+)
 
     assert result == 0
     assert runtime.ingest_calls == []
@@ -64,12 +66,13 @@ def test_monitor_waits_for_late_premarket_before_ingesting_handoff() -> None:
     assert monitor.no_session_count == 0
 
 
-def test_monitor_ingests_handoff_inside_0924_to_092759_window() -> None:
+@pytest.mark.anyio
+async def test_monitor_ingests_handoff_inside_0924_to_092759_window() -> None:
     runtime = _Runtime()
     monitor = ProspectiveGapMonitor(runtime_factory=lambda: runtime)
     observed = datetime(2026, 9, 24, 13, 25, tzinfo=timezone.utc)
 
-    result = asyncio.run(monitor.run_once(now=observed))
+    result = await monitor.run_once(now=observed)
 
     assert result == 0
     assert runtime.ingest_calls == [(date(2026, 9, 24), observed)]
@@ -77,14 +80,15 @@ def test_monitor_ingests_handoff_inside_0924_to_092759_window() -> None:
     assert monitor.scheduler_handoff_ingest_count == 1
 
 
-def test_monitor_does_not_create_late_retroactive_session_after_ingest_window() -> None:
+@pytest.mark.anyio
+async def test_monitor_does_not_create_late_retroactive_session_after_ingest_window() -> None:
     runtime = _Runtime()
     monitor = ProspectiveGapMonitor(runtime_factory=lambda: runtime)
 
     # 09:28 ET is outside the allowed ingestion window.
-    result = asyncio.run(monitor.run_once(
-        now=datetime(2026, 9, 24, 13, 28, tzinfo=timezone.utc)
-    ))
+    result = await monitor.run_once(
+    now=datetime(2026, 9, 24, 13, 28, tzinfo=timezone.utc)
+)
 
     assert result == 0
     assert runtime.ingest_calls == []
@@ -92,19 +96,20 @@ def test_monitor_does_not_create_late_retroactive_session_after_ingest_window() 
     assert monitor.no_session_count == 1
 
     # Further ticks on the same missed session must not inflate the day count.
-    asyncio.run(monitor.run_once(
-        now=datetime(2026, 9, 24, 13, 29, tzinfo=timezone.utc)
-    ))
+    await monitor.run_once(
+    now=datetime(2026, 9, 24, 13, 29, tzinfo=timezone.utc)
+)
     assert monitor.no_session_count == 1
 
 
-def test_existing_session_runs_confirmation_at_open_without_reingesting() -> None:
+@pytest.mark.anyio
+async def test_existing_session_runs_confirmation_at_open_without_reingesting() -> None:
     runtime = _Runtime()
     runtime.has_manifest = True
     monitor = ProspectiveGapMonitor(runtime_factory=lambda: runtime)
     observed = datetime(2026, 9, 24, 13, 30, tzinfo=timezone.utc)
 
-    result = asyncio.run(monitor.run_once(now=observed))
+    result = await monitor.run_once(now=observed)
 
     assert result == 1
     assert runtime.ingest_calls == []

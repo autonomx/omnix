@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+
 
 def _extract_text_from_provider_result(result: Any) -> str:
     if result is None:
@@ -48,7 +50,7 @@ def call_story_authoring_provider(
             "provider": "",
             "model": "",
         }
-    provider = get_provider()
+    provider = adapt_base_provider(get_provider())
     if provider is None:
         return {
             "ok": False,

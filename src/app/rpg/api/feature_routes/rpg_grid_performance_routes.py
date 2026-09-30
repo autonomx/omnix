@@ -2,10 +2,9 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import HTTPException, Request
 from pydantic import ValidationError
 
 from app.rpg.grid_runtime_performance import GridRuntimeBudget
@@ -25,7 +24,6 @@ class RpgGridPerformanceProfileRequestBody(_TypedRequestModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_grid_performance_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_grid_performance_route_hook_installed"
 
 
 def _body(value: object) -> Mapping[str, Any]:
@@ -86,20 +84,3 @@ def register_rpg_grid_performance_routes(router: APIRouter, state) -> None:
                 status_code=409,
                 detail={"ok": False, "error": str(exc)},
             ) from exc
-
-
-def install_rpg_grid_performance_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (
-            args and args[0] == "Omnix Web Gateway"
-        ):
-            register_rpg_grid_performance_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

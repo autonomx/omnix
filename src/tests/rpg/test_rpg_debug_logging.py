@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.rpg.api.feature_routes.rpg_debug_routes import (
-    install_rpg_debug_middleware,
+    add_rpg_debug_middleware,
     register_rpg_debug_routes,
 )
 from app.rpg import debug_logging
@@ -89,7 +89,7 @@ def test_existing_rpg_python_loggers_are_captured(debug_log_dir: Path) -> None:
 def test_rpg_http_middleware_records_status_and_duration(debug_log_dir: Path) -> None:
     app = FastAPI()
     include_router_registrar(app, register_rpg_debug_routes)
-    install_rpg_debug_middleware(app)
+    add_rpg_debug_middleware(app)
 
     @app.get("/api/rpg/sessions/{session_id}/probe")
     async def probe(session_id: str) -> dict[str, str]:

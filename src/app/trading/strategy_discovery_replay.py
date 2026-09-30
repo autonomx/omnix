@@ -7,11 +7,8 @@ starts from a hindsight list of winners; callers provide the complete captured
 observable population for the session.
 """
 
-import hashlib
-import json
 from datetime import date, datetime, timezone
 from typing import Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -21,13 +18,7 @@ from .strategy_dynamic_discovery import (
     DynamicCandidate,
     DynamicDiscoveryConfig,
     MarketAnomalyFeatures,
-    catalyst_discovery_event,
-    market_discovery_event,
-    merge_discovery_event,
-    tier_candidates,
 )
-
-_ET = ZoneInfo("America/New_York")
 
 
 class DiscoveryReplayObservation(BaseModel):
@@ -93,29 +84,6 @@ class DiscoveryReplayResult(BaseModel):
     events: tuple[DiscoveryEvent, ...]
 
 
-def _catalyst_object(payload: dict[str, object]):
-    class _Catalyst:
-        pass
-
-    value = _Catalyst()
-    for key, item in payload.items():
-        setattr(value, key, item)
-    return value
-
-
-def _fingerprint(
-    observations: Sequence[DiscoveryReplayObservation],
-    config: DynamicDiscoveryConfig,
-) -> str:
-    payload = {
-        "observations": [row.model_dump(mode="json") for row in observations],
-        "config": config.model_dump(mode="json"),
-    }
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-
-
 def replay_dynamic_discovery(
     *,
     session_date: date,
@@ -123,107 +91,15 @@ def replay_dynamic_discovery(
     labels: Sequence[DiscoveryOpportunityLabel] = (),
     config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
 ) -> DiscoveryReplayResult:
-    ordered = sorted(
-        observations,
-        key=lambda row: (row.observed_at, row.instrument_id, row.source),
-    )
-    state: dict[str, DynamicCandidate] = {}
-    events: list[DiscoveryEvent] = []
-    for row in ordered:
-        # Session dates in the trading system are exchange-local, not UTC dates.
-        # A UTC-midnight crossing is valid only when it still maps to the same
-        # New York trading date. Observations from another exchange session must
-        # never be silently admitted to a replay.
-        if row.observed_at.astimezone(_ET).date() != session_date:
-            raise ValueError("replay_observation_outside_exchange_session")
+    """Replay discovery through the same causal scan kernel used by live discovery."""
 
-        emitted: list[DiscoveryEvent] = []
-        if row.market is not None:
-            event = market_discovery_event(
-                row.instrument_id,
-                row.market,
-                session_date=session_date,
-                source=row.source,
-                source_locator=row.source_locator,
-                catalyst_known=row.catalyst_known,
-                config=config,
-            )
-            if event is not None:
-                emitted.append(event)
-        if row.catalyst_payload is not None:
-            event = catalyst_discovery_event(
-                row.instrument_id,
-                _catalyst_object(row.catalyst_payload),
-                session_date=session_date,
-                observed_at=row.observed_at,
-                source=row.source,
-                source_locator=row.source_locator,
-                config=config,
-            )
-            if event is not None:
-                emitted.append(event)
-        for event in emitted:
-            if event.causal_as_of > row.observed_at or event.discovered_at > row.observed_at:
-                raise ValueError("replay_discovery_used_future_evidence")
-            state[event.instrument_id] = merge_discovery_event(
-                state.get(event.instrument_id),
-                event,
-            )
-            events.append(event)
-        if state:
-            ranked = tier_candidates(tuple(state.values()), config=config)
-            for candidate in ranked:
-                state[candidate.instrument_id] = candidate
+    from .strategy_dynamic_discovery_quality import _replay_dynamic_discovery_refined
 
-    label_by_symbol = {row.instrument_id: row for row in labels}
-    discovered = set(state)
-    positives = {
-        symbol for symbol, label in label_by_symbol.items() if label.opportunity
-    }
-    true_positive = discovered & positives
-    false_positive = discovered - positives if labels else set()
-    missed = positives - discovered
-    recall = len(true_positive) / len(positives) if positives else None
-    precision = len(true_positive) / len(discovered) if discovered and labels else None
-    latencies: list[float] = []
-    for symbol in true_positive:
-        actionable = label_by_symbol[symbol].first_actionable_at
-        if actionable is None:
-            continue
-        discovered_at = state[symbol].discovered_at
-        latencies.append(
-            max(0.0, (discovered_at - actionable).total_seconds() / 60.0)
-        )
-    median = None
-    if latencies:
-        values = sorted(latencies)
-        middle = len(values) // 2
-        median = (
-            values[middle]
-            if len(values) % 2
-            else (values[middle - 1] + values[middle]) / 2.0
-        )
-
-    finals = tuple(
-        sorted(state.values(), key=lambda row: (-row.common_priority, row.instrument_id))
-    )
-    return DiscoveryReplayResult(
+    return _replay_dynamic_discovery_refined(
         session_date=session_date,
-        observation_count=len(ordered),
-        observable_symbol_count=len({row.instrument_id for row in ordered}),
-        discovered_symbol_count=len(discovered),
-        first_discovered_at={
-            symbol: candidate.discovered_at
-            for symbol, candidate in sorted(state.items())
-        },
-        false_positive_symbols=tuple(sorted(false_positive)),
-        missed_opportunity_symbols=tuple(sorted(missed)),
-        discovery_recall=recall,
-        discovery_precision=precision,
-        median_discovery_latency_minutes=median,
-        fingerprint=_fingerprint(ordered, config),
-        final_candidates=finals,
-        events=tuple(events),
+        observations=observations,
+        labels=labels,
+        config=config,
     )
 
 

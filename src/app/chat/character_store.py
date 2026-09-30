@@ -202,6 +202,23 @@ class _CharacterSessionMixin:
         return self.begin_user_message(session_id, request, start_streaming=True)
 
     def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
+        from .live_agent_store import stream_live_agent_turn
+
+        yield from stream_live_agent_turn(
+            self,
+            session,
+            user_message,
+            planner=self.live_agent_planner,
+            original_stream=self._stream_provider_reply_chunks_with_turn,
+            **kwargs,
+        )
+
+    def _stream_provider_reply_chunks_with_turn(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        **kwargs,
+    ):
         coordinator = _turn_coordinator(self)
         assistant_turn_id = str(user_message.metadata.get("assistant_turn_id") or "").strip()
         if assistant_turn_id:

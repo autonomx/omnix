@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, Callable, Dict, List
 
 from app.rpg.session.package_bridge import package_to_session, session_to_package
@@ -171,13 +172,22 @@ def assert_phase7_save_load_replay_roundtrip_ready() -> Dict[str, Any]:
         {"type": "travel", "command_text": "go to the old mill", "roll_encounter": False},
     ]
 
-    original_dir = durable_store._SESSION_DIR
     with tempfile.TemporaryDirectory() as tmpdir:
-        durable_store._SESSION_DIR = durable_store.Path(tmpdir)
-        try:
-            result = run_save_load_replay_persistence_roundtrip(session, commands, label="phase7.3")
-        finally:
-            durable_store._SESSION_DIR = original_dir
+        session_dir = Path(tmpdir)
+        result = run_save_load_replay_persistence_roundtrip(
+            session,
+            commands,
+            save_session=lambda value: durable_store.save_session_to_disk(
+                value,
+                compact=True,
+                session_dir=session_dir,
+            ),
+            load_session=lambda session_id: durable_store.load_session_from_disk(
+                session_id,
+                session_dir=session_dir,
+            ),
+            label="phase7.3",
+        )
 
     contract = build_save_load_replay_roundtrip_contract(result)
     blockers = list(_safe_list(result.get("blockers")))

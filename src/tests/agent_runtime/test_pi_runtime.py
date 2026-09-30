@@ -5,7 +5,7 @@ from io import StringIO
 from pathlib import Path
 import threading
 
-from app.agent_runtime.contracts import AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.pi_runtime import PiAgentRuntime, PiRpcSession, normalize_pi_event, pi_rpc_argv
 from app.agent_runtime.pi_runtime_core import _assistant_text_delta
 
@@ -520,6 +520,50 @@ def test_pi_session_without_workspace_uses_and_cleans_ephemeral_cwd(tmp_path: Pa
     assert not cwd.exists()
 
 
+def test_pi_session_uses_injected_argv_builder_and_event_normalizer() -> None:
+    captured: dict[str, object] = {}
+    normalized = threading.Event()
+    process = _IdleProcess()
+    process.stdout = StringIO('{"type":"agent_start"}\n')
+
+    def argv_builder(spec, *, pi_path):
+        captured["argv_spec"] = spec
+        captured["pi_path"] = pi_path
+        return [pi_path, "injected"]
+
+    def event_normalizer(run_id, payload, *, task_revision_id=None):
+        captured["payload"] = payload
+        captured["task_revision_id"] = task_revision_id
+        normalized.set()
+        return AgentEvent(run_id=run_id, event_type="run.started")
+
+    def process_factory(argv, **_kwargs):
+        captured["argv"] = argv
+        return process
+
+    spec = AgentRunSpec(
+        run_id="run-injected-pi",
+        task="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    session = PiRpcSession(
+        spec,
+        pi_path="custom-pi",
+        process_factory=process_factory,
+        argv_builder=argv_builder,
+        event_normalizer=event_normalizer,
+    )
+
+    assert normalized.wait(timeout=1)
+    assert captured["argv_spec"] is spec
+    assert captured["pi_path"] == "custom-pi"
+    assert captured["argv"] == ["custom-pi", "injected"]
+    assert captured["payload"] == {"type": "agent_start"}
+    assert captured["task_revision_id"] is None
+    assert session.events()[0].event_type == "run.started"
+    session.close()
+
+
 def test_pi_session_emits_failure_when_process_exits_without_terminal_event() -> None:
     received = []
     done = threading.Event()
@@ -557,6 +601,7 @@ def test_pi_stdout_reader_survives_event_sink_failure() -> None:
     session.process = type("Process", (), {"stdout": StringIO('{"type":"agent_start"}\n')})()
     session._task_revision_id = None
     session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
     session._terminal_seen = False
     session._turn_active = False
     session._assistant_text_parts = []
@@ -586,6 +631,7 @@ def test_pi_stdout_reader_recovers_terminal_text_from_deltas() -> None:
     session.process = type("Process", (), {"stdout": StringIO("\n".join(lines) + "\n")})()
     session._task_revision_id = "revision-1"
     session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
     session._events = deque()
     session._stderr = deque(maxlen=10)
     session._assistant_text_parts = []

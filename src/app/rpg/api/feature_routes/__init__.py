@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.runtime.features import FeatureContext
 
 from .rpg_debug_routes import (
-    install_rpg_debug_middleware,
+    add_rpg_debug_middleware,
     register_rpg_debug_routes,
 )
 from .rpg_geometry_patch_routes import register_rpg_geometry_patch_routes
@@ -57,4 +57,4 @@ def create_rpg_routes_router(context: FeatureContext) -> APIRouter:
     return router
 
 
-__all__ = ["create_rpg_routes_router", "install_rpg_debug_middleware"]
+__all__ = ["create_rpg_routes_router", "add_rpg_debug_middleware"]

@@ -34,6 +34,11 @@ def install_repository_specs(specs: tuple[RepositorySpec, ...]) -> None:
             _SPECS_BY_TYPE[spec.type] = spec
 
 
+def register_repository_specs(specs: tuple[RepositorySpec, ...]) -> None:
+    """Register feature-owned repository providers during composition."""
+    install_repository_specs(specs)
+
+
 def repository_spec(repo_type: Hashable) -> RepositorySpec | None:
     with _LOCK:
         return _SPECS_BY_TYPE.get(repo_type)

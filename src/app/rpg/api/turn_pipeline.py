@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -43,6 +44,10 @@ async def execute_foreground_rpg_turn(
     command: str,
     request: Request,
 ) -> Response:
+    submission_id = (
+        str(request.headers.get("x-omnix-rpg-submission-id") or "").strip()
+        or f"submit:{uuid.uuid4().hex}"
+    )
     trace_id = getattr(request.state, "rpg_trace_id", None)
     delivery_mode = _foreground_delivery_mode(request)
     with rpg_pipeline_trace(
@@ -54,12 +59,13 @@ async def execute_foreground_rpg_turn(
             "method": request.method,
             "path": request.url.path,
             "delivery_mode": delivery_mode.value,
+            "submission_id": submission_id,
         },
     ) as trace:
         with rpg_pipeline_span("turn.request_received") as span:
             span["content_length"] = request.headers.get("content-length")
-            span["submission_id"] = request.headers.get(
-                "x-omnix-rpg-submission-id"
+            span["submission_id"] = (
+                request.headers.get("x-omnix-rpg-submission-id") or submission_id
             )
             span["client_request_started"] = request.headers.get(
                 "x-omnix-rpg-client-started"
@@ -102,13 +108,16 @@ async def execute_foreground_rpg_turn(
 
         from app.rpg.session import interactive_first_call_runtime
         from app.rpg.llm_priority import foreground_rpg_llm_priority
+        from app.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
 
         with rpg_pipeline_span("turn.apply") as span:
             def apply_foreground_turn() -> dict[str, Any]:
                 with foreground_rpg_llm_priority():
-                    return interactive_first_call_runtime.apply_turn(
+                    return execute_turn_with_job_mirror(
+                        interactive_first_call_runtime.apply_turn,
                         session_id,
                         command,
+                        submission_id=submission_id,
                         performance_override={
                             "enable_live_narration_llm": True,
                             "narration_mode": "blocking",
@@ -389,7 +398,9 @@ async def execute_foreground_rpg_turn(
 
         with rpg_pipeline_span("turn.response_send_prepare"):
             response = build_traced_json_response(payload)
-        return finalize_rpg_trace_headers(response, trace)
+        finalized_response = finalize_rpg_trace_headers(response, trace)
+        finalized_response.headers["X-Omnix-Rpg-Submission-Id"] = submission_id
+        return finalized_response
 
 
 def _persisted_turn_session(

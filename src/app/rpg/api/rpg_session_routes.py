@@ -70,19 +70,37 @@ from app.rpg.session.narration_worker import (
     subscribe_narration_events,
     unsubscribe_narration_events,
 )
-from app.rpg.session.runtime import (
-    _apply_turn_authoritative,
-    _copy_dict,
-    _enqueue_narration_request,
-    _generate_turn_narration_artifact,
-    _narration_artifact_completes_turn,
-    _normalize_runtime_settings,
-    apply_resume_catchup,
-    apply_turn,
-    build_frontend_bootstrap_payload,
-    load_runtime_session,
-    process_next_narration_job,
-    save_runtime_session,
+from app.rpg.session.action_execution import (
+    build_frontend_bootstrap_payload as build_frontend_bootstrap_payload,
+)
+from app.rpg.session.companion_turn_runtime import (
+    _narration_artifact_completes_turn as _narration_artifact_completes_turn,
+)
+from app.rpg.session.deferred_narration_persistence import (
+    _generate_turn_narration_artifact as _generate_turn_narration_artifact,
+)
+from app.rpg.session.idle_narration_delivery import (
+    apply_resume_catchup as apply_resume_catchup,
+)
+from app.rpg.session.narration_jobs import (
+    process_next_narration_job as process_next_narration_job,
+)
+from app.rpg.session.semantic_response_projection import (
+    _enqueue_narration_request as _enqueue_narration_request,
+)
+from app.rpg.session.session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+    save_runtime_session as save_runtime_session,
+)
+from app.rpg.session.state_normalization import (
+    _copy_dict as _copy_dict,
+    _normalize_runtime_settings as _normalize_runtime_settings,
+)
+from app.rpg.session.turn_authoritative_guards import (
+    _apply_turn_authoritative as _apply_turn_authoritative,
+)
+from app.rpg.session.turn_response_composition import (
+    apply_turn as apply_turn,
 )
 from app.rpg.social.conversation_presentation import build_conversation_payload
 from app.rpg.social.player_interventions import apply_player_intervention

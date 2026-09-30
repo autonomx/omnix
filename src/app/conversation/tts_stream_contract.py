@@ -59,7 +59,7 @@ def apply_pronunciation_lexicon(text: str, entries: list[TtsPronunciationEntry])
     for entry in ordered:
         phrase = entry.phrase.strip()
         pronunciation = entry.pronunciation.strip()
-        if not phrase or not pronunciation or phrase.casefold() == pronunciation.casefold():
+        if not phrase or not pronunciation or phrase == pronunciation:
             continue
         pattern = re.compile(rf"(?<!\w){re.escape(phrase)}(?!\w)", re.IGNORECASE)
         result = pattern.sub(pronunciation, result)

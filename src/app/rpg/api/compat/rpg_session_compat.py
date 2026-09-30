@@ -498,7 +498,12 @@ def get_rpg_session_payload(data: dict[str, Any]) -> dict[str, Any]:
     if not session_id:
         return {"ok": False, "error": "missing_session_id"}
 
-    from app.rpg.session.runtime import build_frontend_bootstrap_payload, load_runtime_session
+    from app.rpg.session.action_execution import (
+        build_frontend_bootstrap_payload as build_frontend_bootstrap_payload,
+    )
+    from app.rpg.session.session_runtime_store import (
+        load_runtime_session as load_runtime_session,
+    )
 
     session = load_runtime_session(session_id)
     if not session:

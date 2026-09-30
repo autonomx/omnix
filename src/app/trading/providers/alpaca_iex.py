@@ -3,9 +3,10 @@ from __future__ import annotations
 from app.config.env import env_str, environment
 
 import os
+import re
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -89,14 +90,64 @@ def alpaca_iex_auth_headers() -> dict[str, str]:
 
 
 def _parse_timestamp(value: Any, *, field: str) -> datetime:
-    if not isinstance(value, str) or not value.strip():
-        raise ProviderContractError(f"Alpaca IEX snapshot is missing {field} timestamp")
+    if value is None or value == "":
+        raise ProviderContractError(
+            f"Alpaca IEX snapshot is missing {field} timestamp"
+        )
+    parsed: datetime | None = None
+    raw = repr(value)[:160]
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ProviderContractError(f"Alpaca IEX returned invalid {field} timestamp") from exc
+        if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+            epoch = Decimal(str(value))
+        elif isinstance(value, str) and re.fullmatch(
+            r"[+-]?\d+(?:\.\d+)?", value.strip()
+        ):
+            epoch = Decimal(value.strip())
+        else:
+            epoch = None
+        if epoch is not None:
+            magnitude = abs(epoch)
+            if magnitude >= Decimal("1e17"):
+                epoch /= Decimal("1e9")
+            elif magnitude >= Decimal("1e14"):
+                epoch /= Decimal("1e6")
+            elif magnitude >= Decimal("1e11"):
+                epoch /= Decimal("1e3")
+            parsed = datetime.fromtimestamp(float(epoch), tz=timezone.utc)
+        elif isinstance(value, str):
+            text = value.strip()
+            if text.endswith(("Z", "z")):
+                text = text[:-1] + "+00:00"
+            match = re.match(
+                r"^(?P<prefix>\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}:\d{2})"
+                r"(?:\.(?P<fraction>\d+))?(?P<offset>[+-]\d{2}:?\d{2})$",
+                text,
+            )
+            if match:
+                fraction = (match.group("fraction") or "")[:6]
+                offset = match.group("offset")
+                if len(offset) == 5 and ":" not in offset:
+                    offset = offset[:3] + ":" + offset[3:]
+                text = (
+                    match.group("prefix").replace("t", "T")
+                    + (f".{fraction}" if fraction else "")
+                    + offset
+                )
+            parsed = datetime.fromisoformat(text)
+        else:
+            raise TypeError("unsupported timestamp type")
+    except (ValueError, TypeError, InvalidOperation, OverflowError, OSError) as exc:
+        raise ProviderContractError(
+            f"Alpaca IEX returned invalid {field} timestamp (value={raw})"
+        ) from exc
+    if parsed is None:
+        raise ProviderContractError(
+            f"Alpaca IEX returned invalid {field} timestamp (value={raw})"
+        )
     if parsed.tzinfo is None:
-        raise ProviderContractError(f"Alpaca IEX {field} timestamp must be timezone-aware")
+        raise ProviderContractError(
+            f"Alpaca IEX {field} timestamp must be timezone-aware"
+        )
     return parsed.astimezone(timezone.utc)
 
 
@@ -172,6 +223,24 @@ class AlpacaIexExecutionProvider:
         return binding
 
     def indicator_bars_as_of(
+        self,
+        instrument_id: str,
+        *,
+        as_of: datetime,
+        cancellation=None,
+    ) -> list[MarketBar]:
+        try:
+            return self._indicator_bars_as_of(
+                instrument_id,
+                as_of=as_of,
+                cancellation=cancellation,
+            )
+        except ProviderContractError as exc:
+            if str(exc) == "Alpaca IEX historical-bars response has no bars list":
+                return []
+            raise
+
+    def _indicator_bars_as_of(
         self,
         instrument_id: str,
         *,
@@ -317,7 +386,9 @@ class AlpacaIexExecutionProvider:
                 quote_available = False
                 quote_timestamp_degraded = True
         trade_time = _parse_timestamp(latest_trade.get("t"), field="trade")
-        source_time = min(quote_time, trade_time) if quote_time is not None else trade_time
+        # Execution freshness belongs to the executable bid/ask book. An older
+        # last trade must not make a current quote stale.
+        source_time = quote_time if quote_available and quote_time is not None else trade_time
 
         minute_bar = payload.get("minuteBar")
         bar_start_time: datetime | None = None

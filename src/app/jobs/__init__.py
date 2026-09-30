@@ -24,6 +24,7 @@ from .handlers import (
     JobExecutionContext,
     JobHandlerRegistry,
     JobHandlerSpec,
+    JobObserver,
 )
 from .provider_control import (
     create_worker_model_control_hooks,
@@ -63,6 +64,7 @@ __all__ = [
     "JobExecutionContext",
     "JobHandlerRegistry",
     "JobHandlerSpec",
+    "JobObserver",
     "JobListResponse",
     "JobRecord",
     "JobStatus",

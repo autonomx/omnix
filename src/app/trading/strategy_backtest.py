@@ -28,7 +28,7 @@ from .paper import (
 )
 from .research.policy import ResearchPolicyDecision
 from .strategy_research_policy import apply_research_policy_to_quality
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from .strategy_risk import size_strategy_entry
 from .strategy_v2_management import v2_active_stop_for_prior_high, v2_management_levels

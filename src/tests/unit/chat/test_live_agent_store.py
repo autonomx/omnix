@@ -2,16 +2,36 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from app.assist_core.live_agent_planner import LiveAgentUnavailable
 from app.assist_core.mode_chat import ModeChatResponse
-from app.chat.live_agent_store import install_live_agent_store_hooks
+from app.chat.character_store import _CharacterSessionMixin
+from app.chat.live_agent_store import LiveAgentPlanner
 from app.chat.models import ChatMessage, ChatSession
 
 
-class DummyStore:
-    def __init__(self, session: ChatSession) -> None:
+class StaticPlanner:
+    def __init__(self, result) -> None:
+        self.result = result
+        self.calls: list[dict[str, object]] = []
+
+    def plan_proposal(self, **kwargs):
+        self.calls.append(kwargs)
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+class UnusedPlanner:
+    def plan_proposal(self, **kwargs):
+        raise AssertionError("the provider route should not invoke Live Agent planning")
+
+
+class DummyStore(_CharacterSessionMixin):
+    def __init__(self, session: ChatSession, planner=None) -> None:
         self.sessions = [session]
         self.provider_calls = 0
         self.save_calls = 0
+        self.live_agent_planner: LiveAgentPlanner = planner or UnusedPlanner()
 
     def get_session(self, session_id):
         return next((item for item in self.sessions if item.id == session_id), None)
@@ -22,7 +42,7 @@ class DummyStore:
             session if item.id == session.id else item for item in self.sessions
         ]
 
-    def stream_provider_reply_chunks(
+    def _stream_provider_reply_chunks_with_turn(
         self,
         session,
         user_message,
@@ -107,16 +127,26 @@ def _session(content: str, *, voice: bool = True, explicit_agent: bool = False):
     return session, message
 
 
-def test_auto_live_agent_returns_proposal_without_provider_execution(monkeypatch) -> None:
+def _use_test_turn_coordinator(monkeypatch, tmp_path) -> None:
+    from app.chat.assistant_turns import AssistantTurnCoordinator
+
+    coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
+    monkeypatch.setattr(
+        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
+
+
+def test_auto_live_agent_returns_proposal_without_provider_execution(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
+    _use_test_turn_coordinator(monkeypatch, tmp_path)
     session, message = _session("Turn off the kitchen light")
-    store = DummyStore(session)
-    install_live_agent_store_hooks(DummyStore)
-    monkeypatch.setattr(
-        "app.chat.live_agent_store.plan_live_agent_proposal",
-        lambda **kwargs: ModeChatResponse(
+    planner = StaticPlanner(
+        ModeChatResponse(
             ok=True,
             mode="agent",
             backend="hermes",
@@ -134,8 +164,9 @@ def test_auto_live_agent_returns_proposal_without_provider_execution(monkeypatch
                 "requires_confirmation": True,
                 "error": None,
             },
-        ),
+        )
     )
+    store = DummyStore(session, planner=planner)
 
     events = list(store.stream_provider_reply_chunks(
         session,
@@ -154,22 +185,18 @@ def test_auto_live_agent_returns_proposal_without_provider_execution(monkeypatch
     saved = store.sessions[0].messages[0].metadata
     assert saved["dry_run"] is True
     assert saved["live_agent_route"]["automatic"] is True
+    assert planner.calls[0]["session_id"] == session.id
 
 
 def test_hermes_failure_falls_back_to_original_provider_stream(monkeypatch) -> None:
-    from app.assist_core.live_agent_planner import LiveAgentUnavailable
-
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
     session, message = _session("Schedule a meeting for tomorrow")
-    store = DummyStore(session)
-    install_live_agent_store_hooks(DummyStore)
-
-    def unavailable(**kwargs):
-        raise LiveAgentUnavailable("offline")
-
-    monkeypatch.setattr("app.chat.live_agent_store.plan_live_agent_proposal", unavailable)
+    store = DummyStore(
+        session,
+        planner=StaticPlanner(LiveAgentUnavailable("offline")),
+    )
     events = list(store.stream_provider_reply_chunks(
         session,
         message,
@@ -194,7 +221,6 @@ def test_casual_live_voice_stays_on_original_provider_path(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     session, message = _session("How are you?")
     store = DummyStore(session)
-    install_live_agent_store_hooks(DummyStore)
 
     events = list(store.stream_provider_reply_chunks(
         session,
@@ -219,7 +245,6 @@ def test_direct_route_persistence_does_not_block_first_provider_chunk(
     monkeypatch.setenv("HERMES_ENABLED", "1")
     session, message = _session("How are you?")
     store = DummyStore(session)
-    install_live_agent_store_hooks(DummyStore)
 
     stream = store.stream_provider_reply_chunks(
         session,
@@ -247,7 +272,6 @@ def test_direct_route_uses_targeted_user_metadata_update(monkeypatch) -> None:
     monkeypatch.setenv("HERMES_ENABLED", "1")
     session, message = _session("How are you?")
     store = TargetedMetadataStore(session)
-    install_live_agent_store_hooks(TargetedMetadataStore)
 
     events = list(store.stream_provider_reply_chunks(
         session,
@@ -269,13 +293,15 @@ def test_direct_route_uses_targeted_user_metadata_update(monkeypatch) -> None:
     }]
 
 
-def test_typed_chat_fails_closed_when_semantic_parser_is_unavailable(monkeypatch) -> None:
+def test_typed_chat_fails_closed_when_semantic_parser_is_unavailable(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
+    _use_test_turn_coordinator(monkeypatch, tmp_path)
     session, message = _session("Delete the file", voice=False)
     store = DummyStore(session)
-    install_live_agent_store_hooks(DummyStore)
 
     events = list(store.stream_provider_reply_chunks(
         session,

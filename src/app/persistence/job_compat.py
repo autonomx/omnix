@@ -44,13 +44,27 @@ def _utcnow() -> str:
 class PostgresJobStoreAdapter:
     """Compatibility facade over the authoritative PostgreSQL job ledger."""
 
-    def __init__(self, database: PostgresDatabase | None = None) -> None:
+    def __init__(
+        self,
+        database: PostgresDatabase | None = None,
+        *,
+        context=None,
+        chat_execution_owner=None,
+        chat_dispatcher=None,
+    ) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = context or current_tenant()
+        self.chat_execution_owner = chat_execution_owner
+        self.chat_dispatcher = chat_dispatcher
         self.handler_registry = None
 
     def configure_handler_registry(self, registry: Any) -> None:
         self.handler_registry = registry
+
+    def _notify_job_observers(self, event: str, record: JobRecord) -> None:
+        registry = self.handler_registry
+        if registry is not None:
+            registry.notify_observers(event, record)
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
         return self._create_job(request)
@@ -81,7 +95,7 @@ class PostgresJobStoreAdapter:
             "cancel": {},
         }
         with unit_of_work(self.database) as work:
-            owner = getattr(self, "chat_execution_owner", None)
+            owner = self.chat_execution_owner
             if request.type == "chat.generate" and owner is not None:
                 owner.require_live(work.connection)
                 metadata["compat_contract"]["compat"] = {
@@ -112,7 +126,10 @@ class PostgresJobStoreAdapter:
                     self.context, job_id=record['id']
                 ) or record['created_at']
             work.commit()
-        return self._record(record)
+        created_record = self._record(record)
+        if created:
+            self._notify_job_observers("created", created_record)
+        return created_record
 
     def list_jobs(self, limit: int | None = None) -> list[JobRecord]:
         with unit_of_work(self.database) as work:
@@ -203,11 +220,13 @@ class PostgresJobStoreAdapter:
             with unit_of_work(self.database) as work:
                 record = work.jobs.mark_record_only_running(
                     self.context, job_id=job_id,
-                    execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                    execution_owner=getattr(self.chat_execution_owner, "node_id", None),
                     submission_claim_token=self._foreground_claim_token(current),
                 )
                 work.commit()
-            return self._record(record)
+            started = self._record(record)
+            self._notify_job_observers("started", started)
+            return started
         lease = getattr(current, "lease", None)
         owner = self._lease_value(lease, "worker_id", "owner_id")
         token = self._lease_value(lease, "lease_token", "token")
@@ -221,7 +240,9 @@ class PostgresJobStoreAdapter:
                 lease_token=token,
             )
             work.commit()
-        return self._record(record)
+        started = self._record(record)
+        self._notify_job_observers("started", started)
+        return started
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
         current = self.get_job(job_id)
@@ -240,11 +261,13 @@ class PostgresJobStoreAdapter:
                         job_id=job_id,
                         output_refs=request.output_refs,
                         progress={"current": 1, "total": 1, "message": "completed"},
-                        execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                        execution_owner=getattr(self.chat_execution_owner, "node_id", None),
                         submission_claim_token=self._foreground_claim_token(current),
                     )
                     work.commit()
-                return self._record(record)
+                completed = self._record(record)
+                self._notify_job_observers("completed", completed)
+                return completed
             raise JobClaimConflict(f"job completion requires an active lease: {job_id}")
         if not owner or not token:
             raise JobClaimConflict(f"job completion requires caller lease credentials: {job_id}")
@@ -260,7 +283,9 @@ class PostgresJobStoreAdapter:
                 progress={"current": 1, "total": 1, "message": "completed"},
             )
             work.commit()
-        return self._record(record)
+        completed = self._record(record)
+        self._notify_job_observers("completed", completed)
+        return completed
 
     def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
         current = self.get_job(job_id)
@@ -284,11 +309,13 @@ class PostgresJobStoreAdapter:
                         self.context,
                         job_id=job_id,
                         error=error,
-                        execution_owner=getattr(getattr(self, "chat_execution_owner", None), "node_id", None),
+                        execution_owner=getattr(self.chat_execution_owner, "node_id", None),
                         submission_claim_token=self._foreground_claim_token(current),
                     )
                     work.commit()
-                return self._record(record)
+                failed = self._record(record)
+                self._notify_job_observers("failed", failed)
+                return failed
             raise JobClaimConflict(f"job failure requires an active lease: {job_id}")
         if not owner or not token:
             raise JobClaimConflict(f"job failure requires caller lease credentials: {job_id}")
@@ -309,7 +336,9 @@ class PostgresJobStoreAdapter:
                 retry_delay_seconds=int(getattr(request, "_retry_delay_seconds", 0) or 0),
             )
             work.commit()
-        return self._record(record)
+        failed = self._record(record)
+        self._notify_job_observers("failed", failed)
+        return failed
 
     def release_job(self, job_id: str, request: ReleaseJobRequest) -> JobRecord | None:
         current = self.get_job(job_id)

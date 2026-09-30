@@ -4,23 +4,14 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, datetime, time, timedelta, timezone
-from statistics import median
-from typing import Iterable, Sequence
 from zoneinfo import ZoneInfo
 
 from .strategy_dynamic_discovery import (
     DynamicCandidate,
     ShadowQualificationEvidence,
     TrendDurabilityOutcome,
-    evaluate_shadow_qualification,
-    trend_durability_from_prices,
 )
 from .strategy_dynamic_discovery_learning import DiscoveryDailyReport
-from .strategy_dynamic_discovery_repository import (
-    EVENT_DAILY_REPORT,
-    EVENT_REPLAY,
-    DynamicDiscoveryEventRepository,
-)
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
 
 _ET = ZoneInfo("America/New_York")
@@ -58,46 +49,14 @@ def label_candidate_outcome(
     *,
     observed_at: datetime,
 ) -> TrendDurabilityOutcome | None:
-    """Label one candidate using only its same-session finalized price path.
+    """Produce the causal OHLC discovery-path label for one candidate."""
 
-    The reference is the latest finalized close already knowable at discovery.
-    For pre-open discoveries, where no regular close yet exists, the regular-open
-    price is used. This is post-close labeling only and has no execution authority.
-    """
+    from .strategy_dynamic_discovery_runtime import _label_candidate_outcome_complete
 
-    response = market_service.bars(candidate.instrument_id, "1m", 500, None)
-    bars = _regular_session_bars(
-        response,
-        session_date=candidate.session_date,
+    return _label_candidate_outcome_complete(
+        market_service,
+        candidate,
         observed_at=observed_at,
-    )
-    if not bars:
-        return None
-
-    discovered = candidate.discovered_at.astimezone(timezone.utc)
-    causal_reference = [bar for bar in bars if bar.end_time.astimezone(timezone.utc) <= discovered]
-    if causal_reference:
-        reference_price = float(causal_reference[-1].close)
-        reference_time = causal_reference[-1].end_time.astimezone(timezone.utc)
-    else:
-        first = bars[0]
-        reference_price = float(first.open)
-        reference_time = first.start_time.astimezone(timezone.utc)
-
-    if reference_price <= 0:
-        return None
-    samples = [
-        (bar.end_time.astimezone(timezone.utc), float(bar.close))
-        for bar in bars
-        if bar.end_time.astimezone(timezone.utc) >= reference_time
-    ]
-    if not samples:
-        return None
-    return trend_durability_from_prices(
-        candidate.instrument_id,
-        discovered_at=reference_time,
-        reference_price=reference_price,
-        samples=samples,
     )
 
 
@@ -147,15 +106,6 @@ def session_outcomes(
     return tuple(values)
 
 
-def _historical_parent_events(repository: TradingStrategyRepository) -> list[StrategyEvent]:
-    if not hasattr(repository, "recent_events"):
-        return []
-    try:
-        return list(repository.recent_events("interday-trading-strategy-shadow", 50_000))
-    except Exception:
-        return []
-
-
 def qualification_from_persisted_evidence(
     repository: TradingStrategyRepository,
     *,
@@ -163,70 +113,17 @@ def qualification_from_persisted_evidence(
     data_reliability_fraction: float = 1.0,
     causality_violations: int = 0,
 ) -> ShadowQualificationEvidence:
-    """Build a review gate from durable reports/replays without self-promotion.
+    """Build the durable review gate with execution and holdout criteria."""
 
-    Recall/precision are aggregated only from replay rows that actually contain
-    labeled metrics. Execution-adjusted expectancy and drawdown are intentionally
-    left unavailable until a dedicated execution-economics dataset supplies them;
-    therefore this evidence cannot become eligible merely from price-path labels.
-    """
+    from .strategy_dynamic_discovery_runtime import (
+        _qualification_from_persisted_evidence_complete,
+    )
 
-    reports: dict[date, DiscoveryDailyReport] = {}
-    replays: list[dict[str, object]] = []
-    for event in _historical_parent_events(repository):
-        if event.event_type == EVENT_DAILY_REPORT:
-            try:
-                report = DiscoveryDailyReport.model_validate(event.payload)
-            except Exception:
-                continue
-            reports[report.session_date] = report
-        elif event.event_type == EVENT_REPLAY and isinstance(event.payload, dict):
-            if event.payload.get("discovery_recall") is not None and event.payload.get("discovery_precision") is not None:
-                replays.append(dict(event.payload))
-    if current_report is not None:
-        reports[current_report.session_date] = current_report
-
-    true_positive = 0
-    positive_labels = 0
-    discovered_labeled = 0
-    latencies: list[float] = []
-    for replay in replays:
-        discovered_count = int(replay.get("discovered_symbol_count", 0) or 0)
-        false_positive = replay.get("false_positive_symbols") or ()
-        missed = replay.get("missed_opportunity_symbols") or ()
-        fp_count = len(false_positive) if isinstance(false_positive, (list, tuple)) else 0
-        missed_count = len(missed) if isinstance(missed, (list, tuple)) else 0
-        tp = max(0, discovered_count - fp_count)
-        true_positive += tp
-        positive_labels += tp + missed_count
-        discovered_labeled += discovered_count
-        latency = replay.get("median_discovery_latency_minutes")
-        if latency is not None:
-            try:
-                latencies.append(float(latency))
-            except (TypeError, ValueError):
-                pass
-
-    recall = true_positive / positive_labels if positive_labels else 0.0
-    precision = true_positive / discovered_labeled if discovered_labeled else 0.0
-    median_latency = median(latencies) if latencies else None
-    labeled = max(positive_labels, sum(report.durability_labeled_count for report in reports.values()))
-
-    return evaluate_shadow_qualification(
-        {
-            "independent_sessions": len(reports),
-            "labeled_opportunities": labeled,
-            "discovery_recall": recall,
-            "discovery_precision": precision,
-            "median_discovery_latency_minutes": median_latency,
-            # Do not substitute raw price-path returns for execution-adjusted
-            # expectancy or portfolio drawdown. Their absence keeps promotion
-            # gated until the proper economics evidence is wired.
-            "execution_adjusted_expectancy_r": None,
-            "max_drawdown_r": None,
-            "data_reliability_fraction": data_reliability_fraction,
-            "causality_violations": causality_violations,
-        }
+    return _qualification_from_persisted_evidence_complete(
+        repository,
+        current_report=current_report,
+        data_reliability_fraction=data_reliability_fraction,
+        causality_violations=causality_violations,
     )
 
 

@@ -5,7 +5,7 @@ from .content_packs import (
     build_pack_application_preview,
     build_pack_bootstrap_payload,
     ensure_content_pack_state,
-    install_content_pack,
+    add_content_pack,
     list_content_packs,
 )
 
@@ -14,6 +14,6 @@ __all__ = [
     "build_pack_application_preview",
     "build_pack_bootstrap_payload",
     "ensure_content_pack_state",
-    "install_content_pack",
+    "add_content_pack",
     "list_content_packs",
 ]

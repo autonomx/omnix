@@ -23,7 +23,7 @@ from app.trading.paper import (
     PaperPosition,
 )
 from app.trading.replay import FrozenBar, dataset_gaps
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback, session_vwap
+from app.trading.strategies import evaluate_gap_pullback, session_vwap
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile, StrategySignal
 from app.trading.strategy_backtest import freeze_backtest_session, run_gap_pullback_backtest
 from app.trading.strategy_risk import size_strategy_entry

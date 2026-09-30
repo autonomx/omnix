@@ -22,7 +22,6 @@ from fastapi import FastAPI
 
 from app.observability.tts_stream_diagnostics import active_streams_snapshot, stream_log
 
-_HOOK_SENTINEL = "_omnix_event_loop_lag_monitor_hook_installed"
 _ROUTE_SENTINEL = "_omnix_event_loop_lag_monitor_registered"
 _MONITOR_STATE_KEY = "_omnix_event_loop_lag_monitor"
 _DEFAULT_INTERVAL_SECONDS = 0.025
@@ -380,19 +379,3 @@ def register_event_loop_lag_monitor(gateway: FastAPI) -> None:
 
     from .feature_registry import FeatureLifecycle, register_feature_lifecycle
     register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
-
-
-def install_event_loop_lag_monitor_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-
-    original_init = FastAPI.__init__
-
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        is_gateway = kwargs.get("title") == "Omnix Web Gateway"
-        if is_gateway or (args and args[0] == "Omnix Web Gateway"):
-            register_event_loop_lag_monitor(self)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

@@ -10,22 +10,21 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.rpg.api.feature_routes.rpg_session_routes import register_rpg_session_routes
-from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_hook
 
 
-def test_gateway_fresh_start_installs_required_rpg_turn_hooks() -> None:
+def test_gateway_fresh_start_uses_explicit_turn_pipeline_and_job_mirror() -> None:
     repo_root = Path(__file__).resolve().parents[3]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(repo_root / "src")
     script = """
 from app.gateway.main import create_gateway_app
 app = create_gateway_app()
+from app.rpg.jobs.turn_job_mirror import execute_turn_with_job_mirror
 from app.rpg.session import interactive_first_call_runtime as runtime
-assert getattr(runtime, '_omnix_interaction_timeline_hook_installed', False)
-assert getattr(runtime, '_omnix_interaction_lifecycle_runtime_hook_installed', False)
-assert getattr(runtime, '_omnix_fast_visible_dialogue_hook_installed', False)
-assert getattr(runtime, '_omnix_dialogue_quality_hook_installed', False)
-assert getattr(runtime, '_omnix_rpg_turn_job_mirror_installed', False)
+from app.rpg.session.pipeline import TURN_PIPELINE
+assert callable(execute_turn_with_job_mirror)
+assert [stage.name for stage in TURN_PIPELINE]
+assert not hasattr(runtime, '_omnix_rpg_turn_job_mirror_installed')
 """
 
     completed = subprocess.run(
@@ -89,9 +88,6 @@ def test_direct_turn_route_does_not_start_job_for_missing_session(monkeypatch) -
 
     monkeypatch.setattr(interactive_first_call_runtime, "apply_turn", apply_turn)
     monkeypatch.setattr(service, "load_session", lambda session_id: None)
-    monkeypatch.delattr(interactive_first_call_runtime, "_omnix_rpg_turn_job_mirror_installed", raising=False)
-
-    install_rpg_turn_job_mirror_hook()
     app = FastAPI(title="Omnix Web Gateway")
     include_router_registrar(app, register_rpg_session_routes)
 

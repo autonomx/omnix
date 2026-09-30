@@ -6,7 +6,7 @@ from app.rpg.world.causal_runtime import (
     advance_causal_runtime,
     advance_installed_causal_runtime,
     bootstrap_causal_runtime,
-    install_causal_runtime,
+    initialize_causal_runtime,
     replay_causal_events,
 )
 from app.rpg.world.world_event_log import get_world_event_state
@@ -131,7 +131,7 @@ def test_replay_rejects_tampered_hash_chain() -> None:
 
 def test_installed_runtime_publishes_to_existing_world_event_log_once() -> None:
     simulation_state = {}
-    install_causal_runtime(simulation_state, bootstrap_causal_runtime(_planning_topics()))
+    initialize_causal_runtime(simulation_state, bootstrap_causal_runtime(_planning_topics()))
 
     first, emitted = advance_installed_causal_runtime(simulation_state, tick=1)
     second, repeated = advance_installed_causal_runtime(simulation_state, tick=1)

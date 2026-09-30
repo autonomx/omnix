@@ -1,6 +1,7 @@
 import json
 import logging
 
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 from rpg.prompting.builder import build_prompt
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def generate_narration(npc, action, outcome, scene, memory, llm_client=None):
 
     # LLM path (optional)
     if llm_client:
+        llm_client = adapt_base_provider(llm_client)
         prompt = build_prompt(npc, scene, memory)
 
         # Retry strategy

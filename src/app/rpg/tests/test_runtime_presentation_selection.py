@@ -1,4 +1,4 @@
-from app.rpg.session.runtime import _select_final_visible_presentation
+from app.rpg.session.visible_response_selection import _select_final_visible_presentation
 
 
 def test_combat_narration_beats_deferred_runtime_fallback():

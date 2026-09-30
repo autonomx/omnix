@@ -36,6 +36,11 @@ from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
+from .market_evidence_guards import _CoverageMarketService
+from .strategy_session_evidence import (
+    _FullSessionMarketServiceProxy,
+    _PartialCurrentSessionMarketDataProxy,
+)
 
 
 _ET = ZoneInfo("America/New_York")
@@ -197,6 +202,23 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         *,
         now: datetime,
     ) -> int:
+        if not getattr(market_service, "allow_partial_current_session", False):
+            market_service = _PartialCurrentSessionMarketDataProxy(
+                market_service,
+                session_date=now.astimezone(_ET).date(),
+                observed_at=now,
+            )
+        market_service = _FullSessionMarketServiceProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+            allow_shadow_fallback=True,
+        )
+        market_service = _CoverageMarketService(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+        )
         if not _eligible(config):
             return 0
         today_et = now.astimezone(_ET).date()

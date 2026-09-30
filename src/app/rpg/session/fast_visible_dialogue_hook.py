@@ -7,13 +7,11 @@ small-talk where the runtime already has a deterministic safe fallback answer.
 from __future__ import annotations
 
 from copy import deepcopy
-from functools import wraps
 from time import perf_counter
 from typing import Any
 
 from app.rpg.session.turn_grounding import build_turn_grounding_packet
 
-_SENTINEL = "_omnix_fast_visible_dialogue_hook_installed"
 _SOURCE = "fast_visible_dialogue_v1"
 _STATEFUL_TERMS = (
     "attack",
@@ -56,45 +54,6 @@ _DIALOGUE_TERMS = (
     "word around",
     "word is",
 )
-
-
-def install_fast_visible_dialogue_hook() -> None:
-    from app.rpg.session import interactive_first_call_runtime as runtime
-
-    if getattr(runtime, _SENTINEL, False):
-        return
-
-    original = runtime.apply_turn
-
-    @wraps(original)
-    def patched_apply_turn(
-        session_id: str,
-        player_input: str,
-        action: dict[str, Any] | None = None,
-        *,
-        performance_override: dict[str, Any] | None = None,
-        session_override: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        fast = _try_fast_visible_dialogue(
-            runtime,
-            session_id=session_id,
-            player_input=player_input,
-            action=action,
-            performance_override=performance_override,
-            session_override=session_override,
-        )
-        if fast:
-            return fast
-        return original(
-            session_id,
-            player_input,
-            action,
-            performance_override=performance_override,
-            session_override=session_override,
-        )
-
-    runtime.apply_turn = patched_apply_turn
-    setattr(runtime, _SENTINEL, True)
 
 
 def _try_fast_visible_dialogue(
@@ -238,3 +197,18 @@ def _d(value: Any) -> dict[str, Any]:
 
 def _s(value: Any) -> str:
     return str(value) if value is not None else ""
+
+
+def try_fast_visible_dialogue(ctx: Any) -> dict[str, Any]:
+    """Return a deterministic no-LLM result when the fast path is safe."""
+
+    from app.rpg.session import interactive_first_call_runtime as runtime
+
+    return _try_fast_visible_dialogue(
+        runtime,
+        session_id=ctx.session_id,
+        player_input=ctx.player_input,
+        action=ctx.action,
+        performance_override=ctx.performance_override,
+        session_override=ctx.session_override,
+    )

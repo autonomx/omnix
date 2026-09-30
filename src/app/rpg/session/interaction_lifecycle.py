@@ -78,10 +78,12 @@ def queue_deferred_narration_for_interaction(
         return False
 
     from app.rpg.session.narration_worker import ensure_narration_worker_running, signal_narration_work
-    from app.rpg.session.runtime import (
-        _enqueue_narration_request,
-        load_runtime_session,
-        save_runtime_session,
+    from app.rpg.session.semantic_response_projection import (
+        _enqueue_narration_request as _enqueue_narration_request,
+    )
+    from app.rpg.session.session_runtime_store import (
+        load_runtime_session as load_runtime_session,
+        save_runtime_session as save_runtime_session,
     )
 
     session = load_runtime_session(session_id)
@@ -121,7 +123,10 @@ def apply_narration_result_to_interaction(
 ) -> dict[str, Any]:
     """Update only lifecycle/presentation metadata after narration worker completion."""
 
-    from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+    from app.rpg.session.session_runtime_store import (
+        load_runtime_session as load_runtime_session,
+        save_runtime_session as save_runtime_session,
+    )
 
     session = load_runtime_session(session_id)
     if not isinstance(session, dict):

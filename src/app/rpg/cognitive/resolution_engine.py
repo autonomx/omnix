@@ -53,6 +53,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
@@ -180,7 +181,7 @@ class ResolutionEngine:
             llm_client: Optional LLM client for advanced resolution generation.
             use_llm: Whether to use LLM for resolution (default: template-only).
         """
-        self.llm_client = llm_client
+        self.llm_client = adapt_base_provider(llm_client)
         self.use_llm = use_llm
         
         # Tier 14 Fix: Resolution Entropy Injection

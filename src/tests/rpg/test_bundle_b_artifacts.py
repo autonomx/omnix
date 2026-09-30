@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.rpg.session.bundle_ab_late_manifest_hook import register_late_manifest_repair
+from tests.rpg.bundle_ab_late_manifest_repair import register_late_manifest_repair
 from app.rpg.session.bundle_b_artifacts import (
     build_content_exhaustion_forecast_summary,
     build_long_run_dry_run_projection_summary,

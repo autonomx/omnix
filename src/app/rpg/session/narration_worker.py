@@ -113,7 +113,9 @@ def _is_stop_requested() -> bool:
 
 def _worker_loop() -> None:
     # Import lazily to avoid circular imports at module import time.
-    from app.rpg.session.runtime import process_next_narration_job
+    from app.rpg.session.narration_jobs import (
+        process_next_narration_job as process_next_narration_job,
+    )
 
     while True:
         if _is_stop_requested():

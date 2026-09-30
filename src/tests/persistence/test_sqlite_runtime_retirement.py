@@ -86,14 +86,13 @@ def test_postgresql_runtime_modules_do_not_open_sqlite() -> None:
 def test_application_startup_is_explicit_and_postgresql_only() -> None:
     startup = (APP_ROOT / "persistence" / "startup.py").read_text(encoding="utf-8")
     launcher = (ROOT / "scripts" / "run_omnix_gateway.py").read_text(encoding="utf-8")
-    usercustomize = (ROOT / "src" / "usercustomize.py").read_text(encoding="utf-8")
     assert PersistenceMode.POSTGRESQL.value == "postgresql"
     assert "bootstrap_postgresql_runtime" in startup
     assert "install_postgresql_runtime_adapters" not in startup
     assert not (APP_ROOT / "persistence" / "runtime_install.py").exists()
     assert "bootstrap_status_payload" in launcher
     assert 'parser.add_argument("--app"' in launcher
-    assert "install_legacy_authority_block" not in usercustomize
+    assert not (ROOT / "src" / "usercustomize.py").exists()
     assert not (APP_ROOT / "jobs" / "voice_inline.py").exists()
     assert (APP_ROOT / "voice" / "jobs.py").exists()
     assert not (APP_ROOT / "shared.py").exists()

@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.agent_runtime import quality_recovery as recovery_module
-from app.agent_runtime import review_orchestration as orchestration_module
 from app.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
@@ -179,7 +178,7 @@ def test_protocol_valid_final_message_terminalizes_reviewer_without_waiting_for_
     assert closed == ["reviewer-1"]
 
 
-def test_approved_reviewer_result_advances_parent_through_acceptance(monkeypatch) -> None:
+def test_approved_reviewer_result_advances_parent_through_acceptance() -> None:
     parent_state = {"snapshot": _parent()}
     child = _reviewer(status="completed")
     revision = _revision()
@@ -253,6 +252,8 @@ def test_approved_reviewer_result_advances_parent_through_acceptance(monkeypatch
         worker_id="worker-1",
         _quality_enabled=lambda _spec: True,
         _current_revision=lambda _repository, _run_id: revision,
+        quality_repository_factory=Quality,
+        terminal_reviewer_consumer=lambda *_args, **_kwargs: result,
         _quality_fail=MagicMock(),
         _request_quality_repair=MagicMock(),
     )
@@ -272,17 +273,6 @@ def test_approved_reviewer_result_advances_parent_through_acceptance(monkeypatch
 
     service._set_quality_stage = set_stage
     service._finalize_acceptance = finalize
-
-    monkeypatch.setattr(
-        orchestration_module,
-        "PostgresCodingQualityRepository",
-        Quality,
-    )
-    monkeypatch.setattr(
-        orchestration_module,
-        "consume_terminal_reviewer_in_repository",
-        lambda *_args, **_kwargs: result,
-    )
 
     action = reconcile_review_progress_in_repository(service, Repository(), "parent-1")
 

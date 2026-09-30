@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from .goal_generator import GoalGenerator
 from .npc_actor import NPCActor, NPCGoal
-from .planner import Planner
+from .planner_core import Planner
 
 # Action-to-belief mapping (Patch 3)
 ACTION_BELIEF_EFFECTS: Dict[str, Dict[str, float]] = {

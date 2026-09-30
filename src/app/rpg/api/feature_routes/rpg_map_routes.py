@@ -3,11 +3,10 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
 import json
-from typing import Any, Callable
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -71,7 +70,6 @@ class RpgMapActionResponse(BaseModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_map_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_map_route_hook_installed"
 MAP_DEFINITION_CACHE_CONTROL = "public, max-age=3600, immutable"
 MAP_OVERLAY_CACHE_CONTROL = "no-store"
 _ALLOWED_ACTIONS = {"travel", "inspect", "enter", "talk", "trade"}
@@ -253,18 +251,3 @@ def _payload(value: object) -> Any:
 
 def _etag(value: str) -> str:
     return f'"{value}"'
-
-
-def install_rpg_map_route_hook() -> None:
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
-            register_rpg_map_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

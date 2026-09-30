@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat import live_chat_speculation as speculation_runtime
+from app.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import ChatResponse, LMStudioProvider, ProviderConfig
 
@@ -41,6 +42,8 @@ class _CapturingProvider:
 
 
 class _FakeStore:
+    live_voice_chat_port = create_live_voice_chat_port()
+
     def build_provider_prompt(self, _session, user_message, _context_items):
         rendered = SimpleNamespace(
             messages=[SimpleNamespace(role="user", content=user_message.content)]
@@ -94,7 +97,7 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
 def test_side_effect_free_lmstudio_speculation_receives_cancel_event(monkeypatch) -> None:
     provider = _CapturingProvider()
     monkeypatch.setattr(
-        speculation_runtime.shared,
+        speculation_runtime,
         "get_provider",
         lambda _provider_id: provider,
     )

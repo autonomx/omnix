@@ -8,7 +8,7 @@ from app.rpg.modding.content_packs import (
     apply_content_pack,
     build_pack_application_preview,
     ensure_content_pack_state,
-    install_content_pack,
+    add_content_pack,
     list_content_packs,
 )
 from app.rpg.packaging.package_io import (
@@ -78,7 +78,7 @@ def test_multiple_packs_install_without_error():
     """Installing multiple packs should work without error."""
     simulation_state = {"presentation_state": {}}
     for i in range(5):
-        simulation_state = install_content_pack(
+        simulation_state = add_content_pack(
             simulation_state,
             {"manifest": {"id": f"pack:{i}", "title": f"Pack {i}"}, "characters": []},
         )

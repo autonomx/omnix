@@ -1,4 +1,4 @@
-"""Context-local identity shared by RPG turn middleware and its domain hook."""
+"""Context-local submission identity shared by the explicit RPG turn pipeline."""
 from contextvars import ContextVar
 
 

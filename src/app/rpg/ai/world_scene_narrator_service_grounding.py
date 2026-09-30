@@ -1,12 +1,29 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
-from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str
-from app.rpg.ai.world_scene_narrator_dialogue_grounding import *
-
-
+from app.rpg.ai.world_scene_narrator_dialogue_grounding import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
+    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
+    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
+    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
+    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
+    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
+    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural,
+)
 def _strip_basic_markdown(value: Any) -> str:
     text = _safe_str(value).strip()
     if not text:
@@ -23,7 +40,9 @@ def _travel_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, 
     if travel:
         return travel
     turn_contract = _safe_dict(narration_context.get("turn_contract"))
-    resolved = _safe_dict(turn_contract.get("resolved_result") or turn_contract.get("resolved_action"))
+    resolved = _safe_dict(
+        turn_contract.get("resolved_result") or turn_contract.get("resolved_action")
+    )
     return _safe_dict(resolved.get("travel_result"))
 
 
@@ -73,8 +92,7 @@ def _final_grounded_service_action_text(
     service_application = _safe_dict(narration_context.get("service_application"))
     status = _safe_str(service_result.get("status"))
     blocked_reason = _safe_str(
-        service_application.get("blocked_reason")
-        or purchase.get("blocked_reason")
+        service_application.get("blocked_reason") or purchase.get("blocked_reason")
     )
 
     if status == "blocked" or blocked_reason == "insufficient_funds":
@@ -108,7 +126,9 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
     if not service_result:
         return ""
 
-    provider_name = _safe_str(service_result.get("provider_name") or "The provider").strip()
+    provider_name = _safe_str(
+        service_result.get("provider_name") or "The provider"
+    ).strip()
     kind = _safe_str(service_result.get("kind"))
     status = _safe_str(service_result.get("status"))
 
@@ -116,8 +136,7 @@ def _service_grounded_action_result(narration_context: Dict[str, Any]) -> str:
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
         blocked_reason = _safe_str(
-            service_application.get("blocked_reason")
-            or purchase.get("blocked_reason")
+            service_application.get("blocked_reason") or purchase.get("blocked_reason")
         )
 
         if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
@@ -160,8 +179,7 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
         purchase = _safe_dict(service_result.get("purchase"))
         service_application = _safe_dict(narration_context.get("service_application"))
         blocked_reason = _safe_str(
-            service_application.get("blocked_reason")
-            or purchase.get("blocked_reason")
+            service_application.get("blocked_reason") or purchase.get("blocked_reason")
         )
 
         if status == "purchase_offer_not_found" or blocked_reason == "offer_not_found":
@@ -179,7 +197,9 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
                 selected = offer
                 break
 
-        selected_label = _safe_str(selected.get("label") or selected_offer_id or "that").strip()
+        selected_label = _safe_str(
+            selected.get("label") or selected_offer_id or "that"
+        ).strip()
 
         if purchase_applied:
             if selected_label and selected_label != "that":
@@ -191,7 +211,9 @@ def _service_grounded_npc_line(narration_context: Dict[str, Any]) -> str:
 
         if status == "blocked":
             price = _safe_dict(purchase.get("price"))
-            price_text = _service_offer_label_with_price({"label": selected_label, "price": price})
+            price_text = _service_offer_label_with_price(
+                {"label": selected_label, "price": price}
+            )
             return f"{price_text} is the price, but you do not have enough coin."
 
     if status == "offers_available" and offers:
@@ -220,8 +242,14 @@ def _fallback_non_service_narration(narration_context: Dict[str, Any]) -> str:
         or turn_contract.get("resolved_result")
         or turn_contract.get("resolved_action")
     )
-    action_type = _safe_str(resolved.get("action_type") or _safe_dict(turn_contract.get("action")).get("action_type"))
-    target_name = _safe_str(resolved.get("target_name") or _safe_dict(turn_contract.get("action")).get("target_name"))
+    action_type = _safe_str(
+        resolved.get("action_type")
+        or _safe_dict(turn_contract.get("action")).get("action_type")
+    )
+    target_name = _safe_str(
+        resolved.get("target_name")
+        or _safe_dict(turn_contract.get("action")).get("target_name")
+    )
     outcome = _safe_str(resolved.get("outcome"))
 
     if target_name and action_type in {"social_activity", "persuade", "investigate"}:
@@ -249,7 +277,9 @@ def _sanitize_repeated_player_input_narration(
     if not narration or not player_input:
         return
 
-    if _normalized_text_for_compare(narration) == _normalized_text_for_compare(player_input):
+    if _normalized_text_for_compare(narration) == _normalized_text_for_compare(
+        player_input
+    ):
         payload["narration"] = _fallback_non_service_narration(narration_context)
 
 
@@ -283,22 +313,21 @@ def _service_grounded_narration_text(narration_context: Dict[str, Any]) -> str:
     if not service_result:
         return ""
 
-    provider_name = _safe_str(service_result.get("provider_name") or "The provider").strip()
-    service_kind = _safe_str(service_result.get("service_kind")).replace("_", " ").strip()
+    provider_name = _safe_str(
+        service_result.get("provider_name") or "The provider"
+    ).strip()
+    service_kind = (
+        _safe_str(service_result.get("service_kind")).replace("_", " ").strip()
+    )
     status = _safe_str(service_result.get("status"))
     purchase = _safe_dict(service_result.get("purchase"))
     service_application = _safe_dict(narration_context.get("service_application"))
     blocked_reason = _safe_str(
-        service_application.get("blocked_reason")
-        or purchase.get("blocked_reason")
+        service_application.get("blocked_reason") or purchase.get("blocked_reason")
     )
 
-    if (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and (
-            status == "purchase_offer_not_found"
-            or blocked_reason == "offer_not_found"
-        )
+    if _safe_str(service_result.get("kind")) == "service_purchase" and (
+        status == "purchase_offer_not_found" or blocked_reason == "offer_not_found"
     ):
         return f"{provider_name} checks the available offers and finds no matching item or service."
 
@@ -408,15 +437,14 @@ def _service_purchase_is_applied(
     narration_context: Dict[str, Any],
 ) -> bool:
     service_result = _safe_dict(service_result)
-    service_application = _safe_dict(_safe_dict(narration_context).get("service_application"))
+    service_application = _safe_dict(
+        _safe_dict(narration_context).get("service_application")
+    )
     purchase = _safe_dict(service_result.get("purchase"))
-    return (
-        _safe_str(service_result.get("kind")) == "service_purchase"
-        and (
-            _safe_str(service_result.get("status")) == "purchased"
-            or bool(purchase.get("applied"))
-            or bool(service_application.get("applied"))
-        )
+    return _safe_str(service_result.get("kind")) == "service_purchase" and (
+        _safe_str(service_result.get("status")) == "purchased"
+        or bool(purchase.get("applied"))
+        or bool(service_application.get("applied"))
     )
 
 
@@ -431,8 +459,14 @@ def _selected_service_offer(service_result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _service_extract_price_tokens(text: str) -> set[str]:
-    number_pattern = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
-    return set(re.findall(rf"\b{number_pattern}\s*(gold|silver|copper)\b", _safe_str(text).lower()))
+    number_pattern = (
+        r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    )
+    return set(
+        re.findall(
+            rf"\b{number_pattern}\s*(gold|silver|copper)\b", _safe_str(text).lower()
+        )
+    )
 
 
 def _successful_service_purchase_text_needs_grounding(
@@ -489,7 +523,9 @@ def _successful_service_purchase_text_needs_grounding(
     return False
 
 
-def _ground_action_result_text(action_text: str, narration_context: Dict[str, Any]) -> str:
+def _ground_action_result_text(
+    action_text: str, narration_context: Dict[str, Any]
+) -> str:
     text = _safe_str(action_text).strip()
     if not text:
         return text
@@ -514,39 +550,28 @@ def _ground_action_result_text(action_text: str, narration_context: Dict[str, An
         service_application = _safe_dict(narration_context.get("service_application"))
         service_status = _safe_str(service_result.get("status"))
         blocked_reason = _safe_str(
-            service_application.get("blocked_reason")
-            or purchase.get("blocked_reason")
+            service_application.get("blocked_reason") or purchase.get("blocked_reason")
         )
 
-        if (
-            _safe_str(service_result.get("kind")) == "service_purchase"
-            and (
-                service_status == "blocked"
-                or blocked_reason == "insufficient_funds"
-            )
+        if _safe_str(service_result.get("kind")) == "service_purchase" and (
+            service_status == "blocked" or blocked_reason == "insufficient_funds"
         ):
             grounded = _service_grounded_action_result(narration_context)
             if grounded:
                 return grounded
 
-        if (
-            _safe_str(service_result.get("kind")) == "service_purchase"
-            and (
-                service_status == "purchase_offer_not_found"
-                or blocked_reason == "offer_not_found"
-            )
+        if _safe_str(service_result.get("kind")) == "service_purchase" and (
+            service_status == "purchase_offer_not_found"
+            or blocked_reason == "offer_not_found"
         ):
             grounded = _service_grounded_action_result(narration_context)
             if grounded:
                 return grounded
 
-        if (
-            _safe_str(service_result.get("kind")) == "service_purchase"
-            and (
-                _safe_str(service_result.get("status")) == "purchased"
-                or bool(purchase.get("applied"))
-                or bool(service_application.get("applied"))
-            )
+        if _safe_str(service_result.get("kind")) == "service_purchase" and (
+            _safe_str(service_result.get("status")) == "purchased"
+            or bool(purchase.get("applied"))
+            or bool(service_application.get("applied"))
         ):
             grounded = _service_grounded_action_result(narration_context)
             if grounded:
@@ -625,7 +650,7 @@ def _player_input_action_text(narration_context: Dict[str, Any]) -> str:
     )
     for prefix, replacement in replacements:
         if lowered.startswith(prefix):
-            text = replacement + text[len(prefix):]
+            text = replacement + text[len(prefix) :]
             break
     else:
         if not lowered.startswith("you "):
@@ -673,4 +698,11 @@ def _first_nonempty(*values: Any) -> str:
             return text
     return ""
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+
+__all__ = (
+    "annotations json logging re traceback dataclass field Any Callable Dict List Optional normalize_grounding_settings select_grounded_narration_candidate memory_reference_is_backed build_runtime_npc_response_architecture build_runtime_current_turn_prompt_contract format_runtime_prompt_contract_block build_runtime_presentation_guardrails_block sanitize_unsupported_combat_payload parse_runtime_provider_payload build_encounter_view logger _ACTIVE_NARRATIONS "
+    "NARRATION_JSON_FORMAT_VERSION NARRATION_JSON_SCHEMA_HINT _extract_llm_text _llm_text _attach_social_context _safe_str_p6 _attach_npc_mind_context _NARRATION_MAX_MARKDOWN _safe_str _safe_dict _safe_list _title_case_token _force_live_llm_required _build_ambient_conversation_line _bound_text _clean_npc_dialogue_line _is_accommodation_request _has_authoritative_accommodation_offer _ground_accommodation_npc_line _service_result_from_context _recalled_service_memories_from_context "
+    "_format_recalled_service_memories_for_prompt _recalled_npc_memories_from_context _format_recalled_npc_memories_for_prompt _conversation_result_from_context _format_conversation_beat_for_prompt _apply_grounded_conversation_beat _line_has_prior_memory_reference _memory_reference_is_backed _strip_unbacked_memory_reference_from_npc_line _strip_service_meta_language _service_offer_label_with_price _join_natural _strip_basic_markdown _travel_result_from_context "
+    "_grounded_travel_narration _grounded_travel_action _final_grounded_service_action_text _service_grounded_action_result _service_grounded_npc_line _normalized_text_for_compare _fallback_non_service_narration _sanitize_repeated_player_input_narration _naturalize_service_debug_language _service_grounded_narration_text _service_narration_needs_grounding _service_claim_needs_grounding _service_purchase_is_applied _selected_service_offer _service_extract_price_tokens "
+    "_successful_service_purchase_text_needs_grounding _ground_action_result_text _player_input_action_text _build_authoritative_action_line _build_action_result_line _build_rewards_block _titleize_action _first_nonempty "
+).split()

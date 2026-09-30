@@ -236,7 +236,9 @@ def test_research_api_is_read_only_and_maps_invalid_output_to_provider_failure()
 
 
 def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
-    source = Path("src/app/trading/research.py").read_text().lower()
+    source = Path(
+        "src/app/trading/research/market_research_compat.py"
+    ).read_text().lower()
     for forbidden in (
         "lmstudio",
         "openai.chat",

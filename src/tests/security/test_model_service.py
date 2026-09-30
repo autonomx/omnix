@@ -111,7 +111,8 @@ def test_multipart_upload_limit(protected):
 
 @pytest.mark.parametrize("path", ["/action", "/caught", "/multipart"])
 @pytest.mark.parametrize("length", [None, b"1"])
-def test_chunked_and_underreported_uploads_stay_bounded(protected, path, length):
+@pytest.mark.anyio
+async def test_chunked_and_underreported_uploads_stay_bounded(protected, path, length):
     app, _, headers = protected
     chunks = [b"x" * 256, b"x" * 256, b"x", b"must not be read"]
     consumed = []
@@ -137,7 +138,7 @@ def test_chunked_and_underreported_uploads_stay_bounded(protected, path, length)
     async def send(message):
         messages.append(message)
 
-    asyncio.run(app(scope, receive, send))
+    await app(scope, receive, send)
     assert len(consumed) == 3
     assert messages[0]["status"] == 413
     assert json.loads(messages[1]["body"])["error"] == "upload_too_large"
@@ -211,14 +212,22 @@ def test_openai_stream_failure_keeps_error_details_private_and_correlates_reques
     client = TestClient(openai_api.app, base_url="http://127.0.0.1", headers=service_headers())
     response = client.post("/v1/chat/completions", json={"model": "test", "messages": [{"role": "user", "content": "test"}], "stream": True})
     assert response.status_code == 200
-    payload = json.loads(response.text.removeprefix("data: ").strip())
-    assert payload == {"error": "model_service_error", "request_id": response.headers["x-request-id"]}
+    events = [
+        line.removeprefix("data: ")
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    payloads = [json.loads(event) for event in events if event != "[DONE]"]
+    assert payloads == [
+        {"error": "model_service_error", "request_id": response.headers["x-request-id"]}
+    ]
     assert token not in response.text
     assert "Traceback" not in response.text
 
 
 @pytest.mark.parametrize("request_id", ["server-request-identifier", None])
-def test_stt_background_feed_failure_reports_private_correlated_error(request_id):
+@pytest.mark.anyio
+async def test_stt_background_feed_failure_reports_private_correlated_error(request_id):
     from app.providers.nemotron_eou_live_websocket import HybridSegment, _schedule_stream_drain
 
     class Socket:
@@ -252,4 +261,4 @@ def test_stt_background_feed_failure_reports_private_correlated_error(request_id
         assert message["request_id"] == request_id if request_id else len(message["request_id"]) == 32
         assert "private provider details" not in json.dumps(message)
 
-    asyncio.run(run())
+    await run()

@@ -13,6 +13,7 @@ from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
+import threading
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
@@ -28,7 +29,15 @@ from .execution_observation_plane import (
     ExecutionObservationPlane,
     default_execution_observation_plane,
 )
+from .gapper_dataset import GapperCandidate
 from .indicator_signals import multi_timeframe_indicator_context
+from .market_evidence import (
+    DEFAULT_MARKET_EVIDENCE_POLICY,
+    ExecutionInputGap,
+    MARKET_EVIDENCE_POLICY_VERSION,
+    ProviderReadiness,
+    classify_provider_exception,
+)
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies import evaluate_gap_pullback
@@ -47,6 +56,10 @@ from .strategy_ai_shadow import (
     simulate_ai_shadow_fill,
 )
 from .strategy_intraday_learning import build_intraday_learning_snapshot
+from .strategy_evaluability import (
+    assess_bar_coverage,
+    candidate_morning_evidence_eligible,
+)
 from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import (
     StrategyEvent,
@@ -56,6 +69,10 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_timeframes import resample_final_bars
+from .strategy_session_evidence import (
+    _CurrentSessionMarketDataProxy,
+    _FullSessionMarketServiceProxy,
+)
 from .trade_logging import trade_log
 
 
@@ -73,6 +90,7 @@ _EVENT_TYPES = (
     "ai_shadow_trade",
     "ai_shadow_batch",
     "ai_shadow_data_gap",
+    "ai_shadow_input_gap",
     "ai_shadow_session_summary",
     "shadow_strategy_comparison",
 )
@@ -96,6 +114,19 @@ _EXECUTION_FIELDS = (
     "rejection_reasons",
     "halted",
 )
+_GAP_HEARTBEAT = timedelta(minutes=15)
+_GAP_LOCK = threading.RLock()
+_GAP_LAST_EMITTED: dict[tuple[str, str, str, str, str], datetime] = {}
+
+
+def _events_with_data_gap_aliases(events: list[StrategyEvent]) -> list[StrategyEvent]:
+    output = list(events)
+    output.extend(
+        event.model_copy(update={"event_type": "ai_shadow_data_gap"})
+        for event in events
+        if event.event_type == "ai_shadow_input_gap"
+    )
+    return output
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -549,6 +580,20 @@ class TradingAIShadowMonitor:
         payload: dict[str, object],
         identity: tuple[object, ...],
     ) -> bool:
+        if event_type in {"ai_shadow_input_gap", "ai_shadow_data_gap"}:
+            policy = str(payload.get("policy") or "")
+            key = (config.strategy_id, instrument_id, event_type, reason_code, policy)
+            current = observed_at.astimezone(timezone.utc)
+            with _GAP_LOCK:
+                previous = _GAP_LAST_EMITTED.get(key)
+                if previous is not None and timedelta(0) <= current - previous < _GAP_HEARTBEAT:
+                    return False
+                _GAP_LAST_EMITTED[key] = current
+            payload = dict(payload)
+            payload["duplicate_gap_heartbeat_seconds"] = int(
+                _GAP_HEARTBEAT.total_seconds()
+            )
+            payload["gap_sampling"] = "state_or_periodic_heartbeat"
         idem = _key(
             config.strategy_id,
             AI_SHADOW_POLICY_VERSION,
@@ -1199,6 +1244,280 @@ class TradingAIShadowMonitor:
             if trade_persisted:
                 self.trade_count += 1
 
+    async def _filter_morning_evidence_rows(
+        self,
+        *,
+        policy: AIShadowPolicy,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+    ) -> list[dict[str, object]]:
+        prepared: list[dict[str, object]] = []
+        for row in rows:
+            candidate = row["candidate"]
+            observed_at = row["observed_at"]
+            assert isinstance(observed_at, datetime)
+            if isinstance(candidate, GapperCandidate):
+                morning_ok, reasons = candidate_morning_evidence_eligible(
+                    candidate,
+                    config.config,
+                )
+            else:
+                morning_ok, reasons = True, ()
+            if morning_ok:
+                prepared.append(row)
+                continue
+            persisted = await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_input_gap",
+                state="unavailable",
+                reason_code="AI_SHADOW_MORNING_EVIDENCE_GAP",
+                observed_at=observed_at,
+                payload={
+                    "policy": policy,
+                    "universe_id": row.get("universe_id"),
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+                    "morning_evidence_reason_codes": list(reasons),
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+                identity=(
+                    policy,
+                    observed_at.astimezone(timezone.utc).isoformat(),
+                    "morning_evidence",
+                    *reasons,
+                ),
+            )
+            if persisted:
+                self.data_gap_count += 1
+            trade_log(
+                "auto_trading",
+                "ai_shadow_input_gap",
+                strategy_id=config.strategy_id,
+                policy=policy,
+                instrument_id=candidate.instrument_id,
+                reason_code="AI_SHADOW_MORNING_EVIDENCE_GAP",
+                morning_evidence_reason_codes=list(reasons),
+                execution_authority=False,
+            )
+        return prepared
+
+    async def _minute_cohort_watermark_ready(
+        self,
+        *,
+        policy: AIShadowPolicy,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+    ) -> bool:
+        if policy != "minute":
+            return True
+        universe_id = str(rows[0].get("universe_id") or "")
+        try:
+            universe = repository.get_universe(universe_id)
+        except Exception:
+            universe = None
+        expected_ids = {
+            candidate.instrument_id
+            for candidate in universe.candidates
+            if candidate_morning_evidence_eligible(candidate, config.config)[0]
+        } if universe is not None else set()
+        observed_by_id = {
+            row["candidate"].instrument_id: row["observed_at"]
+            for row in rows
+        }
+        row_ids = set(observed_by_id)
+        watermarks = {
+            observed.astimezone(timezone.utc)
+            for observed in observed_by_id.values()
+            if isinstance(observed, datetime)
+        }
+        cohort_complete = not expected_ids or row_ids == expected_ids
+        common_watermark = len(watermarks) == 1
+        if cohort_complete and common_watermark:
+            return True
+
+        observed_at = max(watermarks, default=datetime.now(timezone.utc))
+        persisted = await self._append(
+            repository,
+            config,
+            instrument_id="__universe__",
+            event_type="ai_shadow_input_gap",
+            state="pending",
+            reason_code="AI_SHADOW_COHORT_WATERMARK_PENDING",
+            observed_at=observed_at,
+            payload={
+                "policy": policy,
+                "universe_id": universe_id or None,
+                "expected_instrument_ids": sorted(expected_ids),
+                "available_instrument_ids": sorted(row_ids),
+                "cohort_complete": cohort_complete,
+                "common_finalized_minute": common_watermark,
+                "candidate_watermarks": {
+                    instrument_id: value.astimezone(timezone.utc).isoformat()
+                    for instrument_id, value in sorted(observed_by_id.items())
+                    if isinstance(value, datetime)
+                },
+                "research_only": True,
+                "execution_authority": False,
+            },
+            identity=(
+                policy,
+                universe_id,
+                tuple(sorted(expected_ids)),
+                tuple(
+                    sorted(
+                        (
+                            instrument_id,
+                            value.astimezone(timezone.utc).isoformat(),
+                        )
+                        for instrument_id, value in observed_by_id.items()
+                        if isinstance(value, datetime)
+                    )
+                ),
+                "cohort_watermark_pending",
+            ),
+        )
+        if persisted:
+            self.data_gap_count += 1
+        return False
+
+    async def _filter_execution_input_rows(
+        self,
+        *,
+        policy: AIShadowPolicy,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+    ) -> list[dict[str, object]]:
+        valid_rows: list[dict[str, object]] = []
+        for row in rows:
+            candidate = row["candidate"]
+            observed_at = row["observed_at"]
+            assert isinstance(observed_at, datetime)
+            feature = row.get("feature_snapshot") or {}
+            execution = feature.get("execution") if isinstance(feature, dict) else None
+            missing_execution = (
+                not isinstance(execution, dict)
+                or execution.get("last") is None
+            )
+            coverage = assess_bar_coverage(
+                list(row.get("bars") or []),
+                session_date=observed_at.astimezone(_ET).date(),
+                observed_at=observed_at,
+                provider="configured_history",
+            )
+            if not missing_execution and coverage.ready:
+                valid_rows.append(row)
+                continue
+
+            readiness = None
+            if missing_execution:
+                try:
+                    market_service.execution_observation(
+                        candidate.instrument_id,
+                        candidate.binding_id,
+                    )
+                except Exception as exc:
+                    readiness = classify_provider_exception(
+                        exc,
+                        provider=DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider,
+                        observed_at=observed_at,
+                    )
+            if readiness is None:
+                readiness = ProviderReadiness(
+                    provider=DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider,
+                    state="READY" if not missing_execution else "QUOTE_MISSING",
+                    ready=not missing_execution,
+                    observed_at=observed_at,
+                    detail=None,
+                )
+            gap = ExecutionInputGap(
+                instrument_id=candidate.instrument_id,
+                binding_id=candidate.binding_id,
+                provider=DEFAULT_MARKET_EVIDENCE_POLICY.execution_provider,
+                readiness=readiness,
+                reason_code=(
+                    "AI_SHADOW_EXECUTION_INPUT_GAP"
+                    if missing_execution
+                    else "AI_SHADOW_BAR_COVERAGE_GAP"
+                ),
+                observed_at=observed_at,
+            )
+            persisted = await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_input_gap",
+                state="unavailable",
+                reason_code=gap.reason_code,
+                observed_at=observed_at,
+                payload={
+                    "policy": policy,
+                    "gap": gap.model_dump(mode="json"),
+                    "bar_coverage": coverage.model_dump(mode="json"),
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+                identity=(
+                    policy,
+                    observed_at.astimezone(timezone.utc).isoformat(),
+                    gap.reason_code,
+                ),
+            )
+            if persisted:
+                self.data_gap_count += 1
+            trade_log(
+                "auto_trading",
+                "ai_shadow_input_gap",
+                strategy_id=config.strategy_id,
+                policy=policy,
+                instrument_id=candidate.instrument_id,
+                reason_code=gap.reason_code,
+                provider_readiness=readiness.model_dump(mode="json"),
+                bar_coverage=coverage.model_dump(mode="json"),
+                execution_authority=False,
+            )
+        return valid_rows
+
+    async def _prepare_policy_rows(
+        self,
+        *,
+        policy: AIShadowPolicy,
+        rows: list[dict[str, object]],
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+    ) -> list[dict[str, object]]:
+        if rows and all(
+            not isinstance(row.get("candidate"), GapperCandidate)
+            for row in rows
+        ):
+            return rows
+        prepared = await self._filter_morning_evidence_rows(
+            policy=policy,
+            rows=rows,
+            config=config,
+            repository=repository,
+        )
+        if not prepared or not await self._minute_cohort_watermark_ready(
+            policy=policy,
+            rows=prepared,
+            config=config,
+            repository=repository,
+        ):
+            return []
+        return await self._filter_execution_input_rows(
+            policy=policy,
+            rows=prepared,
+            config=config,
+            repository=repository,
+            market_service=market_service,
+        )
+
     async def _run_policy(
         self,
         *,
@@ -1209,6 +1528,16 @@ class TradingAIShadowMonitor:
         market_service: TradingMarketDataService,
         events: list[StrategyEvent],
     ) -> None:
+        rows = await self._prepare_policy_rows(
+            policy=policy,
+            rows=rows,
+            config=config,
+            repository=repository,
+            market_service=market_service,
+        )
+        if not rows:
+            return
+
         due: list[dict[str, object]] = []
         reasons_by_id: dict[str, tuple[str, ...]] = {}
         for row in rows:
@@ -1701,6 +2030,7 @@ class TradingAIShadowMonitor:
         session_date,
         now: datetime,
     ) -> None:
+        events = _events_with_data_gap_aliases(events)
         if now.astimezone(_ET).time() < time(16, 0):
             return
         for policy in ("minute", "event"):
@@ -1840,6 +2170,7 @@ class TradingAIShadowMonitor:
         cohort_candidate_count: int,
         now: datetime,
     ) -> None:
+        events = _events_with_data_gap_aliases(events)
         if now.astimezone(_ET).time() < time(16, 0):
             return
 
@@ -2110,6 +2441,17 @@ class TradingAIShadowMonitor:
         *,
         now: datetime,
     ) -> None:
+        market_service = _CurrentSessionMarketDataProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+        )
+        market_service = _FullSessionMarketServiceProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+            allow_shadow_fallback=True,
+        )
         universe = await asyncio.to_thread(
             resolve_v2_shadow_archive,
             config,

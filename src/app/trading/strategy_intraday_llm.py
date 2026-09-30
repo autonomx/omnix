@@ -94,7 +94,47 @@ def _strip_json_fence(value: str) -> str:
 def _default_provider():
     from app.providers.service import get_provider
 
-    return get_provider()
+    provider = get_provider()
+    provider_name = str(
+        getattr(provider, "provider_name", "")
+        or getattr(getattr(provider, "config", None), "provider_type", "")
+    ).strip().casefold()
+    if provider is not None and provider_name == "chatgpt_codex":
+        return _IntradaySchemaProviderProxy(provider)
+    return provider
+
+
+class _IntradaySchemaProviderProxy:
+    def __init__(self, delegate: Any) -> None:
+        self._delegate = delegate
+
+    def __getattr__(self, name: str):
+        return getattr(self._delegate, name)
+
+    def chat_completion(self, *args, **kwargs):
+        response_format = kwargs.get("response_format")
+        if (
+            isinstance(response_format, dict)
+            and str(response_format.get("type") or "").casefold() == "json_object"
+        ):
+            from app.providers.structured.contracts import StructuredMode
+            from app.providers.structured.schema_projection import project_provider_schema
+
+            schema = project_provider_schema(
+                IntradayLLMBatchResponse.model_json_schema(),
+                mode=StructuredMode.JSON_SCHEMA,
+                provider_name="chatgpt_codex",
+            )
+            kwargs = dict(kwargs)
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "intraday_llm_batch_response",
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
+        return self._delegate.chat_completion(*args, **kwargs)
 
 
 def _usage_int(usage: Any, *keys: str) -> int | None:
@@ -610,6 +650,31 @@ class IntradayLLMAnalyzer:
         self.provider_factory = provider_factory or _default_provider
 
     def assess(
+        self,
+        rows: Iterable[tuple[GapperCandidate, Any, datetime, IntradayLearningSnapshot]],
+        *,
+        ranks: dict[str, int],
+        previous_by_instrument: dict[str, dict[str, Any]] | None = None,
+        trigger_reasons_by_instrument: dict[str, tuple[str, ...]] | None = None,
+        payload_modes_by_instrument: dict[str, Literal["delta", "full"]] | None = None,
+    ) -> IntradayLLMResult:
+        from .strategy_ai_shadow_provider import assess_intraday_with_shared_circuit
+
+        kwargs = {
+            "ranks": ranks,
+            "previous_by_instrument": previous_by_instrument,
+            "trigger_reasons_by_instrument": trigger_reasons_by_instrument,
+            "payload_modes_by_instrument": payload_modes_by_instrument,
+        }
+        return assess_intraday_with_shared_circuit(
+            self,
+            rows,
+            kwargs=kwargs,
+            original=type(self)._assess_core,
+            default_provider=_default_provider,
+        )
+
+    def _assess_core(
         self,
         rows: Iterable[tuple[GapperCandidate, Any, datetime, IntradayLearningSnapshot]],
         *,

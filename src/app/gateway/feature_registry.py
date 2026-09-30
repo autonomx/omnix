@@ -61,6 +61,10 @@ def _register_feature_modules(gateway) -> None:
         install_runtime_hooks(feature.hooks)
         for handler in feature.job_handlers:
             job_handlers.register(handler)
+        for observer_factory in feature.job_observers:
+            observer = observer_factory()
+            if observer is not None:
+                job_handlers.register_observer(observer)
         if feature.repositories:
             install_repository_specs(tuple(feature.repositories))
         context = FeatureContext(

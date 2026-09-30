@@ -29,6 +29,12 @@ class JobHandlerSpec(Protocol):
     submission_policy: Callable[..., object] | None
 
 
+class JobObserverFactory(Protocol):
+    """Feature factory that returns an enabled kernel job observer, if any."""
+
+    def __call__(self) -> object | None: ...
+
+
 class ScheduledTaskSpec(Protocol):
     """Structural contract for a feature-owned scheduled task."""
 
@@ -101,6 +107,7 @@ class FeatureModule:
     routers: tuple[RouterFactory, ...] = ()
     internal_routers: tuple[RouterFactory, ...] = ()
     job_handlers: tuple[JobHandlerSpec, ...] = ()
+    job_observers: tuple[JobObserverFactory, ...] = ()
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()
     scheduled_tasks: tuple[ScheduledTaskSpec, ...] = ()
     repositories: tuple[RepositorySpec, ...] = ()

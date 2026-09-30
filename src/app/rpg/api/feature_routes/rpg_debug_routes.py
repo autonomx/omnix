@@ -1,7 +1,6 @@
 from __future__ import annotations
 from fastapi import APIRouter
 
-from functools import wraps
 from time import perf_counter
 from typing import Any, Callable
 
@@ -27,26 +26,8 @@ class RpgDebugClientEventRequestBody(_TypedRequestModel):
     duration_ms: float | None = None
 
 
-_HOOK_SENTINEL = "_omnix_rpg_debug_route_hook_installed"
 _MIDDLEWARE_SENTINEL = "_omnix_rpg_debug_middleware_installed"
 _ROUTE_SENTINEL = "_omnix_rpg_debug_routes_installed"
-
-
-def install_rpg_debug_route_hook() -> None:
-    configure_rpg_debug_logging()
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (args and args[0] == "Omnix Web Gateway"):
-            register_rpg_debug_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)
 
 
 def register_rpg_debug_routes(router: APIRouter, state) -> None:
@@ -85,7 +66,7 @@ def register_rpg_debug_routes(router: APIRouter, state) -> None:
         return {"ok": True, "trace_id": trace_id}
 
 
-def install_rpg_debug_middleware(app: FastAPI) -> None:
+def add_rpg_debug_middleware(app: FastAPI) -> None:
     if getattr(app.state, _MIDDLEWARE_SENTINEL, False):
         return
     setattr(app.state, _MIDDLEWARE_SENTINEL, True)

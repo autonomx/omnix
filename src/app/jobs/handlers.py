@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import builtins
+import logging
 import math
 import random
 from threading import Event
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
@@ -48,6 +49,16 @@ class JobExecutionContext:
 
 JobHandler = Callable[[JobExecutionContext, JobRecord], JobRecord]
 SubmissionPolicy = Callable[[CreateJobRequest], CreateJobRequest]
+logger = logging.getLogger(__name__)
+
+
+class JobObserver(Protocol):
+    """Read-only notification port for durable job lifecycle transitions."""
+
+    def on_created(self, job: JobRecord) -> None: ...
+    def on_started(self, job: JobRecord) -> None: ...
+    def on_completed(self, job: JobRecord) -> None: ...
+    def on_failed(self, job: JobRecord) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,8 +84,31 @@ class JobHandlerSpec:
 class JobHandlerRegistry:
     def __init__(self, specs: tuple[JobHandlerSpec, ...] = ()) -> None:
         self._handlers: dict[str, JobHandlerSpec] = {}
+        self._observers: list[JobObserver] = []
         for spec in specs:
             self.register(spec)
+
+    @property
+    def observers(self) -> tuple[JobObserver, ...]:
+        return tuple(self._observers)
+
+    def register_observer(self, observer: JobObserver) -> None:
+        if observer in self._observers:
+            raise ValueError("duplicate job observer")
+        self._observers.append(observer)
+
+    def notify_observers(self, event: str, job: JobRecord) -> None:
+        callback_name = f"on_{event}"
+        for observer in self._observers:
+            callback = getattr(observer, callback_name, None)
+            if not callable(callback):
+                raise ValueError(f"unsupported job lifecycle event: {event}")
+            try:
+                callback(job)
+            except Exception:
+                logger.exception(
+                    "Job observer failed for lifecycle event %s", event
+                )
 
     def register(self, spec: JobHandlerSpec) -> None:
         if spec.type in self._handlers:
@@ -161,4 +195,8 @@ def registry_from_features(features: tuple[Any, ...]) -> JobHandlerRegistry:
     for feature in features:
         for spec in getattr(feature, "job_handlers", ()):
             registry.register(spec)
+        for observer_factory in getattr(feature, "job_observers", ()):
+            observer = observer_factory()
+            if observer is not None:
+                registry.register_observer(observer)
     return registry

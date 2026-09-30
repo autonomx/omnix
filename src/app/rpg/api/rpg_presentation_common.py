@@ -117,9 +117,9 @@ from app.rpg.session.durable_store import (
     save_session_to_disk,
 )
 from app.rpg.session.migrations import migrate_session_payload
-from app.rpg.session.runtime import (
-    load_runtime_session,
-    save_runtime_session,
+from app.rpg.session.session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+    save_runtime_session as save_runtime_session,
 )
 
 # Phase 15.2 — Session/package bridge with validation and normalization
@@ -772,25 +772,6 @@ def _build_recent_consequence_context(runtime_state: dict, actor_id: str, locati
         "local_pressure": local_pressure[:4],
         "local_conditions": local_conditions[:4],
     }
-
-
-def _resolve_authoritative_runtime_state(data: dict) -> dict:
-    """
-    Prefer authoritative runtime state from the active session when possible,
-    falling back to request payload runtime_state only when needed.
-    """
-    data = _safe_dict(data)
-    session_id = _safe_str(data.get("session_id")).strip()
-    if session_id:
-        try:
-            from app.rpg.session.runtime import ACTIVE_RPG_SESSIONS
-            session = _safe_dict(ACTIVE_RPG_SESSIONS.get(session_id))
-            runtime_state = _safe_dict(session.get("runtime_state"))
-            if runtime_state:
-                return runtime_state
-        except Exception:
-            pass
-    return _safe_dict(data.get("runtime_state"))
 
 
 def _maybe_answer_from_activity(player_text: str, activity: dict, actor_name: str) -> str:

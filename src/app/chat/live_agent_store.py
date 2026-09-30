@@ -1,16 +1,15 @@
-"""Install governed Live Agent routing around authoritative Chat stores."""
+"""Explicit Live Agent routing stage for authoritative Chat stores."""
 from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import ValidationError
 
 from app.assist_core.live_agent_planner import (
     LiveAgentUnavailable,
-    plan_live_agent_proposal,
 )
 from app.assist_core.live_agent_router import (
     LiveAgentRouteDecision,
@@ -31,7 +30,6 @@ from .models import ChatMessage, ChatSession
 from .routing_deadline import provider_turn_deadline
 from .store import _pop_ready_sentences
 
-_HOOK = "_omnix_live_agent_stream_installed"
 _CONFIRM = re.compile(
     r"^(?:yes|yes[, ]+do it|confirm|confirmed|approve|go ahead|proceed|do it)[.!\s]*$",
     re.IGNORECASE,
@@ -42,147 +40,243 @@ _REJECT = re.compile(
 )
 
 
-def install_live_agent_store_hooks(*store_classes: type) -> None:
-    for store_class in store_classes:
-        if getattr(store_class, _HOOK, False):
-            continue
-        original = store_class.stream_provider_reply_chunks
+class LiveAgentPlanner(Protocol):
+    def plan_proposal(
+        self,
+        *,
+        content: str,
+        session_id: str,
+        context: dict[str, Any],
+        timeout_seconds: float,
+    ) -> Any: ...
 
-        def wrapped(
-            self,
-            session: ChatSession,
-            user_message: ChatMessage,
-            *,
-            provider_id: str | None,
-            model_id: str | None,
-            context_items: list[dict[str, Any]] | None = None,
-            routing_deadline_at: float | None = None,
-            _original: Callable[..., Iterable[dict[str, Any]]] = original,
-        ):
-            governed_pending = _pending_governed_proposal(session, user_message.id)
-            governed_choice = _confirmation_choice(user_message.content) if governed_pending else None
-            if governed_pending and governed_choice == "approve":
-                proposal_message, request = governed_pending
-                payload = hermes_assistant_tool_execute_payload(
-                    user_message.content,
-                    request.model_copy(update={"session_id": session.id}),
-                    approved=True,
-                )
-                status = "executed" if payload.execution_result.error is None else "failed"
-                _mark_governed_proposal(
-                    self,
-                    session.id,
-                    proposal_message.id,
-                    status=status,
-                    result=payload.model_dump(mode="json"),
-                )
-                yield from _governed_execution_events(user_message, payload)
-                return
-            if governed_pending and governed_choice == "reject":
-                proposal_message, request = governed_pending
-                _mark_governed_proposal(
-                    self,
-                    session.id,
-                    proposal_message.id,
-                    status="rejected",
-                    result={"tool_id": request.tool_id, "action_id": request.action_id},
-                )
-                yield from _governed_rejection_events(user_message, request)
-                return
 
-            from app.agent_runtime.chat_bridge import route_typed_chat_turn
+class AssistCoreLiveAgentPlanner:
+    """Adapter from the Chat planner port to the Assist Core implementation."""
 
-            generalized = route_typed_chat_turn(
+    def plan_proposal(
+        self,
+        *,
+        content: str,
+        session_id: str,
+        context: dict[str, Any],
+        timeout_seconds: float,
+    ) -> Any:
+        from app.assist_core.live_agent_planner import plan_live_agent_proposal
+
+        return plan_live_agent_proposal(
+            content=content,
+            session_id=session_id,
+            context=context,
+            timeout_seconds=timeout_seconds,
+        )
+
+
+def default_live_agent_planner() -> LiveAgentPlanner:
+    return AssistCoreLiveAgentPlanner()
+
+
+def stream_live_agent_turn(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+    context_items: list[dict[str, Any]] | None = None,
+    routing_deadline_at: float | None = None,
+    planner: LiveAgentPlanner,
+    original_stream: Callable[..., Iterable[dict[str, Any]]],
+):
+    def original(
+        _store: Any,
+        _session: ChatSession,
+        _user_message: ChatMessage,
+        **kwargs: Any,
+    ) -> Iterable[dict[str, Any]]:
+        return original_stream(_session, _user_message, **kwargs)
+
+    def wrapped(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
+        _original: Callable[..., Iterable[dict[str, Any]]] = original,
+        _planner: LiveAgentPlanner = planner,
+    ):
+        governed_pending = _pending_governed_proposal(session, user_message.id)
+        governed_choice = _confirmation_choice(user_message.content) if governed_pending else None
+        if governed_pending and governed_choice == "approve":
+            proposal_message, request = governed_pending
+            payload = hermes_assistant_tool_execute_payload(
+                user_message.content,
+                request.model_copy(update={"session_id": session.id}),
+                approved=True,
+            )
+            status = "executed" if payload.execution_result.error is None else "failed"
+            _mark_governed_proposal(
+                self,
+                session.id,
+                proposal_message.id,
+                status=status,
+                result=payload.model_dump(mode="json"),
+            )
+            yield from _governed_execution_events(user_message, payload)
+            return
+        if governed_pending and governed_choice == "reject":
+            proposal_message, request = governed_pending
+            _mark_governed_proposal(
+                self,
+                session.id,
+                proposal_message.id,
+                status="rejected",
+                result={"tool_id": request.tool_id, "action_id": request.action_id},
+            )
+            yield from _governed_rejection_events(user_message, request)
+            return
+
+        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+
+        generalized = route_typed_chat_turn(
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=(
+                routing_deadline_at
+                if routing_deadline_at is not None
+                else provider_turn_deadline(
+                    provider_id,
+                    session_provider_id=getattr(session, "provider_id", None),
+                )
+            ),
+            routing_context_factory=lambda: _canonical_routing_context(
+                self,
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                routing_deadline_at=(
-                    routing_deadline_at
-                    if routing_deadline_at is not None
-                    else provider_turn_deadline(
-                        provider_id,
-                        session_provider_id=getattr(session, "provider_id", None),
-                    )
-                ),
-                routing_context_factory=lambda: _canonical_routing_context(
+                context_items or [],
+            ),
+        )
+        if generalized is not None:
+            discard_context = getattr(self, "discard_prompt_context", None)
+            if callable(discard_context):
+                discard_context(session, user_message)
+            _persist_omnix_route(
+                self,
+                session.id,
+                user_message,
+                generalized.metadata.get("omnix_route"),
+            )
+            yield from _generalized_result_events(user_message, generalized.content, generalized.metadata)
+            return
+
+        # A generalized Chat decision is still a completed routing decision:
+        # continue with the provider, but do not let the legacy Live Agent
+        # router reinterpret the same user prompt. Preserve pending legacy
+        # Kasa confirmations until they have been approved/rejected.
+        routed_chat = bool(user_message.metadata.get("omnix_chat_routed"))
+        routed_chat_decision = user_message.metadata.get("omnix_route")
+        legacy_pending = _pending_kasa_proposal(session, user_message.id)
+        if routed_chat and legacy_pending is None:
+            _persist_omnix_route(
+                self,
+                session.id,
+                user_message,
+                routed_chat_decision,
+            )
+            original_kwargs: dict[str, Any] = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "context_items": context_items,
+            }
+            if routing_deadline_at is not None:
+                original_kwargs["routing_deadline_at"] = routing_deadline_at
+            yield from _original(self, session, user_message, **original_kwargs)
+            return
+
+        pending = legacy_pending
+        choice = _confirmation_choice(user_message.content) if pending else None
+        if pending and choice == "approve":
+            proposal_message, request = pending
+            payload = hermes_assistant_tool_execute_payload(
+                user_message.content,
+                request.model_copy(update={"session_id": session.id}),
+                approved=True,
+            )
+            status = "executed" if payload.execution_result.error is None else "failed"
+            _mark_kasa_proposal(
+                self,
+                session.id,
+                proposal_message.id,
+                status=status,
+                result=payload.model_dump(mode="json"),
+            )
+            yield from _kasa_execution_events(user_message, payload)
+            return
+        if pending and choice == "reject":
+            proposal_message, request = pending
+            _mark_kasa_proposal(
+                self,
+                session.id,
+                proposal_message.id,
+                status="rejected",
+                result={"tool_id": request.tool_id, "action_id": request.action_id},
+            )
+            yield from _kasa_rejection_events(user_message, request)
+            return
+
+        decision = _decision(user_message)
+        if decision.route != "agent_plan":
+            yield from _provider_with_route(
+                _original(
                     self,
                     session,
                     user_message,
-                    context_items or [],
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                ),
+                decision,
+                persist_route=lambda: _persist_route(
+                    self,
+                    session.id,
+                    user_message,
+                    decision,
                 ),
             )
-            if generalized is not None:
-                discard_context = getattr(self, "discard_prompt_context", None)
-                if callable(discard_context):
-                    discard_context(session, user_message)
-                _persist_omnix_route(
-                    self,
-                    session.id,
-                    user_message,
-                    generalized.metadata.get("omnix_route"),
-                )
-                yield from _generalized_result_events(user_message, generalized.content, generalized.metadata)
-                return
+            return
 
-            # A generalized Chat decision is still a completed routing decision:
-            # continue with the provider, but do not let the legacy Live Agent
-            # router reinterpret the same user prompt. Preserve pending legacy
-            # Kasa confirmations until they have been approved/rejected.
-            routed_chat = bool(user_message.metadata.get("omnix_chat_routed"))
-            routed_chat_decision = user_message.metadata.get("omnix_route")
-            legacy_pending = _pending_kasa_proposal(session, user_message.id)
-            if routed_chat and legacy_pending is None:
-                _persist_omnix_route(
-                    self,
-                    session.id,
-                    user_message,
-                    routed_chat_decision,
+        _persist_route(self, session.id, user_message, decision)
+        if decision.automatic:
+            try:
+                response = _planner.plan_proposal(
+                    content=_contextual_content(
+                        user_message.content,
+                        context_items or [],
+                    ),
+                    session_id=session.id,
+                    context={
+                        "route_reason": decision.reason,
+                        **live_agent_planner_context(),
+                    },
+                    timeout_seconds=(
+                        live_agent_runtime_config().planner_timeout_seconds
+                    ),
                 )
-                original_kwargs: dict[str, Any] = {
-                    "provider_id": provider_id,
-                    "model_id": model_id,
-                    "context_items": context_items,
-                }
-                if routing_deadline_at is not None:
-                    original_kwargs["routing_deadline_at"] = routing_deadline_at
-                yield from _original(self, session, user_message, **original_kwargs)
-                return
-
-            pending = legacy_pending
-            choice = _confirmation_choice(user_message.content) if pending else None
-            if pending and choice == "approve":
-                proposal_message, request = pending
-                payload = hermes_assistant_tool_execute_payload(
-                    user_message.content,
-                    request.model_copy(update={"session_id": session.id}),
-                    approved=True,
+            except LiveAgentUnavailable as exc:
+                fallback_error = str(exc)
+                fallback = decision.model_copy(
+                    update={
+                        "route": "direct_chat",
+                        "reason": "hermes_unavailable_fallback",
+                        "review_required": False,
+                    }
                 )
-                status = "executed" if payload.execution_result.error is None else "failed"
-                _mark_kasa_proposal(
-                    self,
-                    session.id,
-                    proposal_message.id,
-                    status=status,
-                    result=payload.model_dump(mode="json"),
-                )
-                yield from _kasa_execution_events(user_message, payload)
-                return
-            if pending and choice == "reject":
-                proposal_message, request = pending
-                _mark_kasa_proposal(
-                    self,
-                    session.id,
-                    proposal_message.id,
-                    status="rejected",
-                    result={"tool_id": request.tool_id, "action_id": request.action_id},
-                )
-                yield from _kasa_rejection_events(user_message, request)
-                return
-
-            decision = _decision(user_message)
-            if decision.route != "agent_plan":
                 yield from _provider_with_route(
                     _original(
                         self,
@@ -192,86 +286,48 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                         model_id=model_id,
                         context_items=context_items,
                     ),
-                    decision,
-                    persist_route=lambda: _persist_route(
+                    fallback,
+                    error=fallback_error,
+                    persist_route=lambda fallback_error=fallback_error: _persist_route(
                         self,
                         session.id,
                         user_message,
-                        decision,
+                        fallback,
+                        error=fallback_error,
                     ),
                 )
                 return
-
-            _persist_route(self, session.id, user_message, decision)
-            if decision.automatic:
-                try:
-                    response = plan_live_agent_proposal(
-                        content=_contextual_content(
-                            user_message.content,
-                            context_items or [],
-                        ),
-                        session_id=session.id,
-                        context={
-                            "route_reason": decision.reason,
-                            **live_agent_planner_context(),
-                        },
-                        timeout_seconds=(
-                            live_agent_runtime_config().planner_timeout_seconds
-                        ),
-                    )
-                except LiveAgentUnavailable as exc:
-                    fallback_error = str(exc)
-                    fallback = decision.model_copy(
-                        update={
-                            "route": "direct_chat",
-                            "reason": "hermes_unavailable_fallback",
-                            "review_required": False,
-                        }
-                    )
-                    yield from _provider_with_route(
-                        _original(
-                            self,
-                            session,
-                            user_message,
-                            provider_id=provider_id,
-                            model_id=model_id,
-                            context_items=context_items,
-                        ),
-                        fallback,
-                        error=fallback_error,
-                        persist_route=lambda fallback_error=fallback_error: _persist_route(
-                            self,
-                            session.id,
-                            user_message,
-                            fallback,
-                            error=fallback_error,
-                        ),
-                    )
-                    return
-            else:
-                response = plan_mode_chat(
-                    ModeChatRequest(
-                        content=_contextual_content(
-                            user_message.content,
-                            context_items or [],
-                        ),
-                        session_id=session.id,
-                        dry_run=True,
-                        metadata={
-                            "source": "explicit_live_agent",
-                            "proposal_only": True,
-                        },
-                    )
+        else:
+            response = plan_mode_chat(
+                ModeChatRequest(
+                    content=_contextual_content(
+                        user_message.content,
+                        context_items or [],
+                    ),
+                    session_id=session.id,
+                    dry_run=True,
+                    metadata={
+                        "source": "explicit_live_agent",
+                        "proposal_only": True,
+                    },
                 )
-            yield from _agent_events(
-                user_message,
-                decision,
-                response,
-                session_id=session.id,
             )
+        yield from _agent_events(
+            user_message,
+            decision,
+            response,
+            session_id=session.id,
+        )
 
-        store_class.stream_provider_reply_chunks = wrapped
-        setattr(store_class, _HOOK, True)
+    yield from wrapped(
+        store,
+        session,
+        user_message,
+        provider_id=provider_id,
+        model_id=model_id,
+        context_items=context_items,
+        routing_deadline_at=routing_deadline_at,
+    )
 
 
 def _canonical_routing_context(

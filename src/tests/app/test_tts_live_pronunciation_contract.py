@@ -19,7 +19,9 @@ def test_pronunciation_lexicon_rewrites_synthesized_text_only() -> None:
     )
 
     assert request.text == "NEE-kah visited New Yawk with NEE-kah."
-    assert request.delivery_plan == {"speech_act": "answer", "warmth": "moderate"}
+    assert request.delivery_plan is not None
+    assert request.delivery_plan.speech_act == "answer"
+    assert request.delivery_plan.warmth == "moderate"
     assert request.parity_mode is False
     assert request.repetition_penalty >= 1.05
 

@@ -103,7 +103,7 @@ class ChatExecutionTransactions:
             if earlier:
                 work.rollback()
                 return None
-            owner = getattr(self, "chat_execution_owner", None)
+            owner = self.chat_execution_owner
             record = work.jobs.mark_record_only_running(
                 self.context,
                 job_id=job_id,

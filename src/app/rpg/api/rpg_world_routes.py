@@ -7,7 +7,10 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.rpg.api.rpg_session_payloads import _safe_dict, _safe_list, _safe_str
-from app.rpg.session.runtime import load_runtime_session, save_runtime_session
+from app.rpg.session.session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+    save_runtime_session as save_runtime_session,
+)
 
 
 def _player_turn_request_active(runtime_state: dict) -> bool:
@@ -143,7 +146,9 @@ async def get_rpg_session_world_events(request: Request):
 
 async def get_world_behavior(request: Request):
     """Return effective world behavior config for a session."""
-    from app.rpg.session.runtime import get_effective_world_behavior
+    from app.rpg.session.combat_intent import (
+        get_effective_world_behavior as get_effective_world_behavior,
+    )
 
     data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()
@@ -171,7 +176,9 @@ async def update_world_behavior(request: Request):
     from app.rpg.creator.schema import (
         _WORLD_BEHAVIOR_ENUMS,
     )
-    from app.rpg.session.runtime import get_effective_world_behavior
+    from app.rpg.session.combat_intent import (
+        get_effective_world_behavior as get_effective_world_behavior,
+    )
 
     data = await request.json()
     session_id = _safe_str(data.get("session_id")).strip()

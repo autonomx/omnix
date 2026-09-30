@@ -3,8 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
+from app.trading.strategy_ai_shadow_v2_monitor import deterministic_risk_geometry
 from app.trading.strategy_ai_shadow_v2_hardening import _OBSERVED_SPREAD_BPS
-from app.trading.strategy_ai_shadow_v2_risk_policy import _risk_geometry_policy
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -25,7 +25,7 @@ def _decision() -> AIShadowV2AlphaDecision:
 
 
 def test_observed_spread_does_not_relax_authoritative_two_r_cost_assumption() -> None:
-    baseline = _risk_geometry_policy(
+    baseline = deterministic_risk_geometry(
         _decision(),
         entry_reference=Decimal("10"),
         estimated_cost_bps=Decimal("160"),
@@ -36,7 +36,7 @@ def test_observed_spread_does_not_relax_authoritative_two_r_cost_assumption() ->
 
     token = _OBSERVED_SPREAD_BPS.set({INSTRUMENT: Decimal("20")})
     try:
-        observed = _risk_geometry_policy(
+        observed = deterministic_risk_geometry(
             _decision(),
             entry_reference=Decimal("10"),
             estimated_cost_bps=Decimal("160"),

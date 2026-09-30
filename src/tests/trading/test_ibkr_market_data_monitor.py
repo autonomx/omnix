@@ -1,9 +1,10 @@
-import asyncio
 import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+import pytest
 
 from app.trading import ibkr_market_data_monitor as monitor_module
 from app.trading.execution import ExecutionObservation, assess_execution_observation
@@ -168,7 +169,8 @@ def test_ibkr_monitor_market_data_line_budget_preserves_existing_lines(tmp_path)
     assert monitor.budget_denied_instrument_count == 1
 
 
-def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_path):
+@pytest.mark.anyio
+async def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_path):
     event_loop_thread_id = threading.get_ident()
     reconciliation_thread_ids: list[int] = []
 
@@ -211,7 +213,7 @@ def test_ibkr_monitor_reconciliation_runs_off_the_event_loop(monkeypatch, tmp_pa
         ),
     )
 
-    result = asyncio.run(monitor.run_once())
+    result = await monitor.run_once()
 
     assert result == 0
     assert reconciliation_thread_ids

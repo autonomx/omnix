@@ -1,4 +1,10 @@
-from app.rpg.session import runtime as rt
+from app.rpg.session.player_activity_runtime import _apply_semantic_action_to_runtime
+from app.rpg.session.semantic_interaction_runtime import (
+    _MAX_RUNTIME_LLM_RECORDS,
+    _compile_semantic_action_record,
+    _find_npc_target_by_name,
+    _prune_llm_records_state,
+)
 
 
 def _sim_state():
@@ -69,12 +75,12 @@ def test_compile_and_apply_semantic_action_for_darts():
         "reason": "Direct public friendly competition.",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
+    record = _compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
     assert record["action_type"] == "social_competition"
     assert record["activity_label"] == "darts"
     assert record["target_id"] == "npc_bran"
 
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
 
     assert sim2["active_interactions"]
     assert sim2["active_interactions"][0]["subtype"] == "darts"
@@ -104,8 +110,8 @@ def test_compile_and_apply_semantic_action_appends_simulation_event():
         "reason": "Direct public friendly competition.",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
+    record = _compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
 
     assert sim2["event_history"]
     assert sim2["event_history"][-1]["type"] == "player_semantic_action"
@@ -116,7 +122,7 @@ def test_compile_and_apply_semantic_action_appends_simulation_event():
 
 def test_target_resolution_supports_role_fallback():
     sim = _sim_state()
-    target = rt._find_npc_target_by_name(sim, "I challenge the innkeeper to darts")
+    target = _find_npc_target_by_name(sim, "I challenge the innkeeper to darts")
     assert target == "npc_bran"
 
 
@@ -139,9 +145,9 @@ def test_apply_semantic_action_is_idempotent_for_same_record():
         "scene_impact": "gathers_attention",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
-    sim3, runtime3 = rt._apply_semantic_action_to_runtime(sim2, runtime2, record)
+    record = _compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
+    sim3, runtime3 = _apply_semantic_action_to_runtime(sim2, runtime2, record)
 
     assert len(sim3["event_history"]) == 1
     assert len(runtime3["world_consequences"]) == 1
@@ -158,9 +164,9 @@ def test_prune_llm_records_state_bounds_index():
         runtime_state["llm_records"].append(item)
         runtime_state["llm_records_index"][f"semantic_action_compiled:{tick}"] = item
 
-    pruned = rt._prune_llm_records_state(runtime_state)
-    assert len(pruned["llm_records"]) <= rt._MAX_RUNTIME_LLM_RECORDS
-    assert len(pruned["llm_records_index"]) <= rt._MAX_RUNTIME_LLM_RECORDS
+    pruned = _prune_llm_records_state(runtime_state)
+    assert len(pruned["llm_records"]) <= _MAX_RUNTIME_LLM_RECORDS
+    assert len(pruned["llm_records_index"]) <= _MAX_RUNTIME_LLM_RECORDS
     assert "semantic_action_compiled:399" in pruned["llm_records_index"]
     assert "semantic_action_compiled:0" not in pruned["llm_records_index"]
 
@@ -185,8 +191,8 @@ def test_compile_and_apply_semantic_action_for_hug():
         "reason": "Warm direct social contact.",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I hug Elara", action, advisory)
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
+    record = _compile_semantic_action_record(sim, runtime_state, "I hug Elara", action, advisory)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
 
     assert runtime2["actor_activities"]["npc_elara"]["kind"] == "player_social_affection"
     assert any("warmer toward the player" in item.get("summary", "") for item in runtime2["world_consequences"])
@@ -212,8 +218,8 @@ def test_semantic_competition_propagates_pressure_and_rumor_and_observer_activit
         "reason": "Direct public contest in a tavern.",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I arm wrestle Bran", action, advisory)
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
+    record = _compile_semantic_action_record(sim, runtime_state, "I arm wrestle Bran", action, advisory)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
 
     assert runtime2["world_pressure"]
     assert any("Attention builds" in item.get("summary", "") for item in runtime2["world_pressure"])
@@ -250,8 +256,8 @@ def test_semantic_public_competition_generates_observer_activity():
         "scene_impact": "gathers_attention",
     }
 
-    record = rt._compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
-    sim2, runtime2 = rt._apply_semantic_action_to_runtime(sim, runtime_state, record)
+    record = _compile_semantic_action_record(sim, runtime_state, "I challenge Bran to darts", action, advisory)
+    sim2, runtime2 = _apply_semantic_action_to_runtime(sim, runtime_state, record)
 
     assert "npc_guard" in runtime2["actor_activities"]
     assert runtime2["actor_activities"]["npc_guard"]["kind"] in {"observer_reaction", "authority_observation"}

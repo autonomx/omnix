@@ -87,7 +87,7 @@ def ensure_content_pack_state(simulation_state: Dict[str, Any]) -> Dict[str, Any
     return simulation_state
 
 
-def install_content_pack(
+def add_content_pack(
     simulation_state: Dict[str, Any],
     pack: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -192,7 +192,7 @@ def apply_content_pack(
     simulation_state = ensure_content_pack_state(simulation_state)
     pack = _normalize_content_pack(pack)
 
-    simulation_state = install_content_pack(simulation_state, pack)
+    simulation_state = add_content_pack(simulation_state, pack)
 
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):

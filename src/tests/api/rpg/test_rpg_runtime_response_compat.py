@@ -6,24 +6,9 @@ SRC = ROOT
 STATIC = ROOT / "static"
 
 
-def test_sitecustomize_provides_opening_bonus_default():
-    sitecustomize = SRC / "sitecustomize.py"
-    text = sitecustomize.read_text(encoding="utf-8")
-
-    assert "builtins.opening_bonus" in text
-    assert "0.0" in text
-    assert "resume/idle catch-up" in text
-
-
-def test_sitecustomize_adapts_lmstudio_for_rpg_narrator_interface():
-    sitecustomize = SRC / "sitecustomize.py"
-    text = sitecustomize.read_text(encoding="utf-8")
-
-    assert "_install_rpg_lmstudio_gateway_compat" in text
-    assert "LMStudioProvider.generate" in text
-    assert "LMStudioProvider.generate_stream" in text
-    assert "LMStudioProvider.call" in text
-    assert "chat_completion" in text
+def test_python_startup_patchers_are_removed():
+    assert not (SRC / "sitecustomize.py").exists()
+    assert not (SRC / "usercustomize.py").exists()
 
 
 def test_runtime_promotion_normalizes_missing_turn_ids_before_rpg_js():

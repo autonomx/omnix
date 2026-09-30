@@ -18,12 +18,18 @@ from app.rpg.api.rpg_session_payloads import (
     _safe_str,
 )
 from app.rpg.economy.action_generator import build_menu_action
-from app.rpg.session.runtime import (
-    _normalize_runtime_settings,
-    apply_turn,
-    build_frontend_bootstrap_payload,
-    load_runtime_session,
-    save_runtime_session,
+from app.rpg.session.action_execution import (
+    build_frontend_bootstrap_payload as build_frontend_bootstrap_payload,
+)
+from app.rpg.session.session_runtime_store import (
+    load_runtime_session as load_runtime_session,
+    save_runtime_session as save_runtime_session,
+)
+from app.rpg.session.state_normalization import (
+    _normalize_runtime_settings as _normalize_runtime_settings,
+)
+from app.rpg.session.turn_response_composition import (
+    apply_turn as apply_turn,
 )
 
 
@@ -352,7 +358,9 @@ async def idle_tick_rpg_session(request: Request):
         print("[RPG][idle_tick] semantic proposal scheduling failed:", repr(exc))
 
     try:
-        from app.rpg.session.runtime import apply_idle_ticks
+        from app.rpg.session.idle_narration_delivery import (
+            apply_idle_ticks as apply_idle_ticks,
+        )
 
         result = _safe_dict(apply_idle_ticks(session_id, count, reason=reason))
     except Exception as exc:

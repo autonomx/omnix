@@ -40,6 +40,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Set
 
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+
 logger = logging.getLogger(__name__)
 
 # Allowed intent types — LLM cannot create new ones
@@ -93,7 +95,7 @@ class IntentEnrichment:
                         Can be None if LLM enrichment not needed.
             cooldown_ticks: Minimum ticks between LLM enrichment calls.
         """
-        self.llm_client = llm_client
+        self.llm_client = adapt_base_provider(llm_client)
         self.cooldown_ticks = cooldown_ticks
         self._last_llm_call_tick: int = -cooldown_ticks  # Ready immediately
         self._stats: Dict[str, int] = {

@@ -643,9 +643,9 @@ def record_direct_dialogue_exchange(
     persist_error = ""
     if persist:
         try:
-            from app.rpg.session import runtime as canonical_runtime
+            from app.rpg.session.session_runtime_store import save_runtime_session
 
-            canonical_runtime.save_runtime_session(session)
+            save_runtime_session(session)
             persisted = True
         except Exception as exc:  # pragma: no cover - persistence is best effort here
             persist_error = f"{type(exc).__name__}: {exc}"

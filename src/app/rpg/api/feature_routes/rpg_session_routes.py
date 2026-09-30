@@ -4,10 +4,9 @@ from fastapi import APIRouter
 from app.config.env import env_str as _env_str
 
 import asyncio
-from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import HTTPException, Query, Request
 from pydantic import ValidationError
 
 from .rpg_campaign_lore_routes import register_rpg_campaign_lore_routes
@@ -100,7 +99,6 @@ class RpgSessionConversationInterveneRequestBody(_TypedRequestModel):
 
 
 _ROUTE_SENTINEL = "_omnix_rpg_session_routes_registered"
-_HOOK_SENTINEL = "_omnix_rpg_session_route_hook_installed"
 _GENESIS_CONTRACT_VERSION = "rpg_genesis_v2"
 _LOCAL_DIALOGUE_FIXTURE_HEADER = "x-omnix-rpg-live-smoke"
 
@@ -504,25 +502,3 @@ def register_rpg_session_routes(router: APIRouter, state) -> None:
                 not_found_errors={"session_not_found"},
             )
         )
-
-
-def install_rpg_session_route_hook() -> None:
-    """Register the session routes on future gateway app instances."""
-    if getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-    original_init: Callable[..., None] = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(
-        self: FastAPI,
-        *args: Any,
-        **kwargs: Any,
-    ) -> None:
-        original_init(self, *args, **kwargs)
-        if kwargs.get("title") == "Omnix Web Gateway" or (
-            args and args[0] == "Omnix Web Gateway"
-        ):
-            register_rpg_session_routes(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)

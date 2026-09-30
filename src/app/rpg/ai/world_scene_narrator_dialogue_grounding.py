@@ -1,9 +1,20 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
-from app.rpg.ai.world_scene_narrator_common import _safe_dict, _safe_list, _safe_str, _title_case_token
+from app.rpg.ai.world_scene_narrator_common import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+)
+
 
 def _build_ambient_conversation_line(narration_context: Dict[str, Any]) -> str:
     narration_context = _safe_dict(narration_context)
@@ -14,8 +25,16 @@ def _build_ambient_conversation_line(narration_context: Dict[str, Any]) -> str:
 
     summary = _safe_str(beat.get("summary")).strip()
     stance = _safe_str(beat.get("stance")).strip().lower()
-    addressed_to = [_title_case_token(x) for x in _safe_list(beat.get("addressed_to")) if _safe_str(x).strip()]
-    mentions = [_title_case_token(x) for x in _safe_list(beat.get("mentions")) if _safe_str(x).strip()]
+    addressed_to = [
+        _title_case_token(x)
+        for x in _safe_list(beat.get("addressed_to"))
+        if _safe_str(x).strip()
+    ]
+    mentions = [
+        _title_case_token(x)
+        for x in _safe_list(beat.get("mentions"))
+        if _safe_str(x).strip()
+    ]
 
     summary = summary.rstrip(".!? ").strip()
     if not summary:
@@ -121,8 +140,7 @@ def _has_authoritative_accommodation_offer(narration_context: Dict[str, Any]) ->
     resolved = _safe_dict(narration_context.get("resolved_result"))
     turn_contract = _safe_dict(narration_context.get("turn_contract"))
     resolved_from_contract = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
+        turn_contract.get("resolved_result") or turn_contract.get("resolved_action")
     )
 
     for source in (resolved, resolved_from_contract):
@@ -136,7 +154,9 @@ def _has_authoritative_accommodation_offer(narration_context: Dict[str, Any]) ->
             return True
         if service_effects:
             return True
-        if _safe_str(source.get("service_id") or source.get("room_id") or source.get("offer_id")):
+        if _safe_str(
+            source.get("service_id") or source.get("room_id") or source.get("offer_id")
+        ):
             return True
 
     return False
@@ -177,13 +197,11 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
         "might have something",
         "something for you",
         "somethin' for you",
-
         # Scene movement / transition claims
         "follow me",
         "come with me",
         "let me show you",
         "show you the room",
-
         # Specific room/location facts
         "top floor",
         "above the inn",
@@ -193,7 +211,6 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
         "garden out back",
         "stable accommodations",
         "accommodations in town",
-
         # Price / transaction claims
         "what'll it cost",
         "what will it cost",
@@ -203,7 +220,6 @@ def _ground_accommodation_npc_line(line: str, narration_context: Dict[str, Any])
         "silver",
         "gold",
         "copper",
-
         # Quality/assignment claims
         "perfect for a traveler",
         "perfect for you",
@@ -239,8 +255,7 @@ def _service_result_from_context(narration_context: Dict[str, Any]) -> Dict[str,
 
     # 2. Then use resolved contract state.
     resolved = _safe_dict(
-        turn_contract.get("resolved_result")
-        or turn_contract.get("resolved_action")
+        turn_contract.get("resolved_result") or turn_contract.get("resolved_action")
     )
     resolved_service = _safe_dict(resolved.get("service_result"))
     if resolved_service.get("matched"):
@@ -264,7 +279,10 @@ def _service_result_from_context(narration_context: Dict[str, Any]) -> Dict[str,
 
     return {}
 
-def _recalled_service_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+
+def _recalled_service_memories_from_context(
+    narration_context: Dict[str, Any],
+) -> List[Dict[str, Any]]:
     narration_context = _safe_dict(narration_context)
     memories = narration_context.get("recalled_service_memories")
     if isinstance(memories, list):
@@ -272,7 +290,9 @@ def _recalled_service_memories_from_context(narration_context: Dict[str, Any]) -
     return []
 
 
-def _format_recalled_service_memories_for_prompt(narration_context: Dict[str, Any]) -> str:
+def _format_recalled_service_memories_for_prompt(
+    narration_context: Dict[str, Any],
+) -> str:
     memories = _recalled_service_memories_from_context(narration_context)
     if not memories:
         return "None."
@@ -302,7 +322,9 @@ def _format_recalled_service_memories_for_prompt(narration_context: Dict[str, An
     return "\n".join(lines) if lines else "None."
 
 
-def _recalled_npc_memories_from_context(narration_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _recalled_npc_memories_from_context(
+    narration_context: Dict[str, Any],
+) -> List[Dict[str, Any]]:
     narration_context = _safe_dict(narration_context)
     memories = narration_context.get("recalled_npc_memories")
     if isinstance(memories, list):
@@ -328,7 +350,9 @@ def _format_recalled_npc_memories_for_prompt(narration_context: Dict[str, Any]) 
     return "\n".join(lines) if lines else "None."
 
 
-def _conversation_result_from_context(narration_context: Dict[str, Any]) -> Dict[str, Any]:
+def _conversation_result_from_context(
+    narration_context: Dict[str, Any],
+) -> Dict[str, Any]:
     narration_context = _safe_dict(narration_context)
     direct = _safe_dict(narration_context.get("conversation_result"))
     if direct:
@@ -350,7 +374,11 @@ def _format_conversation_beat_for_prompt(narration_context: Dict[str, Any]) -> s
     topic_title = _safe_str(topic.get("title") or beat.get("topic"))
     if not line:
         return "None."
-    mode = _safe_str(participation.get("mode") or conversation.get("participation_mode") or "overheard")
+    mode = _safe_str(
+        participation.get("mode")
+        or conversation.get("participation_mode")
+        or "overheard"
+    )
     return f'{speaker} speaks to {listener} about {topic_title} [{mode}]: "{line}"'
 
 
@@ -421,15 +449,23 @@ def _memory_reference_is_backed(line: str, narration_context: Dict[str, Any]) ->
         kind = _safe_str(memory.get("kind"))
         if kind and kind in lower:
             return True
-        if "short" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
+        if (
+            "short" in lower
+            and _safe_str(memory.get("blocked_reason")) == "insufficient_funds"
+        ):
             return True
-        if "coin" in lower and _safe_str(memory.get("blocked_reason")) == "insufficient_funds":
+        if (
+            "coin" in lower
+            and _safe_str(memory.get("blocked_reason")) == "insufficient_funds"
+        ):
             return True
         if "bought" in lower and kind == "service_purchase":
             return True
         if "asked" in lower and kind == "service_inquiry":
             return True
-        if summary and any(token in summary for token in lower.split() if len(token) > 5):
+        if summary and any(
+            token in summary for token in lower.split() if len(token) > 5
+        ):
             return True
 
     specific_claim_terms = ("short", "coin", "bought", "paid", "purchased", "failed")
@@ -450,6 +486,10 @@ def _strip_unbacked_memory_reference_from_npc_line(
     )
     if service_backed or npc_backed:
         return line
+
+    from app.rpg.ai.world_scene_narrator_service_grounding import (
+        _service_grounded_npc_line as _service_grounded_npc_line,
+    )
 
     grounded_line = _service_grounded_npc_line(narration_context)
     if grounded_line:
@@ -472,8 +512,7 @@ def _strip_service_meta_language(text: str, narration_context: Dict[str, Any]) -
     purchase = _safe_dict(service_result.get("purchase"))
     service_application = _safe_dict(narration_context.get("service_application"))
     blocked_reason = _safe_str(
-        service_application.get("blocked_reason")
-        or purchase.get("blocked_reason")
+        service_application.get("blocked_reason") or purchase.get("blocked_reason")
     )
 
     meta_markers = (
@@ -530,4 +569,9 @@ def _join_natural(items: List[str]) -> str:
         return f"{items[0]} or {items[1]}"
     return f"{', '.join(items[:-1])}, or {items[-1]}"
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+
+__all__ = (
+    "annotations json logging re traceback dataclass field Any Callable Dict List Optional normalize_grounding_settings select_grounded_narration_candidate memory_reference_is_backed build_runtime_npc_response_architecture build_runtime_current_turn_prompt_contract format_runtime_prompt_contract_block build_runtime_presentation_guardrails_block sanitize_unsupported_combat_payload parse_runtime_provider_payload build_encounter_view logger _ACTIVE_NARRATIONS "
+    "NARRATION_JSON_FORMAT_VERSION NARRATION_JSON_SCHEMA_HINT _extract_llm_text _llm_text _attach_social_context _safe_str_p6 _attach_npc_mind_context _NARRATION_MAX_MARKDOWN _safe_str _safe_dict _safe_list _title_case_token _force_live_llm_required _build_ambient_conversation_line _bound_text _clean_npc_dialogue_line _is_accommodation_request _has_authoritative_accommodation_offer _ground_accommodation_npc_line _service_result_from_context _recalled_service_memories_from_context "
+    "_format_recalled_service_memories_for_prompt _recalled_npc_memories_from_context _format_recalled_npc_memories_for_prompt _conversation_result_from_context _format_conversation_beat_for_prompt _apply_grounded_conversation_beat _line_has_prior_memory_reference _memory_reference_is_backed _strip_unbacked_memory_reference_from_npc_line _strip_service_meta_language _service_offer_label_with_price _join_natural "
+).split()

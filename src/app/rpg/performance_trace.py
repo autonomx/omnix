@@ -251,6 +251,21 @@ def rpg_pipeline_span(
         _SPAN_DEPTH.reset(depth_token)
 
 
+@contextmanager
+def rpg_pipeline_span_if_active(
+    name: str,
+    *,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[dict[str, Any] | None]:
+    """Measure an internal operation only when a request trace is already active."""
+
+    if current_rpg_pipeline_trace() is None:
+        yield None
+        return
+    with rpg_pipeline_span(name, fields=fields) as span:
+        yield span
+
+
 def build_traced_json_response(payload: dict[str, Any], *, status_code: int = 200) -> Response:
     if payload.get("contract_version") == "rpg_turn_response_v2":
         from app.rpg.presentation.turn_response import TURN_RESPONSE_MAX_BYTES

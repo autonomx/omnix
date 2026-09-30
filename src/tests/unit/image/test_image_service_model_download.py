@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from app import image_service_app
+from app import image_service_runtime as image_service_app
 from app.image import downloads as image_downloads
 from app.image.downloads import get_image_local_model_status
 
