@@ -12,7 +12,9 @@ from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 from app.trading.feature import FEATURE
 
 
-def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks():
+def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch):
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
     assert FEATURE.background_workers == ()
     assert len(FEATURE.scheduled_tasks) == 22
     config = RuntimeConfig()

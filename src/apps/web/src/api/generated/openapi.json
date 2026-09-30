@@ -34974,6 +34974,11 @@
             "title": "Replicas",
             "type": "object"
           },
+          "scheduler": {
+            "additionalProperties": true,
+            "title": "Scheduler",
+            "type": "object"
+          },
           "schema_version": {
             "default": 1,
             "title": "Schema Version",

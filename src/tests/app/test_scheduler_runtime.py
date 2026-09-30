@@ -78,6 +78,10 @@ def _execution_scope(_owner):
     return nullcontext()
 
 
+def _process_task_callback(_context: TaskContext) -> None:
+    return None
+
+
 def test_scheduled_task_requires_exactly_one_schedule_and_serial_async_callback():
     async def run(_context: TaskContext):
         return None
@@ -450,6 +454,41 @@ def test_thread_executor_keeps_task_lock_until_cancelled_work_exits():
 
     asyncio.run(scenario())
     assert maximum_active == 1
+    assert database.keys == set()
+
+
+def test_process_executor_receives_the_task_context():
+    database = _FakeDatabase()
+    scheduler = SchedulerRuntime(
+        database,
+        "workspace-a",
+        capabilities=_capabilities(),
+        execution_scope=_execution_scope,
+        startup_jitter_seconds=0,
+        process_workers=1,
+    )
+    scheduler.register_task(
+        ScheduledTaskSpec(
+            task_id="test.process-context",
+            run=_process_task_callback,
+            interval_seconds=0.005,
+            timeout_seconds=5,
+            executor="process",
+        )
+    )
+
+    async def scenario():
+        await scheduler.startup()
+        for _ in range(200):
+            if scheduler.diagnostics()["tasks"]["test.process-context"]["run_count"]:
+                break
+            await asyncio.sleep(0.025)
+        await scheduler.shutdown()
+
+    asyncio.run(scenario())
+    metric = scheduler.diagnostics()["tasks"]["test.process-context"]
+    assert metric["run_count"] > 0
+    assert metric["failure_count"] == 0
     assert database.keys == set()
 
 

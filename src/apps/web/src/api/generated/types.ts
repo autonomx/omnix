@@ -23380,6 +23380,10 @@ export interface components {
             replicas?: {
                 [key: string]: unknown;
             };
+            /** Scheduler */
+            scheduler?: {
+                [key: string]: unknown;
+            };
             /**
              * Schema Version
              * @default 1

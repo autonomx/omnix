@@ -6,10 +6,9 @@ post-open confirmation and deterministic post-close finalization.
 
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import asyncio
-import os
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -146,8 +145,6 @@ class ProspectiveGapMonitor:
 
 def create_prospective_gap_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
     state = context.runtime_state
-    if not prospective_gap_monitor_enabled():
-        return None
     existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, ProspectiveGapMonitor):
         return None

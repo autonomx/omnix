@@ -744,10 +744,9 @@ class SchedulerRuntime:
                 with self.execution_scope(owner):
                     return spec.run(context)
 
-            callback = invoke_thread
+            future = loop.run_in_executor(executor, invoke_thread)
         else:
-            callback = spec.run
-        future = loop.run_in_executor(executor, callback)
+            future = loop.run_in_executor(executor, spec.run, context)
         try:
             result = await asyncio.wait_for(
                 asyncio.shield(future), timeout=spec.timeout_seconds
@@ -861,6 +860,8 @@ class SchedulerRuntime:
                 owner.require_live()
                 await controls.enabled.wait()
                 if next_interval is not None:
+                    assert spec.interval_seconds is not None
+                    interval_seconds = spec.interval_seconds
                     scheduled_mono = next_interval
                     delay = max(0.0, scheduled_mono - time.monotonic())
                     scheduled_at, lag, triggered = await self._wait_until_due(
@@ -871,11 +872,11 @@ class SchedulerRuntime:
                     next_interval = (
                         time.monotonic()
                         if triggered
-                        else scheduled_mono + spec.interval_seconds
+                        else scheduled_mono + interval_seconds
                     )
                     now_mono = time.monotonic()
                     while next_interval <= now_mono:
-                        next_interval += spec.interval_seconds
+                        next_interval += interval_seconds
                     if spec.jitter_seconds:
                         next_interval += random.uniform(0, spec.jitter_seconds)
                 else:
