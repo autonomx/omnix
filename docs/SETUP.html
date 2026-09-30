@@ -37,8 +37,8 @@
 <th>Meaning</th>
 </tr></thead><tbody>
 <tr>
-<td><code>OMNIX_GATEWAY_BACKGROUND_ROLE=worker</code> or <code>api</code></td>
-<td>Worker owns singleton background execution; API serves requests under durable chat ownership. Default is worker.</td>
+<td><code>OMNIX_GATEWAY_BACKGROUND_ROLE=worker</code>, <code>api</code>, or <code>scheduler</code></td>
+<td>Worker owns grouped background workers and may run scheduled tasks; scheduler runs independently locked tasks without owning the grouped background runtime; API serves requests without scheduled-task ownership. Default is worker.</td>
 </tr>
 <tr>
 <td><code>OMNIX_TTS_URL</code>, <code>OMNIX_STT_URL</code>, <code>OMNIX_IMAGE_URL</code></td>
@@ -73,7 +73,7 @@
 <td>Browser speech routes through its gateway origin. The gateway sends the private credential to <code>OMNIX_STT_URL</code>.</td>
 </tr>
 </tbody></table></div>
-<p>Optional explicit <code>OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME</code> and <code>OMNIX_GATEWAY_ALLOW_LOCAL_TTS</code> flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">the Nginx ingress example</a>; the Vite proxy is for local development. See <a href="OPERATIONS.html">operations</a> for readiness/recovery and <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a> for disposable test database and certification commands.</p>
+<p>Optional explicit <code>OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME</code> and <code>OMNIX_GATEWAY_ALLOW_LOCAL_TTS</code> flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. <code>OMNIX_SCHEDULER_THREAD_WORKERS</code> and <code>OMNIX_SCHEDULER_PROCESS_WORKERS</code> bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install <a href="architecture/OMNIX_PRODUCTION_INGRESS.html">the Nginx ingress example</a>; the Vite proxy is for local development. See <a href="OPERATIONS.html">operations</a> for readiness/recovery and <a href="testing/ARCHITECTURE_GATES.html">architecture gates</a> for disposable test database and certification commands.</p>
 <p>This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.</p>
 <h2 id="1-prerequisites">1. Prerequisites</h2>
 <p>Install the tools needed for the parts of Omnix you intend to run.</p>

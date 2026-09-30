@@ -66,7 +66,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-5.11 | not started | — | 2026-09-27 | — | Migration lint in CI |
 | WP-6.1 | not started | — | 2026-09-27 | — | Job worker pools by resource class, as a standalone process |
 | WP-6.2 | not started | — | 2026-09-27 | — | Device permits for GPU capacity across processes |
-| WP-6.3 | not started | — | 2026-09-27 | — | Scheduler with per-task ownership |
+| WP-6.3 | in progress | #1547 | 2026-09-30 | Focused scheduler/trading tests pass; PostgreSQL process-split acceptance test skipped locally without `OMNIX_TEST_DATABASE_URL`; fresh PR Actions evidence pending | Per-task advisory ownership, recovery migration, 22 trading task specs, role isolation, handoff control, and diagnostics are implemented; do not mark done until current-source CI acceptance is green. |
 | WP-6.4 | not started | — | 2026-09-27 | — | Live voice scaling |
 | WP-6.5 | not started | — | 2026-09-27 | — | Agent runtime concurrency and durability |
 | WP-6.6 | not started | — | 2026-09-27 | — | Inventory and elimination of process-local state |

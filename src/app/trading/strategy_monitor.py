@@ -3411,6 +3411,40 @@ class TradingStrategyMonitor:
                 )
             await asyncio.sleep(self.interval_seconds)
 
+async def prepare_trading_strategy_monitor_for_scheduled_execution(
+    monitor: TradingStrategyMonitor,
+) -> None:
+    if not managed_finviz_shadow_autoprovision_enabled():
+        return
+    try:
+        provision = await asyncio.to_thread(
+            provision_managed_finviz_shadow_strategy,
+            strategy_repository=monitor.strategy_repository_factory(),
+            paper_repository=monitor.paper_repository_factory(),
+        )
+        monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
+        monitor.managed_finviz_shadow_provision_error = None
+        if (
+            monitor.last_error is not None
+            and monitor.last_error.startswith("managed_finviz_shadow_provision:")
+        ):
+            monitor.last_error = None
+    except Exception as exc:
+        monitor.managed_finviz_shadow_provision = None
+        monitor.managed_finviz_shadow_provision_error = (
+            f"{type(exc).__name__}: {exc}"
+        )
+        monitor.last_error = (
+            "managed_finviz_shadow_provision: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        trade_log(
+            "auto_trading",
+            "managed_finviz_shadow_provision_error",
+            error_type=type(exc).__name__,
+            detail=str(exc),
+        )
+
 
 def create_trading_strategy_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
     state = context.runtime_state
@@ -3421,37 +3455,7 @@ def create_trading_strategy_monitor_worker(context: FeatureContext) -> Backgroun
     setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
-        if managed_finviz_shadow_autoprovision_enabled():
-            try:
-                provision = await asyncio.to_thread(
-                    provision_managed_finviz_shadow_strategy,
-                    strategy_repository=monitor.strategy_repository_factory(),
-                    paper_repository=monitor.paper_repository_factory(),
-                )
-                monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
-                monitor.managed_finviz_shadow_provision_error = None
-                if (
-                    monitor.last_error is not None
-                    and monitor.last_error.startswith(
-                        "managed_finviz_shadow_provision:"
-                    )
-                ):
-                    monitor.last_error = None
-            except Exception as exc:
-                monitor.managed_finviz_shadow_provision = None
-                monitor.managed_finviz_shadow_provision_error = (
-                    f"{type(exc).__name__}: {exc}"
-                )
-                monitor.last_error = (
-                    "managed_finviz_shadow_provision: "
-                    f"{type(exc).__name__}: {exc}"
-                )
-                trade_log(
-                    "auto_trading",
-                    "managed_finviz_shadow_provision_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                )
+        await prepare_trading_strategy_monitor_for_scheduled_execution(monitor)
         if trading_strategy_monitor_enabled():
             monitor.start()
 

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 import asyncio
 from typing import Any
 
@@ -56,10 +55,16 @@ class TradingMetricMonitor:
             service.binance.liquidation_buffer.ensure_started(symbol)
         self.started_symbols = symbols
 
+    def run_once(self) -> int:
+        """Reconcile stream collectors owned by this scheduled task."""
+        self.start()
+        return len(self.started_symbols)
+
     def diagnostics(self) -> dict[str, Any]:
         service = self.service
         return {
             "enabled": trading_liquidation_collector_enabled(),
+            "running": bool(self.started_symbols),
             "started_symbols": list(self.started_symbols),
             "collecting": {
                 symbol: bool(

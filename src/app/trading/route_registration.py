@@ -1,12 +1,13 @@
-"""Trading router composition and runtime-owned background workers."""
+"""Trading router composition and scheduler-owned monitor tasks."""
 from __future__ import annotations
 
 from collections.abc import Callable
+import inspect
 
 from fastapi import APIRouter
 
-from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
+from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 
 
 def create_trading_router(_context: FeatureContext) -> APIRouter:
@@ -57,69 +58,173 @@ def create_trading_router(_context: FeatureContext) -> APIRouter:
     return router
 
 
-def trading_background_worker_factories() -> tuple[Callable[[FeatureContext], BackgroundWorker | None], ...]:
-    """Return the monitor worker factories owned by the trading feature."""
-    from app.trading.alerts_monitor import create_trading_alert_monitor_worker
+def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], ScheduledTaskSpec | None], ...]:
+    """Build per-monitor tasks while preserving feature-owned enablement and cleanup."""
+    from app.trading.alerts_monitor import (
+        create_trading_alert_monitor_worker,
+        trading_alert_monitor_enabled,
+    )
     from app.trading.execution_observation_monitor import (
         create_trading_execution_observation_monitor_worker,
+        execution_observation_monitor_enabled,
     )
-    from app.trading.ibkr_market_data_monitor import create_trading_ibkr_market_data_monitor_worker
-    from app.trading.metric_monitor import create_trading_metric_monitor_worker
-    from app.trading.paper_monitor import create_trading_paper_monitor_worker
-    from app.trading.prospective_gap_monitor import create_prospective_gap_monitor_worker
-    from app.trading.providers.alpaca_iex_status import create_alpaca_iex_status_monitor_worker
+    from app.trading.ibkr_market_data_monitor import (
+        create_trading_ibkr_market_data_monitor_worker,
+        ibkr_market_data_monitor_enabled,
+    )
+    from app.trading.metric_monitor import (
+        create_trading_metric_monitor_worker,
+        trading_liquidation_collector_enabled,
+    )
+    from app.trading.paper_monitor import (
+        create_trading_paper_monitor_worker,
+        trading_paper_monitor_enabled,
+    )
+    from app.trading.prospective_gap_monitor import (
+        create_prospective_gap_monitor_worker,
+        prospective_gap_monitor_enabled,
+    )
+    from app.trading.providers.alpaca_iex_status import (
+        create_alpaca_iex_status_monitor_worker,
+        alpaca_iex_status_monitor_enabled,
+    )
     from app.trading.session_reconciliation_monitor import (
         create_trading_session_reconciliation_monitor_worker,
+        session_reconciliation_monitor_enabled,
     )
-    from app.trading.strategy_ai_shadow_monitor import create_trading_ai_shadow_monitor_worker
-    from app.trading.strategy_ai_shadow_v2_monitor import create_trading_ai_shadow_v2_monitor_worker
-    from app.trading.strategy_ai_shadow_v3_monitor import create_trading_ai_shadow_v3_monitor_worker
+    from app.trading.strategy_ai_shadow_monitor import (
+        create_trading_ai_shadow_monitor_worker,
+        ai_shadow_monitor_enabled,
+    )
+    from app.trading.strategy_ai_shadow_v2_monitor import (
+        create_trading_ai_shadow_v2_monitor_worker,
+        ai_shadow_v2_monitor_enabled,
+    )
+    from app.trading.strategy_ai_shadow_v3_monitor import (
+        create_trading_ai_shadow_v3_monitor_worker,
+        ai_shadow_v3_monitor_enabled,
+    )
     from app.trading.strategy_deep_recovery_monitor import (
         create_trading_strategy_deep_recovery_shadow_monitor_worker,
+        strategy_deep_recovery_shadow_monitor_enabled,
     )
-    from app.trading.strategy_dynamic_discovery_monitor import create_interday_dynamic_discovery_monitor_worker
-    from app.trading.strategy_interday_learning_monitor import create_interday_learning_monitor_worker
-    from app.trading.strategy_monitor import create_trading_strategy_monitor_worker
+    from app.trading.strategy_dynamic_discovery_monitor import (
+        create_interday_dynamic_discovery_monitor_worker,
+        dynamic_discovery_monitor_enabled,
+    )
+    from app.trading.strategy_interday_learning_monitor import (
+        create_interday_learning_monitor_worker,
+        interday_learning_monitor_enabled,
+    )
+    from app.trading.strategy_monitor import (
+        create_trading_strategy_monitor_worker,
+        prepare_trading_strategy_monitor_for_scheduled_execution,
+        trading_strategy_monitor_enabled,
+    )
     from app.trading.strategy_prospective_economic_monitor import (
         create_trading_strategy_prospective_economic_monitor_worker,
+        strategy_prospective_economic_monitor_enabled,
     )
-    from app.trading.strategy_research_monitor import create_trading_strategy_research_monitor_worker
+    from app.trading.strategy_research_monitor import (
+        create_trading_strategy_research_monitor_worker,
+        strategy_research_monitor_enabled,
+    )
     from app.trading.strategy_research_outcome_monitor import (
         create_trading_strategy_research_outcome_monitor_worker,
+        strategy_research_outcome_monitor_enabled,
     )
-    from app.trading.strategy_solana_ai_monitor import create_trading_solana_ai_monitor_worker
+    from app.trading.strategy_solana_ai_monitor import (
+        create_trading_solana_ai_monitor_worker,
+        solana_ai_monitor_enabled,
+    )
     from app.trading.strategy_universe_archive_monitor import (
         create_trading_strategy_universe_archive_monitor_worker,
+        strategy_universe_archive_monitor_enabled,
     )
     from app.trading.strategy_v2_qualification_monitor import (
         create_trading_strategy_v2_qualification_monitor_worker,
+        strategy_v2_qualification_monitor_enabled,
     )
-    from app.trading.yahoo_acquisition_monitor import create_trading_yahoo_acquisition_monitor_worker
-
-    return (
-        create_trading_alert_monitor_worker,
-        create_trading_execution_observation_monitor_worker,
-        create_trading_ibkr_market_data_monitor_worker,
-        create_trading_metric_monitor_worker,
-        create_trading_paper_monitor_worker,
-        create_prospective_gap_monitor_worker,
-        create_alpaca_iex_status_monitor_worker,
-        create_trading_session_reconciliation_monitor_worker,
-        create_trading_ai_shadow_monitor_worker,
-        create_trading_ai_shadow_v2_monitor_worker,
-        create_trading_ai_shadow_v3_monitor_worker,
-        create_trading_strategy_deep_recovery_shadow_monitor_worker,
-        create_interday_dynamic_discovery_monitor_worker,
-        create_interday_learning_monitor_worker,
-        create_trading_strategy_monitor_worker,
-        create_trading_strategy_prospective_economic_monitor_worker,
-        create_trading_strategy_research_monitor_worker,
-        create_trading_strategy_research_outcome_monitor_worker,
-        create_trading_solana_ai_monitor_worker,
-        create_trading_strategy_universe_archive_monitor_worker,
-        create_trading_strategy_v2_qualification_monitor_worker,
+    from app.trading.yahoo_acquisition_monitor import (
         create_trading_yahoo_acquisition_monitor_worker,
+        yahoo_acquisition_monitor_enabled,
     )
 
+    registrations = (
+        (create_trading_alert_monitor_worker, trading_alert_monitor_enabled),
+        (create_trading_execution_observation_monitor_worker, execution_observation_monitor_enabled),
+        (create_trading_ibkr_market_data_monitor_worker, ibkr_market_data_monitor_enabled),
+        (create_trading_metric_monitor_worker, trading_liquidation_collector_enabled),
+        (create_trading_paper_monitor_worker, trading_paper_monitor_enabled),
+        (create_prospective_gap_monitor_worker, prospective_gap_monitor_enabled),
+        (create_alpaca_iex_status_monitor_worker, alpaca_iex_status_monitor_enabled),
+        (create_trading_session_reconciliation_monitor_worker, session_reconciliation_monitor_enabled),
+        (create_trading_ai_shadow_monitor_worker, ai_shadow_monitor_enabled),
+        (create_trading_ai_shadow_v2_monitor_worker, ai_shadow_v2_monitor_enabled),
+        (create_trading_ai_shadow_v3_monitor_worker, ai_shadow_v3_monitor_enabled),
+        (create_trading_strategy_deep_recovery_shadow_monitor_worker, strategy_deep_recovery_shadow_monitor_enabled),
+        (create_interday_dynamic_discovery_monitor_worker, dynamic_discovery_monitor_enabled),
+        (create_interday_learning_monitor_worker, interday_learning_monitor_enabled),
+        (create_trading_strategy_monitor_worker, trading_strategy_monitor_enabled),
+        (create_trading_strategy_prospective_economic_monitor_worker, strategy_prospective_economic_monitor_enabled),
+        (create_trading_strategy_research_monitor_worker, strategy_research_monitor_enabled),
+        (create_trading_strategy_research_outcome_monitor_worker, strategy_research_outcome_monitor_enabled),
+        (create_trading_solana_ai_monitor_worker, solana_ai_monitor_enabled),
+        (create_trading_strategy_universe_archive_monitor_worker, strategy_universe_archive_monitor_enabled),
+        (create_trading_strategy_v2_qualification_monitor_worker, strategy_v2_qualification_monitor_enabled),
+        (create_trading_yahoo_acquisition_monitor_worker, yahoo_acquisition_monitor_enabled),
+    )
 
-__all__ = ["create_trading_router", "trading_background_worker_factories"]
+    def factory_for(worker_factory, enabled):
+        def create(context: FeatureContext) -> ScheduledTaskSpec | None:
+            worker = worker_factory(context)
+            if worker is None:
+                return None
+            monitor = worker.monitor
+            run_once = getattr(monitor, "run_once", None)
+            if not callable(run_once):
+                raise TypeError(
+                    f"Scheduled trading monitor {worker.name} must expose run_once()"
+                )
+            interval_seconds = getattr(monitor, "interval_seconds", 60.0)
+            active_interval = getattr(monitor, "active_interval_seconds", None)
+            if active_interval is not None:
+                interval_seconds = min(interval_seconds, active_interval)
+
+            async def run(_task_context: TaskContext) -> None:
+                result = run_once()
+                if inspect.isawaitable(result):
+                    await result
+
+            startup = getattr(monitor, "prepare_for_scheduled_execution", None)
+            if startup is None and worker.name.endswith("metric_monitor"):
+                startup_callbacks = worker.startup
+            elif startup is None and worker.name.endswith(".strategy_monitor"):
+                startup_callbacks = (
+                    lambda: prepare_trading_strategy_monitor_for_scheduled_execution(
+                        monitor
+                    ),
+                )
+            else:
+                startup_callbacks = (startup,) if callable(startup) else ()
+
+            return ScheduledTaskSpec(
+                task_id=worker.name,
+                run=run,
+                interval_seconds=max(0.25, float(interval_seconds)),
+                jitter_seconds=min(1.0, max(0.0, float(interval_seconds) * 0.05)),
+                timeout_seconds=max(60.0, float(interval_seconds)),
+                enabled=enabled,
+                on_startup=tuple(startup_callbacks),
+                on_shutdown=worker.shutdown,
+            )
+
+        return create
+
+    return tuple(factory_for(worker_factory, enabled) for worker_factory, enabled in registrations)
+
+
+__all__ = [
+    "create_trading_router",
+    "trading_scheduled_task_factories",
+]

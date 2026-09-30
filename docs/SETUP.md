@@ -6,7 +6,7 @@ The normal development launcher can run `python scripts/run_omnix_gateway.py --a
 
 | Input | Meaning |
 | --- | --- |
-| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker` or `api` | Worker owns singleton background execution; API serves requests under durable chat ownership. Default is worker. |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker`, `api`, or `scheduler` | Worker owns grouped background workers and may run scheduled tasks; scheduler runs independently locked tasks without owning the grouped background runtime; API serves requests without scheduled-task ownership. Default is worker. |
 | `OMNIX_TTS_URL`, `OMNIX_STT_URL`, `OMNIX_IMAGE_URL` | HTTP(S) compute service endpoints without credentials/query/fragment. APIs use configured TTS remotely. |
 | `OMNIX_GATEWAY_TTS_HTTP=1` | Worker also uses HTTP TTS; requires a TTS endpoint. |
 | `OMNIX_GATEWAY_REQUIRED_WORKERS` | Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness. |
@@ -16,7 +16,7 @@ The normal development launcher can run `python scripts/run_omnix_gateway.py --a
 | `OMNIX_MAX_UPLOAD_BYTES` | Positive integer; streamed model-service request budget, default 52428800 bytes including multipart overhead. |
 | `VITE_ASSISTANT_STT_URL=/api/stt?authority=auto` | Browser speech routes through its gateway origin. The gateway sends the private credential to `OMNIX_STT_URL`. |
 
-Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
+Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. `OMNIX_SCHEDULER_THREAD_WORKERS` and `OMNIX_SCHEDULER_PROCESS_WORKERS` bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
 
 This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.
 

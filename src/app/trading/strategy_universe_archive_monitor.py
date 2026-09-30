@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import asyncio
-import os
 from contextlib import suppress
 from datetime import datetime, timezone
 
@@ -108,20 +107,12 @@ class TradingStrategyUniverseArchiveMonitor:
                 )
             await asyncio.sleep(self.interval_seconds)
 
-
-def create_trading_strategy_universe_archive_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
-    state = context.runtime_state
-    existing = getattr(state, _STATE_KEY, None)
-    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
-        return None
-    monitor = TradingStrategyUniverseArchiveMonitor()
-    setattr(state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
+    async def prepare_for_scheduled_execution(self) -> None:
+        """Run startup-only late recovery before periodic archive passes."""
         if not strategy_universe_archive_monitor_enabled():
             return
         try:
-            recovered = await monitor.run_once(allow_late_recovery=True)
+            recovered = await self.run_once(allow_late_recovery=True)
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation",
@@ -132,7 +123,7 @@ def create_trading_strategy_universe_archive_monitor_worker(context: FeatureCont
         except Exception as exc:
             # Reconciliation is best-effort. A provider/database problem at boot
             # must not prevent the normal periodic monitor from starting.
-            monitor.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
+            self.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation_error",
@@ -141,7 +132,20 @@ def create_trading_strategy_universe_archive_monitor_worker(context: FeatureCont
                 detail=str(exc),
                 execution_authority=False,
             )
-        monitor.start()
+
+
+def create_trading_strategy_universe_archive_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
+    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
+        return None
+    monitor = TradingStrategyUniverseArchiveMonitor()
+    setattr(state, _STATE_KEY, monitor)
+
+    async def startup() -> None:
+        await monitor.prepare_for_scheduled_execution()
+        if strategy_universe_archive_monitor_enabled():
+            monitor.start()
 
     async def shutdown() -> None:
         await monitor.stop()

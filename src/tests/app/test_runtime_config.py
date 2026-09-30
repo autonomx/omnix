@@ -55,6 +55,25 @@ def test_job_priority_aging_configuration_is_bounded():
             RuntimeConfig.from_environment({'OMNIX_JOB_PRIORITY_AGING_SECONDS': value})
 
 
+def test_scheduler_executor_sizes_are_configurable_and_bounded():
+    assert RuntimeConfig.from_environment({}).scheduler_thread_workers == 4
+    assert RuntimeConfig.from_environment({}).scheduler_process_workers == 2
+    configured = RuntimeConfig.from_environment({
+        "OMNIX_SCHEDULER_THREAD_WORKERS": "8",
+        "OMNIX_SCHEDULER_PROCESS_WORKERS": "3",
+    })
+    assert configured.scheduler_thread_workers == 8
+    assert configured.scheduler_process_workers == 3
+    for name, value in (
+        ("OMNIX_SCHEDULER_THREAD_WORKERS", "0"),
+        ("OMNIX_SCHEDULER_THREAD_WORKERS", "65"),
+        ("OMNIX_SCHEDULER_PROCESS_WORKERS", "0"),
+        ("OMNIX_SCHEDULER_PROCESS_WORKERS", "17"),
+    ):
+        with pytest.raises(ValueError, match=name):
+            RuntimeConfig.from_environment({name: value})
+
+
 def test_production_config_cannot_be_reinterpreted_after_binding(monkeypatch):
     config = RuntimeConfig(gateway_role=GatewayRole.API)
     runtime.install_runtime_config(config)
@@ -82,6 +101,22 @@ def test_api_capabilities_exclude_singleton_and_local_gpu_work():
     assert capabilities.allows(Capability.RUN_CHAT_DISPATCH)
     for capability in (Capability.OWN_BACKGROUND_RUNTIME, Capability.RUN_LOCAL_TTS, Capability.RUN_RECOVERY, Capability.RUN_SCHEDULERS):
         with pytest.raises(RuntimeError, match='lacks runtime capabilities'):
+            capabilities.require(capability)
+
+
+def test_scheduler_role_owns_task_scheduling_without_global_background_authority():
+    config = RuntimeConfig.from_environment(
+        {"OMNIX_GATEWAY_BACKGROUND_ROLE": "scheduler"}
+    )
+    capabilities = RuntimeCapabilities.from_config(config)
+    assert config.runs_schedulers and not config.owns_background_runtime
+    assert capabilities.allows(Capability.RUN_SCHEDULERS)
+    for capability in (
+        Capability.OWN_BACKGROUND_RUNTIME,
+        Capability.RUN_RECOVERY,
+        Capability.RUN_LOCAL_TTS,
+    ):
+        with pytest.raises(RuntimeError, match="lacks runtime capabilities"):
             capabilities.require(capability)
 
 

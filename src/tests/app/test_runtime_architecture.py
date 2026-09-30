@@ -121,11 +121,19 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
     app.state.runtime_services = SimpleNamespace(jobs=SimpleNamespace(
         database=SimpleNamespace(connection=connection), context=SimpleNamespace(workspace_id='test'),
     ))
+    scheduler_metrics = {
+        'registered_tasks': ['platform.probe'],
+        'tasks': {'platform.probe': {'failure_count': 1, 'last_lag_seconds': 0.25}},
+    }
+    app.state.scheduler_runtime = SimpleNamespace(
+        diagnostics=lambda: scheduler_metrics,
+    )
     payload = runtime_diagnostics(app.state).model_dump()
     assert payload['postgresql'] == {'connectivity': False, 'error_class': 'OSError'}
     assert payload['tts']['mode'] == 'worker_routed'
     assert 'secret' not in json.dumps(payload)
     assert payload['background']['owns_lock'] is False
+    assert payload['scheduler'] == scheduler_metrics
 
 
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):

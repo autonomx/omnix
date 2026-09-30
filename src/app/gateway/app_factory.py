@@ -61,6 +61,7 @@ def create_gateway_app(
     readiness_check: Callable[[], dict[str, Any]] | None = None,
     runtime_lifecycle: Callable[[], AbstractAsyncContextManager] | None = None,
     background_runtime=None,
+    scheduler_runtime=None,
     runtime_config=None,
     runtime_services=None,
 ) -> FastAPI:
@@ -116,6 +117,7 @@ def create_gateway_app(
     add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False
     gateway.state.background_runtime = background_runtime
+    gateway.state.scheduler_runtime = scheduler_runtime
     gateway.state.runtime_config = runtime_config
     if runtime_services is None:
         from types import SimpleNamespace
@@ -135,8 +137,10 @@ def create_gateway_app(
     gateway.state.runtime_services = runtime_services
     gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(runtime_config)
     from .background_runtime import GatewayBackgroundRegistryAdapter
+    from .scheduler_runtime import GatewaySchedulerRegistryAdapter
 
     gateway.state.background_registry = GatewayBackgroundRegistryAdapter(gateway)
+    gateway.state.scheduler_registry = GatewaySchedulerRegistryAdapter(gateway)
     gateway.state.feature_lifecycles = []
     from app.platform.runtime_diagnostics import RequestMetrics, RuntimeRequestMiddleware
 

@@ -36,10 +36,26 @@ class JobObserverFactory(Protocol):
 
 
 class ScheduledTaskSpec(Protocol):
-    """Structural contract for a feature-owned scheduled task."""
+    """Structural contract for an independently owned scheduled task."""
 
     task_id: str
     run: Callable[..., object]
+    interval_seconds: float | None
+    cron: str | None
+    jitter_seconds: float
+    timeout_seconds: float
+    executor: object
+    max_overlap: int
+    requires: frozenset[RuntimeCapability]
+    enabled: Callable[[], bool]
+    on_startup: tuple[Callable[[], Any], ...]
+    on_shutdown: tuple[Callable[[], Any], ...]
+
+
+class ScheduledTaskFactory(Protocol):
+    """Feature factory that builds a task against the composed services."""
+
+    def __call__(self, context: "FeatureContext") -> ScheduledTaskSpec | None: ...
 
 
 class RepositorySpec(Protocol):
@@ -109,7 +125,7 @@ class FeatureModule:
     job_handlers: tuple[JobHandlerSpec, ...] = ()
     job_observers: tuple[JobObserverFactory, ...] = ()
     background_workers: tuple[BackgroundWorkerFactory, ...] = ()
-    scheduled_tasks: tuple[ScheduledTaskSpec, ...] = ()
+    scheduled_tasks: tuple[ScheduledTaskFactory, ...] = ()
     repositories: tuple[RepositorySpec, ...] = ()
     hooks: tuple[RuntimeHookSpec, ...] = ()
     outbox_consumers: tuple[OutboxConsumerSpec, ...] = ()

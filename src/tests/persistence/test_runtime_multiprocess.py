@@ -2,6 +2,7 @@
 import asyncio
 import multiprocessing
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -10,6 +11,68 @@ import pytest
 from app.chat.models import ChatMessage, ChatSession
 
 pytestmark = pytest.mark.skipif(not os.environ.get('OMNIX_TEST_DATABASE_URL'), reason='requires disposable PostgreSQL')
+
+_SCHEDULER_EVENTS = None
+
+
+async def _scheduler_probe(context):
+    _SCHEDULER_EVENTS.put((context.task_id, os.getpid()))
+
+
+def _scheduler_process(url, workspace, events, start_gate, stop_gate, control):
+    global _SCHEDULER_EVENTS
+    from app.config.runtime import GatewayRole, RuntimeConfig
+    from app.persistence.config import DatabaseSettings
+    from app.persistence.database import PostgresDatabase
+    from app.persistence.background_authority import background_execution
+    from app.runtime.capabilities import RuntimeCapabilities
+    from app.runtime.scheduler import ScheduledTaskSpec, SchedulerRuntime
+
+    _SCHEDULER_EVENTS = events
+    database = PostgresDatabase(DatabaseSettings(url=url, pool_max=3))
+
+    async def run():
+        control.send({'event': 'booted', 'pid': os.getpid()})
+        if not await asyncio.to_thread(start_gate.wait, 20):
+            raise TimeoutError('scheduler startup gate timed out')
+        config = RuntimeConfig(gateway_role=GatewayRole.SCHEDULER)
+        scheduler = SchedulerRuntime(
+            database,
+            workspace,
+            capabilities=RuntimeCapabilities.from_config(config),
+            execution_scope=background_execution,
+            poll_seconds=0.05,
+            startup_jitter_seconds=0.01,
+            thread_workers=1,
+            process_workers=1,
+        )
+        for index in range(24):
+            scheduler.register_task(
+                ScheduledTaskSpec(
+                    task_id=f'acceptance.split-{index:02d}',
+                    run=_scheduler_probe,
+                    interval_seconds=0.05,
+                    timeout_seconds=2,
+                )
+            )
+        async with scheduler.lifespan():
+            control.send({
+                'event': 'ready',
+                'pid': os.getpid(),
+                'owned_tasks': scheduler.diagnostics()['owned_tasks'],
+            })
+            if not await asyncio.to_thread(stop_gate.wait, 30):
+                raise TimeoutError('scheduler stop gate timed out')
+        control.send({'event': 'done', 'pid': os.getpid()})
+
+    try:
+        asyncio.run(run())
+    except BaseException as error:
+        control.send({'event': 'error', 'error': f'{type(error).__name__}: {error}'})
+        raise
+    finally:
+        database.close()
+        control.close()
 
 
 def _gateway_process(url, workspace, role, control):
@@ -136,6 +199,69 @@ def test_worker_process_crash_releases_singleton_authority(cohort):
     worker.join(5)
     _, successor = start('worker', workspace)
     assert receive(successor, 'ready')['owns_lock']
+
+
+def test_scheduler_processes_split_per_task_locks_without_duplicate_execution(cohort):
+    _, _, workspace = cohort
+    context = multiprocessing.get_context('spawn')
+    events = context.Queue()
+    start_gate = context.Event()
+    stop_gate = context.Event()
+    children = []
+    receivers = []
+    try:
+        for _ in range(2):
+            parent, child = context.Pipe()
+            process = context.Process(
+                target=_scheduler_process,
+                args=(
+                    os.environ['OMNIX_TEST_DATABASE_URL'],
+                    workspace,
+                    events,
+                    start_gate,
+                    stop_gate,
+                    child,
+                ),
+            )
+            process.start()
+            child.close()
+            children.append(process)
+            receivers.append(parent)
+        booted = [receive(pipe, 'booted') for pipe in receivers]
+        start_gate.set()
+        ready = [receive(pipe, 'ready') for pipe in receivers]
+        assert len({item['pid'] for item in booted}) == 2
+
+        task_owners = {}
+        deadline = time.monotonic() + 20
+        expected_tasks = {f'acceptance.split-{index:02d}' for index in range(24)}
+        while set(task_owners) != expected_tasks and time.monotonic() < deadline:
+            try:
+                task_id, process_id = events.get(timeout=0.5)
+            except Exception:
+                continue
+            task_owners.setdefault(task_id, set()).add(process_id)
+        assert set(task_owners) == expected_tasks
+        assert all(len(process_ids) == 1 for process_ids in task_owners.values())
+        assert len({next(iter(value)) for value in task_owners.values()}) == 2
+        assert sum(bool(item['owned_tasks']) for item in ready) == 2
+
+        stop_gate.set()
+        for receiver in receivers:
+            receive(receiver, 'done')
+        for process in children:
+            process.join(10)
+            assert process.exitcode == 0
+    finally:
+        stop_gate.set()
+        start_gate.set()
+        for process in children:
+            if process.is_alive():
+                process.terminate()
+            process.join(5)
+        for receiver in receivers:
+            receiver.close()
+        events.close()
 
 
 def _claim_chat_process(url, workspace, user, session, control):

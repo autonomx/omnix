@@ -71,7 +71,7 @@ class GatewayBackgroundRuntime:
         self._started = []
 
     def acquire(self):
-        if self.role == "api":
+        if not self.config.owns_background_runtime:
             return
         self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
         self._connection_context = self.database.connection()
@@ -110,7 +110,7 @@ class GatewayBackgroundRuntime:
             ) from exc
 
     def ready(self):
-        if self.role == "api":
+        if not self.config.owns_background_runtime:
             return True
         self.require_live()
         return True
@@ -150,7 +150,7 @@ class GatewayBackgroundRuntime:
             await result
 
     async def startup(self):
-        if self.role == "api":
+        if not self.config.owns_background_runtime:
             return
         self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
         if self._started:
@@ -220,7 +220,11 @@ class GatewayBackgroundRuntime:
     @asynccontextmanager
     async def lifespan(self):
         await asyncio.to_thread(self.acquire)
-        task = asyncio.create_task(self._supervise()) if self.role == "worker" else None
+        task = (
+            asyncio.create_task(self._supervise())
+            if self.config.owns_background_runtime
+            else None
+        )
         try:
             yield
         finally:

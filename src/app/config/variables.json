@@ -1274,6 +1274,20 @@
     "type": "string"
   },
   {
+    "default": "2",
+    "description": "Controls scheduler process workers for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_SCHEDULER_PROCESS_WORKERS",
+    "type": "integer"
+  },
+  {
+    "default": "4",
+    "description": "Controls scheduler thread workers for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_SCHEDULER_THREAD_WORKERS",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls service token for security.",
     "feature": "security",

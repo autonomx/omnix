@@ -26,6 +26,7 @@ def configured_job_priority_aging_seconds() -> int:
 class GatewayRole(str, Enum):
     WORKER = "worker"
     API = "api"
+    SCHEDULER = "scheduler"
 
 
 def _url(value: str, *, origin: bool = False) -> str:
@@ -77,6 +78,8 @@ class RuntimeConfig:
     enabled_features: tuple[str, ...] = ("all",)
     disabled_features: tuple[str, ...] = ()
     job_priority_aging_seconds: int = 60
+    scheduler_thread_workers: int = 4
+    scheduler_process_workers: int = 2
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "gateway_role", GatewayRole(self.gateway_role))
@@ -88,6 +91,12 @@ class RuntimeConfig:
         if not 1 <= int(self.job_priority_aging_seconds) <= 86_400:
             raise ValueError("OMNIX_JOB_PRIORITY_AGING_SECONDS must be between 1 and 86400")
         object.__setattr__(self, "job_priority_aging_seconds", int(self.job_priority_aging_seconds))
+        if not 1 <= int(self.scheduler_thread_workers) <= 64:
+            raise ValueError("OMNIX_SCHEDULER_THREAD_WORKERS must be between 1 and 64")
+        if not 1 <= int(self.scheduler_process_workers) <= 16:
+            raise ValueError("OMNIX_SCHEDULER_PROCESS_WORKERS must be between 1 and 16")
+        object.__setattr__(self, "scheduler_thread_workers", int(self.scheduler_thread_workers))
+        object.__setattr__(self, "scheduler_process_workers", int(self.scheduler_process_workers))
         object.__setattr__(self, "api_replica_origins", origins)
         object.__setattr__(self, "required_workers", tuple(sorted(set(self.required_workers))))
         enabled = tuple(dict.fromkeys(value.strip() for value in self.enabled_features if value.strip()))
@@ -105,6 +114,10 @@ class RuntimeConfig:
     @property
     def owns_background_runtime(self) -> bool:
         return self.gateway_role is GatewayRole.WORKER
+
+    @property
+    def runs_schedulers(self) -> bool:
+        return self.gateway_role in {GatewayRole.WORKER, GatewayRole.SCHEDULER}
 
     @property
     def allow_local_tts(self) -> bool:
@@ -131,6 +144,20 @@ class RuntimeConfig:
             60,
             minimum=1,
             maximum=86_400,
+            env=env,
+        )
+        scheduler_thread_workers = env_int(
+            "OMNIX_SCHEDULER_THREAD_WORKERS",
+            4,
+            minimum=1,
+            maximum=64,
+            env=env,
+        )
+        scheduler_process_workers = env_int(
+            "OMNIX_SCHEDULER_PROCESS_WORKERS",
+            2,
+            minimum=1,
+            maximum=16,
             env=env,
         )
         owns = role is GatewayRole.WORKER
@@ -167,6 +194,8 @@ class RuntimeConfig:
                 if value.strip()
             ),
             job_priority_aging_seconds=job_priority_aging_seconds,
+            scheduler_thread_workers=scheduler_thread_workers,
+            scheduler_process_workers=scheduler_process_workers,
         )
 
     def worker_discovery_environment(self) -> dict[str, str]:

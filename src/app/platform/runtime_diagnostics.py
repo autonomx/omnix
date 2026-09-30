@@ -17,6 +17,7 @@ class RuntimeDiagnostics(BaseModel):
     background: dict[str, Any] = Field(default_factory=dict)
     jobs: dict[str, Any] = Field(default_factory=dict)
     chat: dict[str, Any] = Field(default_factory=dict)
+    scheduler: dict[str, Any] = Field(default_factory=dict)
     tts: dict[str, Any] = Field(default_factory=dict)
     replicas: dict[str, Any] = Field(default_factory=dict)
 
@@ -97,6 +98,7 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
     metrics = state.runtime_metrics
     owner = getattr(state, 'execution_owner', None)
     background = getattr(state, 'background_runtime', None)
+    scheduler = getattr(state, 'scheduler_runtime', None)
     services = getattr(state, 'runtime_services', None)
     postgres, jobs, sessions = {"connectivity": None}, {"available": False}, None
     if services is not None:
@@ -124,6 +126,7 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
         postgresql=postgres,
         background=background.diagnostics() if background is not None else {"role": config.gateway_role.value, "owns_lock": False},
         jobs=jobs, chat=chat,
+        scheduler=scheduler.diagnostics() if scheduler is not None else {},
         tts={"mode": 'remote' if config.use_remote_tts else 'local' if config.allow_local_tts else 'worker_routed',
              "endpoint": config.tts.url if config.tts else None, **stream_snapshot,
              "provider_refresh": resolver.diagnostics() if resolver is not None else {},

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, Request
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
+from app.runtime.scheduler import SchedulerOwnershipUnavailable
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import TradingMarketDataService, default_market_data_service
@@ -30,6 +31,7 @@ from .trade_logging import trade_log
 
 
 _STATE_KEY = "_omnix_trading_solana_ai_monitor"
+SCHEDULED_TASK_ID = __name__
 
 
 class SolanaAIStrategyRecord(BaseModel):
@@ -190,9 +192,7 @@ class TradingSolanaAIMonitor:
         self._decision_events.append(event)
         return persisted
 
-    def start(self) -> bool:
-        if self._task is not None and not self._task.done():
-            return True
+    def _ensure_strategy_record(self) -> bool:
         repository = self.strategy_repository_factory()
         if repository is not None:
             try:
@@ -212,8 +212,9 @@ class TradingSolanaAIMonitor:
                     execution_authority=False,
                 )
                 return False
-        self._task = asyncio.create_task(self._loop())
-        self.last_error = None
+        return True
+
+    def _log_started(self) -> None:
         trade_log(
             "auto_trading",
             "solana_ai_monitor_started",
@@ -226,6 +227,24 @@ class TradingSolanaAIMonitor:
             research_only=True,
             execution_authority=False,
         )
+
+    async def prepare_for_scheduled_execution(self) -> None:
+        """Validate durable strategy state without creating a private loop."""
+        if not await asyncio.to_thread(self._ensure_strategy_record):
+            raise RuntimeError(
+                self.last_error or "solana_ai_strategy_persistence_unavailable"
+            )
+        self.last_error = None
+        self._log_started()
+
+    def start(self) -> bool:
+        if self._task is not None and not self._task.done():
+            return True
+        if not self._ensure_strategy_record():
+            return False
+        self._task = asyncio.create_task(self._loop())
+        self.last_error = None
+        self._log_started()
         return True
 
     async def stop(self, *, reason: str = "gateway_shutdown") -> None:
@@ -493,8 +512,14 @@ def create_trading_solana_ai_control_router() -> APIRouter:
 
     @router.post("/stop", status_code=202, response_model=SolanaAIMonitorControlResponse)
     async def stop_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
-        monitor = monitor_for(request)
-        await monitor.stop(reason="operator_request")
+        monitor_for(request)
+        scheduler = getattr(request.app.state, "scheduler_runtime", None)
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="scheduler_unavailable")
+        try:
+            await scheduler.pause_task(SCHEDULED_TASK_ID)
+        except SchedulerOwnershipUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return SolanaAIMonitorControlResponse(
             status="stopped",
             running=False,
@@ -503,12 +528,14 @@ def create_trading_solana_ai_control_router() -> APIRouter:
 
     @router.post("/start", status_code=202, response_model=SolanaAIMonitorControlResponse)
     async def start_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
-        monitor = monitor_for(request)
-        if not monitor.start():
-            raise HTTPException(
-                status_code=503,
-                detail=monitor.last_error or "solana_ai_strategy_persistence_unavailable",
-            )
+        monitor_for(request)
+        scheduler = getattr(request.app.state, "scheduler_runtime", None)
+        if scheduler is None:
+            raise HTTPException(status_code=503, detail="scheduler_unavailable")
+        try:
+            scheduler.resume_task(SCHEDULED_TASK_ID)
+        except SchedulerOwnershipUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return SolanaAIMonitorControlResponse(
             status="started",
             running=True,
@@ -522,6 +549,7 @@ __all__ = [
     "SolanaAIMonitorControlResponse",
     "SolanaAIStrategyRecord",
     "TradingSolanaAIMonitor",
+    "SCHEDULED_TASK_ID",
     "create_trading_solana_ai_control_router",
     "create_trading_solana_ai_monitor_worker",
     "solana_ai_monitor_enabled",

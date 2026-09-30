@@ -16,6 +16,7 @@ from app.trading.strategy_solana_ai import (
     SolanaAIAnalyzer,
 )
 from app.trading.strategy_solana_ai_monitor import (
+    SCHEDULED_TASK_ID,
     TradingSolanaAIMonitor,
     create_trading_solana_ai_control_router,
     solana_ai_monitor_enabled,
@@ -161,17 +162,35 @@ async def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
 
 
 def test_solana_ai_monitor_control_router_stops_only_registered_monitor() -> None:
+    class Scheduler:
+        def __init__(self):
+            self.calls = []
+
+        async def pause_task(self, task_id):
+            self.calls.append(("pause", task_id))
+
+        def resume_task(self, task_id):
+            self.calls.append(("resume", task_id))
+
     app = FastAPI()
     monitor = TradingSolanaAIMonitor()
     app.state._omnix_trading_solana_ai_monitor = monitor
+    app.state.scheduler_runtime = Scheduler()
     app.include_router(create_trading_solana_ai_control_router())
 
-    response = TestClient(app).post("/api/trading/solana-ai/stop")
+    client = TestClient(app)
+    response = client.post("/api/trading/solana-ai/stop")
 
     assert response.status_code == 202
     assert response.json()["status"] == "stopped"
     assert response.json()["execution_authority"] is False
+    assert app.state.scheduler_runtime.calls == [("pause", SCHEDULED_TASK_ID)]
     assert monitor._task is None
+
+    response = client.post("/api/trading/solana-ai/start")
+    assert response.status_code == 202
+    assert response.json()["status"] == "started"
+    assert app.state.scheduler_runtime.calls[-1] == ("resume", SCHEDULED_TASK_ID)
 
 
 class FixtureStrategyRepository:

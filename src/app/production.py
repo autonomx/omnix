@@ -130,6 +130,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         recover_abandoned_chat_generation_jobs,
     )
     from app.runtime.background import GatewayBackgroundRuntime
+    from app.runtime.scheduler import ScheduledTaskSpec, SchedulerRuntime
 
     tenant_context = tenant_provider.current()
     owner = GatewayRuntimeOwner(database, tenant_context.workspace_id, config=config)
@@ -168,16 +169,65 @@ def create_production_app(config: RuntimeConfig | None = None):
         authority_check=background_authority_check,
         execution_scope=background_execution,
     )
-    if capabilities.allows(RuntimeCapability.RUN_RECOVERY):
-        def recover():
-            with background_execution(background):
-                return recover_abandoned_chat_generation_jobs(services.chat, services.jobs)
+    scheduler = SchedulerRuntime(
+        services.jobs.database,
+        services.jobs.context.workspace_id,
+        capabilities=capabilities,
+        authority_check=background_authority_check,
+        execution_scope=background_execution,
+        thread_workers=config.scheduler_thread_workers,
+        process_workers=config.scheduler_process_workers,
+    )
+    if capabilities.allows(RuntimeCapability.RUN_SCHEDULERS):
+        async def recover_chat_generations(_task_context) -> None:
+            await asyncio.to_thread(
+                recover_abandoned_chat_generation_jobs,
+                services.chat,
+                services.jobs,
+            )
 
-        owner.recover = recover
+        async def release_expired_job_leases(_task_context) -> None:
+            from app.persistence.unit_of_work import unit_of_work
+
+            def release() -> None:
+                with unit_of_work(services.jobs.database) as work:
+                    work.jobs.release_expired_leases(services.jobs.context)
+                    work.commit()
+
+            await asyncio.to_thread(release)
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="platform.chat-generation-recovery",
+                run=recover_chat_generations,
+                interval_seconds=owner.recovery_seconds,
+                timeout_seconds=60,
+                requires=frozenset(
+                    {
+                        RuntimeCapability.RUN_SCHEDULERS,
+                        RuntimeCapability.RUN_RECOVERY,
+                    }
+                ),
+            )
+        )
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="platform.job-lease-recovery",
+                run=release_expired_job_leases,
+                interval_seconds=5,
+                timeout_seconds=60,
+                requires=frozenset(
+                    {
+                        RuntimeCapability.RUN_SCHEDULERS,
+                        RuntimeCapability.RUN_RECOVERY,
+                    }
+                ),
+            )
+        )
 
     @asynccontextmanager
     async def lifecycle():
-        async with owner.lifespan(), background.lifespan():
+        async with owner.lifespan(), background.lifespan(), scheduler.lifespan():
             try:
                 yield
             finally:
@@ -192,7 +242,13 @@ def create_production_app(config: RuntimeConfig | None = None):
         payload["execution_owner_ready"] = owner.ready()
         payload['background_role'] = background.role
         payload['background_ready'] = background.ready()
-        payload["ready"] = payload["ready"] and payload["execution_owner_ready"] and payload['background_ready']
+        payload["scheduler_ready"] = scheduler.ready()
+        payload["ready"] = (
+            payload["ready"]
+            and payload["execution_owner_ready"]
+            and payload['background_ready']
+            and payload["scheduler_ready"]
+        )
         return payload
 
     gateway = create_gateway_app(
@@ -203,6 +259,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         readiness_check=readiness,
         runtime_lifecycle=lifecycle,
         background_runtime=background,
+        scheduler_runtime=scheduler,
         runtime_config=config,
         runtime_services=services,
     )

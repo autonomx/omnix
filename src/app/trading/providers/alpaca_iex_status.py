@@ -5,7 +5,6 @@ from app.config.env import env_str, environment
 import asyncio
 import inspect
 import json
-import os
 import ssl
 import threading
 from collections import deque
@@ -322,6 +321,11 @@ class AlpacaIexStatusMonitor:
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.create_task(self._loop())
+
+    def run_once(self) -> None:
+        """Keep the reconnecting status stream under its scheduler task lock."""
+        if _enabled():
+            self.start()
 
     async def stop(self) -> None:
         task = self._task

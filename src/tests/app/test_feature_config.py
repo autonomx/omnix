@@ -8,6 +8,7 @@ from app.config.load import load_feature_config
 from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig
 from app.runtime.features import FeatureModule
+from app.runtime.scheduler import ScheduledTaskSpec
 
 
 class SampleFeatureConfig(BaseModel):
@@ -106,3 +107,43 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     assert len(included) == 1
     dependencies = included[0][1]["dependencies"]
     assert dependencies[0].dependency.__name__ == "feature_guard_sample_feature"
+
+
+def test_feature_composition_registers_scheduled_tasks(monkeypatch):
+    registered_tasks = []
+
+    class SchedulerRegistry:
+        def register_task(self, task):
+            registered_tasks.append(task)
+
+    async def run(_context):
+        return None
+
+    task = ScheduledTaskSpec(
+        task_id="sample-feature.scheduled",
+        run=run,
+        interval_seconds=1,
+    )
+    feature = FeatureModule(
+        id="sample-feature",
+        title="Sample feature",
+        scheduled_tasks=(lambda _context: task,),
+    )
+    monkeypatch.setattr(feature_registry, "enabled_feature_ids", lambda _config: (feature.id,))
+    monkeypatch.setattr(feature_registry, "load_feature", lambda _feature_id: feature)
+    monkeypatch.setattr(feature_registry, "environment", lambda: {})
+    monkeypatch.setattr(feature_registry, "reset_repository_specs", lambda: None)
+    monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
+    monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
+    monkeypatch.setattr(feature_registry, "install_runtime_hooks", lambda _hooks: None)
+
+    gateway = FastAPI()
+    gateway.state.runtime_config = RuntimeConfig()
+    gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(RuntimeConfig())
+    gateway.state.runtime_services = None
+    gateway.state.background_registry = None
+    gateway.state.scheduler_registry = SchedulerRegistry()
+
+    feature_registry._register_feature_modules(gateway)
+
+    assert registered_tasks == [task]

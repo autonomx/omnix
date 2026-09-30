@@ -1158,10 +1158,6 @@ class PostgresJobRepository(_BaseJobRepository):
         lease_seconds: int = 30,
         job_id: str | None = None,
     ) -> dict[str, Any] | None:
-        self.release_expired_leases(
-            context, job_id=job_id,
-            job_type=job_types[0] if job_id and job_types and len(job_types) == 1 else None,
-        )
         if not resource_classes:
             return None
         lease_seconds = max(1, min(int(lease_seconds), 3600))

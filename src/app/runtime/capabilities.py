@@ -25,11 +25,16 @@ class RuntimeCapabilities:
 
     @classmethod
     def from_config(cls, config: RuntimeConfig) -> "RuntimeCapabilities":
-        # Request-driven Chat execution has a durable per-process owner on both
-        # roles. Singleton recovery/schedulers belong only to the worker.
+        # Request-driven Chat execution has a durable per-process owner on all
+        # serving roles. Recovery stays with the singleton worker, while
+        # independent schedulers may be spread across scheduler-role replicas.
         granted = {RuntimeCapability.SERVE_API, RuntimeCapability.RUN_CHAT_DISPATCH}
         if config.owns_background_runtime:
-            granted.update({RuntimeCapability.OWN_BACKGROUND_RUNTIME, RuntimeCapability.RUN_RECOVERY, RuntimeCapability.RUN_SCHEDULERS})
+            granted.update(
+                {RuntimeCapability.OWN_BACKGROUND_RUNTIME, RuntimeCapability.RUN_RECOVERY}
+            )
+        if config.runs_schedulers:
+            granted.add(RuntimeCapability.RUN_SCHEDULERS)
         if config.allow_local_tts:
             granted.add(RuntimeCapability.RUN_LOCAL_TTS)
         if config.use_remote_tts:

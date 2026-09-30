@@ -1,6 +1,7 @@
 """Registry-driven FeatureModule composition."""
 
 import logging
+from typing import cast
 
 from fastapi import Depends
 
@@ -13,6 +14,7 @@ from app.runtime.background import register_background_worker
 from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
 from app.runtime.hooks import install_runtime_hooks
+from app.runtime.scheduler import ScheduledTaskSpec as RuntimeScheduledTaskSpec
 
 
 def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
@@ -45,6 +47,7 @@ def _register_feature_modules(gateway) -> None:
     capabilities = gateway.state.runtime_capabilities
     services = getattr(gateway.state, "runtime_services", None)
     registry = getattr(gateway.state, "background_registry", None)
+    scheduler_registry = getattr(gateway.state, "scheduler_registry", None)
     registered: list[str] = []
     loaded_features = []
     job_handlers = JobHandlerRegistry()
@@ -91,6 +94,14 @@ def _register_feature_modules(gateway) -> None:
             worker = worker_factory(context)
             if worker is not None:
                 register_background_worker(registry, worker)
+        for task_factory in feature.scheduled_tasks:
+            task = task_factory(context)
+            if task is not None:
+                if scheduler_registry is None:
+                    raise RuntimeError(
+                        f"Feature {feature.id} declares scheduled tasks without a scheduler registry"
+                    )
+                scheduler_registry.register_task(cast(RuntimeScheduledTaskSpec, task))
         if feature.lifecycle is not None:
             register_feature_lifecycle(gateway, feature.lifecycle)
         registered.append(feature.id)

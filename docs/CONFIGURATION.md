@@ -186,6 +186,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
+| `OMNIX_SCHEDULER_PROCESS_WORKERS` | integer | `2` | kernel | Controls scheduler process workers for kernel. |
+| `OMNIX_SCHEDULER_THREAD_WORKERS` | integer | `4` | kernel | Controls scheduler thread workers for kernel. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
