@@ -28,7 +28,7 @@ from app.providers import ChatMessage as ProviderMessage
 from app.providers.base import ChatResponse, ConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
 
-from . import live_chat_provider_metrics as metrics_runtime
+from app.live_voice.llm import metrics as metrics_runtime
 from . import lmstudio_loaded_model_resolution as model_resolution
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -549,7 +549,7 @@ def _stream_stateful_lmstudio_reply(
         previous_response_id=previous_response_id,
         request_timeout_seconds=remaining_budget,
     )
-    chunker = metrics_runtime._LowLatencyTextChunker()
+    chunker = metrics_runtime.LowLatencyTextChunker()
     full_text = ""
     usage: dict[str, Any] | None = None
     provider_metrics: dict[str, Any] = {}
@@ -691,7 +691,7 @@ def install_live_chat_lmstudio_responses_hook() -> None:
     """Wrap accepted live-voice LM Studio streams with fail-closed response state."""
     if getattr(metrics_runtime, _HOOK_SENTINEL, False):
         return
-    original_stream = metrics_runtime._stream_lmstudio_reply
+    original_stream = metrics_runtime.stream_lmstudio_reply
 
     @wraps(original_stream)
     def patched_stream(
@@ -768,7 +768,7 @@ def install_live_chat_lmstudio_responses_hook() -> None:
                 **stream_kwargs,
             )
 
-    metrics_runtime._stream_lmstudio_reply = patched_stream
+    metrics_runtime.stream_lmstudio_reply = patched_stream
     setattr(metrics_runtime, _HOOK_SENTINEL, True)
 
 

@@ -367,24 +367,34 @@ def test_response_state_reuses_only_exact_prompt_prefix_and_model() -> None:
         ChatMessage(role="assistant", content="Answer one"),
         ChatMessage(role="user", content="Second"),
     ]
-    response_id, reason = responses_runtime._resolve_previous_response_id(
-        session_id="chat-one",
-        model_id="test-model",
-        messages=next_messages,
+    response_id, reason, continuation_count, rolled_off = (
+        responses_runtime._resolve_previous_response_id(
+            session_id="chat-one",
+            model_id="test-model",
+            messages=next_messages,
+        )
     )
-    assert (response_id, reason) == ("resp_one", "hit")
+    assert (response_id, reason, continuation_count, rolled_off) == (
+        "resp_one",
+        "hit",
+        0,
+        0,
+    )
 
     changed_prompt = [
         ChatMessage(role="system", content="Persona v2"),
         *next_messages[1:],
     ]
-    response_id, reason = responses_runtime._resolve_previous_response_id(
-        session_id="chat-one",
-        model_id="test-model",
-        messages=changed_prompt,
+    response_id, reason, continuation_count, rolled_off = (
+        responses_runtime._resolve_previous_response_id(
+            session_id="chat-one",
+            model_id="test-model",
+            messages=changed_prompt,
+        )
     )
     assert response_id is None
-    assert reason == "prompt_prefix_changed"
+    assert reason == "stable_context_changed"
+    assert (continuation_count, rolled_off) == (0, 0)
 
 
 def test_response_state_invalidates_when_loaded_model_changes() -> None:
@@ -406,11 +416,14 @@ def test_response_state_invalidates_when_loaded_model_changes() -> None:
         ChatMessage(role="user", content="Second"),
     ]
 
-    response_id, reason = responses_runtime._resolve_previous_response_id(
-        session_id="chat-two",
-        model_id="model-b",
-        messages=next_messages,
+    response_id, reason, continuation_count, rolled_off = (
+        responses_runtime._resolve_previous_response_id(
+            session_id="chat-two",
+            model_id="model-b",
+            messages=next_messages,
+        )
     )
 
     assert response_id is None
     assert reason == "model_changed"
+    assert (continuation_count, rolled_off) == (0, 0)

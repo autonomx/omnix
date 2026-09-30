@@ -2,119 +2,14 @@
 from __future__ import annotations
 
 import time
-from functools import wraps
 from typing import Any, Iterator
 
-from app.chat.memory_commands import parse_memory_command
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.chat.prompt_store import route_typed_stream_boundary
 from app.chat.provider_metrics import merge_provider_response_metrics
 from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from app.chat.store import _model_key, _provider_key
+from app.live_voice.llm.stream import LowLatencyTextChunker
 
 from app.observability.tts_stream_diagnostics import stream_log
-
-_HOOK_SENTINEL = "_omnix_live_chat_provider_metrics_installed"
-_FIRST_TEXT_MAX_CHARS = 48
-_STEADY_TEXT_TARGET_CHARS = 32
-_STEADY_TEXT_MAX_CHARS = 96
-_SENTENCE_BOUNDARIES = frozenset(".!?。！？\n")
-
-
-class _LowLatencyTextChunker:
-    """Emit the first complete lexical unit without waiting for a sentence.
-
-    Provider deltas may split a word across multiple chunks. The chunker waits for
-    a whitespace or punctuation boundary before the first emission, then groups
-    later deltas into modest boundary-safe chunks. This keeps the existing browser
-    text-merging contract readable while removing sentence-level first-token delay.
-    """
-
-    def __init__(self) -> None:
-        self._pending = ""
-        self._emitted = False
-
-    def push(self, text: str) -> list[str]:
-        if text:
-            self._pending += text
-        ready: list[str] = []
-        while self._pending:
-            cut = self._next_cut()
-            if cut is None:
-                break
-            chunk = self._pending[:cut]
-            self._pending = self._pending[cut:]
-            if not chunk.strip():
-                continue
-            ready.append(chunk)
-            self._emitted = True
-        return ready
-
-    def flush(self) -> str:
-        pending = self._pending
-        self._pending = ""
-        return pending
-
-    def _next_cut(self) -> int | None:
-        sentence_cut = _first_sentence_cut(self._pending)
-        if not self._emitted:
-            lexical_cut = _first_lexical_cut(self._pending)
-            candidates = [cut for cut in (sentence_cut, lexical_cut) if cut is not None]
-            if candidates:
-                return min(candidates)
-            if len(self._pending) >= _FIRST_TEXT_MAX_CHARS:
-                return _FIRST_TEXT_MAX_CHARS
-            return None
-
-        if sentence_cut is not None:
-            return sentence_cut
-        if len(self._pending) < _STEADY_TEXT_TARGET_CHARS:
-            return None
-        boundary_cut = _last_whitespace_cut(
-            self._pending,
-            minimum=_STEADY_TEXT_TARGET_CHARS,
-            maximum=_STEADY_TEXT_MAX_CHARS,
-        )
-        if boundary_cut is not None:
-            return boundary_cut
-        if len(self._pending) >= _STEADY_TEXT_MAX_CHARS:
-            return _STEADY_TEXT_MAX_CHARS
-        return None
-
-
-def _first_lexical_cut(text: str) -> int | None:
-    saw_text = False
-    for index, character in enumerate(text):
-        if character.isspace():
-            if saw_text:
-                end = index + 1
-                while end < len(text) and text[end].isspace():
-                    end += 1
-                return end
-            continue
-        saw_text = True
-    return None
-
-
-def _first_sentence_cut(text: str) -> int | None:
-    for index, character in enumerate(text):
-        if character not in _SENTENCE_BOUNDARIES:
-            continue
-        end = index + 1
-        while end < len(text) and text[end].isspace():
-            end += 1
-        return end
-    return None
-
-
-def _last_whitespace_cut(text: str, *, minimum: int, maximum: int) -> int | None:
-    upper = min(len(text), maximum)
-    cut: int | None = None
-    for index in range(minimum, upper):
-        if text[index].isspace():
-            cut = index + 1
-    return cut
-
 
 def _resolve_provider(provider_id: str | None) -> Any:
     from app.providers.service import get_provider
@@ -122,20 +17,20 @@ def _resolve_provider(provider_id: str | None) -> Any:
     return get_provider(_provider_key(provider_id))
 
 
-def _is_lmstudio_provider(provider: Any) -> bool:
+def is_lmstudio_provider(provider: Any) -> bool:
     return str(getattr(provider, "provider_name", "")).strip().lower() == "lmstudio"
 
 
-def _is_lmstudio(provider_id: str | None) -> bool:
-    return _is_lmstudio_provider(_resolve_provider(provider_id))
+def is_lmstudio(provider_id: str | None) -> bool:
+    return is_lmstudio_provider(_resolve_provider(provider_id))
 
 
 def _metrics_provider_id(provider_id: str | None) -> str:
     return provider_id or "lmstudio"
 
 
-def _generate_lmstudio_reply(
-    self: PromptChatSessionStore,
+def generate_lmstudio_reply(
+    self: Any,
     session: Any,
     user_message: Any,
     *,
@@ -203,8 +98,8 @@ def _generate_lmstudio_reply(
     return {"content": content, "metadata": metadata}
 
 
-def _stream_lmstudio_reply(
-    self: PromptChatSessionStore,
+def stream_lmstudio_reply(
+    self: Any,
     session: Any,
     user_message: Any,
     *,
@@ -252,7 +147,7 @@ def _stream_lmstudio_reply(
         stream=True,
         **completion_kwargs,
     )
-    chunker = _LowLatencyTextChunker()
+    chunker = LowLatencyTextChunker()
     full_text = ""
     resolved_model = model_name
     usage = None
@@ -346,118 +241,3 @@ def _stream_lmstudio_reply(
             **({"provider_metrics": provider_metrics} if provider_metrics else {}),
         },
     }
-
-
-def install_live_chat_provider_metrics_hook() -> None:
-    """Install LM Studio metric capture before the pre-token retry wrapper."""
-    if getattr(PromptChatSessionStore, _HOOK_SENTINEL, False):
-        return
-
-    original_generate = PromptChatSessionStore._generate_provider_reply
-    original_stream = PromptChatSessionStore.stream_provider_reply_chunks
-
-    @wraps(original_generate)
-    def patched_generate(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]],
-        routing_deadline_at: float | None = None,
-    ) -> dict[str, Any]:
-        provider = _resolve_provider(provider_id)
-        if not _is_lmstudio_provider(provider):
-            generate_kwargs: dict[str, Any] = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items,
-            }
-            if routing_deadline_at is not None:
-                generate_kwargs["routing_deadline_at"] = routing_deadline_at
-            return original_generate(
-                self,
-                session,
-                user_message,
-                **generate_kwargs,
-            )
-        return _generate_lmstudio_reply(
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            provider=provider,
-            routing_deadline_at=routing_deadline_at,
-        )
-
-    @wraps(original_stream)
-    def patched_stream(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]] | None = None,
-        routing_deadline_at: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        provider = _resolve_provider(provider_id)
-        if parse_memory_command(user_message.content) is not None:
-            stream_kwargs: dict[str, Any] = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items,
-            }
-            if routing_deadline_at is not None:
-                stream_kwargs["routing_deadline_at"] = routing_deadline_at
-            yield from original_stream(
-                self,
-                session,
-                user_message,
-                **stream_kwargs,
-            )
-            return
-        routing_deadline_at = provider_turn_deadline(
-            provider_id,
-            session_provider_id=getattr(session, "provider_id", None),
-            existing_deadline_at=routing_deadline_at,
-        )
-        boundary_events = route_typed_stream_boundary(
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            routing_deadline_at=routing_deadline_at,
-        )
-        if boundary_events is not None:
-            yield from boundary_events
-            return
-        if not _is_lmstudio_provider(provider):
-            stream_kwargs = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items,
-            }
-            if routing_deadline_at is not None:
-                stream_kwargs["routing_deadline_at"] = routing_deadline_at
-            yield from original_stream(self, session, user_message, **stream_kwargs)
-            return
-        yield from _stream_lmstudio_reply(
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            provider=provider,
-            routing_deadline_at=routing_deadline_at,
-        )
-
-    PromptChatSessionStore._generate_provider_reply = patched_generate
-    PromptChatSessionStore.stream_provider_reply_chunks = patched_stream
-    setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)

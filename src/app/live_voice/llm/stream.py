@@ -169,13 +169,15 @@ def stream_low_latency_reply(
     provider_id: str | None,
     model_id: str | None,
     context_items: list[dict[str, Any]] | None,
+    provider: Any | None = None,
     routing_deadline_at: float | None = None,
 ) -> Iterator[dict[str, Any]]:
     from app.providers import ChatMessage as ProviderMessage
 
     started = time.perf_counter()
     provider_name = _provider_key(provider_id)
-    provider = get_provider(provider_name)
+    if provider is None:
+        provider = get_provider(provider_name)
     if provider is None:
         raise RuntimeError("Chat provider is not available")
 

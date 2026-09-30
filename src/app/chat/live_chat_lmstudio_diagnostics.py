@@ -18,7 +18,7 @@ from typing import Any
 from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _model_key
 
-from . import live_chat_provider_metrics as metrics_runtime
+from app.live_voice.llm import metrics as metrics_runtime
 from app.observability.tts_stream_diagnostics import stream_log
 
 _HOOK_SENTINEL = "_omnix_live_chat_lmstudio_diagnostics_installed"
@@ -172,7 +172,7 @@ def install_live_chat_lmstudio_diagnostics_hook() -> None:
         return
 
     original_build_prompt = PromptChatSessionStore.build_provider_prompt
-    original_generate = metrics_runtime._generate_lmstudio_reply
+    original_generate = metrics_runtime.generate_lmstudio_reply
 
     @wraps(original_build_prompt)
     def patched_build_prompt(
@@ -217,7 +217,7 @@ def install_live_chat_lmstudio_diagnostics_hook() -> None:
         )
 
     PromptChatSessionStore.build_provider_prompt = patched_build_prompt
-    metrics_runtime._generate_lmstudio_reply = patched_generate
+    metrics_runtime.generate_lmstudio_reply = patched_generate
     setattr(metrics_runtime, _HOOK_SENTINEL, True)
 
 

@@ -610,6 +610,19 @@ class ChatSessionStore(JsonChatSessionStore):
         provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
+        from app.live_voice.llm import metrics as llm_metrics
+
+        if llm_metrics.is_lmstudio_provider(provider):
+            return llm_metrics.generate_lmstudio_reply(
+                self,
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                provider=provider,
+                routing_deadline_at=routing_deadline_at,
+            )
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
@@ -699,16 +712,32 @@ class ChatSessionStore(JsonChatSessionStore):
             yield from boundary_events
             return
 
-        from app.live_voice.llm.stream import stream_low_latency_reply
+        provider = provider_service.get_provider(_provider_key(provider_id))
+        if provider is None:
+            raise RuntimeError("Chat provider is not available")
+        from app.live_voice.llm import metrics as llm_metrics
+        from app.live_voice.llm import stream as llm_stream
 
-        yield from stream_low_latency_reply(
+        stream_args = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+            "provider": provider,
+            "routing_deadline_at": routing_deadline_at,
+        }
+        if llm_metrics.is_lmstudio_provider(provider):
+            yield from llm_metrics.stream_lmstudio_reply(
+                self,
+                session,
+                user_message,
+                **stream_args,
+            )
+            return
+        yield from llm_stream.stream_low_latency_reply(
             self,
             session,
             user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            routing_deadline_at=routing_deadline_at,
+            **stream_args,
         )
 
     @staticmethod
