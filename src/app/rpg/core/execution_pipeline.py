@@ -51,9 +51,9 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
-from app.runtime.clock import Clock, SYSTEM_CLOCK, current_turn_context, utc_now
+from app.runtime.clock import Clock, SYSTEM_CLOCK, utc_now
 from app.rpg.core.action_resolver import ActionResolver
-from app.rpg.core.determinism import rng_for, rng_seed_from_session_id
+from app.rpg.core.determinism import rng_for, turn_rng_identity
 from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
 
 # ============================================================
@@ -547,33 +547,10 @@ class ExecutionPipeline:
         turn_now = utc_now(self.clock)
         start_time = self.clock.monotonic()
         self._turn_counter += 1
-        turn_context = current_turn_context()
-        if turn_context is not None and turn_context.session_seed is not None:
-            self._active_rng_seed = turn_context.session_seed
-        elif isinstance(session, dict):
-            session_seed = session.get("rng_seed")
-            if isinstance(session_seed, int) and not isinstance(session_seed, bool):
-                self._active_rng_seed = session_seed
-            elif session.get("session_id") or session.get("id"):
-                self._active_rng_seed = rng_seed_from_session_id(
-                    str(session.get("session_id") or session.get("id"))
-                )
-            else:
-                self._active_rng_seed = 0
-        else:
-            self._active_rng_seed = 0
-
-        if turn_context is not None and turn_context.turn_index is not None:
-            self._active_turn_index = turn_context.turn_index
-        elif isinstance(session, dict):
-            session_turn_index = session.get("turn_index")
-            self._active_turn_index = (
-                session_turn_index
-                if isinstance(session_turn_index, int) and not isinstance(session_turn_index, bool)
-                else self._turn_counter
-            )
-        else:
-            self._active_turn_index = self._turn_counter
+        self._active_rng_seed, self._active_turn_index = turn_rng_identity(
+            session,
+            self._turn_counter,
+        )
 
         trace = TurnTrace(turn_number=self._turn_counter, now=turn_now)
         trace.player_input = player_input

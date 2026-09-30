@@ -21,7 +21,7 @@ from .runtime_part17 import *
 from .runtime_part18 import *
 from .runtime_part19 import *
 from .runtime_part20 import *
-from .runtime_part20 import _recorded_idle_tick_time as _recorded_idle_tick_time
+from .idle_time import recorded_idle_tick_time
 
 from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
@@ -191,12 +191,13 @@ def apply_idle_tick(
         return {"ok": False, "error": "session_not_found"}
 
     session = _copy_dict(session)
-    simulation_state = _safe_dict(session.get("simulation_state"))
+    simulation_state = session.get("simulation_state")
+    simulation_state = simulation_state if isinstance(simulation_state, dict) else {}
     session_seed = simulation_state.get("rng_seed")
     if not isinstance(session_seed, int) or isinstance(session_seed, bool):
         session_seed = _rng_seed_from_session_id(session_id)
     turn_index = simulation_state.get("tick", simulation_state.get("turn_index", 0))
-    replay_now, _ = _recorded_idle_tick_time(session)
+    replay_now, _ = recorded_idle_tick_time(session)
     turn_context = _TurnContext.capture(
         clock,
         session_seed=session_seed if isinstance(session_seed, int) and not isinstance(session_seed, bool) else 0,
@@ -246,12 +247,13 @@ def apply_idle_ticks(
     ticks_applied = 0
 
     for _ in range(count):
-        simulation_state = _safe_dict(session.get("simulation_state"))
+        simulation_state = session.get("simulation_state")
+        simulation_state = simulation_state if isinstance(simulation_state, dict) else {}
         session_seed = simulation_state.get("rng_seed")
         if not isinstance(session_seed, int) or isinstance(session_seed, bool):
             session_seed = _rng_seed_from_session_id(session_id)
         turn_index = simulation_state.get("tick", simulation_state.get("turn_index", 0))
-        replay_now, _ = _recorded_idle_tick_time(session)
+        replay_now, _ = recorded_idle_tick_time(session)
         turn_context = _TurnContext.capture(
             clock,
             session_seed=session_seed if isinstance(session_seed, int) and not isinstance(session_seed, bool) else 0,

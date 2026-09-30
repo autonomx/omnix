@@ -75,6 +75,38 @@ def rng_for_current_turn(purpose: str, sub_index: int = 0) -> random.Random:
     return rng_for(context.session_seed, context.turn_index, purpose, sub_index)
 
 
+def turn_rng_identity(session: Any, fallback_turn_index: int) -> tuple[int, int]:
+    """Resolve the durable seed and turn number for a pipeline invocation."""
+
+    context = current_turn_context()
+    session_data = session if isinstance(session, dict) else {}
+    state = session_data.get("simulation_state")
+    state = state if isinstance(state, dict) else session_data
+    if context is not None and context.session_seed is not None:
+        session_seed = context.session_seed
+    else:
+        session_seed = state.get("rng_seed")
+        if (
+            not isinstance(session_seed, int)
+            or isinstance(session_seed, bool)
+            or not 0 <= session_seed < 2**64
+        ):
+            session_id = (
+                session_data.get("session_id")
+                or session_data.get("id")
+                or state.get("session_id")
+                or state.get("id")
+            )
+            session_seed = rng_seed_from_session_id(str(session_id)) if session_id else 0
+    if context is not None and context.turn_index is not None:
+        turn_index = context.turn_index
+    else:
+        turn_index = state.get("turn_index")
+        if not isinstance(turn_index, int) or isinstance(turn_index, bool):
+            turn_index = fallback_turn_index
+    return session_seed, turn_index
+
+
 def stable_sub_index(value: Any) -> int:
     """Derive a stable stream index from a JSON-safe decision subject."""
 

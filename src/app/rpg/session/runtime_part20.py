@@ -20,27 +20,8 @@ from .runtime_part16 import *
 from .runtime_part17 import *
 from .runtime_part18 import *
 from .runtime_part19 import *
-
-def _recorded_idle_tick_time(session: Dict[str, Any]) -> tuple[datetime | None, str | None]:
-    runtime_state = _safe_dict(session.get("runtime_state"))
-    simulation_state = _safe_dict(session.get("simulation_state"))
-    current_tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0)
-    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
-    if mode != "replay":
-        return None, None
-    capture_key = f"idle_tick:{current_tick}"
-    captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(capture_key))
-    recorded_now = _safe_str(captured.get("now")).strip()
-    if not recorded_now:
-        return None, f"missing_replay_idle_tick_time_for_tick:{current_tick}"
-    try:
-        turn_now = datetime.fromisoformat(recorded_now.replace("Z", "+00:00"))
-        if turn_now.tzinfo is None:
-            turn_now = turn_now.replace(tzinfo=timezone.utc)
-        return turn_now.astimezone(timezone.utc), None
-    except (TypeError, ValueError):
-        return None, f"invalid_replay_idle_tick_time_for_tick:{current_tick}"
-
+from .idle_time import recorded_idle_tick_time
+from app.runtime.clock import utc_now as _runtime_utc_now
 
 def _apply_idle_tick_to_session(
     session: Dict[str, Any],
@@ -60,11 +41,11 @@ def _apply_idle_tick_to_session(
     idle_capture_key = f"idle_tick:{current_tick}"
     mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
     captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(idle_capture_key))
-    turn_now, replay_time_error = _recorded_idle_tick_time(session)
+    turn_now, replay_time_error = recorded_idle_tick_time(session)
     if replay_time_error:
         return {"ok": False, "error": replay_time_error}
     if turn_now is None:
-        turn_now = _utc_now()
+        turn_now = _runtime_utc_now()
 
     if _has_blocking_player_turn_narration(runtime_state):
         return {

@@ -11,13 +11,14 @@ from app.rpg.core.determinism import (
     rng_for_current_turn,
     rng_seed_from_session_id,
     stable_json,
+    turn_rng_identity,
 )
 from app.rpg.core.clock import DeterministicClock
 from app.rpg.core.event_bus import DeterminismConfig, Event, EventBus
 from app.rpg.core.execution_pipeline import ExecutionPipeline
 from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
 from app.rpg.core.world_loop import WorldSimulationLoop
-from app.rpg.session.runtime_part20 import _recorded_idle_tick_time
+from app.rpg.session.idle_time import recorded_idle_tick_time
 from app.runtime.clock import Clock, TurnContext, bind_turn_context, utc_now
 from app.rpg.session import service as session_service
 from app.rpg.world.political_system import PoliticalSystem
@@ -66,6 +67,25 @@ def test_legacy_campaign_seed_does_not_override_the_session_id_upcast() -> None:
     assert session["simulation_state"]["rng_seed"] == rng_seed_from_session_id(
         "old-session-legacy-seed"
     )
+
+
+def test_turn_rng_identity_prefers_context_and_upcasts_legacy_state() -> None:
+    session = {
+        "session_id": "legacy-pipeline-session",
+        "simulation_state": {"seed": 1234, "turn_index": 8},
+    }
+    assert turn_rng_identity(session, 99) == (
+        rng_seed_from_session_id("legacy-pipeline-session"),
+        8,
+    )
+
+    context = TurnContext.capture(
+        FixedClock(datetime(2026, 9, 29, tzinfo=timezone.utc)),
+        session_seed=55,
+        turn_index=4,
+    )
+    with bind_turn_context(context):
+        assert turn_rng_identity(session, 99) == (55, 4)
 
 
 def test_legacy_session_seed_is_persisted_on_the_next_save(monkeypatch) -> None:
@@ -212,7 +232,7 @@ def test_idle_replay_turn_time_comes_from_the_recorded_input() -> None:
         },
     }
 
-    now, error = _recorded_idle_tick_time(session)
+    now, error = recorded_idle_tick_time(session)
 
     assert error is None
     assert now == datetime.fromisoformat(recorded_now)

@@ -70,6 +70,18 @@ jobs:
           python -m app.persistence migrate
           python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
 
+      - name: RPG seeded 50-turn replay regression
+        run: |
+          set -o pipefail
+          python -m pytest src/tests/unit/rpg/test_enterprise_determinism.py -q --tb=short 2>&1 | tee rpg-determinism-pytest-output.txt
+
+      - name: Upload RPG determinism diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpg-determinism-pytest-output
+          path: rpg-determinism-pytest-output.txt
+
       - name: Install web dependencies
         run: |
           set -o pipefail
