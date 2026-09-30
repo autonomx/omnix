@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

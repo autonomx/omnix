@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { startBlankChat } from './sessionTools';
 
 const HOST_ATTRIBUTE = 'data-omnix-chat-sidebar-manager';

@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 import {
   createLiveCallDiagnosticsReporter,

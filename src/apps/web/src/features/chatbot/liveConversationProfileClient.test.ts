@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { migrateLegacyConversationSettingsOnce } from './liveConversationProfileClient';

@@ -29,7 +29,7 @@ def _url(value: str, *, origin: bool = False) -> str:
         )
     except ValueError:
         valid = False
-    if not valid:
+    if not valid or parsed.hostname is None:
         raise ValueError("Service URLs must be absolute HTTP(S) URLs without credentials, query or fragment")
     host = parsed.hostname.lower()
     if ":" in host:
@@ -44,7 +44,7 @@ class ServiceEndpoint:
     url: str
     required: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "url", _url(self.url))
 
 
@@ -62,7 +62,7 @@ class RuntimeConfig:
     enabled_features: tuple[str, ...] = ("all",)
     disabled_features: tuple[str, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "gateway_role", GatewayRole(self.gateway_role))
         origins = tuple(_url(value, origin=True) for value in self.api_replica_origins)
         if len(set(origins)) != len(origins):
@@ -112,7 +112,7 @@ class RuntimeConfig:
             raise ValueError("Explicit background ownership contradicts gateway role")
         required = tuple(value.strip() for value in env.get("OMNIX_GATEWAY_REQUIRED_WORKERS", "").split(",") if value.strip())
 
-        def endpoint(name: str):
+        def endpoint(name: str) -> ServiceEndpoint | None:
             value = env.get(f"OMNIX_{name.upper()}_URL", "").strip()
             return ServiceEndpoint(value, name in required) if value else None
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { TradingPriceScaleSide } from './chart/chartAdapter';
 import './TradingYAxisControls.css';

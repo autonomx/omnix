@@ -3,8 +3,20 @@ name: RPG deterministic PR gates
 on:
   pull_request:
     branches: [main, rpg]
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - "src/tests/unit/rpg/**"
+      - "src/apps/web/src/features/rpg/**"
+      - ".github/workflows/rpg-pr-deterministic.yml"
   push:
     branches: [main, rpg]
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - "src/tests/unit/rpg/**"
+      - "src/apps/web/src/features/rpg/**"
+      - ".github/workflows/rpg-pr-deterministic.yml"
   workflow_dispatch:
 
 permissions:
@@ -61,14 +73,14 @@ jobs:
       - name: Install web dependencies
         run: |
           set -o pipefail
-          npm install 2>&1 | tee web-npm-install-output.txt
+          npm ci 2>&1 | tee web-npm-ci-output.txt
 
       - name: Upload web install diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: web-npm-install-output
-          path: web-npm-install-output.txt
+          path: web-npm-ci-output.txt
 
       - name: Check RPG file line limits
         run: |

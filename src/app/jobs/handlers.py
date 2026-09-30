@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import builtins
 import math
 import random
 from threading import Event
@@ -14,6 +15,9 @@ from .models import CreateJobRequest, FailJobRequest, JobRecord, ResourceClass
 
 class AnyJobInput(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+
+JobInputModel = builtins.type[BaseModel]
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +54,7 @@ SubmissionPolicy = Callable[[CreateJobRequest], CreateJobRequest]
 class JobHandlerSpec:
     type: str
     handler: JobHandler
-    input_model: type[BaseModel] = AnyJobInput
+    input_model: JobInputModel = AnyJobInput
     resource_class: ResourceClass = ResourceClass.CPU
     timeout_seconds: float = 300.0
     max_attempts: int = 3

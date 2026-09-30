@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-this-alias -- baseline WP-9.x */
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';

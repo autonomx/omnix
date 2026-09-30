@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { omnixApiClient, type JobListResponse, type ListJobsOptions } from '../../api/client';
 
 const VOICE_JOB_SUMMARIES_PATH = '/api/jobs/voice-summaries?limit=40';

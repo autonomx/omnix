@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { ApprovalPolicy } from '../assistant-workspace/tool-actions';
 import type { ToolConfig } from '../assistant-workspace/tool-registry';
 import { executeToolProposal } from '../assistant-workspace/tool-proposal-client';

@@ -13,7 +13,7 @@ _T = TypeVar("_T")
 _lock = RLock()
 _load: Callable[[], dict[str, Any]] | None = None
 _save: Callable[[dict[str, Any]], None] | None = None
-_update: Callable[[Callable[[dict[str, Any]], _T]], tuple[dict[str, Any], _T]] | None = None
+_update: Callable[[Callable[[dict[str, Any]], Any]], tuple[dict[str, Any], Any]] | None = None
 _sessions: dict[str, Any] = {}
 
 
@@ -21,7 +21,7 @@ def install_legacy_session_callbacks(
     *,
     load_callback: Callable[[], dict[str, Any]],
     save_callback: Callable[[dict[str, Any]], None],
-    update_callback: Callable[[Callable[[dict[str, Any]], _T]], tuple[dict[str, Any], _T]] | None = None,
+    update_callback: Callable[[Callable[[dict[str, Any]], Any]], tuple[dict[str, Any], Any]] | None = None,
 ) -> None:
     global _load, _save, _update
     with _lock:

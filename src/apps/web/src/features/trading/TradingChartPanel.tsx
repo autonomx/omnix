@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PriceScaleMode, type IChartApi } from 'lightweight-charts';

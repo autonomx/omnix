@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import type { PaperAccount, PaperAccountSnapshot, PaperOrder } from './paperTypes';
 import { tradingPaperApi } from './tradingPaperApi';

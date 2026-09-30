@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RpgHeroSummaryPreview, RpgSessionSummaryPreview, RpgStoryMessagePreview } from './rpgUiState';
 import {

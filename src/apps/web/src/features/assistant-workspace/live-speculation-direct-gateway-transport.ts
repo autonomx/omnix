@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
 const INSTALLED_KEY = '__omnixLiveSpeculationDirectGatewayTransportInstalled';

@@ -4,9 +4,17 @@ on:
   push:
     branches:
       - "rpg-v1.*"
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - ".github/workflows/rpg-artifact-pytest.yml"
   pull_request:
     branches:
       - "rpg-v1.*"
+    paths:
+      - "src/app/rpg/**"
+      - "src/tests/rpg/**"
+      - ".github/workflows/rpg-artifact-pytest.yml"
   workflow_dispatch:
 
 jobs:

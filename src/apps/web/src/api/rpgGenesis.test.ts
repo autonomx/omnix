@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- baseline WP-9.x */
 import { describe, expect, it } from 'vitest';
 import type { RpgNewGameRequest } from './client';
 import { withRpgGenesisContract } from './rpgGenesis';

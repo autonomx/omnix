@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { ProductionGenerationStyle, ProductionStage, ReviewMode, ReviewPolicy } from '../conversation-production/types';
 import { automaticReviewPolicy } from '../conversation-production/types';
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';

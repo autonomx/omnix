@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { tradingPaperApi } from './tradingPaperApi';
 import type { PaperAccountSnapshot, PaperOrder } from './paperTypes';

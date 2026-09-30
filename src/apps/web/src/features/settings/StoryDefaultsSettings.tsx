@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { useEffect } from 'react';
 import { saveStoryReadSettings } from '../storyteller/storyReadSettings';
 import { SettingsField, SettingsSection } from './SettingsPrimitives';

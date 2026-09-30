@@ -15,7 +15,7 @@ default and log files are created owner-readable/writable only.
 """
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import env_str
 
 from datetime import datetime, timedelta, timezone
 import json
@@ -70,12 +70,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def agent_debug_logging_enabled() -> bool:
-    value = env_str(AGENT_DEBUG_ENABLED_ENV, "0").strip().lower()
+    value = (env_str(AGENT_DEBUG_ENABLED_ENV, "0") or "0").strip().lower()
     return value not in {"0", "false", "no", "off", "disabled"}
 
 
 def agent_debug_log_dir() -> Path:
-    override = env_str(AGENT_DEBUG_LOG_DIR_ENV, "").strip()
+    override = (env_str(AGENT_DEBUG_LOG_DIR_ENV, "") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
     return resources_root() / "logs" / "agent"
@@ -229,7 +229,7 @@ def _write_event(payload: dict[str, Any]) -> None:
                 targets.append(_dated_log_path(directory, "errors"))
             run_id = str(payload.get("run_id") or "").strip()
             if run_id:
-                targets.append(directory / f"run-{_safe_filename(run_id)}.jsonl")
+                targets.append(str(directory / f"run-{_safe_filename(run_id)}.jsonl"))
             encoded = line.encode("utf-8", errors="replace")
             for path in dict.fromkeys(str(item) for item in targets):
                 fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
@@ -330,10 +330,10 @@ def _sanitize(value: Any, *, key: str = "", depth: int = 0) -> Any:
         return output
     if isinstance(value, (list, tuple, set, frozenset)):
         items = list(value)
-        output = [_sanitize(item, key=key, depth=depth + 1) for item in items[:_MAX_COLLECTION_ITEMS]]
+        cleaned_items = [_sanitize(item, key=key, depth=depth + 1) for item in items[:_MAX_COLLECTION_ITEMS]]
         if len(items) > _MAX_COLLECTION_ITEMS:
-            output.append(f"<truncated-items:{len(items) - _MAX_COLLECTION_ITEMS}>")
-        return output
+            cleaned_items.append(f"<truncated-items:{len(items) - _MAX_COLLECTION_ITEMS}>")
+        return cleaned_items
     model_dump = getattr(value, "model_dump", None)
     if callable(model_dump):
         try:

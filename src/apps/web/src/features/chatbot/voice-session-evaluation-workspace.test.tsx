@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { screen, waitFor } from '@testing-library/dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

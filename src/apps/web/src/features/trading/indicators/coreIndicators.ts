@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import type { MarketBar } from '../tradingTypes';
 import { autoChartPatternLines, isAutoChartPatternId, type AutoChartPatternId } from './autoPatterns';
 

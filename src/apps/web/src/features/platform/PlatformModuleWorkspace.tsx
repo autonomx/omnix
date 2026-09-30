@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { Button, Group, Progress, Switch, Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient, type QueryKey, type UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';

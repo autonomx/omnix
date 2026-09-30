@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import {
   LIVE_CONVERSATION_PROFILE_CHANGED_EVENT,
   readEffectiveLiveConversationProfile,

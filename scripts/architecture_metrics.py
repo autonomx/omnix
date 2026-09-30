@@ -363,12 +363,14 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                                                 for path, symbol in sorted(local_state)]
     evidence["process_local_state_inventory_kind"] = "syntactic_candidates_plus_explicit_entries"
     values["quarantined_tests"] = _quarantines(analysis.sources)
-    patterns = _mypy_ignore_patterns(analysis.sources)
+    patterns, strict_patterns = _mypy_override_patterns(analysis.sources)
     values["mypy_ignored_modules"] = len(patterns)
     ignored = {module_name(path) for path in analysis.sources if path.startswith("src/app/") and path.endswith(".py")
-               and any(fnmatch.fnmatchcase(module_name(path), pattern) for pattern in patterns)}
+               and any(fnmatch.fnmatchcase(module_name(path), pattern) for pattern in patterns)
+               and not any(fnmatch.fnmatchcase(module_name(path), pattern) for pattern in strict_patterns)}
     evidence["mypy_ignored_modules"] = sorted(ignored)
     evidence["mypy_ignored_patterns"] = sorted(patterns)
+    evidence["mypy_strict_patterns"] = sorted(strict_patterns)
     evidence["unreachable_rpg_modules"] = _unreachable_python(analysis)
     values["unreachable_rpg_modules"] = len(evidence["unreachable_rpg_modules"])
     evidence["absolute_storage_path_read_files"] = sorted({
@@ -410,21 +412,25 @@ def _quarantines(sources: dict[str, str]) -> int:
     return total
 
 
-def _mypy_ignore_patterns(sources: dict[str, str]) -> set[str]:
-    patterns = set()
+def _mypy_override_patterns(sources: dict[str, str]) -> tuple[set[str], set[str]]:
+    ignored_patterns: set[str] = set()
+    strict_patterns: set[str] = set()
     for path, source in sources.items():
         if PurePosixPath(path).name == "pyproject.toml":
             for override in tomllib.loads(source).get("tool", {}).get("mypy", {}).get("overrides", []):
+                modules = override.get("module", [])
+                modules = [modules] if isinstance(modules, str) else modules
                 if override.get("ignore_errors") is True:
-                    modules = override.get("module", [])
-                    patterns.update([modules] if isinstance(modules, str) else modules)
+                    ignored_patterns.update(modules)
+                elif override.get("ignore_errors") is False:
+                    strict_patterns.update(modules)
         if PurePosixPath(path).name in {"mypy.ini", ".mypy.ini", "setup.cfg"}:
             parser = configparser.ConfigParser()
             parser.read_string(source)
             for section in parser.sections():
                 if section.startswith("mypy-") and parser.getboolean(section, "ignore_errors", fallback=False):
-                    patterns.update(pattern.strip() for pattern in section.removeprefix("mypy-").split(","))
-    return patterns
+                    ignored_patterns.update(pattern.strip() for pattern in section.removeprefix("mypy-").split(","))
+    return ignored_patterns, strict_patterns
 
 
 def _unreachable_python(analysis: SourceAnalysis) -> list[str]:
@@ -508,6 +514,12 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     handwritten, route_count, boundaries = set(), 0, 0
     schema_names = set(openapi.get("components", {}).get("schemas", {}))
     for path, source in sources.items():
+        if path.startswith("src/apps/web/") and path.endswith(
+            (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
+        ):
+            values["eslint_baseline_disables"] += len(
+                re.findall(r"eslint-disable(?:-next-line|-line)?[^\n]*", source)
+            )
         if not path.startswith("src/apps/web/src/") or is_test(path) or not path.endswith((".ts", ".tsx", ".css")):
             continue
         code = mask_js(source)
@@ -539,7 +551,6 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
             values["web_mutation_observer_files"] += bool(re.search(r"\b(?:window\.)?MutationObserver\s*\(", code))
             values["web_set_interval_files"] += bool(re.search(r"\b(?:window\.)?setInterval\s*\(", code))
             values["web_custom_event_dispatch_files"] += bool(re.search(r"\bdispatchEvent\s*\(\s*new\s+CustomEvent\s*\(", code))
-            values["eslint_baseline_disables"] += len(re.findall(r"eslint-disable(?:-next-line|-line)?[^\n]*", source))
             route_count += len(re.findall(r"\bcreate(?:Root|File)?Route\s*\(", code))
             boundaries += len(re.findall(r"\berrorComponent\s*:", code))
             # A helper's route declaration produces one route per concrete

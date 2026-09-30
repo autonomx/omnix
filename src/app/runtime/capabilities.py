@@ -20,11 +20,11 @@ class RuntimeCapability(str, Enum):
 class RuntimeCapabilities:
     granted: frozenset[RuntimeCapability]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, 'granted', frozenset(RuntimeCapability(value) for value in self.granted))
 
     @classmethod
-    def from_config(cls, config: RuntimeConfig):
+    def from_config(cls, config: RuntimeConfig) -> "RuntimeCapabilities":
         # Request-driven Chat execution has a durable per-process owner on both
         # roles. Singleton recovery/schedulers belong only to the worker.
         granted = {RuntimeCapability.SERVE_API, RuntimeCapability.RUN_CHAT_DISPATCH}

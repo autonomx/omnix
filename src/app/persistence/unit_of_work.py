@@ -4,7 +4,7 @@ import sys
 import uuid
 import logging
 from types import TracebackType
-from typing import Any, Hashable, Literal
+from typing import Any, Callable, Hashable, Literal
 
 from .authority import (
     AuthorityOperation,
@@ -60,7 +60,7 @@ class PostgresUnitOfWork:
         self._connection_context: Any | None = None
         self._transaction_scope_context: Any | None = None
         self._completed = False
-        self._after_commit = []
+        self._after_commit: list[Callable[[], Any]] = []
         self._committed = False
         self._feature_repositories: dict[Hashable, Any] = {}
 
@@ -92,7 +92,7 @@ class PostgresUnitOfWork:
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
         return self
 
-    def repository(self, repo_type: Hashable):
+    def repository(self, repo_type: Hashable) -> Any:
         connection = self._require_connection()
         if repo_type in self._feature_repositories:
             return self._feature_repositories[repo_type]
@@ -103,7 +103,7 @@ class PostgresUnitOfWork:
         self._feature_repositories[repo_type] = value
         return value
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
         spec = repository_spec_by_alias(name)
@@ -163,7 +163,7 @@ def unit_of_work(
     database: PostgresDatabase | None = None,
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
-):
+) -> PostgresUnitOfWork | _JoinedUnitOfWork:
     from .transaction_binding import shared_work
 
     resolved = database or default_database()
@@ -178,28 +178,33 @@ def unit_of_work(
 class _JoinedUnitOfWork:
     """Nested repository operation: commit releases a savepoint, never the root."""
 
-    def __init__(self, parent):
+    def __init__(self, parent: PostgresUnitOfWork) -> None:
         self.parent = parent
         self.name = f'omnix_join_{uuid.uuid4().hex}'
         self.completed = False
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self.parent, name)
 
-    def __enter__(self):
+    def __enter__(self) -> _JoinedUnitOfWork:
         self.parent._require_connection().execute(f'SAVEPOINT {self.name}')
         self.callback_count = len(self.parent._after_commit)
         return self
 
-    def commit(self):
+    def commit(self) -> None:
         self.completed = True
 
-    def rollback(self):
+    def rollback(self) -> None:
         self.parent._require_connection().execute(f'ROLLBACK TO SAVEPOINT {self.name}')
         del self.parent._after_commit[self.callback_count:]
         self.completed = True
 
-    def __exit__(self, exc_type, exc, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
         connection = self.parent._require_connection()
         if exc_type is not None or not self.completed:
             connection.execute(f'ROLLBACK TO SAVEPOINT {self.name}')

@@ -40,7 +40,7 @@ class LocalJobExecutor:
 
         job = self.store.mark_running(claim.job.id) or claim.job
         # Retain the credentials from this claim, never from a later row read.
-        credentials = {
+        credentials: dict[str, Any] = {
             "worker_id": self.worker_id,
             "lease_token": claim.job.lease.token if claim.job.lease is not None else None,
         }

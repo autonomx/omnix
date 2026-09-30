@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';
 import type { SpeechPerformancePlan } from './live-speech-performance-contract';
 

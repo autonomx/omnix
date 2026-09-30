@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import os
 import shutil
 import time
 from pathlib import Path
@@ -20,14 +21,23 @@ class ResilientRotatingFileHandler(logging.handlers.RotatingFileHandler):
 
     _ROLLOVER_RETRY_SECONDS = 60.0
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        filename: str | os.PathLike[str],
+        mode: str = "a",
+        maxBytes: int = 0,
+        backupCount: int = 0,
+        encoding: str | None = None,
+        delay: bool = False,
+        errors: str | None = None,
+    ) -> None:
+        super().__init__(filename, mode, maxBytes, backupCount, encoding, delay, errors)
         self._retry_rollover_after = 0.0
 
     def shouldRollover(self, record: logging.LogRecord) -> bool:  # noqa: N802
         if time.monotonic() < self._retry_rollover_after:
             return False
-        return super().shouldRollover(record)
+        return bool(super().shouldRollover(record))
 
     def doRollover(self) -> None:  # noqa: N802
         try:

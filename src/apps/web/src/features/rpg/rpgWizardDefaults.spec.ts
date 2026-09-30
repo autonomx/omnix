@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS_DOCUMENT } from '../settings/settingsDefaults';
 import { applyRpgWizardDefaults, rpgWizardDefaultsFromSettings } from './rpgWizardDefaults';

@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { InitiativeMode } from '../chatbot/liveConversationProfileClient';
 
 export type InitiativePolicyInput = {

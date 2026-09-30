@@ -43,8 +43,9 @@ def _read(path: Path) -> str:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise ServiceCredentialError("service_credential_not_regular")
+        getuid = getattr(os, "getuid", None)
         if not _windows() and (
-            metadata.st_mode & 0o077 or metadata.st_uid != os.getuid()
+            metadata.st_mode & 0o077 or getuid is None or metadata.st_uid != getuid()
         ):
             raise ServiceCredentialError("service_credential_permissions_unsafe")
         value = os.read(descriptor, 65537)

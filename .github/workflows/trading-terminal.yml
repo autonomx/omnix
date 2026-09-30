@@ -71,7 +71,7 @@ jobs:
       - name: Install Trading test dependencies
         run: |
           python -m pip install --require-hashes -r requirements/dev.lock.txt
-          npm install
+          npm ci
       - name: Trading architecture and backend tests
         run: |
           python -m pytest \

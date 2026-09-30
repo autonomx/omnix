@@ -8,6 +8,7 @@
     "dev:devtools": "vite --host 127.0.0.1 --port 5173 --mode devtools",
     "dev:lan": "vite --host 0.0.0.0 --port 5173",
     "devtools": "react-devtools",
+    "lint": "eslint .",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
     "preview:lan": "vite preview --host 0.0.0.0 --port 4173",
@@ -45,8 +46,11 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.1.0",
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.0",
+    "typescript-eslint": "8.71.0",
     "vite": "^7.2.0",
     "vitest": "^4.1.0"
   }

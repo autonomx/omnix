@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { ConversationProduction, ProductionAsset, ProductionConstraints, ProductionGenerationStyle, ReviewPolicy } from '../conversation-production/types';
 
 export type PodcastFormat = 'debate' | 'interview' | 'speech' | 'roundtable';

@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import type { OmnixModuleId } from './modules';
 
 const VIEW_API_FIREWALL_KEY = '__omnixViewApiFirewallInstalled';

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { readCurrentAssistantDiagnosticText } from './live-conversation-assistant-summary';
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult } from './live-accepted-final';
 import { acceptedFinalSuppressionReason } from './live-accepted-final-routing';

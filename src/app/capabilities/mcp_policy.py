@@ -124,7 +124,7 @@ class McpPolicy(BaseModel):
 
 
 def mcp_policy_path() -> Path:
-    configured = _env_str("OMNIX_AGENT_MCP_POLICY_PATH", "").strip()
+    configured = (_env_str("OMNIX_AGENT_MCP_POLICY_PATH", "") or "").strip()
     return Path(configured) if configured else DEFAULT_MCP_POLICY_PATH
 
 

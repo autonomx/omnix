@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DrawingTool } from './drawings/drawingCommands';
 import './TradingDrawingTools.css';

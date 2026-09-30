@@ -153,7 +153,7 @@ jobs:
           node-version: "22"
 
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
 
       - name: Web typecheck
         run: npm --workspace @omnix/web run typecheck

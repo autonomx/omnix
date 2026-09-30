@@ -28,7 +28,7 @@ def reset_default_job_store_factory_for_tests() -> None:
         _DEFAULT_JOB_STORE_FACTORY = None
 
 
-def default_job_store():
+def default_job_store() -> object:
     with _FACTORY_LOCK:
         factory = _DEFAULT_JOB_STORE_FACTORY
     if factory is None:

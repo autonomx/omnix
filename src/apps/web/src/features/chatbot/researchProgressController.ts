@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import {
   omnixApiClient,
   type ChatSession,

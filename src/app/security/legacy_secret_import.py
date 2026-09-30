@@ -74,13 +74,13 @@ def _recognized_secrets(payload: dict[str, Any]) -> dict[str, Any]:
     ):
         values = payload.get(section)
         if isinstance(values, dict):
-            clean = {
+            clean_research_keys = {
                 provider: str(values.get(provider) or "").strip()
                 for provider in providers
                 if str(values.get(provider) or "").strip()
             }
-            if clean:
-                recognized[section] = clean
+            if clean_research_keys:
+                recognized[section] = clean_research_keys
 
     trading = payload.get("trading_credentials")
     if isinstance(trading, dict):

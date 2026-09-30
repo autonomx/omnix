@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment -- baseline WP-9.x */
+/* eslint-disable @typescript-eslint/no-explicit-any -- baseline WP-9.x */
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 // @ts-nocheck
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';

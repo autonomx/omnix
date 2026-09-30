@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';

@@ -19,7 +19,7 @@ _DEFAULT_ORIGINS = (
 
 def bind_host(requested: str | None = None) -> str:
     """Return a validated listener address; public binding requires two opt-ins."""
-    configured = _env_str("OMNIX_BIND_HOST", "").strip() or "127.0.0.1"
+    configured = (_env_str("OMNIX_BIND_HOST", "") or "").strip() or "127.0.0.1"
     host = configured if requested is None else str(requested).strip()
     if host == "localhost":
         return host
@@ -29,7 +29,7 @@ def bind_host(requested: str | None = None) -> str:
         raise ValueError("OMNIX_BIND_HOST must be an IP address or localhost") from exc
     if address.is_loopback:
         return host
-    if configured != host or _env_str("OMNIX_ALLOW_LAN", "").strip().lower() != "true":
+    if configured != host or (_env_str("OMNIX_ALLOW_LAN", "") or "").strip().lower() != "true":
         raise ValueError("Non-loopback binding requires OMNIX_BIND_HOST and OMNIX_ALLOW_LAN=true")
     _LOGGER.warning("Omnix listener explicitly exposed beyond loopback: %s", host)
     return host

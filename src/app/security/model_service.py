@@ -25,6 +25,8 @@ _ERROR_CODES = {
 
 def max_upload_bytes() -> int:
     raw = _env_str("OMNIX_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
+    if raw is None:
+        raw = str(DEFAULT_MAX_UPLOAD_BYTES)
     if not raw.isascii() or not raw.isdecimal() or int(raw) <= 0:
         raise ValueError("OMNIX_MAX_UPLOAD_BYTES must be a positive integer")
     return int(raw)
@@ -124,7 +126,9 @@ class ModelServiceMiddleware:
             if message["type"] == "http.response.body":
                 if not started:
                     if oversized or failure_status is not None:
-                        await error_response(413 if oversized else failure_status)
+                        status = 413 if oversized else failure_status
+                        assert status is not None
+                        await error_response(status)
                         return
                     assert response_start is not None
                     headers = [(k, v) for k, v in response_start.get("headers", [])

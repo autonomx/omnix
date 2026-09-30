@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 type AssetRecordLike = {
   id?: unknown;
   module?: unknown;

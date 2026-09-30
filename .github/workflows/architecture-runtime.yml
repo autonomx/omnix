@@ -3,8 +3,34 @@ name: Architecture runtime gates
 on:
   pull_request:
     branches: [main]
+    paths:
+      - "src/app/**"
+      - "src/tests/**"
+      - "src/apps/web/**"
+      - "scripts/architecture_*.py"
+      - "scripts/run_architecture_gates.py"
+      - "scripts/export_gateway_openapi.py"
+      - "resources/architecture/**"
+      - "requirements/*.lock.txt"
+      - "pyproject.toml"
+      - "package-lock.json"
+      - ".node-version"
+      - ".github/workflows/architecture-runtime.yml"
   push:
-    branches: [main, refactor]
+    branches: [main]
+    paths:
+      - "src/app/**"
+      - "src/tests/**"
+      - "src/apps/web/**"
+      - "scripts/architecture_*.py"
+      - "scripts/run_architecture_gates.py"
+      - "scripts/export_gateway_openapi.py"
+      - "resources/architecture/**"
+      - "requirements/*.lock.txt"
+      - "pyproject.toml"
+      - "package-lock.json"
+      - ".node-version"
+      - ".github/workflows/architecture-runtime.yml"
   workflow_dispatch:
 
 permissions:

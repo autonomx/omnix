@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { liveConversationStore } from './live-conversation-store';

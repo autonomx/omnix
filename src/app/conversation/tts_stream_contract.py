@@ -5,6 +5,7 @@ import importlib
 import math
 import re
 import sys
+from types import ModuleType
 from typing import Any, Iterator
 
 from pydantic import BaseModel, Field, model_validator
@@ -12,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.conversation.performance_contract import SpeechPerformancePlan
 from app.text import remove_emojis
 
+np: ModuleType | None
 try:
     np = importlib.import_module("numpy")
 except ImportError:  # pragma: no cover - exercised in minimal dependency environments.

@@ -372,12 +372,35 @@ def test_explicit_state_inventory_entries_are_counted_even_when_not_mutable_lite
     assert observed(sources)["metrics"]["process_local_state_unapproved"]["value"] == 1
 
 
-def test_mypy_reports_override_pattern_count_and_actual_matching_modules():
-    sources = {"mypy.ini": "[mypy-app.chat.*, app.missing.*]\nignore_errors = true\n", APP + "chat/a.py": "", APP + "chat/b.py": "", APP + "chat/c.py": "", APP + "jobs/a.py": ""}
+def test_mypy_reports_override_pattern_count_and_effective_matching_modules():
+    sources = {
+        "pyproject.toml": (
+            "[[tool.mypy.overrides]]\n"
+            'module = ["app.chat.*", "app.missing.*"]\n'
+            "ignore_errors = true\n"
+            "[[tool.mypy.overrides]]\n"
+            'module = ["app.chat.strict"]\n'
+            "ignore_errors = false\n"
+        ),
+        APP + "chat/a.py": "",
+        APP + "chat/strict.py": "",
+        APP + "chat/c.py": "",
+        APP + "jobs/a.py": "",
+    }
     result = observed(sources)
     assert result["metrics"]["mypy_ignored_modules"]["value"] == 2
-    assert result["evidence"]["mypy_ignored_modules"] == ["app.chat.a", "app.chat.b", "app.chat.c"]
+    assert result["evidence"]["mypy_ignored_modules"] == ["app.chat.a", "app.chat.c"]
     assert result["evidence"]["mypy_ignored_patterns"] == ["app.chat.*", "app.missing.*"]
+    assert result["evidence"]["mypy_strict_patterns"] == ["app.chat.strict"]
+
+
+def test_eslint_baseline_metric_includes_all_linted_web_files():
+    sources = {
+        WEB + "app/a.ts": "/* eslint-disable no-console -- baseline WP-9.x */\n",
+        WEB + "features/a.test.ts": "/* eslint-disable no-restricted-imports -- baseline WP-9.x */\n",
+        "src/apps/web/tests/e2e/a.spec.ts": "/* eslint-disable prefer-const -- baseline WP-9.x */\n",
+    }
+    assert observed(sources)["metrics"]["eslint_baseline_disables"]["value"] == 3
 
 
 @pytest.mark.parametrize("change", ["source", "environment", "expired", "missing", "nan"])

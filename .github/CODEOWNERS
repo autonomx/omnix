@@ -1,5 +1,4 @@
-* @autonomxDeveloper
-/docs/ @autonomxDeveloper
-/src/app/security/ @autonomxDeveloper
-/src/app/persistence/ @autonomxDeveloper
-/.github/ @autonomxDeveloper
+# Replace these placeholders with maintainer usernames or teams before enforcing code-owner review.
+* @OWNER
+/src/app/ @OWNER
+/.github/ @OWNER

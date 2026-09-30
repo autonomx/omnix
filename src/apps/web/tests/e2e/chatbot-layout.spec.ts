@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { expect, test, type Page } from '@playwright/test';
 
 async function installChatbotMocks(page: Page): Promise<void> {

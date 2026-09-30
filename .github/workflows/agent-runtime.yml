@@ -106,7 +106,7 @@ jobs:
       - name: Install Agent Runtime test dependencies
         run: |
           python -m pip install --require-hashes -r requirements/dev.lock.txt
-          npm install
+          npm ci
       - name: Apply PostgreSQL migrations
         run: python -m app.persistence migrate
       - name: Initialize empty PostgreSQL authority and local identity

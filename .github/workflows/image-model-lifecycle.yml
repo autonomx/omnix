@@ -97,7 +97,7 @@ jobs:
           node-version: "22"
           cache: npm
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
       - name: Typecheck image lifecycle modules
         run: |
           cat > src/apps/web/tsconfig.image-lifecycle.json <<'JSON'

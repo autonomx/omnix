@@ -3,8 +3,34 @@ name: PostgreSQL persistence gates
 on:
   pull_request:
     branches: [main, "agent/generalized-agent-runtime"]
+    paths:
+      - "src/app/persistence/**"
+      - "src/app/audiobook/**"
+      - "src/tests/persistence/**"
+      - "src/tests/app/test_chat_*.py"
+      - "src/tests/app/test_live_chat_postgres_fast_path.py"
+      - "src/tests/app/test_live_voice_runtime_offload.py"
+      - "src/tests/unit/audiobook/**"
+      - "src/tests/api/gateway/**"
+      - "src/tests/api/test_legacy_ui_retirement.py"
+      - "src/tests/unit/test_shared_state_safety.py"
+      - "src/apps/web/src/features/audiobook/**"
+      - ".github/workflows/postgresql-persistence.yml"
   push:
     branches: [main]
+    paths:
+      - "src/app/persistence/**"
+      - "src/app/audiobook/**"
+      - "src/tests/persistence/**"
+      - "src/tests/app/test_chat_*.py"
+      - "src/tests/app/test_live_chat_postgres_fast_path.py"
+      - "src/tests/app/test_live_voice_runtime_offload.py"
+      - "src/tests/unit/audiobook/**"
+      - "src/tests/api/gateway/**"
+      - "src/tests/api/test_legacy_ui_retirement.py"
+      - "src/tests/unit/test_shared_state_safety.py"
+      - "src/apps/web/src/features/audiobook/**"
+      - ".github/workflows/postgresql-persistence.yml"
   workflow_dispatch:
 
 permissions:
