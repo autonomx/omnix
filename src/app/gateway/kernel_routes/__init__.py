@@ -156,9 +156,6 @@ def create_kernel_router(
     register_core_chat_routes(
         router, get_chat_store=get_chat_store, get_job_store=get_job_store
     )
-    from ..live_sse_transport import install_live_chat_sse_route_execution
-
-    install_live_chat_sse_route_execution(router)
 
     @router.get(
         "/api/providers", response_model=ProviderFacadePayload, tags=["providers"]

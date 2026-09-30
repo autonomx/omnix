@@ -1,83 +1,49 @@
 from __future__ import annotations
 
-from app.gateway import memory_job_offload
-from concurrent.futures import Future
+from types import SimpleNamespace
+
+from app.assistant_memory.feature import FEATURE
+from app.assistant_memory.jobs import (
+    MEMORY_SUGGEST_JOB_TYPE,
+    create_memory_suggestion_job_request,
+)
+from app.jobs.handlers import JobExecutionContext
+from app.jobs.models import JobStatus
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
-def test_background_memory_job_resolves_structured_provider_inside_worker(monkeypatch) -> None:
-    sentinel_provider = object()
-    captured: dict[str, object] = {}
+def test_assistant_memory_registers_durable_suggestion_handler(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    handlers = {handler.type: handler for handler in FEATURE.job_handlers}
+    assert MEMORY_SUGGEST_JOB_TYPE in handlers
+    handler = handlers[MEMORY_SUGGEST_JOB_TYPE]
 
+    store = InMemoryJobStore(tmp_path / "jobs")
+    job = store.create_job(
+        create_memory_suggestion_job_request("chat:missing", "msg:missing")
+    )
+    chat_store = SimpleNamespace(
+        get_session=lambda _session_id: None,
+        memory_service_factory=lambda: None,
+    )
     monkeypatch.setattr(
-        memory_job_offload,
-        "default_structured_proposal_provider",
-        lambda: sentinel_provider,
+        "app.assistant_memory.feature.default_memory_service",
+        lambda: None,
     )
 
-    def fake_process(job, **kwargs):
-        captured["job"] = job
-        captured.update(kwargs)
-        return "processed"
-
-    monkeypatch.setattr(
-        memory_job_offload,
-        "process_memory_suggestion_job",
-        fake_process,
+    completed = handler.handler(
+        JobExecutionContext(
+            job_store=store,
+            services=SimpleNamespace(chat=chat_store),
+        ),
+        job,
     )
 
-    result = memory_job_offload._process_background_job(
-        "job:one",
-        chat_store="chat-store",
-        memory_service="memory-service",
-    )
-
-    assert result == "processed"
-    assert captured == {
-        "job": "job:one",
-        "chat_store": "chat-store",
-        "memory_service": "memory-service",
-        "proposal_provider": sentinel_provider,
-    }
-
-
-def test_background_memory_job_resolves_memory_service_inside_worker(monkeypatch) -> None:
-    sentinel_service = object()
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        memory_job_offload,
-        "default_structured_proposal_provider",
-        lambda: object(),
-    )
-
-    def fake_process(job, **kwargs):
-        captured["job"] = job
-        captured.update(kwargs)
-        return "processed"
-
-    monkeypatch.setattr(memory_job_offload, "process_memory_suggestion_job", fake_process)
-
-    result = memory_job_offload._process_background_job(
-        "job:two",
-        chat_store="chat-store",
-        memory_service=lambda: sentinel_service,
-    )
-
-    assert result == "processed"
-    assert captured["memory_service"] is sentinel_service
-
-
-def test_failure_callback_reports_without_mutating_an_unowned_job(monkeypatch):
-    events = []
-    monkeypatch.setattr(memory_job_offload, "stream_log", lambda *args, **kwargs: events.append(kwargs))
-    future = Future()
-    future.set_exception(RuntimeError("provider failed"))
-    memory_job_offload._mark_failure("job:failed", future)
-    assert events == [{"job_id": "job:failed", "error_type": "RuntimeError"}]
-
-
-def test_canceled_dispatch_does_not_raise_from_failure_callback(monkeypatch):
-    monkeypatch.setattr(memory_job_offload, "stream_log", lambda *_args, **_kwargs: None)
-    future = Future()
-    future.cancel()
-    memory_job_offload._mark_failure("job:canceled", future)
+    assert completed.status == JobStatus.COMPLETED
+    assert completed.id == job.id
+    persisted = store.get_job(job.id)
+    assert persisted is not None
+    assert persisted.status == JobStatus.COMPLETED
+    assert persisted.logs[0]["event"] == "memory.suggestion.processed"

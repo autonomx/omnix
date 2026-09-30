@@ -112,6 +112,43 @@ class AssistantTurnCoordinator:
             self._save()
             return record.model_copy(deep=True)
 
+    def start_streaming(
+        self,
+        *,
+        session_id: str,
+        user_message_id: str,
+        user_turn_id: str,
+        speech_segment_id: str | None = None,
+    ) -> AssistantTurnRecord:
+        """Persist a directly streamed turn as running in its initial write."""
+        with self._lock:
+            existing = self.find_by_user_turn(session_id, user_turn_id)
+            if existing is not None:
+                record = self._records[existing.assistant_turn_id]
+                if record.terminal:
+                    return record.model_copy(deep=True)
+                if (
+                    record.lifecycle != "streaming"
+                    or record.provider_execution != "running"
+                ):
+                    record.lifecycle = "streaming"
+                    record.provider_execution = "running"
+                    record.updated_at = _utcnow()
+                    self._save()
+                return record.model_copy(deep=True)
+            record = AssistantTurnRecord(
+                assistant_turn_id=f"assistant-turn:{uuid.uuid4().hex}",
+                session_id=session_id,
+                user_message_id=user_message_id,
+                user_turn_id=user_turn_id,
+                speech_segment_id=speech_segment_id,
+                lifecycle="streaming",
+                provider_execution="running",
+            )
+            self._records[record.assistant_turn_id] = record
+            self._save()
+            return record.model_copy(deep=True)
+
     def get(self, assistant_turn_id: str) -> AssistantTurnRecord | None:
         with self._lock:
             record = self._records.get(assistant_turn_id)

@@ -282,6 +282,7 @@ def _begin_user_message_fast(
     *,
     context_items: list[dict[str, Any]] | None = None,
     context_diagnostics: dict[str, Any] | None = None,
+    start_streaming: bool = False,
 ) -> tuple[ChatSession, ChatMessage] | None:
     started = time.perf_counter()
     load_started = time.perf_counter()
@@ -337,9 +338,15 @@ def _begin_user_message_fast(
     coordinator_started = time.perf_counter()
     database = _store_database(self)
     if database is None:
-        _start_assistant_turn(session, message, request)
+        _start_assistant_turn(session, message, request, streaming=start_streaming)
     else:
-        _start_assistant_turn(session, message, request, database=database)
+        _start_assistant_turn(
+            session,
+            message,
+            request,
+            database=database,
+            streaming=start_streaming,
+        )
     message.metadata["segment_id"] = session.active_segment_id
     coordinator_ms = (time.perf_counter() - coordinator_started) * 1000.0
 
@@ -635,6 +642,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         memory_settings_factory: Callable[[], Any] | None = None,
         history_search_factory: Callable[[], PostgresHistorySearchService] = PostgresHistorySearchService,
         summary_repository_factory: Callable[[], PostgresConversationSummaryRepository] = PostgresConversationSummaryRepository,
+        job_service: Any | None = None,
     ) -> None:
         if path is not None:
             raise RuntimeError("file-backed chat authority is retired; use the legacy importer")
@@ -643,6 +651,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self.memory_settings_factory = memory_settings_factory or _missing_memory_settings
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self.job_service = job_service
         self._repository = PostgresChatRepositoryAdapter()
         self._initialize_prompt_context_cache()
 
@@ -752,6 +761,7 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         *,
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
+        start_streaming: bool = False,
     ) -> tuple[ChatSession, ChatMessage] | None:
         from app.chat.live_chat_provider_routing import route_postgres_begin_user_message
         from app.chat.live_chat_speculation import prime_live_speculation_session
@@ -767,11 +777,20 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
                     routed_request,
                     context_items=context_items,
                     context_diagnostics=context_diagnostics,
+                    start_streaming=start_streaming,
                 ),
             )
         if result is not None:
             prime_live_speculation_session(result[0])
         return result
+
+    def begin_streaming_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+    ) -> tuple[ChatSession, ChatMessage] | None:
+        """Begin a streamed turn with running state in the first durable write."""
+        return self.begin_user_message(session_id, request, start_streaming=True)
 
     def complete_streamed_reply(
         self,
@@ -808,12 +827,14 @@ def default_chat_store(
     store_class: type[PostgresCharacterChatSessionStore] | None = None,
     memory_service_factory: Callable[[], Any] | None = None,
     memory_settings_factory: Callable[[], Any] | None = None,
+    job_service: Any | None = None,
 ) -> PostgresCharacterChatSessionStore:
     """Reuse the authoritative chat store instead of re-running startup checks per request."""
     return (store_class or PostgresCharacterChatSessionStore)(
         history_search_factory=default_history_search_service,
         memory_service_factory=memory_service_factory,
         memory_settings_factory=memory_settings_factory,
+        job_service=job_service,
     )
 
 

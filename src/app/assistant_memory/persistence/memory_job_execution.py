@@ -24,12 +24,23 @@ class MemoryJobExecution:
     lease_seconds = 30
     renewal_seconds = 10
 
-    def __init__(self, store, job):
+    def __init__(self, store, job, *, already_claimed: bool = False):
         self.store = store
         self.job = job
+        self.already_claimed = already_claimed
         self.claimed = False
-        self.worker_id = f"memory-post-turn:{uuid.uuid4().hex}"
-        self.lease_token = None
+        if already_claimed:
+            if job.lease is None or not callable(
+                getattr(store, "require_execution_authority_in", None)
+            ):
+                raise RuntimeError(
+                    "preclaimed memory job requires an authority-bound lease"
+                )
+            self.worker_id = job.lease.worker_id
+            self.lease_token = job.lease.token
+        else:
+            self.worker_id = f"memory-post-turn:{uuid.uuid4().hex}"
+            self.lease_token = None
         self._stop = threading.Event()
         self._lost = threading.Event()
         self._thread = None
@@ -37,6 +48,9 @@ class MemoryJobExecution:
         self._completed = False
 
     def __enter__(self):
+        if self.already_claimed:
+            self.claimed = True
+            return self
         if not isinstance(self.store, PostgresJobStoreAdapter):
             self.claimed = True
             return self
@@ -80,6 +94,9 @@ class MemoryJobExecution:
     def _require_lease(self, work):
         if self._lost.is_set():
             raise JobClaimConflict(f"memory job lease lost: {self.job.id}")
+        if self.already_claimed:
+            self.store.require_execution_authority_in(work, self.job.id)
+            return
         work.jobs.require_running_lease(
             self.store.context,
             job_id=self.job.id,
@@ -89,7 +106,7 @@ class MemoryJobExecution:
 
     @contextmanager
     def write_result(self, memory_service=None):
-        if not isinstance(self.store, PostgresJobStoreAdapter):
+        if not isinstance(self.store, PostgresJobStoreAdapter) and not self.already_claimed:
             yield
             return
         if memory_service is not None:
@@ -115,6 +132,14 @@ class MemoryJobExecution:
     def complete_job(self, job_id: str, request: CompleteJobRequest):
         if job_id != self.job.id:
             raise ValueError("Memory execution cannot complete another job")
+        if self.already_claimed:
+            work = self._work
+            if work is None:
+                raise RuntimeError("Memory completion requires its result transaction")
+            self._require_lease(work)
+            result = self.store.complete_job_in_transaction(work, job_id, request)
+            self._completed = True
+            return result
         if not isinstance(self.store, PostgresJobStoreAdapter):
             return self.store.complete_job(job_id, request)
         work = self._work
@@ -133,6 +158,9 @@ class MemoryJobExecution:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=1)
+        if exc is not None and self.already_claimed:
+            # The durable feature worker owns failure recording and retry policy.
+            return False
         if self.claimed and not self._completed and isinstance(self.store, PostgresJobStoreAdapter):
             try:
                 with unit_of_work(self.store.database) as work:

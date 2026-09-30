@@ -18,7 +18,7 @@ from app.runtime.background import (
     register_background_worker,
 )
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
-from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus, ResourceClass
+from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.unit_of_work import unit_of_work
 
@@ -54,13 +54,37 @@ class _AuthorityBoundJobStore:
             raise JobClaimConflict("Durable feature executor cannot mutate another job")
         self._authority.require_live()
         with unit_of_work(self._store.database) as work:
-            work.jobs.require_execution_lease(
-                self._store.context,
-                job_id=self._job_id,
-                worker_id=self._worker_id,
-                lease_token=self._lease_token,
-            )
+            self.require_execution_authority_in(work, target)
             work.rollback()
+
+    def require_execution_authority_in(self, work: Any, job_id: str | None = None) -> None:
+        target = job_id or self._job_id
+        if target != self._job_id:
+            raise JobClaimConflict("Durable feature executor cannot mutate another job")
+        self._authority.require_live()
+        work.jobs.require_execution_lease(
+            self._store.context,
+            job_id=self._job_id,
+            worker_id=self._worker_id,
+            lease_token=self._lease_token,
+        )
+
+    def complete_job_in_transaction(
+        self,
+        work: Any,
+        job_id: str,
+        request: CompleteJobRequest,
+    ):
+        self.require_execution_authority_in(work, job_id)
+        record = work.jobs.complete(
+            self._store.context,
+            job_id=self._job_id,
+            worker_id=self._worker_id,
+            lease_token=self._lease_token,
+            output_refs=request.output_refs,
+        )
+        self._store._append_compat_logs(work, self._job_id, request.logs)
+        return self._store._record(record)
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
         self.require_execution_authority(job_id)

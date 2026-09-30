@@ -154,7 +154,7 @@ class _CharacterSessionMixin:
         return session, user_message
 
     @serialized_chat_mutation
-    def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
+    def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None, start_streaming: bool = False):
         existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
         if existing is not None:
             return existing
@@ -163,7 +163,11 @@ class _CharacterSessionMixin:
             return None
         session, user_message = result
         record = _start_assistant_turn(
-            session, user_message, request, database=_store_database(self)
+            session,
+            user_message,
+            request,
+            database=_store_database(self),
+            streaming=start_streaming,
         )
         user_message.metadata.update({
             "segment_id": session.active_segment_id,
@@ -174,6 +178,14 @@ class _CharacterSessionMixin:
         })
         self._save_session(session)
         return session, user_message
+
+    def begin_streaming_user_message(
+        self,
+        session_id: str,
+        request: SendChatMessageRequest,
+    ):
+        """Begin a streamed turn with running state in the first durable write."""
+        return self.begin_user_message(session_id, request, start_streaming=True)
 
     def stream_provider_reply_chunks(self, session: ChatSession, user_message: ChatMessage, **kwargs):
         coordinator = _turn_coordinator(self)
@@ -392,10 +404,12 @@ def _start_assistant_turn(
     request: SendChatMessageRequest,
     *,
     database=None,
+    streaming: bool = False,
 ):
     user_turn_id = request.user_turn_id or f"user-turn:{uuid.uuid4().hex}"
     coordinator = default_assistant_turn_coordinator(database) if database is not None else default_assistant_turn_coordinator()
-    record = coordinator.start(
+    start = coordinator.start_streaming if streaming else coordinator.start
+    record = start(
         session_id=session.id,
         user_message_id=user_message.id,
         user_turn_id=user_turn_id,

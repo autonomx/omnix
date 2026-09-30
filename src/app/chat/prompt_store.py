@@ -14,7 +14,6 @@ from typing import Any
 from app.assistant_memory import MemoryService, default_memory_service
 from app.assistant_memory.jobs import (
     enqueue_memory_suggestion_job,
-    process_memory_suggestion_job,
 )
 
 from .compaction import (
@@ -231,11 +230,13 @@ class ChatSessionStore(JsonChatSessionStore):
         memory_service_factory: Callable[[], MemoryService] = default_memory_service,
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
+        job_service: Any | None = None,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self.job_service = job_service
         self._initialize_prompt_context_cache()
 
     def _initialize_prompt_context_cache(self) -> None:
@@ -451,17 +452,18 @@ class ChatSessionStore(JsonChatSessionStore):
                 return
 
     def _enqueue_memory_suggestion_job(self, session_id: str, user_message_id: str) -> None:
-        job = enqueue_memory_suggestion_job(session_id, user_message_id)
+        job = enqueue_memory_suggestion_job(
+            session_id,
+            user_message_id,
+            job_store=self.job_service,
+        )
         if job is None:
             return
-        try:
-            process_memory_suggestion_job(
-                job,
-                chat_store=self,
-                memory_service=self.memory_service_factory(),
-            )
-        except Exception:
-            logger.exception("Memory suggestion processing failed: %s", job.id)
+        logger.info(
+            "Memory suggestion job queued: job_id=%s session_id=%s",
+            job.id,
+            session_id,
+        )
 
     def _run_post_turn_maintenance(self, session: ChatSession, user_message_id: str) -> None:
         """Run optional memory maintenance without changing chat delivery success."""

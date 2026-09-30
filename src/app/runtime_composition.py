@@ -42,6 +42,7 @@ def production_chat_store():
         store_class=PostgresCharacterChatSessionStore,
         memory_service_factory=default_memory_service,
         memory_settings_factory=load_memory_runtime_settings,
+        job_service=production_job_store(),
     )
 
 

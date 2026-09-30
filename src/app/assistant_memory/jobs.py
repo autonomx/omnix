@@ -151,12 +151,17 @@ def process_memory_suggestion_job(
     memory_service: MemoryService | None = None,
     job_store: Any | None = None,
     proposal_provider: StructuredProposalProvider | None = None,
+    already_claimed: bool = False,
 ) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
         raise ValueError(f"unsupported memory job type: {job.type}")
     from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
 
-    with MemoryJobExecution(job_store or default_job_store(), job) as execution:
+    with MemoryJobExecution(
+        job_store or default_job_store(),
+        job,
+        already_claimed=already_claimed,
+    ) as execution:
         if not execution.claimed:
             return MemorySuggestionJobResult(
                 job_id=job.id, skipped_reasons=["job_not_claimable"],

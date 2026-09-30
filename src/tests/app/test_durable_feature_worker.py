@@ -60,6 +60,7 @@ def test_feature_catalog_owns_durable_job_types():
         "voice-cloning.transcribe-sample",
         "image.generate",
         "assistant.deep_research",
+        "assistant.memory.suggest",
     }
     actual = {
         spec.type

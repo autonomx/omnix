@@ -330,7 +330,7 @@
       "count": 1,
       "fingerprint": "default_chat_store:app.runtime_composition",
       "lines": [
-        307
+        319
       ],
       "path": "src/app/chat/character_store.py",
       "rule": "AL001"
@@ -519,7 +519,7 @@
       "count": 1,
       "fingerprint": "route_typed_stream_boundary:app.agent_runtime.chat_bridge",
       "lines": [
-        147
+        146
       ],
       "path": "src/app/chat/prompt_store.py",
       "rule": "AL001"
@@ -1797,90 +1797,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "install_live_chat_assistant_turn_start_hook:app.chat.assistant_turns.AssistantTurnCoordinator.<dynamic>",
-      "lines": [
-        257
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_chat_assistant_turn_start_hook:app.chat.assistant_turns.AssistantTurnCoordinator.mark_streaming",
-      "lines": [
-        256
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_chat_assistant_turn_start_hook:app.chat.assistant_turns.AssistantTurnCoordinator.start",
-      "lines": [
-        255
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_sse_transport_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        392
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_sse_transport_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        391
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_sse_transport_hook:starlette.responses.StreamingResponse.<dynamic>",
-      "lines": [
-        375
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_sse_transport_hook:starlette.responses.StreamingResponse.__init__",
-      "lines": [
-        374
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_memory_job_offload_hook:app.chat.prompt_store.ChatSessionStore.<dynamic>",
-      "lines": [
-        77
-      ],
-      "path": "src/app/gateway/memory_job_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_memory_job_offload_hook:app.chat.prompt_store.ChatSessionStore._enqueue_memory_suggestion_job",
-      "lines": [
-        76
-      ],
-      "path": "src/app/gateway/memory_job_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        68
+        66
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -1889,7 +1808,7 @@
       "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.__init__",
       "lines": [
-        67
+        65
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -4757,36 +4676,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:install_live_chat_assistant_turn_start_hook",
-      "lines": [
-        140
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_sse_transport_hook",
-      "lines": [
-        368
-      ],
-      "path": "src/app/gateway/live_sse_transport.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_memory_job_offload_hook",
-      "lines": [
-        49
-      ],
-      "path": "src/app/gateway/memory_job_offload.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:_install_local_browser_cors_hook",
       "lines": [
-        44
+        42
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL004"
@@ -6289,7 +6181,7 @@
       "count": 1,
       "fingerprint": "create_live_speech_router:protocol",
       "lines": [
-        23
+        21
       ],
       "path": "src/app/live_speech/api_stub.py",
       "rule": "AL005"
@@ -6298,7 +6190,7 @@
       "count": 1,
       "fingerprint": "create_live_speech_router:status",
       "lines": [
-        30
+        28
       ],
       "path": "src/app/live_speech/api_stub.py",
       "rule": "AL005"
@@ -8195,7 +8087,7 @@
       "count": 1,
       "fingerprint": "AssistantTurnCoordinator._load:except",
       "lines": [
-        276
+        313
       ],
       "path": "src/app/chat/assistant_turns.py",
       "rule": "AL009"

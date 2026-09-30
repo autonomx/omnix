@@ -34,6 +34,7 @@ def setup_runtime(tmp_path, monkeypatch):
     chat_store = ChatSessionStore(
         tmp_path / "chat.json",
         memory_service_factory=lambda: memory_service,
+        job_service=job_store,
     )
     session = chat_store.create_session(
         CreateChatSessionRequest(
@@ -147,6 +148,10 @@ def test_missing_messages_and_explicit_commands_complete_without_candidates(tmp_
 
 def test_non_streaming_and_streaming_completion_enqueue_and_process_one_job_each(tmp_path, monkeypatch):
     job_store, memory_service, chat_store, session = setup_runtime(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        "app.assistant_memory.feature.default_memory_service",
+        lambda: memory_service,
+    )
 
     regular = chat_store.append_user_message(
         session.id,
@@ -178,11 +183,30 @@ def test_non_streaming_and_streaming_completion_enqueue_and_process_one_job_each
 
     jobs = [job for job in job_store.list_jobs() if job.type == MEMORY_SUGGEST_JOB_TYPE]
     assert len(jobs) == 2
-    assert {getattr(job.status, "value", str(job.status)) for job in jobs} == {"completed"}
+    assert {getattr(job.status, "value", str(job.status)) for job in jobs} == {"queued"}
+    assert memory_service.repository.list_candidates(status="pending") == []
     assert {job.input_payload["user_message_id"] for job in jobs} == {
         regular[1].id,
         message.id,
     }
+
+    from app.assistant_memory.feature import FEATURE
+    from app.jobs.handlers import JobExecutionContext
+
+    handler = next(
+        spec.handler
+        for spec in FEATURE.job_handlers
+        if spec.type == MEMORY_SUGGEST_JOB_TYPE
+    )
+    execution = JobExecutionContext(
+        job_store=job_store,
+        services=SimpleNamespace(chat=chat_store),
+    )
+    for job in jobs:
+        handler(execution, job)
+
+    completed = [job_store.get_job(job.id) for job in jobs]
+    assert all(job is not None and job.status.value == "completed" for job in completed)
     candidates = memory_service.repository.list_candidates(status="pending")
     assert len(candidates) == 2
     assert {candidate.proposed_content for candidate in candidates} == {

@@ -7,7 +7,6 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
 
 from app.chat.generation_jobs import (
     chat_submission_lock,
@@ -26,6 +25,7 @@ from app.chat.models import (
     SendChatMessageResponse,
 )
 from app.jobs.models import CreateJobRequest, ResourceClass
+from app.live_voice.transport.sse import OmnixStreamingResponse
 
 
 def _chat_message_image_data_urls(metadata: object) -> list[str]:
@@ -205,7 +205,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     @router.post(
         "/api/chat/sessions/{session_id}/messages/stream",
         response_model=None,
-        response_class=StreamingResponse,
+        response_class=OmnixStreamingResponse,
         responses={
             200: {
                 "description": "Chat generation events as Server-Sent Events.",
@@ -216,11 +216,13 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     )
     async def stream_chat_message(
         session_id: str, request: SendChatMessageRequest
-    ) -> StreamingResponse:
+    ) -> OmnixStreamingResponse:
         chat_store = get_chat_store()
-        appended = await asyncio.to_thread(
-            chat_store.begin_user_message, session_id, request
+        begin_streaming = getattr(chat_store, "begin_streaming_user_message", None)
+        begin_user_message = (
+            begin_streaming if callable(begin_streaming) else chat_store.begin_user_message
         )
+        appended = await asyncio.to_thread(begin_user_message, session_id, request)
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         session, user_message = appended
@@ -270,4 +272,22 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
             except Exception as exc:
                 yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or 'Chat stream failed.'}, sort_keys=True)}\n\n"
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        user_turn_id = str(request.user_turn_id or "").strip() or None
+        speech_segment_id = str(request.speech_segment_id or "").strip() or None
+        voice_turn_id = (
+            user_turn_id.removeprefix("voice-user-turn:")
+            if user_turn_id and user_turn_id.startswith("voice-user-turn:")
+            else None
+        )
+        return OmnixStreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            eager_sync=True,
+            diagnostic_context={
+                "route_path": "/api/chat/sessions/{session_id}/messages/stream",
+                "session_id": session_id,
+                "user_turn_id": user_turn_id,
+                "speech_segment_id": speech_segment_id,
+                "voice_turn_id": voice_turn_id,
+            },
+        )

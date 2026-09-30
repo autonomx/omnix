@@ -23,12 +23,10 @@ from app.chat.live_chat_prompt_window import install_live_chat_prompt_window_hoo
 from app.chat.live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
 from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
-from .live_sse_transport import install_live_sse_transport_hook
 from app.chat.live_voice_spoken_style import install_live_voice_spoken_style_hook
 from app.chat.lmstudio_loaded_model_resolution import (
     install_lmstudio_loaded_model_resolution_hook,
 )
-from .memory_job_offload import install_memory_job_offload_hook
 from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_hook
 
 
@@ -119,7 +117,6 @@ def initialize_gateway_runtime_hooks():
 
     configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     install_companion_activity_user_turn_hook()
-    install_live_sse_transport_hook(constructor_hook=False)
     install_live_chat_low_latency_stream_hook()
     install_live_chat_provider_metrics_hook()
     install_live_chat_stream_retry_hook()
@@ -133,4 +130,3 @@ def initialize_gateway_runtime_hooks():
     install_live_chat_prompt_cache_hook()
     install_live_chat_prompt_dependency_stage_hook()
     install_live_chat_lmstudio_diagnostics_hook()
-    install_memory_job_offload_hook()
