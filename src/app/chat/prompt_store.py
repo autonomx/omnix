@@ -788,7 +788,7 @@ class ChatSessionStore(JsonChatSessionStore):
             rendered = render_prompt_assembly(assembly)
             self._cache_prompt_context(session, user_message, assembly)
             try:
-                for event in super(ChatSessionStore, self).stream_provider_reply_chunks(
+                for event in self._stream_provider_reply_chunks_once(
                     session,
                     user_message,
                     provider_id=provider_id,

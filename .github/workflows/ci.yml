@@ -268,7 +268,7 @@ jobs:
           python -m pip install --require-hashes -r requirements/dev.lock.txt
           npm ci
       - name: Audit production Python dependencies
-        run: pip-audit --audit-level high -r requirements/gateway.lock.txt
+        run: pip-audit -r requirements/gateway.lock.txt
       - name: Audit production web dependencies
         run: npm audit --omit=dev --audit-level=high --prefix src/apps/web
 

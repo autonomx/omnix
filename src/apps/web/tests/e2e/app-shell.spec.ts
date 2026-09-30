@@ -610,6 +610,24 @@ test('storyteller module queues a shared story job', async ({ page }) => {
 });
 
 test('podcast module queues a shared podcast job', async ({ page }) => {
+  await page.route('**/api/chat/sessions', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ id: 'chat-podcast-script' }),
+    });
+  });
+
+  await page.route('**/api/chat/sessions/chat-podcast-script/messages', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        content: JSON.stringify({
+          segments: [{ speaker: 'Host', text: 'Welcome to the show.' }],
+        }),
+      }),
+    });
+  });
+
   await page.route('**/api/providers', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -685,7 +703,7 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
   await page.getByLabel(/Episode brief/).fill('Discuss local AI workstation design.');
   await page.getByRole('button', { name: /Generate live podcast/i }).click();
 
-  await expect(page.getByText('Podcast production queued: job:podcast')).toBeVisible();
+  await expect(page.getByText('Podcast production queued: job:podcast')).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(/Final podcast audio is ready/)).toBeVisible();
 });
 

@@ -1064,9 +1064,9 @@
     "type": "string"
   },
   {
-    "default": null,
-    "description": "Controls live lmstudio stateful responses for launcher, live-voice-hardware-policy.py.",
-    "feature": "launcher, live-voice-hardware-policy.py",
+    "default": "true",
+    "description": "Controls live lmstudio stateful responses for launcher.",
+    "feature": "launcher",
     "name": "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES",
     "type": "string"
   },
@@ -1075,13 +1075,6 @@
     "description": "Controls live pronunciation path for characters.",
     "feature": "characters",
     "name": "OMNIX_LIVE_PRONUNCIATION_PATH",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls live tts allow serial speculation for live-voice-hardware-policy.py.",
-    "feature": "live-voice-hardware-policy.py",
-    "name": "OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION",
     "type": "string"
   },
   {
@@ -1117,13 +1110,6 @@
     "description": "Controls live voice provider id for kernel.",
     "feature": "kernel",
     "name": "OMNIX_LIVE_VOICE_PROVIDER_ID",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls lmstudio model discovery cache seconds for live-voice-hardware-policy.py.",
-    "feature": "live-voice-hardware-policy.py",
-    "name": "OMNIX_LMSTUDIO_MODEL_DISCOVERY_CACHE_SECONDS",
     "type": "string"
   },
   {
@@ -1292,6 +1278,13 @@
     "description": "Controls software revision for kernel.",
     "feature": "kernel",
     "name": "OMNIX_SOFTWARE_REVISION",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls sse flush preamble bytes for live-voice.",
+    "feature": "live-voice",
+    "name": "OMNIX_SSE_FLUSH_PREAMBLE_BYTES",
     "type": "string"
   },
   {

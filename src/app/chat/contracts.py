@@ -12,7 +12,11 @@ from app.chat.prompt_assembly import (
     build_prompt_assembly,
     resolve_system_session_identity,
 )
-from app.chat.prompt_window import build_prompt_assembly_with_window
+from app.chat.prompt_window import (
+    build_prompt_assembly_with_window,
+    normal_chat_prompt_window_enabled,
+    normal_chat_recent_message_limit,
+)
 from app.chat.provider_routing import resolve_effective_provider_id
 from app.chat.prompt_rendering import (
     RenderedPrompt,
@@ -42,6 +46,8 @@ __all__ = [
     "live_call_provider_affinity",
     "merge_provider_response_metrics",
     "model_key",
+    "normal_chat_prompt_window_enabled",
+    "normal_chat_recent_message_limit",
     "prompt_budget_from_env",
     "provider_key",
     "provider_turn_deadline",

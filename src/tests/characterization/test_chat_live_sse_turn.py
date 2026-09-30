@@ -115,7 +115,14 @@ def test_chat_live_sse_turn_matches_pre_refactor_golden(
         live_voice_stream, "get_provider", lambda _name=None: provider
     )
 
-    store = RecordingChatStore(ChatSessionStore(tmp_path / "chat.json"))
+    from app.live_voice.chat_integration import create_live_voice_chat_port
+
+    store = RecordingChatStore(
+        ChatSessionStore(
+            tmp_path / "chat.json",
+            live_voice_chat_port=create_live_voice_chat_port(),
+        )
+    )
     session = store.create_session(
         CreateChatSessionRequest(
             title="Characterization",

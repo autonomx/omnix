@@ -107,7 +107,7 @@ def tts_generate_audio(
 ) -> dict[str, Any]:
     trace_id = _trace_id("tts-audio")
     endpoint = f"{_tts_base_url()}/api/tts/generate_audio"
-    payload = {
+    payload: dict[str, Any] = {
         "text": text,
         "speaker": speaker,
         "language": language,
@@ -176,7 +176,7 @@ def tts_generate_stream_audio(
 ) -> dict[str, Any]:
     trace_id = _trace_id("tts-stream")
     endpoint = f"{_tts_base_url()}/api/tts/generate_stream_audio"
-    payload = {
+    payload: dict[str, Any] = {
         "text": text,
         "speaker": speaker,
         "language": language,

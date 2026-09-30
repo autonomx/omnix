@@ -156,15 +156,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LIVE_CHAT_EVALUATION_PATH` | string | — | chat | Controls live chat evaluation path for chat. |
 | `OMNIX_LIVE_CONVERSATION_PROFILE_PATH` | string | — | characters | Controls live conversation profile path for characters. |
 | `OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS` | string | `60` | providers | Controls live global prompt cache ttl seconds for providers. |
-| `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | — | launcher, live-voice-hardware-policy.py | Controls live lmstudio stateful responses for launcher, live-voice-hardware-policy.py. |
+| `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | `true` | launcher | Controls live lmstudio stateful responses for launcher. |
 | `OMNIX_LIVE_PRONUNCIATION_PATH` | string | — | characters | Controls live pronunciation path for characters. |
-| `OMNIX_LIVE_TTS_ALLOW_SERIAL_SPECULATION` | string | — | live-voice-hardware-policy.py | Controls live tts allow serial speculation for live-voice-hardware-policy.py. |
 | `OMNIX_LIVE_TTS_PROVIDER_NAME` | string | — | kernel | Controls live tts provider name for kernel. |
 | `OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS` | string | `2` | launcher | Controls live tts speculative chunk steps for launcher. |
 | `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | kernel | Controls live voice execution mode for kernel. |
 | `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | kernel | Controls live voice model id for kernel. |
 | `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | kernel | Controls live voice provider id for kernel. |
-| `OMNIX_LMSTUDIO_MODEL_DISCOVERY_CACHE_SECONDS` | string | — | live-voice-hardware-policy.py | Controls lmstudio model discovery cache seconds for live-voice-hardware-policy.py. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER` | string | — | assistant-memory | Controls memory structured extraction provider for assistant-memory. |
@@ -189,6 +187,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
+| `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |
 | `OMNIX_START_HERMES` | boolean | — | launcher | Controls start hermes for launcher. |
 | `OMNIX_START_IMAGE_SERVICE` | string | — | launcher | Controls start image service for launcher. |
 | `OMNIX_STT_DEVICE` | string | `auto` | providers | Controls stt device for providers. |
