@@ -25,6 +25,7 @@ from app.agent_runtime.quality_recovery import (
     reconcile_orphaned_quality_reviews,
 )
 from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.agent_runtime.review_orchestration_core import consume_terminal_reviewer_in_repository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -363,6 +364,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 self.context = context
                 self.worker_id = "replacement-quality-worker"
                 self.quality_repository_factory = PostgresCodingQualityRepository
+                self.terminal_reviewer_consumer = consume_terminal_reviewer_in_repository
 
             @staticmethod
             def _quality_enabled(spec: AgentRunSpec) -> bool:

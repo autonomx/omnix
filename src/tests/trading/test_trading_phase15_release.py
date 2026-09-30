@@ -187,7 +187,7 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
         assert forbidden not in trading_source
 
     research = Path(
-        "src/app/trading/research/market_research_compat.py"
+        "src/app/trading/research/market_research.py"
     ).read_text(encoding="utf-8").lower()
     for forbidden in (
         "place_order",

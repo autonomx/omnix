@@ -122,12 +122,23 @@ def test_durable_event_append_failure_has_traceback(agent_log_dir: Path) -> None
 
 
 def test_pi_process_and_rpc_activity_is_traceable(agent_log_dir: Path, tmp_path: Path) -> None:
+    class PromptInput(StringIO):
+        def __init__(self, prompt_sent: threading.Event) -> None:
+            super().__init__()
+            self.prompt_sent = prompt_sent
+
+        def write(self, value: str) -> int:
+            written = super().write(value)
+            self.prompt_sent.set()
+            return written
+
     class OutputStream:
         def __init__(self, process: FakeProcess, lines: list[str]) -> None:
             self.process = process
             self.lines = lines
 
         def __iter__(self):
+            self.process.prompt_sent.wait(timeout=2)
             yield from self.lines
             self.process.output_done.set()
 
@@ -136,7 +147,8 @@ def test_pi_process_and_rpc_activity_is_traceable(agent_log_dir: Path, tmp_path:
             self.pid = 731
             self.returncode: int | None = None
             self.output_done = threading.Event()
-            self.stdin = StringIO()
+            self.prompt_sent = threading.Event()
+            self.stdin = PromptInput(self.prompt_sent)
             self.stdout = OutputStream(
                 self,
                 [

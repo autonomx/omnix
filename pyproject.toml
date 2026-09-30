@@ -16,10 +16,6 @@ target-version = "py311"
 select = ["F", "E9", "W6", "B006", "B008", "B017", "PLE", "UP006", "UP007"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/app/rpg/session/runtime_part16.py" = ["F403", "F405", "F841", "I001"]
-"src/app/rpg/session/runtime_part17.py" = ["F403", "F405", "I001", "SIM211"]
-"src/app/rpg/session/runtime_part18.py" = ["F403", "F405", "I001"]
-"src/app/rpg/session/runtime_part19.py" = ["F403", "F405", "I001", "C414", "S110", "BLE001"]
 "src/app/assistant_memory/controls.py" = ["I001"]
 "src/app/assistant_memory/initiative.py" = ["BLE001"]
 "src/app/assistant_memory/jobs.py" = ["UP012"]
