@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS omnix_job_logs (
     job_id TEXT NOT NULL,
     workspace_id TEXT NOT NULL,
     seq BIGINT NOT NULL CHECK (seq >= 1),
-    level TEXT NOT NULL DEFAULT 'info',
-    message TEXT NOT NULL,
+    level TEXT,
+    message TEXT,
     data JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (job_id, seq),
@@ -47,8 +47,10 @@ INSERT INTO omnix_job_logs (
 SELECT jobs.id,
        jobs.workspace_id,
        entry.ordinality,
-       COALESCE(NULLIF(entry.item ->> 'level', ''), 'info'),
-       COALESCE(entry.item ->> 'message', entry.item::text),
+       CASE WHEN jsonb_typeof(entry.item) = 'object'
+            THEN entry.item ->> 'level' ELSE 'info' END,
+       CASE WHEN jsonb_typeof(entry.item) = 'object'
+            THEN entry.item ->> 'message' ELSE entry.item::text END,
        CASE WHEN jsonb_typeof(entry.item) = 'object'
             THEN entry.item - 'level' - 'message'
             ELSE jsonb_build_object('legacy_value', entry.item)

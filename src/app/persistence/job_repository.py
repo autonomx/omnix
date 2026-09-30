@@ -16,6 +16,20 @@ from .tenant import TenantContext
 _FOREGROUND_OWNER_GUARD = _BASE_FOREGROUND_OWNER_GUARD.replace("omnix_jobs.", "jobs.")
 
 
+def _job_log_compat_entry(level: Any, message: Any, data: Any) -> dict[str, Any]:
+    entry = dict(data or {})
+    if level is not None:
+        entry["level"] = str(level)
+    if message is not None:
+        entry["message"] = str(message)
+    return entry
+
+
+def _bounded_job_log_limit(limit: int) -> int:
+    """Bound log hydration independently of repository collection pagination."""
+    return max(1, min(int(limit), 500))
+
+
 _QUALIFIED_JOB_COLUMNS = """
 jobs.id, jobs.workspace_id, jobs.owner_user_id, jobs.module, jobs.job_type,
 jobs.status, jobs.resource_class, jobs.priority, jobs.input_payload,
@@ -495,8 +509,8 @@ class PostgresJobRepository(_BaseJobRepository):
                     job_id,
                     context.workspace_id,
                     seq,
-                    str(item.get("level") or "info"),
-                    str(item.get("message") or ""),
+                    str(item["level"]) if item.get("level") is not None else None,
+                    str(item["message"]) if item.get("message") is not None else None,
                     _json(data),
                 ),
             )
@@ -511,12 +525,9 @@ class PostgresJobRepository(_BaseJobRepository):
                         ORDER BY seq DESC LIMIT %s
                    ) recent
                 ORDER BY seq ASC""",
-            (context.workspace_id, job_id, max(1, min(int(limit), 500))),
+            (context.workspace_id, job_id, _bounded_job_log_limit(limit)),
         ).fetchall()
-        return [
-            {"level": str(row[0]), "message": str(row[1]), **dict(row[2] or {})}
-            for row in rows
-        ]
+        return [_job_log_compat_entry(row[0], row[1], row[2]) for row in rows]
 
     def list_job_logs_for_jobs(
         self, context: TenantContext, *, job_ids: list[str], limit_per_job: int = 500
@@ -524,19 +535,21 @@ class PostgresJobRepository(_BaseJobRepository):
         if not job_ids:
             return {}
         rows = self.connection.execute(
-            """SELECT job_id, level, message, data FROM (
-                       SELECT job_id, level, message, data, seq,
-                              row_number() OVER (PARTITION BY job_id ORDER BY seq DESC) AS rank
-                         FROM omnix_job_logs
-                        WHERE workspace_id = %s AND job_id = ANY(%s)
-                   ) recent
-                WHERE rank <= %s ORDER BY job_id, seq ASC""",
-            (context.workspace_id, job_ids, max(1, min(int(limit_per_job), 500))),
+            """SELECT requested.job_id, recent.level, recent.message, recent.data
+                 FROM unnest(%s::text[]) AS requested(job_id)
+                 CROSS JOIN LATERAL (
+                     SELECT level, message, data, seq
+                       FROM omnix_job_logs
+                      WHERE workspace_id = %s AND job_id = requested.job_id
+                      ORDER BY seq DESC LIMIT %s
+                 ) AS recent
+                ORDER BY requested.job_id, recent.seq ASC""",
+            (job_ids, context.workspace_id, _bounded_job_log_limit(limit_per_job)),
         ).fetchall()
         result: dict[str, list[dict[str, Any]]] = {job_id: [] for job_id in job_ids}
         for row in rows:
             result[str(row[0])].append(
-                {"level": str(row[1]), "message": str(row[2]), **dict(row[3] or {})}
+                _job_log_compat_entry(row[1], row[2], row[3])
             )
         return result
 

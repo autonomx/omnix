@@ -401,6 +401,14 @@ def test_expired_job_attempt_is_fenced_after_another_worker_claims(chat_runtime)
     with database.transaction() as connection:
         connection.execute("UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s", (job['id'],))
     with unit_of_work(database) as work:
+        released = work.jobs.release_expired_leases(store.context, job_id=job['id'])
+        assert [row['id'] for row in released] == [job['id']]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s",
+            (job['id'],),
+        )
+        work.commit()
+    with unit_of_work(database) as work:
         second = work.jobs.claim_next(store.context, worker_id='worker:b', resource_classes=['gpu:image'])
         work.commit()
     assert first['lease_token'] != second['lease_token']

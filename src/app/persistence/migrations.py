@@ -31,7 +31,7 @@ _MIGRATION_HEADER = re.compile(
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0101_runtime_role_grants"
+SCHEMA_KNOWN = "0102_durable_job_hygiene"
 APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
 APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
@@ -218,7 +218,6 @@ def migration_status(
         applied = _applied(connection, initialize_table=initialize_table)
     drift: list[str] = []
     pending: list[str] = []
-    known_versions = {migration.version for migration in discovered}
     for migration in discovered:
         record = applied.get(migration.version)
         if record is None:

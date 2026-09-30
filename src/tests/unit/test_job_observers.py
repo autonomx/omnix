@@ -146,6 +146,9 @@ def test_created_observer_runs_after_durable_commit(monkeypatch) -> None:
         def create_job(self, context, payload):
             return {"id": payload["id"]}
 
+        def list_job_logs(self, context, *, job_id):
+            return []
+
     class Work:
         jobs = JobRepository()
         connection = object()

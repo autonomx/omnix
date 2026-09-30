@@ -1315,6 +1315,13 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         for _ in range(8):
             if service.get_project(context, project["id"])["state"] == "mastering":
                 break
+            with database.transaction() as connection:
+                connection.execute(
+                    """UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second'
+                         WHERE workspace_id = %s AND job_type = 'audiobook.render-chapter'
+                           AND input_payload->>'render_run_id' = %s AND status = 'retrying'""",
+                    (context.workspace_id, submission["render_run_id"]),
+                )
             assert run_render_once(database, blobs, context, worker_id="test:render")
             with unit_of_work(database) as work:
                 completed_chapters = work.connection.execute(

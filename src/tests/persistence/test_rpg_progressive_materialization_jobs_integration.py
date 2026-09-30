@@ -278,11 +278,21 @@ def test_materialization_worker_retries_then_dead_letters_terminal_failure() -> 
             materializer=fail_materialization,
             retry_delay_seconds=0,
         )
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE job_type = 'rpg.world.map.materialize' AND status = 'retrying'"
+            )
         second = run_materialization_worker_once(
             database=database,
             materializer=fail_materialization,
             retry_delay_seconds=0,
         )
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE job_type = 'rpg.world.map.materialize' AND status = 'retrying'"
+            )
         third = run_materialization_worker_once(
             database=database,
             materializer=fail_materialization,
@@ -303,7 +313,7 @@ def test_materialization_worker_retries_then_dead_letters_terminal_failure() -> 
         assert telemetry["failed_location_ids"] == [
             "location:old-road:frontier"
         ]
-        context = ensure_local_identity(database)
+        ensure_local_identity(database)
         with unit_of_work(database) as work:
             attempts = work.connection.execute(
                 "SELECT status FROM omnix_job_attempts ORDER BY attempt"

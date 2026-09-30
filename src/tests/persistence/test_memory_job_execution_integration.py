@@ -17,6 +17,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
+from app.persistence.unit_of_work import unit_of_work
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -47,6 +48,19 @@ def runtime():
 
 def memory_job(store):
     return store.create_job(jobs.create_memory_suggestion_job_request("chat:test", "msg:test"))
+
+
+def _make_expired_retry_available(database, store, job_id: str) -> None:
+    """Fast-forward the persisted retry delay in a deterministic test."""
+    with unit_of_work(database) as work:
+        released = work.jobs.release_expired_leases(store.context, job_id=job_id)
+        assert [row["id"] for row in released] == [job_id]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+            "WHERE id = %s",
+            (job_id,),
+        )
+        work.commit()
 
 
 def test_processing_claims_and_completes_missing_session(runtime, monkeypatch):
@@ -173,6 +187,7 @@ def test_expired_attempt_cannot_complete_or_fail_new_owner(runtime):
                 "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s",
                 (job.id,),
             )
+        _make_expired_retry_available(database, store, job.id)
         with MemoryJobExecution(store, job) as current:
             assert current.claimed
             assert current.lease_token != stale.lease_token

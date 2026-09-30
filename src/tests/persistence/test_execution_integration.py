@@ -4,16 +4,15 @@ import os
 import threading
 
 import pytest
-from psycopg.errors import CheckViolation
 
 from app.jobs.handlers import Backoff, JobHandlerRegistry, JobHandlerSpec
 from app.jobs.models import CreateJobRequest, ResourceClass
 from app.persistence.config import DatabaseSettings
-from app.persistence.database import PostgresDatabase
+from app.persistence.database import PostgresConstraintError, PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import ensure_local_identity
 from app.persistence.job_compat import PostgresJobStoreAdapter
-from app.persistence.migrations import apply_migrations
+from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -65,6 +64,19 @@ def _create_job(work, context, job_id: str, *, priority: int = 0, max_attempts: 
             "input_payload": {"prompt": "redacted-test"},
         },
     )
+
+
+def _make_expired_retry_available(database, context, job_id: str) -> None:
+    """Fast-forward the persisted retry delay in a deterministic test."""
+    with unit_of_work(database) as work:
+        released = work.jobs.release_expired_leases(context, job_id=job_id)
+        assert [row["id"] for row in released] == [job_id]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+            "WHERE id = %s",
+            (job_id,),
+        )
+        work.commit()
 
 
 def test_skip_locked_claims_distinct_jobs_and_completes() -> None:
@@ -169,6 +181,7 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
                 "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
                 "WHERE id = 'job:durable-feature'"
             )
+        _make_expired_retry_available(database, context, "job:durable-feature")
 
         with unit_of_work(database) as work:
             reclaimed = work.jobs.claim_next(
@@ -249,6 +262,7 @@ def test_stale_worker_cannot_fail_successor_attempt() -> None:
                 "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
                 "WHERE id = 'job:stale-failure'"
             )
+        _make_expired_retry_available(database, context, "job:stale-failure")
 
         with unit_of_work(database) as work:
             second = work.jobs.claim_next(
@@ -432,6 +446,78 @@ def test_concurrent_cancel_and_fenced_log_append_both_persist() -> None:
         database.close()
 
 
+def test_data_only_compat_log_keeps_its_original_shape() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:data-only-log")
+            claimed = work.jobs.claim_next(
+                context, worker_id="worker:data-only-log", resource_classes=["gpu:image"]
+            )
+            assert claimed is not None
+            work.jobs.mark_running(
+                context,
+                job_id=claimed["id"],
+                worker_id="worker:data-only-log",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            assert work.jobs.append_compat_logs(
+                context,
+                job_id=claimed["id"],
+                logs=[{"event": "completed"}],
+                worker_id="worker:data-only-log",
+                lease_token=claimed["lease_token"],
+            )
+            work.commit()
+
+        with unit_of_work(database) as work:
+            logs = work.jobs.list_job_logs(context, job_id=claimed["id"])
+            work.rollback()
+        assert logs == [{"event": "completed"}]
+    finally:
+        database.close()
+
+
+def test_legacy_data_only_logs_backfill_without_adding_compat_fields() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = ensure_local_identity(database)
+        with unit_of_work(database) as work:
+            work.jobs.create_job(
+                context,
+                {
+                    "id": "job:legacy-data-only-log",
+                    "module": "image",
+                    "job_type": "image.generate",
+                    "resource_class": "gpu:image",
+                    "metadata": {"compat_contract": {"logs": [{"event": "imported"}]}},
+                },
+            )
+            work.commit()
+
+        migration = next(
+            item for item in discover_migrations()
+            if item.version == "0102_durable_job_hygiene"
+        )
+        with unit_of_work(database) as work:
+            work.connection.execute(migration.sql)
+            migrated = work.jobs.get_job(context, "job:legacy-data-only-log")
+            logs = work.jobs.list_job_logs(context, job_id="job:legacy-data-only-log")
+            work.commit()
+
+        assert migrated is not None
+        assert "logs" not in migrated["metadata"]["compat_contract"]
+        assert logs == [{"event": "imported"}]
+    finally:
+        database.close()
+
+
 def test_expired_lease_backoff_counts_attempts_and_dead_letters_exhaustion() -> None:
     database = _database()
     try:
@@ -555,11 +641,12 @@ def test_job_status_constraint_rejects_unknown_state() -> None:
         with unit_of_work(database) as work:
             _create_job(work, context, "job:status-check")
             work.commit()
-        with pytest.raises(CheckViolation):
+        with pytest.raises(PostgresConstraintError) as error:
             with database.transaction() as connection:
                 connection.execute(
                     "UPDATE omnix_jobs SET status = 'not-a-job-state' WHERE id = 'job:status-check'"
                 )
+        assert error.value.constraint == "ck_omnix_jobs_status"
     finally:
         database.close()
 
@@ -644,6 +731,11 @@ def test_job_retry_then_dead_letter() -> None:
             )
             work.commit()
         assert retried["status"] == "retrying"
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = 'job:retry'"
+            )
 
         with unit_of_work(database) as work:
             second = work.jobs.claim_next(

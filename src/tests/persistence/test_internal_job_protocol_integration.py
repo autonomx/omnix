@@ -80,6 +80,21 @@ def _credentials(claim):
     return {"worker_id": claim["lease"]["worker_id"], "lease_token": claim["lease"]["token"]}
 
 
+def _make_expired_retry_available(client, job_id: str) -> None:
+    """Fast-forward the persisted retry delay in a deterministic test."""
+    with unit_of_work(client.store.database) as work:
+        released = work.jobs.release_expired_leases(
+            client.store.context, job_id=job_id
+        )
+        assert [row["id"] for row in released] == [job_id]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' "
+            "WHERE id = %s",
+            (job_id,),
+        )
+        work.commit()
+
+
 @pytest.mark.parametrize("path", ["claim", "job-one/complete", "job-one/fail"])
 def test_worker_protocol_requires_service_token(client, path):
     response = client.post(f"/internal/jobs/{path}", json={})
@@ -144,6 +159,7 @@ def test_stale_attempt_cannot_borrow_successors_lease(client, operation):
     first = _claim(client)
     with client.store.database.transaction() as connection:
         connection.execute("UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s", (job.id,))
+    _make_expired_retry_available(client, job.id)
     second = _claim(client, "worker:successor")
     assert second["id"] == first["id"]
     assert second["lease"]["token"] != first["lease"]["token"]

@@ -67,6 +67,12 @@ def test_reclaimed_ingest_cannot_rewind_completed_newer_source(pipeline):
             "UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = %s",
             (older["job_id"],),
         )
+        released = work.jobs.release_expired_leases(context, job_id=older["job_id"])
+        assert [row["id"] for row in released] == [older["job_id"]]
+        work.connection.execute(
+            "UPDATE omnix_jobs SET available_at = clock_timestamp() - INTERVAL '1 second' WHERE id = %s",
+            (older["job_id"],),
+        )
         work.commit()
     assert run_ingest_once(database, blobs, context, worker_id="recovered-ingest")
     assert service.get_project(context, project_id)["current_source_revision_id"] == current_revision
