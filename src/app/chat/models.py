@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.characters import character_mode_enabled
+from app.characters.contracts import character_mode_enabled
 from app.conversation.contracts import (
     DEFAULT_PROFILE_ID,  # noqa: F401 - compatibility re-export
     DEFAULT_WORKSPACE_ID,  # noqa: F401 - compatibility re-export

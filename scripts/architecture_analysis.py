@@ -232,6 +232,46 @@ class SourceAnalysis:
         self.modules = {module_name(path): path for path in self.trees if path.startswith("src/")}
         self._bindings: dict[str, PythonBindings] = {}
 
+    def feature_dependencies(self) -> dict[str, tuple[str, frozenset[str]]]:
+        """Read package feature ids and declared dependencies without imports."""
+        result: dict[str, tuple[str, frozenset[str]]] = {}
+        for module, path in self.modules.items():
+            if not module.endswith(".feature"):
+                continue
+            package = module.removesuffix(".feature")
+            for node in self.trees[path].body:
+                if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    continue
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                if not any(isinstance(target, ast.Name) and target.id == "FEATURE" for target in targets):
+                    continue
+                call = node.value
+                if not isinstance(call, ast.Call) or qualified_name(call.func).split(".")[-1] != "FeatureModule":
+                    continue
+                values = {
+                    keyword.arg: keyword.value
+                    for keyword in call.keywords
+                    if keyword.arg is not None
+                }
+                try:
+                    feature_id = ast.literal_eval(values["id"])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                dependency_node = values.get("depends_on")
+                try:
+                    dependencies = ast.literal_eval(dependency_node) if dependency_node is not None else ()
+                except (ValueError, TypeError):
+                    continue
+                if (
+                    not isinstance(feature_id, str)
+                    or not isinstance(dependencies, (tuple, list, set, frozenset))
+                    or any(not isinstance(item, str) for item in dependencies)
+                ):
+                    continue
+                result[package] = (feature_id, frozenset(dependencies))
+                break
+        return result
+
     def bindings(self, path: str) -> PythonBindings:
         if path not in self._bindings:
             self._bindings[path] = PythonBindings(self.trees[path], lambda node: import_target(node, path))
@@ -275,6 +315,10 @@ class SourceAnalysis:
     def violations(self) -> list[Violation]:
         result = []
         owners = self.config.get("owners", {})
+        feature_dependencies = self.feature_dependencies()
+        feature_contract_module = self.config.get("layers", {}).get("features", {}).get(
+            "feature_contract_module", "contracts"
+        )
         for path, tree in self.trees.items():
             if not is_production(path, self.config):
                 continue
@@ -302,8 +346,24 @@ class SourceAnalysis:
                         if source_layer and target_layer:
                             allowed = self.config["layers"][source_layer[0]]["may_import"]
                             same_feature = source_layer[0] == target_layer[0] == "features" and source_layer[1] == target_layer[1]
+                            declared_contract_dependency = False
+                            if (
+                                source_layer[0] == target_layer[0] == "features"
+                                and target == f"{target_layer[1]}.{feature_contract_module}"
+                            ):
+                                source_feature = feature_dependencies.get(source_layer[1])
+                                target_feature = feature_dependencies.get(target_layer[1])
+                                declared_contract_dependency = bool(
+                                    source_feature
+                                    and target_feature
+                                    and (
+                                        target_feature[0] in source_feature[1]
+                                        or source_feature[0] in target_feature[1]
+                                    )
+                                )
                             if ("*" not in allowed and not same_feature and (target_layer[0] not in allowed
-                                or source_layer[0] == target_layer[0] == "features")):
+                                or source_layer[0] == target_layer[0] == "features")
+                                and not declared_contract_dependency):
                                 add("AL001", node, target, scope)
                     if isinstance(node, ast.ImportFrom) and path.startswith("src/app/") and any(item.name == "*" for item in node.names):
                         add("AL010", node, import_target(node, path), scope)

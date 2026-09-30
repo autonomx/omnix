@@ -11,9 +11,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from app.assistant_memory import MemoryService, default_memory_service
-from app.assistant_memory.jobs import (
+from app.assistant_memory.contracts import (
+    MemoryService,
+    default_memory_service,
     enqueue_memory_suggestion_job,
+)
+from app.conversation.contracts import (
+    AcceptedChatActivityRecorder,
+    LiveVoiceChatPort,
 )
 
 from .compaction import (
@@ -33,9 +38,9 @@ from .memory_prompt import resolve_prompt_memory
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
-from app.live_voice.prompt.window import build_prompt_assembly_with_window
 from .routing_context import ChatRoutingContext, build_chat_routing_context
 from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
+from .prompt_window import build_prompt_assembly_with_window
 from .store import (
     ChatSessionStore as JsonChatSessionStore,
     _model_key,
@@ -232,12 +237,16 @@ class ChatSessionStore(JsonChatSessionStore):
         history_search_factory: Callable[[], InMemoryHistorySearchService] = default_history_search_service,
         summary_repository_factory: Callable[[], InMemoryConversationSummaryRepository] = InMemoryConversationSummaryRepository,
         job_service: Any | None = None,
+        live_voice_chat_port: LiveVoiceChatPort | None = None,
+        accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         super().__init__(path)
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
         self.job_service = job_service
+        self.live_voice_chat_port = live_voice_chat_port
+        self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._initialize_prompt_context_cache()
 
     def _initialize_prompt_context_cache(self) -> None:
@@ -390,13 +399,9 @@ class ChatSessionStore(JsonChatSessionStore):
         user_message: ChatMessage,
         context_items: list[dict[str, Any]] | None = None,
     ) -> tuple[PromptAssembly, RenderedPrompt]:
-        from app.live_voice.pipeline import (
-            build_live_voice_prompt,
-            is_live_voice_message,
-        )
-
-        if is_live_voice_message(user_message):
-            prompt = build_live_voice_prompt(
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is not None and live_voice.is_live_voice_message(user_message):
+            prompt = live_voice.build_live_voice_prompt(
                 self,
                 session,
                 user_message,
@@ -408,9 +413,8 @@ class ChatSessionStore(JsonChatSessionStore):
                 or self.build_prompt_context(session, user_message, context_items)
             )
             prompt = assembly, render_prompt_assembly(assembly)
-        from app.live_voice.llm.lmstudio_diagnostics import record_rendered_prompt
-
-        record_rendered_prompt(*prompt)
+        if live_voice is not None:
+            live_voice.record_rendered_prompt(*prompt)
         return prompt
 
     def _provider_messages(
@@ -510,10 +514,14 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        from app.live_voice.llm.routing import (
-            ROUTE_METADATA_KEY,
-            begin_routed_user_message,
-        )
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            return super().begin_user_message(
+                session_id,
+                request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
 
         def persist(
             routed_request: SendChatMessageRequest,
@@ -528,14 +536,15 @@ class ChatSessionStore(JsonChatSessionStore):
             if appended is None:
                 return None
             routed_session, user_message = appended
-            if route_metadata is not None and ROUTE_METADATA_KEY not in user_message.metadata:
-                user_message.metadata[ROUTE_METADATA_KEY] = route_metadata
+            route_key = live_voice.route_metadata_key
+            if route_metadata is not None and route_key not in user_message.metadata:
+                user_message.metadata[route_key] = route_metadata
                 routed_session.provider_id = route_metadata["provider_id"]
                 routed_session.model_id = route_metadata["model_id"]
                 self._save_session(routed_session)
             return appended
 
-        appended = begin_routed_user_message(
+        appended = live_voice.begin_routed_user_message(
             self,
             session_id,
             request,
@@ -561,18 +570,24 @@ class ChatSessionStore(JsonChatSessionStore):
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from app.live_voice.llm.routing import (
-            log_provider_route,
-            resolve_generation_route,
-        )
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            return super(ChatSessionStore, self)._generate_reply(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                request=request,
+                context_items=context_items,
+            )
 
-        route = resolve_generation_route(
+        route = live_voice.resolve_generation_route(
             user_message,
             provider_id=provider_id,
             model_id=model_id,
             request=request,
         )
-        log_provider_route(
+        live_voice.log_provider_route(
             requested_provider_id=request.provider_id or provider_id,
             route=route,
             stream=False,
@@ -675,12 +690,19 @@ class ChatSessionStore(JsonChatSessionStore):
         provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
-        from app.live_voice.llm import metrics as llm_metrics
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            return super(ChatSessionStore, self)._generate_provider_reply(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
 
-        if llm_metrics.is_lmstudio_provider(provider):
-            from app.live_voice.llm import lmstudio_diagnostics
-
-            return lmstudio_diagnostics.generate_lmstudio_reply(
+        if live_voice.is_lmstudio_provider(provider):
+            return live_voice.generate_lmstudio_reply(
                 self,
                 session,
                 user_message,
@@ -688,7 +710,6 @@ class ChatSessionStore(JsonChatSessionStore):
                 model_id=model_id,
                 context_items=context_items,
                 provider=provider,
-                fallback_generate=llm_metrics.generate_lmstudio_reply,
                 routing_deadline_at=routing_deadline_at,
             )
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
@@ -744,18 +765,24 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         routing_deadline_at: float | None = None,
     ):
-        from app.live_voice.llm.retry import stream_with_retry
-        from app.live_voice.llm.routing import (
-            log_provider_route,
-            resolve_stream_route,
-        )
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            yield from super(ChatSessionStore, self).stream_provider_reply_chunks(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
+            return
 
-        route = resolve_stream_route(
+        route = live_voice.resolve_stream_route(
             user_message,
             provider_id=provider_id,
             model_id=model_id,
         )
-        log_provider_route(
+        live_voice.log_provider_route(
             requested_provider_id=provider_id,
             route=route,
             stream=True,
@@ -783,7 +810,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 routing_deadline_at=routing_deadline_at,
             )
 
-        yield from stream_with_retry(
+        yield from live_voice.stream_with_retry(
             stream_factory,
             fallback_factory,
             provider_id=routed_provider_id,
@@ -839,8 +866,17 @@ class ChatSessionStore(JsonChatSessionStore):
         provider = provider_service.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
-        from app.live_voice.llm import metrics as llm_metrics
-        from app.live_voice.llm import stream as llm_stream
+        live_voice = getattr(self, "live_voice_chat_port", None)
+        if live_voice is None:
+            yield from super(ChatSessionStore, self).stream_provider_reply_chunks(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
+            return
 
         stream_args = {
             "provider_id": provider_id,
@@ -849,18 +885,15 @@ class ChatSessionStore(JsonChatSessionStore):
             "provider": provider,
             "routing_deadline_at": routing_deadline_at,
         }
-        if llm_metrics.is_lmstudio_provider(provider):
-            from app.live_voice.llm import lmstudio_responses
-
-            yield from lmstudio_responses.stream_lmstudio_reply(
+        if live_voice.is_lmstudio_provider(provider):
+            yield from live_voice.stream_lmstudio_reply(
                 self,
                 session,
                 user_message,
-                fallback_stream=llm_metrics.stream_lmstudio_reply,
                 **stream_args,
             )
             return
-        yield from llm_stream.stream_low_latency_reply(
+        yield from live_voice.stream_low_latency_reply(
             self,
             session,
             user_message,

@@ -5,12 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from app.chat.models import SendChatMessageRequest
-from app.chat.store import _provider_key
+from app.chat.contracts import (
+    SendChatMessageRequest,
+    live_call_provider_affinity,
+    provider_key,
+    resolve_effective_provider_id,
+)
+from app.conversation.contracts import LIVE_VOICE_ROUTE_METADATA_KEY
 from app.observability.tts_stream_diagnostics import stream_log
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 
-ROUTE_METADATA_KEY = "omnix_provider_route"
+ROUTE_METADATA_KEY = LIVE_VOICE_ROUTE_METADATA_KEY
 
 
 @dataclass(frozen=True)
@@ -45,23 +50,12 @@ def _is_live_voice_request(request: SendChatMessageRequest) -> bool:
     )
 
 
-def resolve_effective_provider_id(provider_id: str | None) -> str | None:
-    """Preserve explicit routing and read the current default for implicit turns."""
-    explicit = _normalized(provider_id)
-    if explicit:
-        return explicit
-
-    from app.settings.access import load_settings
-
-    return _normalized(load_settings().get("provider")) or "lmstudio"
-
-
 def resolve_provider_route(provider_id: str | None) -> tuple[str | None, Any]:
     """Return the current concrete provider and its configured provider instance."""
     from app.providers.service import get_provider
 
     effective_provider_id = resolve_effective_provider_id(provider_id)
-    provider = get_provider(_provider_key(effective_provider_id))
+    provider = get_provider(provider_key(effective_provider_id))
     return effective_provider_id, provider
 
 
@@ -104,14 +98,12 @@ def _live_voice_affinity_for_current_provider(
     session_id: str,
 ) -> tuple[str | None, str | None] | None:
     """Use prewarm affinity only while it matches the current Settings provider."""
-    from app.chat.live_call_prewarm import live_call_provider_affinity
-
     affinity = live_call_provider_affinity(session_id)
     if affinity is None:
         return None
     affinity_provider_id, affinity_model_id = affinity
     configured_provider_id = resolve_effective_provider_id(None)
-    if _provider_key(affinity_provider_id) == _provider_key(configured_provider_id):
+    if provider_key(affinity_provider_id) == provider_key(configured_provider_id):
         return affinity_provider_id, affinity_model_id
 
     stream_log(
@@ -240,7 +232,7 @@ def log_provider_route(
     if effective_provider_name:
         effective_provider_name = effective_provider_name.lower()
     else:
-        effective_provider_name = _normalized(_provider_key(route.provider_id))
+        effective_provider_name = _normalized(provider_key(route.provider_id))
     stream_log(
         "gateway-live-chat-first-token",
         "runtime",
@@ -258,7 +250,7 @@ def log_provider_route(
         execution_lane=route.execution_lane,
         effective_model_id=route.model_id,
         session_provider_overridden=(
-            _provider_key(requested_provider_id) != _provider_key(route.provider_id)
+            provider_key(requested_provider_id) != provider_key(route.provider_id)
         ),
         lmstudio_metrics_path_expected=effective_provider_name == "lmstudio",
         stream=stream,

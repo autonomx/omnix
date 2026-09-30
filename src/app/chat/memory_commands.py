@@ -6,7 +6,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from app.assistant_memory import (
+from app.assistant_memory.contracts import (
     MemoryService,
     RefreshSessionMemoryRequest,
     refresh_session_memory,

@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from app.assistant_memory import default_memory_service, resolve_session_memory_scope
-from app.characters import (
+from app.assistant_memory.contracts import default_memory_service, resolve_session_memory_scope
+from app.characters.contracts import (
     InteractionSelection,
     SetSessionInteractionRequest,
     default_character_service,
@@ -22,6 +22,16 @@ from .store import serialized_chat_mutation
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _record_accepted_activity(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+) -> None:
+    recorder = getattr(store, "accepted_chat_activity_recorder", None)
+    if callable(recorder):
+        recorder(session, user_message)
 
 
 class _CharacterSessionMixin:
@@ -139,6 +149,7 @@ class _CharacterSessionMixin:
     def append_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None):
         existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
         if existing is not None:
+            _record_accepted_activity(self, *existing)
             return existing
         result = super().append_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
@@ -151,12 +162,14 @@ class _CharacterSessionMixin:
         record = coordinator.mark_streaming(record.assistant_turn_id) or record
         coordinator.try_complete(record.assistant_turn_id)
         _tag_turn_and_save(self, session, user_message.id, record.assistant_turn_id, record.user_turn_id, record.speech_segment_id)
+        _record_accepted_activity(self, session, user_message)
         return session, user_message
 
     @serialized_chat_mutation
     def begin_user_message(self, session_id: str, request: SendChatMessageRequest, *, context_items: list[dict[str, Any]] | None = None, context_diagnostics: dict[str, Any] | None = None, start_streaming: bool = False):
         existing = _find_idempotent_user_turn(self.get_session(session_id), request.user_turn_id)
         if existing is not None:
+            _record_accepted_activity(self, *existing)
             return existing
         result = super().begin_user_message(session_id, request, context_items=context_items, context_diagnostics=context_diagnostics)
         if result is None:
@@ -177,6 +190,7 @@ class _CharacterSessionMixin:
             "assistant_turn": record.model_dump(mode="json"),
         })
         self._save_session(session)
+        _record_accepted_activity(self, session, user_message)
         return session, user_message
 
     def begin_streaming_user_message(

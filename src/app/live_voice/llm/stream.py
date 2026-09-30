@@ -9,8 +9,13 @@ from __future__ import annotations
 import time
 from typing import Any, Iterator
 
-from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
-from app.chat.store import _model_key, _provider_key
+from app.chat.contracts import (
+    merge_provider_response_metrics,
+    model_key,
+    provider_key,
+    provider_turn_deadline,
+    remaining_turn_seconds,
+)
 from app.providers.service import get_provider
 
 from app.observability.tts_stream_diagnostics import stream_log
@@ -175,7 +180,7 @@ def stream_low_latency_reply(
     from app.providers import ChatMessage as ProviderMessage
 
     started = time.perf_counter()
-    provider_name = _provider_key(provider_id)
+    provider_name = provider_key(provider_id)
     if provider is None:
         provider = get_provider(provider_name)
     if provider is None:
@@ -192,7 +197,7 @@ def stream_low_latency_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    model_name = _model_key(model_id)
+    model_name = model_key(model_id)
     completion_kwargs: dict[str, Any] = {}
     if provider_name == "chatgpt_codex":
         conversation_id = str(getattr(session, "id", "") or "").strip()
@@ -210,6 +215,10 @@ def stream_low_latency_reply(
 
             raise ProviderTimeout("chat turn deadline has expired")
         completion_kwargs["request_timeout_seconds"] = remaining
+    if provider_name == "lmstudio":
+        from app.live_voice.llm.policy import lmstudio_live_voice_options
+
+        completion_kwargs.update(lmstudio_live_voice_options(user_message))
     response = provider.chat_completion(
         messages=messages,
         model=model_name,
@@ -307,3 +316,62 @@ def stream_low_latency_reply(
             **({"usage": usage_payload} if usage_payload is not None else {}),
         },
     }
+
+
+def observe_live_voice_provider_stream(response: Any) -> Iterator[Any]:
+    """Forward a raw provider stream while recording voice-only usage metrics."""
+    iterator = iter(response)
+    stream_started = time.perf_counter()
+    first_provider_text_ms: float | None = None
+    provider_metrics: dict[str, Any] = {}
+    completed = False
+    try:
+        while True:
+            try:
+                item = next(iterator)
+            except StopIteration:
+                completed = True
+                return
+            provider_metrics = merge_provider_response_metrics(
+                provider_metrics,
+                item,
+                provider_id=None,
+            )
+            if first_provider_text_ms is None and getattr(item, "content", ""):
+                first_provider_text_ms = (time.perf_counter() - stream_started) * 1000.0
+            yield item
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            close()
+        if provider_metrics or first_provider_text_ms is not None:
+            native_ttft = provider_metrics.get("time_to_first_token_seconds")
+            stream_log(
+                "gateway-live-chat-first-token",
+                "runtime",
+                "live_voice_raw_provider_stream_metrics",
+                stream_completed=completed,
+                first_provider_text_ms=(
+                    round(first_provider_text_ms, 3)
+                    if first_provider_text_ms is not None
+                    else None
+                ),
+                native_ttft_ms=(
+                    round(float(native_ttft) * 1000.0, 3)
+                    if isinstance(native_ttft, (int, float))
+                    else None
+                ),
+                input_tokens=provider_metrics.get("input_tokens"),
+                cached_input_tokens=provider_metrics.get("cached_input_tokens"),
+                uncached_input_tokens=provider_metrics.get("uncached_input_tokens"),
+                prompt_cache_hit_ratio=provider_metrics.get("prompt_cache_hit_ratio"),
+                output_tokens=provider_metrics.get("output_tokens"),
+                tokens_per_second=provider_metrics.get("tokens_per_second"),
+                draft_model=provider_metrics.get("draft_model"),
+                total_draft_tokens=provider_metrics.get("total_draft_tokens"),
+                accepted_draft_tokens=provider_metrics.get("accepted_draft_tokens"),
+                rejected_draft_tokens=provider_metrics.get("rejected_draft_tokens"),
+                ignored_draft_tokens=provider_metrics.get("ignored_draft_tokens"),
+                draft_acceptance_ratio=provider_metrics.get("draft_acceptance_ratio"),
+                total_ms=round((time.perf_counter() - stream_started) * 1000.0, 3),
+            )

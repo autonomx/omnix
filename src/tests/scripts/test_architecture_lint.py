@@ -59,6 +59,57 @@ def test_all_fourteen_rules_are_exercised():
     assert {rule for rule, _ in CASES} == set(lint.RULES)
 
 
+def test_declared_feature_dependency_may_import_only_the_contract_module():
+    sources = {
+        APP + "chat/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='chat')\n"
+        ),
+        APP + "live_voice/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='live-voice', depends_on=('chat',))\n"
+        ),
+        APP + "chat/contracts.py": "class ChatPort: ...\n",
+        APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
+    }
+    assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+
+    sources[APP + "live_voice/adapter.py"] = "from app.chat.store import ChatSessionStore\n"
+    assert [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+
+
+def test_feature_contract_import_requires_a_declared_dependency():
+    sources = {
+        APP + "chat/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='chat')\n"
+        ),
+        APP + "live_voice/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='live-voice')\n"
+        ),
+        APP + "chat/contracts.py": "class ChatPort: ...\n",
+        APP + "live_voice/adapter.py": "from app.chat.contracts import ChatPort\n",
+    }
+    assert [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+
+
+def test_feature_contract_import_is_allowed_for_the_declared_dependency_owner():
+    sources = {
+        APP + "chat/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='chat')\n"
+        ),
+        APP + "characters/feature.py": (
+            "from app.runtime.features import FeatureModule\n"
+            "FEATURE = FeatureModule(id='characters', depends_on=('chat',))\n"
+        ),
+        APP + "characters/contracts.py": "class CharacterPort: ...\n",
+        APP + "chat/adapter.py": "from app.characters.contracts import CharacterPort\n",
+    }
+    assert not [entry for entry in report(sources)["violations"] if entry["rule"] == "AL001"]
+
+
 PROVENANCE_CASES = [
     ("module_alias", "import external\nmodule_alias = external\nmodule_alias.method = replacement", 1),
     ("alias_chain", "import external\na = external\nb = a\nb.method = replacement", 1),

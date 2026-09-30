@@ -3,29 +3,24 @@ import threading
 from types import SimpleNamespace
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from app.chat import ChatSession
 from app.chat import live_chat_speculation as speculation
 from app.chat import live_chat_speculation_handshake as handshake
 from app.chat import live_chat_speculation_inline_stream as inline_stream
+from app.live_voice.chat_integration import create_live_voice_chat_port
 from app.chat.live_chat_speculation_inline_stream import (
     register_live_chat_speculation_inline_stream_routes,
 )
 from tests.support.routers import include_router_registrar
-from app.runtime.net import allowed_origins
 
 
 def _cors_app() -> FastAPI:
-    app = FastAPI(title="Omnix Web Gateway")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins(),
-        allow_credentials=False,
-        allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-    )
+    from app.gateway.app_factory import _install_local_browser_cors
+
+    app = FastAPI()
+    _install_local_browser_cors(app)
     return app
 
 
@@ -47,6 +42,7 @@ class _FakeProvider:
 
 class _FakeStore:
     def __init__(self) -> None:
+        self.live_voice_chat_port = create_live_voice_chat_port()
         self.get_session_calls = 0
         self.session = ChatSession(
             id="session-inline",

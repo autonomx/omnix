@@ -6,7 +6,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.characters import default_character_service, neutralize_legacy_system_prompt, resolve_system_session_identity
+from app.characters.contracts import (
+    default_character_service,
+    neutralize_legacy_system_prompt,
+    resolve_system_session_identity,
+)
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_from_env

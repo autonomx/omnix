@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from contextvars import copy_context
-from typing import Any, Iterator
+from types import SimpleNamespace
+from typing import Any
 
-import pytest
-
-from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.chat.models import ChatMessage, ChatSession
 from app.live_voice import pipeline as live_voice_pipeline
+from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.live_voice.llm import metrics as live_voice_metrics
+from app.live_voice.llm import stream as live_voice_stream
 from app.live_voice.prompt import profile
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import LMStudioProvider, ProviderConfig
@@ -15,17 +15,16 @@ from app.providers import LMStudioProvider, ProviderConfig
 
 def _session_with_long_history() -> tuple[ChatSession, ChatMessage]:
     now = "2026-07-19T00:00:00+00:00"
-    messages: list[ChatMessage] = []
-    for index in range(30):
-        messages.append(
-            ChatMessage(
-                id=f"msg:{index}",
-                role="user" if index % 2 == 0 else "assistant",
-                content=f"Earlier turn {index}",
-                created_at=now,
-                metadata={},
-            )
+    messages = [
+        ChatMessage(
+            id=f"msg:{index}",
+            role="user" if index % 2 == 0 else "assistant",
+            content=f"Earlier turn {index}",
+            created_at=now,
+            metadata={},
         )
+        for index in range(30)
+    ]
     current = ChatMessage(
         id="msg:current",
         role="user",
@@ -48,42 +47,7 @@ def _session_with_long_history() -> tuple[ChatSession, ChatMessage]:
     return session, current
 
 
-def test_browser_live_turn_marker_derives_existing_request_ids() -> None:
-    request = SendChatMessageRequest.model_validate(
-        {
-            "content": "Hello",
-            "live_voice_turn_id": "voice-turn:12345",
-        }
-    )
-
-    assert request.user_turn_id == "voice-user-turn:voice-turn:12345"
-    assert request.speech_segment_id == "voice-segment:voice-turn:12345"
-
-
-def test_prompt_store_selects_feature_pipeline_for_live_voice(monkeypatch) -> None:
-    session, current = _session_with_long_history()
-    expected = (object(), object())
-    observed: list[tuple[object, object, object, object]] = []
-
-    def build(store, routed_session, user_message, context_items):
-        observed.append((store, routed_session, user_message, context_items))
-        return expected
-
-    monkeypatch.setattr(live_voice_pipeline, "build_live_voice_prompt", build)
-    store = object()
-
-    result = PromptChatSessionStore.build_provider_prompt(
-        store,
-        session,
-        current,
-        [],
-    )
-
-    assert result is expected
-    assert observed == [(store, session, current, [])]
-
-
-def test_live_voice_prompt_policy_bounds_history_budget() -> None:
+def test_live_turn_profile_bounds_history_and_prompt_budget() -> None:
     assert profile._live_voice_recent_message_limit() == 12
 
     budget = profile._live_voice_prompt_budget()
@@ -96,8 +60,32 @@ def test_live_voice_prompt_policy_bounds_history_budget() -> None:
     assert budget.external_context_tokens <= 2_048
 
 
-def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monkeypatch) -> None:
-    profile._install_lmstudio_thinking_policy()
+def test_prompt_store_selects_feature_pipeline_for_live_voice(monkeypatch) -> None:
+    from app.chat.prompt_store import ChatSessionStore
+
+    session, current = _session_with_long_history()
+    expected = (object(), object())
+    observed: list[tuple[object, object, object, object]] = []
+
+    def build(store, routed_session, user_message, context_items):
+        observed.append((store, routed_session, user_message, context_items))
+        return expected
+
+    monkeypatch.setattr(live_voice_pipeline, "build_live_voice_prompt", build)
+    store = ChatSessionStore(live_voice_chat_port=create_live_voice_chat_port())
+
+    result = ChatSessionStore.build_provider_prompt(
+        store,
+        session,
+        current,
+        [],
+    )
+
+    assert result is expected
+    assert observed == [(store, session, current, [])]
+
+
+def test_lmstudio_live_voice_policy_is_applied_at_completion_boundary(monkeypatch) -> None:
     provider = LMStudioProvider(
         ProviderConfig(
             provider_type="lmstudio",
@@ -140,45 +128,82 @@ def test_lmstudio_live_voice_disables_thinking_without_affecting_text_chat(monke
 
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
-    token = profile._LIVE_VOICE_TURN.set(True)
-    try:
-        provider.chat_completion(
-            [ProviderMessage(role="user", content="Hello")],
-            stream=False,
-        )
-    finally:
-        profile._LIVE_VOICE_TURN.reset(token)
+    class PromptStore:
+        def build_provider_prompt(self, _session, _message, _context_items):
+            return SimpleNamespace(diagnostics={}), SimpleNamespace(
+                messages=[ProviderMessage(role="user", content="Hello")]
+            )
 
-    provider.chat_completion(
-        [ProviderMessage(role="user", content="Hello")],
-        stream=False,
+        def _active_memory_metadata(self, _assembly, _rendered):
+            return {}
+
+        def _active_history_metadata(self, _assembly):
+            return {}
+
+    store = PromptStore()
+    session = SimpleNamespace(id="chat:test", provider_id="lmstudio")
+    voice_message = ChatMessage(
+        id="msg:voice",
+        role="user",
+        content="Hello",
+        created_at="2026-07-19T00:00:00+00:00",
+        metadata={"user_turn_id": "voice-user-turn:test"},
+    )
+    text_message = ChatMessage(
+        id="msg:text",
+        role="user",
+        content="Hello",
+        created_at="2026-07-19T00:00:00+00:00",
+        metadata={},
+    )
+
+    live_voice_metrics.generate_lmstudio_reply(
+        store,
+        session,
+        voice_message,
+        provider_id="lmstudio",
+        model_id="qwen",
+        context_items=[],
+        provider=provider,
+    )
+    live_voice_metrics.generate_lmstudio_reply(
+        store,
+        session,
+        text_message,
+        provider_id="lmstudio",
+        model_id="qwen",
+        context_items=[],
+        provider=provider,
     )
 
     assert payloads[0]["chat_template_kwargs"] == {"enable_thinking": False}
     assert "chat_template_kwargs" not in payloads[1]
 
 
-def test_live_voice_stream_can_advance_across_copied_contexts() -> None:
-    observed_context: list[bool] = []
+def test_live_voice_provider_stream_observer_forwards_raw_chunks(monkeypatch) -> None:
+    log_events: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    closed: list[bool] = []
 
-    def source() -> Iterator[dict[str, Any]]:
-        observed_context.append(profile._LIVE_VOICE_TURN.get())
-        yield {"type": "chunk", "text": "Hello"}
-        observed_context.append(profile._LIVE_VOICE_TURN.get())
-        yield {"type": "complete"}
-        observed_context.append(profile._LIVE_VOICE_TURN.get())
+    def source():
+        try:
+            yield SimpleNamespace(
+                content="Hello",
+                raw_response={"stats": {"output_tokens": 3}},
+            )
+        finally:
+            closed.append(True)
 
-    stream = profile._stream_with_live_voice_context(
-        source(),
-        is_live_voice=True,
+    monkeypatch.setattr(
+        live_voice_stream,
+        "stream_log",
+        lambda *args, **kwargs: log_events.append((args, kwargs)),
     )
 
-    assert copy_context().run(next, stream) == {"type": "chunk", "text": "Hello"}
-    assert profile._LIVE_VOICE_TURN.get() is False
-    assert copy_context().run(next, stream) == {"type": "complete"}
-    assert profile._LIVE_VOICE_TURN.get() is False
-    with pytest.raises(StopIteration):
-        copy_context().run(next, stream)
+    chunks = list(live_voice_stream.observe_live_voice_provider_stream(source()))
 
-    assert observed_context == [True, True, True]
-    assert profile._LIVE_VOICE_TURN.get() is False
+    assert chunks[0].content == "Hello"
+    assert closed == [True]
+    assert any(
+        args[2] == "live_voice_raw_provider_stream_metrics"
+        for args, _kwargs in log_events
+    )

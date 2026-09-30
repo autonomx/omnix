@@ -15,9 +15,7 @@ import time
 from typing import Any
 from contextvars import Token
 
-from app.chat.models import ChatMessage, ChatSession
-from app.chat.prompt_assembly import PromptAssembly
-from app.chat.prompt_rendering import RenderedPrompt
+from app.chat.contracts import ChatMessage, ChatSession, PromptAssembly, RenderedPrompt
 
 
 @dataclass(slots=True)

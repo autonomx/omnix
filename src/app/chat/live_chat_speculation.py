@@ -27,8 +27,6 @@ from app.chat import (
 from app.chat.store import _model_key, _provider_key
 from app.providers import ChatMessage as ProviderMessage
 
-from app.live_voice.prompt import profile as live_voice_profile
-from app.live_voice.llm.stream import LowLatencyTextChunker
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -383,6 +381,9 @@ def _generate_side_effect_free(
     *,
     cancel_event: threading.Event | None = None,
 ) -> Iterator[str]:
+    live_voice = getattr(store, "live_voice_chat_port", None)
+    if live_voice is None:
+        raise RuntimeError("live_voice_chat_port_required")
     provider = get_provider(_provider_key(speculation.provider_id))
     if provider is None:
         raise RuntimeError("Chat provider is not available")
@@ -409,21 +410,17 @@ def _generate_side_effect_free(
     provider_kwargs: dict[str, Any] = {}
     if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
         provider_kwargs["_cancel_event"] = cancel_event
-    live_voice_token = live_voice_profile._LIVE_VOICE_TURN.set(True)
-    try:
-        raw_response = provider.chat_completion(
-            messages=messages,
-            model=_model_key(speculation.model_id),
-            stream=True,
-            **provider_kwargs,
-        )
-    finally:
-        live_voice_profile._LIVE_VOICE_TURN.reset(live_voice_token)
-    response = live_voice_profile._stream_with_live_voice_context(
-        raw_response,
-        is_live_voice=True,
+    if str(getattr(provider, "provider_name", "")).strip().casefold() == "lmstudio":
+        provider_kwargs.update(live_voice.lmstudio_live_voice_options(user_message))
+        provider_kwargs["include_metrics"] = True
+    raw_response = provider.chat_completion(
+        messages=messages,
+        model=_model_key(speculation.model_id),
+        stream=True,
+        **provider_kwargs,
     )
-    chunker = LowLatencyTextChunker()
+    response = live_voice.observe_live_voice_provider_stream(raw_response)
+    chunker = live_voice.new_text_chunker()
     full_text = ""
     for chunk in response:
         if cancel_event is not None and cancel_event.is_set():

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.provider_metrics import merge_provider_response_metrics
-from app.live_voice.prompt import profile as live_voice_profile
+from app.live_voice.llm import stream as live_voice_stream
 from app.live_voice.llm.metrics import (
     is_lmstudio,
     stream_lmstudio_reply,
@@ -412,9 +412,13 @@ def test_prompt_store_stream_composes_lmstudio_metrics_directly(monkeypatch) -> 
 
     monkeypatch.setattr(llm_metrics, "stream_lmstudio_reply", stream_metrics)
 
+    from app.live_voice.chat_integration import create_live_voice_chat_port
+
+    store = prompt_store.ChatSessionStore(
+        live_voice_chat_port=create_live_voice_chat_port(),
+    )
     events = list(
-        prompt_store.ChatSessionStore.stream_provider_reply_chunks(
-            SimpleNamespace(),
+        store.stream_provider_reply_chunks(
             SimpleNamespace(id="chat:test"),
             SimpleNamespace(id="msg:user", content="Hello", metadata={}),
             provider_id="lmstudio",
@@ -442,8 +446,10 @@ def test_prompt_store_generation_composes_lmstudio_metrics_directly(monkeypatch)
 
     monkeypatch.setattr(llm_metrics, "generate_lmstudio_reply", generate_metrics)
 
+    from app.live_voice.chat_integration import create_live_voice_chat_port
+
     result = prompt_store.ChatSessionStore._generate_provider_reply(
-        SimpleNamespace(),
+        SimpleNamespace(live_voice_chat_port=create_live_voice_chat_port()),
         SimpleNamespace(id="chat:test"),
         SimpleNamespace(id="msg:user", metadata={}),
         provider_id="lmstudio",
@@ -456,49 +462,11 @@ def test_prompt_store_generation_composes_lmstudio_metrics_directly(monkeypatch)
     assert calls[0]["provider_id"] == "lmstudio"
 
 
-def test_live_voice_policy_requests_native_metrics(monkeypatch) -> None:
-    live_voice_profile._install_lmstudio_thinking_policy()
-    provider = _provider()
-    calls: list[tuple[str, dict[str, Any]]] = []
-    payload = _stats_payload()
-
-    def fake_make_request(method: str, endpoint: str, **kwargs: Any):
-        calls.append((endpoint, kwargs))
-        if endpoint == "/api/v1/models":
-            return _loaded_model_response()
-        return _JsonResponse(
-            {
-                "model": "qwen",
-                "choices": [
-                    {
-                        "message": {"content": "Hello"},
-                        "finish_reason": "stop",
-                    }
-                ],
-                **payload,
-            }
-        )
-
-    monkeypatch.setattr(provider, "_make_request", fake_make_request)
-    token = live_voice_profile._LIVE_VOICE_TURN.set(True)
-    try:
-        provider.chat_completion(
-            [ChatMessage(role="user", content="Hello")],
-            stream=False,
-        )
-    finally:
-        live_voice_profile._LIVE_VOICE_TURN.reset(token)
-
-    endpoint, request = calls[-1]
-    assert endpoint == "/api/v0/chat/completions"
-    assert request["json"]["chat_template_kwargs"] == {"enable_thinking": False}
-
-
 def test_raw_live_voice_provider_stream_logs_cache_and_ttft(monkeypatch) -> None:
     payload = _stats_payload()
     logs: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     monkeypatch.setattr(
-        live_voice_profile,
+        live_voice_stream,
         "stream_log",
         lambda *args, **kwargs: logs.append((args, kwargs)),
     )
@@ -517,10 +485,7 @@ def test_raw_live_voice_provider_stream_logs_cache_and_ttft(monkeypatch) -> None
     )
 
     chunks = list(
-        live_voice_profile._stream_with_live_voice_context(
-            source,
-            is_live_voice=True,
-        )
+        live_voice_stream.observe_live_voice_provider_stream(source)
     )
 
     assert "".join(chunk.content for chunk in chunks) == "Hello there."

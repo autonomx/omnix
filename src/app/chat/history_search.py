@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory.settings import load_memory_runtime_settings
+from app.assistant_memory.contracts import load_memory_runtime_settings
 
 from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem

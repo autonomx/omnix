@@ -5,32 +5,30 @@ from app.config.env import env_str as _env_str
 from collections.abc import Callable
 from typing import Any
 
-from app.assistant_memory.companion_context import build_companion_context_packet
-from app.assistant_memory.initiative import (
+from app.assistant_memory.contracts import (
+    build_companion_context_packet,
+    companion_rollout_policy,
     initiative_prompt_directive,
-    plan_companion_initiative,
-)
-from app.assistant_memory.observability import (
-    record_companion_diagnostics,
-    record_memory_usage,
-)
-from app.assistant_memory.paralinguistic_state import (
+    load_memory_runtime_settings,
     observe_paralinguistic_turn,
     paralinguistic_prompt_directive,
+    plan_companion_initiative,
+    record_companion_diagnostics,
+    record_memory_usage,
+    resolve_session_memory_scope,
+    retrieve_temporal_context,
 )
-from app.assistant_memory.rollout import companion_rollout_policy
-from app.assistant_memory.scope import resolve_session_memory_scope
-from app.assistant_memory.settings import load_memory_runtime_settings
-from app.assistant_memory.temporal_retrieval import retrieve_temporal_context
 from app.conversation.contracts import PromptMemoryItem
-from app.characters.live_conversation_profile import (
+from app.characters.contracts import (
     LiveConversationProfile,
     default_live_conversation_profile_store,
 )
-from app.chat.compaction import compaction_enabled
-from app.chat.memory_prompt import resolve_prompt_memory
-from app.chat.prompt_assembly import build_prompt_assembly
-from app.chat.prompt_rendering import render_prompt_assembly
+from app.chat.contracts import (
+    build_prompt_assembly,
+    compaction_enabled,
+    render_prompt_assembly,
+    resolve_prompt_memory,
+)
 
 from app.live_voice.prompt import profile as live_profile
 from app.observability.tts_stream_diagnostics import stream_log

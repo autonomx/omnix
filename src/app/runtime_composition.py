@@ -34,6 +34,8 @@ def production_chat_store():
     from app.chat.live_agent_store import install_live_agent_store_hooks
     from app.assistant_memory import default_memory_service
     from app.assistant_memory.settings import load_memory_runtime_settings
+    from app.desktop_companion.chat_activity import record_accepted_chat_activity
+    from app.live_voice.chat_integration import create_live_voice_chat_port
 
     install_live_agent_store_hooks(
         PostgresCharacterChatSessionStore,
@@ -43,6 +45,8 @@ def production_chat_store():
         memory_service_factory=default_memory_service,
         memory_settings_factory=load_memory_runtime_settings,
         job_service=production_job_store(),
+        live_voice_chat_port=create_live_voice_chat_port(),
+        accepted_chat_activity_recorder=record_accepted_chat_activity,
     )
 
 

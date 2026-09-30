@@ -98,7 +98,12 @@ def test_begin_persists_the_resolved_route_for_later_workers(tmp_path, monkeypat
         "load_settings",
         lambda **_kwargs: {"provider": "lmstudio"},
     )
-    store = ChatSessionStore(tmp_path / "sessions.json")
+    from app.live_voice.chat_integration import create_live_voice_chat_port
+
+    store = ChatSessionStore(
+        tmp_path / "sessions.json",
+        live_voice_chat_port=create_live_voice_chat_port(),
+    )
     session = store.create_session(
         CreateChatSessionRequest(provider_id="cerebras", model_id="stale-model")
     )

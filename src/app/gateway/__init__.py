@@ -6,12 +6,8 @@ __all__ = ["app", "create_gateway_app"]
 
 
 def _install_required_rpg_turn_hooks():
-    from .runtime_hooks import (
-        initialize_gateway_runtime_hooks,
-        _install_required_rpg_turn_hooks as install,
-    )
+    from .runtime_hooks import _install_required_rpg_turn_hooks as install
 
-    initialize_gateway_runtime_hooks()
     install()
 
 

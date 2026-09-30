@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.assistant_memory.settings import (
+from app.assistant_memory.contracts import (
     AssistantMemoryRuntimeSettings,
     load_memory_runtime_settings,
 )

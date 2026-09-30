@@ -27,6 +27,11 @@ from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 from app.chat.retention_policy import transcript_retention_allowed
 from app.chat.store import _context_source_summaries
+from app.conversation.contracts import (
+    AcceptedChatActivityRecorder,
+    LIVE_VOICE_ROUTE_METADATA_KEY,
+    LiveVoiceChatPort,
+)
 from app.observability.tts_stream_diagnostics import stream_log
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.document_store import PostgresDocumentStore
@@ -312,9 +317,7 @@ def _begin_user_message_fast(
         "coding_approval_policy": request.coding_approval_policy,
     }
     if route_metadata is not None:
-        from app.live_voice.llm.routing import ROUTE_METADATA_KEY
-
-        message_metadata[ROUTE_METADATA_KEY] = dict(route_metadata)
+        message_metadata[LIVE_VOICE_ROUTE_METADATA_KEY] = dict(route_metadata)
     if request.image_data_urls:
         message_metadata["image_data_urls"] = list(request.image_data_urls)
         message_metadata["image_data_url"] = request.image_data_urls[0]
@@ -652,6 +655,8 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         history_search_factory: Callable[[], PostgresHistorySearchService] = PostgresHistorySearchService,
         summary_repository_factory: Callable[[], PostgresConversationSummaryRepository] = PostgresConversationSummaryRepository,
         job_service: Any | None = None,
+        live_voice_chat_port: LiveVoiceChatPort | None = None,
+        accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
     ) -> None:
         if path is not None:
             raise RuntimeError("file-backed chat authority is retired; use the legacy importer")
@@ -661,6 +666,8 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
         self.job_service = job_service
+        self.live_voice_chat_port = live_voice_chat_port
+        self.accepted_chat_activity_recorder = accepted_chat_activity_recorder
         self._repository = PostgresChatRepositoryAdapter()
         self._initialize_prompt_context_cache()
 
@@ -772,24 +779,34 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         context_diagnostics: dict[str, Any] | None = None,
         start_streaming: bool = False,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        from app.live_voice.llm.routing import begin_routed_user_message
         from app.chat.live_chat_speculation import prime_live_speculation_session
 
         with _durable_session_mutation(self, session_id):
-            result = begin_routed_user_message(
+            persist = lambda routed_request, route_metadata: _begin_user_message_fast(
                 self,
                 session_id,
-                request,
-                persist=lambda routed_request, route_metadata: _begin_user_message_fast(
-                    self,
+                routed_request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+                route_metadata=route_metadata,
+                start_streaming=start_streaming,
+            )
+            live_voice = getattr(self, "live_voice_chat_port", None)
+            if live_voice is None:
+                result = super().begin_user_message(
                     session_id,
-                    routed_request,
+                    request,
                     context_items=context_items,
                     context_diagnostics=context_diagnostics,
-                    route_metadata=route_metadata,
                     start_streaming=start_streaming,
-                ),
-            )
+                )
+            else:
+                result = live_voice.begin_routed_user_message(
+                    self,
+                    session_id,
+                    request,
+                    persist=persist,
+                )
         if result is not None:
             prime_live_speculation_session(result[0])
         return result
@@ -838,14 +855,21 @@ def default_chat_store(
     memory_service_factory: Callable[[], Any] | None = None,
     memory_settings_factory: Callable[[], Any] | None = None,
     job_service: Any | None = None,
+    live_voice_chat_port: LiveVoiceChatPort | None = None,
+    accepted_chat_activity_recorder: AcceptedChatActivityRecorder | None = None,
 ) -> PostgresCharacterChatSessionStore:
     """Reuse the authoritative chat store instead of re-running startup checks per request."""
-    return (store_class or PostgresCharacterChatSessionStore)(
-        history_search_factory=default_history_search_service,
-        memory_service_factory=memory_service_factory,
-        memory_settings_factory=memory_settings_factory,
-        job_service=job_service,
-    )
+    store_kwargs = {
+        "history_search_factory": default_history_search_service,
+        "memory_service_factory": memory_service_factory,
+        "memory_settings_factory": memory_settings_factory,
+        "job_service": job_service,
+    }
+    if live_voice_chat_port is not None:
+        store_kwargs["live_voice_chat_port"] = live_voice_chat_port
+    if accepted_chat_activity_recorder is not None:
+        store_kwargs["accepted_chat_activity_recorder"] = accepted_chat_activity_recorder
+    return (store_class or PostgresCharacterChatSessionStore)(**store_kwargs)
 
 
 def _missing_memory_service() -> Any:

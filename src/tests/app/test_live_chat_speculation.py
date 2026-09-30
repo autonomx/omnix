@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.chat import ChatMessage, ChatSession
 from app.chat import live_chat_speculation as speculation
+from app.live_voice.chat_integration import create_live_voice_chat_port
 from tests.support.routers import include_router_registrar
 
 
@@ -22,6 +23,7 @@ class _FakeProvider:
 
 class _FakeStore:
     def __init__(self) -> None:
+        self.live_voice_chat_port = create_live_voice_chat_port()
         self.begin_calls = 0
         self.complete_calls = 0
         self.get_session_calls = 0

@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
-from app.assistant_memory import (
+from app.assistant_memory.contracts import (
     MemoryService,
     default_memory_service,
     resolve_chat_scope,
@@ -13,10 +13,9 @@ from app.assistant_memory import (
     resolve_snapshot_view,
     select_memory_records,
 )
-from app.assistant_memory.settings import load_memory_runtime_settings
-from app.assistant_memory.selection import estimate_memory_tokens
+from app.assistant_memory.contracts import estimate_memory_tokens, load_memory_runtime_settings
 from app.assistant_memory_v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
-from app.characters import resolve_shared_memory_categories
+from app.characters.contracts import resolve_shared_memory_categories
 from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import prompt_budget_from_env

@@ -1,6 +1,7 @@
 """Data contracts shared by chat, research, memory and character features."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
@@ -21,6 +22,7 @@ ResearchMode = Literal["disabled", "quick", "deep"]
 ChatMessageRole = Literal["system", "user", "assistant"]
 DEFAULT_PROFILE_ID = "profile:local"
 DEFAULT_WORKSPACE_ID = "workspace:default"
+LIVE_VOICE_ROUTE_METADATA_KEY = "omnix_provider_route"
 
 
 class ChatMessage(BaseModel):
@@ -101,6 +103,61 @@ class DeliveryCheckpointRecorder(Protocol):
     """Port for persisting voice delivery checkpoints into the owning chat turn."""
 
     def __call__(self, details: dict[str, Any]) -> None: ...
+
+
+class AcceptedChatActivityRecorder(Protocol):
+    """Observer for accepted user turns; Chat owns persistence, not enrichment."""
+
+    def __call__(self, session: ChatSession, user_message: ChatMessage) -> None: ...
+
+
+class LiveVoiceChatPort(Protocol):
+    """Live-voice behavior called by Chat through an injected feature port."""
+
+    route_metadata_key: str
+
+    def is_live_voice_message(self, user_message: Any) -> bool: ...
+
+    def build_live_voice_prompt(
+        self,
+        store: Any,
+        session: Any,
+        user_message: Any,
+        context_items: list[dict[str, Any]] | None,
+    ) -> tuple[Any, Any]: ...
+
+    def record_rendered_prompt(self, assembly: Any, rendered: Any) -> None: ...
+
+    def begin_routed_user_message(self, store: Any, session_id: str, request: Any, *, persist: Any) -> Any: ...
+
+    def resolve_generation_route(self, user_message: Any, **kwargs: Any) -> Any: ...
+
+    def resolve_stream_route(self, user_message: Any, **kwargs: Any) -> Any: ...
+
+    def log_provider_route(self, **kwargs: Any) -> None: ...
+
+    def stream_with_retry(
+        self,
+        stream_factory: Any,
+        fallback_factory: Any,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+    ) -> Iterator[Any]: ...
+
+    def is_lmstudio_provider(self, provider: Any) -> bool: ...
+
+    def generate_lmstudio_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Any: ...
+
+    def stream_lmstudio_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Iterator[Any]: ...
+
+    def stream_low_latency_reply(self, store: Any, session: Any, user_message: Any, **kwargs: Any) -> Iterator[Any]: ...
+
+    def lmstudio_live_voice_options(self, user_message: Any) -> dict[str, Any]: ...
+
+    def observe_live_voice_provider_stream(self, response: Any) -> Iterator[Any]: ...
+
+    def new_text_chunker(self) -> Any: ...
 
 
 def estimate_tokens(text: str) -> int:

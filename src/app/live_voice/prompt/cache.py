@@ -10,10 +10,14 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any
 
-from app.characters.interaction import InteractionSelection, resolve_interaction_context
-from app.characters.live_conversation_profile import LiveConversationProfileStore
-from app.characters.service import default_character_service
-from app.chat.prompt_assembly import resolve_system_session_identity
+from app.characters.contracts import (
+    InteractionSelection,
+    LiveConversationProfileStore,
+    default_character_service,
+    resolve_interaction_context,
+    subscribe_character_snapshot_cache,
+)
+from app.chat.contracts import resolve_system_session_identity
 from app.observability.tts_stream_diagnostics import stream_log
 
 _MAX_CACHE_ENTRIES = 256
@@ -78,8 +82,6 @@ def ensure_character_snapshot_observers() -> None:
     with _CACHE_LOCK:
         if _SNAPSHOT_OBSERVERS_READY:
             return
-        from app.characters.service import subscribe_character_snapshot_cache
-
         subscribe_character_snapshot_cache(
             on_resolve=cache_character_snapshot,
             on_change=_invalidate_character,

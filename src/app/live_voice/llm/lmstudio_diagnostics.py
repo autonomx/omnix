@@ -14,7 +14,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from typing import Any
 
-from app.chat.store import _model_key
+from app.chat.contracts import model_key
 from app.observability.tts_stream_diagnostics import stream_log
 
 _ACTIVE_CALL: ContextVar[dict[str, Any] | None] = ContextVar(
@@ -25,7 +25,7 @@ _WHITESPACE = re.compile(r"\s+")
 
 
 def _configured_model(provider: Any, model_id: str | None) -> str | None:
-    explicit = _model_key(model_id)
+    explicit = model_key(model_id)
     if explicit:
         return explicit
     config = getattr(provider, "config", None)

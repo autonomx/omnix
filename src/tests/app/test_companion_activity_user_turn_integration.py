@@ -6,10 +6,9 @@ from app.characters import CharacterRepository, CreateCharacterRequest
 from app.chat import (
     CreateChatSessionRequest,
     SendChatMessageRequest,
-    default_chat_store,
 )
+from app.chat.character_store import InMemoryChatSessionStore
 from app.desktop_companion import chat_activity
-from app.gateway import companion_activity_user_turn as user_turn_hook
 from app.persistence.runtime import reset_persistence_mode_cache
 
 
@@ -48,10 +47,9 @@ def test_accepted_character_chat_turn_reaches_companion_activity_boundary(
             )
         )
 
-    monkeypatch.setattr(user_turn_hook, "record_accepted_chat_activity", record)
-    user_turn_hook.install_companion_activity_user_turn_hook()
+    monkeypatch.setattr(chat_activity, "record_accepted_chat_activity", record)
 
-    store = default_chat_store()
+    store = InMemoryChatSessionStore(accepted_chat_activity_recorder=record)
     session = store.create_session(
         CreateChatSessionRequest(
             title="Companion activity",
@@ -95,14 +93,9 @@ def test_activity_enrichment_failure_does_not_reject_chat_turn(
         "default_desktop_companion_activity_bridge",
         lambda: FailingBridge(),
     )
-    monkeypatch.setattr(
-        user_turn_hook,
-        "record_accepted_chat_activity",
-        chat_activity.record_accepted_chat_activity,
+    store = InMemoryChatSessionStore(
+        accepted_chat_activity_recorder=chat_activity.record_accepted_chat_activity,
     )
-    user_turn_hook.install_companion_activity_user_turn_hook()
-
-    store = default_chat_store()
     session = store.create_session(CreateChatSessionRequest(title="Companion degraded"))
     begun = store.begin_user_message(
         session.id,

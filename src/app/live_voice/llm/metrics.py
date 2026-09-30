@@ -4,9 +4,13 @@ from __future__ import annotations
 import time
 from typing import Any, Iterator
 
-from app.chat.provider_metrics import merge_provider_response_metrics
-from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
-from app.chat.store import _model_key, _provider_key
+from app.chat.contracts import (
+    merge_provider_response_metrics,
+    model_key,
+    provider_key,
+    provider_turn_deadline,
+    remaining_turn_seconds,
+)
 from app.live_voice.llm.stream import LowLatencyTextChunker
 
 from app.observability.tts_stream_diagnostics import stream_log
@@ -14,7 +18,7 @@ from app.observability.tts_stream_diagnostics import stream_log
 def _resolve_provider(provider_id: str | None) -> Any:
     from app.providers.service import get_provider
 
-    return get_provider(_provider_key(provider_id))
+    return get_provider(provider_key(provider_id))
 
 
 def is_lmstudio_provider(provider: Any) -> bool:
@@ -78,7 +82,7 @@ def generate_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    model_name = _model_key(model_id)
+    model_name = model_key(model_id)
     from app.providers.structured.errors import ProviderTimeout
 
     deadline = provider_turn_deadline(
@@ -89,7 +93,10 @@ def generate_lmstudio_reply(
     remaining = remaining_turn_seconds(deadline)
     if remaining is not None and remaining <= 0:
         raise ProviderTimeout("chat turn deadline has expired")
+    from app.live_voice.llm.policy import lmstudio_live_voice_options
+
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
+    completion_kwargs.update(lmstudio_live_voice_options(user_message))
     if remaining is not None:
         completion_kwargs["request_timeout_seconds"] = remaining
     response = _chat_completion(
@@ -156,7 +163,7 @@ def stream_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    model_name = _model_key(model_id)
+    model_name = model_key(model_id)
     deadline = provider_turn_deadline(
         provider_id,
         session_provider_id=getattr(session, "provider_id", None),
@@ -167,7 +174,10 @@ def stream_lmstudio_reply(
         from app.providers.structured.errors import ProviderTimeout
 
         raise ProviderTimeout("chat turn deadline has expired")
+    from app.live_voice.llm.policy import lmstudio_live_voice_options
+
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
+    completion_kwargs.update(lmstudio_live_voice_options(user_message))
     if remaining_budget is not None:
         completion_kwargs["request_timeout_seconds"] = remaining_budget
     response = _chat_completion(

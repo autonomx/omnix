@@ -20,9 +20,12 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from app.chat.provider_metrics import merge_provider_response_metrics
-from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
-from app.chat.store import _model_key
+from app.chat.contracts import (
+    merge_provider_response_metrics,
+    model_key,
+    provider_turn_deadline,
+    remaining_turn_seconds,
+)
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.base import ChatResponse, ConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
@@ -499,7 +502,7 @@ def _stream_stateful_lmstudio_reply(
         ProviderMessage(role=message.role, content=message.content)
         for message in rendered.messages
     ]
-    requested_model = _model_key(model_id)
+    requested_model = model_key(model_id)
     resolved_model, _ = _resolve_current_model(provider, requested_model)
     session_id = str(getattr(session, "id", "") or "").strip()
     previous_response_id, state_reason, prior_continuation_count, rolled_off = (

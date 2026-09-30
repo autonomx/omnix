@@ -7,6 +7,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontext
 from typing import Any, cast
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.assets import SharedAssetStore, default_asset_store
 from app.chat import ChatSessionStore, default_chat_store
@@ -19,6 +20,26 @@ from app.providers.facade import ProviderFacade, default_provider_facade
 from app.replay import RpgReplayPersistenceAdapter, default_rpg_replay_adapter
 
 from . import _install_required_rpg_turn_hooks
+
+
+_LOCAL_BROWSER_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+)
+
+
+def _install_local_browser_cors(gateway: FastAPI) -> None:
+    """Attach local development CORS policy to this gateway instance."""
+    gateway.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(_LOCAL_BROWSER_ORIGINS),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=86_400,
+    )
 
 
 def _gateway_lifespan(app, *, get_chat_store, get_job_store):
@@ -51,6 +72,10 @@ def create_gateway_app(
 
     runtime_config = runtime_config or get_runtime_config()
     _install_required_rpg_turn_hooks()
+    from app.chat.delivery_sync import persist_live_voice_delivery
+    from app.live_voice.diagnostics import configure_delivery_checkpoint_recorder
+
+    configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     if job_store_factory is None:
         from app.runtime_composition import production_job_store
 
@@ -89,6 +114,7 @@ def create_gateway_app(
         summary="Thin local-first gateway foundation for the Omnix web app redesign.",
         lifespan=gateway_lifespan,
     )
+    _install_local_browser_cors(gateway)
     from app.rpg.api.feature_routes import install_rpg_debug_middleware
     from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_middleware
 
