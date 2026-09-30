@@ -70,24 +70,24 @@ jobs:
             src/app/gateway/blocking_route_offload.py \
             src/app/observability/content_free_diagnostics.py \
             src/app/gateway/event_loop_lag_monitor.py \
-            src/app/gateway/hooks/live_chat_companion_context.py \
-            src/app/chat/live_chat_live_voice_profile.py \
-            src/app/chat/live_chat_low_latency_stream.py \
-            src/app/chat/live_chat_provider_metrics.py \
-            src/app/chat/live_chat_provider_routing.py \
-            src/app/chat/live_chat_stream_retry.py \
+            src/app/live_voice/prompt/companion_context.py \
+            src/app/live_voice/prompt/profile.py \
+            src/app/live_voice/llm/stream.py \
+            src/app/live_voice/llm/metrics.py \
+            src/app/live_voice/llm/routing.py \
+            src/app/live_voice/llm/retry.py \
             src/app/chat/live_material_context.py \
             src/app/chat/live_observation_generation.py \
-            src/app/voice/live_voice_cue_asset_routes.py \
-            src/app/voice/live_voice_runtime_offload.py \
-            src/app/voice/live_voice_release_gate.py \
+            src/app/live_voice/transport/cue_asset_routes.py \
+            src/app/live_voice/speech/runtime_offload.py \
+            src/app/live_voice/release_gate.py \
             src/app/chat/live_chat_release_gate.py \
             src/app/chat/live_chat_release_aggregation.py \
             src/app/chat/evaluation_store.py \
             src/app/chat/live_chat_evaluation_routes.py \
-            src/app/voice/live_voice_diagnostics_routes.py \
-            src/app/gateway/memory_job_offload.py \
-            src/app/voice/tts_live_call_websocket.py \
+            src/app/live_voice/transport/diagnostics_routes.py \
+            src/app/assistant_memory/jobs.py \
+            src/app/live_voice/transport/websocket.py \
             src/app/conversation/tts_stream_contract.py \
             src/app/observability/tts_stream_diagnostics.py \
             src/app/chat/persistence/chat_compat.py \

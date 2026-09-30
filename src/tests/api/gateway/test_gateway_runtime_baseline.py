@@ -51,7 +51,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app.gateway import main
     from app.worker_runtime import durable_feature_worker
     from app import runtime_composition
-    from app import live_voice_hardware_policy
+    from app.live_voice import hardware_policy as live_voice_hardware_policy
     from app import assets, chat, jobs
     from app.security import tenant_context
     from app.settings import access as settings_access
@@ -100,7 +100,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     monkeypatch.setattr(startup, "bootstrap_status_payload", bootstrap)
     monkeypatch.setattr(
         live_voice_hardware_policy,
-        "install_live_voice_hardware_policy",
+        "apply_live_voice_process_defaults",
         lambda: calls.append("policy"),
     )
 

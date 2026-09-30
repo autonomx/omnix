@@ -13,7 +13,6 @@ on:
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
       - "src/app/assistant_context/routes.py"
-      - "src/app/gateway/companion_activity_user_turn.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
@@ -37,7 +36,6 @@ on:
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
       - "src/app/assistant_context/routes.py"
-      - "src/app/gateway/companion_activity_user_turn.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
@@ -101,7 +99,6 @@ jobs:
             src/app/desktop_companion/routes.py \
             src/app/desktop_companion/runtime.py \
             src/app/assistant_context/routes.py \
-            src/app/gateway/companion_activity_user_turn.py \
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_activity_user_turn_integration.py \

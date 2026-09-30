@@ -767,14 +767,33 @@ class ChatSessionStore(JsonChatSessionStore):
     ):
         live_voice = getattr(self, "live_voice_chat_port", None)
         if live_voice is None:
-            yield from super(ChatSessionStore, self).stream_provider_reply_chunks(
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                routing_deadline_at=routing_deadline_at,
-            )
+            assembly = self.build_prompt_context(session, user_message, context_items)
+            rendered = render_prompt_assembly(assembly)
+            self._cache_prompt_context(session, user_message, assembly)
+            try:
+                for event in super(ChatSessionStore, self).stream_provider_reply_chunks(
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                    routing_deadline_at=routing_deadline_at,
+                ):
+                    if isinstance(event, dict) and event.get("type") == "complete":
+                        event_metadata = event.get("metadata")
+                        if not isinstance(event_metadata, dict):
+                            event_metadata = {}
+                        event = {
+                            **event,
+                            "metadata": {
+                                **event_metadata,
+                                **self._active_memory_metadata(assembly, rendered),
+                                **self._active_history_metadata(assembly),
+                            },
+                        }
+                    yield event
+            finally:
+                self.discard_prompt_context(session, user_message)
             return
 
         route = live_voice.resolve_stream_route(

@@ -10,7 +10,7 @@ on:
       - "src/app/agent_runtime/router.py"
       - "src/app/agent_runtime/profiles.py"
       - "src/app/agent_runtime/semantic_classifier.py"
-      - "src/app/chat/live_chat_low_latency_stream.py"
+      - "src/app/live_voice/llm/stream.py"
       - "src/app/gateway/main.py"
       - "src/app/providers/service.py"
       - "src/app/settings/service.py"
@@ -96,7 +96,7 @@ jobs:
             src/app/agent_runtime/router.py \
             src/app/agent_runtime/profiles.py \
             src/app/agent_runtime/semantic_classifier.py \
-            src/app/chat/live_chat_low_latency_stream.py \
+            src/app/live_voice/llm/stream.py \
             src/app/providers/chatgpt_codex_provider.py \
             src/app/providers/registry.py \
             src/app/providers/facade.py \
