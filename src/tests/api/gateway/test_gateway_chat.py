@@ -38,11 +38,11 @@ def _client(tmp_path: Path) -> TestClient:
 
 
 def _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service) -> None:
-    monkeypatch.setattr(prompt_store, "get_provider", provider_service.get_provider)
-    from app.chat import live_chat_low_latency_stream
+    monkeypatch.setattr(prompt_store.provider_service, "get_provider", provider_service.get_provider)
+    from app.live_voice.llm import stream as live_voice_stream
 
     monkeypatch.setattr(
-        live_chat_low_latency_stream,
+        live_voice_stream,
         "get_provider",
         provider_service.get_provider,
     )
@@ -105,7 +105,7 @@ def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monke
         ),
     )
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Question"}).json()
 
@@ -148,7 +148,7 @@ def test_gateway_chat_submission_retry_reuses_message_and_job(tmp_path: Path, mo
 
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Retry"}).json()
     body = {
@@ -221,7 +221,7 @@ def test_gateway_chat_cancel_cannot_commit_late_provider_reply(tmp_path: Path, m
 
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Cancel"}).json()
     accepted = client.post(
@@ -271,7 +271,7 @@ def test_gateway_interrupts_active_generation_within_a_chat_session(tmp_path: Pa
 
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=chat_completion))
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     client = _client(tmp_path)
     session = client.post("/api/chat/sessions", json={"title": "Ordered"}).json()
     first = client.post(
@@ -331,7 +331,7 @@ def test_gateway_registers_quick_search_context_route_on_direct_main_import(
 
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(QuickSearchService, "search", fake_search)
 
     client = _client(tmp_path)
@@ -381,7 +381,7 @@ def test_context_completion_failure_removes_unvalidated_reply(tmp_path: Path, mo
         ),
     )
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         QuickSearchService,
         "search",
@@ -450,7 +450,7 @@ def test_gateway_registers_desktop_context_for_streamed_chat(
 
     monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: SimpleNamespace(chat_completion=fake_chat_completion))
     _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service)
-    monkeypatch.setattr(prompt_store, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(prompt_store.provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(DesktopVisionClient, "describe", fake_describe)
     monkeypatch.setenv("OMNIX_VISION_PROVIDER", "lmstudio")
     monkeypatch.setenv("OMNIX_VISION_MODEL", "fixture:vision")

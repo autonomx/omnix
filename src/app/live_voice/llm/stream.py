@@ -1,27 +1,20 @@
 """Emit provider text with immediate typed-chat and lexical voice delivery.
 
-The legacy chat stream waited for sentence-ending punctuation before yielding any
-text. That made a fast provider look slow and delayed live-call TTS. This hook is
-installed before provider-specific wrappers so every ordinary provider gets the
-same boundary-safe first-text policy while LM Studio retains its richer metrics
-path.
+The legacy chat stream waited for sentence-ending punctuation before yielding
+text. This feature-owned stream keeps first text boundary-safe for typed Chat and
+live voice while provider-specific adapters add their own metrics.
 """
 from __future__ import annotations
 
 import time
-from functools import wraps
 from typing import Any, Iterator
 
-from app.chat.memory_commands import parse_memory_command
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
-from app.chat.prompt_store import route_typed_stream_boundary
 from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from app.chat.store import _model_key, _provider_key
 from app.providers.service import get_provider
 
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_live_chat_low_latency_stream_installed"
 _FIRST_TEXT_MAX_CHARS = 48
 _STEADY_TEXT_TARGET_CHARS = 32
 _STEADY_TEXT_MAX_CHARS = 96
@@ -168,8 +161,8 @@ def _json_safe_provider_value(value: Any) -> Any:
     return str(value)
 
 
-def _stream_low_latency_reply(
-    self: PromptChatSessionStore,
+def stream_low_latency_reply(
+    self: Any,
     session: Any,
     user_message: Any,
     *,
@@ -312,63 +305,3 @@ def _stream_low_latency_reply(
             **({"usage": usage_payload} if usage_payload is not None else {}),
         },
     }
-
-
-def install_live_chat_low_latency_stream_hook() -> None:
-    """Replace sentence-buffered ordinary provider streaming once."""
-
-    if getattr(PromptChatSessionStore, _HOOK_SENTINEL, False):
-        return
-    original_stream = PromptChatSessionStore.stream_provider_reply_chunks
-
-    @wraps(original_stream)
-    def patched_stream(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]] | None = None,
-        routing_deadline_at: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        if parse_memory_command(user_message.content) is not None:
-            yield from original_stream(
-                self,
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                routing_deadline_at=routing_deadline_at,
-            )
-            return
-        routing_deadline_at = provider_turn_deadline(
-            provider_id,
-            session_provider_id=getattr(session, "provider_id", None),
-            existing_deadline_at=routing_deadline_at,
-        )
-        boundary_events = route_typed_stream_boundary(
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            routing_deadline_at=routing_deadline_at,
-        )
-        if boundary_events is not None:
-            yield from boundary_events
-            return
-        yield from _stream_low_latency_reply(
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            routing_deadline_at=routing_deadline_at,
-        )
-
-    PromptChatSessionStore.stream_provider_reply_chunks = patched_stream
-    setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)

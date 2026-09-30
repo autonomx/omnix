@@ -699,66 +699,17 @@ class ChatSessionStore(JsonChatSessionStore):
             yield from boundary_events
             return
 
-        routing_deadline_at = provider_turn_deadline(
-            provider_id,
-            session_provider_id=getattr(session, "provider_id", None),
-            existing_deadline_at=routing_deadline_at,
-        )
+        from app.live_voice.llm.stream import stream_low_latency_reply
 
-        provider = provider_service.get_provider(_provider_key(provider_id))
-        if provider is None:
-            raise RuntimeError("Chat provider is not available")
-        assembly, rendered = self.build_provider_prompt(
+        yield from stream_low_latency_reply(
+            self,
             session,
             user_message,
-            context_items or [],
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
         )
-        messages = self._provider_messages_from_rendered(session, user_message, rendered)
-        model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
-        from app.providers.structured.errors import ProviderTimeout
-
-        remaining = remaining_turn_seconds(routing_deadline_at)
-        if remaining is not None:
-            if remaining <= 0:
-                raise ProviderTimeout("chat turn deadline has expired")
-            completion_kwargs["request_timeout_seconds"] = remaining
-        response = provider.chat_completion(
-            messages=messages,
-            model=model_name,
-            stream=True,
-            **completion_kwargs,
-        )
-        pending = ""
-        full_text = ""
-        resolved_model = model_name
-        usage = None
-        for chunk in response:
-            text = getattr(chunk, "content", "") or ""
-            if not text:
-                continue
-            resolved_model = getattr(chunk, "model", None) or resolved_model
-            usage = getattr(chunk, "usage", None) or usage
-            full_text += text
-            pending += text
-            ready, pending = _pop_ready_sentences(pending)
-            for sentence in ready:
-                yield {"type": "text_chunk", "text": sentence}
-        if pending.strip():
-            yield {"type": "text_chunk", "text": pending.strip()}
-        yield {
-            "type": "complete",
-            "content": full_text.strip(),
-            "metadata": {
-                "generation_status": "completed",
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "resolved_model": resolved_model,
-                **self._active_memory_metadata(assembly, rendered),
-                **self._active_history_metadata(assembly),
-                **({"usage": usage} if usage else {}),
-            },
-        }
 
     @staticmethod
     def _summary(session: ChatSession) -> ChatSessionSummary:

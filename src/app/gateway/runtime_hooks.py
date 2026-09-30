@@ -13,7 +13,6 @@ from app.chat.live_chat_lmstudio_diagnostics import (
     install_live_chat_lmstudio_diagnostics_hook,
 )
 from app.chat.live_chat_lmstudio_responses import install_live_chat_lmstudio_responses_hook
-from app.chat.live_chat_low_latency_stream import install_live_chat_low_latency_stream_hook
 from app.chat.live_chat_provider_metrics import install_live_chat_provider_metrics_hook
 from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
 from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
@@ -110,7 +109,6 @@ def initialize_gateway_runtime_hooks():
 
     configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     install_companion_activity_user_turn_hook()
-    install_live_chat_low_latency_stream_hook()
     install_live_chat_provider_metrics_hook()
     install_live_chat_stream_retry_hook()
     install_live_chat_provider_routing_hook()

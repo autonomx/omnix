@@ -32,6 +32,9 @@ class RecordingChatStore:
         )
         return result
 
+    def begin_streaming_user_message(self, session_id: str, request: Any) -> Any:
+        return self.begin_user_message(session_id, request, start_streaming=True)
+
     def stream_provider_reply_chunks(self, session: Any, user_message: Any, **kwargs: Any):
         self.calls.append(
             {
@@ -106,10 +109,10 @@ def test_chat_live_sse_turn_matches_pre_refactor_golden(
         }
     )
     monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
-    from app.chat import live_chat_low_latency_stream
+    from app.live_voice.llm import stream as live_voice_stream
 
     monkeypatch.setattr(
-        live_chat_low_latency_stream, "get_provider", lambda _name=None: provider
+        live_voice_stream, "get_provider", lambda _name=None: provider
     )
 
     store = RecordingChatStore(ChatSessionStore(tmp_path / "chat.json"))
