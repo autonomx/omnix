@@ -37,3 +37,11 @@ the assembled provider messages and prompt-budget diagnostics.
 `live-voice-tts-lane` fixes streamed response text, records the existing phrase
 splitter's complete phrases and final tail, and schedules deterministic PCM
 frames through the accepted TTS lane using `FakeTTS`.
+
+## RPG turn scenario
+
+`rpg-turn` records a seeded 20-turn execution-pipeline run. Prompt-hash keyed
+`FakeLLMProvider` actions cover first call, combat, dialogue, item use, travel,
+idle and fast-path conflict resolution. The golden stores each turn's visible
+response, emitted events, director feedback, arc updates and simulation-state
+hash; the test replays the same recorded inputs before comparing it.
