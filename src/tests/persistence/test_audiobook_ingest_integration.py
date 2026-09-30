@@ -58,6 +58,24 @@ def _queue_analysis(database, context, project_id):
         work.commit()
 
 
+def _expire_job_and_make_retry_due(work, context, job_id: str) -> None:
+    """Release a simulated crashed attempt and bypass its durable retry delay."""
+    work.connection.execute(
+        """UPDATE omnix_jobs
+              SET lease_expires_at = clock_timestamp() - INTERVAL '1 second'
+            WHERE workspace_id = %s AND id = %s""",
+        (context.workspace_id, job_id),
+    )
+    released = work.jobs.release_expired_leases(context, job_id=job_id)
+    assert len(released) == 1 and released[0]["status"] == "retrying"
+    work.connection.execute(
+        """UPDATE omnix_jobs
+              SET available_at = clock_timestamp() - INTERVAL '1 second'
+            WHERE workspace_id = %s AND id = %s AND status = 'retrying'""",
+        (context.workspace_id, job_id),
+    )
+
+
 @pytest.fixture(autouse=True)
 def _synthetic_tts_model_revision(monkeypatch) -> None:
     """These pipeline tests replace TTS; model artifact binding has separate tests."""
@@ -1060,13 +1078,7 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
                 (context.workspace_id, project["id"]),
             ).fetchone()
             assert first_attempt and first_attempt[1] == 0
-            work.connection.execute(
-                """UPDATE omnix_jobs
-                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
-                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
-                    WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, first_attempt[0]),
-            )
+            _expire_job_and_make_retry_due(work, context, first_attempt[0])
             work.commit()
         crashed = subprocess.run(
             [sys.executable, "-c", child_code, os.environ["OMNIX_TEST_DATABASE_URL"],
@@ -1083,13 +1095,7 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
                 (context.workspace_id, project["id"]),
             ).fetchone()
             assert checkpoint and len(checkpoint[0]) == 1
-            work.connection.execute(
-                """UPDATE omnix_jobs
-                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
-                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
-                    WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, checkpoint[1]),
-            )
+            _expire_job_and_make_retry_due(work, context, checkpoint[1])
             work.commit()
         assert run_render_once(database, blobs, context, worker_id="test:golden-render")
         assert run_render_once(database, blobs, context, worker_id="test:golden-render")
@@ -1662,13 +1668,7 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
                                         generation_parameters={}, seed=None).key()
                     if find_valid_render(work.connection, context, blobs, key) is None:
                         missing_after_crash += 1
-            work.connection.execute(
-                """UPDATE omnix_jobs
-                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
-                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
-                    WHERE workspace_id = %s AND id = %s AND status = 'running'""",
-                (context.workspace_id, checkpoint[1]),
-            )
+            _expire_job_and_make_retry_due(work, context, checkpoint[1])
             work.commit()
         for _ in range(5):
             if service.get_project(context, project["id"])["state"] == "mastering":
