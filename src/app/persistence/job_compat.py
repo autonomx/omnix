@@ -61,6 +61,28 @@ class PostgresJobStoreAdapter:
     def configure_handler_registry(self, registry: Any) -> None:
         self.handler_registry = registry
 
+    def _hydrate_job_logs(self, work: Any, record: dict[str, Any] | None) -> dict[str, Any] | None:
+        if record is None:
+            return None
+        hydrated = dict(record)
+        hydrated["logs"] = work.jobs.list_job_logs(self.context, job_id=str(record["id"]))
+        return hydrated
+
+    def _record_only_mutation_identity(
+        self, job_id: str, worker_id: str | None, lease_token: str | None
+    ) -> tuple[str | None, str | None]:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("job mutation requires both lease credentials")
+        if worker_id and lease_token:
+            return None, None
+        current = self.get_job(job_id)
+        if current is None or not self._runs_without_worker_lease(current):
+            raise JobClaimConflict(f"job mutation requires caller lease credentials: {job_id}")
+        return (
+            getattr(self.chat_execution_owner, "node_id", None),
+            self._foreground_claim_token(current),
+        )
+
     def _notify_job_observers(self, event: str, record: JobRecord) -> None:
         registry = self.handler_registry
         if registry is not None:
@@ -91,8 +113,14 @@ class PostgresJobStoreAdapter:
             "stages": [stage.model_dump(mode="json") for stage in stages],
             "input_ref": request_payload.get("input_ref"),
             "compat": request_payload.get("compat") or {},
-            "logs": [],
             "cancel": {},
+        }
+        backoff = handler.retry_backoff if handler is not None else None
+        metadata["retry_backoff"] = {
+            "base_seconds": float(getattr(backoff, "base_seconds", 2.0)),
+            "factor": float(getattr(backoff, "factor", 2.0)),
+            "max_seconds": float(getattr(backoff, "max_seconds", 300.0)),
+            "jitter": float(getattr(backoff, "jitter", 0.2)),
         }
         with unit_of_work(self.database) as work:
             owner = self.chat_execution_owner
@@ -137,12 +165,18 @@ class PostgresJobStoreAdapter:
                 self.context,
                 limit=500 if limit is None else limit,
             )
+            logs_by_job = work.jobs.list_job_logs_for_jobs(
+                self.context, job_ids=[str(record["id"]) for record in records]
+            )
+            for record in records:
+                record["logs"] = logs_by_job.get(str(record["id"]), [])
             work.rollback()
         return [self._record(record) for record in records]
 
     def get_job(self, job_id: str) -> JobRecord | None:
         with unit_of_work(self.database) as work:
             record = work.jobs.get_job(self.context, job_id)
+            record = self._hydrate_job_logs(work, record)
             work.rollback()
         return self._record(record) if record is not None else None
 
@@ -178,6 +212,7 @@ class PostgresJobStoreAdapter:
                 resource_classes=resource_classes,
                 lease_seconds=lease_seconds,
             )
+            record = self._hydrate_job_logs(work, record)
             work.commit()
         if record is None:
             return ClaimJobResponse(ok=False, reason="no_runnable_job")
@@ -191,133 +226,113 @@ class PostgresJobStoreAdapter:
         lease_token: str | None = None,
         lease_seconds: int = 30,
     ) -> JobRecord | None:
-        current = self.get_job(job_id)
-        if current is None:
-            return None
-        lease = getattr(current, "lease", None)
-        owner = worker_id or self._lease_value(lease, "worker_id", "owner_id")
-        token = lease_token or self._lease_value(lease, "lease_token", "token")
-        if not owner or not token:
+        if not worker_id or not lease_token:
             raise JobClaimConflict(f"job has no active lease: {job_id}")
         with unit_of_work(self.database) as work:
-            record = work.jobs.renew_lease(
+            work.jobs.renew_lease(
                 self.context,
                 job_id=job_id,
-                worker_id=owner,
-                lease_token=token,
+                worker_id=worker_id,
+                lease_token=lease_token,
                 lease_seconds=lease_seconds,
             )
             work.commit()
-        return self._record(record)
+        return self.get_job(job_id)
 
-    def mark_running(self, job_id: str) -> JobRecord | None:
-        current = self.get_job(job_id)
-        if current is None:
-            return None
-        if current.status == JobStatus.RUNNING:
-            return current
-        if self._runs_without_worker_lease(current):
+    def mark_running(
+        self,
+        job_id: str,
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("mark_running requires both lease credentials")
+        if not worker_id:
+            current = self.get_job(job_id)
+            if current is None:
+                return None
+            if not self._runs_without_worker_lease(current):
+                raise JobClaimConflict(f"job start requires caller lease credentials: {job_id}")
             with unit_of_work(self.database) as work:
                 record = work.jobs.mark_record_only_running(
                     self.context, job_id=job_id,
                     execution_owner=getattr(self.chat_execution_owner, "node_id", None),
                     submission_claim_token=self._foreground_claim_token(current),
                 )
+                record = self._hydrate_job_logs(work, record)
                 work.commit()
             started = self._record(record)
             self._notify_job_observers("started", started)
             return started
-        lease = getattr(current, "lease", None)
-        owner = self._lease_value(lease, "worker_id", "owner_id")
-        token = self._lease_value(lease, "lease_token", "token")
-        if not owner or not token:
-            return current
         with unit_of_work(self.database) as work:
             record = work.jobs.mark_running(
                 self.context,
                 job_id=job_id,
-                worker_id=owner,
-                lease_token=token,
+                worker_id=worker_id,
+                lease_token=lease_token,
             )
+            record = self._hydrate_job_logs(work, record)
             work.commit()
         started = self._record(record)
         self._notify_job_observers("started", started)
         return started
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
-        current = self.get_job(job_id)
-        if current is None:
-            return None
-        lease = getattr(current, "lease", None)
         owner = request.worker_id
         token = request.lease_token
-        if lease is None:
-            if not owner and not token and self._runs_without_worker_lease(current):
-                request_payload = request.model_dump(mode="json")
-                with unit_of_work(self.database) as work:
-                    self._append_compat_logs(work, job_id, request_payload.get("logs") or [])
-                    record = work.jobs.complete_record_only(
-                        self.context,
-                        job_id=job_id,
-                        output_refs=request.output_refs,
-                        progress={"current": 1, "total": 1, "message": "completed"},
-                        execution_owner=getattr(self.chat_execution_owner, "node_id", None),
-                        submission_claim_token=self._foreground_claim_token(current),
-                    )
-                    work.commit()
-                completed = self._record(record)
-                self._notify_job_observers("completed", completed)
-                return completed
-            raise JobClaimConflict(f"job completion requires an active lease: {job_id}")
-        if not owner or not token:
+        if bool(owner) != bool(token):
             raise JobClaimConflict(f"job completion requires caller lease credentials: {job_id}")
         request_payload = request.model_dump(mode="json")
-        with unit_of_work(self.database) as work:
-            self._append_compat_logs(work, job_id, request_payload.get("logs") or [])
-            record = work.jobs.complete(
-                self.context,
-                job_id=job_id,
-                worker_id=owner,
-                lease_token=token,
-                output_refs=request.output_refs,
-                progress={"current": 1, "total": 1, "message": "completed"},
+        if owner and token:
+            execution_owner = submission_token = None
+        else:
+            current = self.get_job(job_id)
+            if current is None:
+                return None
+            if not self._runs_without_worker_lease(current):
+                raise JobClaimConflict(f"job completion requires an active lease: {job_id}")
+            execution_owner, submission_token = self._record_only_mutation_identity(
+                job_id, None, None
             )
+        with unit_of_work(self.database) as work:
+            if owner and token:
+                self._append_compat_logs(
+                    work, job_id, request_payload.get("logs") or [],
+                    worker_id=owner, lease_token=token,
+                )
+                record = work.jobs.complete(
+                    self.context,
+                    job_id=job_id,
+                    worker_id=owner,
+                    lease_token=token,
+                    output_refs=request.output_refs,
+                    progress={"current": 1, "total": 1, "message": "completed"},
+                )
+            else:
+                self._append_compat_logs(
+                    work, job_id, request_payload.get("logs") or [],
+                    execution_owner=execution_owner,
+                    submission_claim_token=submission_token,
+                )
+                record = work.jobs.complete_record_only(
+                    self.context,
+                    job_id=job_id,
+                    output_refs=request.output_refs,
+                    progress={"current": 1, "total": 1, "message": "completed"},
+                    execution_owner=execution_owner,
+                    submission_claim_token=submission_token,
+                )
+            record = self._hydrate_job_logs(work, record)
             work.commit()
         completed = self._record(record)
         self._notify_job_observers("completed", completed)
         return completed
 
     def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
-        current = self.get_job(job_id)
-        if current is None:
-            return None
-        lease = getattr(current, "lease", None)
         owner = request.worker_id
         token = request.lease_token
-        if lease is None:
-            if not owner and not token and self._runs_without_worker_lease(current):
-                payload = request.model_dump(mode="json")
-                error = {
-                    "code": payload.get("code") or "job_failed",
-                    "message": payload.get("message") or "job failed",
-                    "retryable": bool(payload.get("retryable", False)),
-                    "details": payload.get("details") or {},
-                }
-                with unit_of_work(self.database) as work:
-                    self._append_compat_logs(work, job_id, payload.get("logs") or [])
-                    record = work.jobs.fail_record_only(
-                        self.context,
-                        job_id=job_id,
-                        error=error,
-                        execution_owner=getattr(self.chat_execution_owner, "node_id", None),
-                        submission_claim_token=self._foreground_claim_token(current),
-                    )
-                    work.commit()
-                failed = self._record(record)
-                self._notify_job_observers("failed", failed)
-                return failed
-            raise JobClaimConflict(f"job failure requires an active lease: {job_id}")
-        if not owner or not token:
+        if bool(owner) != bool(token):
             raise JobClaimConflict(f"job failure requires caller lease credentials: {job_id}")
         payload = request.model_dump(mode="json")
         error = payload.get("error") or {
@@ -325,16 +340,45 @@ class PostgresJobStoreAdapter:
             "message": payload.get("message") or "job failed",
             "retryable": bool(payload.get("retryable", False)),
         }
-        with unit_of_work(self.database) as work:
-            self._append_compat_logs(work, job_id, payload.get("logs") or [])
-            record = work.jobs.fail(
-                self.context,
-                job_id=job_id,
-                worker_id=owner,
-                lease_token=token,
-                error=error,
-                retry_delay_seconds=int(getattr(request, "_retry_delay_seconds", 0) or 0),
+        if owner and token:
+            execution_owner = submission_token = None
+        else:
+            current = self.get_job(job_id)
+            if current is None:
+                return None
+            if not self._runs_without_worker_lease(current):
+                raise JobClaimConflict(f"job failure requires an active lease: {job_id}")
+            execution_owner, submission_token = self._record_only_mutation_identity(
+                job_id, None, None
             )
+        with unit_of_work(self.database) as work:
+            if owner and token:
+                self._append_compat_logs(
+                    work, job_id, payload.get("logs") or [],
+                    worker_id=owner, lease_token=token,
+                )
+                record = work.jobs.fail(
+                    self.context,
+                    job_id=job_id,
+                    worker_id=owner,
+                    lease_token=token,
+                    error=error,
+                    retry_delay_seconds=int(getattr(request, "_retry_delay_seconds", 0) or 0),
+                )
+            else:
+                self._append_compat_logs(
+                    work, job_id, payload.get("logs") or [],
+                    execution_owner=execution_owner,
+                    submission_claim_token=submission_token,
+                )
+                record = work.jobs.fail_record_only(
+                    self.context,
+                    job_id=job_id,
+                    error=error,
+                    execution_owner=execution_owner,
+                    submission_claim_token=submission_token,
+                )
+            record = self._hydrate_job_logs(work, record)
             work.commit()
         failed = self._record(record)
         self._notify_job_observers("failed", failed)
@@ -367,15 +411,30 @@ class PostgresJobStoreAdapter:
             payload = request.model_dump(mode="json")
             work.jobs.set_cancel_compat(self.context, job_id=job_id, payload=payload)
             updated = work.jobs.get_job(self.context, job_id)
+            updated = self._hydrate_job_logs(work, updated)
             work.commit()
         return self._record(updated) if updated is not None else None
 
-    def update_progress(self, job_id: str, progress: JobProgress) -> JobRecord | None:
+    def update_progress(
+        self,
+        job_id: str,
+        progress: JobProgress,
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        execution_owner, submission_token = self._record_only_mutation_identity(
+            job_id, worker_id, lease_token
+        )
         with unit_of_work(self.database) as work:
             updated = work.jobs.update_progress_compat(
                 self.context,
                 job_id=job_id,
                 progress=progress.model_dump(mode="json"),
+                worker_id=worker_id,
+                lease_token=lease_token,
+                execution_owner=execution_owner,
+                submission_claim_token=submission_token,
             )
             work.commit()
         return self.get_job(job_id) if updated else None
@@ -386,43 +445,114 @@ class PostgresJobStoreAdapter:
         input_payload: dict[str, Any],
         *,
         compat: dict[str, Any] | None = None,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
     ) -> JobRecord | None:
+        execution_owner, submission_token = self._record_only_mutation_identity(
+            job_id, worker_id, lease_token
+        )
         with unit_of_work(self.database) as work:
             updated = work.jobs.update_input_compat(
                 self.context,
                 job_id=job_id,
                 input_payload=input_payload,
                 compat=compat,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                execution_owner=execution_owner,
+                submission_claim_token=submission_token,
             )
             work.commit()
         return self.get_job(job_id) if updated else None
 
-    def update_job_stages(self, job_id: str, stages: list[JobStage]) -> JobRecord | None:
+    def update_awaiting_plan_input(
+        self,
+        job_id: str,
+        input_payload: dict[str, Any],
+        *,
+        compat: dict[str, Any] | None = None,
+    ) -> JobRecord | None:
+        with unit_of_work(self.database) as work:
+            updated = work.jobs.update_awaiting_plan_input(
+                self.context,
+                job_id=job_id,
+                input_payload=input_payload,
+                compat=compat,
+            )
+            record = self._hydrate_job_logs(
+                work, work.jobs.get_job(self.context, job_id)
+            ) if updated else None
+            work.commit()
+        return self._record(record) if record is not None else None
+
+    def update_job_stages(
+        self,
+        job_id: str,
+        stages: list[JobStage],
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        execution_owner, submission_token = self._record_only_mutation_identity(
+            job_id, worker_id, lease_token
+        )
         with unit_of_work(self.database) as work:
             updated = work.jobs.update_stages_compat(
                 self.context,
                 job_id=job_id,
                 stages=[stage.model_dump(mode="json") for stage in stages],
+                worker_id=worker_id,
+                lease_token=lease_token,
+                execution_owner=execution_owner,
+                submission_claim_token=submission_token,
             )
             work.commit()
         return self.get_job(job_id) if updated else None
 
-    def finalize_cancel(self, job_id: str, reason: str) -> JobRecord | None:
+    def finalize_cancel(
+        self,
+        job_id: str,
+        reason: str,
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        execution_owner, submission_token = self._record_only_mutation_identity(
+            job_id, worker_id, lease_token
+        )
         now = _utcnow()
         with unit_of_work(self.database) as work:
             updated = work.jobs.finalize_cancel_compat(
-                self.context, job_id=job_id, reason=reason, now=now
+                self.context, job_id=job_id, reason=reason, now=now,
+                worker_id=worker_id,
+                lease_token=lease_token,
+                execution_owner=execution_owner,
+                submission_claim_token=submission_token,
             )
             work.commit()
         return self.get_job(job_id) if updated else None
 
-    def append_log(self, job_id: str, message: str) -> JobRecord | None:
+    def append_log(
+        self,
+        job_id: str,
+        message: str,
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        execution_owner, submission_token = self._record_only_mutation_identity(
+            job_id, worker_id, lease_token
+        )
         with unit_of_work(self.database) as work:
-            record = work.jobs.get_job(self.context, job_id)
-            if record is None:
-                work.rollback()
-                return None
-            self._append_compat_logs(work, job_id, [str(message)])
+            self._append_compat_logs(
+                work,
+                job_id,
+                [str(message)],
+                worker_id=worker_id,
+                lease_token=lease_token,
+                execution_owner=execution_owner,
+                submission_claim_token=submission_token,
+            )
             work.commit()
         return self.get_job(job_id)
 
@@ -492,17 +622,30 @@ class PostgresJobStoreAdapter:
 
         return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    def _append_compat_logs(self, work: Any, job_id: str, logs: list[Any]) -> None:
+    def _append_compat_logs(
+        self,
+        work: Any,
+        job_id: str,
+        logs: list[Any],
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
+    ) -> None:
         if not logs:
             return
-        record = work.jobs.get_job(self.context, job_id)
-        if record is None:
-            return
-        work.jobs.append_compat_logs(
+        appended = work.jobs.append_compat_logs(
             self.context,
             job_id=job_id,
             logs=[self._compat_log(item) for item in logs],
+            worker_id=worker_id,
+            lease_token=lease_token,
+            execution_owner=execution_owner,
+            submission_claim_token=submission_claim_token,
         )
+        if not appended:
+            raise JobClaimConflict(f"job log append rejected: {job_id}")
 
     @staticmethod
     def _compat_log(value: Any) -> dict[str, Any]:
@@ -566,7 +709,7 @@ class PostgresJobStoreAdapter:
                 "priority": value["priority"],
                 "stages": stages,
                 "progress": progress,
-                "logs": [self._compat_log(item) for item in contract.get("logs") or []],
+                "logs": [self._compat_log(item) for item in value.get("logs") or []],
                 "input_ref": contract.get("input_ref"),
                 "input_payload": value.get("input_payload") or {},
                 "output_refs": value.get("output_refs") or [],

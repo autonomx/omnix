@@ -146,11 +146,18 @@ class MemoryJobExecution:
         if work is None:
             raise RuntimeError("Memory completion requires its result transaction")
         self._require_lease(work)
+        self.store._append_compat_logs(
+            work,
+            job_id,
+            request.logs,
+            worker_id=self.worker_id,
+            lease_token=self.lease_token,
+        )
         record = work.jobs.complete(
             self.store.context, job_id=job_id, worker_id=self.worker_id,
             lease_token=self.lease_token, output_refs=request.output_refs,
         )
-        self.store._append_compat_logs(work, job_id, request.logs)
+        record = self.store._hydrate_job_logs(work, record)
         self._completed = True
         return self.store._record(record)
 

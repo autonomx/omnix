@@ -38,12 +38,12 @@ class LocalJobExecutor:
         if not claim.ok or claim.job is None:
             return None
 
-        job = self.store.mark_running(claim.job.id) or claim.job
         # Retain the credentials from this claim, never from a later row read.
         credentials: dict[str, Any] = {
             "worker_id": self.worker_id,
             "lease_token": claim.job.lease.token if claim.job.lease is not None else None,
         }
+        job = self.store.mark_running(claim.job.id, **credentials) or claim.job
         handler = self.handlers.get(job.type)
         if handler is None:
             return self.store.fail_job(

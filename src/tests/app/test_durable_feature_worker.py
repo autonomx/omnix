@@ -185,6 +185,17 @@ def test_fail_job_retry_delay_is_not_part_of_public_request_schema():
     assert "retry_delay_seconds" not in FailJobRequest.model_json_schema()["properties"]
 
 
+def test_registered_retry_delay_has_a_one_second_floor():
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(
+            type="feature.zero-delay",
+            handler=lambda context, job: job,
+            retry_backoff=Backoff(base_seconds=0, jitter=0),
+        ),
+    ))
+    assert registry.retry_delay_seconds("feature.zero-delay", 1) == 1
+
+
 def test_unknown_durable_type_fails_nonretryably_with_lease_credentials():
     calls = []
     expected = SimpleNamespace(status="failed")
@@ -216,6 +227,10 @@ def test_authority_bound_store_is_the_execution_fence(live):
         database = SimpleNamespace()
         context = SimpleNamespace(workspace_id="workspace:test")
 
+        def update_progress(self, job_id, progress, **credentials):
+            events.append(("progress", job_id, progress, credentials))
+            return SimpleNamespace(status="running")
+
         def complete_job(self, job_id, request):
             events.append("complete")
             return SimpleNamespace(status="completed")
@@ -228,11 +243,19 @@ def test_authority_bound_store_is_the_execution_fence(live):
     fenced = _AuthorityBoundJobStore(Store(), authority, job)
 
     if live:
-        # The database lease query is covered by PostgreSQL integration tests.
-        assert fenced.get_job if hasattr(fenced, "get_job") else True
+        fenced.update_progress("job:rpg", progress={"current": 1})
+        assert events == [(
+            "progress",
+            "job:rpg",
+            {"current": 1},
+            {"worker_id": "worker:test", "lease_token": "lease-token"},
+        )]
+        assert authority.checks == 1
     else:
         with pytest.raises(RuntimeError, match="authority lost"):
-            fenced.require_execution_authority(job.id)
+            fenced.update_progress("job:rpg", progress={"current": 1})
+        assert events == []
+        assert authority.checks == 1
 
 
 def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):

@@ -113,13 +113,17 @@ class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapte
         message: str | None = None,
         stage_id: str | None = None,
         stage_status: JobStatus = JobStatus.RUNNING,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
     ) -> JobRecord | None:
         value = progress or JobProgress(
             current=max(0, int(current or 0)),
             total=max(1, int(total or 1)),
             message=message,
         )
-        updated = super().update_progress(job_id, value)
+        updated = super().update_progress(
+            job_id, value, worker_id=worker_id, lease_token=lease_token
+        )
         if not stage_id:
             return updated
         record = updated or self.get_job(job_id)
@@ -140,7 +144,9 @@ class PostgresJobStoreAdapter(ChatExecutionTransactions, _PostgresJobStoreAdapte
             else stage
             for stage in record.stages
         ]
-        return self.update_job_stages(job_id, stages) or record
+        return self.update_job_stages(
+            job_id, stages, worker_id=worker_id, lease_token=lease_token
+        ) or record
 
     def latest_event_id(self) -> int:
         with unit_of_work(self.database) as work:

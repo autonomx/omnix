@@ -133,9 +133,9 @@ class JobHandlerRegistry:
     def retry_delay_seconds(self, job_type: str, attempt_count: int) -> int:
         spec = self.get(job_type)
         if spec is None:
-            return 0
+            return 1
         attempt = max(0, int(attempt_count) - 1)
-        return max(0, math.ceil(spec.retry_backoff.delay(attempt)))
+        return max(1, math.ceil(spec.retry_backoff.delay(attempt)))
 
     def validate_submission(self, request: CreateJobRequest) -> CreateJobRequest:
         spec = self.get(request.type)
@@ -183,7 +183,7 @@ class RetryPolicyJobStore:
                 self._attempt_count,
             )
             request = request.model_copy(deep=True)
-            request._retry_delay_seconds = max(request._retry_delay_seconds, delay)
+            request._retry_delay_seconds = max(1, request._retry_delay_seconds, delay)
         return self._job_store.fail_job(job_id, request)
 
     def __getattr__(self, name: str) -> Any:

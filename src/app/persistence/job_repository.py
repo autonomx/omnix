@@ -5,8 +5,15 @@ from typing import Any, Literal
 
 from .execution_repositories import JobClaimConflict
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
-from .execution_repositories import _job, _json
+from .execution_repositories import (
+    _FOREGROUND_OWNER_GUARD as _BASE_FOREGROUND_OWNER_GUARD,
+    _job,
+    _json,
+)
 from .tenant import TenantContext
+
+
+_FOREGROUND_OWNER_GUARD = _BASE_FOREGROUND_OWNER_GUARD.replace("omnix_jobs.", "jobs.")
 
 
 _QUALIFIED_JOB_COLUMNS = """
@@ -247,13 +254,32 @@ class PostgresJobRepository(_BaseJobRepository):
         )
 
     def update_progress_compat(
-        self, context: TenantContext, *, job_id: str, progress: dict[str, Any]
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        progress: dict[str, Any],
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> bool:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("job progress update requires both lease credentials")
+        if worker_id and lease_token:
+            predicate = """AND jobs.lease_owner = %s AND jobs.lease_token = %s
+                             AND jobs.status IN ('running', 'cancel_requested')
+                             AND jobs.lease_expires_at > clock_timestamp()"""
+            credentials: tuple[Any, ...] = (worker_id, lease_token)
+        else:
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
+            credentials = (execution_owner, submission_claim_token)
         row = self.connection.execute(
-            """UPDATE omnix_jobs
-                  SET progress = %s::jsonb, updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND workspace_id = %s RETURNING id""",
-            (_json(progress), job_id, context.workspace_id),
+            f"""UPDATE omnix_jobs AS jobs
+                  SET progress = %s::jsonb, updated_at = clock_timestamp()
+                WHERE jobs.id = %s AND jobs.workspace_id = %s {predicate}
+                RETURNING jobs.id""",
+            (_json(progress), job_id, context.workspace_id, *credentials),
         ).fetchone()
         return row is not None
 
@@ -264,45 +290,108 @@ class PostgresJobRepository(_BaseJobRepository):
         job_id: str,
         input_payload: dict[str, Any],
         compat: dict[str, Any] | None = None,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> bool:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("job input update requires both lease credentials")
+        if worker_id and lease_token:
+            predicate = """AND jobs.lease_owner = %s AND jobs.lease_token = %s
+                             AND jobs.status IN ('running', 'cancel_requested')
+                             AND jobs.lease_expires_at > clock_timestamp()"""
+            credentials: tuple[Any, ...] = (worker_id, lease_token)
+        else:
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
+            credentials = (execution_owner, submission_claim_token)
         compat_patch = _json(compat or {})
+        row = self.connection.execute(
+            f"""UPDATE omnix_jobs AS jobs
+                  SET input_payload = %s::jsonb,
+                      metadata = CASE WHEN %s::boolean THEN
+                          jsonb_set(
+                              jobs.metadata,
+                              '{{compat_contract,compat}}',
+                              ((COALESCE(jobs.metadata #> '{{compat_contract,compat}}', '{{}}'::jsonb)
+                                  - 'execution_owner') || %s::jsonb ||
+                               CASE WHEN COALESCE(jobs.metadata #> '{{compat_contract,compat}}', '{{}}'::jsonb)
+                                             ? 'execution_owner'
+                                    THEN jsonb_build_object(
+                                        'execution_owner',
+                                        jobs.metadata #> '{{compat_contract,compat}}' -> 'execution_owner'
+                                    )
+                                    ELSE '{{}}'::jsonb END),
+                              TRUE
+                          )
+                      ELSE jobs.metadata END,
+                      updated_at = clock_timestamp()
+                WHERE jobs.id = %s AND jobs.workspace_id = %s {predicate}
+                RETURNING jobs.id""",
+            (_json(input_payload), compat is not None, compat_patch,
+             job_id, context.workspace_id, *credentials),
+        ).fetchone()
+        return row is not None
+
+    def update_awaiting_plan_input(
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        input_payload: dict[str, Any],
+        compat: dict[str, Any] | None = None,
+    ) -> bool:
+        """Update only a caller-owned research plan that is awaiting approval."""
         row = self.connection.execute(
             """UPDATE omnix_jobs
                   SET input_payload = %s::jsonb,
                       metadata = CASE WHEN %s::boolean THEN
-                          jsonb_set(
-                              metadata,
-                              '{compat_contract,compat}',
-                              ((COALESCE(metadata #> '{compat_contract,compat}', '{}'::jsonb)
-                                  - 'execution_owner') || %s::jsonb ||
-                               CASE WHEN COALESCE(metadata #> '{compat_contract,compat}', '{}'::jsonb)
-                                             ? 'execution_owner'
-                                    THEN jsonb_build_object(
-                                        'execution_owner',
-                                        metadata #> '{compat_contract,compat}' -> 'execution_owner'
-                                    )
-                                    ELSE '{}'::jsonb END),
-                              TRUE
-                          )
+                          jsonb_set(metadata, '{compat_contract,compat}',
+                                    (COALESCE(metadata #> '{compat_contract,compat}', '{}'::jsonb)
+                                     - 'execution_owner') || %s::jsonb, TRUE)
                       ELSE metadata END,
-                      updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND workspace_id = %s RETURNING id""",
-            (_json(input_payload), compat is not None, compat_patch,
-             job_id, context.workspace_id),
+                      updated_at = clock_timestamp()
+                WHERE id = %s AND workspace_id = %s AND owner_user_id = %s
+                  AND job_type = 'assistant.deep_research'
+                  AND status IN ('queued', 'waiting')
+                  AND COALESCE(input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
+                  AND lease_owner IS NULL AND lease_token IS NULL
+                RETURNING id""",
+            (_json(input_payload), compat is not None, _json(compat or {}),
+             job_id, context.workspace_id, context.user_id),
         ).fetchone()
         return row is not None
 
     def update_stages_compat(
-        self, context: TenantContext, *, job_id: str, stages: list[dict[str, Any]]
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        stages: list[dict[str, Any]],
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> bool:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("job stage update requires both lease credentials")
+        if worker_id and lease_token:
+            predicate = """AND jobs.lease_owner = %s AND jobs.lease_token = %s
+                             AND jobs.status IN ('running', 'cancel_requested')
+                             AND jobs.lease_expires_at > clock_timestamp()"""
+            credentials: tuple[Any, ...] = (worker_id, lease_token)
+        else:
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
+            credentials = (execution_owner, submission_claim_token)
         row = self.connection.execute(
-            """UPDATE omnix_jobs
+            f"""UPDATE omnix_jobs AS jobs
                   SET metadata = jsonb_set(
-                          metadata, '{compat_contract,stages}', %s::jsonb, TRUE
+                          jobs.metadata, '{{compat_contract,stages}}', %s::jsonb, TRUE
                       ),
-                      updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND workspace_id = %s RETURNING id""",
-            (_json(stages), job_id, context.workspace_id),
+                      updated_at = clock_timestamp()
+                WHERE jobs.id = %s AND jobs.workspace_id = %s {predicate}
+                RETURNING jobs.id""",
+            (_json(stages), job_id, context.workspace_id, *credentials),
         ).fetchone()
         return row is not None
 
@@ -313,9 +402,24 @@ class PostgresJobRepository(_BaseJobRepository):
         job_id: str,
         reason: str,
         now: str,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> bool:
+        del now
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("cancel finalization requires both lease credentials")
+        if worker_id and lease_token:
+            predicate = """AND jobs.lease_owner = %s AND jobs.lease_token = %s
+                             AND jobs.status = 'cancel_requested'
+                             AND jobs.lease_expires_at > clock_timestamp()"""
+            credentials: tuple[Any, ...] = (worker_id, lease_token)
+        else:
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
+            credentials = (execution_owner, submission_claim_token)
         row = self.connection.execute(
-            """UPDATE omnix_jobs AS jobs
+            f"""UPDATE omnix_jobs AS jobs
                   SET status = 'canceled',
                       lease_owner = NULL,
                       lease_token = NULL,
@@ -324,56 +428,117 @@ class PostgresJobRepository(_BaseJobRepository):
                       updated_at = CURRENT_TIMESTAMP,
                       metadata = jsonb_set(
                           metadata,
-                          '{compat_contract,cancel}',
+                          '{{compat_contract,cancel}}',
                           jsonb_build_object(
                               'requested', TRUE,
                               'requested_at', COALESCE(
-                                  metadata #>> '{compat_contract,cancel,requested_at}', %s::text
+                                  jobs.metadata #>> '{{compat_contract,cancel,requested_at}}', clock_timestamp()::text
                               ),
-                              'acknowledged_at', %s::text,
+                              'acknowledged_at', clock_timestamp()::text,
                               'reason', COALESCE(
-                                  metadata #>> '{compat_contract,cancel,reason}', %s::text
+                                  jobs.metadata #>> '{{compat_contract,cancel,reason}}', %s::text
                               )
                           ),
                           TRUE
                       )
-                WHERE jobs.id = %s AND jobs.workspace_id = %s
-                  AND jobs.status NOT IN ('completed', 'failed', 'canceled', 'stale')
+                WHERE jobs.id = %s AND jobs.workspace_id = %s {predicate}
                 RETURNING jobs.id""",
-            (now, now, reason, job_id, context.workspace_id),
+            (reason, job_id, context.workspace_id, *credentials),
         ).fetchone()
         return row is not None
 
     def append_compat_logs(
-        self, context: TenantContext, *, job_id: str, logs: list[dict[str, Any]]
+        self,
+        context: TenantContext,
+        *,
+        job_id: str,
+        logs: list[dict[str, Any]],
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+        execution_owner: str | None = None,
+        submission_claim_token: str | None = None,
     ) -> bool:
         if not logs:
             return True
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("job log append requires both lease credentials")
+        if worker_id and lease_token:
+            predicate = """AND jobs.lease_owner = %s AND jobs.lease_token = %s
+                             AND jobs.status IN ('running', 'cancel_requested')
+                             AND jobs.lease_expires_at > clock_timestamp()"""
+            credentials: tuple[Any, ...] = (worker_id, lease_token)
+        else:
+            predicate = "AND jobs.status IN ('running', 'cancel_requested') " + _FOREGROUND_OWNER_GUARD
+            credentials = (execution_owner, submission_claim_token)
         row = self.connection.execute(
-            """WITH current_logs AS (
-                       SELECT COALESCE(metadata #> '{compat_contract,logs}', '[]'::jsonb)
-                                  || %s::jsonb AS value
-                         FROM omnix_jobs
-                        WHERE id = %s AND workspace_id = %s
-                   ), retained AS (
-                       SELECT COALESCE(jsonb_agg(item ORDER BY ordinal), '[]'::jsonb) AS value
-                         FROM (
-                               SELECT item, ordinal
-                                 FROM current_logs, jsonb_array_elements(current_logs.value)
-                                      WITH ORDINALITY AS entries(item, ordinal)
-                                ORDER BY ordinal DESC LIMIT 500
-                         ) recent
-                   )
-                  UPDATE omnix_jobs AS jobs
-                     SET metadata = jsonb_set(
-                             jobs.metadata, '{compat_contract,logs}', retained.value, TRUE
-                         )
-                    FROM retained
-                   WHERE jobs.id = %s AND jobs.workspace_id = %s
-                RETURNING jobs.id""",
-            (_json(logs), job_id, context.workspace_id, job_id, context.workspace_id),
+            f"""UPDATE omnix_jobs AS jobs
+                   SET updated_at = clock_timestamp()
+                 WHERE jobs.id = %s AND jobs.workspace_id = %s {predicate}
+                 RETURNING jobs.id""",
+            (job_id, context.workspace_id, *credentials),
         ).fetchone()
-        return row is not None
+        if row is None:
+            return False
+        seq_row = self.connection.execute(
+            "SELECT COALESCE(MAX(seq), 0) FROM omnix_job_logs WHERE workspace_id = %s AND job_id = %s",
+            (context.workspace_id, job_id),
+        ).fetchone()
+        seq = int(seq_row[0])
+        for item in logs:
+            seq += 1
+            data = {key: value for key, value in item.items() if key not in {"level", "message"}}
+            self.connection.execute(
+                """INSERT INTO omnix_job_logs
+                       (job_id, workspace_id, seq, level, message, data)
+                   VALUES (%s, %s, %s, %s, %s, %s::jsonb)""",
+                (
+                    job_id,
+                    context.workspace_id,
+                    seq,
+                    str(item.get("level") or "info"),
+                    str(item.get("message") or ""),
+                    _json(data),
+                ),
+            )
+        return True
+
+    def list_job_logs(self, context: TenantContext, *, job_id: str, limit: int = 500) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """SELECT level, message, data FROM (
+                       SELECT level, message, data, seq
+                         FROM omnix_job_logs
+                        WHERE workspace_id = %s AND job_id = %s
+                        ORDER BY seq DESC LIMIT %s
+                   ) recent
+                ORDER BY seq ASC""",
+            (context.workspace_id, job_id, max(1, min(int(limit), 500))),
+        ).fetchall()
+        return [
+            {"level": str(row[0]), "message": str(row[1]), **dict(row[2] or {})}
+            for row in rows
+        ]
+
+    def list_job_logs_for_jobs(
+        self, context: TenantContext, *, job_ids: list[str], limit_per_job: int = 500
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not job_ids:
+            return {}
+        rows = self.connection.execute(
+            """SELECT job_id, level, message, data FROM (
+                       SELECT job_id, level, message, data, seq,
+                              row_number() OVER (PARTITION BY job_id ORDER BY seq DESC) AS rank
+                         FROM omnix_job_logs
+                        WHERE workspace_id = %s AND job_id = ANY(%s)
+                   ) recent
+                WHERE rank <= %s ORDER BY job_id, seq ASC""",
+            (context.workspace_id, job_ids, max(1, min(int(limit_per_job), 500))),
+        ).fetchall()
+        result: dict[str, list[dict[str, Any]]] = {job_id: [] for job_id in job_ids}
+        for row in rows:
+            result[str(row[0])].append(
+                {"level": str(row[1]), "message": str(row[2]), **dict(row[3] or {})}
+            )
+        return result
 
     def list_job_events(self, context: TenantContext, *, job_id: str) -> list[Any]:
         return self.connection.execute(
@@ -1010,7 +1175,13 @@ class PostgresJobRepository(_BaseJobRepository):
                        queued.job_type = 'assistant.deep_research'
                        AND COALESCE(queued.input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
                    )
-                 ORDER BY queued.priority DESC, queued.created_at ASC, queued.id ASC
+                 ORDER BY (
+                     queued.priority::bigint + LEAST(
+                         100::numeric,
+                         GREATEST(0::numeric, FLOOR(EXTRACT(EPOCH FROM
+                             (clock_timestamp() - queued.created_at)) / %s))
+                     )
+                 ) DESC, queued.created_at ASC, queued.id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
             )
@@ -1033,6 +1204,7 @@ class PostgresJobRepository(_BaseJobRepository):
                 resource_classes,
                 job_types,
                 job_types,
+                self.priority_aging_seconds,
                 worker_id,
                 token,
                 lease_seconds,

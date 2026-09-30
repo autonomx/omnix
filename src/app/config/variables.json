@@ -959,6 +959,13 @@
     "type": "string"
   },
   {
+    "default": "60",
+    "description": "Controls job priority aging seconds for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_JOB_PRIORITY_AGING_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": "",
     "description": "Controls kasa device alias for assistant-tools.",
     "feature": "assistant-tools",

@@ -141,6 +141,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IMAGE_URL` | string | — | image-http-client.py | Controls image url for image-http-client.py. |
 | `OMNIX_IMAGE_WARMUP` | string | `0` | image-service-runtime.py, launcher | Controls image warmup for image-service-runtime.py, launcher. |
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
+| `OMNIX_JOB_PRIORITY_AGING_SECONDS` | integer | `60` | kernel | Controls job priority aging seconds for kernel. |
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
 | `OMNIX_KASA_ENABLED` | boolean | — | assistant-tools | Controls kasa enabled for assistant-tools. |

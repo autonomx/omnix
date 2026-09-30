@@ -597,6 +597,13 @@ def _update_job_input(
     *,
     compat: dict[str, Any] | None = None,
 ) -> JobRecord | None:
+    update_awaiting_plan = getattr(job_store, "update_awaiting_plan_input", None)
+    if callable(update_awaiting_plan):
+        return update_awaiting_plan(
+            job.id,
+            input_payload.model_dump(mode="json"),
+            compat=compat,
+        )
     update = getattr(job_store, "update_job_input", None)
     if not callable(update):
         return None

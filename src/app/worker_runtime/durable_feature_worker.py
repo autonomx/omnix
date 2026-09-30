@@ -53,21 +53,13 @@ class _AuthorityBoundJobStore:
         if target != self._job_id:
             raise JobClaimConflict("Durable feature executor cannot mutate another job")
         self._authority.require_live()
-        with unit_of_work(self._store.database) as work:
-            self.require_execution_authority_in(work, target)
-            work.rollback()
 
     def require_execution_authority_in(self, work: Any, job_id: str | None = None) -> None:
+        del work
         target = job_id or self._job_id
         if target != self._job_id:
             raise JobClaimConflict("Durable feature executor cannot mutate another job")
         self._authority.require_live()
-        work.jobs.require_execution_lease(
-            self._store.context,
-            job_id=self._job_id,
-            worker_id=self._worker_id,
-            lease_token=self._lease_token,
-        )
 
     def complete_job_in_transaction(
         self,
@@ -76,6 +68,13 @@ class _AuthorityBoundJobStore:
         request: CompleteJobRequest,
     ):
         self.require_execution_authority_in(work, job_id)
+        self._store._append_compat_logs(
+            work,
+            self._job_id,
+            request.logs,
+            worker_id=self._worker_id,
+            lease_token=self._lease_token,
+        )
         record = work.jobs.complete(
             self._store.context,
             job_id=self._job_id,
@@ -83,7 +82,7 @@ class _AuthorityBoundJobStore:
             lease_token=self._lease_token,
             output_refs=request.output_refs,
         )
-        self._store._append_compat_logs(work, self._job_id, request.logs)
+        record = self._store._hydrate_job_logs(work, record)
         return self._store._record(record)
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
@@ -105,6 +104,8 @@ class _AuthorityBoundJobStore:
 
         def guarded(*args: Any, **kwargs: Any) -> Any:
             self.require_execution_authority()
+            kwargs.setdefault("worker_id", self._worker_id)
+            kwargs.setdefault("lease_token", self._lease_token)
             return value(*args, **kwargs)
 
         return guarded

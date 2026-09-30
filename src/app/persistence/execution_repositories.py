@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import random
 import uuid
 from typing import Any
 
@@ -43,6 +45,24 @@ def _job(row: Any) -> dict[str, Any]:
     }
 
 
+def _expired_retry_delay(job: dict[str, Any]) -> int:
+    """Compute the handler backoff saved when a durable job was admitted."""
+    try:
+        metadata = job.get("metadata") or {}
+        saved = metadata.get("retry_backoff") if isinstance(metadata, dict) else None
+        contract = saved if isinstance(saved, dict) else {}
+        base = max(0.001, min(float(contract.get("base_seconds", 2.0)), 86_400.0))
+        factor = max(1.0, min(float(contract.get("factor", 2.0)), 100.0))
+        maximum = max(0.001, min(float(contract.get("max_seconds", 300.0)), 86_400.0))
+        jitter = max(0.0, min(float(contract.get("jitter", 0.2)), 1.0))
+        attempt = max(0, int(job.get("attempt_count", 1)) - 1)
+        raw = min(maximum, base * (factor ** min(attempt, 64)))
+        delay = raw * (1.0 + ((random.random() * 2.0) - 1.0) * jitter)
+        return max(1, math.ceil(delay))
+    except (OverflowError, TypeError, ValueError):
+        return 1
+
+
 _JOB_COLUMNS = """
 id, workspace_id, owner_user_id, module, job_type, status, resource_class,
 priority, input_payload, output_refs, progress, error, attempt_count,
@@ -82,8 +102,9 @@ AND (
 
 
 class PostgresJobRepository:
-    def __init__(self, connection: Any) -> None:
+    def __init__(self, connection: Any, *, priority_aging_seconds: int = 60) -> None:
         self.connection = connection
+        self.priority_aging_seconds = max(1, int(priority_aging_seconds))
 
     def create_job(self, context: TenantContext, payload: dict[str, Any]) -> dict[str, Any]:
         row = self.connection.execute(
@@ -148,43 +169,50 @@ class PostgresJobRepository:
         self, context: TenantContext, *, job_id: str | None = None,
         job_type: str | None = None,
     ) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            f"""
-            UPDATE omnix_jobs
-               SET status = CASE
-                       WHEN status = 'cancel_requested' THEN 'canceled'
-                       WHEN attempt_count < max_attempts THEN 'retrying'
-                       ELSE 'failed'
-                   END,
-                   available_at = CASE
-                       WHEN status <> 'cancel_requested' AND attempt_count < max_attempts
-                           THEN CURRENT_TIMESTAMP
-                       ELSE available_at
-                   END,
-                   error = CASE
-                       WHEN status = 'cancel_requested' THEN NULL
-                       ELSE jsonb_build_object('code', 'lease_expired')
-                   END,
-                   lease_owner = NULL,
-                   lease_token = NULL,
-                   lease_expires_at = NULL,
-                   updated_at = CURRENT_TIMESTAMP,
-                   completed_at = CASE
-                       WHEN status = 'cancel_requested' OR attempt_count >= max_attempts
-                           THEN CURRENT_TIMESTAMP
-                       ELSE completed_at
-                   END
-             WHERE workspace_id = %s
-               AND (%s::text IS NULL OR id = %s)
-               AND (%s::text IS NULL OR job_type = %s)
-               AND status IN ('leased', 'running', 'cancel_requested')
-               AND lease_expires_at <= CURRENT_TIMESTAMP
-            RETURNING {_JOB_COLUMNS}
-            """,
+        expired = self.connection.execute(
+            f"""SELECT {_JOB_COLUMNS} FROM omnix_jobs
+                 WHERE workspace_id = %s
+                   AND (%s::text IS NULL OR id = %s)
+                   AND (%s::text IS NULL OR job_type = %s)
+                   AND status IN ('leased', 'running', 'cancel_requested')
+                   AND lease_expires_at <= clock_timestamp()
+                 ORDER BY lease_expires_at, id
+                 FOR UPDATE SKIP LOCKED""",
             (context.workspace_id, job_id, job_id, job_type, job_type),
         ).fetchall()
-        results = [_job(row) for row in rows]
-        for result in results:
+        results: list[dict[str, Any]] = []
+        for expired_row in expired:
+            current = _job(expired_row)
+            canceled = current["status"] == "cancel_requested"
+            retry = not canceled and current["attempt_count"] < current["max_attempts"]
+            status = "canceled" if canceled else "retrying" if retry else "failed"
+            error = None if canceled else {"code": "lease_expired"}
+            delay = _expired_retry_delay(current) if retry else 0
+            row = self.connection.execute(
+                f"""UPDATE omnix_jobs
+                       SET status = %s,
+                           available_at = CASE WHEN %s THEN clock_timestamp() + (%s * INTERVAL '1 second')
+                                               ELSE available_at END,
+                           error = %s::jsonb,
+                           lease_owner = NULL,
+                           lease_token = NULL,
+                           lease_expires_at = NULL,
+                           updated_at = clock_timestamp(),
+                           completed_at = CASE WHEN %s THEN clock_timestamp() ELSE completed_at END
+                     WHERE id = %s AND workspace_id = %s
+                       AND lease_token = %s AND lease_owner = %s
+                       AND status = %s AND lease_expires_at <= clock_timestamp()
+                    RETURNING {_JOB_COLUMNS}""",
+                (
+                    status, retry, delay, _json(error) if error is not None else None,
+                    canceled or not retry, current["id"], context.workspace_id,
+                    current["lease_token"], current["lease_owner"], current["status"],
+                ),
+            ).fetchone()
+            if row is None:
+                continue
+            result = _job(row)
+            results.append(result)
             self.connection.execute(
                 """
                 UPDATE omnix_job_attempts
@@ -255,7 +283,13 @@ class PostgresJobRepository:
                        job_type = 'assistant.deep_research'
                        AND COALESCE(input_payload ->> 'awaiting_plan_approval', 'false') = 'true'
                    )
-                 ORDER BY priority DESC, created_at ASC, id ASC
+                 ORDER BY (
+                     priority::bigint + LEAST(
+                         100::numeric,
+                         GREATEST(0::numeric, FLOOR(EXTRACT(EPOCH FROM
+                             (clock_timestamp() - created_at)) / %s))
+                     )
+                 ) DESC, created_at ASC, id ASC
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
             )
@@ -275,6 +309,7 @@ class PostgresJobRepository:
             (
                 context.workspace_id,
                 resource_classes,
+                self.priority_aging_seconds,
                 worker_id,
                 token,
                 lease_seconds,
@@ -348,12 +383,20 @@ class PostgresJobRepository:
     ) -> dict[str, Any]:
         row = self.connection.execute(
             f"""
+            WITH candidate AS (
+                SELECT id AS candidate_id, status AS old_status
+                  FROM omnix_jobs
+                 WHERE id = %s AND workspace_id = %s
+                   AND lease_owner = %s AND lease_token = %s
+                   AND status IN ('leased', 'running')
+                   AND lease_expires_at > clock_timestamp()
+                 FOR UPDATE
+            )
             UPDATE omnix_jobs
                SET status = 'running', updated_at = CURRENT_TIMESTAMP
-             WHERE id = %s AND workspace_id = %s
-               AND lease_owner = %s AND lease_token = %s
-               AND status = 'leased' AND lease_expires_at > CURRENT_TIMESTAMP
-            RETURNING {_JOB_COLUMNS}
+              FROM candidate
+             WHERE omnix_jobs.id = candidate.candidate_id
+            RETURNING {_JOB_COLUMNS}, candidate.old_status
             """,
             (job_id, context.workspace_id, worker_id, lease_token),
         ).fetchone()
@@ -365,7 +408,8 @@ class PostgresJobRepository:
             "WHERE job_id = %s AND attempt = %s AND lease_token = %s",
             (job_id, result["attempt_count"], lease_token),
         )
-        self._event(context, job_id, "job.running", {"worker_id": worker_id})
+        if str(row[24]) == "leased":
+            self._event(context, job_id, "job.running", {"worker_id": worker_id})
         return result
 
     def update_progress(
@@ -386,7 +430,7 @@ class PostgresJobRepository:
                    updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND lease_owner = %s AND lease_token = %s
-               AND status IN ('leased', 'running', 'cancel_requested')
+               AND status IN ('running', 'cancel_requested')
                AND lease_expires_at > CURRENT_TIMESTAMP
             RETURNING {_JOB_COLUMNS}
             """,
@@ -413,21 +457,29 @@ class PostgresJobRepository:
         """Start a synchronously executed audit record without a worker lease."""
         row = self.connection.execute(
             f"""
+            WITH candidate AS (
+                SELECT id AS candidate_id, status AS old_status
+                  FROM omnix_jobs
+                 WHERE id = %s AND workspace_id = %s
+                   AND status IN ('queued', 'running')
+                   {_FOREGROUND_OWNER_GUARD}
+                 FOR UPDATE
+            )
             UPDATE omnix_jobs
                SET status = 'running',
                    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
                    updated_at = CURRENT_TIMESTAMP
-             WHERE id = %s AND workspace_id = %s
-               AND status = 'queued'
-            {_FOREGROUND_OWNER_GUARD}
-            RETURNING {_JOB_COLUMNS}
+              FROM candidate
+             WHERE omnix_jobs.id = candidate.candidate_id
+            RETURNING {_JOB_COLUMNS}, candidate.old_status
             """,
             (job_id, context.workspace_id, execution_owner, submission_claim_token),
         ).fetchone()
         if row is None:
             raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
         result = _job(row)
-        self._event(context, job_id, "job.running", {"execution": "foreground_record"})
+        if str(row[24]) == "queued":
+            self._event(context, job_id, "job.running", {"execution": "foreground_record"})
         return result
 
     def complete_record_only(
@@ -556,19 +608,19 @@ class PostgresJobRepository:
         error: dict[str, Any],
         retry_delay_seconds: int = 0,
     ) -> dict[str, Any]:
-        current = self.get_job(context, job_id)
-        if current is None:
-            raise EntityNotFound(job_id)
-        retry = bool(error.get("retryable", True)) and current["attempt_count"] < current["max_attempts"]
-        status = "retrying" if retry else "failed"
+        retryable = bool(error.get("retryable", True))
         row = self.connection.execute(
             f"""
             UPDATE omnix_jobs
-               SET status = %s, error = %s::jsonb,
-                   available_at = CASE WHEN %s THEN CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
+               SET status = CASE WHEN %s AND attempt_count < max_attempts
+                                 THEN 'retrying' ELSE 'failed' END,
+                   error = %s::jsonb,
+                   available_at = CASE WHEN %s AND attempt_count < max_attempts
+                                       THEN CURRENT_TIMESTAMP + (%s * INTERVAL '1 second')
                                        ELSE available_at END,
                    lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL,
-                   completed_at = CASE WHEN %s THEN NULL ELSE CURRENT_TIMESTAMP END,
+                   completed_at = CASE WHEN %s AND attempt_count < max_attempts
+                                       THEN NULL ELSE CURRENT_TIMESTAMP END,
                    updated_at = CURRENT_TIMESTAMP
              WHERE id = %s AND workspace_id = %s
                AND lease_owner = %s AND lease_token = %s
@@ -577,11 +629,11 @@ class PostgresJobRepository:
             RETURNING {_JOB_COLUMNS}
             """,
             (
-                status,
+                retryable,
                 _json(error),
-                retry,
-                max(0, int(retry_delay_seconds)),
-                retry,
+                retryable,
+                max(1, int(retry_delay_seconds)),
+                retryable,
                 job_id,
                 context.workspace_id,
                 worker_id,
@@ -591,6 +643,8 @@ class PostgresJobRepository:
         if row is None:
             raise JobClaimConflict(f"job failure rejected: {job_id}")
         result = _job(row)
+        retry = result["status"] == "retrying"
+        status = result["status"]
         self.connection.execute(
             """
             UPDATE omnix_job_attempts

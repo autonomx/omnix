@@ -45,6 +45,16 @@ def test_worker_remote_tts_and_required_service_policy():
     assert config.required_workers == ('stt', 'tts')
 
 
+def test_job_priority_aging_configuration_is_bounded():
+    assert RuntimeConfig.from_environment({}).job_priority_aging_seconds == 60
+    assert RuntimeConfig.from_environment({
+        'OMNIX_JOB_PRIORITY_AGING_SECONDS': '15',
+    }).job_priority_aging_seconds == 15
+    for value in ('0', '86401', 'fast'):
+        with pytest.raises(ValueError, match='OMNIX_JOB_PRIORITY_AGING_SECONDS'):
+            RuntimeConfig.from_environment({'OMNIX_JOB_PRIORITY_AGING_SECONDS': value})
+
+
 def test_production_config_cannot_be_reinterpreted_after_binding(monkeypatch):
     config = RuntimeConfig(gateway_role=GatewayRole.API)
     runtime.install_runtime_config(config)

@@ -42,9 +42,17 @@ class PostgresUnitOfWork:
         database: PostgresDatabase | None = None,
         *,
         authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+        job_priority_aging_seconds: int | None = None,
     ) -> None:
+        from app.config.runtime import configured_job_priority_aging_seconds
+
         self.database = database or default_database()
         self.authority_operation = authority_operation
+        self.job_priority_aging_seconds = (
+            configured_job_priority_aging_seconds()
+            if job_priority_aging_seconds is None
+            else max(1, int(job_priority_aging_seconds))
+        )
         self.connection: Any | None = None
         self.identities: PostgresIdentityRepository
         self.audit: PostgresAuditRepository
@@ -85,7 +93,10 @@ class PostgresUnitOfWork:
         self.assets = PostgresAssetRepository(self.connection)
         self.settings = PostgresSettingsRepository(self.connection)
         self.secret_references = PostgresSecretReferenceRepository(self.connection)
-        self.jobs = PostgresJobRepository(self.connection)
+        self.jobs = PostgresJobRepository(
+            self.connection,
+            priority_aging_seconds=self.job_priority_aging_seconds,
+        )
         self.outbox = PostgresOutboxRepository(self.connection)
         self.outbox_consumers = PostgresOutboxConsumerRepository(self.connection)
         self.side_effects = PostgresSideEffectRepository(self.connection)
@@ -163,6 +174,7 @@ def unit_of_work(
     database: PostgresDatabase | None = None,
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+    job_priority_aging_seconds: int | None = None,
 ) -> PostgresUnitOfWork | _JoinedUnitOfWork:
     from .transaction_binding import shared_work
 
@@ -172,7 +184,11 @@ def unit_of_work(
         if parent.authority_operation != authority_operation:
             raise RuntimeError('A shared transaction cannot change its authority operation')
         return _JoinedUnitOfWork(parent)
-    return PostgresUnitOfWork(resolved, authority_operation=authority_operation)
+    return PostgresUnitOfWork(
+        resolved,
+        authority_operation=authority_operation,
+        job_priority_aging_seconds=job_priority_aging_seconds,
+    )
 
 
 class _JoinedUnitOfWork:

@@ -5,7 +5,22 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from urllib.parse import urlsplit
+
+from .env import env_int, environment
+
+
+@lru_cache(maxsize=1)
+def configured_job_priority_aging_seconds() -> int:
+    """Read the process job-aging policy once through the typed config owner."""
+    return env_int(
+        "OMNIX_JOB_PRIORITY_AGING_SECONDS",
+        60,
+        minimum=1,
+        maximum=86_400,
+        env=environment(),
+    )
 
 
 class GatewayRole(str, Enum):
@@ -61,6 +76,7 @@ class RuntimeConfig:
     worker_environment: tuple[tuple[str, str], ...] = ()
     enabled_features: tuple[str, ...] = ("all",)
     disabled_features: tuple[str, ...] = ()
+    job_priority_aging_seconds: int = 60
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "gateway_role", GatewayRole(self.gateway_role))
@@ -69,6 +85,9 @@ class RuntimeConfig:
             raise ValueError("Duplicate API replica origins")
         if len(origins) > 8:
             raise ValueError("At most eight API replica origins are supported")
+        if not 1 <= int(self.job_priority_aging_seconds) <= 86_400:
+            raise ValueError("OMNIX_JOB_PRIORITY_AGING_SECONDS must be between 1 and 86400")
+        object.__setattr__(self, "job_priority_aging_seconds", int(self.job_priority_aging_seconds))
         object.__setattr__(self, "api_replica_origins", origins)
         object.__setattr__(self, "required_workers", tuple(sorted(set(self.required_workers))))
         enabled = tuple(dict.fromkeys(value.strip() for value in self.enabled_features if value.strip()))
@@ -107,6 +126,13 @@ class RuntimeConfig:
             raise ValueError(f"{name} must be a boolean")
 
         role = GatewayRole(env.get("OMNIX_GATEWAY_BACKGROUND_ROLE", "worker").strip())
+        job_priority_aging_seconds = env_int(
+            "OMNIX_JOB_PRIORITY_AGING_SECONDS",
+            60,
+            minimum=1,
+            maximum=86_400,
+            env=env,
+        )
         owns = role is GatewayRole.WORKER
         if flag("OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME", owns) != owns:
             raise ValueError("Explicit background ownership contradicts gateway role")
@@ -140,6 +166,7 @@ class RuntimeConfig:
                 for value in env.get("OMNIX_FEATURES_DISABLED", "").split(",")
                 if value.strip()
             ),
+            job_priority_aging_seconds=job_priority_aging_seconds,
         )
 
     def worker_discovery_environment(self) -> dict[str, str]:
