@@ -692,14 +692,31 @@ class ChatSessionStore(JsonChatSessionStore):
             raise RuntimeError("Chat provider is not available")
         live_voice = getattr(self, "live_voice_chat_port", None)
         if live_voice is None:
-            return super(ChatSessionStore, self)._generate_provider_reply(
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                routing_deadline_at=routing_deadline_at,
-            )
+            assembly = self.build_prompt_context(session, user_message, context_items)
+            rendered = render_prompt_assembly(assembly)
+            self._cache_prompt_context(session, user_message, assembly)
+            try:
+                reply = super(ChatSessionStore, self)._generate_provider_reply(
+                    session,
+                    user_message,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                    context_items=context_items,
+                    routing_deadline_at=routing_deadline_at,
+                )
+            finally:
+                self.discard_prompt_context(session, user_message)
+            metadata = reply.get("metadata")
+            if not isinstance(metadata, dict):
+                metadata = {}
+            return {
+                **reply,
+                "metadata": {
+                    **metadata,
+                    **self._active_memory_metadata(assembly, rendered),
+                    **self._active_history_metadata(assembly),
+                },
+            }
 
         if live_voice.is_lmstudio_provider(provider):
             return live_voice.generate_lmstudio_reply(
