@@ -529,9 +529,19 @@ def recover_abandoned_chat_generation_jobs(chat_store: Any, job_store: Any) -> i
     return recovered
 
 
-def _resolve_chat_provider(session: ChatSession, request: SendChatMessageRequest) -> Any | None:
+def _resolve_chat_provider(
+    session: ChatSession,
+    request: SendChatMessageRequest,
+    user_message: ChatMessage | None = None,
+) -> Any | None:
+    metadata = getattr(user_message, "metadata", None)
+    route = metadata.get("omnix_provider_route") if isinstance(metadata, dict) else None
+    routed_provider = route.get("provider_id") if isinstance(route, dict) else None
     provider_id = str(
-        request.provider_id or getattr(session, "provider_id", None) or ""
+        routed_provider
+        or request.provider_id
+        or getattr(session, "provider_id", None)
+        or ""
     ).strip()
     if provider_id.startswith("llm:"):
         provider_id = provider_id.split(":", 1)[1]
@@ -687,7 +697,7 @@ def _run_chat_generation_job(
 
         _mark_assistant_turn_streaming(user_message)
         _update_progress(job_store, job.id, "Generating response")
-        provider = _resolve_chat_provider(session, request)
+        provider = _resolve_chat_provider(session, request, user_message)
         if provider is not None:
             _register_active_chat_provider(job.id, provider)
         try:

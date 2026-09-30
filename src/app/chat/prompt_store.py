@@ -510,11 +510,36 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         context_diagnostics: dict[str, Any] | None = None,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        appended = super().begin_user_message(
+        from app.live_voice.llm.routing import (
+            ROUTE_METADATA_KEY,
+            begin_routed_user_message,
+        )
+
+        def persist(
+            routed_request: SendChatMessageRequest,
+            route_metadata: dict[str, Any] | None,
+        ):
+            appended = super(ChatSessionStore, self).begin_user_message(
+                session_id,
+                routed_request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            )
+            if appended is None:
+                return None
+            routed_session, user_message = appended
+            if route_metadata is not None and ROUTE_METADATA_KEY not in user_message.metadata:
+                user_message.metadata[ROUTE_METADATA_KEY] = route_metadata
+                routed_session.provider_id = route_metadata["provider_id"]
+                routed_session.model_id = route_metadata["model_id"]
+                self._save_session(routed_session)
+            return appended
+
+        appended = begin_routed_user_message(
+            self,
             session_id,
             request,
-            context_items=context_items,
-            context_diagnostics=context_diagnostics,
+            persist=persist,
         )
         if appended is None:
             return None
@@ -525,6 +550,41 @@ class ChatSessionStore(JsonChatSessionStore):
             message.metadata["memory_command"] = payload
             self._mark_memory_command(session.id, message.id, payload)
         return session, message
+
+    def _generate_reply(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        request: SendChatMessageRequest,
+        context_items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        from app.live_voice.llm.routing import (
+            log_provider_route,
+            resolve_generation_route,
+        )
+
+        route = resolve_generation_route(
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            request=request,
+        )
+        log_provider_route(
+            requested_provider_id=request.provider_id or provider_id,
+            route=route,
+            stream=False,
+        )
+        return super(ChatSessionStore, self)._generate_reply(
+            session,
+            user_message,
+            provider_id=route.provider_id,
+            model_id=route.model_id,
+            request=request,
+            context_items=context_items,
+        )
 
     def append_user_message(
         self,
@@ -685,13 +745,30 @@ class ChatSessionStore(JsonChatSessionStore):
         routing_deadline_at: float | None = None,
     ):
         from app.live_voice.llm.retry import stream_with_retry
+        from app.live_voice.llm.routing import (
+            log_provider_route,
+            resolve_stream_route,
+        )
+
+        route = resolve_stream_route(
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
+        log_provider_route(
+            requested_provider_id=provider_id,
+            route=route,
+            stream=True,
+        )
+        routed_provider_id = route.provider_id
+        routed_model_id = route.model_id
 
         def stream_factory():
             return self._stream_provider_reply_chunks_once(
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
+                provider_id=routed_provider_id,
+                model_id=routed_model_id,
                 context_items=context_items,
                 routing_deadline_at=routing_deadline_at,
             )
@@ -700,8 +777,8 @@ class ChatSessionStore(JsonChatSessionStore):
             return self._generate_provider_reply(
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
+                provider_id=routed_provider_id,
+                model_id=routed_model_id,
                 context_items=context_items or [],
                 routing_deadline_at=routing_deadline_at,
             )
@@ -709,8 +786,8 @@ class ChatSessionStore(JsonChatSessionStore):
         yield from stream_with_retry(
             stream_factory,
             fallback_factory,
-            provider_id=provider_id,
-            model_id=model_id,
+            provider_id=routed_provider_id,
+            model_id=routed_model_id,
         )
 
     def _stream_provider_reply_chunks_once(

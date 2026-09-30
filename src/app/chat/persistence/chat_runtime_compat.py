@@ -282,6 +282,7 @@ def _begin_user_message_fast(
     *,
     context_items: list[dict[str, Any]] | None = None,
     context_diagnostics: dict[str, Any] | None = None,
+    route_metadata: dict[str, Any] | None = None,
     start_streaming: bool = False,
 ) -> tuple[ChatSession, ChatMessage] | None:
     started = time.perf_counter()
@@ -310,6 +311,10 @@ def _begin_user_message_fast(
         "agent_mode": request.agent_mode,
         "coding_approval_policy": request.coding_approval_policy,
     }
+    if route_metadata is not None:
+        from app.live_voice.llm.routing import ROUTE_METADATA_KEY
+
+        message_metadata[ROUTE_METADATA_KEY] = dict(route_metadata)
     if request.image_data_urls:
         message_metadata["image_data_urls"] = list(request.image_data_urls)
         message_metadata["image_data_url"] = request.image_data_urls[0]
@@ -351,8 +356,12 @@ def _begin_user_message_fast(
     coordinator_ms = (time.perf_counter() - coordinator_started) * 1000.0
 
     session.messages.append(message)
-    session.provider_id = request.provider_id or session.provider_id
-    session.model_id = request.model_id or session.model_id
+    if route_metadata is not None:
+        session.provider_id = route_metadata["provider_id"]
+        session.model_id = route_metadata["model_id"]
+    else:
+        session.provider_id = request.provider_id or session.provider_id
+        session.model_id = request.model_id or session.model_id
     session.message_count = len(session.messages)
     if session.title.strip().lower() in {"new chat", "new chat..."}:
         session.title = message.content[:48] or "New chat"
@@ -763,20 +772,21 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         context_diagnostics: dict[str, Any] | None = None,
         start_streaming: bool = False,
     ) -> tuple[ChatSession, ChatMessage] | None:
-        from app.chat.live_chat_provider_routing import route_postgres_begin_user_message
+        from app.live_voice.llm.routing import begin_routed_user_message
         from app.chat.live_chat_speculation import prime_live_speculation_session
 
         with _durable_session_mutation(self, session_id):
-            result = route_postgres_begin_user_message(
+            result = begin_routed_user_message(
                 self,
                 session_id,
                 request,
-                persist=lambda routed_request: _begin_user_message_fast(
+                persist=lambda routed_request, route_metadata: _begin_user_message_fast(
                     self,
                     session_id,
                     routed_request,
                     context_items=context_items,
                     context_diagnostics=context_diagnostics,
+                    route_metadata=route_metadata,
                     start_streaming=start_streaming,
                 ),
             )

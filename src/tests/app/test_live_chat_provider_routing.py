@@ -4,35 +4,53 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.chat.models import SendChatMessageRequest
 from app.chat import live_call_prewarm as prewarm
-from app.providers import service as provider_service
-from app.settings import access as settings_access
-from app.chat.live_chat_provider_routing import (
+from app.chat.models import CreateChatSessionRequest, SendChatMessageRequest
+from app.live_voice.llm.routing import (
+    ROUTE_METADATA_KEY,
     _live_voice_affinity_for_current_provider,
-    _remember_turn_route,
-    _reset_provider_route_state_for_tests,
-    _stream_route,
     resolve_effective_provider_id,
+    resolve_generation_route,
     resolve_provider_route,
+    resolve_stream_route,
     route_chat_request,
 )
+from app.providers import service as provider_service
+from app.settings import access as settings_access
 
 
 @pytest.fixture(autouse=True)
-def reset_route_state():
-    _reset_provider_route_state_for_tests()
+def clear_live_call_affinity():
     prewarm.clear_live_call_prewarm_state()
     yield
-    _reset_provider_route_state_for_tests()
     prewarm.clear_live_call_prewarm_state()
 
 
-def test_default_provider_is_concretized_before_metrics_and_retry(monkeypatch) -> None:
+def test_default_provider_is_resolved_from_current_settings(monkeypatch) -> None:
+    settings = iter(("lmstudio", "cerebras"))
+    settings_loads = 0
+
+    def fake_load_settings():
+        nonlocal settings_loads
+        settings_loads += 1
+        return {"provider": next(settings)}
+
+    monkeypatch.setattr(settings_access, "load_settings", fake_load_settings)
+
+    assert resolve_effective_provider_id(None) == "lmstudio"
+    assert resolve_effective_provider_id(None) == "cerebras"
+    assert settings_loads == 2
+
+
+def test_default_provider_resolves_to_its_configured_instance(monkeypatch) -> None:
     provider = SimpleNamespace(provider_name="lmstudio")
     requested: list[str | None] = []
 
-    monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "lmstudio"})
+    monkeypatch.setattr(
+        settings_access,
+        "load_settings",
+        lambda **_kwargs: {"provider": "lmstudio"},
+    )
 
     def fake_get_provider(provider_id: str | None):
         requested.append(provider_id)
@@ -45,44 +63,80 @@ def test_default_provider_is_concretized_before_metrics_and_retry(monkeypatch) -
     assert effective_provider_id == "lmstudio"
     assert resolved_provider is provider
     assert requested == ["lmstudio"]
-    assert resolved_provider.provider_name == "lmstudio"
 
 
-def test_default_provider_resolution_is_process_cached(monkeypatch) -> None:
-    settings_loads = 0
+def test_generation_worker_resolves_cancellation_provider_from_turn_route(monkeypatch) -> None:
+    from app.chat.generation_jobs import _resolve_chat_provider
 
-    def fake_load_settings():
-        nonlocal settings_loads
-        settings_loads += 1
-        return {"provider": "lmstudio"}
+    provider = SimpleNamespace(provider_name="lmstudio")
+    requested: list[str | None] = []
 
-    monkeypatch.setattr(settings_access, "load_settings", fake_load_settings)
+    def fake_get_provider(provider_id: str | None):
+        requested.append(provider_id)
+        return provider
 
-    assert resolve_effective_provider_id(None) == "lmstudio"
-    assert resolve_effective_provider_id(None) == "lmstudio"
-    assert settings_loads == 1
-
-
-def test_implicit_turn_overrides_stale_session_provider_and_model(monkeypatch) -> None:
-    monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "lmstudio"})
-    request = SendChatMessageRequest(content="Hello")
-
-    routed_request, route = route_chat_request(request)
-    _remember_turn_route("msg:user", route)
-    provider_id, model_id, remembered = _stream_route(
-        SimpleNamespace(id="msg:user"),
-        "cerebras",
-        "llama-3.3-70b",
+    monkeypatch.setattr(provider_service, "get_provider", fake_get_provider)
+    user_message = SimpleNamespace(
+        metadata={ROUTE_METADATA_KEY: {"provider_id": "lmstudio"}}
     )
 
-    assert routed_request.provider_id == "lmstudio"
-    assert routed_request.model_id is None
-    assert provider_id == "lmstudio"
-    assert model_id is None
-    assert remembered is route
-    assert route.provider_explicit is False
-    assert route.model_explicit is False
-    assert route.execution_lane == "session"
+    resolved = _resolve_chat_provider(
+        SimpleNamespace(provider_id="cerebras"),
+        SendChatMessageRequest(content="Hello"),
+        user_message,
+    )
+
+    assert resolved is provider
+    assert requested == ["lmstudio"]
+
+
+def test_begin_persists_the_resolved_route_for_later_workers(tmp_path, monkeypatch) -> None:
+    from app.chat.prompt_store import ChatSessionStore
+
+    monkeypatch.setattr(
+        settings_access,
+        "load_settings",
+        lambda **_kwargs: {"provider": "lmstudio"},
+    )
+    store = ChatSessionStore(tmp_path / "sessions.json")
+    session = store.create_session(
+        CreateChatSessionRequest(provider_id="cerebras", model_id="stale-model")
+    )
+
+    started = store.begin_user_message(
+        session.id,
+        SendChatMessageRequest(content="Hello"),
+    )
+
+    assert started is not None
+    _, user_message = started
+    persisted = store.get_session(session.id)
+    assert persisted is not None
+    persisted_message = next(item for item in persisted.messages if item.id == user_message.id)
+    assert persisted.provider_id == "lmstudio"
+    assert persisted.model_id is None
+    assert persisted_message.metadata[ROUTE_METADATA_KEY] == {
+        "provider_id": "lmstudio",
+        "model_id": None,
+        "provider_explicit": False,
+        "model_explicit": False,
+        "execution_lane": "session",
+    }
+
+    stream_route = resolve_stream_route(
+        persisted_message,
+        provider_id="cerebras",
+        model_id="stale-model",
+    )
+    generation_route = resolve_generation_route(
+        persisted_message,
+        provider_id="cerebras",
+        model_id="stale-model",
+        request=SendChatMessageRequest(content="Hello"),
+    )
+    assert stream_route.provider_id == "lmstudio"
+    assert stream_route.model_id is None
+    assert generation_route == stream_route
 
 
 def test_live_voice_ignores_stale_prewarm_affinity_after_settings_change(monkeypatch) -> None:
@@ -96,7 +150,7 @@ def test_live_voice_ignores_stale_prewarm_affinity_after_settings_change(monkeyp
     assert _live_voice_affinity_for_current_provider("session-live") is None
 
 
-def test_live_voice_keeps_prewarm_affinity_when_settings_provider_matches(monkeypatch) -> None:
+def test_live_voice_uses_prewarm_affinity_when_provider_matches(monkeypatch) -> None:
     monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "lmstudio"})
     prewarm.remember_live_call_provider_affinity(
         "session-live",
@@ -110,7 +164,7 @@ def test_live_voice_keeps_prewarm_affinity_when_settings_provider_matches(monkey
     )
 
 
-def test_implicit_live_turn_uses_prewarmed_session_affinity(monkeypatch) -> None:
+def test_live_voice_turn_uses_prewarmed_session_affinity(monkeypatch) -> None:
     monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "cerebras"})
     request = SendChatMessageRequest(
         content="Hello",
@@ -131,7 +185,7 @@ def test_implicit_live_turn_uses_prewarmed_session_affinity(monkeypatch) -> None
     assert route.execution_lane == "session"
 
 
-def test_explicit_live_provider_ignores_prewarmed_session_affinity(monkeypatch) -> None:
+def test_explicit_live_provider_ignores_implicit_affinity(monkeypatch) -> None:
     monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "lmstudio"})
     request = SendChatMessageRequest(
         content="Hello",
@@ -152,8 +206,7 @@ def test_explicit_live_provider_ignores_prewarmed_session_affinity(monkeypatch) 
     assert route.model_explicit is False
 
 
-def test_explicit_provider_and_model_routing_is_preserved(monkeypatch) -> None:
-    monkeypatch.setattr(settings_access, "load_settings", lambda: {"provider": "lmstudio"})
+def test_explicit_provider_and_model_are_preserved_in_durable_route() -> None:
     request = SendChatMessageRequest(
         content="Hello",
         provider_id="llm:cerebras",
@@ -161,21 +214,16 @@ def test_explicit_provider_and_model_routing_is_preserved(monkeypatch) -> None:
     )
 
     routed_request, route = route_chat_request(request)
-    _remember_turn_route("msg:explicit", route)
-    provider_id, model_id, remembered = _stream_route(
-        SimpleNamespace(id="msg:explicit"),
-        "lmstudio",
-        None,
-    )
+    message = SimpleNamespace(metadata={ROUTE_METADATA_KEY: route.to_metadata()})
+    resolved = resolve_stream_route(message, provider_id="lmstudio", model_id=None)
 
     assert resolve_effective_provider_id("llm:cerebras") == "llm:cerebras"
     assert routed_request.provider_id == "llm:cerebras"
-    assert provider_id == "llm:cerebras"
-    assert model_id == "llm:cerebras:llama-3.3-70b"
-    assert remembered is route
-    assert route.provider_explicit is True
-    assert route.model_explicit is True
-    assert route.execution_lane == "session"
+    assert resolved.provider_id == "llm:cerebras"
+    assert resolved.model_id == "llm:cerebras:llama-3.3-70b"
+    assert resolved.provider_explicit is True
+    assert resolved.model_explicit is True
+    assert resolved.execution_lane == "session"
 
 
 def test_live_turn_uses_opt_in_dedicated_provider_and_model(monkeypatch) -> None:

@@ -115,7 +115,10 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
         current: ChatSession,
         message: object,
         request: SendChatMessageRequest,
+        *,
+        streaming: bool = False,
     ) -> FakeTurn:
+        assert streaming is False
         turn = FakeTurn()
         message.metadata.update(
             {
@@ -135,14 +138,25 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     request = SendChatMessageRequest(
         content="Hello from live voice",
         provider_id="llm:lmstudio",
-        model_id="llm:lmstudio:qwen",
         user_turn_id="voice-user-turn:test",
         speech_segment_id="voice-segment:test",
         workspace_root="F:/LLM/omnix",
     )
     store = SimpleNamespace()
 
-    result = fast_path._begin_user_message_fast(store, session.id, request)
+    route_metadata = {
+        "provider_id": "llm:lmstudio",
+        "model_id": None,
+        "provider_explicit": True,
+        "model_explicit": False,
+        "execution_lane": "session",
+    }
+    result = fast_path._begin_user_message_fast(
+        store,
+        session.id,
+        request,
+        route_metadata=route_metadata,
+    )
 
     assert result is not None
     returned_session, message = result
@@ -151,14 +165,20 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     assert persisted[0] == (session, message)
     assert session.title == "Hello from live voice"
     assert session.provider_id == "llm:lmstudio"
-    assert session.model_id == "llm:lmstudio:qwen"
+    assert session.model_id is None
     assert session.message_count == 1
     assert message.metadata["generation_status"] == "running"
     assert message.metadata["segment_id"] == "segment:test"
     assert message.metadata["assistant_turn_id"] == "assistant-turn:test"
     assert message.metadata["workspace_root"] == "F:/LLM/omnix"
+    assert message.metadata["omnix_provider_route"] == route_metadata
 
-    duplicate = fast_path._begin_user_message_fast(store, session.id, request)
+    duplicate = fast_path._begin_user_message_fast(
+        store,
+        session.id,
+        request,
+        route_metadata=route_metadata,
+    )
 
     assert duplicate is not None
     assert duplicate[0] is session
@@ -455,10 +475,18 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
             created_history.append(self)
 
     class FakeChatStore:
-        def __init__(self, *, history_search_factory, memory_service_factory, memory_settings_factory) -> None:
+        def __init__(
+            self,
+            *,
+            history_search_factory,
+            memory_service_factory,
+            memory_settings_factory,
+            job_service,
+        ) -> None:
             self.history_search_factory = history_search_factory
             self.memory_service_factory = memory_service_factory
             self.memory_settings_factory = memory_settings_factory
+            self.job_service = job_service
             created_stores.append(self)
 
     chat_runtime_compat.reset_default_chat_runtime_caches()

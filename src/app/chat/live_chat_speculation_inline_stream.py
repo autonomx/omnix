@@ -23,7 +23,7 @@ from app.chat.store import _provider_key
 from . import live_chat_speculation as speculation_runtime
 from . import live_chat_speculation_handshake as handshake_runtime
 from .live_call_prewarm import live_call_provider_affinity
-from .live_chat_provider_routing import resolve_effective_provider_id
+from app.live_voice.llm.routing import resolve_effective_provider_id
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
 
