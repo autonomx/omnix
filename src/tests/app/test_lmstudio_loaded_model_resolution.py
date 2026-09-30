@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.chat.lmstudio_loaded_model_resolution import (
+from app.live_voice.llm.lmstudio_model_resolution import (
     _clear_lmstudio_model_discovery_cache,
-    _resolve_lmstudio_model,
-    install_lmstudio_loaded_model_resolution_hook,
+    chat_completion_with_loaded_model,
+    resolve_lmstudio_model,
 )
 from app.providers import ChatMessage, LMStudioProvider, ProviderConfig
 from app.providers.base import ConnectionError as ProviderConnectionError
@@ -78,7 +78,7 @@ def test_explicit_request_model_wins_without_discovery(monkeypatch) -> None:
 
     monkeypatch.setattr(provider, "_make_request", unexpected_request)
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, "session/model")
+    selected, diagnostics = resolve_lmstudio_model(provider, "session/model")
 
     assert selected == "session/model"
     assert diagnostics["source"] == "explicit_request"
@@ -119,7 +119,7 @@ def test_single_loaded_llm_uses_model_key_not_instance_id(monkeypatch) -> None:
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, None)
+    selected, diagnostics = resolve_lmstudio_model(provider, None)
 
     assert selected == "google/gemma-current"
     assert diagnostics["source"] == "loaded_model_key"
@@ -131,7 +131,6 @@ def test_single_loaded_llm_uses_model_key_not_instance_id(monkeypatch) -> None:
 
 
 def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     chat_payloads: list[dict[str, Any]] = []
@@ -172,7 +171,8 @@ def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    response = provider.chat_completion(
+    response = chat_completion_with_loaded_model(
+        provider,
         [ChatMessage(role="user", content="Hello")],
         stream=False,
     )
@@ -183,7 +183,6 @@ def test_loaded_model_key_is_sent_to_chat_endpoint(monkeypatch) -> None:
 
 
 def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     calls: list[tuple[str, dict[str, Any]]] = []
@@ -214,7 +213,8 @@ def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    response = provider.chat_completion(
+    response = chat_completion_with_loaded_model(
+        provider,
         [ChatMessage(role="user", content="Hello")],
         stream=False,
         include_metrics=True,
@@ -231,7 +231,6 @@ def test_native_metrics_rejection_retries_openai_nonstream_transport(monkeypatch
 
 
 def test_native_metrics_rejection_retries_openai_stream_transport(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     calls: list[str] = []
@@ -248,7 +247,8 @@ def test_native_metrics_rejection_retries_openai_stream_transport(monkeypatch) -
     monkeypatch.setattr(provider, "_make_request", request)
 
     chunks = list(
-        provider.chat_completion(
+        chat_completion_with_loaded_model(
+            provider,
             [ChatMessage(role="user", content="Hello")],
             stream=True,
             include_metrics=True,
@@ -283,7 +283,7 @@ def test_configured_model_is_used_only_when_no_llm_is_loaded(monkeypatch) -> Non
         ),
     )
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, None)
+    selected, diagnostics = resolve_lmstudio_model(provider, None)
 
     assert selected == "qwen/fallback"
     assert diagnostics["source"] == "configured_fallback_no_loaded_model"
@@ -317,7 +317,7 @@ def test_multiple_loaded_models_prefer_configured_model_only_if_already_loaded(
         ),
     )
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, None)
+    selected, diagnostics = resolve_lmstudio_model(provider, None)
 
     assert selected == "qwen/selected"
     assert diagnostics["source"] == "loaded_model_key_config_match"
@@ -334,7 +334,7 @@ def test_discovery_failure_does_not_auto_load_stale_fallback(monkeypatch) -> Non
 
     monkeypatch.setattr(provider, "_make_request", unavailable)
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, None)
+    selected, diagnostics = resolve_lmstudio_model(provider, None)
 
     assert selected is None
     assert diagnostics["source"] == "runtime_default_discovery_unavailable"
@@ -342,7 +342,6 @@ def test_discovery_failure_does_not_auto_load_stale_fallback(monkeypatch) -> Non
 
 
 def test_discovery_failure_omits_stale_fallback_from_chat_payload(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     provider = _provider(configured_model="stale/fallback")
     _clear_lmstudio_model_discovery_cache()
     chat_payloads: list[dict[str, Any]] = []
@@ -366,7 +365,8 @@ def test_discovery_failure_omits_stale_fallback_from_chat_payload(monkeypatch) -
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    response = provider.chat_completion(
+    response = chat_completion_with_loaded_model(
+        provider,
         [ChatMessage(role="user", content="Hello")],
         stream=False,
     )
@@ -405,7 +405,7 @@ def test_v0_loaded_state_is_used_when_v1_is_unavailable(monkeypatch) -> None:
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    selected, diagnostics = _resolve_lmstudio_model(provider, None)
+    selected, diagnostics = resolve_lmstudio_model(provider, None)
 
     assert selected == "legacy-loaded-model"
     assert diagnostics["source"] == "loaded_model_key"
@@ -435,8 +435,8 @@ def test_short_discovery_cache_avoids_duplicate_model_queries(monkeypatch) -> No
 
     monkeypatch.setattr(provider, "_make_request", request)
 
-    first, first_diagnostics = _resolve_lmstudio_model(provider, None)
-    second, second_diagnostics = _resolve_lmstudio_model(provider, None)
+    first, first_diagnostics = resolve_lmstudio_model(provider, None)
+    second, second_diagnostics = resolve_lmstudio_model(provider, None)
 
     assert first == second == "loaded/model"
     assert calls == 1

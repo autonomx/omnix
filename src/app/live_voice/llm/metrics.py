@@ -29,6 +29,34 @@ def _metrics_provider_id(provider_id: str | None) -> str:
     return provider_id or "lmstudio"
 
 
+def _chat_completion(
+    provider: Any,
+    messages: list[Any],
+    *,
+    model: str | None,
+    stream: bool,
+    kwargs: dict[str, Any],
+) -> Any:
+    from app.providers.lmstudio_provider import LMStudioProvider
+
+    if isinstance(provider, LMStudioProvider):
+        from app.live_voice.llm import lmstudio_model_resolution
+
+        return lmstudio_model_resolution.chat_completion_with_loaded_model(
+            provider,
+            messages,
+            model=model,
+            stream=stream,
+            **kwargs,
+        )
+    return provider.chat_completion(
+        messages=messages,
+        model=model,
+        stream=stream,
+        **kwargs,
+    )
+
+
 def generate_lmstudio_reply(
     self: Any,
     session: Any,
@@ -64,11 +92,12 @@ def generate_lmstudio_reply(
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
     if remaining is not None:
         completion_kwargs["request_timeout_seconds"] = remaining
-    response = provider.chat_completion(
-        messages=messages,
+    response = _chat_completion(
+        provider,
+        messages,
         model=model_name,
         stream=False,
-        **completion_kwargs,
+        kwargs=completion_kwargs,
     )
     content = (getattr(response, "content", "") or "").strip()
     if not content:
@@ -141,11 +170,12 @@ def stream_lmstudio_reply(
     completion_kwargs: dict[str, Any] = {"include_metrics": True}
     if remaining_budget is not None:
         completion_kwargs["request_timeout_seconds"] = remaining_budget
-    response = provider.chat_completion(
-        messages=messages,
+    response = _chat_completion(
+        provider,
+        messages,
         model=model_name,
         stream=True,
-        **completion_kwargs,
+        kwargs=completion_kwargs,
     )
     chunker = LowLatencyTextChunker()
     full_text = ""

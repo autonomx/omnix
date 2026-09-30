@@ -28,7 +28,7 @@ from app.providers.base import ChatResponse, ConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
 
 from app.live_voice.llm.stream import LowLatencyTextChunker
-from app.chat import lmstudio_loaded_model_resolution as model_resolution
+from app.live_voice.llm import lmstudio_model_resolution as model_resolution
 from app.observability.tts_stream_diagnostics import stream_log
 
 _RESPONSES_ENDPOINT = "/v1/responses"
@@ -457,7 +457,7 @@ def _resolve_current_model(
     provider: LMStudioProvider,
     requested_model: str | None,
 ) -> tuple[str | None, dict[str, Any]]:
-    resolved_model, diagnostics = model_resolution._resolve_lmstudio_model(
+    resolved_model, diagnostics = model_resolution.resolve_lmstudio_model(
         provider,
         requested_model,
     )

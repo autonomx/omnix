@@ -10,8 +10,8 @@ from app.live_voice.llm.metrics import (
     stream_lmstudio_reply,
 )
 from app.live_voice.llm.stream import LowLatencyTextChunker
-from app.chat.lmstudio_loaded_model_resolution import (
-    install_lmstudio_loaded_model_resolution_hook,
+from app.live_voice.llm.lmstudio_model_resolution import (
+    chat_completion_with_loaded_model,
 )
 from app.providers import ChatMessage, ChatResponse, LMStudioProvider, ProviderConfig
 from app.providers import service as provider_service
@@ -96,7 +96,6 @@ def _provider() -> LMStudioProvider:
 
 
 def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     calls: list[tuple[str, str, dict[str, Any]]] = []
     provider = _provider()
     stream_response = _StreamResponse()
@@ -110,7 +109,8 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
     chunks = list(
-        provider.chat_completion(
+        chat_completion_with_loaded_model(
+            provider,
             [ChatMessage(role="user", content="Hello")],
             stream=True,
             include_metrics=True,
@@ -136,7 +136,6 @@ def test_lmstudio_metric_stream_retains_final_usage_and_stats(monkeypatch) -> No
 
 
 def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -> None:
-    install_lmstudio_loaded_model_resolution_hook()
     calls: list[tuple[str, dict[str, Any]]] = []
     provider = _provider()
     stream_response = _StreamResponse()
@@ -150,7 +149,8 @@ def test_lmstudio_regular_stream_keeps_openai_compatible_endpoint(monkeypatch) -
     monkeypatch.setattr(provider, "_make_request", fake_make_request)
 
     list(
-        provider.chat_completion(
+        chat_completion_with_loaded_model(
+            provider,
             [ChatMessage(role="user", content="Hello")],
             stream=True,
         )
@@ -235,6 +235,35 @@ def test_default_provider_is_detected_as_lmstudio(monkeypatch) -> None:
 
     assert is_lmstudio(None) is True
     assert requested == [None]
+
+
+def test_lmstudio_metrics_use_feature_owned_model_resolution(monkeypatch) -> None:
+    from app.live_voice.llm import lmstudio_model_resolution, metrics
+
+    provider = _provider()
+    calls: list[tuple[Any, list[Any], dict[str, Any]]] = []
+
+    def complete(selected_provider: Any, messages: list[Any], **kwargs: Any):
+        calls.append((selected_provider, messages, kwargs))
+        return ChatResponse(content="Resolved response", model="loaded/qwen")
+
+    monkeypatch.setattr(
+        lmstudio_model_resolution,
+        "chat_completion_with_loaded_model",
+        complete,
+    )
+
+    response = metrics._chat_completion(
+        provider,
+        [ChatMessage(role="user", content="Hello")],
+        model="qwen",
+        stream=False,
+        kwargs={"include_metrics": True},
+    )
+
+    assert response.content == "Resolved response"
+    assert calls[0][0] is provider
+    assert calls[0][2] == {"model": "qwen", "stream": False, "include_metrics": True}
 
 
 def test_low_latency_chunker_emits_first_word_before_sentence_completion() -> None:

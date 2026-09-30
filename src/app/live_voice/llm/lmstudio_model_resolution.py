@@ -12,9 +12,8 @@ from app.config.env import env_str as _env_str
 import re
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from functools import wraps
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -23,7 +22,6 @@ from app.providers.lmstudio_provider import LMStudioProvider
 
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_loaded_model_resolution_installed"
 _DEFAULT_CACHE_TTL_SECONDS = 0.25
 _DEFAULT_DISCOVERY_TIMEOUT_SECONDS = 0.75
 _DEFAULT_TRANSPORT_FALLBACK_MAX_SECONDS = 1.5
@@ -238,7 +236,7 @@ def _discover_loaded_models(provider: LMStudioProvider) -> tuple[_Discovery, boo
     return discovery, False
 
 
-def _resolve_lmstudio_model(
+def resolve_lmstudio_model(
     provider: LMStudioProvider,
     requested_model: str | None,
 ) -> tuple[str | None, dict[str, Any]]:
@@ -394,11 +392,8 @@ def _log_transport_fallback(
 def _stream_with_transport_fallback(
     primary: Iterator[Any],
     *,
-    original_chat_completion,
-    provider: LMStudioProvider,
-    messages,
+    retry_chat_completion: Callable[[], Iterator[Any]],
     resolved_model: str | None,
-    kwargs: dict[str, Any],
     diagnostics: dict[str, Any],
     started: float,
 ) -> Iterator[Any]:
@@ -425,106 +420,84 @@ def _stream_with_transport_fallback(
             diagnostics,
             transport_fallback=True,
         )
-        fallback_kwargs = dict(kwargs)
-        fallback_kwargs["include_metrics"] = False
-        fallback = original_chat_completion(
-            provider,
+        yield from retry_chat_completion()
+
+
+def chat_completion_with_loaded_model(
+    provider: LMStudioProvider,
+    messages: list[Any],
+    *,
+    model: str | None = None,
+    stream: bool = False,
+    **kwargs: Any,
+) -> Any:
+    """Resolve the loaded model and execute with a bounded transport fallback."""
+    resolved_model, diagnostics = resolve_lmstudio_model(provider, model)
+    log_fields = dict(diagnostics)
+    model_source = log_fields.pop("source")
+    stream_log(
+        "gateway-live-chat-first-token",
+        "runtime",
+        "live_chat_lmstudio_model_resolved",
+        stream=bool(stream),
+        model_source=model_source,
+        **log_fields,
+    )
+    _update_active_diagnostics(
+        resolved_model,
+        diagnostics,
+        transport_fallback=False,
+    )
+    call_kwargs = dict(kwargs)
+    include_metrics = bool(call_kwargs.get("include_metrics", False))
+    started = time.perf_counter()
+
+    def execute(*, include_metrics_override: bool | None = None) -> Any:
+        execute_kwargs = dict(call_kwargs)
+        if include_metrics_override is not None:
+            execute_kwargs["include_metrics"] = include_metrics_override
+        return provider.chat_completion(
             messages,
             model=resolved_model,
-            stream=True,
+            stream=stream,
             _use_configured_model=False,
-            **fallback_kwargs,
+            **execute_kwargs,
         )
-        yield from fallback
 
-
-def install_lmstudio_loaded_model_resolution_hook() -> None:
-    """Install loaded-model-first model selection for LM Studio requests."""
-    if getattr(LMStudioProvider, _HOOK_SENTINEL, False):
-        return
-    original_chat_completion = LMStudioProvider.chat_completion
-
-    @wraps(original_chat_completion)
-    def patched_chat_completion(
-        self: LMStudioProvider,
-        messages,
-        model=None,
-        stream: bool = False,
-        **kwargs,
-    ):
-        resolved_model, diagnostics = _resolve_lmstudio_model(self, model)
-        log_fields = dict(diagnostics)
-        model_source = log_fields.pop("source")
-        stream_log(
-            "gateway-live-chat-first-token",
-            "runtime",
-            "live_chat_lmstudio_model_resolved",
-            stream=bool(stream),
-            model_source=model_source,
-            **log_fields,
+    try:
+        result = execute()
+    except ProviderConnectionError as exc:
+        elapsed_seconds = time.perf_counter() - started
+        if not include_metrics or not _should_retry_with_openai_transport(
+            exc,
+            elapsed_seconds=elapsed_seconds,
+        ):
+            raise
+        _log_transport_fallback(
+            model=resolved_model,
+            stream=stream,
+            error=exc,
+            elapsed_seconds=elapsed_seconds,
         )
         _update_active_diagnostics(
             resolved_model,
             diagnostics,
-            transport_fallback=False,
+            transport_fallback=True,
         )
-        call_kwargs = dict(kwargs)
-        include_metrics = bool(call_kwargs.get("include_metrics", False))
-        started = time.perf_counter()
-        try:
-            result = original_chat_completion(
-                self,
-                messages,
-                model=resolved_model,
-                stream=stream,
-                _use_configured_model=False,
-                **call_kwargs,
-            )
-        except ProviderConnectionError as exc:
-            elapsed_seconds = time.perf_counter() - started
-            if not include_metrics or not _should_retry_with_openai_transport(
-                exc,
-                elapsed_seconds=elapsed_seconds,
-            ):
-                raise
-            _log_transport_fallback(
-                model=resolved_model,
-                stream=stream,
-                error=exc,
-                elapsed_seconds=elapsed_seconds,
-            )
-            _update_active_diagnostics(
-                resolved_model,
-                diagnostics,
-                transport_fallback=True,
-            )
-            fallback_kwargs = dict(call_kwargs)
-            fallback_kwargs["include_metrics"] = False
-            return original_chat_completion(
-                self,
-                messages,
-                model=resolved_model,
-                stream=stream,
-                _use_configured_model=False,
-                **fallback_kwargs,
-            )
-        if not stream or not include_metrics:
-            return result
-        return _stream_with_transport_fallback(
-            result,
-            original_chat_completion=original_chat_completion,
-            provider=self,
-            messages=messages,
-            resolved_model=resolved_model,
-            kwargs=call_kwargs,
-            diagnostics=diagnostics,
-            started=started,
-        )
+        return execute(include_metrics_override=False)
 
-    LMStudioProvider.chat_completion = patched_chat_completion
-    setattr(LMStudioProvider, _HOOK_SENTINEL, True)
+    if not stream or not include_metrics:
+        return result
+    return _stream_with_transport_fallback(
+        result,
+        retry_chat_completion=lambda: execute(include_metrics_override=False),
+        resolved_model=resolved_model,
+        diagnostics=diagnostics,
+        started=started,
+    )
 
 
 __all__ = [
-    "install_lmstudio_loaded_model_resolution_hook",
+    "chat_completion_with_loaded_model",
+    "resolve_lmstudio_model",
 ]
