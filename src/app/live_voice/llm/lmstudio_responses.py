@@ -16,9 +16,8 @@ import json
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from functools import wraps
 from typing import Any
 
 from app.chat.provider_metrics import merge_provider_response_metrics
@@ -28,11 +27,10 @@ from app.providers import ChatMessage as ProviderMessage
 from app.providers.base import ChatResponse, ConnectionError
 from app.providers.lmstudio_provider import LMStudioProvider
 
-from app.live_voice.llm import metrics as metrics_runtime
-from . import lmstudio_loaded_model_resolution as model_resolution
+from app.live_voice.llm.stream import LowLatencyTextChunker
+from app.chat import lmstudio_loaded_model_resolution as model_resolution
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_live_chat_lmstudio_responses_installed"
 _RESPONSES_ENDPOINT = "/v1/responses"
 _STATE_ENV = "OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES"
 _STATE_TTL_ENV = "OMNIX_LIVE_LMSTUDIO_RESPONSE_STATE_TTL_SECONDS"
@@ -549,7 +547,7 @@ def _stream_stateful_lmstudio_reply(
         previous_response_id=previous_response_id,
         request_timeout_seconds=remaining_budget,
     )
-    chunker = metrics_runtime.LowLatencyTextChunker()
+    chunker = LowLatencyTextChunker()
     full_text = ""
     usage: dict[str, Any] | None = None
     provider_metrics: dict[str, Any] = {}
@@ -687,93 +685,66 @@ def _stream_stateful_lmstudio_reply(
     }
 
 
-def install_live_chat_lmstudio_responses_hook() -> None:
-    """Wrap accepted live-voice LM Studio streams with fail-closed response state."""
-    if getattr(metrics_runtime, _HOOK_SENTINEL, False):
+def stream_lmstudio_reply(
+    self: Any,
+    session: Any,
+    user_message: Any,
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+    context_items: list[dict[str, Any]] | None,
+    provider: Any | None,
+    fallback_stream: Callable[..., Iterator[dict[str, Any]]],
+    routing_deadline_at: float | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Use bounded Responses state for accepted voice turns, then fail closed."""
+    fallback_kwargs = {
+        "provider_id": provider_id,
+        "model_id": model_id,
+        "context_items": context_items,
+        "provider": provider,
+        "routing_deadline_at": routing_deadline_at,
+    }
+    if (
+        not stateful_responses_enabled()
+        or not _is_live_voice_user_message(user_message)
+        or not isinstance(provider, LMStudioProvider)
+    ):
+        yield from fallback_stream(self, session, user_message, **fallback_kwargs)
         return
-    original_stream = metrics_runtime.stream_lmstudio_reply
 
-    @wraps(original_stream)
-    def patched_stream(
-        self: Any,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]] | None,
-        provider: Any | None = None,
-        routing_deadline_at: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        if (
-            not stateful_responses_enabled()
-            or not _is_live_voice_user_message(user_message)
-            or not isinstance(provider, LMStudioProvider)
+    session_id = str(getattr(session, "id", "") or "").strip()
+    emitted = False
+    try:
+        for event in _stream_stateful_lmstudio_reply(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            provider=provider,
+            routing_deadline_at=routing_deadline_at,
         ):
-            stream_kwargs: dict[str, Any] = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items,
-                "provider": provider,
-            }
-            if routing_deadline_at is not None:
-                stream_kwargs["routing_deadline_at"] = routing_deadline_at
-            yield from original_stream(
-                self,
-                session,
-                user_message,
-                **stream_kwargs,
-            )
-            return
-
-        session_id = str(getattr(session, "id", "") or "").strip()
-        emitted = False
-        try:
-            for event in _stream_stateful_lmstudio_reply(
-                self,
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                provider=provider,
-                routing_deadline_at=routing_deadline_at,
-            ):
-                emitted = True
-                yield event
-        except Exception as exc:
-            _invalidate_state(session_id)
-            if emitted:
-                raise
-            stream_log(
-                "gateway-live-chat-first-token",
-                "runtime",
-                "live_chat_lmstudio_responses_fallback",
-                session_id=session_id,
-                error_type=type(exc).__name__,
-                fallback_transport="chat_completions",
-            )
-            stream_kwargs = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items,
-                "provider": provider,
-            }
-            if routing_deadline_at is not None:
-                stream_kwargs["routing_deadline_at"] = routing_deadline_at
-            yield from original_stream(
-                self,
-                session,
-                user_message,
-                **stream_kwargs,
-            )
-
-    metrics_runtime.stream_lmstudio_reply = patched_stream
-    setattr(metrics_runtime, _HOOK_SENTINEL, True)
+            emitted = True
+            yield event
+    except Exception as exc:
+        _invalidate_state(session_id)
+        if emitted:
+            raise
+        stream_log(
+            "gateway-live-chat-first-token",
+            "runtime",
+            "live_chat_lmstudio_responses_fallback",
+            session_id=session_id,
+            error_type=type(exc).__name__,
+            fallback_transport="chat_completions",
+        )
+        yield from fallback_stream(self, session, user_message, **fallback_kwargs)
 
 
 __all__ = [
-    "install_live_chat_lmstudio_responses_hook",
     "prompt_fingerprint",
     "stateful_responses_enabled",
+    "stream_lmstudio_reply",
 ]

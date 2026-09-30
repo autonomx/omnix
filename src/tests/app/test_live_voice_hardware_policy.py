@@ -7,7 +7,7 @@ from app.live_voice.hardware_policy import (
     apply_live_voice_process_defaults,
     should_defer_speculative_tts,
 )
-from app.chat.live_chat_lmstudio_responses import stateful_responses_enabled
+from app.live_voice.llm.lmstudio_responses import stateful_responses_enabled
 
 
 class _SerialTtsProvider:

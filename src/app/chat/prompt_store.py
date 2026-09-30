@@ -396,17 +396,22 @@ class ChatSessionStore(JsonChatSessionStore):
         )
 
         if is_live_voice_message(user_message):
-            return build_live_voice_prompt(
+            prompt = build_live_voice_prompt(
                 self,
                 session,
                 user_message,
                 context_items,
             )
-        assembly = (
-            self._pop_cached_prompt_context(session, user_message)
-            or self.build_prompt_context(session, user_message, context_items)
-        )
-        return assembly, render_prompt_assembly(assembly)
+        else:
+            assembly = (
+                self._pop_cached_prompt_context(session, user_message)
+                or self.build_prompt_context(session, user_message, context_items)
+            )
+            prompt = assembly, render_prompt_assembly(assembly)
+        from app.live_voice.llm.lmstudio_diagnostics import record_rendered_prompt
+
+        record_rendered_prompt(*prompt)
+        return prompt
 
     def _provider_messages(
         self,
@@ -613,7 +618,9 @@ class ChatSessionStore(JsonChatSessionStore):
         from app.live_voice.llm import metrics as llm_metrics
 
         if llm_metrics.is_lmstudio_provider(provider):
-            return llm_metrics.generate_lmstudio_reply(
+            from app.live_voice.llm import lmstudio_diagnostics
+
+            return lmstudio_diagnostics.generate_lmstudio_reply(
                 self,
                 session,
                 user_message,
@@ -621,6 +628,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 model_id=model_id,
                 context_items=context_items,
                 provider=provider,
+                fallback_generate=llm_metrics.generate_lmstudio_reply,
                 routing_deadline_at=routing_deadline_at,
             )
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
@@ -726,10 +734,13 @@ class ChatSessionStore(JsonChatSessionStore):
             "routing_deadline_at": routing_deadline_at,
         }
         if llm_metrics.is_lmstudio_provider(provider):
-            yield from llm_metrics.stream_lmstudio_reply(
+            from app.live_voice.llm import lmstudio_responses
+
+            yield from lmstudio_responses.stream_lmstudio_reply(
                 self,
                 session,
                 user_message,
+                fallback_stream=llm_metrics.stream_lmstudio_reply,
                 **stream_args,
             )
             return

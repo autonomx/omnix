@@ -12,16 +12,11 @@ import re
 import time
 from collections.abc import Callable
 from contextvars import ContextVar
-from functools import wraps
 from typing import Any
 
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.chat.store import _model_key
-
-from app.live_voice.llm import metrics as metrics_runtime
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_live_chat_lmstudio_diagnostics_installed"
 _ACTIVE_CALL: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_lmstudio_nonstream_diagnostics",
     default=None,
@@ -86,7 +81,7 @@ def _rendered_prompt_fields(assembly: Any, rendered: Any) -> dict[str, Any]:
 
 def _run_lmstudio_nonstream_diagnostics(
     original: Callable[..., dict[str, Any]],
-    self: PromptChatSessionStore,
+    self: Any,
     session: Any,
     user_message: Any,
     *,
@@ -166,61 +161,40 @@ def _run_lmstudio_nonstream_diagnostics(
         _ACTIVE_CALL.reset(token)
 
 
-def install_live_chat_lmstudio_diagnostics_hook() -> None:
-    """Wrap final prompt rendering and LM Studio non-stream generation."""
-    if getattr(metrics_runtime, _HOOK_SENTINEL, False):
-        return
+def record_rendered_prompt(assembly: Any, rendered: Any) -> None:
+    """Capture final prompt dimensions during an instrumented LM Studio call."""
+    active = _ACTIVE_CALL.get()
+    if active is not None:
+        active.update(_rendered_prompt_fields(assembly, rendered))
 
-    original_build_prompt = PromptChatSessionStore.build_provider_prompt
-    original_generate = metrics_runtime.generate_lmstudio_reply
 
-    @wraps(original_build_prompt)
-    def patched_build_prompt(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        context_items: list[dict[str, Any]] | None = None,
-    ):
-        assembly, rendered = original_build_prompt(
-            self,
-            session,
-            user_message,
-            context_items,
-        )
-        active = _ACTIVE_CALL.get()
-        if active is not None:
-            active.update(_rendered_prompt_fields(assembly, rendered))
-        return assembly, rendered
-
-    @wraps(original_generate)
-    def patched_generate(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]],
-        provider: Any | None = None,
-        routing_deadline_at: float | None = None,
-    ) -> dict[str, Any]:
-        return _run_lmstudio_nonstream_diagnostics(
-            original_generate,
-            self,
-            session,
-            user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            provider=provider,
-            routing_deadline_at=routing_deadline_at,
-        )
-
-    PromptChatSessionStore.build_provider_prompt = patched_build_prompt
-    metrics_runtime.generate_lmstudio_reply = patched_generate
-    setattr(metrics_runtime, _HOOK_SENTINEL, True)
+def generate_lmstudio_reply(
+    self: Any,
+    session: Any,
+    user_message: Any,
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+    context_items: list[dict[str, Any]],
+    provider: Any | None,
+    fallback_generate: Callable[..., dict[str, Any]],
+    routing_deadline_at: float | None = None,
+) -> dict[str, Any]:
+    """Add privacy-safe diagnostics around the direct provider metrics adapter."""
+    return _run_lmstudio_nonstream_diagnostics(
+        fallback_generate,
+        self,
+        session,
+        user_message,
+        provider_id=provider_id,
+        model_id=model_id,
+        context_items=context_items,
+        provider=provider,
+        routing_deadline_at=routing_deadline_at,
+    )
 
 
 __all__ = [
-    "install_live_chat_lmstudio_diagnostics_hook",
+    "generate_lmstudio_reply",
+    "record_rendered_prompt",
 ]
