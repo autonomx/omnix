@@ -27,3 +27,13 @@ each new golden.
 `harness.capture(name, fn)` requires a dictionary result and a checked-in golden.
 The harness replaces timestamps, durations, and UUIDs in first-seen order,
 rounds floats to six decimals, preserves ordered sequences, and sorts sets.
+
+## Live voice scenarios
+
+`live-voice-prompt` fixes a character identity, conversation profile, approved
+memory record, recent transcript and current spoken user turn. Its golden records
+the assembled provider messages and prompt-budget diagnostics.
+
+`live-voice-tts-lane` fixes streamed response text, records the existing phrase
+splitter's complete phrases and final tail, and schedules deterministic PCM
+frames through the accepted TTS lane using `FakeTTS`.

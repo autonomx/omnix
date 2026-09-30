@@ -1,0 +1,104 @@
+{
+  "complete_phrases": [
+    "The first spoken phrase is ready.",
+    "The second phrase follows clearly!"
+  ],
+  "input_text": "The first spoken phrase is ready. The second phrase follows clearly! A final thought closes the response",
+  "pending_tail": "A final thought closes the response",
+  "provider_calls": [
+    {
+      "kwargs": {
+        "chunk_size": 2,
+        "temperature": 0.4
+      },
+      "language": "en-US",
+      "speaker": "sofia-calm",
+      "text": "The first spoken phrase is ready."
+    },
+    {
+      "kwargs": {
+        "chunk_size": 2,
+        "temperature": 0.4
+      },
+      "language": "en-US",
+      "speaker": "sofia-calm",
+      "text": "The second phrase follows clearly!"
+    },
+    {
+      "kwargs": {
+        "chunk_size": 2,
+        "temperature": 0.4
+      },
+      "language": "en-US",
+      "speaker": "sofia-calm",
+      "text": "A final thought closes the response"
+    }
+  ],
+  "scheduled_phrases": [
+    {
+      "frames": [
+        {
+          "pcm_hex": "7fba45c4",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 0
+          }
+        },
+        {
+          "pcm_hex": "2dcd8b80",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 1
+          }
+        }
+      ],
+      "phrase_index": 0,
+      "text": "The first spoken phrase is ready."
+    },
+    {
+      "frames": [
+        {
+          "pcm_hex": "d4c11088",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 0
+          }
+        },
+        {
+          "pcm_hex": "370f4c56",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 1
+          }
+        }
+      ],
+      "phrase_index": 1,
+      "text": "The second phrase follows clearly!"
+    },
+    {
+      "frames": [
+        {
+          "pcm_hex": "f143c6e3",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 0
+          }
+        },
+        {
+          "pcm_hex": "0c9a38a0",
+          "sample_rate": 24000,
+          "timing": {
+            "frame_index": 1
+          }
+        }
+      ],
+      "phrase_index": 2,
+      "text": "A final thought closes the response"
+    }
+  ],
+  "scheduler_after_turn": {
+    "active_cancelled": false,
+    "active_priority": null,
+    "waiting": []
+  }
+}
