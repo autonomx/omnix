@@ -1061,7 +1061,9 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
             ).fetchone()
             assert first_attempt and first_attempt[1] == 0
             work.connection.execute(
-                """UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                """UPDATE omnix_jobs
+                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
+                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
                     WHERE workspace_id = %s AND id = %s""",
                 (context.workspace_id, first_attempt[0]),
             )
@@ -1082,7 +1084,9 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
             ).fetchone()
             assert checkpoint and len(checkpoint[0]) == 1
             work.connection.execute(
-                """UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                """UPDATE omnix_jobs
+                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
+                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
                     WHERE workspace_id = %s AND id = %s""",
                 (context.workspace_id, checkpoint[1]),
             )
@@ -1659,7 +1663,9 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), ensure_local_ident
                     if find_valid_render(work.connection, context, blobs, key) is None:
                         missing_after_crash += 1
             work.connection.execute(
-                """UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                """UPDATE omnix_jobs
+                      SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second',
+                          available_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
                     WHERE workspace_id = %s AND id = %s AND status = 'running'""",
                 (context.workspace_id, checkpoint[1]),
             )
