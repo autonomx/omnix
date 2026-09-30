@@ -270,7 +270,7 @@ jobs:
       - name: Audit production Python dependencies
         run: pip-audit -r requirements/gateway.lock.txt
       - name: Audit production web dependencies
-        run: npm audit --omit=dev --audit-level=high --prefix src/apps/web
+        run: npm audit --omit=dev --audit-level=high --workspace=@omnix/web
 
   full-python-suite:
     name: full-python-suite (manual)
