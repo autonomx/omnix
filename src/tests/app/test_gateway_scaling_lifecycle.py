@@ -193,7 +193,7 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
 
 
 def test_delivery_worker_restarts_explicitly_and_drops_post_shutdown_checkpoints():
-    from app.voice.live_voice_runtime_offload import DeliveryPersistenceWorker
+    from app.live_voice.speech.runtime_offload import DeliveryPersistenceWorker
 
     received = []
     finished = threading.Event()
@@ -237,7 +237,7 @@ def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
 
 def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypatch):
     from fastapi import FastAPI
-    from app.voice import live_voice_runtime_offload as offload
+    from app.live_voice.speech import runtime_offload as offload
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
     monkeypatch.delenv("OMNIX_GATEWAY_TTS_HTTP", raising=False)
@@ -255,7 +255,7 @@ def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypa
     monkeypatch.setattr(resolver, "start", lambda: calls.append("start"))
     startup = next(
         handler for handler in app.router.on_startup
-        if handler.__module__ == "app.voice.live_voice_runtime_offload"
+        if handler.__module__ == "app.live_voice.speech.runtime_offload"
     )
     asyncio.run(startup())
     assert calls == []

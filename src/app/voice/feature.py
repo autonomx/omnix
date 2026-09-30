@@ -32,13 +32,7 @@ def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
 
 
 def _voice_router(context):
-    from .live_voice_cue_asset_routes import register_live_voice_cue_asset_routes
-    from .live_voice_diagnostics_routes import register_live_voice_diagnostics_routes
-    from .live_voice_runtime_offload import register_live_voice_runtime_offload
-    from .live_voice_speculative_tts import register_live_voice_execution_lane_routes
     from .stt_proxy_routes import register_stt_proxy_routes
-    from .tts_live_call_websocket import register_tts_live_call_websocket
-    from .tts_live_capabilities import register_tts_live_capability_routes
     from .tts_pcm_websocket import register_tts_pcm_websocket
     from .tts_runtime_routes import register_tts_runtime_routes
     from .voice_job_summary_routes import register_voice_job_summary_routes
@@ -46,15 +40,9 @@ def _voice_router(context):
 
     router = APIRouter()
     state = context.runtime_state
-    register_live_voice_runtime_offload(router, state)
-    register_live_voice_diagnostics_routes(router, state)
-    register_live_voice_cue_asset_routes(router, state)
     register_tts_runtime_routes(router, state)
     register_stt_proxy_routes(router, state)
     register_tts_pcm_websocket(router, state)
-    register_tts_live_call_websocket(router, state)
-    register_live_voice_execution_lane_routes(router, state)
-    register_tts_live_capability_routes(router, state)
     register_voice_job_summary_routes(router, state)
     register_voice_library_route(router, state)
     return router

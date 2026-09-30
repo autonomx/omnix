@@ -1,9 +1,7 @@
 """FastAPI route registration for live speech."""
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket
 
 from .compat import compatibility_payload
 from .events import error_event
@@ -30,7 +28,7 @@ def create_live_speech_router() -> APIRouter:
     async def status() -> LiveSpeechStatusResponse:
         return LiveSpeechStatusResponse.model_validate(live_speech_status_payload())
 
-    async def realtime_endpoint(channel: Any) -> None:
+    async def realtime_endpoint(channel: WebSocket) -> None:
         await channel.accept()
         service = LiveSpeechRealtimeService()
         await channel.send_json(service.session_created().wire())

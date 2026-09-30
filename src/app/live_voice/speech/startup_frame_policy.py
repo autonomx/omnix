@@ -1,12 +1,10 @@
 """Runtime startup policy for low-latency live-call TTS playback."""
 from __future__ import annotations
 
-from collections.abc import Iterator
-from functools import wraps
+from collections.abc import Callable, Iterator
 from itertools import chain
 from typing import Any
 
-from . import tts_live_call_websocket
 from app.conversation.tts_stream_contract import (
     DEFAULT_SAMPLE_RATE,
     STREAM_INITIAL_FALLBACK_THRESHOLD,
@@ -36,9 +34,6 @@ TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD = STREAM_INITIAL_FALLBACK_THRESHOLD
 # established 400 ms window.
 TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS = 160.0
 
-_HOOK_SENTINEL = "_omnix_tts_live_call_startup_policy_installed"
-
-
 def live_call_max_initial_silence_ms_for_first_chunk(
     pcm_bytes: bytes,
     sample_rate: int,
@@ -54,45 +49,26 @@ def live_call_max_initial_silence_ms_for_first_chunk(
     return STREAM_MAX_INITIAL_SILENCE_MS
 
 
-def _install_live_call_onset_policy() -> None:
-    if getattr(tts_live_call_websocket, _HOOK_SENTINEL, False):
-        return
-    original_streamer = tts_live_call_websocket._stream_pcm16_blocks
+def stream_live_call_pcm16_blocks(
+    chunks: Iterator[tuple[bytes, int, Any]],
+    *,
+    streamer: Callable[..., Iterator[tuple[bytes, int, Any]]],
+    block_samples: int,
+) -> Iterator[tuple[bytes, int, Any]]:
+    """Apply the first-chunk onset window before packing transport frames."""
+    chunk_iter = iter(chunks)
+    try:
+        first_chunk = next(chunk_iter)
+    except StopIteration:
+        return iter(())
 
-    @wraps(original_streamer)
-    def live_call_streamer(
-        chunks: Iterator[tuple[bytes, int, Any]],
-        *args: Any,
-        **kwargs: Any,
-    ) -> Iterator[tuple[bytes, int, Any]]:
-        chunk_iter = iter(chunks)
-        try:
-            first_chunk = next(chunk_iter)
-        except StopIteration:
-            return iter(())
-
-        first_pcm, first_rate, _first_timing = first_chunk
-        kwargs.setdefault(
-            "silence_threshold",
-            TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
-        )
-        kwargs.setdefault(
-            "max_initial_silence_ms",
-            live_call_max_initial_silence_ms_for_first_chunk(first_pcm, first_rate),
-        )
-        return original_streamer(
-            chain((first_chunk,), chunk_iter),
-            *args,
-            **kwargs,
-        )
-
-    tts_live_call_websocket._stream_pcm16_blocks = live_call_streamer
-    setattr(tts_live_call_websocket, _HOOK_SENTINEL, True)
-
-
-def install_tts_live_call_startup_frame_policy() -> int:
-    """Install the live-call frame and audible-onset policy, returning the old frame size."""
-    previous = int(tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES)
-    tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES = TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
-    _install_live_call_onset_policy()
-    return previous
+    first_pcm, first_rate, _first_timing = first_chunk
+    return streamer(
+        chain((first_chunk,), chunk_iter),
+        block_samples=block_samples,
+        silence_threshold=TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
+        max_initial_silence_ms=live_call_max_initial_silence_ms_for_first_chunk(
+            first_pcm,
+            first_rate,
+        ),
+    )

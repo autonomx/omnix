@@ -121,7 +121,7 @@ def test_diagnostics_summarize_before_existing_redaction_boundary() -> None:
 
 def test_server_diagnostics_enforce_content_free_boundary() -> None:
     tts = _source("src/app/observability/tts_stream_diagnostics.py")
-    browser_route = _source("src/app/voice/live_voice_diagnostics_routes.py")
+    browser_route = _source("src/app/live_voice/transport/diagnostics_routes.py")
     assert "sanitize_content_free_details(details)" in tts
     assert "sanitize_content_free_details(item.details)" in browser_route
     assert "**item.details" not in browser_route

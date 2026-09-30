@@ -8,6 +8,18 @@ from fastapi.testclient import TestClient
 from app.live_speech.api_stub import create_live_speech_router
 
 
+def _client() -> TestClient:
+    return TestClient(
+        _app(),
+        base_url="http://127.0.0.1",
+        headers={
+            "Host": "127.0.0.1",
+            "Origin": "http://127.0.0.1:5173",
+            "X-Omnix-Client": "test",
+        },
+    )
+
+
 def _app() -> FastAPI:
     app = FastAPI()
     app.include_router(create_live_speech_router())
@@ -15,7 +27,7 @@ def _app() -> FastAPI:
 
 
 def test_protocol_metadata_route_exposes_realtime_contract() -> None:
-    client = TestClient(_app())
+    client = _client()
 
     response = client.get("/api/live-speech/protocol")
 
@@ -26,7 +38,7 @@ def test_protocol_metadata_route_exposes_realtime_contract() -> None:
 
 
 def test_realtime_socket_accepts_text_and_creates_response() -> None:
-    client = TestClient(_app())
+    client = _client()
 
     with client.websocket_connect("/v1/realtime") as channel:
         created = channel.receive_json()
@@ -48,7 +60,7 @@ def test_realtime_socket_accepts_text_and_creates_response() -> None:
 
 
 def test_realtime_socket_emits_transcript_delta_for_audio_append() -> None:
-    client = TestClient(_app())
+    client = _client()
     sample = (2000).to_bytes(2, byteorder="little", signed=True) * 3200
     audio = base64.b64encode(sample).decode("ascii")
 

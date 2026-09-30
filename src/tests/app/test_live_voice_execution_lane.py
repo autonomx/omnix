@@ -6,8 +6,8 @@ import time
 import pytest
 from typing import Any
 
-from app.voice import live_voice_execution_lane as execution_lane
-from app.voice.live_voice_execution_lane import (
+from app.live_voice.speech import tts_lane as execution_lane
+from app.live_voice.speech.tts_lane import (
     PriorityTtsScheduler,
     TtsLanePriority,
     reset_live_voice_execution_lane_for_tests,

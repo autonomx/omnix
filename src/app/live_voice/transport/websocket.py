@@ -13,11 +13,19 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 
-from app.providers import service as provider_service
 from app.conversation.performance_contract import apply_performance_plan_to_provider
 from app.text import remove_emojis
+from app.live_voice.contracts import TTSProviderResolver
+from app.live_voice.speech.pcm_diagnostics import (
+    measured_pcm_block_streamer,
+    measured_pcm_converter,
+)
+from app.live_voice.speech.startup_frame_policy import (
+    TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
+    stream_live_call_pcm16_blocks,
+)
 
-from .live_voice_speculative_tts import resolve_live_call_tts_provider
+from app.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
 from app.observability.tts_stream_diagnostics import (
     begin_stream,
     diagnostics_log_path,
@@ -34,15 +42,11 @@ from app.conversation.tts_stream_contract import (
 
 _ROUTE_SENTINEL = "_omnix_tts_live_call_ws_registered"
 TTS_LIVE_CALL_WEBSOCKET_PATH = "/api/tts/live-call/websocket"
-TTS_PCM_FRAME_SAMPLES = 2_400
+TTS_PCM_FRAME_SAMPLES = TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
 FRAME_HANDOFF_TIMEOUT_SECONDS = 0.250
 SPECULATIVE_STARTUP_BURST_FRAMES = 2
-
-# Explicit dependency seam retained for focused tests and alternate gateway
-# composition. Runtime lane selection still happens below; this is not a
-# process-wide provider monkey-patch.
-get_tts_provider = provider_service.get_tts_provider
-
+_measured_audio_converter = measured_pcm_converter(_audio_chunk_to_pcm16_bytes)
+_measured_pcm_block_streamer = measured_pcm_block_streamer(_stream_pcm16_blocks)
 
 @dataclass(frozen=True)
 class FrameMessage:
@@ -265,6 +269,8 @@ async def _stream_phrase(
     websocket: WebSocket,
     payload: dict[str, Any],
     state: ConnectionState,
+    *,
+    provider_resolver: TTSProviderResolver,
 ) -> None:
     """Generate and send one output item without closing the session websocket."""
     phrase_index = _phrase_index(payload)
@@ -368,7 +374,7 @@ async def _stream_phrase(
             )
             return
 
-        provider = resolve_live_call_tts_provider(get_tts_provider())
+        provider = resolve_live_call_tts_provider(provider_resolver.get())
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)
@@ -464,7 +470,7 @@ async def _stream_phrase(
                         raw_chunk_interarrival_ms = (
                             raw_chunk_ready_at - last_raw_chunk_at
                         ) * 1000
-                        pcm_bytes = _audio_chunk_to_pcm16_bytes(audio_chunk)
+                        pcm_bytes = _measured_audio_converter(audio_chunk)
                         resolved_rate = int(sample_rate or DEFAULT_SAMPLE_RATE)
                         sample_count = len(pcm_bytes) // 2
                         raw_chunk_count += 1
@@ -584,8 +590,9 @@ async def _stream_phrase(
                         )
                     return not stopped()
 
-                transport_frames = _stream_pcm16_blocks(
+                transport_frames = stream_live_call_pcm16_blocks(
                     raw_chunks(),
+                    streamer=_measured_pcm_block_streamer,
                     block_samples=TTS_PCM_FRAME_SAMPLES,
                 )
                 deferred_frame: tuple[bytes, int, Any] | None = None
@@ -817,7 +824,12 @@ async def _stream_phrase(
             )
 
 
-def register_tts_live_call_websocket(router: APIRouter, state: Any) -> None:
+def register_tts_live_call_websocket(
+    router: APIRouter,
+    state: Any,
+    *,
+    provider_resolver: TTSProviderResolver,
+) -> None:
     if getattr(state, _ROUTE_SENTINEL, False):
         return
     setattr(state, _ROUTE_SENTINEL, True)
@@ -853,7 +865,12 @@ def register_tts_live_call_websocket(router: APIRouter, state: Any) -> None:
                         }
                     )
                     continue
-                await _stream_phrase(websocket, payload, state)
+                await _stream_phrase(
+                    websocket,
+                    payload,
+                    state,
+                    provider_resolver=provider_resolver,
+                )
         finally:
             _stop_connection(state, "route-cleanup")
             receiver.cancel()

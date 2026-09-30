@@ -7,10 +7,8 @@ from collections.abc import Callable, Iterator
 from functools import wraps
 from typing import Any
 
-from . import tts_live_call_websocket
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_tts_live_call_pcm_diagnostics_installed"
 _DIAGNOSTIC_STREAM_ID = "gateway-live-tts-pcm-conversion"
 _SLOW_CONVERSION_MS = 25.0
 _THREAD_STATE = threading.local()
@@ -119,22 +117,7 @@ def measured_pcm_block_streamer(
     return measured
 
 
-def install_tts_live_call_pcm_diagnostics_hook() -> None:
-    """Measure conversion and block packing imported by the persistent route."""
-
-    if getattr(tts_live_call_websocket, _HOOK_SENTINEL, False):
-        return
-    tts_live_call_websocket._audio_chunk_to_pcm16_bytes = measured_pcm_converter(
-        tts_live_call_websocket._audio_chunk_to_pcm16_bytes
-    )
-    tts_live_call_websocket._stream_pcm16_blocks = measured_pcm_block_streamer(
-        tts_live_call_websocket._stream_pcm16_blocks
-    )
-    setattr(tts_live_call_websocket, _HOOK_SENTINEL, True)
-
-
 __all__ = [
-    "install_tts_live_call_pcm_diagnostics_hook",
     "measured_pcm_block_streamer",
     "measured_pcm_converter",
 ]

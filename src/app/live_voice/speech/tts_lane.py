@@ -18,6 +18,7 @@ from app.settings.access import load_settings
 from app.providers.audio_registry import get_audio_registry
 
 from app.observability.tts_stream_diagnostics import stream_log
+from app.live_voice.contracts import TTSProvider
 
 
 class TtsLanePriority(IntEnum):
@@ -59,7 +60,7 @@ class PriorityTtsScheduler:
 
     def stream(
         self,
-        provider: Any,
+        provider: TTSProvider,
         *,
         text: str,
         speaker: str | None,
@@ -307,7 +308,7 @@ def live_voice_tts_scheduler() -> PriorityTtsScheduler:
     return _TTS_SCHEDULER
 
 
-def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
+def resolve_live_voice_tts_provider(default_provider: TTSProvider) -> tuple[TTSProvider, str]:
     """Return an optional separately instantiated provider for the live lane."""
     global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
 

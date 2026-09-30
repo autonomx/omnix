@@ -22,6 +22,7 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
     "hermes": "app.assist_core.feature:FEATURE",
     "image": "app.image.feature:FEATURE",
     "voice": "app.voice.feature:FEATURE",
+    "live-voice": "app.live_voice.feature:FEATURE",
     "research": "app.research.feature:FEATURE",
     "story": "app.story.feature:FEATURE",
     "rpg": "app.rpg.feature:FEATURE",

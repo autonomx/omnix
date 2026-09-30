@@ -6,17 +6,15 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
-from functools import wraps
 from typing import Any
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter
 
 from app.providers.service import get_tts_provider
 
 from app.observability.tts_stream_diagnostics import active_streams_snapshot, stream_log
 
 _STATE_SENTINEL = "_omnix_live_voice_runtime_offload_registered"
-_HOOK_SENTINEL = "_omnix_live_voice_runtime_offload_hook_installed"
 _DEFAULT_PROVIDER_REFRESH_SECONDS = 5.0
 _DEFAULT_DELIVERY_QUEUE_SIZE = 128
 _PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
@@ -326,7 +324,7 @@ def get_cached_live_tts_provider(provider_name: str | None = None) -> Any:
 def register_live_voice_runtime_offload(router: APIRouter, state: Any) -> None:
     if getattr(state, _STATE_SENTINEL, False):
         return
-    install_live_voice_runtime_offload_hook(constructor_hook=False)
+    configure_live_voice_runtime_offload()
     setattr(state, _STATE_SENTINEL, True)
     state.live_voice_delivery_persistence_worker = _PERSISTENCE_WORKER
     state.live_voice_tts_provider_resolver = _PROVIDER_RESOLVER
@@ -353,31 +351,15 @@ def register_live_voice_runtime_offload(router: APIRouter, state: Any) -> None:
     router.add_event_handler("shutdown", shutdown)
 
 
-def install_live_voice_runtime_offload_hook(*, constructor_hook: bool = True) -> None:
-    """Install bounded persistence and provider warming before app creation."""
-    if constructor_hook and getattr(FastAPI, _HOOK_SENTINEL, False):
-        return
-
-    from . import live_voice_stream_diagnostics
+def configure_live_voice_runtime_offload() -> None:
+    """Compose bounded persistence and provider resolution for live voice."""
+    from app.live_voice import diagnostics
 
     global _PROVIDER_RESOLVER, _PERSISTENCE_WORKER
     if _PERSISTENCE_WORKER is None:
-        _PERSISTENCE_WORKER = DeliveryPersistenceWorker(live_voice_stream_diagnostics._persist_delivery)
-        live_voice_stream_diagnostics._persist_delivery = _PERSISTENCE_WORKER.enqueue
+        _PERSISTENCE_WORKER = DeliveryPersistenceWorker(
+            diagnostics.persist_delivery_checkpoint
+        )
+    if _PROVIDER_RESOLVER is None:
         _PROVIDER_RESOLVER = CachedTtsProviderResolver(get_tts_provider)
-    if not constructor_hook:
-        return
-
-    original_init = FastAPI.__init__
-
-    @wraps(original_init)
-    def patched_init(self: FastAPI, *args: Any, **kwargs: Any) -> None:
-        original_init(self, *args, **kwargs)
-        is_gateway = kwargs.get("title") == "Omnix Web Gateway"
-        if not is_gateway and args:
-            is_gateway = args[0] == "Omnix Web Gateway"
-        if is_gateway:
-            register_live_voice_runtime_offload(self, self.state)
-
-    FastAPI.__init__ = patched_init  # type: ignore[method-assign]
-    setattr(FastAPI, _HOOK_SENTINEL, True)
+    diagnostics.configure_delivery_checkpoint_dispatcher(_PERSISTENCE_WORKER.enqueue)

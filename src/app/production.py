@@ -112,9 +112,9 @@ def create_production_app(config: RuntimeConfig | None = None):
     settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
     from app.settings.access import install_settings_service
     install_settings_service(settings_service)
-    from app.live_voice_hardware_policy import install_live_voice_hardware_policy
+    from app.live_voice.hardware_policy import apply_live_voice_process_defaults
 
-    install_live_voice_hardware_policy()
+    apply_live_voice_process_defaults()
     # Resolve adapters after bootstrap, including when a schema exporter or test
     # previously imported the provider-free gateway factory in this process.
     from app.assets import default_asset_store

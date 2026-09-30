@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import struct
 
-from app.voice.tts_live_call_startup_frame_policy import (
+from app.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS,
     TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,

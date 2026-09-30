@@ -26,6 +26,7 @@ LIVE_VOICE_STREAM_LOG_BACKUP_COUNT = 4
 _ID_PATTERN = re.compile(r"[^A-Za-z0-9_.:-]+")
 _SEQUENCE = itertools.count(1)
 _DELIVERY_CHECKPOINT_RECORDER: DeliveryCheckpointRecorder | None = None
+_DELIVERY_CHECKPOINT_DISPATCHER: DeliveryCheckpointRecorder | None = None
 
 
 def _json_default(value: Any) -> Any:
@@ -86,10 +87,22 @@ def configure_delivery_checkpoint_recorder(
     _DELIVERY_CHECKPOINT_RECORDER = recorder
 
 
+def configure_delivery_checkpoint_dispatcher(
+    dispatcher: DeliveryCheckpointRecorder | None,
+) -> None:
+    """Select the bounded queue used to dispatch durable delivery checkpoints."""
+    global _DELIVERY_CHECKPOINT_DISPATCHER
+    _DELIVERY_CHECKPOINT_DISPATCHER = dispatcher
+
+
 def live_voice_log(trace_id: str, source: str, event: str, **details: Any) -> None:
     """Queue one JSON-line live-call diagnostics record without blocking audio work."""
     if event == "delivery_checkpoint":
-        _persist_delivery(details)
+        dispatcher = _DELIVERY_CHECKPOINT_DISPATCHER
+        if dispatcher is None:
+            _persist_delivery(details)
+        else:
+            dispatcher(details)
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "monotonic_ms": round(time.perf_counter_ns() / 1_000_000, 3),

@@ -8,7 +8,6 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.voice import tts_live_call_websocket as _tts_live_call_websocket
 from app.gateway.hooks.live_chat_companion_context import install_live_chat_companion_context_hook
 from app.chat.live_chat_live_voice_profile import install_live_chat_live_voice_profile_hook
 from app.chat.live_chat_lmstudio_diagnostics import (
@@ -25,22 +24,12 @@ from app.chat.live_chat_provider_metrics import install_live_chat_provider_metri
 from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
 from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
 from .live_sse_transport import install_live_sse_transport_hook
-from app.voice.live_voice_runtime_offload import (
-    get_cached_live_tts_provider,
-    install_live_voice_runtime_offload_hook,
-)
 from app.chat.live_voice_spoken_style import install_live_voice_spoken_style_hook
 from app.chat.lmstudio_loaded_model_resolution import (
     install_lmstudio_loaded_model_resolution_hook,
 )
 from .memory_job_offload import install_memory_job_offload_hook
 from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_hook
-from app.voice.tts_live_call_pcm_diagnostics import (
-    install_tts_live_call_pcm_diagnostics_hook,
-)
-from app.voice.tts_live_call_startup_frame_policy import (
-    install_tts_live_call_startup_frame_policy,
-)
 
 
 _LOCAL_BROWSER_CORS_HOOK = "_omnix_local_browser_cors_hook_installed"
@@ -124,7 +113,7 @@ def _install_required_rpg_turn_hooks() -> None:
 def initialize_gateway_runtime_hooks():
     from .companion_activity_user_turn import install_companion_activity_user_turn_hook
     from app.chat.delivery_sync import persist_live_voice_delivery
-    from app.voice.live_voice_stream_diagnostics import (
+    from app.live_voice.diagnostics import (
         configure_delivery_checkpoint_recorder,
     )
 
@@ -145,12 +134,3 @@ def initialize_gateway_runtime_hooks():
     install_live_chat_prompt_dependency_stage_hook()
     install_live_chat_lmstudio_diagnostics_hook()
     install_memory_job_offload_hook()
-    install_live_voice_runtime_offload_hook(constructor_hook=False)
-    if (
-        _tts_live_call_websocket.get_tts_provider
-        is _tts_live_call_websocket.provider_service.get_tts_provider
-    ):
-        # Preserve the explicit dependency seam used by alternate compositions.
-        _tts_live_call_websocket.get_tts_provider = get_cached_live_tts_provider
-    install_tts_live_call_pcm_diagnostics_hook()
-    install_tts_live_call_startup_frame_policy()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.chat.store import _pop_ready_sentences
-from app.voice.live_voice_execution_lane import PriorityTtsScheduler, TtsLanePriority
+from app.live_voice.speech.tts_lane import PriorityTtsScheduler, TtsLanePriority
 from tests.characterization.fakes import FakeTTS
 from tests.characterization.harness import capture
 

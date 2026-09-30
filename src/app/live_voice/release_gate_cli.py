@@ -5,8 +5,11 @@ import argparse
 import json
 from pathlib import Path
 
-from .live_voice_release_gate import LiveVoiceReleaseThresholds, evaluate_live_voice_log
-from .live_voice_stream_diagnostics import LIVE_VOICE_STREAM_LOG_PATH
+from app.live_voice.release_gate import (
+    LiveVoiceReleaseThresholds,
+    evaluate_live_voice_log,
+)
+from app.live_voice.diagnostics import LIVE_VOICE_STREAM_LOG_PATH
 
 
 def build_parser() -> argparse.ArgumentParser:

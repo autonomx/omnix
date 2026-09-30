@@ -330,7 +330,7 @@
       "count": 1,
       "fingerprint": "default_chat_store:app.runtime_composition",
       "lines": [
-        310
+        307
       ],
       "path": "src/app/chat/character_store.py",
       "rule": "AL001"
@@ -357,7 +357,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_memory.settings",
       "lines": [
-        11
+        9
       ],
       "path": "src/app/chat/context_budget.py",
       "rule": "AL001"
@@ -519,7 +519,7 @@
       "count": 1,
       "fingerprint": "route_typed_stream_boundary:app.agent_runtime.chat_bridge",
       "lines": [
-        150
+        147
       ],
       "path": "src/app/chat/prompt_store.py",
       "rule": "AL001"
@@ -564,7 +564,7 @@
       "count": 1,
       "fingerprint": "ChatSessionStore._generate_reply:app.agent_runtime.chat_bridge",
       "lines": [
-        550
+        590
       ],
       "path": "src/app/chat/store.py",
       "rule": "AL001"
@@ -1160,7 +1160,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_lmstudio_responses_hook:app.chat.live_chat_provider_metrics.<dynamic>",
       "lines": [
-        769
+        772
       ],
       "path": "src/app/chat/live_chat_lmstudio_responses.py",
       "rule": "AL003"
@@ -1169,7 +1169,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_lmstudio_responses_hook:app.chat.live_chat_provider_metrics._stream_lmstudio_reply",
       "lines": [
-        768
+        771
       ],
       "path": "src/app/chat/live_chat_lmstudio_responses.py",
       "rule": "AL003"
@@ -1196,7 +1196,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_prompt_window_hook:app.chat.prompt_store.<dynamic>",
       "lines": [
-        227
+        225
       ],
       "path": "src/app/chat/live_chat_prompt_window.py",
       "rule": "AL003"
@@ -1205,7 +1205,7 @@
       "count": 1,
       "fingerprint": "install_live_chat_prompt_window_hook:app.chat.prompt_store.build_prompt_assembly",
       "lines": [
-        226
+        224
       ],
       "path": "src/app/chat/live_chat_prompt_window.py",
       "rule": "AL003"
@@ -1880,7 +1880,7 @@
       "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.<dynamic>",
       "lines": [
-        79
+        68
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -1889,16 +1889,7 @@
       "count": 1,
       "fingerprint": "_install_local_browser_cors_hook:fastapi.FastAPI.__init__",
       "lines": [
-        78
-      ],
-      "path": "src/app/gateway/runtime_hooks.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "initialize_gateway_runtime_hooks:app.voice.tts_live_call_websocket.get_tts_provider",
-      "lines": [
-        154
+        67
       ],
       "path": "src/app/gateway/runtime_hooks.py",
       "rule": "AL003"
@@ -1910,42 +1901,6 @@
         12
       ],
       "path": "src/app/image_service_app.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_hardware_policy:app.chat.live_chat_lmstudio_responses.stateful_responses_enabled",
-      "lines": [
-        150
-      ],
-      "path": "src/app/live_voice_hardware_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_hardware_policy:app.chat.live_chat_provider_metrics._stream_lmstudio_reply",
-      "lines": [
-        226
-      ],
-      "path": "src/app/live_voice_hardware_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_hardware_policy:app.voice.live_voice_speculative_tts.<dynamic>",
-      "lines": [
-        227
-      ],
-      "path": "src/app/live_voice_hardware_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_hardware_policy:app.voice.live_voice_speculative_tts._start_prefetch",
-      "lines": [
-        174
-      ],
-      "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL003"
     },
     {
@@ -4532,87 +4487,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "install_live_voice_runtime_offload_hook:app.voice.live_voice_stream_diagnostics._persist_delivery",
-      "lines": [
-        366
-      ],
-      "path": "src/app/voice/live_voice_runtime_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_runtime_offload_hook:fastapi.FastAPI.<dynamic>",
-      "lines": [
-        383
-      ],
-      "path": "src/app/voice/live_voice_runtime_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_live_voice_runtime_offload_hook:fastapi.FastAPI.__init__",
-      "lines": [
-        382
-      ],
-      "path": "src/app/voice/live_voice_runtime_offload.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_tts_live_call_pcm_diagnostics_hook:app.voice.tts_live_call_websocket.<dynamic>",
-      "lines": [
-        133
-      ],
-      "path": "src/app/voice/tts_live_call_pcm_diagnostics.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_tts_live_call_pcm_diagnostics_hook:app.voice.tts_live_call_websocket._audio_chunk_to_pcm16_bytes",
-      "lines": [
-        127
-      ],
-      "path": "src/app/voice/tts_live_call_pcm_diagnostics.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_tts_live_call_pcm_diagnostics_hook:app.voice.tts_live_call_websocket._stream_pcm16_blocks",
-      "lines": [
-        130
-      ],
-      "path": "src/app/voice/tts_live_call_pcm_diagnostics.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_live_call_onset_policy:app.voice.tts_live_call_websocket.<dynamic>",
-      "lines": [
-        90
-      ],
-      "path": "src/app/voice/tts_live_call_startup_frame_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_install_live_call_onset_policy:app.voice.tts_live_call_websocket._stream_pcm16_blocks",
-      "lines": [
-        89
-      ],
-      "path": "src/app/voice/tts_live_call_startup_frame_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
-      "fingerprint": "install_tts_live_call_startup_frame_policy:app.voice.tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES",
-      "lines": [
-        96
-      ],
-      "path": "src/app/voice/tts_live_call_startup_frame_policy.py",
-      "rule": "AL003"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:builtins.opening_bonus",
       "lines": [
         19
@@ -4705,7 +4579,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_chat_lmstudio_responses_hook",
       "lines": [
-        687
+        690
       ],
       "path": "src/app/chat/live_chat_lmstudio_responses.py",
       "rule": "AL004"
@@ -4723,7 +4597,7 @@
       "count": 1,
       "fingerprint": "<module>:install_live_chat_prompt_window_hook",
       "lines": [
-        207
+        205
       ],
       "path": "src/app/chat/live_chat_prompt_window.py",
       "rule": "AL004"
@@ -4912,18 +4786,9 @@
       "count": 1,
       "fingerprint": "<module>:_install_local_browser_cors_hook",
       "lines": [
-        55
+        44
       ],
       "path": "src/app/gateway/runtime_hooks.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_voice_hardware_policy",
-      "lines": [
-        126
-      ],
-      "path": "src/app/live_voice_hardware_policy.py",
       "rule": "AL004"
     },
     {
@@ -5509,42 +5374,6 @@
         667
       ],
       "path": "src/app/trading/trading_session_reliability.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_live_voice_runtime_offload_hook",
-      "lines": [
-        356
-      ],
-      "path": "src/app/voice/live_voice_runtime_offload.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_tts_live_call_pcm_diagnostics_hook",
-      "lines": [
-        122
-      ],
-      "path": "src/app/voice/tts_live_call_pcm_diagnostics.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:_install_live_call_onset_policy",
-      "lines": [
-        57
-      ],
-      "path": "src/app/voice/tts_live_call_startup_frame_policy.py",
-      "rule": "AL004"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:install_tts_live_call_startup_frame_policy",
-      "lines": [
-        93
-      ],
-      "path": "src/app/voice/tts_live_call_startup_frame_policy.py",
       "rule": "AL004"
     },
     {
@@ -6289,7 +6118,7 @@
       "count": 1,
       "fingerprint": "register_core_chat_routes:chat_session",
       "lines": [
-        58
+        64
       ],
       "path": "src/app/gateway/kernel_routes/core_chat_routes.py",
       "rule": "AL005"
@@ -6298,7 +6127,7 @@
       "count": 1,
       "fingerprint": "register_core_chat_routes:chat_session_attachments",
       "lines": [
-        83
+        89
       ],
       "path": "src/app/gateway/kernel_routes/core_chat_routes.py",
       "rule": "AL005"
@@ -6472,6 +6301,87 @@
         30
       ],
       "path": "src/app/live_speech/api_stub.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_execution_lane_routes:accept_speculative_tts",
+      "lines": [
+        751
+      ],
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_execution_lane_routes:cancel_speculative_tts",
+      "lines": [
+        767
+      ],
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_execution_lane_routes:live_voice_execution_lane_status",
+      "lines": [
+        689
+      ],
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_execution_lane_routes:prefetch_speculative_tts",
+      "lines": [
+        703
+      ],
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_tts_live_capability_routes:tts_live_call_capabilities",
+      "lines": [
+        60
+      ],
+      "path": "src/app/live_voice/transport/capabilities.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_voice_release_gate_payload",
+      "lines": [
+        104
+      ],
+      "path": "src/app/live_voice/transport/diagnostics_routes.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_diagnostics_routes:ingest_live_voice_diagnostics",
+      "lines": [
+        61
+      ],
+      "path": "src/app/live_voice/transport/diagnostics_routes.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_diagnostics_routes:live_voice_diagnostics_status",
+      "lines": [
+        78
+      ],
+      "path": "src/app/live_voice/transport/diagnostics_routes.py",
+      "rule": "AL005"
+    },
+    {
+      "count": 1,
+      "fingerprint": "register_live_voice_diagnostics_routes:live_voice_release_gate",
+      "lines": [
+        85
+      ],
+      "path": "src/app/live_voice/transport/diagnostics_routes.py",
       "rule": "AL005"
     },
     {
@@ -7016,87 +6926,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_voice_release_gate_payload",
-      "lines": [
-        100
-      ],
-      "path": "src/app/voice/live_voice_diagnostics_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_diagnostics_routes:ingest_live_voice_diagnostics",
-      "lines": [
-        57
-      ],
-      "path": "src/app/voice/live_voice_diagnostics_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_diagnostics_routes:live_voice_diagnostics_status",
-      "lines": [
-        74
-      ],
-      "path": "src/app/voice/live_voice_diagnostics_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_diagnostics_routes:live_voice_release_gate",
-      "lines": [
-        81
-      ],
-      "path": "src/app/voice/live_voice_diagnostics_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_execution_lane_routes:accept_speculative_tts",
-      "lines": [
-        707
-      ],
-      "path": "src/app/voice/live_voice_speculative_tts.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_execution_lane_routes:cancel_speculative_tts",
-      "lines": [
-        723
-      ],
-      "path": "src/app/voice/live_voice_speculative_tts.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_execution_lane_routes:live_voice_execution_lane_status",
-      "lines": [
-        645
-      ],
-      "path": "src/app/voice/live_voice_speculative_tts.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_live_voice_execution_lane_routes:prefetch_speculative_tts",
-      "lines": [
-        659
-      ],
-      "path": "src/app/voice/live_voice_speculative_tts.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "register_tts_live_capability_routes:tts_live_call_capabilities",
-      "lines": [
-        60
-      ],
-      "path": "src/app/voice/tts_live_capabilities.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:authorityz",
       "lines": [
         59
@@ -7299,6 +7128,15 @@
         43
       ],
       "path": "src/app/live_speech/benchmark_runner.py",
+      "rule": "AL008"
+    },
+    {
+      "count": 1,
+      "fingerprint": "main:print",
+      "lines": [
+        43
+      ],
+      "path": "src/app/live_voice/release_gate_cli.py",
       "rule": "AL008"
     },
     {
@@ -7953,15 +7791,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        40
-      ],
-      "path": "src/app/voice/live_voice_release_gate_cli.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
       "fingerprint": "_authoritative_diff_text:except",
       "lines": [
         378
@@ -8442,6 +8271,33 @@
         491
       ],
       "path": "src/app/launcher/service_manager.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "_json_default:except",
+      "lines": [
+        36
+      ],
+      "path": "src/app/live_voice/diagnostics.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "persist_delivery_checkpoint:except",
+      "lines": [
+        140
+      ],
+      "path": "src/app/live_voice/diagnostics.py",
+      "rule": "AL009"
+    },
+    {
+      "count": 1,
+      "fingerprint": "evaluate_live_voice_release_gate:except",
+      "lines": [
+        129
+      ],
+      "path": "src/app/live_voice/release_gate.py",
       "rule": "AL009"
     },
     {
@@ -9943,33 +9799,6 @@
         704
       ],
       "path": "src/app/trading/yahoo_evidence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "evaluate_live_voice_release_gate:except",
-      "lines": [
-        129
-      ],
-      "path": "src/app/voice/live_voice_release_gate.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_json_default:except",
-      "lines": [
-        35
-      ],
-      "path": "src/app/voice/live_voice_stream_diagnostics.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "persist_delivery_checkpoint:except",
-      "lines": [
-        127
-      ],
-      "path": "src/app/voice/live_voice_stream_diagnostics.py",
       "rule": "AL009"
     },
     {

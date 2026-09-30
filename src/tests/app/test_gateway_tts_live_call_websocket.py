@@ -135,10 +135,9 @@ def _assert_start_control(
 
 
 def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
-    from app.voice import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(
         tts_live_call_websocket,
         "diagnostics_log_path",
@@ -162,7 +161,17 @@ def _configure_gateway(monkeypatch, provider: FakeTtsProvider):
         lambda stream_id, **details: 0,
     )
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    return TestClient(app), logged_events
+    provider_resolver = app.state.live_voice_tts_provider_resolver
+    monkeypatch.setattr(
+        provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    ), logged_events
 
 
 def test_live_call_websocket_reuses_one_connection_for_multiple_phrases(monkeypatch) -> None:

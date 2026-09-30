@@ -59,7 +59,10 @@ _RESPONSE_STATES: OrderedDict[str, _ResponseState] = OrderedDict()
 
 
 def stateful_responses_enabled() -> bool:
-    return (_env_str(_STATE_ENV) or "").strip().casefold() in {
+    raw = _env_str(_STATE_ENV)
+    if raw is None:
+        return True
+    return raw.strip().casefold() in {
         "1",
         "true",
         "yes",

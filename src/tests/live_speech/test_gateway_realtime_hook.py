@@ -5,8 +5,20 @@ from fastapi.testclient import TestClient
 from app.gateway.main import create_gateway_app
 
 
+def _client() -> TestClient:
+    return TestClient(
+        create_gateway_app(),
+        base_url="http://127.0.0.1",
+        headers={
+            "Host": "127.0.0.1",
+            "Origin": "http://127.0.0.1:5173",
+            "X-Omnix-Client": "test",
+        },
+    )
+
+
 def test_default_gateway_exposes_live_speech_status_route() -> None:
-    client = TestClient(create_gateway_app())
+    client = _client()
 
     response = client.get("/api/live-speech/status")
 
@@ -18,7 +30,7 @@ def test_default_gateway_exposes_live_speech_status_route() -> None:
 
 
 def test_default_gateway_exposes_live_speech_protocol_route() -> None:
-    client = TestClient(create_gateway_app())
+    client = _client()
 
     response = client.get("/api/live-speech/protocol")
 

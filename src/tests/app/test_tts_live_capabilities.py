@@ -1,4 +1,4 @@
-from app.voice import tts_live_capabilities
+from app.live_voice.transport import capabilities as tts_live_capabilities
 
 
 class _PhraseProvider:

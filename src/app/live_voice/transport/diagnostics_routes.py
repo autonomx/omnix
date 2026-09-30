@@ -7,14 +7,18 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from app.observability.content_free_diagnostics import sanitize_content_free_details
-from .live_voice_release_gate import (
+from app.live_voice.release_gate import (
     LiveVoiceReleaseEvent,
     LiveVoiceReleaseGateReport,
     LiveVoiceReleaseThresholds,
     evaluate_live_voice_log,
     evaluate_live_voice_release_gate,
 )
-from .live_voice_stream_diagnostics import diagnostics_log_path, live_voice_log, normalize_trace_id
+from app.live_voice.diagnostics import (
+    diagnostics_log_path,
+    live_voice_log,
+    normalize_trace_id,
+)
 
 _ROUTE_SENTINEL = "_omnix_live_voice_diagnostics_registered"
 LIVE_VOICE_DIAGNOSTICS_PATH = "/api/tts/live-call/diagnostics"

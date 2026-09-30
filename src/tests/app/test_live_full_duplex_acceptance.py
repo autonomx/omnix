@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.voice.tts_live_call_startup_frame_policy import (
+from app.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
 )
 
@@ -74,16 +74,21 @@ def _item_request(output_id: str, generation_epoch: int, output_order: int) -> d
 
 
 def test_item_cancellation_preserves_unrelated_persistent_tts_output(monkeypatch) -> None:
-    from app.voice import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = FakeTtsProvider()
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(tts_live_call_websocket, "diagnostics_log_path", lambda: "/tmp/live-acceptance.log")
     monkeypatch.setattr(tts_live_call_websocket, "stream_log", lambda *args, **kwargs: None)
     monkeypatch.setattr(tts_live_call_websocket, "begin_stream", lambda *args, **kwargs: 1)
     monkeypatch.setattr(tts_live_call_websocket, "end_stream", lambda *args, **kwargs: 0)
+    app = _app()
+    monkeypatch.setattr(
+        app.state.live_voice_tts_provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
     client = TestClient(
-        _app(),
+        app,
         raise_server_exceptions=False,
         base_url="http://127.0.0.1",
         headers={"X-Omnix-Client": "test"},
