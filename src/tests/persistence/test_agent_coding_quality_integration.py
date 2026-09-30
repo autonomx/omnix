@@ -362,6 +362,7 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 self.database = database
                 self.context = context
                 self.worker_id = "replacement-quality-worker"
+                self.quality_repository_factory = PostgresCodingQualityRepository
 
             @staticmethod
             def _quality_enabled(spec: AgentRunSpec) -> bool:

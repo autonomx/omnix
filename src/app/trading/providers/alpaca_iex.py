@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
-import os
 import re
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone

@@ -3,7 +3,7 @@ from __future__ import annotations
 """RPG session runtime responsibility module."""
 
 from copy import deepcopy
-from typing import Any, Dict, Iterable
+from typing import Any, Iterable
 
 from app.rpg.response_generation.strict_pipeline import StrictRpgProductionResponsePipeline
 from app.rpg.economy.service_resolver import resolve_service_turn
@@ -105,7 +105,7 @@ def _bool(value: Any, default: bool = False) -> bool:
     return default if value is None else bool(value)
 
 
-def _iter_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def _iter_sources(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
     seen: set[int] = set()
     for source in _phase8_part38_iter_candidate_sources(_safe_dict(payload)):
         if isinstance(source, dict) and id(source) not in seen:
@@ -120,14 +120,14 @@ def _iter_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
         return
 
 
-def _source_field(source: Dict[str, Any], key: str) -> str:
+def _source_field(source: dict[str, Any], key: str) -> str:
     source = _safe_dict(source)
     semantic = _safe_dict(source.get("semantic_advisory"))
     intent = _safe_dict(source.get("action_intent"))
     return _clean(source.get(key) or semantic.get(key) or intent.get(key))
 
 
-def _source_text(source: Dict[str, Any], player_input: str) -> str:
+def _source_text(source: dict[str, Any], player_input: str) -> str:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
@@ -151,7 +151,7 @@ def _source_text(source: Dict[str, Any], player_input: str) -> str:
     return _norm(" ".join(_clean(piece) for piece in pieces))
 
 
-def _is_social_claim(source: Dict[str, Any], player_input: str) -> bool:
+def _is_social_claim(source: dict[str, Any], player_input: str) -> bool:
     source = _safe_dict(source)
     semantic = _safe_dict(source.get("semantic_advisory"))
     action_type = _source_field(source, "action_type").casefold()
@@ -180,7 +180,7 @@ def _is_social_claim(source: Dict[str, Any], player_input: str) -> bool:
     return bool((has_claim or declarative) and has_achievement and not literal)
 
 
-def _has_travel_mismatch(payload: Dict[str, Any]) -> bool:
+def _has_travel_mismatch(payload: dict[str, Any]) -> bool:
     for source in _iter_sources(payload):
         action_type = _source_field(source, "action_type").casefold()
         travel = _safe_dict(source.get("travel_result"))
@@ -206,7 +206,7 @@ def _has_travel_mismatch(payload: Dict[str, Any]) -> bool:
     return False
 
 
-def _guard_fields(player_input: str, claim_source: Dict[str, Any]) -> Dict[str, Any]:
+def _guard_fields(player_input: str, claim_source: dict[str, Any]) -> dict[str, Any]:
     utterance = _clean(player_input) or "I report an accomplishment."
     narration = (
         f'You say, "{utterance}" The statement is treated as an unverified claim '
@@ -253,7 +253,7 @@ def _guard_fields(player_input: str, claim_source: Dict[str, Any]) -> Dict[str, 
     }
 
 
-def _patch_target(target: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
+def _patch_target(target: dict[str, Any], fields: dict[str, Any]) -> dict[str, Any]:
     patched = dict(_safe_dict(target))
     patched.update(deepcopy(fields))
     semantic_action = _safe_dict(
@@ -311,17 +311,17 @@ def _phase8_part39_patch_social_claim_mismatch(
 def _apply_turn_authoritative(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART39_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
 
     guarded_action = _safe_dict(action)
-    service_result: Dict[str, Any] = {}
+    service_result: dict[str, Any] = {}
     session = hydrate_simulation_player(
         deepcopy(_safe_dict(load_runtime_session(session_id)))
     )
@@ -375,10 +375,10 @@ def _apply_turn_authoritative(
 
 
 def _service_postcondition_satisfied(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
     session_id: str,
-    service_result: Dict[str, Any],
+    service_result: dict[str, Any],
 ) -> bool:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
@@ -411,11 +411,11 @@ def _service_postcondition_satisfied(
 
 
 def _patch_service_postcondition_payload(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
-    session: Dict[str, Any],
-    authoritative: Dict[str, Any],
-) -> Dict[str, Any]:
+    session: dict[str, Any],
+    authoritative: dict[str, Any],
+) -> dict[str, Any]:
     patched = dict(_safe_dict(payload))
     simulation = deepcopy(_safe_dict(authoritative.get("simulation_state")))
     resolved = deepcopy(_safe_dict(authoritative.get("result")))
@@ -464,7 +464,7 @@ def _patch_service_postcondition_payload(
     return patched
 
 
-def _grounded_service_visible_response(resolved: Dict[str, Any]) -> Dict[str, Any]:
+def _grounded_service_visible_response(resolved: dict[str, Any]) -> dict[str, Any]:
     resolved = _safe_dict(resolved)
     service_result = _safe_dict(resolved.get("service_result"))
     application = _safe_dict(resolved.get("service_application"))
@@ -523,10 +523,10 @@ def _grounded_service_visible_response(resolved: Dict[str, Any]) -> Dict[str, An
 
 
 def _canonicalize_publication(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     result = dict(_safe_dict(payload))
     existing = _safe_dict(
         result.get("narration_payload") or result.get("structured_narration")
@@ -602,7 +602,7 @@ def _canonicalize_publication(
     return result
 
 
-def _response_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _response_soft_truth(payload: dict[str, Any]) -> dict[str, Any]:
     narration = _safe_dict(
         payload.get("narration_payload") or payload.get("structured_narration")
     )
@@ -611,7 +611,7 @@ def _response_soft_truth(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _persist_soft_truth(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+def _persist_soft_truth(payload: dict[str, Any], session_id: str) -> dict[str, Any]:
     from app.rpg.session.session_runtime_store import (
         save_runtime_session as save_runtime_session,
     )
@@ -647,11 +647,11 @@ def _persist_soft_truth(payload: Dict[str, Any], session_id: str) -> Dict[str, A
 def apply_turn(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_apply_turn: Any = _PHASE8_PART39_BASE_APPLY_TURN,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_apply_turn(
         session_id,
         player_input,

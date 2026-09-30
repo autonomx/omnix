@@ -185,7 +185,7 @@ def _prepare_turn_action_context(ctx) -> bool:
         )
         ctx.action_type = _safe_str(ctx.action.get("action_type")).strip()
     # Lazy LLM gateway: build at most once per authoritative turn.
-    ctx._llm_gw_holder: List[Any] = []
+    ctx._llm_gw_holder: list[Any] = []
 
     ctx.advisory = {}
     ctx.semantic_advisory = {}

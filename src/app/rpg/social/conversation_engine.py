@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from .conversation_beats import (
     append_beat,
@@ -50,7 +50,7 @@ from .npc_conversations import (
 )
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
@@ -60,14 +60,14 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-def _player_location(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+def _player_location(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> str:
     runtime_state = _safe_dict(runtime_state)
     simulation_state = _safe_dict(simulation_state)
     player_state = _safe_dict(simulation_state.get("player_state"))
     return _safe_str(runtime_state.get("current_location_id") or player_state.get("location_id"))
 
 
-def _conversation_exists_for_group(simulation_state: Dict[str, Any], location_id: str, participants: List[str], topic_anchor: str) -> bool:
+def _conversation_exists_for_group(simulation_state: dict[str, Any], location_id: str, participants: list[str], topic_anchor: str) -> bool:
     target = sorted([_safe_str(x) for x in participants if _safe_str(x)])
     for conv in list_active_conversations(simulation_state, location_id=location_id):
         if sorted(conv.get("participants") or []) == target:
@@ -78,15 +78,15 @@ def _conversation_exists_for_group(simulation_state: Dict[str, Any], location_id
 
 
 def open_conversation(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     *,
     kind: str,
     location_id: str,
-    participants: List[str],
-    topic: Dict[str, Any],
+    participants: list[str],
+    topic: dict[str, Any],
     tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     initiator_id = select_initiator(simulation_state, participants)
     player_loc = _player_location(simulation_state, runtime_state)
@@ -108,13 +108,13 @@ def open_conversation(
     return conversation
 
 
-def _resolve_speaker_name(simulation_state: Dict[str, Any], speaker_id: str) -> str:
+def _resolve_speaker_name(simulation_state: dict[str, Any], speaker_id: str) -> str:
     npc_index = _safe_dict(_safe_dict(simulation_state).get("npc_index"))
     row = _safe_dict(npc_index.get(speaker_id))
     return _safe_str(row.get("name")) or _safe_str(speaker_id)
 
 
-def build_next_conversation_line(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+def build_next_conversation_line(conversation: dict[str, Any], simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     speaker_id = select_next_speaker(conversation, simulation_state)
     recent_lines = get_conversation_lines(simulation_state, conversation.get("conversation_id"))
@@ -196,7 +196,7 @@ def build_next_conversation_line(conversation: Dict[str, Any], simulation_state:
     )
 
 
-def should_close_conversation(conversation: Dict[str, Any], simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> bool:
+def should_close_conversation(conversation: dict[str, Any], simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> bool:
     conversation = _safe_dict(conversation)
     if _safe_str(conversation.get("status")) != "active":
         return True
@@ -205,7 +205,7 @@ def should_close_conversation(conversation: Dict[str, Any], simulation_state: Di
     return False
 
 
-def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+def try_start_ambient_conversations(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     if not settings["ambient_conversations_enabled"]:
         return simulation_state
@@ -239,7 +239,7 @@ def try_start_ambient_conversations(simulation_state: Dict[str, Any], runtime_st
     return simulation_state
 
 
-def try_start_party_reaction_conversation(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], player_action: Dict[str, Any], tick: int) -> Dict[str, Any]:
+def try_start_party_reaction_conversation(simulation_state: dict[str, Any], runtime_state: dict[str, Any], player_action: dict[str, Any], tick: int) -> dict[str, Any]:
     settings = resolve_conversation_settings(simulation_state, runtime_state)
     if not settings["party_reaction_interrupts_enabled"]:
         return simulation_state
@@ -270,7 +270,7 @@ def try_start_party_reaction_conversation(simulation_state: Dict[str, Any], runt
     return simulation_state
 
 
-def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+def advance_active_conversations(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     ensure_beats_state(simulation_state)
     ensure_signal_state(runtime_state)
 
@@ -324,7 +324,7 @@ def advance_active_conversations(simulation_state: Dict[str, Any], runtime_state
     return simulation_state
 
 
-def _post_player_ambient_delay_active(runtime_state: Dict[str, Any], settings: Dict[str, Any], tick: int) -> bool:
+def _post_player_ambient_delay_active(runtime_state: dict[str, Any], settings: dict[str, Any], tick: int) -> bool:
     runtime_state = _safe_dict(runtime_state)
     settings = _safe_dict(settings)
 
@@ -341,10 +341,10 @@ def _post_player_ambient_delay_active(runtime_state: Dict[str, Any], settings: D
 
 
 def _should_attempt_ambient_start(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     tick: int,
-    settings: Dict[str, Any],
+    settings: dict[str, Any],
 ) -> bool:
     if not settings.get("ambient_conversations_enabled", True):
         return False
@@ -375,7 +375,7 @@ def _should_attempt_ambient_start(
     return True
 
 
-def _trim_ambient_overflow(simulation_state: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
+def _trim_ambient_overflow(simulation_state: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
     max_ambient = int(settings.get("max_concurrent_ambient_threads", 1) or 1)
     ambient = [dict(c) for c in list_active_conversations(simulation_state) if _safe_str(dict(c).get("mode")) in {"", "ambient"}]
     if len(ambient) <= max_ambient:
@@ -389,7 +389,7 @@ def _trim_ambient_overflow(simulation_state: Dict[str, Any], settings: Dict[str,
     return simulation_state
 
 
-def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], tick: int) -> Dict[str, Any]:
+def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any], tick: int) -> dict[str, Any]:
     """Sole authoritative conversation lifecycle entrypoint.
 
     Pipeline:
@@ -462,9 +462,9 @@ def run_conversation_tick(simulation_state: Dict[str, Any], runtime_state: Dict[
 
 
 def _update_thread_metadata(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     """Update metadata on active threads (mode reclassification, importance recalc).
 
     Uses helpers from conversation_scheduler.

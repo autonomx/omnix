@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 # RPG session runtime responsibility module.
 # Phase 8.29 follow-up: keep the visible narration fallback wrapper from
@@ -45,12 +45,12 @@ def _phase8_attach_player_input(payload: Any, player_input: str) -> Any:
 def _apply_visible_fallback_with_travel_panels(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART29_BASE_APPLY_TURN_AUTHORITATIVE,
     _fallback_patch: Any = _phase8_patch_visible_fallback,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply a player turn without depending on mutable facade base aliases.
 
     runtime.py mirrors the final merged globals into every runtime_partXX module.

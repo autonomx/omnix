@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 
@@ -32,7 +32,7 @@ def call_story_authoring_provider(
     *,
     system_prompt: str,
     user_prompt: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if app_context is None:
         return {
             "ok": False,

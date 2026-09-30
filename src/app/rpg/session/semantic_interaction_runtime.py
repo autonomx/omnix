@@ -22,9 +22,9 @@ from typing import (
 
 
 def _clean_resolved_interaction_world_event_rows(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     """Remove recent_world_event_rows that reference resolved interactions."""
     resolved_labels: set[str] = set()
     resolved_ids: set[str] = set()
@@ -46,7 +46,7 @@ def _clean_resolved_interaction_world_event_rows(
     if not resolved_labels and not resolved_ids:
         return runtime_state
 
-    def _row_references_resolved(row: Dict[str, Any]) -> bool:
+    def _row_references_resolved(row: dict[str, Any]) -> bool:
         row = _safe_dict(row)
         eid = _safe_str(row.get("event_id")).strip().lower()
         row_id = _safe_str(row.get("reaction_id") or row.get("id")).strip().lower()
@@ -65,7 +65,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean recent_world_event_rows
     rows = _safe_list(runtime_state.get("recent_world_event_rows"))
-    kept: list[Dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
     for row in rows:
         row = _safe_dict(row)
         kind = _safe_str(row.get("kind")).strip().lower()
@@ -80,7 +80,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean recent_scene_beats
     beats = _safe_list(runtime_state.get("recent_scene_beats"))
-    kept_beats: list[Dict[str, Any]] = []
+    kept_beats: list[dict[str, Any]] = []
     for beat in beats:
         beat = _safe_dict(beat)
         if _row_references_resolved(beat):
@@ -90,7 +90,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean world_consequences
     consequences = _safe_list(runtime_state.get("world_consequences"))
-    kept_consequences: list[Dict[str, Any]] = []
+    kept_consequences: list[dict[str, Any]] = []
     for c in consequences:
         if not _row_references_resolved(_safe_dict(c)):
             kept_consequences.append(c)
@@ -98,7 +98,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean world_rumors
     rumors = _safe_list(runtime_state.get("world_rumors"))
-    kept_rumors: list[Dict[str, Any]] = []
+    kept_rumors: list[dict[str, Any]] = []
     for r in rumors:
         if not _row_references_resolved(_safe_dict(r)):
             kept_rumors.append(r)
@@ -106,7 +106,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean world_pressure
     pressure = _safe_list(runtime_state.get("world_pressure"))
-    kept_pressure: list[Dict[str, Any]] = []
+    kept_pressure: list[dict[str, Any]] = []
     for p in pressure:
         if not _row_references_resolved(_safe_dict(p)):
             kept_pressure.append(p)
@@ -114,7 +114,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean npc_reaction_records tied to resolved interactions
     reaction_records = _safe_list(runtime_state.get("npc_reaction_records"))
-    kept_reaction_records: list[Dict[str, Any]] = []
+    kept_reaction_records: list[dict[str, Any]] = []
     for record in reaction_records:
         record = _safe_dict(record)
         interaction_id = _safe_str(record.get("interaction_id")).strip()
@@ -125,7 +125,7 @@ def _clean_resolved_interaction_world_event_rows(
 
     # Clean escalation state tied to resolved interactions
     reaction_state_rows = _safe_list(runtime_state.get("interaction_reaction_state"))
-    kept_reaction_state_rows: list[Dict[str, Any]] = []
+    kept_reaction_state_rows: list[dict[str, Any]] = []
     for row in reaction_state_rows:
         row = _safe_dict(row)
         interaction_id = _safe_str(row.get("interaction_id")).strip()
@@ -137,10 +137,10 @@ def _clean_resolved_interaction_world_event_rows(
     return runtime_state
 
 
-def _prune_llm_records_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _prune_llm_records_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     records = _safe_list(runtime_state.get("llm_records"))[-_MAX_RUNTIME_LLM_RECORDS:]
-    new_index: Dict[str, Any] = {}
+    new_index: dict[str, Any] = {}
     for item in records:
         item = _safe_dict(item)
         record_type = _safe_str(item.get("type")).strip()
@@ -168,14 +168,14 @@ def _stable_semantic_action_id(tick: int, player_input: str, action_type: str, t
     return "semantic_action_" + hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
 
 
-def _find_npc_target_by_name(simulation_state: Dict[str, Any], text: str) -> str:
+def _find_npc_target_by_name(simulation_state: dict[str, Any], text: str) -> str:
     simulation_state = _safe_dict(simulation_state)
     npc_index = _safe_dict(simulation_state.get("npc_index"))
     text_lc = _safe_str(text).strip().lower()
     if not text_lc:
         return ""
 
-    candidates: List[tuple[str, str]] = []
+    candidates: list[tuple[str, str]] = []
     for npc_id, raw in sorted(npc_index.items()):
         npc = _safe_dict(raw)
         name = _safe_str(npc.get("name")).strip().lower()
@@ -196,7 +196,7 @@ def _find_npc_target_by_name(simulation_state: Dict[str, Any], text: str) -> str
     return ""
 
 
-def _coerce_action_target(simulation_state: Dict[str, Any], action: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _coerce_action_target(simulation_state: dict[str, Any], action: dict[str, Any], player_input: str) -> dict[str, Any]:
     action = _safe_dict(action)
     target_id = _safe_str(action.get("target_id") or action.get("npc_id")).strip()
     if not target_id:
@@ -207,10 +207,10 @@ def _coerce_action_target(simulation_state: Dict[str, Any], action: Dict[str, An
 
 
 def _coerce_action_target_to_active_combat_participant(
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    action: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.semantic_state_changes import (
         _get_combat_state as _get_combat_state,
     )
@@ -283,12 +283,12 @@ def _coerce_action_target_to_active_combat_participant(
 
 
 def _compile_semantic_action_record(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     player_input: str,
-    action: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     action = _safe_dict(action)
@@ -400,7 +400,7 @@ def _compile_semantic_action_record(
     }
 
 
-def _append_simulation_semantic_event(simulation_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+def _append_simulation_semantic_event(simulation_state: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     record = _safe_dict(record)
     if not record:
@@ -444,7 +444,7 @@ def _append_simulation_semantic_event(simulation_state: Dict[str, Any], record: 
     return simulation_state
 
 
-def _append_semantic_action_record(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+def _append_semantic_action_record(runtime_state: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_action_runtime_state(runtime_state)
     record = _safe_dict(record)
     items = _safe_list(runtime_state.get("semantic_action_records"))
@@ -461,7 +461,7 @@ def _append_semantic_action_record(runtime_state: Dict[str, Any], record: Dict[s
     return runtime_state
 
 
-def _semantic_activity_kind(record: Dict[str, Any]) -> str:
+def _semantic_activity_kind(record: dict[str, Any]) -> str:
     record = _safe_dict(record)
     action_type = _safe_str(record.get("action_type"))
     semantic_family = _safe_str(record.get("semantic_family"))
@@ -480,7 +480,7 @@ def _semantic_activity_kind(record: Dict[str, Any]) -> str:
     return "player_engaged"
 
 
-def _semantic_consequence_summary(record: Dict[str, Any]) -> str:
+def _semantic_consequence_summary(record: dict[str, Any]) -> str:
     record = _safe_dict(record)
     target_name = _safe_str(record.get("target_name"))
     activity_label = _safe_str(record.get("activity_label")).replace("_", " ")
@@ -502,7 +502,7 @@ def _semantic_consequence_summary(record: Dict[str, Any]) -> str:
     return f"The player's {activity_label or 'action'} affects the immediate scene."
 
 
-def _safe_relationship_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _safe_relationship_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     relationships = _safe_dict(simulation_state.get("relationship_state"))
     simulation_state["relationship_state"] = relationships
@@ -517,9 +517,9 @@ def _relationship_bucket_key(a: str, b: str) -> str:
 
 
 def _apply_semantic_social_axes_to_relationships(
-    simulation_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     record = _safe_dict(record)
     target_id = _safe_str(record.get("target_id")).strip()
@@ -554,16 +554,16 @@ def _apply_semantic_social_axes_to_relationships(
 
 
 def _derive_semantic_observer_ids(
-    simulation_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> List[str]:
+    simulation_state: dict[str, Any],
+    record: dict[str, Any],
+) -> list[str]:
     simulation_state = _safe_dict(simulation_state)
     record = _safe_dict(record)
     target_id = _safe_str(record.get("target_id")).strip()
     location_id = _safe_str(record.get("location_id")).strip()
     npc_index = _safe_dict(simulation_state.get("npc_index"))
 
-    observer_ids: List[str] = []
+    observer_ids: list[str] = []
     for npc_id, raw in sorted(npc_index.items()):
         npc = _safe_dict(raw)
         stable_id = _safe_str(npc.get("id") or npc_id).strip()
@@ -578,7 +578,7 @@ def _derive_semantic_observer_ids(
 
 def _build_observer_activity_summary(
     observer_name: str,
-    record: Dict[str, Any],
+    record: dict[str, Any],
 ) -> str:
     record = _safe_dict(record)
     action_type = _safe_str(record.get("action_type"))
@@ -595,10 +595,10 @@ def _build_observer_activity_summary(
 
 
 def _apply_semantic_observer_reactions(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.session.player_activity_runtime import (
         _normalize_activity_record as _normalize_activity_record, _stable_activity_id as _stable_activity_id, ensure_actor_activity_state as ensure_actor_activity_state,
         set_actor_activity as set_actor_activity,
@@ -649,7 +649,7 @@ def _apply_semantic_observer_reactions(
     return runtime_state
 
 
-def _append_semantic_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, Any]) -> Dict[str, Any]:
+def _append_semantic_world_pressure(runtime_state: dict[str, Any], pressure: dict[str, Any]) -> dict[str, Any]:
     items = _safe_list(runtime_state.get("world_pressure"))
     pressure = _safe_dict(pressure)
     pressure_id = _safe_str(pressure.get("pressure_id")).strip()
@@ -660,7 +660,7 @@ def _append_semantic_world_pressure(runtime_state: Dict[str, Any], pressure: Dic
     return runtime_state
 
 
-def _append_semantic_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
+def _append_semantic_world_rumor(runtime_state: dict[str, Any], rumor: dict[str, Any]) -> dict[str, Any]:
     items = _safe_list(runtime_state.get("world_rumors"))
     rumor = _safe_dict(rumor)
     rumor_id = _safe_str(rumor.get("rumor_id")).strip()
@@ -672,10 +672,10 @@ def _append_semantic_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str,
 
 
 def _apply_semantic_world_propagation(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     from app.rpg.session.player_activity_runtime import (
         _stable_consequence_id as _stable_consequence_id, ensure_world_consequence_state as ensure_world_consequence_state,
     )
@@ -761,7 +761,7 @@ def _apply_semantic_world_propagation(
     return simulation_state, runtime_state
 
 
-def _append_world_event_row(runtime_state: Dict[str, Any], row: Dict[str, Any]) -> Dict[str, Any]:
+def _append_world_event_row(runtime_state: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
     rows = _safe_list(runtime_state.get("recent_world_event_rows"))
     row = _safe_dict(row)
     row_id = _safe_str(row.get("event_id")).strip()
@@ -772,7 +772,7 @@ def _append_world_event_row(runtime_state: Dict[str, Any], row: Dict[str, Any]) 
     return runtime_state
 
 
-def _append_semantic_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+def _append_semantic_world_consequence(runtime_state: dict[str, Any], consequence: dict[str, Any]) -> dict[str, Any]:
     items = _safe_list(runtime_state.get("world_consequences"))
     consequence = _safe_dict(consequence)
     consequence_id = _safe_str(consequence.get("consequence_id")).strip()
@@ -783,7 +783,7 @@ def _append_semantic_world_consequence(runtime_state: Dict[str, Any], consequenc
     return runtime_state
 
 
-def _emit_scene_beat_from_semantic_action(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+def _emit_scene_beat_from_semantic_action(runtime_state: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
     beats = _safe_list(runtime_state.get("recent_scene_beats"))
     record = _safe_dict(record)
     tick = _safe_int(record.get("tick"), 0)
@@ -807,4 +807,31 @@ def _emit_scene_beat_from_semantic_action(runtime_state: Dict[str, Any], record:
     runtime_state["recent_scene_beats"] = beats[-_MAX_RECENT_SCENE_BEATS:]
     return runtime_state
 
-__all__ = ['_MAX_INTERACTION_REACTION_STATE', '_MAX_NPC_REACTION_RECORDS', '_MAX_RUNTIME_LLM_RECORDS', '_MAX_SEMANTIC_ACTION_RECORDS', '_append_semantic_action_record', '_append_semantic_world_consequence', '_append_semantic_world_pressure', '_append_semantic_world_rumor', '_append_simulation_semantic_event', '_append_world_event_row', '_apply_semantic_observer_reactions', '_apply_semantic_social_axes_to_relationships', '_apply_semantic_world_propagation', '_build_observer_activity_summary', '_clean_resolved_interaction_world_event_rows', '_coerce_action_target', '_coerce_action_target_to_active_combat_participant', '_derive_semantic_observer_ids', '_emit_scene_beat_from_semantic_action', '_find_npc_target_by_name', '_part04', '_prune_llm_records_state', '_relationship_bucket_key', '_safe_relationship_state', '_semantic_activity_kind', '_semantic_consequence_summary', '_stable_semantic_action_id']
+__all__ = [
+    '_MAX_INTERACTION_REACTION_STATE',
+    '_MAX_NPC_REACTION_RECORDS',
+    '_MAX_RUNTIME_LLM_RECORDS',
+    '_MAX_SEMANTIC_ACTION_RECORDS',
+    '_append_semantic_action_record',
+    '_append_semantic_world_consequence',
+    '_append_semantic_world_pressure',
+    '_append_semantic_world_rumor',
+    '_append_simulation_semantic_event',
+    '_append_world_event_row',
+    '_apply_semantic_observer_reactions',
+    '_apply_semantic_social_axes_to_relationships',
+    '_apply_semantic_world_propagation',
+    '_build_observer_activity_summary',
+    '_clean_resolved_interaction_world_event_rows',
+    '_coerce_action_target',
+    '_coerce_action_target_to_active_combat_participant',
+    '_derive_semantic_observer_ids',
+    '_emit_scene_beat_from_semantic_action',
+    '_find_npc_target_by_name',
+    '_prune_llm_records_state',
+    '_relationship_bucket_key',
+    '_safe_relationship_state',
+    '_semantic_activity_kind',
+    '_semantic_consequence_summary',
+    '_stable_semantic_action_id',
+]

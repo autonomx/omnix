@@ -18,12 +18,12 @@ FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES = [
 ALLOWED_PROVIDER_INTERFACE_IMPORTS = {
     "app.providers.base",
 }
-EXPECTED_COMBAT_CONTRACT_PARTS = [
-    "runtime_part22",
-    "runtime_part23",
-    "runtime_part24",
-    "runtime_part25",
-    "runtime_part26",
+EXPECTED_COMBAT_CONTRACT_MODULES = [
+    "combat_xp_projection",
+    "attack_reward_runtime",
+    "combat_reward_narrative",
+    "combat_quest_progress",
+    "combat_quest_narrative",
 ]
 REQUIRED_RPG_WORKFLOWS = [
     ".github/workflows/rpg-pr-deterministic.yml",
@@ -78,10 +78,6 @@ def _module_is_forbidden(module: str) -> bool:
         module == forbidden or module.startswith(f"{forbidden}.")
         for forbidden in FORBIDDEN_LIVE_PROVIDER_IMPORT_PREFIXES
     )
-
-
-def _runtime_part_from_module(module: str) -> str:
-    return module.rsplit(".", 1)[-1]
 
 
 def _find_forbidden_imports(path: Path) -> list[str]:
@@ -151,32 +147,31 @@ def _structured_architecture_violations(relative_path: str) -> list[str]:
     return violations
 
 
-def test_phase0_runtime_facade_loads_split_parts_monotonically():
+def test_phase0_runtime_facade_exposes_static_owner_manifest():
     from app.rpg.session import runtime
 
     manifest = runtime.get_runtime_wrapper_manifest()
-    part_modules = list(manifest["part_modules"])
-    part_numbers = [int(name.removeprefix("runtime_part")) for name in part_modules]
-    combat_contract_parts = [
-        _runtime_part_from_module(module)
-        for module in manifest["combat_contract_modules"]
-    ]
+    runtime_modules = manifest["runtime_modules"]
 
-    assert part_numbers == list(range(1, max(part_numbers) + 1))
-    assert combat_contract_parts == EXPECTED_COMBAT_CONTRACT_PARTS
-    for part_name in EXPECTED_COMBAT_CONTRACT_PARTS:
-        assert part_name in part_modules
+    assert len(runtime_modules) == len(set(runtime_modules))
+    assert all(not name.startswith("runtime_part") for name in runtime_modules)
+    assert "turn_response_composition" in runtime_modules
+    assert manifest["combat_contract_modules"] == EXPECTED_COMBAT_CONTRACT_MODULES
+    assert manifest["final_apply_turn_authoritative_module"] == (
+        "app.rpg.session.turn_authoritative_guards"
+    )
+    assert runtime.apply_turn.__module__ == "app.rpg.session.turn_response_composition"
 
 
 def test_phase0_combat_contract_bridges_emit_source_fields():
     assert '"source": "deterministic_combat_reward_contract"' in _read(
-        "src/app/rpg/session/runtime_part24.py"
+        "src/app/rpg/session/combat_reward_narrative.py"
     )
     assert '"source": "deterministic_combat_quest_sync"' in _read(
-        "src/app/rpg/session/runtime_part25.py"
+        "src/app/rpg/session/combat_quest_progress.py"
     )
     assert '"source": "deterministic_combat_quest_sync_contract"' in _read(
-        "src/app/rpg/session/runtime_part26.py"
+        "src/app/rpg/session/combat_quest_narrative.py"
     )
 
 

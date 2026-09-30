@@ -354,9 +354,9 @@ def _pdf_chapters(
     content: bytes, *, settings: dict[str, object],
 ) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     try:
-        from PyPDF2 import PdfReader
+        from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - packaging failure
-        raise UnsupportedSource("PDF support requires PyPDF2") from exc
+        raise UnsupportedSource("PDF support requires pypdf") from exc
     try:
         reader = PdfReader(io.BytesIO(content), strict=False)
     except Exception as exc:

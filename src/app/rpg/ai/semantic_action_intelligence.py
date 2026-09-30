@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
@@ -26,7 +26,7 @@ _ALLOWED_RISK_DOMAINS = {
     "quest", "relationship_change", "reward", "service", "threat", "travel", "unknown",
 }
 _SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
-_SEMANTIC_PACKET_SCHEMA: Dict[str, Any] = {
+_SEMANTIC_PACKET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "action_intent": {"type": "object"},
@@ -43,11 +43,11 @@ _SEMANTIC_PACKET_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
+def _safe_dict(v: Any) -> dict[str, Any]:
     return dict(v) if isinstance(v, dict) else {}
 
 
-def _safe_list(v: Any) -> List[Any]:
+def _safe_list(v: Any) -> list[Any]:
     return v if isinstance(v, list) else []
 
 
@@ -80,7 +80,7 @@ def _clip_text(text: Any, limit: int = 120) -> str:
     return _safe_str(text).strip()[:limit]
 
 
-def _prompt_payload(prompt: str) -> Dict[str, Any]:
+def _prompt_payload(prompt: str) -> dict[str, Any]:
     if "INPUT:\n" not in prompt:
         return {}
     try:
@@ -119,7 +119,7 @@ def _semantic_family_for_action(action_type: str) -> str:
 
 
 def _attach_first_call_diagnostics(
-    advisory: Dict[str, Any],
+    advisory: dict[str, Any],
     *,
     prompt: str = "",
     raw_result: Any,
@@ -128,7 +128,7 @@ def _attach_first_call_diagnostics(
     provider_called: bool = False,
     provider_error: str = "",
     parse_ok: bool | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     advisory = _safe_dict(advisory)
     prompt = _safe_str(prompt)
     payload = _prompt_payload(prompt) if prompt else {}
@@ -244,7 +244,7 @@ def _repair_provider_message_content(
     return result, raw_text, source
 
 
-def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> str:
+def build_semantic_action_prompt(player_input: str, simulation_state: dict[str, Any], runtime_state: dict[str, Any], candidate_action: dict[str, Any]) -> str:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     candidate_action = _safe_dict(candidate_action)
@@ -292,7 +292,7 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
     )
 
 
-def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_semantic_action_advisory(advisory: dict[str, Any], candidate_action: dict[str, Any]) -> dict[str, Any]:
     advisory = _safe_dict(advisory)
     candidate_action = _safe_dict(candidate_action)
     action_intent = _safe_dict(advisory.get("action_intent"))
@@ -484,7 +484,7 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
     return normalized
 
 
-def _line_restates_player_input(line: str, advisory: Dict[str, Any]) -> bool:
+def _line_restates_player_input(line: str, advisory: dict[str, Any]) -> bool:
     import re
 
     normalize = lambda value: re.sub(r"[^a-z0-9]+", " ", _safe_str(value).casefold()).strip()
@@ -501,7 +501,7 @@ def _line_restates_player_input(line: str, advisory: Dict[str, Any]) -> bool:
     )
 
 
-def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
+def _is_action_fast_path_advisory(candidate_action: dict[str, Any]) -> bool:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
     return bool(
@@ -512,7 +512,7 @@ def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
     )
 
 
-def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def _semantic_action_from_action_fast_path(candidate_action: dict[str, Any]) -> dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
     reason = _safe_str(
@@ -555,7 +555,7 @@ def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> 
     return normalize_semantic_action_advisory(raw, candidate_action)
 
 
-def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: dict[str, Any], runtime_state: dict[str, Any], candidate_action: dict[str, Any]) -> dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     if llm_gateway is None:
         return {}
@@ -563,7 +563,7 @@ def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation
     raw_result: Any = {}
     raw_text = ""
     source = "semantic_action_intelligence.complete"
-    parsed: Dict[str, Any] = {}
+    parsed: dict[str, Any] = {}
     provider_error = ""
     try:
         raw_result, raw_text, source = _complete_raw_text(llm_gateway, prompt)

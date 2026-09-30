@@ -223,7 +223,7 @@ def derive_action_candidates(simulation_state, player_input, runtime_state=None)
     return candidates
 
 
-def _fallback_scene(simulation_state: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _fallback_scene(simulation_state: dict[str, Any], player_input: str) -> dict[str, Any]:
     return {
         "scene_id": f"scene:tick:{int(simulation_state.get('tick', 0) or 0)}",
         "scene": f"You act: {player_input}",
@@ -238,7 +238,7 @@ def _fallback_scene(simulation_state: Dict[str, Any], player_input: str) -> Dict
 
 
 
-def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any], summary: List[str]) -> Dict[str, Any]:
+def _build_turn_payload(session: dict[str, Any], narration_result: dict[str, Any], summary: list[str]) -> dict[str, Any]:
     return build_turn_payload(
         session,
         narration_result,
@@ -247,18 +247,18 @@ def _build_turn_payload(session: Dict[str, Any], narration_result: Dict[str, Any
     )
 
 
-def load_runtime_session(session_id: str) -> Dict[str, Any] | None:
+def load_runtime_session(session_id: str) -> dict[str, Any] | None:
     if not session_id:
         return None
     return load_canonical_session(session_id)
 
 
-def save_runtime_session(session: Dict[str, Any]) -> Dict[str, Any]:
+def save_runtime_session(session: dict[str, Any]) -> dict[str, Any]:
     compact = _runtime_compact_save_enabled(_safe_dict(session.get("runtime_state")))
     return save_canonical_session(session, compact=compact)
 
 
-def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> Dict[str, Any]:
+def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> dict[str, Any]:
     """Find an active combat_state nested anywhere inside a turn payload.
 
     J19-J21 rescue path:
@@ -269,7 +269,7 @@ def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> Dict[
     """
     seen: set[int] = set()
 
-    def walk(value: Any, depth: int) -> Dict[str, Any]:
+    def walk(value: Any, depth: int) -> dict[str, Any]:
         if depth > max_depth:
             return {}
         if not isinstance(value, (dict, list)):
@@ -302,7 +302,7 @@ def _find_active_combat_state_deep(payload: Any, *, max_depth: int = 6) -> Dict[
 
 
 def _combat_utility_kind_from_semantic_or_text(
-    semantic_action_record: Dict[str, Any],
+    semantic_action_record: dict[str, Any],
     player_input: str,
 ) -> str:
     from app.rpg.session.combat_turn_actions import (
@@ -341,9 +341,9 @@ def _combat_utility_kind_from_semantic_or_text(
 
 
 def _extract_semantic_action_record_for_turn(
-    semantic_action_record: Dict[str, Any],
-    authoritative: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    semantic_action_record: dict[str, Any],
+    authoritative: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the best semantic action record available for this turn.
 
     Some semantic action records are produced inside _apply_authoritative_action(...)
@@ -383,7 +383,7 @@ def _extract_semantic_action_record_for_turn(
 
 
 def _resolved_result_is_unsupported_combat_utility(
-    resolved_result: Dict[str, Any],
+    resolved_result: dict[str, Any],
     player_input: str,
 ) -> str:
     from app.rpg.session.combat_turn_actions import (
@@ -436,9 +436,9 @@ def _resolved_result_is_unsupported_combat_utility(
 
 
 def _rescue_final_apply_turn_combat_utility_result(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Last-mile J19-J21 rescue after build_apply_turn_response(...).
 
     Some combat utility failures only become visible after the final apply-turn
@@ -524,8 +524,8 @@ def _rescue_final_apply_turn_combat_utility_result(
     tick = _safe_int(final_result.get("tick"), _safe_int(runtime_state.get("tick"), 0))
     player_actor_id = "player"
 
-    combat_result: Dict[str, Any] = {}
-    npc_combat_result: Dict[str, Any] = {}
+    combat_result: dict[str, Any] = {}
+    npc_combat_result: dict[str, Any] = {}
 
     current_actor_id = get_current_actor_id(combat_state)
     if current_actor_id and _safe_str(current_actor_id) != player_actor_id:
@@ -671,7 +671,7 @@ def _rescue_final_apply_turn_combat_utility_result(
     return final_result
 
 
-def _combat_result_from_consumable_result(consumable_result: Dict[str, Any]) -> Dict[str, Any]:
+def _combat_result_from_consumable_result(consumable_result: dict[str, Any]) -> dict[str, Any]:
     consumable_result = _safe_dict(consumable_result)
     if not consumable_result:
         return {}
@@ -693,7 +693,7 @@ def _combat_result_from_consumable_result(consumable_result: Dict[str, Any]) -> 
     return combat_result
 
 
-def _is_successful_consumable_result(value: Dict[str, Any]) -> bool:
+def _is_successful_consumable_result(value: dict[str, Any]) -> bool:
     value = _safe_dict(value)
     if not value:
         return False
@@ -704,11 +704,11 @@ def _is_successful_consumable_result(value: Dict[str, Any]) -> bool:
     return False
 
 
-def _extract_successful_consumable_result_from_payload(payload: Any, *, max_depth: int = 7) -> Dict[str, Any]:
+def _extract_successful_consumable_result_from_payload(payload: Any, *, max_depth: int = 7) -> dict[str, Any]:
     """Find a successful consumable_result anywhere in a nested apply-turn payload."""
     seen: set[int] = set()
 
-    def walk(value: Any, depth: int) -> Dict[str, Any]:
+    def walk(value: Any, depth: int) -> dict[str, Any]:
         if depth > max_depth:
             return {}
         if not isinstance(value, (dict, list)):
@@ -745,7 +745,7 @@ def _extract_successful_consumable_result_from_payload(payload: Any, *, max_dept
     return walk(payload, 0)
 
 
-def _safe_parse_mapping_payload(value: Any) -> Dict[str, Any]:
+def _safe_parse_mapping_payload(value: Any) -> dict[str, Any]:
     """Parse dict payloads that were serialized as JSON or Python repr strings.
 
     Manual/apply-turn payloads sometimes carry the authoritative result as a
@@ -774,14 +774,14 @@ def _safe_parse_mapping_payload(value: Any) -> Dict[str, Any]:
         return {}
 
 
-def _extract_successful_consumable_result_from_string_payload(value: Any) -> Dict[str, Any]:
+def _extract_successful_consumable_result_from_string_payload(value: Any) -> dict[str, Any]:
     parsed = _safe_parse_mapping_payload(value)
     if not parsed:
         return {}
     return _extract_successful_consumable_result_from_payload(parsed)
 
 
-def _mirror_rescued_combat_utility_result(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _mirror_rescued_combat_utility_result(final_result: dict[str, Any]) -> dict[str, Any]:
     """Ensure rescued J19-J21 results are consistent at top level.
 
     The wrapper-level rescue can successfully rewrite final_result["resolved_result"],
@@ -857,7 +857,7 @@ def _mirror_rescued_combat_utility_result(final_result: Dict[str, Any]) -> Dict[
     return final_result
 
 
-def _mirror_enemy_ai_combat_results(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _mirror_enemy_ai_combat_results(final_result: dict[str, Any]) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
     combat_state = _safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state"))

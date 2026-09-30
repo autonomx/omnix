@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, List, Set
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.30: make queued narration fallbacks complete enough to render as a
@@ -52,7 +52,7 @@ def _phase8_part30_is_incomplete_visible_text(value: Any) -> bool:
     return any(lowered.startswith(prefix) for prefix in _PHASE8_PART30_INCOMPLETE_PREFIXES)
 
 
-def _phase8_part30_dialogue_line(npc_payload: Dict[str, Any]) -> str:
+def _phase8_part30_dialogue_line(npc_payload: dict[str, Any]) -> str:
     npc_payload = _safe_dict(npc_payload)
     speaker = _phase8_part30_first_text((
         npc_payload.get("speaker"),
@@ -69,7 +69,7 @@ def _phase8_part30_dialogue_line(npc_payload: Dict[str, Any]) -> str:
     return line
 
 
-def _phase8_part30_structured_text(payload: Dict[str, Any]) -> str:
+def _phase8_part30_structured_text(payload: dict[str, Any]) -> str:
     payload = _safe_dict(payload)
     if not payload:
         return ""
@@ -112,7 +112,7 @@ def _phase8_part30_structured_text(payload: Dict[str, Any]) -> str:
     )
     reward = _phase8_part30_first_text((structured.get("reward"), payload.get("reward")))
 
-    parts: List[str] = []
+    parts: list[str] = []
     if narration:
         parts.append("Scene\n" + narration)
     if action:
@@ -124,7 +124,7 @@ def _phase8_part30_structured_text(payload: Dict[str, Any]) -> str:
     return "\n".join(parts).strip()
 
 
-def _phase8_part30_json_objects_from_text(text: str) -> List[Dict[str, Any]]:
+def _phase8_part30_json_objects_from_text(text: str) -> list[dict[str, Any]]:
     text = _phase8_part30_clean_text(text)
     if not text:
         return []
@@ -141,7 +141,7 @@ def _phase8_part30_json_objects_from_text(text: str) -> List[Dict[str, Any]]:
     if 0 <= first < last:
         candidates.append(text[first : last + 1])
 
-    parsed: List[Dict[str, Any]] = []
+    parsed: list[dict[str, Any]] = []
     for candidate in candidates:
         try:
             value = json.loads(candidate)
@@ -168,7 +168,7 @@ def _phase8_part30_text_from_scalar(value: Any) -> str:
 
 
 def _phase8_part30_recursive_structured_text(value: Any, *, max_depth: int = 8) -> str:
-    seen: Set[int] = set()
+    seen: set[int] = set()
 
     def walk(current: Any, depth: int) -> str:
         if depth > max_depth or current is None:
@@ -238,7 +238,7 @@ def _phase8_part30_normalize_player_phrase(player_input: str) -> str:
     return text.strip() or _safe_str(player_input).strip()
 
 
-def _phase8_part30_find_speaker(payload: Dict[str, Any], player_input: str) -> str:
+def _phase8_part30_find_speaker(payload: dict[str, Any], player_input: str) -> str:
     text = _safe_str(player_input).casefold()
     if "bran" in text or "innkeeper" in text:
         return "Bran"
@@ -251,8 +251,8 @@ def _phase8_part30_find_speaker(payload: Dict[str, Any], player_input: str) -> s
     # service/dialogue NPC. Prefer any recent explicit speaker if available;
     # otherwise use Bran so the fallback remains a complete NPC reply instead of
     # a player-action echo.
-    found: List[str] = []
-    seen: Set[int] = set()
+    found: list[str] = []
+    seen: set[int] = set()
 
     def walk(value: Any, depth: int = 0) -> None:
         if depth > 6 or value is None:
@@ -277,7 +277,7 @@ def _phase8_part30_find_speaker(payload: Dict[str, Any], player_input: str) -> s
     return found[0] if found else "Bran"
 
 
-def _phase8_part30_dialogue_fallback(payload: Dict[str, Any], player_input: str) -> str:
+def _phase8_part30_dialogue_fallback(payload: dict[str, Any], player_input: str) -> str:
     player_input = _safe_str(player_input).strip()
     if not player_input:
         return ""
@@ -308,7 +308,7 @@ def _phase8_part30_dialogue_fallback(payload: Dict[str, Any], player_input: str)
     )).strip()
 
 
-def _phase8_part30_complete_fallback_text(payload: Dict[str, Any], player_input: str) -> str:
+def _phase8_part30_complete_fallback_text(payload: dict[str, Any], player_input: str) -> str:
     structured = _phase8_part30_recursive_structured_text(payload)
     if structured and not _phase8_part30_is_incomplete_visible_text(structured):
         return structured
@@ -350,11 +350,11 @@ def _phase8_part30_patch_complete_visible_fallback(payload: Any, player_input: s
 def _apply_complete_visible_fallback(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART30_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

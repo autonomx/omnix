@@ -22,7 +22,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from ..core.determinism import DeterminismConfig
 from ..core.event_bus import Event
@@ -50,7 +50,7 @@ class BranchEvaluation:
     narrative_quality: float = 0.5
     goal_alignment: float = 0.5
     interesting_outcomes: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class AIBranchEvaluator:
@@ -101,7 +101,7 @@ class AIBranchEvaluator:
                 effect_manager=self.effect_manager,
             )
 
-        self._cache: Dict[str, BranchEvaluation] = {}
+        self._cache: dict[str, BranchEvaluation] = {}
 
     def set_mode(self, mode: str) -> None:
         """Set mode for LLM behavior during replay."""
@@ -120,7 +120,7 @@ class AIBranchEvaluator:
         if self.llm_gateway is not None:
             self.llm_gateway.set_effect_manager(effect_manager)
 
-    def evaluate(self, events: List[Event], context: Optional[Dict[str, Any]] = None) -> float:
+    def evaluate(self, events: list[Event], context: Optional[dict[str, Any]] = None) -> float:
         """Evaluate a branch and return score.
 
         This is the main scoring interface. It summarizes events,
@@ -142,7 +142,7 @@ class AIBranchEvaluator:
         return evaluation.score
 
     def evaluate_detailed(
-        self, events: List[Event], context: Optional[Dict[str, Any]] = None
+        self, events: list[Event], context: Optional[dict[str, Any]] = None
     ) -> BranchEvaluation:
         """Evaluate a branch and return detailed evaluation.
 
@@ -165,7 +165,7 @@ class AIBranchEvaluator:
             return self._heuristic_evaluate(events, context)
 
     def _llm_evaluate(
-        self, events: List[Event], context: Dict[str, Any]
+        self, events: list[Event], context: dict[str, Any]
     ) -> BranchEvaluation:
         """Evaluate using LLM integration.
 
@@ -207,7 +207,7 @@ Respond with ONLY a JSON object in this format:
         return self._parse_llm_response(response)
 
     def _heuristic_evaluate(
-        self, events: List[Event], context: Dict[str, Any]
+        self, events: list[Event], context: dict[str, Any]
     ) -> BranchEvaluation:
         """Evaluate using heuristic scoring without LLM.
 
@@ -270,7 +270,7 @@ Respond with ONLY a JSON object in this format:
         )
 
     def _heuristic_goal_alignment(
-        self, events: List[Event], context: Dict[str, Any]
+        self, events: list[Event], context: dict[str, Any]
     ) -> float:
         """Estimate goal alignment heuristically.
 
@@ -311,7 +311,7 @@ Respond with ONLY a JSON object in this format:
 
         return min(1.0, max(0.0, alignment))
 
-    def _summarize(self, events: List[Event]) -> str:
+    def _summarize(self, events: list[Event]) -> str:
         """Summarize events into a timeline string.
 
         Args:
@@ -330,7 +330,7 @@ Respond with ONLY a JSON object in this format:
             lines.append(f"{i + 1}. [{e.type}] {payload_summary}")
         return "\n".join(lines)
 
-    def _format_context(self, context: Dict[str, Any]) -> str:
+    def _format_context(self, context: dict[str, Any]) -> str:
         """Format context dictionary for prompt.
 
         Args:
@@ -392,7 +392,7 @@ Respond with ONLY a JSON object in this format:
             reasoning=f"Failed to parse LLM response: {text[:100]}",
         )
 
-    def _make_cache_key(self, events: List[Event], context: Dict[str, Any]) -> str:
+    def _make_cache_key(self, events: list[Event], context: dict[str, Any]) -> str:
         """Create cache key from events and context.
 
         Args:

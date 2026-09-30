@@ -40,10 +40,10 @@ logger = logging.getLogger(__name__)
 
 
 def compile_semantic_state_change_to_canonical_delta(
-    proposal: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    proposal: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     proposal = _normalize_semantic_state_change_proposal(proposal)
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
@@ -137,10 +137,10 @@ def compile_semantic_state_change_to_canonical_delta(
 
 
 def _apply_canonical_state_change_event(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    event: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    event: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     event = _safe_dict(event)
@@ -170,7 +170,7 @@ def _apply_canonical_state_change_event(
     return simulation_state, runtime_state
 
 
-def _record_accepted_state_change_event(runtime_state: Dict[str, Any], event: Dict[str, Any]) -> Dict[str, Any]:
+def _record_accepted_state_change_event(runtime_state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     event = _safe_dict(event)
     accepted = _safe_list(runtime_state.get("accepted_state_change_events"))
@@ -185,7 +185,7 @@ def _record_accepted_state_change_event(runtime_state: Dict[str, Any], event: Di
     return runtime_state
 
 
-def _record_applied_semantic_proposal_id(runtime_state: Dict[str, Any], proposal_id: str) -> Dict[str, Any]:
+def _record_applied_semantic_proposal_id(runtime_state: dict[str, Any], proposal_id: str) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     proposal_id = _safe_str(proposal_id)
     if not proposal_id:
@@ -203,7 +203,7 @@ def _record_applied_semantic_proposal_id(runtime_state: Dict[str, Any], proposal
     return runtime_state
 
 
-def _emit_scene_beat_from_accepted_state_change(runtime_state: Dict[str, Any], event: Dict[str, Any]) -> Dict[str, Any]:
+def _emit_scene_beat_from_accepted_state_change(runtime_state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     event = _safe_dict(event)
     beat = _safe_dict(event.get("beat"))
@@ -224,9 +224,9 @@ def _emit_scene_beat_from_accepted_state_change(runtime_state: Dict[str, Any], e
 
 
 def process_semantic_state_change_proposals(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
 
     from app.rpg.session.combat_intent import (
         _log_interaction_trace as _log_interaction_trace,
@@ -336,8 +336,8 @@ def process_semantic_state_change_proposals(
 
 
 def _build_semantic_state_change_prompt_contract(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> str:
     from app.rpg.session.combat_intent import (
         _log_interaction_trace as _log_interaction_trace,
@@ -392,7 +392,7 @@ def _build_semantic_state_change_prompt_contract(
 
     # ── Recent player action context ────────────────────────────────────────
     last_player_action = _safe_dict(runtime_state.get("last_player_action"))
-    player_action_context: Dict[str, Any] = {}
+    player_action_context: dict[str, Any] = {}
     if _safe_str(last_player_action.get("text")):
         player_action_context = {
             "action_type": _safe_str(last_player_action.get("action_type")),
@@ -401,7 +401,7 @@ def _build_semantic_state_change_prompt_contract(
         }
 
     # ── Recent scene context (player-driven beats) ───────────────────────
-    recent_beats_context: List[Dict[str, str]] = []
+    recent_beats_context: list[dict[str, str]] = []
     for beat in _safe_list(runtime_state.get("recent_scene_beats"))[-_MAX_PROMPT_SCENE_BEATS:]:
         beat = _safe_dict(beat)
         summary = _safe_str(beat.get("summary")).strip()
@@ -541,7 +541,7 @@ def _build_semantic_state_change_prompt_contract(
     )
 
 
-def _extract_json_array(text: str) -> List[Any]:
+def _extract_json_array(text: str) -> list[Any]:
     text = _safe_str(text)
     if not text:
         return []
@@ -569,9 +569,9 @@ def _normalize_llm_text_output(raw: Any) -> str:
 
 
 def llm_semantic_proposal_gateway(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> list[dict[str, Any]]:
     """
     Replay-safe gateway stub.
 
@@ -586,7 +586,7 @@ def llm_semantic_proposal_gateway(
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     recorded = _safe_list(runtime_state.get("recorded_semantic_llm_proposals"))
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     seen = set()
     for item in recorded[:3]:
         proposal = _normalize_semantic_state_change_proposal(_safe_dict(item))
@@ -602,13 +602,13 @@ def llm_semantic_proposal_gateway(
 
 
 def preview_semantic_state_change_prompt(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> str:
     return _build_semantic_state_change_prompt_contract(simulation_state, runtime_state)
 
 
-def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Helper for an upstream recorded LLM boundary.
 
@@ -702,8 +702,8 @@ def normalize_semantic_state_change_llm_output(raw_output: Any, simulation_state
 
 
 def _should_generate_llm_semantic_proposals(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> bool:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
@@ -726,9 +726,9 @@ def _should_generate_llm_semantic_proposals(
 
 
 def maybe_enqueue_llm_semantic_state_change_proposals(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
 
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
@@ -751,10 +751,10 @@ def maybe_enqueue_llm_semantic_state_change_proposals(
 
 
 
-def _build_recent_narration_continuity(runtime_state: Dict[str, Any], current_turn_id: str, limit: int = 3) -> List[Dict[str, Any]]:
+def _build_recent_narration_continuity(runtime_state: dict[str, Any], current_turn_id: str, limit: int = 3) -> list[dict[str, Any]]:
     runtime_state = _safe_dict(runtime_state)
     artifacts = _safe_list(runtime_state.get("narration_artifacts"))
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
 
     for artifact in reversed(artifacts):
         artifact = _safe_dict(artifact)
@@ -783,9 +783,9 @@ def _build_recent_narration_continuity(runtime_state: Dict[str, Any], current_tu
     return rows
 
 
-def _build_recent_authoritative_turn_facts(runtime_state: Dict[str, Any], current_turn_id: str, limit: int = 3) -> List[str]:
+def _build_recent_authoritative_turn_facts(runtime_state: dict[str, Any], current_turn_id: str, limit: int = 3) -> list[str]:
     rows = _build_recent_narration_continuity(runtime_state, current_turn_id, limit=limit)
-    facts: List[str] = []
+    facts: list[str] = []
     for row in rows:
         tick = int(row.get("tick", 0) or 0)
         action = _safe_str(row.get("action")).strip()
@@ -793,7 +793,7 @@ def _build_recent_authoritative_turn_facts(runtime_state: Dict[str, Any], curren
         npc = _safe_dict(row.get("npc"))
         speaker = _safe_str(npc.get("speaker")).strip()
         line = _safe_str(npc.get("line")).strip()
-        parts: List[str] = []
+        parts: list[str] = []
         if action:
             parts.append(action)
         if speaker and line:
@@ -807,20 +807,20 @@ def _build_recent_authoritative_turn_facts(runtime_state: Dict[str, Any], curren
 
 
 
-def _get_combat_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _get_combat_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     return normalize_combat_state(_safe_dict(runtime_state).get("combat_state"))
 
 
-def _set_combat_state(runtime_state: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+def _set_combat_state(runtime_state: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     runtime_state["combat_state"] = normalize_combat_state(combat_state)
     return runtime_state
 
 
 def _active_combat_state_from_runtime_or_simulation(
-    runtime_state: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    runtime_state: dict[str, Any],
+    simulation_state: dict[str, Any],
+) -> dict[str, Any]:
     combat_state = _safe_dict(_get_combat_state(runtime_state))
     if combat_state.get("active"):
         return combat_state
@@ -831,8 +831,8 @@ def _active_combat_state_from_runtime_or_simulation(
 
 
 def _active_combat_utility_kind(
-    runtime_state: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    semantic_action_record: dict[str, Any],
     player_input: str,
 ) -> str:
     from app.rpg.session.combat_intent import (

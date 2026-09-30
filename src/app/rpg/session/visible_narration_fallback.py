@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.29: ensure player turns always carry a visible fallback narration
@@ -22,11 +22,11 @@ _PHASE8_EMPTY_VISIBLE_TEXT = {
 }
 
 
-def _phase8_safe_dict(value: Any) -> Dict[str, Any]:
+def _phase8_safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _phase8_safe_list(value: Any) -> List[Any]:
+def _phase8_safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -66,9 +66,9 @@ def _phase8_first_text(values: Iterable[Any]) -> str:
     return ""
 
 
-def _phase8_payload_candidates(authoritative_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _phase8_payload_candidates(authoritative_result: dict[str, Any]) -> list[dict[str, Any]]:
     authoritative_result = _phase8_safe_dict(authoritative_result)
-    candidates: List[Dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     for key in ("result", "authoritative", "payload"):
         candidate = _phase8_safe_dict(authoritative_result.get(key))
         if candidate and candidate not in candidates:
@@ -89,7 +89,7 @@ def _phase8_payload_candidates(authoritative_result: Dict[str, Any]) -> List[Dic
     return candidates
 
 
-def _phase8_dialogue_line(npc_payload: Dict[str, Any]) -> str:
+def _phase8_dialogue_line(npc_payload: dict[str, Any]) -> str:
     npc_payload = _phase8_safe_dict(npc_payload)
     speaker = _phase8_first_text((
         npc_payload.get("speaker"),
@@ -106,7 +106,7 @@ def _phase8_dialogue_line(npc_payload: Dict[str, Any]) -> str:
     return line
 
 
-def _phase8_structured_narration_text(payload: Dict[str, Any]) -> str:
+def _phase8_structured_narration_text(payload: dict[str, Any]) -> str:
     payload = _phase8_safe_dict(payload)
     structured = _phase8_safe_dict(payload.get("structured_narration"))
     narration_json = _phase8_safe_dict(payload.get("narration_json"))
@@ -128,7 +128,7 @@ def _phase8_structured_narration_text(payload: Dict[str, Any]) -> str:
     )
     reward = _phase8_first_text((structured.get("reward"), payload.get("reward")))
 
-    parts: List[str] = []
+    parts: list[str] = []
     if narration:
         parts.append("Scene\n" + narration)
     if action:
@@ -140,7 +140,7 @@ def _phase8_structured_narration_text(payload: Dict[str, Any]) -> str:
     return "\n".join(parts).strip()
 
 
-def _phase8_presentation_text(payload: Dict[str, Any]) -> str:
+def _phase8_presentation_text(payload: dict[str, Any]) -> str:
     presentation = _phase8_safe_dict(payload.get("presentation"))
     if not presentation:
         turn_contract = _phase8_safe_dict(payload.get("turn_contract"))
@@ -158,7 +158,7 @@ def _phase8_presentation_text(payload: Dict[str, Any]) -> str:
         return direct
 
     speaker_turns = _phase8_safe_list(presentation.get("speaker_turns") or payload.get("speaker_turns"))
-    lines: List[str] = []
+    lines: list[str] = []
     for raw in speaker_turns:
         raw = _phase8_safe_dict(raw)
         line = _phase8_dialogue_line(raw)
@@ -167,7 +167,7 @@ def _phase8_presentation_text(payload: Dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-def _phase8_visible_fallback_text(authoritative_result: Dict[str, Any]) -> str:
+def _phase8_visible_fallback_text(authoritative_result: dict[str, Any]) -> str:
     for payload in _phase8_payload_candidates(authoritative_result):
         structured_text = _phase8_structured_narration_text(payload)
         if structured_text:
@@ -201,7 +201,7 @@ def _phase8_visible_fallback_text(authoritative_result: Dict[str, Any]) -> str:
     return "The turn is resolved and recorded."
 
 
-def _phase8_patch_visible_fallback(authoritative_result: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_patch_visible_fallback(authoritative_result: dict[str, Any]) -> dict[str, Any]:
     authoritative_result = _phase8_safe_dict(authoritative_result)
     if not authoritative_result:
         return authoritative_result
@@ -231,9 +231,9 @@ def _phase8_patch_visible_fallback(authoritative_result: Dict[str, Any]) -> Dict
 def _apply_visible_fallback(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
-    performance_override: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    action: dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     result = _base_apply_turn_authoritative(
         session_id,
         player_input,

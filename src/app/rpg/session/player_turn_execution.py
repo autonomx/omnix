@@ -111,10 +111,10 @@ from typing import (
 def apply_turn(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    performance_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     from app.rpg.session.turn_authoritative_guards import (
         _apply_turn_authoritative as _apply_turn_authoritative,
     )

@@ -70,8 +70,8 @@ from typing import (
 
 
 def _reconcile_narration_quality_memory_and_warnings(
-    final_result: Dict[str, Any],
-) -> Dict[str, Any]:
+    final_result: dict[str, Any],
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     session = _safe_dict(final_result.get("session"))
     runtime_state = dict(_safe_dict(session.get("runtime_state") or final_result.get("runtime_state")))
@@ -123,9 +123,9 @@ def _reconcile_narration_quality_memory_and_warnings(
 
 
 def _reconcile_npc_backbone_social_decision(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     session = _safe_dict(final_result.get("session"))
     simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))
@@ -184,7 +184,7 @@ def _reconcile_npc_backbone_social_decision(
     return final_result
 
 
-def _fallback_npc_backbone_narration(decision: Dict[str, Any]) -> str:
+def _fallback_npc_backbone_narration(decision: dict[str, Any]) -> str:
     npc_id = _safe_str(decision.get("npc_id") or "npc")
     decision_kind = _safe_str(decision.get("decision"))
     reason = _safe_str(decision.get("reason"))
@@ -207,9 +207,9 @@ def _fallback_npc_backbone_narration(decision: Dict[str, Any]) -> str:
 
 
 def _reconcile_player_reposition_action(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     if not _player_input_requests_reposition(player_input):
         return final_result
@@ -285,9 +285,9 @@ def _reconcile_player_reposition_action(
 
 
 def _reconcile_general_interaction_action(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     if not _player_input_requests_general_interaction(player_input):
         return final_result
@@ -360,7 +360,7 @@ def _reconcile_general_interaction_action(
     return final_result
 
 
-def _reconcile_position_attack_range_gate(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _reconcile_position_attack_range_gate(final_result: dict[str, Any], player_input: str) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     text = _safe_str(player_input).strip().lower()
     if "attack" not in text:
@@ -437,7 +437,7 @@ def _reconcile_position_attack_range_gate(final_result: Dict[str, Any], player_i
     return final_result
 
 
-def _reconcile_combat_world_consequences(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _reconcile_combat_world_consequences(final_result: dict[str, Any]) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
     combat_state = dict(_safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state")))
@@ -528,7 +528,7 @@ def _player_input_requests_combat_ability(player_input: str) -> bool:
     return bool(_ability_id_from_player_input(player_input))
 
 
-def _target_id_for_ability(runtime_state: Dict[str, Any], player_input: str) -> str:
+def _target_id_for_ability(runtime_state: dict[str, Any], player_input: str) -> str:
     combat_state = _safe_dict(_get_combat_state(runtime_state))
     participants = _safe_dict(combat_state.get("participants"))
     text = _safe_str(player_input).strip().lower()
@@ -562,7 +562,7 @@ def _manual_encounter_preset_from_input(player_input: str) -> str:
     return text.split(":", 1)[1].strip() or "bandit_easy"
 
 
-def _repair_generated_encounter_player_turn(combat_state: Dict[str, Any]) -> Dict[str, Any]:
+def _repair_generated_encounter_player_turn(combat_state: dict[str, Any]) -> dict[str, Any]:
     combat_state = dict(_safe_dict(combat_state))
     if not combat_state.get("active"):
         return combat_state
@@ -589,11 +589,11 @@ def _repair_generated_encounter_player_turn(combat_state: Dict[str, Any]) -> Dic
 
 
 def _apply_manual_start_encounter_turn(
-    session: Dict[str, Any],
+    session: dict[str, Any],
     player_input: str,
     *,
     tick: int = 0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Start a generated encounter from the outer apply_turn wrapper.
 
     J31-J33 manual encounter starts must run before the generic semantic action
@@ -677,21 +677,21 @@ def _apply_manual_start_encounter_turn(
 
 def _resolve_active_combat_utility_turn(
     *,
-    runtime_state: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    semantic_action_record: dict[str, Any],
     player_input: str,
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    action: dict[str, Any],
     player_actor_id: str,
     active_combat_utility_kind: str,
     current_tick: int,
     turn_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     combat_state = _safe_dict(_get_combat_state(runtime_state))
     combat_state = normalize_combat_state(combat_state)
 
     after_action_state = _ensure_simulation_state(simulation_state)
-    resolved_result: Dict[str, Any] = {
+    resolved_result: dict[str, Any] = {
         "action_type": active_combat_utility_kind,
         "outcome": active_combat_utility_kind,
         "visible_interaction_reason": f"combat_{active_combat_utility_kind}",
@@ -704,8 +704,8 @@ def _resolve_active_combat_utility_turn(
         },
     }
 
-    combat_result: Dict[str, Any] = {}
-    npc_combat_result: Dict[str, Any] = {}
+    combat_result: dict[str, Any] = {}
+    npc_combat_result: dict[str, Any] = {}
 
     current_actor_id = get_current_actor_id(combat_state)
     if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):

@@ -1,7 +1,7 @@
 """End-to-end RPG request tracing with bounded structured stage metrics."""
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import env_str
 
 import json
 import os

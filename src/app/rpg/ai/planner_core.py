@@ -10,7 +10,7 @@ and belief-driven action selection.
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from .npc_actor import NPCActor, NPCGoal
 from .strategy_profiles import get_strategy_bias
@@ -31,7 +31,7 @@ class Planner:
     """
 
     # Action templates for different goal types
-    ACTION_TEMPLATES: Dict[str, List[Dict[str, Any]]] = {
+    ACTION_TEMPLATES: dict[str, list[dict[str, Any]]] = {
         "recover_power": [
             {"type": "recruit", "weight": 1.0},
             {"type": "gather_resources", "weight": 0.8},
@@ -92,7 +92,7 @@ class Planner:
     }
 
     # Fallback strategies for when plans fail (Patch 2)
-    FALLBACK_STRATEGIES: Dict[str, List[Dict[str, Any]]] = {
+    FALLBACK_STRATEGIES: dict[str, list[dict[str, Any]]] = {
         "undermine_player": [
             {"type": "retreat", "weight": 1.0},
             {"type": "reassess", "weight": 0.8},
@@ -113,9 +113,9 @@ class Planner:
     def create_plan(
         self,
         npc: NPCActor,
-        goal: Dict[str, Any],
-        world: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        goal: dict[str, Any],
+        world: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
         """Create an action plan for an NPC based on a goal.
 
         Tier 17.5 Patch 2: Checks for repeated failures and
@@ -159,8 +159,8 @@ class Planner:
         return plan
 
     def _fallback_strategy(
-        self, npc: NPCActor, goal: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, npc: NPCActor, goal: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Generate fallback strategy after repeated failures.
 
         Tier 17.5 Patch 2: When plans fail multiple times, NPCs
@@ -201,8 +201,8 @@ class Planner:
         self,
         npc: NPCActor,
         strategy: str,
-        actions: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        actions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Apply strategy profile bias to action weights.
 
         Args:
@@ -243,8 +243,8 @@ class Planner:
     def _apply_belief_adjustments(
         self,
         npc: NPCActor,
-        actions: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        actions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Apply belief-driven adjustments to action weights.
 
         Tier 17.5 Patch 3: Beliefs about player and world affect
@@ -280,8 +280,8 @@ class Planner:
         return sorted(adjusted, key=lambda a: a["weight"], reverse=True)
 
     def _select_plan_actions(
-        self, npc: NPCActor, actions: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, npc: NPCActor, actions: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Select actions for the plan based on NPC capabilities.
 
         Args:
@@ -295,7 +295,7 @@ class Planner:
         aggression = npc.get_trait("aggression", 0.5)
         intelligence = npc.get_trait("intelligence", 0.5)
 
-        selected: List[Dict[str, Any]] = []
+        selected: list[dict[str, Any]] = []
         for action in actions:
             if len(selected) >= 3:
                 break
@@ -317,7 +317,7 @@ class Planner:
 
         return selected
 
-    def _create_generic_plan(self, goal: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _create_generic_plan(self, goal: dict[str, Any]) -> list[dict[str, Any]]:
         """Create a generic plan for unknown goal types.
 
         Args:
@@ -336,8 +336,8 @@ class Planner:
         self,
         npc: NPCActor,
         goal: NPCGoal,
-        world: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        world: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
         """Create a plan from a stateful NPCGoal.
 
         Tier 17.5 Patch: Works with persistent goals.

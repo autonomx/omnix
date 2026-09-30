@@ -14,7 +14,7 @@ from .combat_quest_progress import _apply_turn_with_combat_quest_sync as _base_a
 _COMBAT_QUEST_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
 
 
-def _combat_quest_contract_sources(payload: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+def _combat_quest_contract_sources(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     payload = _safe_dict(payload)
     result = _safe_dict(payload.get("result"))
     resolved_result = _safe_dict(payload.get("resolved_result")) or result
@@ -23,7 +23,7 @@ def _combat_quest_contract_sources(payload: Dict[str, Any]) -> tuple[Dict[str, A
     return result, resolved_result, narration_context, sync_result
 
 
-def _combat_quest_contract_lines(sync_result: Dict[str, Any]) -> list[str]:
+def _combat_quest_contract_lines(sync_result: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     for objective in _safe_list(_safe_dict(sync_result).get("updated_objectives")):
         objective = _safe_dict(objective)
@@ -41,7 +41,7 @@ def _combat_quest_contract_lines(sync_result: Dict[str, Any]) -> list[str]:
     return lines
 
 
-def _build_combat_quest_narrative_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _build_combat_quest_narrative_contract(payload: dict[str, Any]) -> dict[str, Any]:
     _, _, _, sync_result = _combat_quest_contract_sources(payload)
     if not sync_result:
         return {}
@@ -61,7 +61,7 @@ def _build_combat_quest_narrative_contract(payload: Dict[str, Any]) -> Dict[str,
     }
 
 
-def _apply_combat_quest_narrative_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_combat_quest_narrative_contract(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     contract = _build_combat_quest_narrative_contract(payload)
     if not contract:
@@ -87,11 +87,11 @@ def _apply_combat_quest_narrative_contract(payload: Dict[str, Any]) -> Dict[str,
 def _apply_combat_quest_narrative(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _COMBAT_QUEST_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(session_id, player_input, action, performance_override=performance_override)
     return _apply_combat_quest_narrative_contract(payload)
 

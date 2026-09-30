@@ -161,12 +161,12 @@ def _resolve_companion_reposition_and_authoritative_action(ctx) -> bool:
         ctx.runtime_state = _set_combat_state(
             ctx.runtime_state, ctx.combat_state
         )
-    ctx.combat_result: Dict[str, Any] = {}
+    ctx.combat_result: dict[str, Any] = {}
     return False
 
 
 def _resolve_companion_reposition_and_authoritative_action_continued_1(ctx) -> bool:
-    ctx.npc_combat_result: Dict[str, Any] = {}
+    ctx.npc_combat_result: dict[str, Any] = {}
     ctx.normalized_action_type = (
         _safe_str(_safe_dict(ctx.action).get("action_type"))
         .strip()

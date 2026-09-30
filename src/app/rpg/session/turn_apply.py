@@ -6,7 +6,7 @@ from app.rpg.llm_app_gateway import (
 
 
 from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Any
 
 from .turn_action_resolution import (
     _prepare_turn_action_context,
@@ -57,10 +57,10 @@ _TURN_APPLY_STAGES = (
 def _apply_turn_authoritative_base(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    performance_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     ctx = SimpleNamespace(
         session_id=session_id,
         player_input=player_input,

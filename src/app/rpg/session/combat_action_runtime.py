@@ -94,7 +94,7 @@ def _maybe_resolve_general_interaction_turn(
     simulation_state: Any,
     runtime_state: Any,
     current_tick: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if _player_input_requests_general_interaction(player_input):
         simulation_state, interaction_result = resolve_general_interaction_v2(
             simulation_state,
@@ -674,7 +674,7 @@ def _apply_active_non_attack_combat_action(
     is_combat_flee: Any,
     is_combat_use_item: Any,
     normalized_action_type: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if combat_state.get('active') and is_combat_action and (not is_combat_attack):
         current_actor_id = get_current_actor_id(combat_state)
         if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
@@ -776,7 +776,7 @@ def _apply_attack_combat_action(
     is_combat_attack: Any,
     normalized_action_type: Any,
     target_id: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if is_combat_attack and target_id:
         if not combat_state.get('active'):
             participant_ids = build_combat_participants(after_action_state, [player_actor_id, target_id])

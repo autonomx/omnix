@@ -197,12 +197,12 @@ from app.rpg.visual.worker import (
 from app.settings.access import load_settings, save_settings
 
 
-def _jsonify(data: Dict[str, Any], status_code: int = 200) -> JSONResponse:
+def _jsonify(data: dict[str, Any], status_code: int = 200) -> JSONResponse:
     """FastAPI-compatible JSON response."""
     return JSONResponse(content=data, status_code=status_code)
 
 
-async def _get_json(request: Request) -> Dict[str, Any]:
+async def _get_json(request: Request) -> dict[str, Any]:
     """Get JSON body from request, returning empty dict on failure."""
     try:
         body = await request.json()
@@ -211,7 +211,7 @@ async def _get_json(request: Request) -> Dict[str, Any]:
         return {}
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
+def _safe_dict(v: Any) -> dict[str, Any]:
     return dict(v) if isinstance(v, dict) else {}
 
 
@@ -223,7 +223,7 @@ def _request_nonce() -> str:
     return datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
 
 
-def _drop_visual_requests_for_target(simulation_state: Dict[str, Any], *, kind: str, target_id: str) -> Dict[str, Any]:
+def _drop_visual_requests_for_target(simulation_state: dict[str, Any], *, kind: str, target_id: str) -> dict[str, Any]:
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
     visual_state = _safe_dict(presentation_state.get("visual_state"))
@@ -237,7 +237,7 @@ def _drop_visual_requests_for_target(simulation_state: Dict[str, Any], *, kind: 
     return simulation_state
 
 
-def _load_visual_request_simulation_state(session_id: str, setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+def _load_visual_request_simulation_state(session_id: str, setup_payload: dict[str, Any]) -> dict[str, Any]:
     """
     Prefer the persisted session simulation_state for visual requests.
     Falling back to setup_payload is only for non-session / preview flows.
@@ -332,7 +332,7 @@ def _is_generic_scene_visual_prompt(prompt: str) -> bool:
     return any(marker in text for marker in generic_markers)
 
 
-def _lookup_location_record(simulation_state: Dict[str, Any], location_id: str) -> Dict[str, Any]:
+def _lookup_location_record(simulation_state: dict[str, Any], location_id: str) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     location_id = _safe_str(location_id).strip()
     if not location_id:
@@ -365,7 +365,7 @@ def _humanize_visual_id(value: Any) -> str:
     return text.replace("loc_", "").replace("scene_", "").replace("_", " ").replace("-", " ").strip().title()
 
 
-def _derive_scene_visual_context(simulation_state: Dict[str, Any], *, scene_id: str, event_id: str, title: str) -> Dict[str, Any]:
+def _derive_scene_visual_context(simulation_state: dict[str, Any], *, scene_id: str, event_id: str, title: str) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(simulation_state.get("runtime_state"))
     current_scene = _safe_dict(runtime_state.get("current_scene") or simulation_state.get("current_scene"))
@@ -453,7 +453,7 @@ def _scene_type_visual_details(title: str, location_type: str) -> str:
 
 
 def build_grounded_scene_illustration_prompt(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     *,
     scene_id: str,
     event_id: str,
@@ -613,7 +613,7 @@ def _first_non_empty(*values: Any) -> str:
     return ""
 
 
-def _safe_character_ui_state(v: Any) -> Dict[str, Any]:
+def _safe_character_ui_state(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict):
         return {"characters": [], "count": 0}
     raw_characters = v.get("characters")
@@ -625,11 +625,11 @@ def _safe_character_ui_state(v: Any) -> Dict[str, Any]:
     return {"characters": characters, "count": count}
 
 
-def _get_simulation_state(setup_payload: Dict[str, Any]) -> Dict[str, Any]:
+def _get_simulation_state(setup_payload: dict[str, Any]) -> dict[str, Any]:
     return _safe_dict(_safe_dict(setup_payload).get("simulation_state"))
 
 
-def _ensure_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_character_ui_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
@@ -639,7 +639,7 @@ def _ensure_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, An
     return simulation_state
 
 
-def _extract_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_character_ui_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     presentation_state = simulation_state.get("presentation_state") or {}
     if not isinstance(presentation_state, dict):
@@ -648,7 +648,7 @@ def _extract_character_ui_state(simulation_state: Dict[str, Any]) -> Dict[str, A
     return _safe_character_ui_state(character_ui_state)
 
 
-def _safe_character_inspector_state(v: Any) -> Dict[str, Any]:
+def _safe_character_inspector_state(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict):
         return {"characters": [], "count": 0}
     raw_characters = v.get("characters")
@@ -660,7 +660,7 @@ def _safe_character_inspector_state(v: Any) -> Dict[str, Any]:
     return {"characters": characters, "count": count}
 
 
-def _ensure_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_character_inspector_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
     if not isinstance(presentation_state, dict):
@@ -670,7 +670,7 @@ def _ensure_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict[
     return simulation_state
 
 
-def _extract_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_character_inspector_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     presentation_state = simulation_state.get("presentation_state") or {}
     if not isinstance(presentation_state, dict):
@@ -679,7 +679,7 @@ def _extract_character_inspector_state(simulation_state: Dict[str, Any]) -> Dict
     return _safe_character_inspector_state(inspector_state)
 
 
-def _safe_world_inspector_state(v: Any) -> Dict[str, Any]:
+def _safe_world_inspector_state(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict):
         return {"summary": {}, "threads": [], "thread_count": 0, "factions": {"factions": [], "count": 0}, "locations": {"locations": [], "count": 0}}
     summary = v.get("summary")
@@ -789,15 +789,15 @@ def _maybe_answer_from_activity(player_text: str, activity: dict, actor_name: st
     return ""
 
 
-def _ensure_actor_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_actor_memory_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     return ensure_actor_memory_state(_safe_dict(simulation_state))
 
 
-def _ensure_world_memory_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_world_memory_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     return ensure_world_memory_state(_safe_dict(simulation_state))
 
 
-def _ensure_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_world_inspector_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     simulation_state = _ensure_world_memory_state(simulation_state)
     presentation_state = simulation_state.get("presentation_state")
@@ -808,7 +808,7 @@ def _ensure_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str,
     return simulation_state
 
 
-def _extract_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_world_inspector_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     presentation_state = simulation_state.get("presentation_state") or {}
     if not isinstance(presentation_state, dict):
@@ -817,7 +817,7 @@ def _extract_world_inspector_state(simulation_state: Dict[str, Any]) -> Dict[str
     return _safe_world_inspector_state(world_inspector_state)
 
 
-def _safe_visual_state(v: Any) -> Dict[str, Any]:
+def _safe_visual_state(v: Any) -> dict[str, Any]:
     if not isinstance(v, dict):
         return {"character_visual_identities": {}, "scene_illustrations": [], "image_requests": [], "visual_assets": [], "appearance_profiles": {}, "appearance_events": {}, "defaults": {}}
     identities = v.get("character_visual_identities")
@@ -847,14 +847,14 @@ def _safe_visual_state(v: Any) -> Dict[str, Any]:
     return {"character_visual_identities": identities, "scene_illustrations": illustrations, "image_requests": requests, "visual_assets": assets, "appearance_profiles": appearance_profiles, "appearance_events": appearance_events, "defaults": defaults}
 
 
-def _extract_visual_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _extract_visual_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = ensure_visual_state(_safe_dict(simulation_state))
     presentation_state = _safe_dict(simulation_state.get("presentation_state"))
     visual_state = _safe_dict(presentation_state.get("visual_state"))
     return _safe_visual_state(visual_state)
 
 
-def _add_content_pack_data(response_dict: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _add_content_pack_data(response_dict: dict[str, Any], simulation_state: dict[str, Any]) -> dict[str, Any]:
     response_dict["content_packs"] = list_content_packs(simulation_state)
     response_dict["package_manifest"] = {"package_version": "1.0", "title": "", "description": "", "created_by": ""}
     return response_dict

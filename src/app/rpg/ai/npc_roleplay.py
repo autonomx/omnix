@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import inspect
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 
@@ -39,15 +39,15 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
-def _extract_json_object(text: str) -> Dict[str, Any]:
+def _extract_json_object(text: str) -> dict[str, Any]:
     text = _safe_str(text).strip()
     if not text:
         return {}
@@ -67,7 +67,7 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
     return {}
 
 
-def build_npc_roleplay_prompt(profile: Dict[str, Any]) -> str:
+def build_npc_roleplay_prompt(profile: dict[str, Any]) -> str:
     profile = _safe_dict(profile)
     return (
         "You are writing ONE line of NPC dialogue for a deterministic RPG engine.\n"
@@ -88,15 +88,15 @@ def build_npc_roleplay_prompt(profile: Dict[str, Any]) -> str:
 
 
 def validate_npc_roleplay_output(
-    output: Dict[str, Any],
+    output: dict[str, Any],
     *,
     expected_speaker_id: str,
-    profile: Dict[str, Any],
+    profile: dict[str, Any],
     max_line_chars: int = 240,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     output = _safe_dict(output)
     profile = _safe_dict(profile)
-    violations: List[str] = []
+    violations: list[str] = []
 
     speaker_id = _safe_str(output.get("speaker_id"))
     line = _safe_str(output.get("line")).strip()
@@ -142,11 +142,11 @@ def validate_npc_roleplay_output(
 
 async def try_generate_npc_roleplay_line(
     *,
-    profile: Dict[str, Any],
+    profile: dict[str, Any],
     expected_speaker_id: str,
     provider: Any = None,
     enabled: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not enabled:
         return {
             "ok": False,

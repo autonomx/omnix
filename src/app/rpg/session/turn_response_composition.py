@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, Mapping
+from typing import Any, Mapping
 
 from app.runtime.clock import Clock as _Clock
 from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
@@ -28,9 +28,9 @@ def _safe_str(value: Any) -> str:
 
 
 def build_apply_turn_response(
-    authoritative_result: Dict[str, Any],
+    authoritative_result: dict[str, Any],
     _base_builder: Any = _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Retain the authoritative queued fallback through later presentation selection."""
 
     payload = _base_builder(authoritative_result)
@@ -52,7 +52,7 @@ def build_apply_turn_response(
     return result
 
 
-def _queued_narration_snapshot(payload: Dict[str, Any]) -> dict[str, Any]:
+def _queued_narration_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
     result = _safe_dict(payload)
     nested = _safe_dict(result.get("result"))
     authoritative = _safe_dict(result.get("authoritative"))
@@ -86,9 +86,9 @@ def _queued_narration_snapshot(payload: Dict[str, Any]) -> dict[str, Any]:
 
 
 def _restore_queued_narration(
-    payload: Dict[str, Any],
-    snapshot: Dict[str, Any],
-) -> Dict[str, Any]:
+    payload: dict[str, Any],
+    snapshot: dict[str, Any],
+) -> dict[str, Any]:
     if not snapshot:
         return payload
     result = dict(_safe_dict(payload))
@@ -130,7 +130,7 @@ def _restore_queued_narration(
     return result
 
 
-def _advance_causal_turn(payload: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+def _advance_causal_turn(payload: dict[str, Any], session_id: str) -> dict[str, Any]:
     try:
         return advance_causal_runtime_for_turn(
             session_id,
@@ -156,12 +156,12 @@ def _advance_causal_turn(payload: Dict[str, Any], session_id: str) -> Dict[str, 
 def apply_turn(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     clock: _Clock = _SYSTEM_CLOCK,
     _base_apply_turn: Any = _PHASE8_PART40_BASE_APPLY_TURN,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     session = load_runtime_session(session_id)
     simulation_state = _safe_dict(_safe_dict(session).get("simulation_state"))
     runtime_state = _safe_dict(_safe_dict(session).get("runtime_state"))

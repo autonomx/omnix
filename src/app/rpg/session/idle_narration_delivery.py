@@ -36,8 +36,8 @@ from app.runtime.clock import bind_turn_context as _bind_turn_context
 from app.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
 
 def _make_initiative_update_from_candidate(
-    candidate: Dict[str, Any],
-) -> Dict[str, Any]:
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
     """Convert an NPC initiative candidate into an ambient update."""
     candidate = _safe_dict(candidate)
     kind = _safe_str(candidate.get("kind") or "npc_to_player")
@@ -89,7 +89,7 @@ def _make_initiative_update_from_candidate(
     }
 
 
-def _make_scene_update_from_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
+def _make_scene_update_from_beat(beat: dict[str, Any]) -> dict[str, Any]:
     beat = _safe_dict(beat)
     return {
         "tick": 0,
@@ -115,16 +115,16 @@ def _make_scene_update_from_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
 
 def _apply_ambient_narration_and_delivery(
     *,
-    session: Dict[str, Any],
-    updates: List[Dict[str, Any]],
-    after_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    session: dict[str, Any],
+    updates: list[dict[str, Any]],
+    after_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     idle_capture_key: str,
-) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     session = _copy_dict(session)
     runtime_state = _copy_dict(runtime_state)
     current_scene = _safe_dict(runtime_state.get("current_scene"))
-    narrated_updates: List[Dict[str, Any]] = []
+    narrated_updates: list[dict[str, Any]] = []
 
     llm_gateway = None
     try:
@@ -191,7 +191,7 @@ def apply_idle_tick(
     *,
     reason: str = "heartbeat",
     clock: _Clock = _SYSTEM_CLOCK,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     session = load_runtime_session(session_id)
     if session is None:
         return {"ok": False, "error": "session_not_found"}
@@ -238,7 +238,7 @@ def apply_idle_ticks(
     *,
     reason: str = "heartbeat",
     clock: _Clock = _SYSTEM_CLOCK,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply multiple idle ticks, clamped to _MAX_IDLE_TICKS_PER_REQUEST.
 
     Coalesces results across ticks in memory and saves once at the end.
@@ -249,7 +249,7 @@ def apply_idle_ticks(
         return {"ok": False, "error": "session_not_found"}
 
     session = _copy_dict(session)
-    all_updates: List[Dict[str, Any]] = []
+    all_updates: list[dict[str, Any]] = []
     ticks_applied = 0
 
     for _ in range(count):
@@ -292,7 +292,7 @@ def apply_idle_ticks(
     }
 
 
-def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> Dict[str, Any]:
+def apply_resume_catchup(session_id: str, *, elapsed_seconds: int = 0) -> dict[str, Any]:
     """Apply bounded catch-up ticks on session resume.
 
     Converts elapsed time to capped idle ticks. If excess ticks would be

@@ -41,11 +41,11 @@ logger = logging.getLogger(__name__)
 
 
 def _force_active_combat_utility_action(
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    action: dict[str, Any],
+    semantic_action_record: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.combat_turn_actions import (
         _player_input_requests_combat_ability as _player_input_requests_combat_ability,
     )
@@ -83,9 +83,9 @@ def _force_active_combat_utility_action(
 
 
 def _extract_active_combat_state_for_turn(
-    runtime_state: Dict[str, Any],
-    resolved_result: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    runtime_state: dict[str, Any],
+    resolved_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     combat_state = _safe_dict(_get_combat_state(runtime_state))
     if combat_state.get("active"):
         return combat_state
@@ -103,7 +103,7 @@ def _extract_active_combat_state_for_turn(
     return combat_state
 
 
-def _lookup_actor_by_id(simulation_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+def _lookup_actor_by_id(simulation_state: dict[str, Any], actor_id: str) -> dict[str, Any]:
     for collection_key in ("actor_states", "npc_states"):
         for actor in _safe_list(simulation_state.get(collection_key)):
             if _safe_str(actor.get("id")).strip() == _safe_str(actor_id).strip():
@@ -111,12 +111,12 @@ def _lookup_actor_by_id(simulation_state: Dict[str, Any], actor_id: str) -> Dict
     return {}
 
 
-def _actor_is_player(simulation_state: Dict[str, Any], actor_id: str) -> bool:
+def _actor_is_player(simulation_state: dict[str, Any], actor_id: str) -> bool:
     actor = _lookup_actor_by_id(simulation_state, actor_id)
     return bool(actor.get("is_player")) or _safe_str(actor.get("type")).strip().lower() == "player"
 
 
-def _build_combat_gate_result(current_actor_id: str, player_actor_id: str) -> Dict[str, Any]:
+def _build_combat_gate_result(current_actor_id: str, player_actor_id: str) -> dict[str, Any]:
     return {
         "ok": False,
         "blocked": True,
@@ -127,7 +127,7 @@ def _build_combat_gate_result(current_actor_id: str, player_actor_id: str) -> Di
     }
 
 
-def _action_requests_hostile_combat(action: Dict[str, Any], player_input: str) -> bool:
+def _action_requests_hostile_combat(action: dict[str, Any], player_input: str) -> bool:
     action = _safe_dict(action)
     action_type = _safe_str(action.get("action_type")).strip().lower()
     if action_type in {"melee_attack", "unarmed_attack", "attack_melee", "attack_unarmed"}:
@@ -139,7 +139,7 @@ def _action_requests_hostile_combat(action: Dict[str, Any], player_input: str) -
     return False
 
 
-def _action_requests_combat_defend(action: Dict[str, Any], player_input: str) -> bool:
+def _action_requests_combat_defend(action: dict[str, Any], player_input: str) -> bool:
     action = _safe_dict(action)
     action_type = _safe_str(action.get("action_type")).strip().lower()
     text = _safe_str(player_input).strip().lower()
@@ -148,7 +148,7 @@ def _action_requests_combat_defend(action: Dict[str, Any], player_input: str) ->
     )
 
 
-def _action_requests_combat_flee(action: Dict[str, Any], player_input: str) -> bool:
+def _action_requests_combat_flee(action: dict[str, Any], player_input: str) -> bool:
     action = _safe_dict(action)
     action_type = _safe_str(action.get("action_type")).strip().lower()
     text = _safe_str(player_input).strip().lower()
@@ -157,7 +157,7 @@ def _action_requests_combat_flee(action: Dict[str, Any], player_input: str) -> b
     )
 
 
-def _action_requests_combat_use_item(action: Dict[str, Any], player_input: str) -> bool:
+def _action_requests_combat_use_item(action: dict[str, Any], player_input: str) -> bool:
     action = _safe_dict(action)
     action_type = _safe_str(action.get("action_type")).strip().lower()
     text = _safe_str(player_input).strip().lower()
@@ -178,7 +178,7 @@ def _action_requests_revive_or_heal_other(player_input: str) -> bool:
     )
 
 
-def _infer_recovery_target_actor_id(runtime_state: Dict[str, Any], player_input: str) -> str:
+def _infer_recovery_target_actor_id(runtime_state: dict[str, Any], player_input: str) -> str:
     text = _safe_str(player_input).strip().lower()
     combat_state = _safe_dict(_get_combat_state(runtime_state))
     participants = _safe_dict(combat_state.get("participants"))
@@ -203,8 +203,8 @@ def _infer_recovery_target_actor_id(runtime_state: Dict[str, Any], player_input:
 
 
 def _infer_inventory_item_id_from_text(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    action: dict[str, Any],
     player_input: str,
 ) -> str:
     explicit = _safe_str(action.get("item_id")).strip()
@@ -242,7 +242,7 @@ def _infer_inventory_item_id_from_text(
     return ""
 
 
-def _interaction_trace_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _interaction_trace_enabled(runtime_state: dict[str, Any]) -> bool:
     runtime_state = _safe_dict(runtime_state)
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
     raw = settings.get("interaction_trace")
@@ -251,7 +251,7 @@ def _interaction_trace_enabled(runtime_state: Dict[str, Any]) -> bool:
     return _safe_bool(raw, True)
 
 
-def _compact_active_interactions(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _compact_active_interactions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for raw in _safe_list(items)[:8]:
         item = _safe_dict(raw)
@@ -273,7 +273,7 @@ def _compact_active_interactions(items: List[Dict[str, Any]]) -> List[Dict[str, 
     return out
 
 
-def _log_interaction_trace(label: str, payload: Dict[str, Any], runtime_state: Dict[str, Any] | None = None) -> None:
+def _log_interaction_trace(label: str, payload: dict[str, Any], runtime_state: dict[str, Any] | None = None) -> None:
     if runtime_state is not None and not _interaction_trace_enabled(runtime_state):
         return
     logger.debug("INTERACTION TRACE %s = %s", label, payload)
@@ -286,9 +286,9 @@ def _utc_now_iso() -> str:
 
 
 
-def _stable_unique_labeled_items(values: List[Any], limit: int) -> List[str]:
+def _stable_unique_labeled_items(values: list[Any], limit: int) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for raw in _safe_list(values):
         if isinstance(raw, dict):
             value = (
@@ -309,10 +309,10 @@ def _stable_unique_labeled_items(values: List[Any], limit: int) -> List[str]:
     return out
 
 def _build_world_advance_recap(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    debug_trace: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    debug_trace: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     from app.rpg.session.idle_resume_runtime import (
         _build_player_facing_resume_summary as _build_player_facing_resume_summary, _choose_meaningful_recap_lines as _choose_meaningful_recap_lines,
         _coerce_recap_labels as _coerce_recap_labels, _is_meaningful_recap_text as _is_meaningful_recap_text,
@@ -425,7 +425,7 @@ def _build_world_advance_recap(
     return recap
 
 
-def _recap_has_meaningful_sections(recap: Dict[str, Any]) -> bool:
+def _recap_has_meaningful_sections(recap: dict[str, Any]) -> bool:
     recap = _safe_dict(recap)
     return bool(
         _safe_list(recap.get("scene_beats")) or
@@ -439,12 +439,12 @@ def _recap_has_meaningful_sections(recap: Dict[str, Any]) -> bool:
 
 
 
-def _interaction_memory_key(interaction: Dict[str, Any]) -> str:
+def _interaction_memory_key(interaction: dict[str, Any]) -> str:
     interaction = _safe_dict(interaction)
     return _safe_str(interaction.get("id")) or "interaction"
 
 
-def _snapshot_interaction_for_memory(interaction: Dict[str, Any]) -> Dict[str, Any]:
+def _snapshot_interaction_for_memory(interaction: dict[str, Any]) -> dict[str, Any]:
     interaction = _safe_dict(interaction)
     return {
         "id": _safe_str(interaction.get("id")),
@@ -458,13 +458,13 @@ def _snapshot_interaction_for_memory(interaction: Dict[str, Any]) -> Dict[str, A
     }
 
 
-def _detect_interaction_changes(prev_interaction: Dict[str, Any], interaction: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _detect_interaction_changes(prev_interaction: dict[str, Any], interaction: dict[str, Any]) -> list[dict[str, Any]]:
     prev_interaction = _safe_dict(prev_interaction)
     interaction = _safe_dict(interaction)
     prev_state = _safe_dict(prev_interaction.get("state"))
     state = _safe_dict(interaction.get("state"))
 
-    changes: List[Dict[str, Any]] = []
+    changes: list[dict[str, Any]] = []
     if not prev_interaction:
         changes.append({"change_type": "started"})
 
@@ -518,7 +518,7 @@ def _detect_interaction_changes(prev_interaction: Dict[str, Any], interaction: D
     return changes
 
 
-def _format_generic_interaction_beat(interaction: Dict[str, Any], change: Dict[str, Any]) -> str:
+def _format_generic_interaction_beat(interaction: dict[str, Any], change: dict[str, Any]) -> str:
     interaction = _safe_dict(interaction)
     change = _safe_dict(change)
     name = _safe_str(interaction.get("display_name")) or "your opponent"
@@ -554,7 +554,7 @@ def _format_generic_interaction_beat(interaction: Dict[str, Any], change: Dict[s
     return ""
 
 
-def _format_arm_wrestling_beat(interaction: Dict[str, Any], change: Dict[str, Any]) -> str:
+def _format_arm_wrestling_beat(interaction: dict[str, Any], change: dict[str, Any]) -> str:
     interaction = _safe_dict(interaction)
     change = _safe_dict(change)
     name = _safe_str(interaction.get("display_name")) or "your opponent"
@@ -581,7 +581,7 @@ def _format_arm_wrestling_beat(interaction: Dict[str, Any], change: Dict[str, An
     return _format_generic_interaction_beat(interaction, change)
 
 
-def _format_interaction_beat(interaction: Dict[str, Any], change: Dict[str, Any]) -> str:
+def _format_interaction_beat(interaction: dict[str, Any], change: dict[str, Any]) -> str:
     interaction = _safe_dict(interaction)
     interaction_type = _safe_str(interaction.get("type"))
     interaction_subtype = _safe_str(interaction.get("subtype"))
@@ -592,15 +592,15 @@ def _format_interaction_beat(interaction: Dict[str, Any], change: Dict[str, Any]
 
 
 def _emit_scene_beats_from_active_interactions(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = ensure_ambient_runtime_state(_safe_dict(runtime_state))
 
     interactions = _normalize_active_interactions(simulation_state, runtime_state)
     prev_memory = _safe_dict(runtime_state.get("scene_beat_memory"))
-    next_memory: Dict[str, Any] = {}
+    next_memory: dict[str, Any] = {}
     tick = _safe_int(runtime_state.get("tick", 0), 0)
 
     for interaction in interactions:
@@ -635,7 +635,7 @@ def _emit_scene_beats_from_active_interactions(
     return runtime_state
 
 
-def ensure_ambient_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def ensure_ambient_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     runtime_state.setdefault("ambient_queue", [])
     runtime_state.setdefault("ambient_history", [])
@@ -650,9 +650,9 @@ def ensure_ambient_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any
     return runtime_state
 
 
-def _stable_unique_strs(values: List[Any]) -> List[str]:
+def _stable_unique_strs(values: list[Any]) -> list[str]:
     seen = set()
-    out: List[str] = []
+    out: list[str] = []
     for raw in values:
         value = _safe_str(raw).strip()
         if not value or value in seen:
@@ -672,7 +672,7 @@ def _normalize_prompt_location_name(value: str, grounded_fallback: str) -> str:
 
 
 def _resolve_location_name(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     location_id: str,
     fallback_name: str = "",
 ) -> str:
@@ -703,10 +703,10 @@ def _resolve_location_name(
     return final_fallback if final_fallback else "Current Location"
 
 
-def _resolve_actor_names(simulation_state: Dict[str, Any], actor_ids: List[str]) -> List[str]:
+def _resolve_actor_names(simulation_state: dict[str, Any], actor_ids: list[str]) -> list[str]:
     simulation_state = _safe_dict(simulation_state)
     npc_index = _safe_dict(simulation_state.get("npc_index"))
-    names: List[str] = []
+    names: list[str] = []
     for actor_id in _stable_unique_strs(actor_ids):
         npc = _safe_dict(npc_index.get(actor_id))
         names.append(_safe_str(npc.get("name") or actor_id))
@@ -714,10 +714,10 @@ def _resolve_actor_names(simulation_state: Dict[str, Any], actor_ids: List[str])
 
 
 def _derive_grounded_scene_context(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    turn_result: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    turn_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     turn_result = _safe_dict(turn_result)
@@ -772,7 +772,7 @@ def _derive_grounded_scene_context(
     }
 
 
-def _apply_grounded_scene_overlay(scene: Dict[str, Any], grounded: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_grounded_scene_overlay(scene: dict[str, Any], grounded: dict[str, Any]) -> dict[str, Any]:
     scene = _copy_dict(_safe_dict(scene))
     grounded = _safe_dict(grounded)
 
@@ -792,13 +792,13 @@ def _apply_grounded_scene_overlay(scene: Dict[str, Any], grounded: Dict[str, Any
     return scene
 
 
-def _ensure_scene_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_scene_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     return ensure_persistent_scene_runtime_state(runtime_state)
 
 
-def _filter_salient_player_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _filter_salient_player_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep only player-meaningful events for idle initiative context."""
-    result: List[Dict[str, Any]] = []
+    result: list[dict[str, Any]] = []
     for evt in _safe_list(events):
         evt = _safe_dict(evt)
         text = " ".join(
@@ -832,7 +832,7 @@ def _filter_salient_player_events(events: List[Dict[str, Any]]) -> List[Dict[str
 # ── Phase F — effective world behavior config ─────────────────────────────
 
 
-def get_effective_world_behavior(session: Dict[str, Any]) -> Dict[str, Any]:
+def get_effective_world_behavior(session: dict[str, Any]) -> dict[str, Any]:
     """Merge setup world_behavior with runtime override.
 
     The setup config provides adventure-level defaults.
@@ -863,7 +863,7 @@ def get_effective_world_behavior(session: Dict[str, Any]) -> Dict[str, Any]:
 # ── Phase 5 — opening-aware runtime metadata ─────────────────────────────
 
 
-def _build_opening_runtime(setup: Dict[str, Any]) -> Dict[str, Any]:
+def _build_opening_runtime(setup: dict[str, Any]) -> dict[str, Any]:
     """Build opening-aware runtime metadata from setup payload.
 
     Persisted as runtime_state["opening_runtime"].

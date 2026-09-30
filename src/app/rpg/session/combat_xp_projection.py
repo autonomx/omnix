@@ -14,7 +14,7 @@ from .turn_apply import _apply_turn_authoritative_base as _base_apply_turn_autho
 _COMBAT_XP_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
 
 
-def _first_non_empty_xp_result(*values: Any) -> Dict[str, Any]:
+def _first_non_empty_xp_result(*values: Any) -> dict[str, Any]:
     for value in values:
         xp_result = _safe_dict(value)
         if not xp_result:
@@ -29,7 +29,7 @@ def _first_non_empty_xp_result(*values: Any) -> Dict[str, Any]:
     return {}
 
 
-def _surface_combat_xp_result_in_turn_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _surface_combat_xp_result_in_turn_payload(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     result = _safe_dict(payload.get("result"))
     resolved_result = _safe_dict(payload.get("resolved_result")) or result
@@ -92,11 +92,11 @@ def _surface_combat_xp_result_in_turn_payload(payload: Dict[str, Any]) -> Dict[s
 def _apply_combat_xp_surface(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative=_COMBAT_XP_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

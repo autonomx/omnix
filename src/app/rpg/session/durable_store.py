@@ -13,7 +13,7 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.rpg.session.migrations import migrate_session_payload
 from app.rpg.session.session_store import _normalize_session, _safe_dict
@@ -181,7 +181,7 @@ def _quarantine_corrupt_session_file(path: Path) -> Path:
     return quarantine_path
 
 
-def _read_payload_json(path: Path, session_id: str) -> Dict[str, Any]:
+def _read_payload_json(path: Path, session_id: str) -> dict[str, Any]:
     """Read raw JSON payload with corruption detection + quarantine."""
     try:
         text = _read_text_with_retry(path)
@@ -204,11 +204,11 @@ def _read_payload_json(path: Path, session_id: str) -> Dict[str, Any]:
 
 
 def save_session_to_disk(
-    session: Dict[str, Any],
+    session: dict[str, Any],
     *,
     compact: bool = False,
     session_dir: Path | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     manifest = _safe_dict(_safe_dict(session).get("manifest"))
     session_id = str(
         manifest.get("session_id")
@@ -236,11 +236,11 @@ def save_session_to_disk(
 
 
 def _save_session_to_disk(
-    session: Dict[str, Any],
+    session: dict[str, Any],
     *,
     compact: bool = False,
     session_dir: Path | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Normalize, migrate, and persist session to disk-backed JSON."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
@@ -269,7 +269,7 @@ def load_session_from_disk(
     session_id: str,
     *,
     session_dir: Path | None = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[dict[str, Any]]:
     with rpg_pipeline_span_if_active(
         "session.file_read_decode_migrate",
         fields={"session_id": session_id},
@@ -287,7 +287,7 @@ def _load_session_from_disk(
     session_id: str,
     *,
     session_dir: Path | None = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[dict[str, Any]]:
     """Load and normalize a session from disk with migration. Returns None if not found."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime() and session_dir is None:
@@ -301,14 +301,14 @@ def _load_session_from_disk(
     return _normalize_session(_safe_dict(migrated.get("session")))
 
 
-def list_sessions_from_disk() -> List[Dict[str, Any]]:
+def list_sessions_from_disk() -> list[dict[str, Any]]:
     """List all persisted sessions from disk with migration, normalized and sorted."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
         from app.runtime_document_services import production_document_services
         return production_document_services().list_sessions_from_disk()
     ensure_session_dir()
-    sessions: List[Dict[str, Any]] = []
+    sessions: list[dict[str, Any]] = []
     for path in sorted(_SESSION_DIR.glob("*.json")):
         try:
             session_id = path.stem
@@ -325,7 +325,7 @@ def list_sessions_from_disk() -> List[Dict[str, Any]]:
     return sessions
 
 
-def archive_session_on_disk(session_id: str) -> Dict[str, Any]:
+def archive_session_on_disk(session_id: str) -> dict[str, Any]:
     """Archive a session on disk by setting archived=True in manifest and persisting."""
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():

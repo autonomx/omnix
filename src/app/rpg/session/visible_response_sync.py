@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 # RPG session runtime responsibility module.
 # Phase 8.33: the streaming route builds its authoritative_result payload from
@@ -41,7 +41,7 @@ def _phase8_part33_has_visible_text(value: Any) -> bool:
     return True
 
 
-def _phase8_part33_completed_visible_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part33_completed_visible_fields(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     status = _safe_str(payload.get("narration_status")).strip().casefold()
     text = _safe_str(
@@ -53,7 +53,7 @@ def _phase8_part33_completed_visible_fields(payload: Dict[str, Any]) -> Dict[str
     if not text:
         return {}
 
-    fields: Dict[str, Any] = {}
+    fields: dict[str, Any] = {}
     for key in _PHASE8_PART33_VISIBLE_KEYS:
         value = payload.get(key)
         if _phase8_part33_has_visible_text(value):
@@ -67,7 +67,7 @@ def _phase8_part33_completed_visible_fields(payload: Dict[str, Any]) -> Dict[str
     return fields
 
 
-def _phase8_part33_mirror_visible_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part33_mirror_visible_fields(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     if not payload:
         return payload
@@ -103,11 +103,11 @@ def _phase8_part33_mirror_visible_fields(payload: Dict[str, Any]) -> Dict[str, A
 def _mirror_completed_visible_fields(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART33_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

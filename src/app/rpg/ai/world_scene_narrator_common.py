@@ -230,11 +230,11 @@ def _safe_str(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
@@ -245,7 +245,7 @@ def _title_case_token(value: Any) -> str:
     return text.replace("_", " ").strip().title()
 
 
-def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
+def _force_live_llm_required(narration_context: dict[str, Any]) -> bool:
     narration_context = _safe_dict(narration_context)
     runtime_settings = _safe_dict(narration_context.get("runtime_settings"))
     performance = _safe_dict(narration_context.get("performance"))
@@ -257,6 +257,41 @@ def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
 
 
 __all__ = (
-    "annotations json logging re traceback dataclass field Any Callable Dict List Optional normalize_grounding_settings select_grounded_narration_candidate memory_reference_is_backed build_runtime_npc_response_architecture build_runtime_current_turn_prompt_contract format_runtime_prompt_contract_block build_runtime_presentation_guardrails_block sanitize_unsupported_combat_payload parse_runtime_provider_payload build_encounter_view logger _ACTIVE_NARRATIONS "
-    "NARRATION_JSON_FORMAT_VERSION NARRATION_JSON_SCHEMA_HINT _extract_llm_text _llm_text _attach_social_context _safe_str_p6 _attach_npc_mind_context _NARRATION_MAX_MARKDOWN _safe_str _safe_dict _safe_list _title_case_token _force_live_llm_required "
-).split()
+    'annotations',
+    'json',
+    'logging',
+    're',
+    'traceback',
+    'dataclass',
+    'field',
+    'Any',
+    'Callable',
+    'Dict',
+    'List',
+    'Optional',
+    'normalize_grounding_settings',
+    'select_grounded_narration_candidate',
+    'memory_reference_is_backed',
+    'build_runtime_npc_response_architecture',
+    'build_runtime_current_turn_prompt_contract',
+    'format_runtime_prompt_contract_block',
+    'build_runtime_presentation_guardrails_block',
+    'sanitize_unsupported_combat_payload',
+    'parse_runtime_provider_payload',
+    'build_encounter_view',
+    'logger',
+    '_ACTIVE_NARRATIONS',
+    'NARRATION_JSON_FORMAT_VERSION',
+    'NARRATION_JSON_SCHEMA_HINT',
+    '_extract_llm_text',
+    '_llm_text',
+    '_attach_social_context',
+    '_safe_str_p6',
+    '_attach_npc_mind_context',
+    '_NARRATION_MAX_MARKDOWN',
+    '_safe_str',
+    '_safe_dict',
+    '_safe_list',
+    '_title_case_token',
+    '_force_live_llm_required',
+)

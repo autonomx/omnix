@@ -14,7 +14,7 @@ from .combat_xp_projection import _apply_combat_xp_surface as _base_apply_turn_a
 _COMBAT_REWARD_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
 
 
-def _combat_reward_contract_first_xp_result(*values: Any) -> Dict[str, Any]:
+def _combat_reward_contract_first_xp_result(*values: Any) -> dict[str, Any]:
     for value in values:
         xp_result = _safe_dict(value)
         if not xp_result:
@@ -29,7 +29,7 @@ def _combat_reward_contract_first_xp_result(*values: Any) -> Dict[str, Any]:
     return {}
 
 
-def _combat_reward_contract_result_sources(payload: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+def _combat_reward_contract_result_sources(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     payload = _safe_dict(payload)
     result = _safe_dict(payload.get("result"))
     resolved_result = _safe_dict(payload.get("resolved_result")) or result
@@ -43,7 +43,7 @@ def _combat_reward_contract_result_sources(payload: Dict[str, Any]) -> tuple[Dic
     return result, resolved_result, narration_context, combat_result
 
 
-def _combat_reward_contract_loot_lines(loot_result: Dict[str, Any]) -> list[str]:
+def _combat_reward_contract_loot_lines(loot_result: dict[str, Any]) -> list[str]:
     loot_result = _safe_dict(loot_result)
     lines: list[str] = []
     for item in _safe_list(loot_result.get("items")):
@@ -60,7 +60,7 @@ def _combat_reward_contract_loot_lines(loot_result: Dict[str, Any]) -> list[str]
     return lines
 
 
-def _build_combat_reward_narrative_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _build_combat_reward_narrative_contract(payload: dict[str, Any]) -> dict[str, Any]:
     result, resolved_result, narration_context, combat_result = _combat_reward_contract_result_sources(payload)
     loot_result = _safe_dict(combat_result.get("loot_result") or result.get("loot_result") or resolved_result.get("loot_result"))
     xp_result = _combat_reward_contract_first_xp_result(
@@ -98,7 +98,7 @@ def _build_combat_reward_narrative_contract(payload: Dict[str, Any]) -> Dict[str
     }
 
 
-def _apply_combat_reward_narrative_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _apply_combat_reward_narrative_contract(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     contract = _build_combat_reward_narrative_contract(payload)
     if not contract:
@@ -127,11 +127,11 @@ def _apply_combat_reward_narrative_contract(payload: Dict[str, Any]) -> Dict[str
 def _apply_combat_reward_narrative(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _COMBAT_REWARD_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

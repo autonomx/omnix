@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
-    ExecutionInputGap,
     MARKET_EVIDENCE_POLICY_VERSION,
     classify_provider_exception,
     premarket_evidence_feature_compatible,

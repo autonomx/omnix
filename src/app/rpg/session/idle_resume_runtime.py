@@ -74,10 +74,10 @@ from .idle_time import recorded_idle_tick_time
 from app.runtime.clock import utc_now as _runtime_utc_now
 
 def _apply_idle_tick_to_session(
-    session: Dict[str, Any],
+    session: dict[str, Any],
     *,
     reason: str = "heartbeat",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply one idle tick to an in-memory session.
 
     This is the canonical implementation for idle ticking.
@@ -174,7 +174,7 @@ def _apply_idle_tick_to_session(
     world_behavior = get_effective_world_behavior(session)
 
     # Debug trace for full observability
-    debug_trace: Dict[str, Any] = {
+    debug_trace: dict[str, Any] = {
         "reason": reason,
         "tick_before": int(before_state.get("tick", 0) or 0),
         "quiet_ticks_before": int(runtime_state.get("post_player_quiet_ticks", 0) or 0),
@@ -372,7 +372,7 @@ def _apply_idle_tick_to_session(
         raw_updates.append(dialogue_update)
 
     # ── Idle conversation lane: only if idle gate is open ──
-    idle_dialogue_candidates: List[Dict[str, Any]] = []
+    idle_dialogue_candidates: list[dict[str, Any]] = []
     selected_dialogue = None
     if idle_gate_open:
         idle_dialogue_candidates = build_ambient_dialogue_candidates(
@@ -577,7 +577,7 @@ def _apply_idle_tick_to_session(
         existing_rows = _safe_list(runtime_state.get("recent_world_event_rows"))
 
         merged_rows = existing_rows + new_rows
-        deduped_rows: List[Dict[str, Any]] = []
+        deduped_rows: list[dict[str, Any]] = []
         seen_event_ids = set()
         for row in reversed(merged_rows):
             row = _safe_dict(row)
@@ -850,9 +850,9 @@ def _recap_has_renderable_content(recap):
 
 
 def _make_dialogue_update_from_candidate(
-    candidate: Dict[str, Any],
-    session_context: Dict[str, Any],
-) -> Dict[str, Any]:
+    candidate: dict[str, Any],
+    session_context: dict[str, Any],
+) -> dict[str, Any]:
     req = build_ambient_dialogue_request(candidate, session_context)
     return {
         "tick": int(req.get("tick", 0) or 0),
@@ -879,10 +879,10 @@ def _make_dialogue_update_from_candidate(
 
 
 def _record_dialogue_update_into_conversation_thread(
-    runtime_state: Dict[str, Any],
-    update: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    update: dict[str, Any],
     current_tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     runtime_state = normalize_conversation_threads(_safe_dict(runtime_state))
     update = _safe_dict(update)
     speaker_id = _safe_str(update.get("speaker_id")).strip()

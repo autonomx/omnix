@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.38: use the current semantic direct-response packet as the visible
@@ -70,7 +70,7 @@ def _phase8_part38_norm(value: Any) -> str:
 
 
 
-def _phase8_part38_direct_safe(source: Dict[str, Any]) -> bool:
+def _phase8_part38_direct_safe(source: dict[str, Any]) -> bool:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
@@ -109,7 +109,7 @@ def _phase8_part38_direct_safe(source: Dict[str, Any]) -> bool:
 
 
 
-def _phase8_part38_player_utterance(source: Dict[str, Any]) -> str:
+def _phase8_part38_player_utterance(source: dict[str, Any]) -> str:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
@@ -131,7 +131,7 @@ def _phase8_part38_player_utterance(source: Dict[str, Any]) -> str:
 
 
 
-def _phase8_part38_line_is_player_restatement(npc_line: str, source: Dict[str, Any]) -> bool:
+def _phase8_part38_line_is_player_restatement(npc_line: str, source: dict[str, Any]) -> bool:
     line = _phase8_part38_clean_text(npc_line)
     if not line:
         return False
@@ -156,7 +156,7 @@ def _phase8_part38_line_is_player_restatement(npc_line: str, source: Dict[str, A
 
 
 
-def _phase8_part38_candidate_from_source(source: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part38_candidate_from_source(source: dict[str, Any]) -> dict[str, Any]:
     source = _safe_dict(source)
     visible = _safe_dict(source.get("visible_response")) or _safe_dict(source.get("semantic_visible_response"))
     if not visible:
@@ -221,9 +221,9 @@ def _phase8_part38_candidate_from_source(source: Dict[str, Any]) -> Dict[str, An
 
 
 
-def _phase8_part38_iter_candidate_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def _phase8_part38_iter_candidate_sources(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
     payload = _safe_dict(payload)
-    roots: List[Dict[str, Any]] = []
+    roots: list[dict[str, Any]] = []
     if payload:
         roots.append(payload)
     for key in ("result", "authoritative", "payload"):
@@ -256,7 +256,7 @@ def _phase8_part38_iter_candidate_sources(payload: Dict[str, Any]) -> Iterable[D
 
 
 
-def _phase8_part38_semantic_visible_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part38_semantic_visible_fields(payload: dict[str, Any]) -> dict[str, Any]:
     for source in _phase8_part38_iter_candidate_sources(payload):
         fields = _phase8_part38_candidate_from_source(source)
         if fields:
@@ -273,7 +273,7 @@ def _phase8_part38_semantic_visible_fields(payload: Dict[str, Any]) -> Dict[str,
 
 
 
-def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
+def _phase8_part31_existing_completed_narration(payload: dict[str, Any]) -> str:
     fields = _phase8_part38_semantic_visible_fields(payload)
     if fields:
         return _phase8_part38_clean_text(fields.get("final_narration") or fields.get("narration"))
@@ -284,7 +284,7 @@ def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
 
 
 
-def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
+def _phase8_part31_should_sync_narration(payload: dict[str, Any]) -> bool:
     # Critical latency gate: safe semantic dialogue already contains the final
     # visible NPC response from the foreground LLM. Do not run the 20k-token full
     # narrator synchronously for that turn.
@@ -340,11 +340,11 @@ def _phase8_part38_patch_semantic_visible(payload: Any, *, session_id: str = "")
 def _patch_semantic_direct_response(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART38_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

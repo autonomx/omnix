@@ -34,7 +34,7 @@ from typing import (
 )
 
 
-def _reconcile_forced_combat_conditions(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _reconcile_forced_combat_conditions(final_result: dict[str, Any]) -> dict[str, Any]:
     """Final J25/J26 reconciliation for manual forced condition scenarios.
 
     Some attack paths do not consume combat_state.force_next_attack_roll /
@@ -66,8 +66,8 @@ def _reconcile_forced_combat_conditions(final_result: Dict[str, Any]) -> Dict[st
     if not target_participant:
         return final_result
 
-    effects_added: List[Dict[str, Any]] = []
-    effects_updated: List[Dict[str, Any]] = []
+    effects_added: list[dict[str, Any]] = []
+    effects_updated: list[dict[str, Any]] = []
 
     forced_attack_roll = _safe_int(combat_state.get("force_next_attack_roll"), 0)
     forced_damage = _safe_int(combat_state.get("force_next_damage"), 0)
@@ -149,9 +149,9 @@ def _reconcile_forced_combat_conditions(final_result: Dict[str, Any]) -> Dict[st
 
 
 def _reconcile_generated_attack_not_actor_turn(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """J31 final rescue for generated encounter attacks.
 
     Current bad shape:
@@ -344,7 +344,7 @@ def _reconcile_generated_attack_not_actor_turn(
     return final_result
 
 
-def _reconcile_combat_recovery_action(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _reconcile_combat_recovery_action(final_result: dict[str, Any], player_input: str) -> dict[str, Any]:
     """Final J27 recovery rescue.
 
     Stabilize/revive commands can be swallowed by companion/social/item routing
@@ -475,10 +475,10 @@ def _reconcile_combat_recovery_action(final_result: Dict[str, Any], player_input
     return final_result
 
 
-def _runtime_extract_nested_dict_by_key(value: Any, key: str, *, max_depth: int = 8) -> Dict[str, Any]:
+def _runtime_extract_nested_dict_by_key(value: Any, key: str, *, max_depth: int = 8) -> dict[str, Any]:
     seen: set[int] = set()
 
-    def walk(node: Any, depth: int) -> Dict[str, Any]:
+    def walk(node: Any, depth: int) -> dict[str, Any]:
         if depth > max_depth:
             return {}
         if not isinstance(node, (dict, list)):
@@ -505,7 +505,7 @@ def _runtime_extract_nested_dict_by_key(value: Any, key: str, *, max_depth: int 
     return walk(value, 0)
 
 
-def _reconcile_condition_tick_for_manual_current_actor(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _reconcile_condition_tick_for_manual_current_actor(final_result: dict[str, Any], player_input: str) -> dict[str, Any]:
     """Final J25 condition tick rescue for __manual_resolve_current_combat_actor__.
 
     The current actor can resolve an attack before start-of-turn ticking is
@@ -565,9 +565,9 @@ def _reconcile_condition_tick_for_manual_current_actor(final_result: Dict[str, A
 
 
 def _reconcile_ability_cooldown_tick_for_manual_current_actor(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     if "__manual_resolve_current_combat_actor__" not in _safe_str(player_input):
         return final_result
@@ -617,7 +617,7 @@ def _reconcile_ability_cooldown_tick_for_manual_current_actor(
     return final_result
 
 
-def _reconcile_companion_turn_result(final_result: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def _reconcile_companion_turn_result(final_result: dict[str, Any], player_input: str) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     if "__manual_resolve_current_combat_actor__" not in _safe_str(player_input):
         return final_result
@@ -676,9 +676,9 @@ def _reconcile_companion_turn_result(final_result: Dict[str, Any], player_input:
 
 
 def _reconcile_invalid_companion_command(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     command = parse_companion_command(player_input)
     if not command or command.get("command") != "invalid":
@@ -750,9 +750,9 @@ def _reconcile_invalid_companion_command(
 
 
 def _reconcile_companion_command_conversation_suppression(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     command = parse_companion_command(player_input)
     if not command:
@@ -806,9 +806,9 @@ def _reconcile_companion_command_conversation_suppression(
 
 
 def _attach_narration_quality_and_backbone_context(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     session = _safe_dict(final_result.get("session"))
     simulation_state = _safe_dict(session.get("simulation_state") or final_result.get("simulation_state"))

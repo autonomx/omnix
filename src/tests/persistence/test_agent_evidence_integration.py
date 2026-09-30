@@ -15,7 +15,6 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
-from app.agent_runtime import service as service_module
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.agent_runtime.service import AgentRunService
 from app.agent_runtime.semantic_task import (
@@ -221,12 +220,7 @@ def test_receipt_rolls_back_with_local_capability_transaction() -> None:
         database.close()
 
 
-def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkeypatch) -> None:
-    monkeypatch.setattr(
-        service_module,
-        "default_semantic_task_parser",
-        lambda **_kwargs: _SteeringV2TestParser(),
-    )
+def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec() -> None:
     database = _database()
     try:
         context = ensure_local_identity(database)
@@ -244,7 +238,11 @@ def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkey
             snapshot = repository.create_run(spec)
             work.commit()
 
-        service = AgentRunService(database, worker_id="steering-compiler")
+        service = AgentRunService(
+            database,
+            worker_id="steering-compiler",
+            semantic_task_parser=lambda **_kwargs: _SteeringV2TestParser(),
+        )
         service._supervisor_started = True
         narrowing = service._compile_steering(
             snapshot,
@@ -289,12 +287,7 @@ def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkey
         database.close()
 
 
-def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authority(monkeypatch) -> None:
-    monkeypatch.setattr(
-        service_module,
-        "default_semantic_task_parser",
-        lambda **_kwargs: _SteeringV2TestParser(),
-    )
+def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authority() -> None:
     database = _database()
     try:
         context = ensure_local_identity(database)
@@ -312,7 +305,11 @@ def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authorit
             snapshot = repository.create_run(spec)
             work.commit()
 
-        service = AgentRunService(database, worker_id="steering-latest-authority")
+        service = AgentRunService(
+            database,
+            worker_id="steering-latest-authority",
+            semantic_task_parser=lambda **_kwargs: _SteeringV2TestParser(),
+        )
         service._supervisor_started = True
         compiled = service._compile_steering(
             snapshot,
@@ -374,11 +371,6 @@ def test_task_revision_source_command_is_idempotent() -> None:
 
 
 def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
-    monkeypatch.setattr(
-        service_module,
-        "default_semantic_task_parser",
-        lambda **_kwargs: _SteeringV2TestParser(),
-    )
     database = _database()
     if database is None:
         pytest.skip("requires PostgreSQL integration database")
@@ -401,7 +393,11 @@ def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
         )
         work.commit()
 
-    service = AgentRunService(database, worker_id="superseding-test")
+    service = AgentRunService(
+        database,
+        worker_id="superseding-test",
+        semantic_task_parser=lambda **_kwargs: _SteeringV2TestParser(),
+    )
     monkeypatch.setattr(service, "_ensure_supervisor", lambda: None)
     monkeypatch.setattr(service.runtime, "close_run", lambda _run_id: None)
     monkeypatch.setattr(

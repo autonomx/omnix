@@ -18,7 +18,7 @@ from typing import (
 )
 
 
-def _mirror_ability_results(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _mirror_ability_results(final_result: dict[str, Any]) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
     combat_state = _safe_dict(final_result.get("combat_state") or resolved_result.get("combat_state"))
@@ -59,9 +59,9 @@ def _mirror_ability_results(final_result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _reconcile_player_combat_ability_action(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Final J34 player ability rescue.
 
     Ability commands can contain "use" and may reach the final payload as
@@ -187,7 +187,7 @@ def _reconcile_player_combat_ability_action(
     return final_result
 
 
-def _mirror_encounter_result(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _mirror_encounter_result(final_result: dict[str, Any]) -> dict[str, Any]:
     final_result = dict(_safe_dict(final_result))
     resolved_result = dict(_safe_dict(final_result.get("resolved_result")))
     result_obj = dict(
@@ -230,7 +230,7 @@ def _mirror_encounter_result(final_result: Dict[str, Any]) -> Dict[str, Any]:
     return final_result
 
 
-def _reconcile_combat_use_item_with_successful_consumable(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _reconcile_combat_use_item_with_successful_consumable(final_result: dict[str, Any]) -> dict[str, Any]:
     """Final J20 consistency pass.
 
     A combat use-item turn can have a successful consumable result from the
@@ -317,10 +317,10 @@ def _reconcile_combat_use_item_with_successful_consumable(final_result: Dict[str
 
 
 def _normalize_combat_loot_result_for_reward_phase(
-    loot_result: Dict[str, Any],
+    loot_result: dict[str, Any],
     *,
     combat_id: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Normalize existing loot runtime result into J23 combat loot shape."""
     loot_result = _safe_dict(loot_result)
     if not loot_result:
@@ -334,8 +334,8 @@ def _normalize_combat_loot_result_for_reward_phase(
         return {}
 
     items_created = _safe_list(loot_result.get("items_created"))
-    items: List[Dict[str, Any]] = []
-    currency: Dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    currency: dict[str, int] = {}
 
     for row in items_created:
         row = _safe_dict(row)
@@ -370,9 +370,9 @@ def _normalize_combat_loot_result_for_reward_phase(
 
 
 def _generate_fallback_combat_reward_result(
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+) -> dict[str, Any]:
     """Generate a minimal deterministic J22 reward result for a victory turn."""
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
@@ -408,9 +408,9 @@ def _generate_fallback_combat_reward_result(
 
 
 def _generate_fallback_combat_loot_result(
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+) -> dict[str, Any]:
     """Generate minimal deterministic J23 loot for victory paths that bypass
     the normal loot runtime.
 
@@ -437,8 +437,8 @@ def _generate_fallback_combat_loot_result(
     loot_table_id = _safe_str(target.get("loot_table_id")).strip()
     archetype_id = _safe_str(target.get("archetype_id")).strip()
 
-    currency: Dict[str, int] = {}
-    items: List[Dict[str, Any]] = []
+    currency: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
 
     # Small deterministic loot table fallback. Keep this intentionally bounded.
     if loot_table_id == "loot:bandit_common" or "bandit" in archetype_id:
@@ -474,7 +474,7 @@ def _generate_fallback_combat_loot_result(
     }
 
 
-def _reconcile_combat_victory_rewards_and_loot(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _reconcile_combat_victory_rewards_and_loot(final_result: dict[str, Any]) -> dict[str, Any]:
     """Final J22/J23 reconciliation for victory turns.
 
     The current attack path can end combat through combat_result:
@@ -590,9 +590,9 @@ def _reconcile_combat_victory_rewards_and_loot(final_result: Dict[str, Any]) -> 
 
 
 def _reconcile_manual_forced_generated_victory_attack(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     player_input: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """J31-J33 manual forced-victory rescue.
 
     Generated encounter victory scenarios use:

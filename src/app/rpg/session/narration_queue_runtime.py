@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 
 
 def _enqueue_narration_request(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
     tick: int,
-    narration_request: Dict[str, Any],
+    narration_request: dict[str, Any],
     job_kind: str = "player_turn",
     priority: int = 100,
-) -> Tuple[Dict[str, Any], Dict[str, Any], bool]:
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
     from app.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso, ensure_ambient_runtime_state as ensure_ambient_runtime_state,
     )
@@ -116,11 +116,11 @@ def _enqueue_narration_request(
 
 
 def _enqueue_grounding_soft_audit_request(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
     tick: int,
-    audit_request: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Dict[str, Any], bool]:
+    audit_request: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
     audit_turn_id = f"{_safe_str(turn_id)}:grounding_soft_audit"
     return _enqueue_narration_request(
         runtime_state,
@@ -135,8 +135,8 @@ def _enqueue_grounding_soft_audit_request(
 # Backward compatibility wrapper
 def _enqueue_narration_request_old(
     session_id: str,
-    narration_request: Dict[str, Any],
-) -> Dict[str, Any]:
+    narration_request: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.session.session_runtime_store import (
         load_runtime_session as load_runtime_session, save_runtime_session as save_runtime_session,
     )
@@ -185,35 +185,35 @@ _FAST_TURN_DEFAULTS = {
 
 
 
-def _runtime_fast_turn_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_fast_turn_enabled(runtime_state: dict[str, Any]) -> bool:
     return bool((_safe_dict(runtime_state).get("performance") or {}).get("fast_turn_mode", False))
 
 
-def _runtime_action_advisory_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_action_advisory_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_action_advisory"]
 
 
-def _runtime_semantic_advisory_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_semantic_advisory_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_semantic_action_advisory"]
 
 
-def _runtime_narration_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_narration_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_live_narration_llm"]
 
 
-def _runtime_narration_retry_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_narration_retry_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_narration_retry"]
 
 
-def _runtime_continuity_grounding_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_continuity_grounding_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["enable_continuity_grounding"]
 
 
-def _runtime_compact_save_enabled(runtime_state: Dict[str, Any]) -> bool:
+def _runtime_compact_save_enabled(runtime_state: dict[str, Any]) -> bool:
     return _normalize_performance_settings(runtime_state)["compact_save"]
 
 
-def _dialogue_semantic_action_from_player_input(player_input: str) -> Dict[str, Any] | None:
+def _dialogue_semantic_action_from_player_input(player_input: str) -> dict[str, Any] | None:
     text = str(player_input or "").strip()
     lower = " ".join(text.lower().split())
     if not lower:
@@ -303,20 +303,20 @@ def _dialogue_semantic_action_from_player_input(player_input: str) -> Dict[str, 
 
 def _build_dialogue_state_update_payload(
     *,
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     speaker: str,
     player_action: str,
     npc_line: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not speaker or not npc_line:
         return {}
     return _safe_dict(_safe_dict(simulation_state).get("dialogue_state"))
 
 
 def _apply_dialogue_state_update_from_narration(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    narration_payload: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    narration_payload: dict[str, Any],
 ) -> None:
     update = narration_payload.get("dialogue_state_update") if isinstance(narration_payload, dict) else None
     if isinstance(update, dict) and update:
@@ -329,9 +329,9 @@ def _apply_dialogue_state_update_from_narration(
 
 def _build_fast_semantic_action_record(
     player_input: str,
-    action: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+    simulation_state: dict[str, Any],
+) -> dict[str, Any]:
     """Build a deterministic semantic action record without LLM advisory.
 
     The semantic_action_id is derived from a content hash of the key
@@ -385,9 +385,9 @@ def _build_last_player_action_record(
     *,
     tick: int,
     player_input: str,
-    action: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+    semantic_action_record: dict[str, Any],
+) -> dict[str, Any]:
     action = _safe_dict(action)
     semantic_action_record = _safe_dict(semantic_action_record)
     return {
@@ -410,10 +410,10 @@ def _build_last_player_action_record(
 
 
 def _clear_stale_last_player_action(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     current_tick: int,
     max_age_ticks: int = 2,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     last_player_action = _safe_dict(runtime_state.get("last_player_action"))
     if not last_player_action:
@@ -429,7 +429,7 @@ def _clear_stale_last_player_action(
 
 
 
-def _semantic_action_starts_persistent_interaction(record: Dict[str, Any]) -> bool:
+def _semantic_action_starts_persistent_interaction(record: dict[str, Any]) -> bool:
     record = _safe_dict(record)
     action_type = _safe_str(record.get("action_type")).strip().lower()
     interaction_mode = _safe_str(record.get("interaction_mode")).strip().lower()
@@ -441,7 +441,7 @@ def _semantic_action_starts_persistent_interaction(record: Dict[str, Any]) -> bo
     return False
 
 
-def _interaction_duration_for_record(record: Dict[str, Any]) -> int:
+def _interaction_duration_for_record(record: dict[str, Any]) -> int:
     record = _safe_dict(record)
     action_type = _safe_str(record.get("action_type")).strip().lower()
     intensity = max(0, min(3, _safe_int(record.get("intensity"), 1)))
@@ -452,13 +452,13 @@ def _interaction_duration_for_record(record: Dict[str, Any]) -> int:
     return _DEFAULT_INTERACTION_DURATION_TICKS
 
 
-def _get_interaction_duration_mode(runtime_state: Dict[str, Any]) -> str:
+def _get_interaction_duration_mode(runtime_state: dict[str, Any]) -> str:
     runtime_state = _safe_dict(runtime_state)
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
     return _safe_str(settings.get("interaction_duration_mode") or "until_next_command").strip().lower() or "until_next_command"
 
 
-def _get_interaction_duration_ticks(runtime_state: Dict[str, Any], record: Dict[str, Any]) -> int:
+def _get_interaction_duration_ticks(runtime_state: dict[str, Any], record: dict[str, Any]) -> int:
     runtime_state = _safe_dict(runtime_state)
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
     configured = _safe_int(settings.get("interaction_duration_ticks"), 5)
@@ -470,8 +470,8 @@ def _get_interaction_duration_ticks(runtime_state: Dict[str, Any], record: Dict[
 
 
 def _compute_interaction_expires_tick(
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
     updated_tick: int,
 ) -> int:
     mode = _get_interaction_duration_mode(runtime_state)
@@ -482,9 +482,9 @@ def _compute_interaction_expires_tick(
 
 
 def _build_active_interaction_from_semantic_action(
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> Dict[str, Any]:
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     record = _safe_dict(record)
     tick = _safe_int(record.get("tick"), 0)
@@ -522,10 +522,10 @@ def _build_active_interaction_from_semantic_action(
 
 
 def _upsert_active_interaction_from_semantic_action(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )
@@ -597,12 +597,12 @@ def _upsert_active_interaction_from_semantic_action(
 
 
 def _persist_player_interaction_state_after_turn(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     player_input: str,
-    semantic_action_record: Dict[str, Any],
+    semantic_action_record: dict[str, Any],
     current_tick: int,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     simulation_state = _ensure_simulation_state(_safe_dict(simulation_state))
     runtime_state = _copy_dict(runtime_state)
     semantic_action_record = _safe_dict(semantic_action_record)
@@ -624,9 +624,9 @@ def _persist_player_interaction_state_after_turn(
 
 
 def _expire_stale_active_interactions(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     current_tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )
@@ -663,9 +663,9 @@ def _expire_stale_active_interactions(
 
 
 def _refresh_active_interactions_for_tick(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     current_tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Keep unresolved interactions visually current across idle ticks.
 
     This does not change lifecycle semantics. It only updates the interaction's
@@ -673,7 +673,7 @@ def _refresh_active_interactions_for_tick(
     interaction under ambient activity rows.
     """
     simulation_state = _ensure_active_interactions(simulation_state)
-    refreshed: list[Dict[str, Any]] = []
+    refreshed: list[dict[str, Any]] = []
 
     for raw in _safe_list(simulation_state.get("active_interactions")):
         item = _safe_dict(raw)
@@ -686,9 +686,9 @@ def _refresh_active_interactions_for_tick(
 
 
 def _build_active_interaction_prompt_context(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     current_tick: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     rows = []
     for raw in _safe_list(simulation_state.get("active_interactions")):
@@ -718,11 +718,11 @@ def _build_active_interaction_prompt_context(
 
 
 def _seed_conversation_thread_from_active_interaction(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    interaction: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    interaction: dict[str, Any],
     current_tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     interaction = _safe_dict(interaction)
@@ -764,10 +764,10 @@ def _seed_conversation_thread_from_active_interaction(
 
 
 def _run_npc_reaction_pass(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     current_tick: int,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     simulation_state = _ensure_simulation_state(_safe_dict(simulation_state))
     runtime_state = _ensure_npc_reaction_runtime_state(_safe_dict(runtime_state))
 
@@ -793,8 +793,8 @@ def _run_npc_reaction_pass(
 
 
 def _semantic_action_matches_active_interaction(
-    interaction: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
+    interaction: dict[str, Any],
+    semantic_action_record: dict[str, Any],
 ) -> bool:
     interaction = _safe_dict(interaction)
     semantic_action_record = _safe_dict(semantic_action_record)
@@ -818,11 +818,11 @@ def _semantic_action_matches_active_interaction(
 
 
 def _resolve_until_next_command_interactions(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    semantic_action_record: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    semantic_action_record: dict[str, Any],
     current_tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.combat_intent import (
         _compact_active_interactions as _compact_active_interactions, _log_interaction_trace as _log_interaction_trace,
     )

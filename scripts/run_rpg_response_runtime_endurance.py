@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from app.rpg.session.runtime_part40 import apply_turn
+from app.rpg.session.turn_response_composition import apply_turn
 
 
 _CATEGORIES = (

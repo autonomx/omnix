@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any
 
 # RPG session runtime responsibility module.
 # Phase 4.13: route session travel commands through guarded Phase 4 runtime helpers.
@@ -25,7 +25,7 @@ _PHASE8_OBJECTIVE_JOURNAL_SOURCE = "deterministic_phase8_objective_journal_detai
 _PHASE8_COMBAT_PANEL_SOURCE = "deterministic_phase8_combat_state_action_affordance_gate"
 
 
-def _phase4_session_travel_turn_index(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> int:
+def _phase4_session_travel_turn_index(runtime_state: dict[str, Any], simulation_state: dict[str, Any]) -> int:
     return _safe_int(
         runtime_state.get("tick")
         or simulation_state.get("tick")
@@ -34,7 +34,7 @@ def _phase4_session_travel_turn_index(runtime_state: Dict[str, Any], simulation_
     )
 
 
-def _phase4_session_travel_current_location(simulation_state: Dict[str, Any]) -> str:
+def _phase4_session_travel_current_location(simulation_state: dict[str, Any]) -> str:
     travel_state = _safe_dict(simulation_state.get("travel_state"))
     location_state = _safe_dict(simulation_state.get("location_state"))
     return _safe_str(
@@ -45,7 +45,7 @@ def _phase4_session_travel_current_location(simulation_state: Dict[str, Any]) ->
     )
 
 
-def _phase4_session_travel_summary(command_result: Dict[str, Any]) -> str:
+def _phase4_session_travel_summary(command_result: dict[str, Any]) -> str:
     command_result = _safe_dict(command_result)
     travel_result = _safe_dict(command_result.get("travel_result"))
     command = _safe_dict(command_result.get("command_result"))
@@ -67,7 +67,7 @@ def _phase4_session_travel_summary(command_result: Dict[str, Any]) -> str:
     return f"Travel command result: {reason or 'not_applied'}."
 
 
-def _phase4_frontend_map_location_panel_payload(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase4_frontend_map_location_panel_payload(simulation_state: dict[str, Any]) -> dict[str, Any]:
     """Build the player-visible map/location UI payload without mutating state."""
     from app.rpg.locations import build_map_location_panel_payload
 
@@ -76,7 +76,7 @@ def _phase4_frontend_map_location_panel_payload(simulation_state: Dict[str, Any]
     return panel_payload
 
 
-def _phase8_inventory_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_inventory_summary(player_state: dict[str, Any]) -> dict[str, Any]:
     inventory = _safe_dict(player_state.get("inventory_state") or player_state.get("inventory"))
     items = []
     for raw in _safe_list(inventory.get("items") or player_state.get("items")):
@@ -105,7 +105,7 @@ def _phase8_inventory_summary(player_state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _phase8_active_objective_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_active_objective_summary(simulation_state: dict[str, Any]) -> dict[str, Any]:
     panel = _phase8_objective_journal_panel_payload(simulation_state, {})
     active_objective = _safe_dict(panel.get("active_objective"))
     return {
@@ -116,7 +116,7 @@ def _phase8_active_objective_summary(simulation_state: Dict[str, Any]) -> Dict[s
     }
 
 
-def _phase8_party_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_party_summary(simulation_state: dict[str, Any]) -> dict[str, Any]:
     party_state = _safe_dict(simulation_state.get("party_state") or simulation_state.get("party"))
     members = []
     for raw in _safe_list(party_state.get("members") or party_state.get("companions")):
@@ -134,8 +134,8 @@ def _phase8_party_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
     return {"members": members[:6], "member_count": len(members), "source": _PHASE8_PLAYER_HUD_SOURCE}
 
 
-def _phase8_major_warnings(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> List[Dict[str, Any]]:
-    warnings: List[Dict[str, Any]] = []
+def _phase8_major_warnings(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
     player_state = _safe_dict(simulation_state.get("player_state"))
     survival = _safe_dict(player_state.get("survival_state") or simulation_state.get("survival_state"))
     hunger = _safe_int(survival.get("hunger"), 0)
@@ -186,7 +186,7 @@ def _phase8_objective_label(status: str) -> str:
     }.get(_safe_str(status), "Available")
 
 
-def _phase8_objective_detail(raw: Dict[str, Any], fallback_index: int, source_name: str) -> Dict[str, Any]:
+def _phase8_objective_detail(raw: dict[str, Any], fallback_index: int, source_name: str) -> dict[str, Any]:
     objective = _safe_dict(raw)
     status = _phase8_objective_status(objective.get("status") or objective.get("state"))
     objective_id = _safe_str(objective.get("objective_id") or objective.get("id") or objective.get("quest_id"))
@@ -211,10 +211,10 @@ def _phase8_objective_detail(raw: Dict[str, Any], fallback_index: int, source_na
     }
 
 
-def _phase8_objective_candidates(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _phase8_objective_candidates(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     journal = _safe_dict(simulation_state.get("journal_state") or simulation_state.get("journal"))
     quest_state = _safe_dict(simulation_state.get("quest_state") or simulation_state.get("quests"))
-    candidates: List[Dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     for raw in _safe_list(journal.get("objectives")):
         candidates.append({"raw": _safe_dict(raw), "source_name": "journal_state.objectives"})
     for raw in _safe_list(quest_state.get("objectives")):
@@ -227,8 +227,8 @@ def _phase8_objective_candidates(simulation_state: Dict[str, Any]) -> List[Dict[
     return candidates
 
 
-def _phase8_grouped_objectives(simulation_state: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
-    grouped: Dict[str, List[Dict[str, Any]]] = {"active": [], "available": [], "completed": [], "blocked": []}
+def _phase8_grouped_objectives(simulation_state: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {"active": [], "available": [], "completed": [], "blocked": []}
     for index, candidate in enumerate(_phase8_objective_candidates(simulation_state)):
         detail = _phase8_objective_detail(
             _safe_dict(candidate.get("raw")),
@@ -239,7 +239,7 @@ def _phase8_grouped_objectives(simulation_state: Dict[str, Any]) -> Dict[str, Li
     return {key: value[:8] for key, value in grouped.items()}
 
 
-def _phase8_journal_entries(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _phase8_journal_entries(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     journal = _safe_dict(simulation_state.get("journal_state") or simulation_state.get("journal"))
     entries = []
     for index, raw in enumerate(_safe_list(journal.get("entries") or journal.get("journal_entries"))):
@@ -273,7 +273,7 @@ def _phase8_journal_entries(simulation_state: Dict[str, Any]) -> List[Dict[str, 
     return entries[-8:]
 
 
-def _phase8_recent_action_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_recent_action_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     last_turn = _safe_dict(runtime_state.get("last_turn_result") or runtime_state.get("last_result"))
     last_action = _safe_dict(runtime_state.get("last_player_action") or runtime_state.get("last_action"))
     return {
@@ -288,9 +288,9 @@ def _phase8_recent_action_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]
 
 
 def _phase8_objective_journal_panel_payload(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build the player-visible objective/journal panel without mutating state."""
 
     simulation_copy = deepcopy(_safe_dict(simulation_state))
@@ -320,7 +320,7 @@ def _phase8_objective_journal_panel_payload(
     }
 
 
-def _phase8_combat_source_state(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_combat_source_state(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> dict[str, Any]:
     return _safe_dict(
         runtime_state.get("combat_state")
         or simulation_state.get("combat_state")
@@ -328,13 +328,13 @@ def _phase8_combat_source_state(simulation_state: Dict[str, Any], runtime_state:
     )
 
 
-def _phase8_actor_is_player(actor_id: str, actor: Dict[str, Any]) -> bool:
+def _phase8_actor_is_player(actor_id: str, actor: dict[str, Any]) -> bool:
     side = _safe_str(actor.get("side") or actor.get("team") or actor.get("faction")).lower()
     actor_type = _safe_str(actor.get("actor_type") or actor.get("type") or actor.get("kind")).lower()
     return actor_id == "player" or side == "player" or actor_type == "player"
 
 
-def _phase8_combat_participant_detail(actor_id: str, raw: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_combat_participant_detail(actor_id: str, raw: dict[str, Any]) -> dict[str, Any]:
     actor = _safe_dict(raw)
     hp = _safe_int(actor.get("hp") or actor.get("current_hp") or actor.get("health"), 0)
     max_hp = _safe_int(actor.get("max_hp") or actor.get("maximum_hp") or actor.get("hp_max"), hp)
@@ -351,9 +351,9 @@ def _phase8_combat_participant_detail(actor_id: str, raw: Dict[str, Any]) -> Dic
     }
 
 
-def _phase8_combat_participants(combat_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _phase8_combat_participants(combat_state: dict[str, Any]) -> list[dict[str, Any]]:
     participants = _safe_dict(combat_state.get("participants"))
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     if participants:
         for actor_id in sorted(participants):
             rows.append(_phase8_combat_participant_detail(_safe_str(actor_id), _safe_dict(participants.get(actor_id))))
@@ -365,7 +365,7 @@ def _phase8_combat_participants(combat_state: Dict[str, Any]) -> List[Dict[str, 
     return rows[:12]
 
 
-def _phase8_player_actor_id(combat_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> str:
+def _phase8_player_actor_id(combat_state: dict[str, Any], participants: list[dict[str, Any]]) -> str:
     configured = _safe_str(combat_state.get("player_actor_id") or combat_state.get("player_id"))
     if configured:
         return configured
@@ -375,7 +375,7 @@ def _phase8_player_actor_id(combat_state: Dict[str, Any], participants: List[Dic
     return "player"
 
 
-def _phase8_combat_legal_actions(combat_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _phase8_combat_legal_actions(combat_state: dict[str, Any], participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if combat_state.get("active") is not True:
         return []
     current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
@@ -383,7 +383,7 @@ def _phase8_combat_legal_actions(combat_state: Dict[str, Any], participants: Lis
     if current_actor_id and current_actor_id != player_actor_id:
         return []
     targets = [row for row in participants if not row.get("is_player") and not row.get("defeated")]
-    actions: List[Dict[str, Any]] = []
+    actions: list[dict[str, Any]] = []
     for target in targets[:6]:
         actions.append(
             {
@@ -398,8 +398,8 @@ def _phase8_combat_legal_actions(combat_state: Dict[str, Any], participants: Lis
     return actions
 
 
-def _phase8_combat_panel_warnings(combat_state: Dict[str, Any], runtime_state: Dict[str, Any], participants: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    warnings: List[Dict[str, Any]] = []
+def _phase8_combat_panel_warnings(combat_state: dict[str, Any], runtime_state: dict[str, Any], participants: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
     if combat_state.get("active") is True:
         current_actor_id = _safe_str(combat_state.get("current_actor_id") or combat_state.get("turn_actor_id"))
         player_actor_id = _phase8_player_actor_id(combat_state, participants)
@@ -426,9 +426,9 @@ def _phase8_combat_panel_warnings(combat_state: Dict[str, Any], runtime_state: D
 
 
 def _phase8_combat_panel_payload(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build player-visible combat state/action affordances without mutating state."""
 
     simulation_copy = deepcopy(_safe_dict(simulation_state))
@@ -458,9 +458,9 @@ def _phase8_combat_panel_payload(
 
 
 def _phase8_player_visible_hud_payload(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build a read-only player HUD payload from deterministic runtime state."""
 
     simulation_copy = deepcopy(_safe_dict(simulation_state))
@@ -495,11 +495,11 @@ def _phase4_session_travel_payload(
     *,
     session_id: str,
     player_input: str,
-    session: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    command_result: Dict[str, Any],
-) -> Dict[str, Any]:
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    command_result: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.locations import build_runtime_travel_command_narration_contract
 
     command_result = _safe_dict(command_result)
@@ -515,7 +515,7 @@ def _phase4_session_travel_payload(
     objective_journal_panel = _phase8_objective_journal_panel_payload(simulation_state, runtime_state)
     combat_action_panel = _phase8_combat_panel_payload(simulation_state, runtime_state)
 
-    resolved_result: Dict[str, Any] = {
+    resolved_result: dict[str, Any] = {
         "ok": command_result.get("ok") is True,
         "action_type": "travel",
         "semantic_action_type": "travel",
@@ -612,10 +612,10 @@ def _apply_phase4_session_travel_command(
     session_id: str,
     player_input: str,
     *,
-    session: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.locations import apply_runtime_travel_command, resolve_travel_command
 
     turn_index = _phase4_session_travel_turn_index(runtime_state, simulation_state)
@@ -644,10 +644,10 @@ def _apply_phase4_session_travel_command(
 def _apply_phase4_travel_and_panels(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    performance_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     session = load_runtime_session(session_id)
     if session is None:
         return _base_apply_turn_authoritative(session_id, player_input, action, performance_override=performance_override)

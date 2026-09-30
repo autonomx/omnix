@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, Iterable, List
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.36: semantic visible responses are prompt/turn scoped.  The previous
@@ -43,7 +43,7 @@ def _phase8_part36_int(value: Any) -> int:
         return 0
 
 
-def _phase8_part36_shallow_sources(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def _phase8_part36_shallow_sources(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
@@ -51,7 +51,7 @@ def _phase8_part36_shallow_sources(payload: Dict[str, Any]) -> Iterable[Dict[str
     payload = _safe_dict(payload)
     if not payload:
         return
-    roots: List[Dict[str, Any]] = [payload]
+    roots: list[dict[str, Any]] = [payload]
     for key in ("result", "authoritative", "payload"):
         nested = _safe_dict(payload.get(key))
         if nested:
@@ -106,7 +106,7 @@ def _phase8_part36_shallow_sources(payload: Dict[str, Any]) -> Iterable[Dict[str
                         yield item
 
 
-def _phase8_part36_current_identity(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part36_current_identity(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     turn_id = ""
     tick = 0
@@ -137,7 +137,7 @@ def _phase8_part36_current_identity(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _phase8_part36_source_identity(source: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part36_source_identity(source: dict[str, Any]) -> dict[str, Any]:
     source = _safe_dict(source)
     player_input = _safe_str(
         source.get("player_input")
@@ -155,7 +155,7 @@ def _phase8_part36_source_identity(source: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _phase8_part36_identity_matches(current: Dict[str, Any], source: Dict[str, Any]) -> bool:
+def _phase8_part36_identity_matches(current: dict[str, Any], source: dict[str, Any]) -> bool:
     current = _safe_dict(current)
     source_id = _phase8_part36_source_identity(source)
 
@@ -182,7 +182,7 @@ def _phase8_part36_identity_matches(current: Dict[str, Any], source: Dict[str, A
     return True
 
 
-def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part35_semantic_visible_response_fields(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     current = _phase8_part36_current_identity(payload)
     for source in _phase8_part36_shallow_sources(payload):
@@ -202,12 +202,12 @@ def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> 
 
 
 def _compile_semantic_action_record(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     player_input: str,
-    action: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+) -> dict[str, Any]:
     record = _safe_dict(
         _PHASE8_PART36_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD(
             simulation_state,
@@ -233,7 +233,7 @@ def _compile_semantic_action_record(
     return record
 
 
-def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str, Any], fields: Dict[str, Any]) -> None:
+def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str, Any], fields: dict[str, Any]) -> None:
     fields = _safe_dict(fields)
     binding = _safe_dict(fields.get("turn_binding")) or _phase8_part36_current_identity(payload)
     turn_id = _safe_str(binding.get("turn_id")).strip() or _phase8_part35_payload_turn_id(payload)

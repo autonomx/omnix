@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 # RPG session runtime responsibility module.
 # Phase 8.37: do not let deterministic/fallback NPC text masquerade as
@@ -33,7 +33,7 @@ _PHASE8_PART37_LLM_SOURCES = {
 }
 
 
-def _phase8_part34_has_structured_llm_payload(source: Dict[str, Any]) -> bool:
+def _phase8_part34_has_structured_llm_payload(source: dict[str, Any]) -> bool:
     """Return true only for payloads that are actually LLM-authored.
 
     The previous Phase 8.34 guard accepted any completed payload with an ``npc``
@@ -90,7 +90,7 @@ def _phase8_part37_clean_text(value: Any) -> str:
     return "" if text.casefold() in {"", "[]", "{}", "null", "none"} else text
 
 
-def _phase8_part37_completed_llm_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part37_completed_llm_fields(payload: dict[str, Any]) -> dict[str, Any]:
     from app.rpg.session.companion_turn_runtime import (
         _narration_artifact_is_echo_fallback as _narration_artifact_is_echo_fallback,
     )
@@ -128,7 +128,7 @@ def _phase8_part37_completed_llm_fields(payload: Dict[str, Any]) -> Dict[str, An
     return {}
 
 
-def _phase8_part37_turn_id(payload: Dict[str, Any]) -> str:
+def _phase8_part37_turn_id(payload: dict[str, Any]) -> str:
     payload = _safe_dict(payload)
     for source in _phase8_part31_iter_payload_dicts(payload):
         turn_id = _safe_str(source.get("turn_id")).strip()
@@ -137,7 +137,7 @@ def _phase8_part37_turn_id(payload: Dict[str, Any]) -> str:
     return _phase8_part35_payload_turn_id(payload)
 
 
-def _phase8_part37_tick(payload: Dict[str, Any]) -> int:
+def _phase8_part37_tick(payload: dict[str, Any]) -> int:
     payload = _safe_dict(payload)
     for source in _phase8_part31_iter_payload_dicts(payload):
         try:
@@ -149,7 +149,7 @@ def _phase8_part37_tick(payload: Dict[str, Any]) -> int:
     return _phase8_part35_payload_tick(payload)
 
 
-def _phase8_part37_persist_llm_artifact(session_id: str, payload: Dict[str, Any], fields: Dict[str, Any]) -> None:
+def _phase8_part37_persist_llm_artifact(session_id: str, payload: dict[str, Any], fields: dict[str, Any]) -> None:
     from app.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn, _store_narration_artifact as _store_narration_artifact,
     )
@@ -248,11 +248,11 @@ def _phase8_part37_patch_completed_llm_visible(payload: Any, *, session_id: str 
 def _patch_turn_bound_narration(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART37_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

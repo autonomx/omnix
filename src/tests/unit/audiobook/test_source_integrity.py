@@ -349,7 +349,7 @@ def _pdf_with_text() -> bytes:
 
 
 def test_pdf_source_extracts_text() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     revision = extract_source(project_id="book:pdf", content=_pdf_with_text(), source_format="pdf")
 
     assert "Chapter 1" in revision.chapters[0].canonical_text
@@ -357,7 +357,7 @@ def test_pdf_source_extracts_text() -> None:
 
 
 def test_pdf_with_spelled_chapter_numbers_creates_each_chapter() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     revision = extract_source(
         project_id="book:gold-cart-merchant",
         content=_pdf_with_pages((
@@ -406,7 +406,9 @@ def _pdf_with_pages(
         stream = " ".join(commands).encode()
         content = b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream"
         objects.extend([page, content])
-    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    objects.append(
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+    )
     output = bytearray(b"%PDF-1.4\n")
     offsets = [0]
     for number, body in enumerate(objects, start=1):
@@ -424,7 +426,7 @@ def _pdf_with_pages(
 
 
 def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     content = _pdf_with_pages()
     complete = extract_source(project_id="book:pdf-pages", content=content, source_format="pdf")
     filtered = extract_source(
@@ -445,7 +447,7 @@ def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
 
 
 def test_pdf_outline_headings_create_chapters_after_front_matter_exclusion() -> None:
-    pdf = pytest.importorskip("PyPDF2")
+    pdf = pytest.importorskip("pypdf")
     writer = pdf.PdfWriter()
     for page in pdf.PdfReader(BytesIO(_pdf_with_pages())).pages:
         writer.add_page(page)
@@ -473,7 +475,7 @@ def test_pdf_page_exclusions_validate_ranges() -> None:
 
 
 def test_pdf_page_exclusions_reject_ranges_past_document() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     with pytest.raises(UnsupportedSource, match="3 pages"):
         extract_source(
             project_id="book:pdf-pages", content=_pdf_with_pages(), source_format="pdf",

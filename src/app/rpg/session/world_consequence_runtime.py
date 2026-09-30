@@ -26,14 +26,14 @@ from typing import (
 )
 
 
-def _append_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) -> Dict[str, Any]:
+def _append_world_rumor(runtime_state: dict[str, Any], rumor: dict[str, Any]) -> dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
     rumor = _normalize_world_rumor(rumor)
     rumor_key = _world_rumor_key(rumor)
 
     rumors = _safe_list(runtime_state.get("world_rumors"))
     updated = False
-    merged: List[Dict[str, Any]] = []
+    merged: list[dict[str, Any]] = []
 
     for existing in rumors:
         existing = _normalize_world_rumor(existing)
@@ -56,14 +56,14 @@ def _append_world_rumor(runtime_state: Dict[str, Any], rumor: Dict[str, Any]) ->
     return runtime_state
 
 
-def _append_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, Any]) -> Dict[str, Any]:
+def _append_world_pressure(runtime_state: dict[str, Any], pressure: dict[str, Any]) -> dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
     pressure = _normalize_pressure_record(pressure)
     pressure_key = _world_pressure_key(pressure)
 
     items = _safe_list(runtime_state.get("world_pressure"))
     updated = False
-    merged: List[Dict[str, Any]] = []
+    merged: list[dict[str, Any]] = []
 
     for existing in items:
         existing = _normalize_pressure_record(existing)
@@ -87,14 +87,14 @@ def _append_world_pressure(runtime_state: Dict[str, Any], pressure: Dict[str, An
     return runtime_state
 
 
-def _append_location_condition(runtime_state: Dict[str, Any], condition: Dict[str, Any]) -> Dict[str, Any]:
+def _append_location_condition(runtime_state: dict[str, Any], condition: dict[str, Any]) -> dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
     condition = _normalize_location_condition(condition)
     condition_key = _location_condition_key(condition)
 
     items = _safe_list(runtime_state.get("location_conditions"))
     updated = False
-    merged: List[Dict[str, Any]] = []
+    merged: list[dict[str, Any]] = []
 
     for existing in items:
         existing = _normalize_location_condition(existing)
@@ -119,14 +119,14 @@ def _append_location_condition(runtime_state: Dict[str, Any], condition: Dict[st
     return runtime_state
 
 
-def _append_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+def _append_world_consequence(runtime_state: dict[str, Any], consequence: dict[str, Any]) -> dict[str, Any]:
     runtime_state = ensure_world_consequence_state(runtime_state)
     consequence = _normalize_world_consequence(consequence)
     consequence_key = _world_consequence_key(consequence)
 
     items = _safe_list(runtime_state.get("world_consequences"))
     updated = False
-    merged: List[Dict[str, Any]] = []
+    merged: list[dict[str, Any]] = []
 
     for existing in items:
         existing = _normalize_world_consequence(existing)
@@ -150,14 +150,14 @@ def _append_world_consequence(runtime_state: Dict[str, Any], consequence: Dict[s
     return runtime_state
 
 
-def _emit_consequence_world_rows(runtime_state: Dict[str, Any], consequence: Dict[str, Any]) -> Dict[str, Any]:
+def _emit_consequence_world_rows(runtime_state: dict[str, Any], consequence: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     rows = _safe_list(runtime_state.get("recent_world_event_rows"))
     consequence = _normalize_world_consequence(consequence)
 
     event_id = _safe_str(consequence.get("consequence_id"))
     replaced = False
-    merged_rows: List[Dict[str, Any]] = []
+    merged_rows: list[dict[str, Any]] = []
 
     for row in rows:
         row = _safe_dict(row)
@@ -200,7 +200,7 @@ def _emit_consequence_world_rows(runtime_state: Dict[str, Any], consequence: Dic
     return runtime_state
 
 
-def propagate_activity_consequences_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def propagate_activity_consequences_for_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = ensure_world_consequence_state(runtime_state)
     runtime_state = ensure_actor_activity_state(runtime_state)
@@ -332,13 +332,13 @@ def propagate_activity_consequences_for_tick(simulation_state: Dict[str, Any], r
     return runtime_state
 
 
-def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def decay_world_consequences_for_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = ensure_world_consequence_state(runtime_state)
     tick = _safe_int(simulation_state.get("tick"), 0)
 
     # Rumors decay by strength, then disappear
-    rumors_out: List[Dict[str, Any]] = []
+    rumors_out: list[dict[str, Any]] = []
     for rumor in _safe_list(runtime_state.get("world_rumors")):
         rumor = _normalize_world_rumor(rumor)
         age = tick - _safe_int(rumor.get("updated_tick"), 0)
@@ -351,7 +351,7 @@ def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_
     runtime_state["world_rumors"] = rumors_out[-_MAX_WORLD_RUMORS:]
 
     # Pressure decays by value, then disappears
-    pressure_out: List[Dict[str, Any]] = []
+    pressure_out: list[dict[str, Any]] = []
     for pressure in _safe_list(runtime_state.get("world_pressure")):
         pressure = _normalize_pressure_record(pressure)
         age = tick - _safe_int(pressure.get("updated_tick"), 0)
@@ -364,7 +364,7 @@ def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_
     runtime_state["world_pressure"] = pressure_out[-_MAX_WORLD_PRESSURE:]
 
     # Location conditions cool and eventually resolve
-    condition_out: List[Dict[str, Any]] = []
+    condition_out: list[dict[str, Any]] = []
     for condition in _safe_list(runtime_state.get("location_conditions")):
         condition = _normalize_location_condition(condition)
         age = tick - _safe_int(condition.get("updated_tick"), 0)
@@ -377,7 +377,7 @@ def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_
     runtime_state["location_conditions"] = condition_out[-_MAX_LOCATION_CONDITIONS:]
 
     # Consequences fade out of active memory if stale
-    consequence_out: List[Dict[str, Any]] = []
+    consequence_out: list[dict[str, Any]] = []
     for consequence in _safe_list(runtime_state.get("world_consequences")):
         consequence = _normalize_world_consequence(consequence)
         age = tick - _safe_int(consequence.get("tick"), 0)
@@ -389,7 +389,7 @@ def decay_world_consequences_for_tick(simulation_state: Dict[str, Any], runtime_
 
 
 def emit_scene_beat(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     *,
     tick: int,
     summary: str,
@@ -397,11 +397,11 @@ def emit_scene_beat(
     priority: int = 50,
     scene_id: str = "",
     interaction_id: str = "",
-    actors: List[str] | None = None,
+    actors: list[str] | None = None,
     location_id: str = "",
     recap_level: str = "notable",
-    tags: List[str] | None = None,
-) -> Dict[str, Any]:
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
     runtime_state = _ensure_recent_scene_beats(runtime_state)
     beat = _normalize_scene_beat(
         {
@@ -427,7 +427,7 @@ def emit_scene_beat(
     return _ensure_recent_scene_beats(runtime_state)
 
 
-def _stable_state_change_event_id(event: Dict[str, Any]) -> str:
+def _stable_state_change_event_id(event: dict[str, Any]) -> str:
     payload = {
         "tick": int(_safe_dict(event).get("tick", 0) or 0),
         "actor_id": _safe_str(_safe_dict(event).get("actor_id")),
@@ -439,7 +439,7 @@ def _stable_state_change_event_id(event: Dict[str, Any]) -> str:
     return "state_change_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _normalize_semantic_state_change_proposal(proposal: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_semantic_state_change_proposal(proposal: dict[str, Any]) -> dict[str, Any]:
     proposal = _safe_dict(proposal)
     delta = _safe_dict(proposal.get("delta"))
     out = {
@@ -480,9 +480,9 @@ def _normalize_semantic_state_change_proposal(proposal: Dict[str, Any]) -> Dict[
 
 
 def _stable_semantic_state_change_proposal_id(
-    proposal: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    proposal: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> str:
     """
     Build a deterministic per-tick proposal identity.
@@ -515,7 +515,7 @@ def _stable_semantic_state_change_proposal_id(
     return "semantic_proposal_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_semantic_pipeline_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     from app.rpg.session.combat_intent import (
         ensure_ambient_runtime_state as ensure_ambient_runtime_state,
     )
@@ -556,7 +556,7 @@ def _ensure_semantic_pipeline_state(runtime_state: Dict[str, Any]) -> Dict[str, 
     return runtime_state
 
 
-def _accepted_state_change_event_ids(runtime_state: Dict[str, Any]) -> set[str]:
+def _accepted_state_change_event_ids(runtime_state: dict[str, Any]) -> set[str]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     ids = set()
     for item in _safe_list(runtime_state.get("accepted_state_change_events")):
@@ -566,7 +566,7 @@ def _accepted_state_change_event_ids(runtime_state: Dict[str, Any]) -> set[str]:
     return ids
 
 
-def _applied_semantic_proposal_ids(runtime_state: Dict[str, Any]) -> set[str]:
+def _applied_semantic_proposal_ids(runtime_state: dict[str, Any]) -> set[str]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     ids = set()
     for item in _safe_list(runtime_state.get("applied_semantic_proposal_ids")):
@@ -576,11 +576,11 @@ def _applied_semantic_proposal_ids(runtime_state: Dict[str, Any]) -> set[str]:
     return ids
 
 
-def _safe_actor_states(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _safe_actor_states(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     npc_index = _safe_dict(simulation_state.get("npc_index"))
     if npc_index:
-        derived: List[Dict[str, Any]] = []
+        derived: list[dict[str, Any]] = []
         for npc_id, npc in npc_index.items():
             npc = _safe_dict(npc)
             actor_id = _safe_str(npc_id)
@@ -606,7 +606,7 @@ def _safe_actor_states(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]
     return [_safe_dict(x) for x in npc_states if _safe_dict(x)]
 
 
-def _write_actor_states(simulation_state: Dict[str, Any], actor_states: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _write_actor_states(simulation_state: dict[str, Any], actor_states: list[dict[str, Any]]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     actor_states = [ _safe_dict(x) for x in _safe_list(actor_states) ]
     simulation_state["actor_states"] = actor_states
@@ -625,7 +625,7 @@ def _write_actor_states(simulation_state: Dict[str, Any], actor_states: List[Dic
     return simulation_state
 
 
-def _find_actor_state(actor_states: List[Dict[str, Any]], actor_id: str) -> Dict[str, Any]:
+def _find_actor_state(actor_states: list[dict[str, Any]], actor_id: str) -> dict[str, Any]:
     actor_id = _safe_str(actor_id)
     for actor in _safe_list(actor_states):
         actor = _safe_dict(actor)
@@ -634,7 +634,7 @@ def _find_actor_state(actor_states: List[Dict[str, Any]], actor_id: str) -> Dict
     return {}
 
 
-def _normalize_actor_state_for_delta(actor: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_actor_state_for_delta(actor: dict[str, Any]) -> dict[str, Any]:
     actor = _safe_dict(actor)
     return {
         "id": _safe_str(actor.get("id")),
@@ -648,7 +648,7 @@ def _normalize_actor_state_for_delta(actor: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _allowed_semantic_actions() -> Dict[str, Dict[str, str]]:
+def _allowed_semantic_actions() -> dict[str, dict[str, str]]:
     return {
         "take_break": {"activity": "on_break", "availability": "temporarily_unavailable"},
         "wash_up": {"activity": "washing_up", "availability": "occupied"},
@@ -661,14 +661,14 @@ def _allowed_semantic_actions() -> Dict[str, Dict[str, str]]:
 
 
 def record_semantic_llm_capture(
-    runtime_state: Dict[str, Any],
-    simulation_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
+    simulation_state: dict[str, Any],
     *,
     prompt: str,
     raw_output: Any,
-    proposals: List[Dict[str, Any]],
+    proposals: list[dict[str, Any]],
     tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
 
     from app.rpg.session.semantic_state_changes import (
         _normalize_llm_text_output as _normalize_llm_text_output,
@@ -714,13 +714,13 @@ def record_semantic_llm_capture(
     return runtime_state
 
 
-def clear_recorded_semantic_llm_capture(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def clear_recorded_semantic_llm_capture(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     runtime_state["recorded_semantic_llm_proposals"] = []
     return runtime_state
 
 
-def _build_location_id_index(simulation_state: Dict[str, Any]) -> set[str]:
+def _build_location_id_index(simulation_state: dict[str, Any]) -> set[str]:
     simulation_state = _safe_dict(simulation_state)
     ids = {
         _safe_str(x.get("id"))
@@ -733,7 +733,7 @@ def _build_location_id_index(simulation_state: Dict[str, Any]) -> set[str]:
     return ids
 
 
-def _canonical_delta_has_values(delta: Dict[str, Any]) -> bool:
+def _canonical_delta_has_values(delta: dict[str, Any]) -> bool:
     delta = _safe_dict(delta)
     return any(
         _safe_str(delta.get(key))
@@ -741,7 +741,7 @@ def _canonical_delta_has_values(delta: Dict[str, Any]) -> bool:
     )
 
 
-def enqueue_semantic_state_change_proposal(runtime_state: Dict[str, Any], proposal: Dict[str, Any]) -> Dict[str, Any]:
+def enqueue_semantic_state_change_proposal(runtime_state: dict[str, Any], proposal: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
     proposal = _normalize_semantic_state_change_proposal(proposal)
     items = _safe_list(runtime_state.get("semantic_state_change_proposals"))
@@ -760,15 +760,15 @@ def enqueue_semantic_state_change_proposal(runtime_state: Dict[str, Any], propos
 
 
 def validate_semantic_state_change_proposal(
-    proposal: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    proposal: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     proposal = _normalize_semantic_state_change_proposal(proposal)
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(runtime_state)
 
-    errors: List[str] = []
+    errors: list[str] = []
     if proposal["proposal_kind"] != "state_delta":
         errors.append("unsupported_proposal_kind")
     if not proposal["actor_id"]:

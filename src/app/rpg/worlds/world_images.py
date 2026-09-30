@@ -943,8 +943,7 @@ def generate_world_images(
     height: int = 768,
     style: str = "",
     no_cache: bool = False,
-    database: Any | None = None,
-    target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
+    database: Any | None = None, target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
     from .world_image_jobs import create_world_image_job
 
@@ -1034,8 +1033,7 @@ def update_world_image_target(
     review_state: str | None = None,
     active_asset_id: str | None = None,
     suggested_prompt: str | None = None,
-    database: Any | None = None,
-    target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
+    database: Any | None = None, target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
     if review_state is not None and review_state not in {"pending", "approved", "rejected"}:
         raise ValueError(f"invalid_image_review_state:{review_state}")

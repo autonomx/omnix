@@ -68,24 +68,24 @@ from typing import (
 
 def _resolve_post_authoritative_combat_utility_turn(
     *,
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     post_authoritative_utility_kind: str,
-    post_authoritative_combat_state: Dict[str, Any],
-    post_authoritative_semantic_action_record: Dict[str, Any],
-    authoritative_simulation_state: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
+    post_authoritative_combat_state: dict[str, Any],
+    post_authoritative_semantic_action_record: dict[str, Any],
+    authoritative_simulation_state: dict[str, Any],
+    simulation_state: dict[str, Any],
+    action: dict[str, Any],
     player_input: str,
     player_actor_id: str,
     current_tick: int,
     session_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     utility_turn_id = _build_turn_id(runtime_state)
     utility_tick = current_tick
     combat_state = normalize_combat_state(post_authoritative_combat_state)
     after_action_state = _ensure_simulation_state(authoritative_simulation_state or simulation_state)
 
-    resolved_result: Dict[str, Any] = {
+    resolved_result: dict[str, Any] = {
         "action_type": post_authoritative_utility_kind,
         "outcome": post_authoritative_utility_kind,
         "visible_interaction_reason": f"combat_{post_authoritative_utility_kind}",
@@ -98,8 +98,8 @@ def _resolve_post_authoritative_combat_utility_turn(
         },
     }
 
-    combat_result: Dict[str, Any] = {}
-    npc_combat_result: Dict[str, Any] = {}
+    combat_result: dict[str, Any] = {}
+    npc_combat_result: dict[str, Any] = {}
 
     current_actor_id = get_current_actor_id(combat_state)
     if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
@@ -210,12 +210,12 @@ def _resolve_post_authoritative_combat_utility_turn(
 
 def _apply_deterministic_travel_resolution(
     *,
-    ambient_tick_result: Dict[str, Any],
-    resolved_result: Dict[str, Any],
-    authoritative: Dict[str, Any],
+    ambient_tick_result: dict[str, Any],
+    resolved_result: dict[str, Any],
+    authoritative: dict[str, Any],
     player_input: str,
-    after_action_state: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    after_action_state: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     # Phase 9.0: deterministic travel/scene transition runtime.
     # Service turns remain service-first. Travel only claims the turn when no
     # deterministic service result has matched.
@@ -340,7 +340,7 @@ def _maybe_start_manual_encounter(
     runtime_state: Any,
     current_tick: Any,
     manual_encounter_preset: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if manual_encounter_preset:
         encounter = build_encounter_from_preset(
             simulation_state,
@@ -416,7 +416,7 @@ def _maybe_resolve_combat_ability_turn(
     runtime_state: Any,
     current_tick: Any,
     ability_id: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if ability_id and _safe_dict(_get_combat_state(runtime_state)).get("active"):
         combat_state = _safe_dict(_get_combat_state(runtime_state))
         target_id = _target_id_for_ability(runtime_state, player_input)
@@ -501,7 +501,7 @@ def _maybe_resolve_companion_combat_command_turn(
     current_tick: Any,
     active_combat_state: Any,
     companion_command: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if companion_command and active_combat_state.get("active"):
         combat_state = active_combat_state
         runtime_state = _set_combat_state(runtime_state, combat_state)
@@ -587,7 +587,7 @@ def _maybe_resolve_reposition_turn(
     runtime_state: Any,
     current_tick: Any,
     active_combat_state: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if _player_input_requests_reposition(player_input) and active_combat_state.get("active"):
         combat_state = active_combat_state
         runtime_state = _set_combat_state(runtime_state, combat_state)
@@ -651,7 +651,7 @@ def _maybe_resolve_stabilize_turn(
     runtime_state: Any,
     current_tick: Any,
     combat_state: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if combat_state.get("active") and _action_requests_stabilize(player_input):
         target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
         combat_state, recovery_result = stabilize_participant(
@@ -711,7 +711,7 @@ def _maybe_resolve_revive_turn(
     runtime_state: Any,
     current_tick: Any,
     combat_state: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if combat_state.get("active") and _action_requests_revive_or_heal_other(player_input):
         target_actor_id = _infer_recovery_target_actor_id(runtime_state, player_input)
         combat_state, recovery_result = revive_participant_with_healing(
@@ -774,7 +774,7 @@ def _maybe_gate_non_player_combat_turn(
     player_actor_id: Any,
     combat_state: Any,
     normalized_action_type: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if combat_state.get("active"):
         current_actor_id = get_current_actor_id(combat_state)
         if current_actor_id and _safe_str(current_actor_id) != _safe_str(player_actor_id):
@@ -825,7 +825,7 @@ def _maybe_return_completed_combat_utility_turn(
     normalized_action_type: Any,
     npc_combat_result: Any,
     resolved_result: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     if combat_state.get("active") and is_combat_action and not is_combat_attack:
         grounded = _derive_grounded_scene_context(after_action_state, runtime_state, resolved_result)
         narration_context = {

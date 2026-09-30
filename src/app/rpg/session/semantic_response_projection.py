@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.35: when the semantic classifier has already produced a complete
@@ -37,7 +37,7 @@ _PHASE8_PART35_NON_NPC_SPEAKERS = {
 
 
 
-def _phase8_part35_iter_dicts(value: Any) -> Iterable[Dict[str, Any]]:
+def _phase8_part35_iter_dicts(value: Any) -> Iterable[dict[str, Any]]:
     if isinstance(value, dict):
         yield value
         for child in value.values():
@@ -91,7 +91,7 @@ def _phase8_part35_list_text(value: Any) -> str:
 
 
 
-def _phase8_part35_player_utterance(source: Dict[str, Any]) -> str:
+def _phase8_part35_player_utterance(source: dict[str, Any]) -> str:
     source = _safe_dict(source)
     explicit = _phase8_part35_clean_text(
         source.get("player_utterance")
@@ -112,7 +112,7 @@ def _phase8_part35_player_utterance(source: Dict[str, Any]) -> str:
 
 
 
-def _phase8_part35_line_is_player_restatement(npc_line: str, source: Dict[str, Any]) -> bool:
+def _phase8_part35_line_is_player_restatement(npc_line: str, source: dict[str, Any]) -> bool:
     line = _phase8_part35_clean_text(npc_line)
     if not line:
         return False
@@ -153,7 +153,7 @@ def _phase8_part35_line_is_player_restatement(npc_line: str, source: Dict[str, A
 
 
 
-def _phase8_part35_direct_response_safe(source: Dict[str, Any]) -> bool:
+def _phase8_part35_direct_response_safe(source: dict[str, Any]) -> bool:
     source = _safe_dict(source)
     gate = _safe_dict(source.get("direct_response_gate"))
     if not _phase8_part35_bool_true(gate.get("safe_to_display_now")):
@@ -175,7 +175,7 @@ def _phase8_part35_direct_response_safe(source: Dict[str, Any]) -> bool:
 
 
 
-def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part35_semantic_visible_candidate(source: dict[str, Any]) -> dict[str, Any]:
     source = _safe_dict(source)
     visible = _safe_dict(source.get("visible_response"))
     if not visible:
@@ -247,7 +247,7 @@ def _phase8_part35_semantic_visible_candidate(source: Dict[str, Any]) -> Dict[st
 
 
 
-def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part35_semantic_visible_response_fields(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     for source in _phase8_part35_iter_dicts(payload):
         fields = _phase8_part35_semantic_visible_candidate(source)
@@ -257,7 +257,7 @@ def _phase8_part35_semantic_visible_response_fields(payload: Dict[str, Any]) -> 
 
 
 
-def _phase8_part35_existing_completed_semantic_or_llm_narration(payload: Dict[str, Any]) -> str:
+def _phase8_part35_existing_completed_semantic_or_llm_narration(payload: dict[str, Any]) -> str:
     semantic_fields = _phase8_part35_semantic_visible_response_fields(payload)
     if semantic_fields:
         return _safe_str(semantic_fields.get("final_narration") or semantic_fields.get("narration"))
@@ -268,12 +268,12 @@ def _phase8_part35_existing_completed_semantic_or_llm_narration(payload: Dict[st
 
 
 
-def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
+def _phase8_part31_existing_completed_narration(payload: dict[str, Any]) -> str:
     return _phase8_part35_existing_completed_semantic_or_llm_narration(payload)
 
 
 
-def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
+def _phase8_part31_should_sync_narration(payload: dict[str, Any]) -> bool:
     if _phase8_part35_semantic_visible_response_fields(payload):
         return False
     # Preserve llm_narration_projection's original policy for all other turns.  It will use
@@ -295,12 +295,12 @@ def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
 
 
 def _compile_semantic_action_record(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     player_input: str,
-    action: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+) -> dict[str, Any]:
     record = _safe_dict(
         _PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD(
             simulation_state,
@@ -343,7 +343,7 @@ def _compile_semantic_action_record(
 
 
 
-def _phase8_part35_payload_turn_id(payload: Dict[str, Any]) -> str:
+def _phase8_part35_payload_turn_id(payload: dict[str, Any]) -> str:
     payload = _safe_dict(payload)
     for source in _phase8_part35_iter_dicts(payload):
         turn_id = _safe_str(source.get("turn_id")).strip()
@@ -353,7 +353,7 @@ def _phase8_part35_payload_turn_id(payload: Dict[str, Any]) -> str:
 
 
 
-def _phase8_part35_payload_tick(payload: Dict[str, Any]) -> int:
+def _phase8_part35_payload_tick(payload: dict[str, Any]) -> int:
     payload = _safe_dict(payload)
     for source in _phase8_part35_iter_dicts(payload):
         try:
@@ -366,7 +366,7 @@ def _phase8_part35_payload_tick(payload: Dict[str, Any]) -> int:
 
 
 
-def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str, Any], fields: Dict[str, Any]) -> None:
+def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str, Any], fields: dict[str, Any]) -> None:
     from app.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn, _store_narration_artifact as _store_narration_artifact,
     )
@@ -425,9 +425,9 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: Dict[str,
 
 
 def _phase8_part35_drop_incomplete_artifact_for_turn(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )
@@ -483,13 +483,13 @@ def _phase8_part35_patch_semantic_visible_response(payload: Any, *, session_id: 
 
 
 def _enqueue_narration_request(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
     tick: int,
-    narration_request: Dict[str, Any],
+    narration_request: dict[str, Any],
     job_kind: str = "player_turn",
     priority: int = 100,
-) -> tuple[Dict[str, Any], Dict[str, Any], bool]:
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
     from app.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn,
     )
@@ -540,11 +540,11 @@ def _enqueue_narration_request(
 def _patch_semantic_visible_response(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,
@@ -554,4 +554,27 @@ def _patch_semantic_visible_response(
     return _phase8_part35_patch_semantic_visible_response(payload, session_id=session_id)
 
 
-__all__ = ['_PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE', '_PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST', '_PHASE8_PART35_NON_NPC_SPEAKERS', '_PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD', '_PHASE8_PART35_SOURCE', '_enqueue_narration_request', '_part35', '_patch_semantic_visible_response', '_phase8_part35_bool_false', '_phase8_part35_bool_true', '_phase8_part35_clean_text', '_phase8_part35_direct_response_safe', '_phase8_part35_drop_incomplete_artifact_for_turn', '_phase8_part35_existing_completed_semantic_or_llm_narration', '_phase8_part35_iter_dicts', '_phase8_part35_line_is_player_restatement', '_phase8_part35_list_text', '_phase8_part35_norm', '_phase8_part35_patch_semantic_visible_response', '_phase8_part35_payload_tick', '_phase8_part35_payload_turn_id', '_phase8_part35_player_utterance', '_phase8_part35_semantic_visible_candidate']
+__all__ = [
+    '_PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE',
+    '_PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST',
+    '_PHASE8_PART35_NON_NPC_SPEAKERS',
+    '_PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD',
+    '_PHASE8_PART35_SOURCE',
+    '_enqueue_narration_request',
+    '_patch_semantic_visible_response',
+    '_phase8_part35_bool_false',
+    '_phase8_part35_bool_true',
+    '_phase8_part35_clean_text',
+    '_phase8_part35_direct_response_safe',
+    '_phase8_part35_drop_incomplete_artifact_for_turn',
+    '_phase8_part35_existing_completed_semantic_or_llm_narration',
+    '_phase8_part35_iter_dicts',
+    '_phase8_part35_line_is_player_restatement',
+    '_phase8_part35_list_text',
+    '_phase8_part35_norm',
+    '_phase8_part35_patch_semantic_visible_response',
+    '_phase8_part35_payload_tick',
+    '_phase8_part35_payload_turn_id',
+    '_phase8_part35_player_utterance',
+    '_phase8_part35_semantic_visible_candidate',
+]

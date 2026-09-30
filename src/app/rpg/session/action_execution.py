@@ -81,8 +81,8 @@ from typing import (
 
 
 def _check_opening_resolution(
-    session: Dict[str, Any],
-) -> Dict[str, Any]:
+    session: dict[str, Any],
+) -> dict[str, Any]:
     """Check simple rule-based conditions for opening resolution.
 
     Returns updated opening_runtime dict.
@@ -141,7 +141,7 @@ def _check_opening_resolution(
 
 _MAX_KNOWN_NPC_IDS = 64
 
-def _update_known_npc_ids(runtime_state: Dict[str, Any], simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _update_known_npc_ids(runtime_state: dict[str, Any], simulation_state: dict[str, Any]) -> dict[str, Any]:
     """Update known NPC list from current player presence.
 
     Adds nearby NPCs to known list (append only, never remove).
@@ -172,9 +172,9 @@ def _update_known_npc_ids(runtime_state: Dict[str, Any], simulation_state: Dict[
     return runtime_state
 
 
-def _build_opening_text(generated: Dict[str, Any]) -> str:
+def _build_opening_text(generated: dict[str, Any]) -> str:
     opening_situation = _safe_dict(generated.get("opening_situation"))
-    parts: List[str] = []
+    parts: list[str] = []
     summary = _safe_str(opening_situation.get("summary")).strip()
     location = _safe_str(opening_situation.get("location")).strip()
     present_actors = [str(v) for v in _safe_list(opening_situation.get("present_actors")) if str(v).strip()]
@@ -187,7 +187,7 @@ def _build_opening_text(generated: Dict[str, Any]) -> str:
     return " ".join(parts).strip() or "Your adventure begins…"
 
 
-def _build_world_payload(setup: Dict[str, Any], generated: Dict[str, Any], canon_summary: Dict[str, Any]) -> Dict[str, Any]:
+def _build_world_payload(setup: dict[str, Any], generated: dict[str, Any], canon_summary: dict[str, Any]) -> dict[str, Any]:
     world_frame = _safe_dict(generated.get("world_frame"))
     return {
         "title": _safe_str(setup.get("title") or world_frame.get("title")),
@@ -198,8 +198,8 @@ def _build_world_payload(setup: Dict[str, Any], generated: Dict[str, Any], canon
     }
 
 
-def _build_npc_cards(generated: Dict[str, Any]) -> List[Dict[str, Any]]:
-    cards: List[Dict[str, Any]] = []
+def _build_npc_cards(generated: dict[str, Any]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
     for npc in _safe_list(generated.get("seed_npcs")):
         npc = _safe_dict(npc)
         if not npc:
@@ -215,7 +215,7 @@ def _build_npc_cards(generated: Dict[str, Any]) -> List[Dict[str, Any]]:
     return cards
 
 
-def _get_player_location_id(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> str:
+def _get_player_location_id(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> str:
     player_state = _safe_dict(simulation_state.get("player_state"))
     current_scene = _safe_dict(runtime_state.get("current_scene"))
     return (
@@ -227,11 +227,11 @@ def _get_player_location_id(simulation_state: Dict[str, Any], runtime_state: Dic
 
 
 
-def select_primary_action(simulation_state: Dict[str, Any], candidates: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+def select_primary_action(simulation_state: dict[str, Any], candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
     return candidates[0] if candidates else {"action_type": "investigate"}
 
 
-def _structured_action_prompt(action: Dict[str, Any]) -> str:
+def _structured_action_prompt(action: dict[str, Any]) -> str:
     action = _safe_dict(action)
     npc_name = _safe_str(action.get("npc_name")).strip()
     npc_id = _safe_str(action.get("npc_id") or action.get("target_id")).strip()
@@ -267,9 +267,9 @@ def _structured_action_prompt(action: Dict[str, Any]) -> str:
 
 
 def _use_item_action(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    action: dict[str, Any],
+) -> dict[str, Any]:
     item_id = _safe_str(action.get("item_id")).strip()
     result = apply_item_effects(simulation_state, item_id)
     return {
@@ -292,7 +292,7 @@ SPEND_ACTION_TYPES = {
 }
 
 
-def _should_apply_action_cost(action: Dict[str, Any]) -> bool:
+def _should_apply_action_cost(action: dict[str, Any]) -> bool:
     action = _safe_dict(action)
 
     action_type = _safe_str(action.get("action_type") or action.get("type")).strip().lower()
@@ -303,7 +303,7 @@ def _should_apply_action_cost(action: Dict[str, Any]) -> bool:
     return action_type in SPEND_ACTION_TYPES
 
 
-def _extract_action_cost(action: Dict[str, Any]) -> Dict[str, int]:
+def _extract_action_cost(action: dict[str, Any]) -> dict[str, int]:
     action = _safe_dict(action)
 
     cost = _safe_dict(action.get("cost"))
@@ -329,9 +329,9 @@ def _extract_action_cost(action: Dict[str, Any]) -> Dict[str, int]:
 
 
 def _apply_action_resource_requirements(
-    simulation_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    action: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = _ensure_simulation_state(simulation_state)
     action = _safe_dict(action)
 
@@ -440,9 +440,9 @@ def _apply_action_resource_requirements(
 
 
 def _is_action_provider_available(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    action: dict[str, Any],
 ) -> bool:
     action = _safe_dict(action)
     provider_id = _safe_str(action.get("provider_id"))
@@ -461,10 +461,10 @@ def _is_action_provider_available(
 
 
 def _apply_authoritative_action(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    action: dict[str, Any],
+) -> dict[str, Any]:
     action_type = _safe_str(action.get("action_type")).strip()
 
     if action_type in {"service_inquiry", "service_purchase"}:
@@ -597,9 +597,9 @@ def _apply_authoritative_action(
 
 
 def _award_progression(
-    simulation_state: Dict[str, Any],
-    resolved_result: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    resolved_result: dict[str, Any],
+) -> dict[str, Any]:
     player_state = _safe_dict(simulation_state.get("player_state"))
     player_state = ensure_player_progression_state(player_state)
 
@@ -658,7 +658,7 @@ def _award_progression(
     }
 
 
-def _initial_scene_state(generated: Dict[str, Any]) -> Dict[str, Any]:
+def _initial_scene_state(generated: dict[str, Any]) -> dict[str, Any]:
     opening = _safe_dict(generated.get("opening_situation"))
     anchor = _safe_dict(generated.get("initial_scene_anchor"))
     scene_id = _safe_str(anchor.get("scene_id") or anchor.get("anchor_id") or "scene:opening")
@@ -679,7 +679,7 @@ def _initial_scene_state(generated: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_session_from_start_result(setup_payload: Dict[str, Any], start_result: Dict[str, Any]) -> Dict[str, Any]:
+def build_session_from_start_result(setup_payload: dict[str, Any], start_result: dict[str, Any]) -> dict[str, Any]:
     setup = apply_adventure_defaults(dict(setup_payload or {}))
     generated = _safe_dict(start_result.get("generated"))
     canon_summary = _safe_dict(start_result.get("canon_summary"))
@@ -778,7 +778,7 @@ def build_session_from_start_result(setup_payload: Dict[str, Any], start_result:
     return session
 
 
-def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+def build_frontend_bootstrap_payload(session: dict[str, Any]) -> dict[str, Any]:
     session = _safe_dict(session)
     manifest = _safe_dict(session.get("manifest"))
     runtime_state = _safe_dict(session.get("runtime_state"))
@@ -858,7 +858,7 @@ def build_frontend_bootstrap_payload(session: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _find_target_by_name(bucket: Dict[str, Any], text: str) -> str:
+def _find_target_by_name(bucket: dict[str, Any], text: str) -> str:
     text_lc = text.lower()
     for entity_id, entity in sorted(bucket.items()):
         entity = _safe_dict(entity)
@@ -875,7 +875,7 @@ def _find_target_by_name(bucket: Dict[str, Any], text: str) -> str:
     return ""
 
 
-def derive_player_action(simulation_state: Dict[str, Any], player_input: str) -> Dict[str, Any]:
+def derive_player_action(simulation_state: dict[str, Any], player_input: str) -> dict[str, Any]:
     text = _safe_str(player_input).strip()
     text_lc = text.lower()
     threads = _safe_dict(simulation_state.get("threads"))

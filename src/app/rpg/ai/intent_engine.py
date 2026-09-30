@@ -10,14 +10,14 @@ and NPC-to-NPC interaction support.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from .goal_generator import GoalGenerator
 from .npc_actor import NPCActor, NPCGoal
 from .planner_core import Planner
 
 # Action-to-belief mapping (Patch 3)
-ACTION_BELIEF_EFFECTS: Dict[str, Dict[str, float]] = {
+ACTION_BELIEF_EFFECTS: dict[str, dict[str, float]] = {
     "frame_player": {"player_trust": -0.2},
     "sabotage": {"player_trust": -0.1},
     "spread_rumors": {"player_trust": -0.15},
@@ -57,12 +57,12 @@ class IntentEngine:
         self.planner = Planner()
         self.goal_regeneration_interval = goal_regeneration_interval
         # Track action history for belief updates
-        self.action_history: Dict[str, List[Dict[str, Any]]] = {}
+        self.action_history: dict[str, list[dict[str, Any]]] = {}
 
     def update_npc(
-        self, npc: NPCActor, world: Dict[str, Any], tick: int,
-        other_npcs: Optional[List[NPCActor]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        self, npc: NPCActor, world: dict[str, Any], tick: int,
+        other_npcs: Optional[list[NPCActor]] = None,
+    ) -> Optional[dict[str, Any]]:
         """Update an NPC and return their next action.
 
         Tier 17.5 Patch: Supports stateful goals and failure tracking.
@@ -134,7 +134,7 @@ class IntentEngine:
         }
 
     def update_beliefs_from_action_result(
-        self, npc: NPCActor, action: Dict[str, Any], success: bool
+        self, npc: NPCActor, action: dict[str, Any], success: bool
     ) -> None:
         """Update beliefs and track failure based on action result.
 
@@ -165,7 +165,7 @@ class IntentEngine:
                 goal.update_progress(0.1)
 
     def _update_beliefs_from_action(
-        self, npc: NPCActor, action: Dict[str, Any]
+        self, npc: NPCActor, action: dict[str, Any]
     ) -> None:
         """Update NPC beliefs based on action type.
 
@@ -184,8 +184,8 @@ class IntentEngine:
     def _process_npc_interactions(
         self,
         npc: NPCActor,
-        action: Dict[str, Any],
-        other_npcs: List[NPCActor],
+        action: dict[str, Any],
+        other_npcs: list[NPCActor],
     ) -> None:
         """Process NPC vs NPC interactions.
 
@@ -243,8 +243,8 @@ class IntentEngine:
         )
 
     def update_all_npcs(
-        self, npcs: List[NPCActor], world: Dict[str, Any], tick: int
-    ) -> List[Dict[str, Any]]:
+        self, npcs: list[NPCActor], world: dict[str, Any], tick: int
+    ) -> list[dict[str, Any]]:
         """Update all NPCs and collect their actions.
 
         Tier 17.5 Patch: Passes all NPCs for interaction processing.
@@ -266,7 +266,7 @@ class IntentEngine:
                 actions.append(action)
         return actions
 
-    def force_regeneration(self, npc: NPCActor, world: Dict[str, Any]) -> None:
+    def force_regeneration(self, npc: NPCActor, world: dict[str, Any]) -> None:
         """Force goal regeneration for an NPC.
 
         Args:
@@ -277,7 +277,7 @@ class IntentEngine:
 
     def get_npc_intent_summary(
         self, npc: NPCActor
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get a summary of NPC's current intent.
 
         Args:
@@ -313,7 +313,7 @@ class IntentEngine:
         }
 
     def get_narrative_weight(
-        self, action: Dict[str, Any], world: Dict[str, Any]
+        self, action: dict[str, Any], world: dict[str, Any]
     ) -> float:
         """Calculate narrative significance of an action.
 
@@ -339,7 +339,7 @@ class IntentEngine:
             return 0.3
 
     def is_major_event(
-        self, action: Dict[str, Any], world: Dict[str, Any]
+        self, action: dict[str, Any], world: dict[str, Any]
     ) -> bool:
         """Check if an action qualifies as a major narrative event.
 

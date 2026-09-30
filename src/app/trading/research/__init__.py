@@ -1,7 +1,7 @@
 """Causal and market research APIs owned by the research package."""
 from __future__ import annotations
 
-from .market_research_compat import (
+from .market_research import (
     MAX_RESEARCH_BARS,
     MAX_RESEARCH_PROMPT_CHARS,
     MAX_RESEARCH_QUESTION_CHARS,

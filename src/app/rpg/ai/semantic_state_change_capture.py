@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 from app.providers.base import ChatMessage
@@ -19,11 +19,11 @@ from app.rpg.session.world_consequence_runtime import (
 )
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -40,12 +40,12 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _extract_actor_states_from_simulation(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _extract_actor_states_from_simulation(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     # Keep capture actor extraction aligned with runtime validator source of truth.
     return _safe_actor_states(simulation_state)
 
 
-def _infer_actor_from_text(proposal: Dict[str, Any], simulation_state: Dict[str, Any]) -> str:
+def _infer_actor_from_text(proposal: dict[str, Any], simulation_state: dict[str, Any]) -> str:
     proposal = _safe_dict(proposal)
     simulation_state = _safe_dict(simulation_state)
     text = " ".join([
@@ -62,9 +62,9 @@ def _infer_actor_from_text(proposal: Dict[str, Any], simulation_state: Dict[str,
 
 def normalize_semantic_state_change_llm_output(
     raw_output: Any,
-    simulation_state: Dict[str, Any] | None = None,
-    runtime_state: Dict[str, Any] | None = None,
-) -> List[Dict[str, Any]]:
+    simulation_state: dict[str, Any] | None = None,
+    runtime_state: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     raw_text = _normalize_provider_text(raw_output)
     text = _extract_json_payload(raw_text)
     if not text:
@@ -75,7 +75,7 @@ def normalize_semantic_state_change_llm_output(
     except Exception:
         return []
 
-    proposals: List[Dict[str, Any]] = []
+    proposals: list[dict[str, Any]] = []
     if isinstance(data, dict) and "state_changes" in data:
         proposals = _safe_list(data.get("state_changes"))
     elif isinstance(data, dict):
@@ -88,7 +88,7 @@ def normalize_semantic_state_change_llm_output(
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
 
-    normalized: List[Dict[str, Any]] = []
+    normalized: list[dict[str, Any]] = []
     for proposal in proposals:
         proposal = _safe_dict(proposal)
         actor_id = _safe_str(proposal.get("actor_id"))
@@ -173,7 +173,7 @@ def _extract_json_payload(raw_text: str) -> str:
     return ""
 
 
-def _current_authoritative_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> int:
+def _current_authoritative_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> int:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
     tick = (
@@ -214,8 +214,8 @@ def _normalize_provider_text(raw: Any) -> str:
 
 
 def should_capture_semantic_state_change_proposals(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> bool:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _ensure_semantic_pipeline_state(_safe_dict(runtime_state))
@@ -266,7 +266,7 @@ def should_capture_semantic_state_change_proposals(
     return True
 
 
-def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any]) -> Dict[str, Any]:
+def capture_semantic_state_change_proposals_for_session(session: dict[str, Any]) -> dict[str, Any]:
     """
     Upstream recorded LLM proposal capture.
 

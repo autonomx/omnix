@@ -1,7 +1,7 @@
 """Pure survival grounding helpers used by the world-scene narrator owners."""
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from app.rpg.ai.survival_narration_grounding import (
     build_survival_narration_evidence,
@@ -17,7 +17,7 @@ _LEGACY_FALLBACK_TEXTS = {
 }
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
@@ -25,7 +25,7 @@ def _safe_str(value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def _has_survival_evidence(narration_context: Dict[str, Any]) -> bool:
+def _has_survival_evidence(narration_context: dict[str, Any]) -> bool:
     evidence = build_survival_narration_evidence(_safe_dict(narration_context))
     return bool(
         evidence.get("survival")
@@ -43,7 +43,7 @@ def _is_legacy_survival_fallback(value: Any) -> bool:
     return text in _LEGACY_FALLBACK_TEXTS
 
 
-def append_survival_grounding_to_prompt(prompt: str, narration_context: Dict[str, Any]) -> str:
+def append_survival_grounding_to_prompt(prompt: str, narration_context: dict[str, Any]) -> str:
     """Append the survival grounding contract only when evidence exists."""
     prompt = str(prompt or "")
     narration_context = _safe_dict(narration_context)
@@ -55,7 +55,7 @@ def append_survival_grounding_to_prompt(prompt: str, narration_context: Dict[str
     return prompt
 
 
-def sanitize_world_scene_survival_payload(payload: Dict[str, Any], narration_context: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_world_scene_survival_payload(payload: dict[str, Any], narration_context: dict[str, Any]) -> dict[str, Any]:
     """Apply BS survival sanitizer while preserving existing narrator metadata."""
     payload = dict(_safe_dict(payload))
     narration_context = _safe_dict(narration_context)
@@ -69,10 +69,10 @@ def sanitize_world_scene_survival_payload(payload: Dict[str, Any], narration_con
     return sanitized
 def _merge_bs1_sanitized_payload(
     *,
-    original_payload: Dict[str, Any],
-    legacy_payload: Dict[str, Any],
-    narration_context: Dict[str, Any],
-) -> Dict[str, Any]:
+    original_payload: dict[str, Any],
+    legacy_payload: dict[str, Any],
+    narration_context: dict[str, Any],
+) -> dict[str, Any]:
     """Run BS after legacy sanitize, salvaging grounded original sentences if legacy over-fell back."""
     legacy_payload = dict(_safe_dict(legacy_payload))
     narration_context = _safe_dict(narration_context)

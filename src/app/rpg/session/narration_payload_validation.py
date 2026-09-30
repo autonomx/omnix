@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.34: a deterministic authoritative/fallback echo must not count as a
@@ -26,7 +26,7 @@ _DETERMINISTIC_FALLBACK_SOURCES = {
 }
 
 
-def _phase8_part34_iter_payload_dicts(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def _phase8_part34_iter_payload_dicts(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
     payload = _safe_dict(payload)
     if payload:
         yield payload
@@ -43,7 +43,7 @@ def _phase8_part34_clean_text(value: Any) -> str:
     return "" if text.casefold() in {"", "[]", "{}", "null", "none"} else text
 
 
-def _phase8_part34_has_structured_llm_payload(source: Dict[str, Any]) -> bool:
+def _phase8_part34_has_structured_llm_payload(source: dict[str, Any]) -> bool:
     source = _safe_dict(source)
     narration_json = _safe_dict(source.get("narration_json"))
     raw = source.get("raw_llm_narrative")
@@ -65,7 +65,7 @@ def _phase8_part34_has_structured_llm_payload(source: Dict[str, Any]) -> bool:
     return False
 
 
-def _phase8_part34_is_deterministic_visible_fallback(source: Dict[str, Any]) -> bool:
+def _phase8_part34_is_deterministic_visible_fallback(source: dict[str, Any]) -> bool:
     source = _safe_dict(source)
     fallback_source = _safe_str(source.get("fallback_narration_source")).strip()
     if fallback_source in _DETERMINISTIC_FALLBACK_SOURCES:
@@ -89,7 +89,7 @@ def _phase8_part34_is_deterministic_visible_fallback(source: Dict[str, Any]) -> 
     )
 
 
-def _phase8_part34_existing_completed_llm_narration(payload: Dict[str, Any]) -> str:
+def _phase8_part34_existing_completed_llm_narration(payload: dict[str, Any]) -> str:
     """Return completed text only when it is actually provider/LLM narration.
 
     The previous guard treated any completed text as final, including the

@@ -42,9 +42,6 @@ def scaling_runtime():
 
 def chat_store(database, store, monkeypatch):
     from app.chat.persistence import chat_runtime_compat as fast
-    from app.gateway import _install_required_rpg_turn_hooks
-
-    _install_required_rpg_turn_hooks()
     monkeypatch.setattr(
         fast,
         "default_assistant_turn_coordinator",

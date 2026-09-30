@@ -1,7 +1,7 @@
 """Phase 15.3 — Canonical session service."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.core.determinism import rng_seed_from_session_id
 from app.rpg.map_package_bridge import attach_map_state_to_package, restore_map_state_from_package
@@ -32,11 +32,11 @@ from app.rpg.validation.integrity import (
 from app.rpg.performance_trace import rpg_pipeline_span_if_active
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
+def create_or_normalize_session(session: dict[str, Any]) -> dict[str, Any]:
     session = _safe_dict(session)
     session = migrate_session_payload(session)
     manifest = _safe_dict(session.get("manifest"))
@@ -72,7 +72,7 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return ensure_published_opening_progress(session)
 
 
-def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+def save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
     manifest = _safe_dict(_safe_dict(session).get("manifest"))
     session_id = str(
         manifest.get("session_id")
@@ -99,7 +99,7 @@ def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str,
         return saved
 
 
-def _save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+def _save_session(session: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
     session = _safe_dict(session)
     manifest = _safe_dict(session.get("manifest"))
     session_id = str(
@@ -135,7 +135,7 @@ def _save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str
     return save_session_to_disk(session, compact=compact)
 
 
-def load_session(session_id: str) -> Dict[str, Any]:
+def load_session(session_id: str) -> dict[str, Any]:
     with rpg_pipeline_span_if_active(
         "session.load_total",
         fields={"session_id": session_id},
@@ -182,7 +182,7 @@ def load_session(session_id: str) -> Dict[str, Any]:
         return session
 
 
-def _load_session(session_id: str) -> Dict[str, Any]:
+def _load_session(session_id: str) -> dict[str, Any]:
     session = load_session_from_disk(session_id)
     if session is None:
         return None
@@ -192,7 +192,7 @@ def _load_session(session_id: str) -> Dict[str, Any]:
     return session
 
 
-def list_sessions() -> List[Dict[str, Any]]:
+def list_sessions() -> list[dict[str, Any]]:
     sessions = list_sessions_from_disk()
     out = []
     for item in sessions:
@@ -204,7 +204,7 @@ def list_sessions() -> List[Dict[str, Any]]:
     return out
 
 
-def list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
+def list_session_summaries(*, limit: int | None = None) -> list[dict[str, Any]]:
     """Return bounded session list rows without normalizing full payloads."""
 
     with rpg_pipeline_span_if_active(
@@ -217,7 +217,7 @@ def list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
         return out
 
 
-def _list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]:
+def _list_session_summaries(*, limit: int | None = None) -> list[dict[str, Any]]:
     out = []
     for item in list_session_summaries_from_disk(limit=limit):
         integrity = validate_session_integrity(item)
@@ -226,18 +226,18 @@ def _list_session_summaries(*, limit: int | None = None) -> List[Dict[str, Any]]
     return out
 
 
-def archive_session(session_id: str) -> Dict[str, Any]:
+def archive_session(session_id: str) -> dict[str, Any]:
     return archive_session_on_disk(session_id)
 
 
-def export_session_as_package(session: Dict[str, Any]) -> Dict[str, Any]:
+def export_session_as_package(session: dict[str, Any]) -> dict[str, Any]:
     session = create_or_normalize_session(session)
     assert_session_integrity(session)
     package = session_to_package(session)
     return attach_map_state_to_package(package, session)
 
 
-def import_session_from_package(package_payload: Dict[str, Any]) -> Dict[str, Any]:
+def import_session_from_package(package_payload: dict[str, Any]) -> dict[str, Any]:
     assert_package_integrity(package_payload)
     result = package_to_session(package_payload)
     if not result.get("ok"):

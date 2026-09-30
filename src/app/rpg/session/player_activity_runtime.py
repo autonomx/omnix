@@ -40,10 +40,10 @@ from typing import (
 
 
 def _apply_semantic_action_to_runtime(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    record: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    record: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     from app.rpg.session.world_consequence_runtime import (
         _append_world_consequence as _append_world_consequence,
     )
@@ -144,7 +144,7 @@ def _apply_semantic_action_to_runtime(
     return simulation_state, runtime_state
 
 
-def _record_real_player_activity(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _record_real_player_activity(runtime_state: dict[str, Any]) -> dict[str, Any]:
     """Record real player activity timestamp and reset idle streak."""
     from app.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso,
@@ -171,10 +171,10 @@ _MEDIUM_RISK_KEYWORDS = frozenset({"investigate", "enter", "approach", "sneak", 
 
 def _classify_player_action_context(
     player_input: str,
-    resolved_result: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    resolved_result: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     """Classify player action into a bounded deterministic context dict.
 
     Uses simple keyword-based classification. No LLM call.
@@ -273,8 +273,8 @@ def _seconds_since_iso(iso_str: str, *, now: datetime | None = None) -> int:
 
 
 def _derive_transaction_context_tags(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
 ) -> list[str]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
@@ -309,9 +309,9 @@ def _derive_transaction_context_tags(
 
 
 def _derive_transaction_providers(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> list[Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
 
@@ -321,7 +321,7 @@ def _derive_transaction_providers(
     npc_providers = derive_npc_transaction_providers(npcs)
     world_providers = derive_world_transaction_providers(world_entities)
 
-    combined: list[Dict[str, Any]] = []
+    combined: list[dict[str, Any]] = []
     seen = set()
 
     for provider in npc_providers + world_providers:
@@ -336,9 +336,9 @@ def _derive_transaction_providers(
 
 
 def _build_transaction_menus_for_state(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> list[Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> list[dict[str, Any]]:
     providers = _derive_transaction_providers(simulation_state, runtime_state)
     menus = build_provider_transaction_menus(providers)
     if menus:
@@ -349,7 +349,7 @@ def _build_transaction_menus_for_state(
     return build_available_transaction_menus(transaction_context_tags)
 
 
-def _stable_scene_beat_id(beat: Dict[str, Any]) -> str:
+def _stable_scene_beat_id(beat: dict[str, Any]) -> str:
     payload = {
         "tick": int(_safe_dict(beat).get("tick", 0) or 0),
         "kind": _safe_str(_safe_dict(beat).get("kind")),
@@ -362,7 +362,7 @@ def _stable_scene_beat_id(beat: Dict[str, Any]) -> str:
     return "scene_beat_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _normalize_scene_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_scene_beat(beat: dict[str, Any]) -> dict[str, Any]:
     beat = _safe_dict(beat)
     out = {
         "id": _safe_str(beat.get("id")),
@@ -382,7 +382,7 @@ def _normalize_scene_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _ensure_recent_scene_beats(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_recent_scene_beats(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     beats = []
     seen = set()
@@ -410,7 +410,7 @@ def _stable_consequence_id(prefix: str, tick: int, scope: str, key: str, summary
     return prefix + "_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _normalize_world_rumor(record: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_world_rumor(record: dict[str, Any]) -> dict[str, Any]:
     record = _safe_dict(record)
     return {
         "rumor_id": _safe_str(record.get("rumor_id")),
@@ -426,7 +426,7 @@ def _normalize_world_rumor(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _normalize_pressure_record(record: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_pressure_record(record: dict[str, Any]) -> dict[str, Any]:
     record = _safe_dict(record)
     return {
         "pressure_id": _safe_str(record.get("pressure_id")),
@@ -441,7 +441,7 @@ def _normalize_pressure_record(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _normalize_location_condition(record: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_location_condition(record: dict[str, Any]) -> dict[str, Any]:
     record = _safe_dict(record)
     return {
         "condition_id": _safe_str(record.get("condition_id")),
@@ -456,7 +456,7 @@ def _normalize_location_condition(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _normalize_world_consequence(record: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_world_consequence(record: dict[str, Any]) -> dict[str, Any]:
     record = _safe_dict(record)
     return {
         "consequence_id": _safe_str(record.get("consequence_id")),
@@ -479,7 +479,7 @@ def _normalize_consequence_text(text: str) -> str:
     return text
 
 
-def _world_rumor_key(record: Dict[str, Any]) -> str:
+def _world_rumor_key(record: dict[str, Any]) -> str:
     record = _normalize_world_rumor(record)
     return "|".join([
         _safe_str(record.get("scope")),
@@ -489,7 +489,7 @@ def _world_rumor_key(record: Dict[str, Any]) -> str:
     ])
 
 
-def _world_pressure_key(record: Dict[str, Any]) -> str:
+def _world_pressure_key(record: dict[str, Any]) -> str:
     record = _normalize_pressure_record(record)
     return "|".join([
         _safe_str(record.get("scope")),
@@ -498,7 +498,7 @@ def _world_pressure_key(record: Dict[str, Any]) -> str:
     ])
 
 
-def _location_condition_key(record: Dict[str, Any]) -> str:
+def _location_condition_key(record: dict[str, Any]) -> str:
     record = _normalize_location_condition(record)
     return "|".join([
         _safe_str(record.get("location_id")),
@@ -506,7 +506,7 @@ def _location_condition_key(record: Dict[str, Any]) -> str:
     ])
 
 
-def _world_consequence_key(record: Dict[str, Any]) -> str:
+def _world_consequence_key(record: dict[str, Any]) -> str:
     record = _normalize_world_consequence(record)
     return "|".join([
         _safe_str(record.get("scope")),
@@ -516,7 +516,7 @@ def _world_consequence_key(record: Dict[str, Any]) -> str:
     ])
 
 
-def ensure_world_consequence_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def ensure_world_consequence_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
 
     rumors = [_normalize_world_rumor(x) for x in _safe_list(runtime_state.get("world_rumors"))]
@@ -545,7 +545,7 @@ def _stable_activity_id(actor_id: str, tick: int, kind: str, location_id: str, t
     return "activity_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def _normalize_activity_record(record: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_activity_record(record: dict[str, Any]) -> dict[str, Any]:
     record = _safe_dict(record)
     return {
         "activity_id": _safe_str(record.get("activity_id")),
@@ -563,10 +563,10 @@ def _normalize_activity_record(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def ensure_actor_activity_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def ensure_actor_activity_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     actor_activities = _safe_dict(runtime_state.get("actor_activities"))
-    normalized: Dict[str, Any] = {}
+    normalized: dict[str, Any] = {}
     for actor_id, rec in actor_activities.items():
         actor_id = _safe_str(actor_id)
         if not actor_id:
@@ -576,12 +576,12 @@ def ensure_actor_activity_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]
     return runtime_state
 
 
-def get_actor_activity(runtime_state: Dict[str, Any], actor_id: str) -> Dict[str, Any]:
+def get_actor_activity(runtime_state: dict[str, Any], actor_id: str) -> dict[str, Any]:
     runtime_state = ensure_actor_activity_state(runtime_state)
     return _safe_dict(_safe_dict(runtime_state.get("actor_activities")).get(_safe_str(actor_id)))
 
 
-def set_actor_activity(runtime_state: Dict[str, Any], actor_id: str, activity: Dict[str, Any]) -> Dict[str, Any]:
+def set_actor_activity(runtime_state: dict[str, Any], actor_id: str, activity: dict[str, Any]) -> dict[str, Any]:
     runtime_state = ensure_actor_activity_state(runtime_state)
     actor_id = _safe_str(actor_id)
     if not actor_id:
@@ -614,9 +614,9 @@ _GLOBAL_ACTIVITY_KINDS = (
     "organize_watch",
 )
 
-def _sorted_npc_entities(simulation_state: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _sorted_npc_entities(simulation_state: dict[str, Any]) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
 
     npc_index = _safe_dict(simulation_state.get("npc_index"))
     for npc_id, npc in npc_index.items():
@@ -636,7 +636,7 @@ def _sorted_npc_entities(simulation_state: Dict[str, Any]) -> List[Dict[str, Any
     return out
 
 
-def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int, runtime_state: Dict[str, Any] | None = None) -> str:
+def _choose_activity_kind_for_actor(actor: dict[str, Any], tick: int, runtime_state: dict[str, Any] | None = None) -> str:
     actor = _safe_dict(actor)
     runtime_state = ensure_world_consequence_state(_safe_dict(runtime_state))
     actor_id = _safe_str(actor.get("id"))
@@ -676,7 +676,7 @@ def _choose_activity_kind_for_actor(actor: Dict[str, Any], tick: int, runtime_st
     return options[idx]
 
 
-def _build_activity_summary(actor: Dict[str, Any], kind: str) -> str:
+def _build_activity_summary(actor: dict[str, Any], kind: str) -> str:
     actor = _safe_dict(actor)
     actor_name = _safe_str(actor.get("name")) or _safe_str(actor.get("id")) or "Someone"
     if kind == "patrol":
@@ -714,7 +714,7 @@ def _build_activity_intent(kind: str) -> str:
     return "Pursue current routine."
 
 
-def _build_activity_tags(kind: str) -> List[str]:
+def _build_activity_tags(kind: str) -> list[str]:
     if kind in ("patrol", "watch_crowd", "question_patron"):
         return ["security", "local"]
     if kind == "trade":
@@ -730,7 +730,7 @@ def _build_activity_tags(kind: str) -> List[str]:
     return ["local"]
 
 
-def advance_actor_activities_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def advance_actor_activities_for_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = ensure_actor_activity_state(runtime_state)
     tick = _safe_int(simulation_state.get("tick"), 0)
@@ -789,7 +789,7 @@ def _stable_world_beat_id(prefix: str, actor_id: str, tick: int, summary: str) -
     return prefix + "_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
 
 
-def emit_activity_beats_for_tick(simulation_state: Dict[str, Any], runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def emit_activity_beats_for_tick(simulation_state: dict[str, Any], runtime_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = ensure_actor_activity_state(runtime_state)
     tick = _safe_int(simulation_state.get("tick"), 0)

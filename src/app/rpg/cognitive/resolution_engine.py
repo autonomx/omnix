@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
@@ -147,13 +147,13 @@ class ResolutionResult:
     
     resolution_type: str = "victory"
     text: str = ""
-    emotional_impact: Dict[str, float] = field(default_factory=dict)
-    relationship_updates: Dict[str, float] = field(default_factory=dict)
-    consequences: List[str] = field(default_factory=list)
+    emotional_impact: dict[str, float] = field(default_factory=dict)
+    relationship_updates: dict[str, float] = field(default_factory=dict)
+    consequences: list[str] = field(default_factory=list)
     satisfies_player: bool = False
     importance: float = 0.5
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize resolution result to dict."""
         return {
             "type": self.resolution_type,
@@ -186,7 +186,7 @@ class ResolutionEngine:
         
         # Tier 14 Fix: Resolution Entropy Injection
         # Track recent resolutions to prevent predictability over long runs
-        self._recent_resolutions: List[str] = []
+        self._recent_resolutions: list[str] = []
         
         self._stats = {
             "resolutions_generated": 0,
@@ -197,9 +197,9 @@ class ResolutionEngine:
     
     def generate(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
     ) -> ResolutionResult:
         """Generate a satisfying resolution for the given storyline.
         
@@ -267,9 +267,9 @@ class ResolutionEngine:
     
     def _determine_resolution_type(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
     ) -> str:
         """Determine the most satisfying resolution type.
         
@@ -330,7 +330,7 @@ class ResolutionEngine:
         # Tier 14 Fix: Use _select_resolution_type with entropy injection
         return self._select_resolution_type(candidate_types)
     
-    def _select_resolution_type(self, candidates: List[str]) -> str:
+    def _select_resolution_type(self, candidates: list[str]) -> str:
         """Select a resolution type with entropy to prevent predictability.
         
         Tier 14 Fix: Prevents resolution patterns from becoming predictable
@@ -384,7 +384,7 @@ class ResolutionEngine:
         return base
     
     @staticmethod
-    def _weighted_choice(candidates: List[str]) -> str:
+    def _weighted_choice(candidates: list[str]) -> str:
         """Simple weighted choice from candidates.
         
         Args:
@@ -402,9 +402,9 @@ class ResolutionEngine:
     
     def _generate_template_resolution(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Generate resolution text from templates.
@@ -499,9 +499,9 @@ class ResolutionEngine:
     
     def _generate_llm_resolution(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Generate resolution using LLM for high-importance storylines.
@@ -545,9 +545,9 @@ class ResolutionEngine:
     
     def _build_llm_prompt(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]] = None,
-        world_state: Optional[Dict[str, Any]] = None,
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]] = None,
+        world_state: Optional[dict[str, Any]] = None,
         resolution_type: str = "victory",
     ) -> str:
         """Build the LLM prompt for resolution generation.
@@ -607,10 +607,10 @@ Resolution:"""
     
     def _calculate_emotional_impact(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate emotional impact of resolution on participants.
         
         Args:
@@ -644,10 +644,10 @@ Resolution:"""
     
     def _calculate_relationship_updates(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate relationship value updates from resolution.
         
         Args:
@@ -686,10 +686,10 @@ Resolution:"""
     
     def _determine_consequences(
         self,
-        storyline: Dict[str, Any],
-        world_state: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        world_state: Optional[dict[str, Any]],
         resolution_type: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Determine narrative consequences of resolution.
         
         Args:
@@ -744,8 +744,8 @@ Resolution:"""
     
     def _check_player_satisfaction(
         self,
-        storyline: Dict[str, Any],
-        characters: Optional[Dict[str, Any]],
+        storyline: dict[str, Any],
+        characters: Optional[dict[str, Any]],
         resolution_type: str,
     ) -> bool:
         """Check if resolution feels satisfying to the player.
@@ -789,7 +789,7 @@ Resolution:"""
         
         return False
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get resolution engine statistics.
         
         Returns:

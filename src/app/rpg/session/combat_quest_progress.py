@@ -14,7 +14,7 @@ from .combat_reward_narrative import _apply_combat_reward_narrative as _base_app
 _COMBAT_QUEST_SYNC_BASE_APPLY_TURN_AUTHORITATIVE = _base_apply_turn_authoritative
 
 
-def _combat_quest_sync_result_sources(payload: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+def _combat_quest_sync_result_sources(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     payload = _safe_dict(payload)
     result = _safe_dict(payload.get("result"))
     resolved_result = _safe_dict(payload.get("resolved_result")) or result
@@ -23,13 +23,13 @@ def _combat_quest_sync_result_sources(payload: Dict[str, Any]) -> tuple[Dict[str
     return result, resolved_result, narration_context, combat_result
 
 
-def _combat_quest_sync_state(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _combat_quest_sync_state(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     session = _safe_dict(payload.get("session"))
     return _safe_dict(payload.get("simulation_state")) or _safe_dict(session.get("simulation_state")) or _safe_dict(payload.get("state"))
 
 
-def _combat_quest_sync_target_ids(combat_result: Dict[str, Any]) -> list[str]:
+def _combat_quest_sync_target_ids(combat_result: dict[str, Any]) -> list[str]:
     combat_result = _safe_dict(combat_result)
     target_ids: list[str] = []
     for value in (combat_result.get("target_id"), combat_result.get("defeated_target_id"), *_safe_list(combat_result.get("defeated_target_ids"))):
@@ -46,7 +46,7 @@ def _combat_quest_sync_target_ids(combat_result: Dict[str, Any]) -> list[str]:
     return target_ids
 
 
-def _combat_quest_sync_iter_quests(simulation_state: Dict[str, Any]):
+def _combat_quest_sync_iter_quests(simulation_state: dict[str, Any]):
     for root in (_safe_dict(simulation_state.get("quest_state")), _safe_dict(simulation_state.get("quest_log")), _safe_dict(simulation_state.get("quests"))):
         if not root:
             continue
@@ -63,7 +63,7 @@ def _combat_quest_sync_iter_quests(simulation_state: Dict[str, Any]):
                     yield quest
 
 
-def _objective_matches_combat_target(objective: Dict[str, Any], target_ids: list[str]) -> bool:
+def _objective_matches_combat_target(objective: dict[str, Any], target_ids: list[str]) -> bool:
     objective = _safe_dict(objective)
     objective_kind = _safe_str(objective.get("type") or objective.get("kind") or objective.get("objective_type"))
     if objective_kind and objective_kind not in {"defeat", "kill", "combat", "combat_defeat"}:
@@ -75,7 +75,7 @@ def _objective_matches_combat_target(objective: Dict[str, Any], target_ids: list
     return bool(target_set.intersection(target_ids))
 
 
-def _complete_combat_objective(objective: Dict[str, Any], *, tick: int) -> bool:
+def _complete_combat_objective(objective: dict[str, Any], *, tick: int) -> bool:
     objective = _safe_dict(objective)
     if _safe_str(objective.get("status")) in {"completed", "complete"}:
         return False
@@ -89,8 +89,8 @@ def _complete_combat_objective(objective: Dict[str, Any], *, tick: int) -> bool:
     return True
 
 
-def _combat_quest_sync_updates(simulation_state: Dict[str, Any], target_ids: list[str], tick: int) -> tuple[list[Dict[str, Any]], list[str]]:
-    updated_objectives: list[Dict[str, Any]] = []
+def _combat_quest_sync_updates(simulation_state: dict[str, Any], target_ids: list[str], tick: int) -> tuple[list[dict[str, Any]], list[str]]:
+    updated_objectives: list[dict[str, Any]] = []
     completed_quests: list[str] = []
     for quest in _combat_quest_sync_iter_quests(simulation_state):
         objectives = _safe_list(quest.get("objectives"))
@@ -109,7 +109,7 @@ def _combat_quest_sync_updates(simulation_state: Dict[str, Any], target_ids: lis
     return updated_objectives, completed_quests
 
 
-def _sync_combat_end_state_to_quests(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _sync_combat_end_state_to_quests(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     result, resolved_result, narration_context, combat_result = _combat_quest_sync_result_sources(payload)
     if not combat_result:
@@ -146,11 +146,11 @@ def _sync_combat_end_state_to_quests(payload: Dict[str, Any]) -> Dict[str, Any]:
 def _apply_turn_with_combat_quest_sync(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _COMBAT_QUEST_SYNC_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(session_id, player_input, action, performance_override=performance_override)
     return _sync_combat_end_state_to_quests(payload)
 

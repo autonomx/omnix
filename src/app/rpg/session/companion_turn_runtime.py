@@ -60,7 +60,7 @@ from app.rpg.world.world_event_director import (
 )
 
 
-def _active_companion_profiles_summary(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _active_companion_profiles_summary(simulation_state: dict[str, Any]) -> dict[str, Any]:
     party_state = _safe_dict(_safe_dict(simulation_state.get("player_state")).get("party_state"))
     summaries = {}
     for companion in _safe_list(party_state.get("companions")):
@@ -96,7 +96,7 @@ def _is_companion_actor_id(actor_id: str) -> bool:
     return actor_id.startswith("npc:") or actor_id.startswith("companion:")
 
 
-def _first_active_companion_actor_id(combat_state: Dict[str, Any]) -> str:
+def _first_active_companion_actor_id(combat_state: dict[str, Any]) -> str:
     for actor_id, participant in _safe_dict(_safe_dict(combat_state).get("participants")).items():
         participant = _safe_dict(participant)
         if not _is_companion_actor_id(str(actor_id)):
@@ -114,7 +114,7 @@ def _player_input_requests_reposition(player_input: str) -> bool:
     return "move closer" in text or "close distance" in text or "reposition" in text or "move to frontline" in text or "fall back" in text
 
 
-def _requested_reposition_values(player_input: str) -> Dict[str, str]:
+def _requested_reposition_values(player_input: str) -> dict[str, str]:
     text = _safe_str(player_input).strip().lower()
     if "fall back" in text or "backline" in text or "far" in text:
         return {"zone": "backline", "range_band": "far"}
@@ -125,7 +125,7 @@ def _player_input_requests_general_interaction(player_input: str) -> bool:
     return bool(detect_interaction_intent(player_input))
 
 
-def _fallback_general_interaction_narration(interaction_result: Dict[str, Any]) -> str:
+def _fallback_general_interaction_narration(interaction_result: dict[str, Any]) -> str:
     interaction_result = _safe_dict(interaction_result)
     target_name = _safe_str(
         interaction_result.get("target_name")
@@ -167,7 +167,7 @@ def _fallback_general_interaction_narration(interaction_result: Dict[str, Any]) 
     return f"Result: {reason}"
 
 
-def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _player_party_state_from_simulation(simulation_state: dict[str, Any]) -> dict[str, Any]:
     return copy.deepcopy(
         _safe_dict(
             _safe_dict(simulation_state.get("player_state")).get("party_state")
@@ -176,11 +176,11 @@ def _player_party_state_from_simulation(simulation_state: Dict[str, Any]) -> Dic
 
 
 def _sync_session_simulation_state_for_early_return(
-    session: Dict[str, Any],
-    simulation_state: Dict[str, Any],
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
     *,
     reason: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Persist simulation_state for early-return turn paths.
 
     Normal apply_turn flows eventually pass through the standard session update
@@ -216,10 +216,10 @@ def _sync_session_simulation_state_for_early_return(
 
 def _companion_runtime_mutated_state(
     *,
-    companion_relationship_drift_result: Dict[str, Any] | None = None,
-    companion_quest_progress_result: Dict[str, Any] | None = None,
-    companion_memory_result: Dict[str, Any] | None = None,
-    companion_command_result: Dict[str, Any] | None = None,
+    companion_relationship_drift_result: dict[str, Any] | None = None,
+    companion_quest_progress_result: dict[str, Any] | None = None,
+    companion_memory_result: dict[str, Any] | None = None,
+    companion_command_result: dict[str, Any] | None = None,
 ) -> bool:
     """Return true when companion systems changed persistent simulation state."""
     drift = _safe_dict(companion_relationship_drift_result)
@@ -242,15 +242,15 @@ def _companion_runtime_mutated_state(
 
 
 def _sync_session_if_companion_runtime_mutated(
-    session: Dict[str, Any],
-    simulation_state: Dict[str, Any],
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
     *,
     reason: str,
-    companion_relationship_drift_result: Dict[str, Any] | None = None,
-    companion_quest_progress_result: Dict[str, Any] | None = None,
-    companion_memory_result: Dict[str, Any] | None = None,
-    companion_command_result: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    companion_relationship_drift_result: dict[str, Any] | None = None,
+    companion_quest_progress_result: dict[str, Any] | None = None,
+    companion_memory_result: dict[str, Any] | None = None,
+    companion_command_result: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not _companion_runtime_mutated_state(
         companion_relationship_drift_result=companion_relationship_drift_result,
         companion_quest_progress_result=companion_quest_progress_result,
@@ -267,11 +267,11 @@ def _sync_session_if_companion_runtime_mutated(
 
 
 def _try_resolve_pending_companion_offer_at_turn_start(
-    simulation_state: Dict[str, Any],
+    simulation_state: dict[str, Any],
     *,
     player_input: str,
     tick: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Resolve pending companion offer before ordinary action handling.
 
     This is intentionally above the conversation-thread runtime. A pending
@@ -342,7 +342,7 @@ def _try_resolve_pending_companion_offer_at_turn_start(
         or "Companion"
     )
 
-    companion_dialogue_result: Dict[str, Any] = {}
+    companion_dialogue_result: dict[str, Any] = {}
     if acceptance_result.get("accepted"):
         companion_dialogue_result = build_companion_join_dialogue(
             npc_id=npc_id,
@@ -464,19 +464,19 @@ _MAX_INTERACTION_REACTION_STATE = 16
 
 
 
-def _ensure_narration_artifact_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_narration_artifact_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("narration_artifacts", [])
     runtime_state.setdefault("narration_artifacts_by_turn", {})
     return runtime_state
 
 
-def _build_turn_id(runtime_state: Dict[str, Any]) -> str:
+def _build_turn_id(runtime_state: dict[str, Any]) -> str:
     tick = int(_safe_dict(runtime_state).get("tick", 0) or 0)
     return f"turn:{tick}"
 
 
-def _prune_narration_artifacts(runtime_state: Dict[str, Any], max_items: int = 48) -> Dict[str, Any]:
+def _prune_narration_artifacts(runtime_state: dict[str, Any], max_items: int = 48) -> dict[str, Any]:
     runtime_state = _ensure_narration_artifact_state(runtime_state)
     artifacts = _safe_list(runtime_state.get("narration_artifacts"))
     if len(artifacts) > max_items:
@@ -495,7 +495,7 @@ def _prune_narration_artifacts(runtime_state: Dict[str, Any], max_items: int = 4
     return runtime_state
 
 
-def _store_narration_artifact(runtime_state: Dict[str, Any], artifact: Dict[str, Any]) -> Dict[str, Any]:
+def _store_narration_artifact(runtime_state: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_narration_artifact_state(runtime_state)
     artifact = _safe_dict(artifact)
     turn_id = _safe_str(artifact.get("turn_id")).strip()
@@ -532,7 +532,7 @@ _DETERMINISTIC_NARRATION_ARTIFACT_SOURCES = {
 }
 
 
-def _narration_artifact_text(artifact: Dict[str, Any]) -> str:
+def _narration_artifact_text(artifact: dict[str, Any]) -> str:
     artifact = _safe_dict(artifact)
     return _safe_str(
         artifact.get("final_narration")
@@ -547,12 +547,12 @@ def _narration_artifact_norm_text(value: Any) -> str:
     return " ".join("".join(ch if ch.isalnum() else " " for ch in text).split())
 
 
-def _narration_artifact_is_echo_fallback(artifact: Dict[str, Any]) -> bool:
+def _narration_artifact_is_echo_fallback(artifact: dict[str, Any]) -> bool:
     text = _narration_artifact_norm_text(_narration_artifact_text(artifact))
     return bool(text.startswith("you continue "))
 
 
-def _narration_artifact_has_structured_llm_content(artifact: Dict[str, Any]) -> bool:
+def _narration_artifact_has_structured_llm_content(artifact: dict[str, Any]) -> bool:
     artifact = _safe_dict(artifact)
     narration_json = _safe_dict(artifact.get("narration_json"))
     raw = artifact.get("raw_llm_narrative")
@@ -574,7 +574,7 @@ def _narration_artifact_has_structured_llm_content(artifact: Dict[str, Any]) -> 
     return False
 
 
-def _narration_artifact_completes_turn(artifact: Dict[str, Any]) -> bool:
+def _narration_artifact_completes_turn(artifact: dict[str, Any]) -> bool:
     artifact = _safe_dict(artifact)
     if not artifact:
         return False
@@ -603,7 +603,7 @@ def _narration_artifact_completes_turn(artifact: Dict[str, Any]) -> bool:
     return True
 
 
-def _ensure_narration_job_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_narration_job_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("narration_jobs", [])
     runtime_state.setdefault("narration_jobs_by_turn", {})
@@ -625,7 +625,7 @@ _AMBIENT_NARRATION_THREAD_COOLDOWN_TICKS = 2
 _MAX_AMBIENT_NARRATION_ENQUEUES_PER_TICK = 2
 
 
-def _ensure_ambient_narration_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_ambient_narration_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("ambient_narration_state", {})
     ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
@@ -635,14 +635,14 @@ def _ensure_ambient_narration_state(runtime_state: Dict[str, Any]) -> Dict[str, 
     return runtime_state
 
 
-def _get_last_ambient_narrated_tick(runtime_state: Dict[str, Any], thread_id: str) -> int:
+def _get_last_ambient_narrated_tick(runtime_state: dict[str, Any], thread_id: str) -> int:
     runtime_state = _ensure_ambient_narration_state(runtime_state)
     ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
     by_thread = _safe_dict(ambient.get("last_narrated_tick_by_thread"))
     return int(by_thread.get(_safe_str(thread_id).strip(), -999999) or -999999)
 
 
-def _record_ambient_narration_enqueue(runtime_state: Dict[str, Any], thread_id: str, tick: int, turn_id: str) -> Dict[str, Any]:
+def _record_ambient_narration_enqueue(runtime_state: dict[str, Any], thread_id: str, tick: int, turn_id: str) -> dict[str, Any]:
     runtime_state = _ensure_ambient_narration_state(runtime_state)
     ambient = _safe_dict(runtime_state.get("ambient_narration_state"))
 
@@ -658,35 +658,35 @@ def _record_ambient_narration_enqueue(runtime_state: Dict[str, Any], thread_id: 
     return runtime_state
 
 
-def _has_narration_artifact_for_turn(runtime_state: Dict[str, Any], turn_id: str) -> bool:
+def _has_narration_artifact_for_turn(runtime_state: dict[str, Any], turn_id: str) -> bool:
     runtime_state = _safe_dict(runtime_state)
     by_turn = _safe_dict(runtime_state.get("narration_artifacts_by_turn"))
     artifact = _safe_dict(by_turn.get(_safe_str(turn_id).strip()))
     return _narration_artifact_completes_turn(artifact)
 
 
-def _get_narration_job_for_turn(runtime_state: Dict[str, Any], turn_id: str) -> Dict[str, Any]:
+def _get_narration_job_for_turn(runtime_state: dict[str, Any], turn_id: str) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     by_turn = _safe_dict(runtime_state.get("narration_jobs_by_turn"))
     return _safe_dict(by_turn.get(_safe_str(turn_id).strip()))
 
 
-def _is_narration_job_terminal(job: Dict[str, Any]) -> bool:
+def _is_narration_job_terminal(job: dict[str, Any]) -> bool:
     status = _safe_str(_safe_dict(job).get("status")).strip().lower()
     return status in {"completed", "failed", "stale", "cancelled"}
 
 
-def _is_narration_job_active(job: Dict[str, Any]) -> bool:
+def _is_narration_job_active(job: dict[str, Any]) -> bool:
     status = _safe_str(_safe_dict(job).get("status")).strip().lower()
     return status in {"queued", "processing"}
 
 
-def _get_authoritative_narration_job_id(runtime_state: Dict[str, Any], turn_id: str) -> str:
+def _get_authoritative_narration_job_id(runtime_state: dict[str, Any], turn_id: str) -> str:
     job = _get_narration_job_for_turn(runtime_state, turn_id)
     return _safe_str(job.get("job_id")).strip()
 
 
-def _has_active_player_turn_request(runtime_state: Dict[str, Any]) -> bool:
+def _has_active_player_turn_request(runtime_state: dict[str, Any]) -> bool:
     marker = _safe_dict(_safe_dict(runtime_state).get("active_player_turn_request"))
     status = _safe_str(marker.get("status")).strip().lower()
     if status not in {"starting", "applying", "streaming"}:
@@ -694,7 +694,7 @@ def _has_active_player_turn_request(runtime_state: Dict[str, Any]) -> bool:
     return not bool(_safe_str(marker.get("completed_at")).strip())
 
 
-def _has_blocking_player_turn_narration(runtime_state: Dict[str, Any]) -> bool:
+def _has_blocking_player_turn_narration(runtime_state: dict[str, Any]) -> bool:
     runtime_state = _safe_dict(runtime_state)
     if _has_active_player_turn_request(runtime_state):
         return True
@@ -730,9 +730,9 @@ def _has_blocking_player_turn_narration(runtime_state: Dict[str, Any]) -> bool:
 
 
 def _select_latest_ambient_conversation_beats_per_active_thread(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
 
@@ -747,7 +747,7 @@ def _select_latest_ambient_conversation_beats_per_active_thread(
         if isinstance(c, dict)
     ]
 
-    selected: List[Dict[str, Any]] = []
+    selected: list[dict[str, Any]] = []
     for thread_id in active_ids:
         rows = [b for b in _safe_list(beats_by_thread.get(thread_id)) if isinstance(b, dict)]
         if not rows:
@@ -764,10 +764,10 @@ def _select_latest_ambient_conversation_beats_per_active_thread(
 
 
 def _build_ambient_conversation_narration_request(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-    beat: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+    beat: dict[str, Any],
+) -> dict[str, Any]:
     beat = _safe_dict(beat)
     if not beat:
         return {}
@@ -804,9 +804,9 @@ def _build_ambient_conversation_narration_request(
 
 def _maybe_enqueue_latest_ambient_conversation_narration(
     session_id: str,
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.session.semantic_response_projection import (
         _enqueue_narration_request as _enqueue_narration_request,
     )
@@ -859,7 +859,7 @@ def _maybe_enqueue_latest_ambient_conversation_narration(
     }
 
 
-def _prune_narration_jobs(runtime_state: Dict[str, Any], max_items: int = 64) -> Dict[str, Any]:
+def _prune_narration_jobs(runtime_state: dict[str, Any], max_items: int = 64) -> dict[str, Any]:
     runtime_state = _ensure_narration_job_state(runtime_state)
     jobs = _safe_list(runtime_state.get("narration_jobs"))
     if len(jobs) > max_items:
@@ -878,7 +878,7 @@ def _prune_narration_jobs(runtime_state: Dict[str, Any], max_items: int = 64) ->
     return runtime_state
 
 
-def _upsert_narration_job(runtime_state: Dict[str, Any], job: Dict[str, Any]) -> Dict[str, Any]:
+def _upsert_narration_job(runtime_state: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _ensure_narration_job_state(runtime_state)
     job = _safe_dict(job)
     turn_id = _safe_str(job.get("turn_id")).strip()
@@ -898,13 +898,13 @@ def _upsert_narration_job(runtime_state: Dict[str, Any], job: Dict[str, Any]) ->
 
 
 def _mark_narration_job_status(
-    runtime_state: Dict[str, Any],
+    runtime_state: dict[str, Any],
     turn_id: str,
     *,
     status: str,
     worker_token: str = "",
     error: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.combat_intent import (
         _utc_now_iso as _utc_now_iso,
     )

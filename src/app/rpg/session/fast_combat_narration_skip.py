@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextvars
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator
+from typing import Any, Iterator
 
 _FAST_DIRECT_SOURCES = {
     "ce211_fast_direct_runtime_budget_v1",
@@ -14,7 +14,7 @@ _FAST_COMBAT_SKIP_CONTEXT: contextvars.ContextVar[bool] = contextvars.ContextVar
 )
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
@@ -72,7 +72,7 @@ def _contains_fast_direct_marker(value: Any, *, depth: int = 0) -> bool:
     return False
 
 
-def _is_combat_action(action: Dict[str, Any]) -> bool:
+def _is_combat_action(action: dict[str, Any]) -> bool:
     action_type = _safe_str(action.get("action_type") or action.get("type")).strip().lower()
     if action_type == "combat":
         return True
@@ -91,7 +91,7 @@ def _action_requests_fast_combat_skip(action: Any, performance_override: Any = N
     return _safe_bool(performance.get("fast_turn_mode")) and _is_combat_action(action_dict)
 
 
-def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
+def _should_skip(payload: dict[str, Any], combat_state: dict[str, Any]) -> bool:
     if _FAST_COMBAT_SKIP_CONTEXT.get(False):
         return True
     payload = _safe_dict(payload)
@@ -107,7 +107,7 @@ def _should_skip(payload: Dict[str, Any], combat_state: Dict[str, Any]) -> bool:
     return _contains_fast_direct_marker(payload) or _contains_fast_direct_marker(combat_state)
 
 
-def _combat_delta_contract(combat_result: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+def _combat_delta_contract(combat_result: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
     delta = {
@@ -154,7 +154,7 @@ def _combat_delta_contract(combat_result: Dict[str, Any], combat_state: Dict[str
     return {key: value for key, value in delta.items() if value not in (None, "")}
 
 
-def _fallback_summary(combat_result: Dict[str, Any], combat_state: Dict[str, Any] | None = None) -> str:
+def _fallback_summary(combat_result: dict[str, Any], combat_state: dict[str, Any] | None = None) -> str:
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
     delta = _combat_delta_contract(combat_result, combat_state)
@@ -178,7 +178,7 @@ def _fallback_summary(combat_result: Dict[str, Any], combat_state: Dict[str, Any
     return "Result: combat_action_resolved"
 
 
-def _build_contract(builder: Any, combat_result: Dict[str, Any], combat_state: Dict[str, Any]) -> Dict[str, Any]:
+def _build_contract(builder: Any, combat_result: dict[str, Any], combat_state: dict[str, Any]) -> dict[str, Any]:
     if not callable(builder):
         builder = getattr(builder, "build_combat_narration_contract", None)
     if callable(builder):
@@ -189,7 +189,7 @@ def _build_contract(builder: Any, combat_result: Dict[str, Any], combat_state: D
     return {}
 
 
-def _deterministic_payload(narration: str, combat_delta: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _deterministic_payload(narration: str, combat_delta: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "source": "deterministic_combat_fast_summary",
         "narration": narration,
@@ -205,11 +205,11 @@ def _stale_or_empty_fast_combat_text(value: Any) -> bool:
 
 def _apply_fast_skip(
     contract_builder: Any,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+) -> dict[str, Any]:
     payload = _safe_dict(payload)
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
@@ -256,11 +256,11 @@ def _apply_fast_skip(
 
 def _with_fast_combat_flags(
     args: tuple[Any, ...],
-    kwargs: Dict[str, Any],
+    kwargs: dict[str, Any],
     *,
     action: Any,
     performance_override: Any,
-) -> tuple[tuple[Any, ...], Dict[str, Any]]:
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
     patched_kwargs = dict(kwargs)
     patched_performance = _safe_dict(performance_override)
     patched_performance["skip_sync_combat_narration"] = True
@@ -286,12 +286,12 @@ def _with_fast_combat_flags(
 
 
 def apply_fast_combat_narration_skip(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
     contract_builder: Any,
-) -> Dict[str, Any] | None:
+) -> dict[str, Any] | None:
     """Return a deterministic payload when fast combat skips provider narration."""
     if not _should_skip(_safe_dict(payload), _safe_dict(combat_state)):
         return None

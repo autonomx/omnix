@@ -52,7 +52,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app.worker_runtime import durable_feature_worker
     from app import runtime_composition
     from app.live_voice import hardware_policy as live_voice_hardware_policy
-    from app import assets, chat, jobs
+    from app import assets, jobs
     from app.security import tenant_context
     from app.settings import access as settings_access
     from app.runtime.config import RuntimeConfig, GatewayRole, get_runtime_config
@@ -65,9 +65,25 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     stores[0].context = SimpleNamespace(
         workspace_id="test-workspace", user_id="test-user"
     )
-    monkeypatch.setattr(runtime_composition, "production_job_store", lambda: stores[0])
+    def production_job_store_factory(
+        *, database, context, chat_execution_owner, chat_dispatcher
+    ):
+        assert database is fake_database
+        assert context is not None
+        assert chat_execution_owner.workspace_id == context.workspace_id
+        assert chat_execution_owner.database is fake_database
+        assert chat_dispatcher is not None
+        return stores[0]
+
+    monkeypatch.setattr(runtime_composition, "production_job_store", production_job_store_factory)
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
-    monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
+
+    def production_chat_store_factory(*, job_service, live_agent_planner):
+        assert job_service is stores[0]
+        assert live_agent_planner is not None
+        return stores[2]
+
+    monkeypatch.setattr(runtime_composition, "production_chat_store", production_chat_store_factory)
     monkeypatch.setattr(jobs, "default_model_residency_store", lambda: stores[3])
     monkeypatch.setattr(runtime_composition, "production_model_residency_store", lambda: stores[3])
     monkeypatch.setattr(database_module, "default_database", lambda: fake_database)

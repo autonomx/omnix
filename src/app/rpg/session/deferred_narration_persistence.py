@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 # RPG session runtime responsibility module.
 # Phase 8.32: player-turn narration is append-only presentation for a specific
@@ -24,7 +24,7 @@ _PHASE8_PART32_PLAYER_TURN_KIND = "player_turn_narration"
 _PHASE8_PART32_APPEND_ONLY_POLICY = "append_only_by_turn_id"
 
 
-def _phase8_part32_classify_narration_request(narration_request: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part32_classify_narration_request(narration_request: dict[str, Any]) -> dict[str, Any]:
     """Classify narration before deciding whether tick drift makes it stale.
 
     The old stale check compared artifact.tick to runtime_state.tick for every
@@ -74,9 +74,9 @@ def _phase8_part32_classify_narration_request(narration_request: Dict[str, Any])
 
 
 def _phase8_part32_apply_classification(
-    artifact: Dict[str, Any],
-    classification: Dict[str, Any],
-) -> Dict[str, Any]:
+    artifact: dict[str, Any],
+    classification: dict[str, Any],
+) -> dict[str, Any]:
     artifact = dict(_safe_dict(artifact))
     classification = _safe_dict(classification)
     if classification:
@@ -93,8 +93,8 @@ def _phase8_part32_apply_classification(
 
 def _phase8_part32_store_late_turn_artifact(
     session_id: str,
-    artifact: Dict[str, Any],
-) -> Dict[str, Any]:
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
     from app.rpg.session.companion_turn_runtime import (
         _narration_artifact_completes_turn as _narration_artifact_completes_turn, _store_narration_artifact as _store_narration_artifact,
     )
@@ -144,9 +144,9 @@ def _phase8_part32_store_late_turn_artifact(
 
 def _generate_turn_narration_artifact(
     session_id: str,
-    narration_request: Dict[str, Any],
+    narration_request: dict[str, Any],
     on_chunk: Any = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     from app.rpg.session.state_normalization import (
         _safe_list as _safe_list,
     )

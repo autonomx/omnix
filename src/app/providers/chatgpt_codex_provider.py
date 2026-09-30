@@ -21,7 +21,7 @@ import subprocess
 import tempfile
 import threading
 import time
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Iterator, Optional, Union
 
 from .base import (
     BaseProvider,
@@ -137,7 +137,7 @@ class ChatGPTCodexProvider(BaseProvider):
     def fast_mode(self) -> bool:
         return bool(self.config.extra_params.get("fast_mode", False))
 
-    def get_config_schema(self) -> Dict[str, Any]:
+    def get_config_schema(self) -> dict[str, Any]:
         return {
             "provider_type": self.provider_name,
             "display_name": self.provider_display_name,
@@ -368,7 +368,7 @@ class ChatGPTCodexProvider(BaseProvider):
         except Exception:
             return False
 
-    def get_models(self) -> List[ModelInfo]:
+    def get_models(self) -> list[ModelInfo]:
         fallback = self._fallback_model()
         if not self._lock.acquire(timeout=_MODEL_DISCOVERY_LOCK_TIMEOUT_SECONDS):
             return [fallback]
@@ -420,7 +420,7 @@ class ChatGPTCodexProvider(BaseProvider):
 
     def chat_completion(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         model: Optional[str] = None,
         stream: bool = False,
         **kwargs,
@@ -502,7 +502,7 @@ class ChatGPTCodexProvider(BaseProvider):
 
     def _chat_stream(
         self,
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         *,
         model: str,
         effort: str,
@@ -864,12 +864,12 @@ class ChatGPTCodexProvider(BaseProvider):
 
 
     @staticmethod
-    def _system_instructions(messages: List[ChatMessage]) -> str:
+    def _system_instructions(messages: list[ChatMessage]) -> str:
         parts = [message.content.strip() for message in messages if message.role == "system" and message.content.strip()]
         return "\n\n".join(parts)
 
     @staticmethod
-    def _turn_prompt(messages: List[ChatMessage], *, recover_history: bool) -> str:
+    def _turn_prompt(messages: list[ChatMessage], *, recover_history: bool) -> str:
         non_system = [message for message in messages if message.role != "system" and message.content]
         if not non_system:
             return "Please respond."
@@ -894,7 +894,7 @@ class ChatGPTCodexProvider(BaseProvider):
 
     @staticmethod
     def _turn_input(
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
         prompt: str,
         *,
         recover_history: bool = False,
@@ -958,7 +958,7 @@ class ChatGPTCodexProvider(BaseProvider):
     def _complete_dynamic_tool_call(
         self,
         pending: dict[str, Any],
-        messages: List[ChatMessage],
+        messages: list[ChatMessage],
     ) -> None:
         tool_message = next(
             (message for message in reversed(messages) if message.role == "tool"),

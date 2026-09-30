@@ -62,7 +62,7 @@ def _attach_session_attack_defeat_reward(
     target_id: Any,
     turn_id: Any,
     tick: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     combat_result = _safe_dict(combat_result)
     combat_state = _safe_dict(combat_state)
     target_id = _safe_str(target_id)
@@ -110,7 +110,7 @@ def _apply_attack_combat_action(
     is_combat_attack: Any,
     normalized_action_type: Any,
     target_id: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if is_combat_attack and target_id:
         if not combat_state.get('active'):
             participant_ids = build_combat_participants(after_action_state, [player_actor_id, target_id])

@@ -204,7 +204,7 @@ def test_rpg_turn_visible_text_falls_back_for_direct_npc_business_question() -> 
 
 def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
     from app.rpg.session import narration_worker
-    from app.rpg.session import runtime
+    from app.rpg.session import semantic_response_projection, session_runtime_store
 
     saved_sessions: list[dict] = []
     signaled: list[str] = []
@@ -219,9 +219,9 @@ def test_rpg_turn_job_queues_deferred_narration(monkeypatch) -> None:
         }
         return runtime_state, runtime_state["narration_jobs_by_turn"][turn_id], True
 
-    monkeypatch.setattr(runtime, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
-    monkeypatch.setattr(runtime, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
-    monkeypatch.setattr(runtime, "_enqueue_narration_request", fake_enqueue)
+    monkeypatch.setattr(session_runtime_store, "load_runtime_session", lambda _session_id: {"runtime_state": {}})
+    monkeypatch.setattr(session_runtime_store, "save_runtime_session", lambda session: saved_sessions.append(session) or session)
+    monkeypatch.setattr(semantic_response_projection, "_enqueue_narration_request", fake_enqueue)
     monkeypatch.setattr(narration_worker, "ensure_narration_worker_running", lambda: None)
     monkeypatch.setattr(narration_worker, "signal_narration_work", lambda session_id: signaled.append(session_id))
 

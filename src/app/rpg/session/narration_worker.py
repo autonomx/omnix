@@ -22,7 +22,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +36,9 @@ _MAX_SUBSCRIBERS_PER_SESSION = 16
 _worker_running = False
 _worker_thread: Optional[threading.Thread] = None
 _worker_lock = threading.Lock()
-_pending_sessions: Set[str] = set()
+_pending_sessions: set[str] = set()
 _pending_lock = threading.Lock()
-_subscribers: Dict[str, List[asyncio.Queue]] = {}
+_subscribers: dict[str, list[asyncio.Queue]] = {}
 _stop_requested = False
 
 _WORKER_IDLE_SLEEP_SECONDS = 0.50
@@ -93,7 +93,7 @@ def signal_narration_work(session_id: Any) -> bool:
     return True
 
 
-def drain_pending_sessions() -> List[str]:
+def drain_pending_sessions() -> list[str]:
     """Return and clear all session IDs that have pending work.
 
     Used by the worker loop to decide which sessions to process.
@@ -164,7 +164,7 @@ def _worker_loop() -> None:
 
 # ── Event publishing (SSE) ────────────────────────────────────────────────
 
-def publish_narration_event(session_id: str, event: Dict[str, Any]) -> int:
+def publish_narration_event(session_id: str, event: dict[str, Any]) -> int:
     """Publish a narration event to all subscribers for a session.
 
     Returns the number of subscribers that received the event.

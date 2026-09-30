@@ -43,58 +43,58 @@ from typing import (
 
 def _apply_post_action_companion_enrichment(
     *,
-    session: Dict[str, Any],
-    final_result: Dict[str, Any],
-    authoritative_result: Dict[str, Any],
+    session: dict[str, Any],
+    final_result: dict[str, Any],
+    authoritative_result: dict[str, Any],
     tick: int,
     player_input: str,
-    general_interaction_result: Dict[str, Any],
-    inventory_result: Dict[str, Any],
-    container_result: Dict[str, Any],
-    repair_result: Dict[str, Any],
-    consumable_result: Dict[str, Any],
-    equipment_stats: Dict[str, Any],
-    crafting_result: Dict[str, Any],
-    merchant_result: Dict[str, Any],
-    loot_result: Dict[str, Any],
-    companion_item_acceptance_result: Dict[str, Any],
-    companion_auto_equip_result: Dict[str, Any],
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
+    general_interaction_result: dict[str, Any],
+    inventory_result: dict[str, Any],
+    container_result: dict[str, Any],
+    repair_result: dict[str, Any],
+    consumable_result: dict[str, Any],
+    equipment_stats: dict[str, Any],
+    crafting_result: dict[str, Any],
+    merchant_result: dict[str, Any],
+    loot_result: dict[str, Any],
+    companion_item_acceptance_result: dict[str, Any],
+    companion_auto_equip_result: dict[str, Any],
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
     combat_llm_called: bool,
     combat_llm_error: str,
-    combat_narration_contract: Dict[str, Any],
-    combat_narration_validation: Dict[str, Any],
-    combat_narration_payload: Dict[str, Any],
-    combat_loot_result: Dict[str, Any],
-    combat_ammo_result: Dict[str, Any],
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    _post_action_sim: Dict[str, Any] = {}
-    _party_aware_ctx: Dict[str, Any] = {}
-    _companion_presence: Dict[str, Any] = {}
-    _direct_companion: Dict[str, Any] = {}
-    _companion_drift: Dict[str, Any] = {
+    combat_narration_contract: dict[str, Any],
+    combat_narration_validation: dict[str, Any],
+    combat_narration_payload: dict[str, Any],
+    combat_loot_result: dict[str, Any],
+    combat_ammo_result: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    _post_action_sim: dict[str, Any] = {}
+    _party_aware_ctx: dict[str, Any] = {}
+    _companion_presence: dict[str, Any] = {}
+    _direct_companion: dict[str, Any] = {}
+    _companion_drift: dict[str, Any] = {
         "applied": False,
         "reason": "no_post_action_simulation_state",
         "results": [],
         "source": "deterministic_companion_memory_runtime",
     }
-    _companion_mem_summary: Dict[str, Any] = {
+    _companion_mem_summary: dict[str, Any] = {
         "by_npc": {},
         "source": "deterministic_companion_memory_runtime",
     }
-    _companion_quest_progress: Dict[str, Any] = {
+    _companion_quest_progress: dict[str, Any] = {
         "progressed": False,
         "reason": "no_post_action_simulation_state",
         "source": "deterministic_companion_quest_runtime",
     }
-    _companion_quest_sum: Dict[str, Any] = {
+    _companion_quest_sum: dict[str, Any] = {
         "quests": [],
         "source": "deterministic_companion_quest_runtime",
     }
-    _party_composition: Dict[str, Any] = {}
-    _nps: List[Dict[str, Any]] = []
-    _ccs: List[Dict[str, Any]] = []
+    _party_composition: dict[str, Any] = {}
+    _nps: list[dict[str, Any]] = []
+    _ccs: list[dict[str, Any]] = []
 
     # AO-AP-AQ Patch 4.2 + 6: post-action companion presence projection
     _post_action_sim = _safe_dict(

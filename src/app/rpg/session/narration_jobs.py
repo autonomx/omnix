@@ -45,16 +45,16 @@ logger = logging.getLogger(__name__)
 from .state_normalization import _merge_stepped_simulation_state  # noqa: F401
 
 
-def _ambient_conversation_artifact_line(artifact: Dict[str, Any]) -> str:
+def _ambient_conversation_artifact_line(artifact: dict[str, Any]) -> str:
     artifact = _safe_dict(artifact)
     return _safe_str(artifact.get("line") or artifact.get("narration") or artifact.get("text"))
 
 
 def _generate_turn_narration_artifact(
     session_id: str,
-    narration_request: Dict[str, Any],
+    narration_request: dict[str, Any],
     on_chunk: Optional[Callable[[str], None]] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     logger.debug("_generate_turn_narration_artifact called", extra={"session_id": session_id, "turn_id": narration_request.get("turn_id")})
     t0 = _time.monotonic()
     logger.info("[RPG NARRATION ARTIFACT] start session=%s turn_id=%s tick=%s", session_id, narration_request.get("turn_id"), narration_request.get("tick"))
@@ -65,7 +65,7 @@ def _generate_turn_narration_artifact(
     narration_context = _safe_dict(narration_request.get("narration_context"))
     perf = _safe_dict(narration_request.get("performance"))
 
-    streamed_chunks: List[str] = []
+    streamed_chunks: list[str] = []
 
     def _emit_chunk(piece: str) -> None:
         piece = _safe_str(piece)
@@ -171,7 +171,7 @@ def _generate_turn_narration_artifact(
     return {"ok": True, "session": session, "artifact": artifact}
 
 
-def _process_next_narration_job(session_id: str) -> Dict[str, Any]:
+def _process_next_narration_job(session_id: str) -> dict[str, Any]:
     """
     Process at most one queued narration job for the given session.
     Safe for polling/heartbeat driven execution.
@@ -730,7 +730,7 @@ def _process_next_narration_job(session_id: str) -> Dict[str, Any]:
     }
 
 
-def process_next_narration_job(session_id: str) -> Dict[str, Any]:
+def process_next_narration_job(session_id: str) -> dict[str, Any]:
     """Process one job and apply its result to the owning interaction lifecycle."""
 
     result = _process_next_narration_job(session_id)
@@ -766,4 +766,7 @@ def process_next_narration_job(session_id: str) -> Dict[str, Any]:
         return result
 
 
-__all__ = ['_part17', '_process_next_narration_job', 'process_next_narration_job']
+__all__ = [
+    '_process_next_narration_job',
+    'process_next_narration_job',
+]

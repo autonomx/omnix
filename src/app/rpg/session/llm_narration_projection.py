@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable
+from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
 # Phase 8.31: the visible response for a player turn must come from the
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _PHASE8_PART31_SOURCE = "provider_sync_visible_turn_narration"
 
 
-def _phase8_part31_iter_payload_dicts(payload: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+def _phase8_part31_iter_payload_dicts(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
     payload = _safe_dict(payload)
     if payload:
         yield payload
@@ -37,7 +37,7 @@ def _phase8_part31_clean_text(value: Any) -> str:
     return "" if text.casefold() in {"", "[]", "{}", "null", "none"} else text
 
 
-def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
+def _phase8_part31_existing_completed_narration(payload: dict[str, Any]) -> str:
     for source in _phase8_part31_iter_payload_dicts(payload):
         status = _safe_str(source.get("narration_status")).strip().casefold()
         text = _phase8_part31_clean_text(
@@ -50,7 +50,7 @@ def _phase8_part31_existing_completed_narration(payload: Dict[str, Any]) -> str:
     return ""
 
 
-def _phase8_part31_narration_request(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part31_narration_request(payload: dict[str, Any]) -> dict[str, Any]:
     payload = _safe_dict(payload)
     return (
         _safe_dict(payload.get("narration_request"))
@@ -60,7 +60,7 @@ def _phase8_part31_narration_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
-def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
+def _phase8_part31_should_sync_narration(payload: dict[str, Any]) -> bool:
     if _phase8_part31_existing_completed_narration(payload):
         return False
     request = _phase8_part31_narration_request(payload)
@@ -74,7 +74,7 @@ def _phase8_part31_should_sync_narration(payload: Dict[str, Any]) -> bool:
     return bool(scene or context)
 
 
-def _phase8_part31_sync_narration(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _phase8_part31_sync_narration(payload: dict[str, Any]) -> dict[str, Any]:
     request = _phase8_part31_narration_request(payload)
     if not request:
         return {}
@@ -156,11 +156,11 @@ def _phase8_part31_patch_visible_ai_narration(payload: Any) -> Any:
 def _apply_ai_narration_projection(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
+    performance_override: dict[str, Any] | None = None,
     _base_authoritative: Any = _PHASE8_PART31_BASE_APPLY_TURN_AUTHORITATIVE,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _base_authoritative(
         session_id,
         player_input,

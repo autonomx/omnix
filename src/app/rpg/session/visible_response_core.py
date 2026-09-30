@@ -15,7 +15,7 @@ import json
 import logging
 import re
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -23,14 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 
-def _has_pending_conversation_response(simulation_state: Dict[str, Any]) -> bool:
+def _has_pending_conversation_response(simulation_state: dict[str, Any]) -> bool:
     thread_state = _safe_dict(simulation_state.get("conversation_thread_state"))
     pending = _safe_dict(thread_state.get("pending_player_response"))
     return bool(pending.get("thread_id") and pending.get("topic_id"))
 
 
 def _interaction_visible_result_reason(
-    general_interaction_result: Dict[str, Any],
+    general_interaction_result: dict[str, Any],
 ) -> str:
     general_interaction_result = _safe_dict(general_interaction_result)
     interaction = _safe_dict(general_interaction_result.get("interaction_result"))
@@ -85,10 +85,10 @@ def _replace_stale_visible_result_text(text: Any, *, visible_reason: str) -> str
 
 
 def _patch_visible_interaction_reason_into_payload_text(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
     visible_reason: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     payload = _safe_dict(payload)
     visible_reason = _safe_str(visible_reason)
     if not payload or not visible_reason:
@@ -118,10 +118,10 @@ def _patch_visible_interaction_reason_into_payload_text(
 
 
 def _apply_visible_interaction_reason_to_resolved_result(
-    resolved_result: Dict[str, Any],
+    resolved_result: dict[str, Any],
     *,
-    general_interaction_result: Dict[str, Any],
-) -> Dict[str, Any]:
+    general_interaction_result: dict[str, Any],
+) -> dict[str, Any]:
     resolved_result = _safe_dict(resolved_result)
     visible_reason = _interaction_visible_result_reason(general_interaction_result)
     if not visible_reason:
@@ -164,7 +164,7 @@ def _apply_visible_interaction_reason_to_resolved_result(
     return resolved_result
 
 
-def _runtime_narration_payload_is_final(payload: Dict[str, Any]) -> bool:
+def _runtime_narration_payload_is_final(payload: dict[str, Any]) -> bool:
     payload = _safe_dict(payload)
     return (
         _safe_str(payload.get("source")) == "provider_runtime_narration"
@@ -177,7 +177,7 @@ def _normalize_visible_echo_text(value: Any) -> str:
     return re.sub(r"\W+", " ", _safe_str(value).casefold()).strip()
 
 
-def _player_input_from_final_result(final_result: Dict[str, Any]) -> str:
+def _player_input_from_final_result(final_result: dict[str, Any]) -> str:
     final_result = _safe_dict(final_result)
     nested = _safe_dict(final_result.get("result"))
     turn_contract = _safe_dict(final_result.get("turn_contract")) or _safe_dict(
@@ -193,7 +193,7 @@ def _player_input_from_final_result(final_result: Dict[str, Any]) -> str:
 
 
 def _is_preservable_authoritative_narration(
-    final_result: Dict[str, Any], narration: Any
+    final_result: dict[str, Any], narration: Any
 ) -> bool:
     text = _safe_str(narration).strip()
     if not text:
@@ -218,7 +218,7 @@ def _is_preservable_authoritative_narration(
     return not any(fragment in lowered for fragment in blocked_fragments)
 
 
-def _accepted_combat_narration_payload(final_result: Dict[str, Any]) -> Dict[str, Any]:
+def _accepted_combat_narration_payload(final_result: dict[str, Any]) -> dict[str, Any]:
     final_result = _safe_dict(final_result)
     nested = _safe_dict(final_result.get("result"))
     resolved = _safe_dict(final_result.get("resolved_result")) or _safe_dict(
@@ -241,8 +241,8 @@ def _accepted_combat_narration_payload(final_result: Dict[str, Any]) -> Dict[str
 
 
 def _accepted_direct_companion_presentation(
-    final_result: Dict[str, Any],
-) -> Dict[str, Any]:
+    final_result: dict[str, Any],
+) -> dict[str, Any]:
     final_result = _safe_dict(final_result)
     nested = _safe_dict(final_result.get("result"))
     resolved = _safe_dict(final_result.get("resolved_result")) or _safe_dict(
@@ -269,13 +269,13 @@ def _accepted_direct_companion_presentation(
 
 
 def _select_final_visible_presentation(
-    final_result: Dict[str, Any],
+    final_result: dict[str, Any],
     *,
-    runtime_narration_payload: Dict[str, Any],
+    runtime_narration_payload: dict[str, Any],
     prior_narration: str,
-    prior_npc: Dict[str, Any],
+    prior_npc: dict[str, Any],
     prior_llm_called: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     final_result = _safe_dict(final_result)
     runtime_narration_payload = _safe_dict(runtime_narration_payload)
 
@@ -460,11 +460,11 @@ def _extract_llm_text_from_response(raw: Any) -> str:
 
 
 def _apply_combat_narration_if_needed(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     *,
-    combat_result: Dict[str, Any],
-    combat_state: Dict[str, Any],
-) -> Dict[str, Any]:
+    combat_result: dict[str, Any],
+    combat_state: dict[str, Any],
+) -> dict[str, Any]:
     """Attach real LLM combat narration to the active result payload.
 
     This must run before fallback visible narration is finalized.
@@ -566,9 +566,9 @@ def _apply_combat_narration_if_needed(
 
 
 def _sync_combat_narration_fields(
-    target: Dict[str, Any],
-    source: Dict[str, Any],
-) -> Dict[str, Any]:
+    target: dict[str, Any],
+    source: dict[str, Any],
+) -> dict[str, Any]:
     """Copy combat narration fields into the object that feeds final response assembly."""
     target = _safe_dict(target)
     source = _safe_dict(source)

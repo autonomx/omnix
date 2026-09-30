@@ -11,7 +11,7 @@ websockets
 numpy
 soundfile
 pydub
-PyPDF2
+pypdf
 python-docx
 pandas
 python-kasa
