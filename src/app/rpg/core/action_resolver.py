@@ -25,6 +25,7 @@ Key Features:
 
 from __future__ import annotations
 
+import random
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -82,11 +83,13 @@ class ActionResolver:
         max_actions_per_target: int = 1,
         director_action_priority: float = 10.0,
         log_resolutions: bool = False,
+        rng: random.Random | None = None,
     ):
         self.strategy = strategy
         self.max_actions_per_target = max_actions_per_target
         self.director_action_priority = director_action_priority
         self.log_resolutions = log_resolutions
+        self.rng = rng
         self._resolution_log: List[Dict[str, Any]] = []
         
     def resolve(
@@ -94,6 +97,8 @@ class ActionResolver:
         planned_actions: List[Dict[str, Any]],
         world_state: Any = None,
         session: Any = None,
+        *,
+        rng: random.Random | None = None,
     ) -> List[Dict[str, Any]]:
         """Resolve conflicts with temporal + causal ordering.
         
@@ -137,7 +142,7 @@ class ActionResolver:
             if target is None:
                 resolved.extend(actions)
             else:
-                resolved.extend(self._resolve_target_group(actions, target))
+                resolved.extend(self._resolve_target_group(actions, target, rng=rng))
                 
         if self.log_resolutions and self._resolution_log:
             import json
@@ -280,6 +285,8 @@ class ActionResolver:
         self,
         actions: List[Dict[str, Any]],
         target: str,
+        *,
+        rng: random.Random | None = None,
     ) -> List[Dict[str, Any]]:
         """Resolve all actions targeting a single entity using soft conflicts.
         
@@ -311,7 +318,7 @@ class ActionResolver:
         
         # Override actions win — everything else is dropped
         if override_actions:
-            best = self._pick_best(override_actions)
+            best = self._pick_best(override_actions, rng=rng)
             result.append(best)
             self._resolution_log.append({
                 "target": target,
@@ -326,7 +333,7 @@ class ActionResolver:
         
         # Exclusive actions: pick best one
         if exclusive_actions:
-            best = self._pick_best(exclusive_actions)
+            best = self._pick_best(exclusive_actions, rng=rng)
             result.append(best)
             if len(exclusive_actions) > 1:
                 self._resolution_log.append({
@@ -338,7 +345,12 @@ class ActionResolver:
                 
         return result
         
-    def _pick_best(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _pick_best(
+        self,
+        actions: List[Dict[str, Any]],
+        *,
+        rng: random.Random | None = None,
+    ) -> Dict[str, Any]:
         """Pick the best action from a group.
         
         Args:
@@ -358,8 +370,10 @@ class ActionResolver:
                 return max(director_actions, key=lambda a: a.get("priority", 0))
             return max(actions, key=lambda a: a.get("priority", 0))
         elif self.strategy == ResolutionStrategy.RANDOM:
-            import random
-            return random.choice(actions)
+            decision_rng = rng or self.rng
+            if decision_rng is None:
+                raise ValueError("random action resolution requires an injected RNG")
+            return decision_rng.choice(actions)
         else:
             return actions[0]  # FIRST_WINS
             

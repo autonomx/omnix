@@ -6,8 +6,9 @@ recorded as repairs instead of mutating state.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.inventory_items import consume_inventory_item, display_item_name, inventory_quantity, item_type
@@ -53,7 +54,7 @@ def _positive_int(value: Any, fallback: int = 1, *, limit: int = 999) -> int:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _item_id(item: dict[str, Any]) -> str:

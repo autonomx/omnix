@@ -1,8 +1,9 @@
 """Progressive interaction lifecycle for authoritative turns and deferred narration."""
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 INTERACTION_LIFECYCLE_VERSION = "rpg_interaction_lifecycle_v1"
@@ -297,4 +298,4 @@ def _text(value: Any) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()

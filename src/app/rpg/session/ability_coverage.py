@@ -7,8 +7,9 @@ reads traceable state written by the deterministic ability systems.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any, Sequence
 
 from pydantic import BaseModel, Field
@@ -46,7 +47,7 @@ class RpgAbilityCoverageReport(BaseModel):
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

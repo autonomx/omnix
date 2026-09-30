@@ -50,9 +50,10 @@ Design Rules:
 from __future__ import annotations
 
 import logging
-import random
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -352,13 +353,25 @@ class ResolutionEngine:
             # Pick from candidates not in recent history
             non_recent = [c for c in candidates if c not in self._recent_resolutions[-3:]]
             if non_recent:
-                base = random.choice(non_recent)
+                base = rng_for_current_turn(
+                    "text:resolution_avoid_recent_alternative",
+                    stable_sub_index(candidates),
+                ).choice(non_recent)
             else:
-                base = random.choice(candidates)
+                base = rng_for_current_turn(
+                    "text:resolution_avoid_recent_fallback",
+                    stable_sub_index(candidates),
+                ).choice(candidates)
         
         # Inject entropy: 20% chance of completely random choice
-        if random.random() < 0.2:
-            base = random.choice(candidates)
+        if rng_for_current_turn(
+            "text:resolution_entropy_gate",
+            stable_sub_index(candidates),
+        ).random() < 0.2:
+            base = rng_for_current_turn(
+                "text:resolution_entropy_alternative",
+                stable_sub_index(candidates),
+            ).choice(candidates)
         
         # Track this resolution
         self._recent_resolutions.append(base)
@@ -381,7 +394,10 @@ class ResolutionEngine:
         """
         if len(candidates) == 1:
             return candidates[0]
-        return random.choice(candidates)
+        return rng_for_current_turn(
+            "text:resolution_weighted_choice",
+            stable_sub_index(candidates),
+        ).choice(candidates)
     
     def _generate_template_resolution(
         self,
@@ -427,7 +443,10 @@ class ResolutionEngine:
             type_templates = ["The storyline concluded with lasting consequences for all involved."]
         
         # Pick a template
-        template = random.choice(type_templates)
+        template = rng_for_current_turn(
+            "text:resolution_template",
+            stable_sub_index({"story_type": story_type, "type": resolution_type}),
+        ).choice(type_templates)
         
         # Substitute placeholders
         text = template
@@ -707,7 +726,14 @@ Resolution:"""
         pool = consequence_pool.get(story_type, consequence_pool.get("general", []))
         num_consequences = min(2, len(pool)) if importance > 0.5 else 1
         
-        consequences = random.sample(pool, num_consequences) if pool else ["Events will unfold"]
+        consequences = (
+            rng_for_current_turn(
+                "text:resolution_consequence_sample",
+                stable_sub_index(pool),
+            ).sample(pool, num_consequences)
+            if pool
+            else ["Events will unfold"]
+        )
         
         # High importance adds extra consequence
         if importance > 0.7:

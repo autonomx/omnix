@@ -32,10 +32,11 @@ Architecture:
 from __future__ import annotations
 
 import logging
-import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +379,10 @@ class NarrativeSurfacer:
     ) -> str:
         """Generate attention-grabbing headline."""
         templates = self._headline_templates.get(event_type, self._headline_templates["general"])
-        template = random.choice(templates)
+        template = rng_for_current_turn(
+            "text:player_experience_headline",
+            stable_sub_index(event),
+        ).choice(templates)
 
         # Substitute placeholders
         replacements = {

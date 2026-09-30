@@ -3,6 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
+from app.runtime.clock import Clock as _Clock
+from app.runtime.clock import SYSTEM_CLOCK as _SYSTEM_CLOCK
+from app.runtime.clock import TurnContext as _TurnContext
+from app.runtime.clock import bind_turn_context as _bind_turn_context
+from app.rpg.core.determinism import rng_seed_from_session_id as _rng_seed_from_session_id
 from app.rpg.session.response_builder import (
     build_apply_turn_response as _PHASE8_PART40_BASE_BUILD_APPLY_TURN_RESPONSE,
 )
@@ -156,14 +161,32 @@ def apply_turn(
     action: Dict[str, Any] | None = None,
     *,
     performance_override: Dict[str, Any] | None = None,
+    clock: _Clock = _SYSTEM_CLOCK,
     _base_apply_turn: Any = _PHASE8_PART40_BASE_APPLY_TURN,
 ) -> Dict[str, Any]:
-    payload = _base_apply_turn(
-        session_id,
-        player_input,
-        action,
-        performance_override=performance_override,
+    session = load_runtime_session(session_id)
+    simulation_state = _safe_dict(_safe_dict(session).get("simulation_state"))
+    runtime_state = _safe_dict(_safe_dict(session).get("runtime_state"))
+    session_seed = simulation_state.get("rng_seed")
+    if not isinstance(session_seed, int) or isinstance(session_seed, bool):
+        session_seed = _rng_seed_from_session_id(session_id)
+    turn_index = simulation_state.get("turn_index")
+    if not isinstance(turn_index, int) or isinstance(turn_index, bool):
+        history = runtime_state.get("turn_history")
+        turn_index = len(history) if isinstance(history, list) else 0
+    turn_context = _TurnContext.capture(
+        clock,
+        session_seed=session_seed,
+        turn_index=turn_index,
+        session_id=session_id,
     )
+    with _bind_turn_context(turn_context):
+        payload = _base_apply_turn(
+            session_id,
+            player_input,
+            action,
+            performance_override=performance_override,
+        )
     queued = _queued_narration_snapshot(payload)
     canonical = _canonicalize_publication(payload, player_input=player_input)
     canonical = _restore_queued_narration(canonical, queued)

@@ -14,7 +14,7 @@ Architecture:
 
 Usage:
     executor = ProbabilisticActionExecutor()
-    result = executor.execute_with_uncertainty(action)
+    result = executor.execute_with_uncertainty(action, rng=random.Random(session_seed))
     # result = {"success": True, "events": [...]} or {"success": False, "events": [...]}
 
 Key Features:
@@ -89,6 +89,8 @@ class ProbabilisticActionExecutor:
         self,
         action: Dict[str, Any],
         execute_fn=None,
+        *,
+        rng: random.Random,
     ) -> Dict[str, Any]:
         """Execute an action with probabilistic success check.
         
@@ -107,7 +109,7 @@ class ProbabilisticActionExecutor:
         probability = self._calculate_success_probability(action)
         
         # Roll for success
-        roll = random.random()
+        roll = rng.random()
         
         if roll > probability:
             # Action failed

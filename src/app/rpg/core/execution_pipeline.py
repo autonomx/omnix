@@ -49,8 +49,12 @@ The pipeline enforces:
 from __future__ import annotations
 
 import json
-import time
 from typing import Any, Dict, List, Optional
+
+from app.runtime.clock import Clock, SYSTEM_CLOCK, current_turn_context, utc_now
+from app.rpg.core.action_resolver import ActionResolver
+from app.rpg.core.determinism import rng_for, rng_seed_from_session_id
+from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
 
 # ============================================================
 # Fix #4: Authority Hierarchy — Explicit priority model
@@ -112,14 +116,14 @@ class TurnTrace:
         duration_ms: Total pipeline execution time.
     """
 
-    def __init__(self, turn_number: int = 0):
+    def __init__(self, turn_number: int = 0, *, now=None):
         """Initialize TurnTrace.
 
         Args:
             turn_number: Turn number for this trace.
         """
         self.turn_number = turn_number
-        self.timestamp = time.time()
+        self.timestamp = (now or utc_now()).timestamp()
         self.player_input = ""
         self.plan: List[Dict[str, Any]] = []
         self.resolved_actions: List[Dict[str, Any]] = []
@@ -487,6 +491,7 @@ class ExecutionPipeline:
         director: Any = None,
         enable_trace: bool = True,
         max_trace_history: int = 50,
+        clock: Clock = SYSTEM_CLOCK,
     ):
         """Initialize ExecutionPipeline.
 
@@ -513,12 +518,15 @@ class ExecutionPipeline:
         self.enable_trace = enable_trace
         self.trace_history: List[TurnTrace] = []
         self.max_trace_history = max_trace_history
+        self.clock = clock
 
         # Previous turn feedback (for Fix #2)
         self._last_feedback: Optional[Dict[str, Any]] = None
 
         # Turn counter
         self._turn_counter = 0
+        self._active_rng_seed = 0
+        self._active_turn_index = 0
 
     def execute_turn(
         self,
@@ -536,10 +544,38 @@ class ExecutionPipeline:
         Returns:
             Turn result dict with events, trace, and feedback.
         """
-        start_time = time.time()
+        turn_now = utc_now(self.clock)
+        start_time = self.clock.monotonic()
         self._turn_counter += 1
+        turn_context = current_turn_context()
+        if turn_context is not None and turn_context.session_seed is not None:
+            self._active_rng_seed = turn_context.session_seed
+        elif isinstance(session, dict):
+            session_seed = session.get("rng_seed")
+            if isinstance(session_seed, int) and not isinstance(session_seed, bool):
+                self._active_rng_seed = session_seed
+            elif session.get("session_id") or session.get("id"):
+                self._active_rng_seed = rng_seed_from_session_id(
+                    str(session.get("session_id") or session.get("id"))
+                )
+            else:
+                self._active_rng_seed = 0
+        else:
+            self._active_rng_seed = 0
 
-        trace = TurnTrace(turn_number=self._turn_counter)
+        if turn_context is not None and turn_context.turn_index is not None:
+            self._active_turn_index = turn_context.turn_index
+        elif isinstance(session, dict):
+            session_turn_index = session.get("turn_index")
+            self._active_turn_index = (
+                session_turn_index
+                if isinstance(session_turn_index, int) and not isinstance(session_turn_index, bool)
+                else self._turn_counter
+            )
+        else:
+            self._active_turn_index = self._turn_counter
+
+        trace = TurnTrace(turn_number=self._turn_counter, now=turn_now)
         trace.player_input = player_input
         trace.plan = list(planned_actions)
 
@@ -579,7 +615,7 @@ class ExecutionPipeline:
         trace.director_feedback = feedback
 
         # Step 12: Finalize trace
-        trace.duration_ms = (time.time() - start_time) * 1000
+        trace.duration_ms = (self.clock.monotonic() - start_time) * 1000
 
         if self.enable_trace:
             self.trace_history.append(trace)
@@ -621,7 +657,18 @@ class ExecutionPipeline:
         """
         try:
             if self.resolver and hasattr(self.resolver, "resolve"):
-                resolved = self.resolver.resolve(actions, session=session)
+                if isinstance(self.resolver, ActionResolver):
+                    resolved = self.resolver.resolve(
+                        actions,
+                        session=session,
+                        rng=rng_for(
+                            self._active_rng_seed,
+                            self._active_turn_index,
+                            "action_conflict_resolution",
+                        ),
+                    )
+                else:
+                    resolved = self.resolver.resolve(actions, session=session)
                 trace.resolved_actions = list(resolved)
                 return resolved
         except Exception as e:
@@ -722,7 +769,7 @@ class ExecutionPipeline:
             Execution results.
         """
         results = []
-        for action in actions:
+        for index, action in enumerate(actions):
             # Consume resources before execution
             try:
                 if self.resource_manager:
@@ -733,7 +780,18 @@ class ExecutionPipeline:
             # Execute with uncertainty
             try:
                 if self.executor and hasattr(self.executor, "execute_with_uncertainty"):
-                    result = self.executor.execute_with_uncertainty(action)
+                    if isinstance(self.executor, ProbabilisticActionExecutor):
+                        result = self.executor.execute_with_uncertainty(
+                            action,
+                            rng=rng_for(
+                                self._active_rng_seed,
+                                self._active_turn_index,
+                                "probabilistic_execution",
+                                index,
+                            ),
+                        )
+                    else:
+                        result = self.executor.execute_with_uncertainty(action)
                 else:
                     # Mock execution
                     result = {

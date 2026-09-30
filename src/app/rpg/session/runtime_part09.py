@@ -466,8 +466,21 @@ def _apply_authoritative_action(
             "result": blocked_result,
         }
 
-    resolved = resolve_player_action(gated_state, action)
+    from app.rpg.core.determinism import rng_for
+
+    session_seed = gated_state.get("rng_seed")
+    if not isinstance(session_seed, int) or isinstance(session_seed, bool):
+        raise ValueError("RPG action resolution requires a persisted session RNG seed")
+    turn_index = gated_state.get("turn_index")
+    if not isinstance(turn_index, int) or isinstance(turn_index, bool):
+        turn_index = len(_safe_list(runtime_state.get("turn_history")))
+    resolved = resolve_player_action(
+        gated_state,
+        action,
+        rng_for(session_seed, turn_index, "player_action"),
+    )
     next_state = _safe_dict(resolved.get("simulation_state")) or gated_state
+    next_state["turn_index"] = turn_index + 1
     result = _safe_dict(resolved.get("result"))
 
     transaction_metadata = build_transaction_metadata(action)

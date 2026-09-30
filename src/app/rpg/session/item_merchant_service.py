@@ -7,8 +7,9 @@ inventory changes.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.inventory_items import display_item_name, inventory_quantity
@@ -37,7 +38,7 @@ def _norm(value: Any) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _player(state: dict[str, Any]) -> dict[str, Any]:

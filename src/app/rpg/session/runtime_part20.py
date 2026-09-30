@@ -21,6 +21,27 @@ from .runtime_part17 import *
 from .runtime_part18 import *
 from .runtime_part19 import *
 
+def _recorded_idle_tick_time(session: Dict[str, Any]) -> tuple[datetime | None, str | None]:
+    runtime_state = _safe_dict(session.get("runtime_state"))
+    simulation_state = _safe_dict(session.get("simulation_state"))
+    current_tick = int(simulation_state.get("tick", runtime_state.get("tick", 0)) or 0)
+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
+    if mode != "replay":
+        return None, None
+    capture_key = f"idle_tick:{current_tick}"
+    captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(capture_key))
+    recorded_now = _safe_str(captured.get("now")).strip()
+    if not recorded_now:
+        return None, f"missing_replay_idle_tick_time_for_tick:{current_tick}"
+    try:
+        turn_now = datetime.fromisoformat(recorded_now.replace("Z", "+00:00"))
+        if turn_now.tzinfo is None:
+            turn_now = turn_now.replace(tzinfo=timezone.utc)
+        return turn_now.astimezone(timezone.utc), None
+    except (TypeError, ValueError):
+        return None, f"invalid_replay_idle_tick_time_for_tick:{current_tick}"
+
+
 def _apply_idle_tick_to_session(
     session: Dict[str, Any],
     *,
@@ -35,6 +56,15 @@ def _apply_idle_tick_to_session(
     session = _copy_dict(session)
     runtime_state = ensure_ambient_runtime_state(_copy_dict(session.get("runtime_state")))
     simulation_state = _safe_dict(session.get("simulation_state"))
+    current_tick = int(_safe_dict(session.get("simulation_state")).get("tick", runtime_state.get("tick", 0)) or 0)
+    idle_capture_key = f"idle_tick:{current_tick}"
+    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
+    captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(idle_capture_key))
+    turn_now, replay_time_error = _recorded_idle_tick_time(session)
+    if replay_time_error:
+        return {"ok": False, "error": replay_time_error}
+    if turn_now is None:
+        turn_now = _utc_now()
 
     if _has_blocking_player_turn_narration(runtime_state):
         return {
@@ -47,7 +77,10 @@ def _apply_idle_tick_to_session(
                 "idle_suppressed": True,
                 "reason": "blocking_player_turn_narration",
             },
-            "idle_seconds": _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at"))),
+            "idle_seconds": _seconds_since_iso(
+                _safe_str(runtime_state.get("last_real_player_activity_at")),
+                now=turn_now,
+            ),
             "idle_gate_open": False,
             "settings": _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings"))),
         }
@@ -63,14 +96,8 @@ def _apply_idle_tick_to_session(
         runtime_state,
     )
 
-    mode = _safe_str(runtime_state.get("mode")).strip().lower() or "live"
-
     # Simulation tick is authoritative; runtime tick is only a mirror/cache.
-    current_tick = int(_safe_dict(session.get("simulation_state")).get("tick", runtime_state.get("tick", 0)) or 0)
-    idle_capture_key = f"idle_tick:{current_tick}"
-
     if mode == "replay":
-        captured = _safe_dict(_safe_dict(runtime_state.get("llm_records_index")).get(idle_capture_key))
         if not captured:
             return {"ok": False, "error": f"missing_replay_idle_tick_for_tick:{current_tick}"}
         replay_updates = _safe_list(captured.get("updates"))
@@ -125,7 +152,10 @@ def _apply_idle_tick_to_session(
     }
 
     # Real idle-seconds calculation
-    idle_seconds = _seconds_since_iso(_safe_str(runtime_state.get("last_real_player_activity_at")))
+    idle_seconds = _seconds_since_iso(
+        _safe_str(runtime_state.get("last_real_player_activity_at")),
+        now=turn_now,
+    )
     settings = _normalize_runtime_settings(_safe_dict(runtime_state.get("runtime_settings")))
     conversation_idle_seconds = int(settings.get("idle_conversation_seconds", 15) or 15)
     prior_idle_streak = int(runtime_state.get("idle_streak", 0) or 0)
@@ -479,6 +509,7 @@ def _apply_idle_tick_to_session(
     idle_record = {
         "type": "idle_tick",
         "tick": current_tick,
+        "now": turn_now.isoformat(),
         "reason": reason,
         "updates": final_updates,
         "latest_seq": int(runtime_state.get("ambient_seq", 0) or 0),

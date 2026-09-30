@@ -7,11 +7,11 @@ switch sessions immediately and then continue through the normal RPG turn queue.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.runtime.clock import utc_now
 from app.rpg.session.ability_coverage import write_ability_coverage_snapshot
 from app.rpg.session.ability_system import build_progression_package
 from app.rpg.session.new_game_settings import build_new_game_setup_effects
@@ -22,12 +22,11 @@ NEW_GAME_CONTRACT_VERSION = "rpg_new_game_v1"
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _new_session_id(prefix: str = "rpg") -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    return f"{prefix}_{stamp}_{secrets.token_hex(4)}"
+    return f"{prefix}_{secrets.token_urlsafe(12)}"
 
 
 class RpgPlayerOptions(BaseModel):
@@ -68,7 +67,7 @@ class RpgNewGameRequest(BaseModel):
     combat_lethality: Literal["safe", "normal", "deadly"] = "normal"
     companions_enabled: bool = True
     permadeath: bool = False
-    seed: int | None = None
+    seed: int | None = Field(default=None, ge=0, le=(2**64) - 1)
     features: RpgFeatureOptions = Field(default_factory=RpgFeatureOptions)
 
 
@@ -580,6 +579,8 @@ def _starter_loadout(request: RpgNewGameRequest) -> dict[str, Any]:
 def _simulation_state_stub(seed: int) -> dict[str, Any]:
     return {
         "seed": seed,
+        "rng_seed": seed,
+        "turn_index": 0,
         "presentation_state": {"visual_state": {"image_requests": [], "visual_assets": []}},
         "memory_state": {"actor_memory": {}, "world_memory": {"rumors": []}},
         "survival": {"enabled": False, "events": []},
@@ -606,7 +607,7 @@ def _new_game_state(request: RpgNewGameRequest, session_id: str, now: str) -> di
     build = STARTING_BUILDS.get(request.player.build, STARTING_BUILDS["balanced_adventurer"])
     location = STARTING_LOCATIONS.get(request.starting_location, STARTING_LOCATIONS["rusty_flagon_tavern"])
     features = request.features.model_dump(mode="json")
-    seed = int(request.seed or secrets.randbits(31))
+    seed = int(request.seed if request.seed is not None else secrets.randbits(64))
     request_payload = request.model_dump(mode="json")
     progression = build_progression_package(request_payload, build_id=request.player.build, level=1, seed=seed)
     identity = progression["character_identity"]

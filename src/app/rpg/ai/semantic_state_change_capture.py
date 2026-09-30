@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any, Dict, List
 
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 from app.providers.base import ChatMessage
 from app.rpg.session import runtime as runtime_mod
 
@@ -429,14 +430,15 @@ def capture_semantic_state_change_proposals_for_session(session: Dict[str, Any])
     recent = runtime_state.get("recent_semantic_actions", [])
 
     # Add action variety boost
-    import random
-
     interactions = runtime_mod._normalize_active_interactions(simulation_state, runtime_state)
 
     if not interactions:
         for p in normalized:
             if p.get("semantic_action") in ("continue_activity", ""):
-                p["semantic_action"] = random.choice([
+                p["semantic_action"] = rng_for_current_turn(
+                    "text:semantic_fallback_action",
+                    stable_sub_index(p.get("actor_id") or p.get("proposal_id") or p),
+                ).choice([
                     "observe",
                     "adjust_position",
                     "scan_room",

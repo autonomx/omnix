@@ -6,8 +6,9 @@ ability effect operations. Freeform AI text must not mutate mechanics.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -37,7 +38,7 @@ class RpgPassiveHookResult(BaseModel):
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _norm(value: Any) -> str:

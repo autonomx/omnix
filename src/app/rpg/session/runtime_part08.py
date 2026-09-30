@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 # Generated split module for app.rpg.session.runtime.
 from .runtime_part01 import *
 from .runtime_part02 import *
@@ -249,7 +251,7 @@ def _log_interaction_trace(label: str, payload: Dict[str, Any], runtime_state: D
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 
 

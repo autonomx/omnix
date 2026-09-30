@@ -18,6 +18,7 @@ Key capabilities:
 
 from typing import Any, Dict, List, Optional
 
+from app.rpg.core.determinism import rng_for_current_turn
 from .director_types import DirectorOutput
 
 from .director_arc_management import DirectorArcManagementMixin
@@ -295,8 +296,6 @@ class StoryDirector(DirectorArcManagementMixin, DirectorGoalShapingMixin):
         Returns:
             Surprise event dict, or None.
         """
-        import random
-
         # 10% chance of surprise each turn (adjustable)
         surprise_chance = 0.1
 
@@ -312,11 +311,14 @@ class StoryDirector(DirectorArcManagementMixin, DirectorGoalShapingMixin):
         if recent_surprises >= 2:
             return None  # Too many surprises recently
 
-        if random.random() >= surprise_chance:
+        decision_index = len(self.event_history)
+        if rng_for_current_turn(
+            "text:story_surprise_gate",
+            decision_index,
+        ).random() >= surprise_chance:
             return None
 
         # Surprise event pool
-        import random
         surprises = [
             {
                 "type": "story_event",
@@ -350,7 +352,10 @@ class StoryDirector(DirectorArcManagementMixin, DirectorGoalShapingMixin):
             },
         ]
 
-        return random.choice(surprises)
+        return rng_for_current_turn(
+            "text:story_surprise_choice",
+            decision_index,
+        ).choice(surprises)
 
     def _get_npc_goal_updates(
         self, session, player_intent: Dict[str, Any], memory_context: Dict[str, Any] = None

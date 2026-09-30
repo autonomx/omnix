@@ -1,12 +1,13 @@
 """Small shared helpers for RPG ability modules."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.runtime.clock import utc_now
+
 from typing import Any
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _norm(value: Any) -> str:

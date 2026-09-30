@@ -206,7 +206,7 @@ def _classify_player_action_context(
     return result
 
 
-def _seconds_since_iso(iso_str: str) -> int:
+def _seconds_since_iso(iso_str: str, *, now: datetime | None = None) -> int:
     """Return seconds elapsed since an ISO timestamp. Returns 9999 if invalid."""
     iso_str = _safe_str(iso_str).strip()
     if not iso_str:
@@ -215,7 +215,7 @@ def _seconds_since_iso(iso_str: str) -> int:
         dt = datetime.fromisoformat(iso_str)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        delta = datetime.now(timezone.utc) - dt
+        delta = (now or _utc_now()) - dt
         return max(0, int(delta.total_seconds()))
     except Exception:
         return 9999

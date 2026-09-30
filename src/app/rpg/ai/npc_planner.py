@@ -1,5 +1,4 @@
-import random
-
+from app.rpg.core.determinism import rng_for_current_turn, stable_sub_index
 from app.rpg.ai.goap import Action
 from app.rpg.ai.goap.actions import default_actions as goap_default_actions
 from app.rpg.ai.goap.planner import plan as goap_plan
@@ -281,7 +280,13 @@ def decide(npc, session):
         
         # Clear stale plan
         npc._current_plan = None
-        return {"action": random.choice(["wander", "observe"])}
+        actor_id = getattr(npc, "id", getattr(npc, "npc_id", "npc"))
+        return {
+            "action": rng_for_current_turn(
+                "text:npc_default_action",
+                stable_sub_index(actor_id),
+            ).choice(["wander", "observe"])
+        }
 
     next_action = plan_result[0].name
     

@@ -17,11 +17,92 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
+
+from app.runtime.clock import current_turn_context
 
 # Bump this only when intentionally changing deterministic event identity rules.
 IDENTITY_VERSION = 1
+
+
+def rng_seed_from_session_id(session_id: str) -> int:
+    """Derive the stable 64-bit RNG seed used to upcast pre-seed sessions."""
+
+    session_id = str(session_id)
+    if not session_id.strip():
+        raise ValueError("session_id is required to derive the RPG RNG seed")
+    return int.from_bytes(hashlib.sha256(session_id.encode("utf-8")).digest()[:8], "big")
+
+
+def rng_for(
+    session_seed: int,
+    turn_index: int,
+    purpose: str,
+    sub_index: int = 0,
+) -> random.Random:
+    """Create a replay-stable RNG stream for one named turn decision."""
+
+    if (
+        not isinstance(turn_index, int)
+        or isinstance(turn_index, bool)
+        or not isinstance(sub_index, int)
+        or isinstance(sub_index, bool)
+        or turn_index < 0
+        or sub_index < 0
+    ):
+        raise ValueError("turn_index and sub_index must be non-negative")
+    if not isinstance(session_seed, int) or isinstance(session_seed, bool) or not 0 <= session_seed < 2**64:
+        raise ValueError("session_seed must be an unsigned 64-bit integer")
+    if not isinstance(purpose, str) or not purpose.strip():
+        raise ValueError("purpose is required for a deterministic RPG RNG stream")
+    material = f"{session_seed}:{turn_index}:{purpose}:{sub_index}".encode("utf-8")
+    seed = int.from_bytes(hashlib.sha256(material).digest()[:8], "big")
+    return random.Random(seed)
+
+
+def rng_for_current_turn(purpose: str, sub_index: int = 0) -> random.Random:
+    """Build a named decision stream from the active turn's immutable input."""
+
+    context = current_turn_context()
+    if (
+        context is None
+        or context.session_seed is None
+        or context.turn_index is None
+    ):
+        raise RuntimeError("text RNG requires a seeded RPG turn context")
+    return rng_for(context.session_seed, context.turn_index, purpose, sub_index)
+
+
+def stable_sub_index(value: Any) -> int:
+    """Derive a stable stream index from a JSON-safe decision subject."""
+
+    digest = hashlib.sha256(stable_json(value).encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def deterministic_turn_uuid(
+    session_id: str,
+    turn_index: int,
+    purpose: str,
+    counter: int = 0,
+) -> str:
+    """Return a stable UUID for an event created by a turn decision."""
+
+    if (
+        not isinstance(turn_index, int)
+        or isinstance(turn_index, bool)
+        or not isinstance(counter, int)
+        or isinstance(counter, bool)
+        or turn_index < 0
+        or counter < 0
+    ):
+        raise ValueError("turn_index and counter must be non-negative")
+    if not str(session_id).strip():
+        raise ValueError("session_id is required for deterministic RPG event IDs")
+    session_namespace = uuid.uuid5(uuid.NAMESPACE_URL, session_id)
+    return str(uuid.uuid5(session_namespace, f"{turn_index}:{purpose}:{counter}"))
 
 
 @dataclass
@@ -83,10 +164,10 @@ class SeededRNG:
         """Restore underlying RNG state from snapshots."""
         self._rng.setstate(state)
 
-    def serialize_state(self) -> Dict[str, Any]:
+    def serialize_state(self) -> dict[str, Any]:
         return {"state": self._rng.getstate(), "seed": self._seed}
 
-    def deserialize_state(self, state: Dict[str, Any]) -> None:
+    def deserialize_state(self, state: dict[str, Any]) -> None:
         self._rng.setstate(state["state"])
 
 
@@ -112,7 +193,7 @@ def compute_deterministic_event_id(
     *,
     seed: int,
     event_type: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     source: Optional[str],
     parent_id: Optional[str],
     tick: Optional[int],

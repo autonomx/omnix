@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from app.rpg.core.determinism import rng_seed_from_session_id
 from app.rpg.map_package_bridge import attach_map_state_to_package, restore_map_state_from_package
 from app.rpg.map_persistence import ensure_session_map_state
 from app.rpg.session.ambient_builder import (
@@ -41,6 +42,24 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
     session["manifest"] = manifest
     session.setdefault("installed_packs", [])
     session.setdefault("simulation_state", {})
+    simulation_state = dict(_safe_dict(session.get("simulation_state")))
+    rng_seed = simulation_state.get("rng_seed")
+    if (
+        not isinstance(rng_seed, int)
+        or isinstance(rng_seed, bool)
+        or not 0 <= rng_seed < 2**64
+    ):
+        manifest = _safe_dict(session.get("manifest"))
+        session_id = str(
+            session.get("session_id")
+            or session.get("id")
+            or manifest.get("session_id")
+            or manifest.get("id")
+            or ""
+        )
+        rng_seed = rng_seed_from_session_id(session_id)
+        simulation_state["rng_seed"] = rng_seed
+    session["simulation_state"] = simulation_state
     session = ensure_session_environment_seed_state(session)
     session = normalize_session_survival_for_persistence(session)
     session = ensure_session_map_state(session)
@@ -53,6 +72,36 @@ def create_or_normalize_session(session: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def save_session(session: Dict[str, Any], *, compact: bool = False) -> Dict[str, Any]:
+    session = _safe_dict(session)
+    manifest = _safe_dict(session.get("manifest"))
+    session_id = str(
+        session.get("session_id")
+        or session.get("id")
+        or manifest.get("session_id")
+        or manifest.get("id")
+        or ""
+    )
+    if session_id:
+        previous = load_session_from_disk(session_id)
+        if previous is not None:
+            previous_state = _safe_dict(previous.get("simulation_state"))
+            previous_seed = previous_state.get("rng_seed")
+            if (
+                not isinstance(previous_seed, int)
+                or isinstance(previous_seed, bool)
+                or not 0 <= previous_seed < 2**64
+            ):
+                previous_seed = rng_seed_from_session_id(session_id)
+            simulation_state = dict(_safe_dict(session.get("simulation_state")))
+            submitted_seed = simulation_state.get("rng_seed")
+            if (
+                isinstance(submitted_seed, int)
+                and not isinstance(submitted_seed, bool)
+                and submitted_seed != previous_seed
+            ):
+                raise ValueError("RPG session rng_seed is immutable")
+            simulation_state["rng_seed"] = previous_seed
+            session["simulation_state"] = simulation_state
     session = create_or_normalize_session(session)
     assert_session_integrity(session)
     return save_session_to_disk(session, compact=compact)

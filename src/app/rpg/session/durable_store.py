@@ -5,6 +5,8 @@ Never trusts raw disk payloads; normalizes input on load.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 import json
 import logging
 import os
@@ -163,7 +165,7 @@ def _read_text_with_retry(path: Path, *, attempts: int = 8, base_delay_s: float 
 
 def _quarantine_corrupt_session_file(path: Path) -> Path:
     """Move a corrupt session aside so repeated resume attempts do not crash forever."""
-    quarantine_path = path.with_name(f"{path.stem}.corrupt.{int(time.time() * 1000)}{path.suffix}")
+    quarantine_path = path.with_name(f"{path.stem}.corrupt.{int(utc_now().timestamp() * 1000)}{path.suffix}")
     try:
         os.replace(path, quarantine_path)
     except OSError:

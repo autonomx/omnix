@@ -422,7 +422,7 @@ class EncounterResolver:
             "reason": f"{action_type} in {mode} mode -> {outcome_type}",
         }
 
-    def resolve_combat_round(self, action: dict, seed: int | None = None) -> dict:
+    def resolve_combat_round(self, action: dict, seed: int) -> dict:
         """Resolve a combat round using the authoritative action resolver."""
         from app.rpg.action_resolver import (
             resolve_player_action,

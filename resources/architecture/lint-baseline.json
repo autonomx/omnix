@@ -6275,7 +6275,7 @@
       "count": 1,
       "fingerprint": "_extract_json_payload:print",
       "lines": [
-        161
+        162
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6284,7 +6284,7 @@
       "count": 1,
       "fingerprint": "_resolve_runtime_actor_id:print",
       "lines": [
-        143
+        144
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6293,30 +6293,30 @@
       "count": 24,
       "fingerprint": "capture_semantic_state_change_proposals_for_session:print",
       "lines": [
-        266,
-        270,
+        267,
         271,
         272,
-        281,
-        286,
-        288,
-        293,
-        298,
-        302,
-        305,
-        312,
+        273,
+        282,
+        287,
+        289,
+        294,
+        299,
+        303,
+        306,
         313,
-        317,
-        321,
-        325,
-        332,
+        314,
+        318,
+        322,
+        326,
         333,
-        340,
-        381,
-        426,
-        468,
-        469,
-        470
+        334,
+        341,
+        382,
+        427,
+        470,
+        471,
+        472
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6325,11 +6325,10 @@
       "count": 16,
       "fingerprint": "should_capture_semantic_state_change_proposals:print",
       "lines": [
-        215,
-        218,
-        231,
+        216,
+        219,
         232,
-        239,
+        233,
         240,
         241,
         242,
@@ -6339,8 +6338,9 @@
         246,
         247,
         248,
-        251,
-        254
+        249,
+        252,
+        255
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL008"
@@ -6472,7 +6472,7 @@
       "count": 1,
       "fingerprint": "ActionResolver.resolve:print",
       "lines": [
-        145
+        150
       ],
       "path": "src/app/rpg/core/action_resolver.py",
       "rule": "AL008"
@@ -6481,7 +6481,7 @@
       "count": 1,
       "fingerprint": "EventBus.emit:print",
       "lines": [
-        376
+        391
       ],
       "path": "src/app/rpg/core/event_bus.py",
       "rule": "AL008"
@@ -6576,7 +6576,7 @@
       "count": 1,
       "fingerprint": "_log_interaction_trace:print",
       "lines": [
-        245
+        247
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL008"
@@ -7307,7 +7307,7 @@
       "count": 1,
       "fingerprint": "_get_llm_provider:except",
       "lines": [
-        182
+        183
       ],
       "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL009"
@@ -7527,7 +7527,7 @@
       "count": 1,
       "fingerprint": "WorldSimulationLoop._step_arcs_update:except",
       "lines": [
-        372
+        397
       ],
       "path": "src/app/rpg/core/world_loop.py",
       "rule": "AL009"
@@ -7536,7 +7536,7 @@
       "count": 1,
       "fingerprint": "WorldSimulationLoop._step_plan:except",
       "lines": [
-        306
+        323
       ],
       "path": "src/app/rpg/core/world_loop.py",
       "rule": "AL009"
@@ -7820,7 +7820,7 @@
       "count": 1,
       "fingerprint": "_replace_with_retry:except",
       "lines": [
-        105
+        107
       ],
       "path": "src/app/rpg/session/durable_store.py",
       "rule": "AL009"
@@ -7901,7 +7901,7 @@
       "count": 1,
       "fingerprint": "_log_interaction_trace:except",
       "lines": [
-        246
+        248
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL009"
@@ -9060,7 +9060,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part01",
       "lines": [
-        4
+        6
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9069,7 +9069,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part02",
       "lines": [
-        5
+        7
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9078,7 +9078,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part03",
       "lines": [
-        6
+        8
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9087,7 +9087,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part04",
       "lines": [
-        7
+        9
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9096,7 +9096,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part05",
       "lines": [
-        8
+        10
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9105,7 +9105,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part06",
       "lines": [
-        9
+        11
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -9114,7 +9114,7 @@
       "count": 1,
       "fingerprint": "<module>:app.rpg.session.runtime_part07",
       "lines": [
-        10
+        12
       ],
       "path": "src/app/rpg/session/runtime_part08.py",
       "rule": "AL010"
@@ -10983,353 +10983,6 @@
       ],
       "path": "src/app/trading/replay_runtime_repository.py",
       "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_make_rng:random.Random",
-      "lines": [
-        87
-      ],
-      "path": "src/app/rpg/action_resolver.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ActionResolver._pick_best:random.choice",
-      "lines": [
-        362
-      ],
-      "path": "src/app/rpg/core/action_resolver.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 2,
-      "fingerprint": "ExecutionPipeline.execute_turn:time.time",
-      "lines": [
-        539,
-        582
-      ],
-      "path": "src/app/rpg/core/execution_pipeline.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TurnTrace.__init__:time.time",
-      "lines": [
-        122
-      ],
-      "path": "src/app/rpg/core/execution_pipeline.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "GoalState.__init__:time.time",
-      "lines": [
-        153
-      ],
-      "path": "src/app/rpg/core/npc_state.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ProbabilisticActionExecutor.execute_with_uncertainty:random.random",
-      "lines": [
-        110
-      ],
-      "path": "src/app/rpg/core/probabilistic_executor.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 5,
-      "fingerprint": "WorldSimulationLoop._generate_passive_event_data:random.choice",
-      "lines": [
-        415,
-        417,
-        420,
-        422,
-        429
-      ],
-      "path": "src/app/rpg/core/world_loop.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "WorldSimulationLoop._generate_passive_event_data:random.randint",
-      "lines": [
-        418
-      ],
-      "path": "src/app/rpg/core/world_loop.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "WorldSimulationLoop._schedule_next_tick:random.randint",
-      "lines": [
-        442
-      ],
-      "path": "src/app/rpg/core/world_loop.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "WorldSimulationLoop._step_passive_events:random.random",
-      "lines": [
-        393
-      ],
-      "path": "src/app/rpg/core/world_loop.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        49
-      ],
-      "path": "src/app/rpg/session/ability_coverage.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        9
-      ],
-      "path": "src/app/rpg/session/ability_utils.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now_iso:datetime.datetime.now",
-      "lines": [
-        116
-      ],
-      "path": "src/app/rpg/session/ambient_builder.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_quarantine_corrupt_session_file:time.time",
-      "lines": [
-        166
-      ],
-      "path": "src/app/rpg/session/durable_store.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        300
-      ],
-      "path": "src/app/rpg/session/interaction_lifecycle.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "commit_turn_interaction:datetime.datetime.now",
-      "lines": [
-        73
-      ],
-      "path": "src/app/rpg/session/interaction_timeline.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        38
-      ],
-      "path": "src/app/rpg/session/item_diagnostics.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        36
-      ],
-      "path": "src/app/rpg/session/item_effect_session.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        54
-      ],
-      "path": "src/app/rpg/session/item_loadout_hooks.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        38
-      ],
-      "path": "src/app/rpg/session/item_market_session.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        40
-      ],
-      "path": "src/app/rpg/session/item_merchant_service.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        36
-      ],
-      "path": "src/app/rpg/session/item_pickup_session.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        35
-      ],
-      "path": "src/app/rpg/session/item_report_session.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        41
-      ],
-      "path": "src/app/rpg/session/item_scenarios.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        62
-      ],
-      "path": "src/app/rpg/session/item_session_with_hooks.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        34
-      ],
-      "path": "src/app/rpg/session/item_signals.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        45
-      ],
-      "path": "src/app/rpg/session/item_turn_hooks.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        56
-      ],
-      "path": "src/app/rpg/session/item_use.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        69
-      ],
-      "path": "src/app/rpg/session/loadout.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_new_session_id:datetime.datetime.now",
-      "lines": [
-        29
-      ],
-      "path": "src/app/rpg/session/new_game.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        25
-      ],
-      "path": "src/app/rpg/session/new_game.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        86
-      ],
-      "path": "src/app/rpg/session/new_game_creation_progress.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        40
-      ],
-      "path": "src/app/rpg/session/passive_traits.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_seconds_since_iso:datetime.now",
-      "lines": [
-        218
-      ],
-      "path": "src/app/rpg/session/runtime_part05.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now_iso:datetime.now",
-      "lines": [
-        252
-      ],
-      "path": "src/app/rpg/session/runtime_part08.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        22
-      ],
-      "path": "src/app/rpg/session/world_ability_integration.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now:datetime.datetime.now",
-      "lines": [
-        42
-      ],
-      "path": "src/app/rpg/session/world_effects.py",
-      "rule": "AL013"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_utc_now_iso:datetime.datetime.now",
-      "lines": [
-        52
-      ],
-      "path": "src/app/rpg/world/world_event_director.py",
-      "rule": "AL013"
     }
   ]
 }

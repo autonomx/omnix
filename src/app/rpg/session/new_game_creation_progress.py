@@ -7,7 +7,8 @@ side effects into session creation.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.runtime.clock import utc_now
+
 from typing import Any, Literal
 
 from app.rpg.session.new_game import RpgNewGameRequest, _create_new_game_session_base
@@ -83,7 +84,7 @@ CREATION_STAGES: list[dict[str, Any]] = [
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def creation_job_id(session_id: str) -> str:
