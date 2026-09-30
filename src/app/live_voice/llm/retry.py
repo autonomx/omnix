@@ -9,15 +9,12 @@ from app.config.env import env_str as _env_str
 
 import time
 from collections.abc import Callable, Iterator
-from functools import wraps
 from typing import Any
 
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
 from app.providers.exceptions import RateLimitError
 
 from app.observability.tts_stream_diagnostics import stream_log
 
-_HOOK_SENTINEL = "_omnix_live_chat_stream_retry_installed"
 _DEFAULT_STREAM_ATTEMPTS = 4
 _MAX_STREAM_ATTEMPTS = 5
 _DEFAULT_RETRY_BASE_DELAY_MS = 250.0
@@ -256,57 +253,23 @@ def retry_provider_stream(
     raise RuntimeError("Chat provider stream failed without an error")
 
 
-def install_live_chat_stream_retry_hook() -> None:
-    """Wrap PromptAssembly provider streaming once for every chat store."""
-    if getattr(PromptChatSessionStore, _HOOK_SENTINEL, False):
-        return
-
-    original = PromptChatSessionStore.stream_provider_reply_chunks
-
-    @wraps(original)
-    def patched(
-        self: PromptChatSessionStore,
-        session: Any,
-        user_message: Any,
-        *,
-        provider_id: str | None,
-        model_id: str | None,
-        context_items: list[dict[str, Any]] | None = None,
-        routing_deadline_at: float | None = None,
-    ) -> Iterator[dict[str, Any]]:
-        stream_kwargs: dict[str, Any] = {
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "context_items": context_items,
-        }
-        if routing_deadline_at is not None:
-            stream_kwargs["routing_deadline_at"] = routing_deadline_at
-
-        def stream_factory() -> Iterator[dict[str, Any]]:
-            return original(self, session, user_message, **stream_kwargs)
-
-        def fallback_factory() -> dict[str, Any]:
-            fallback_kwargs: dict[str, Any] = {
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "context_items": context_items or [],
-            }
-            if routing_deadline_at is not None:
-                fallback_kwargs["routing_deadline_at"] = routing_deadline_at
-            return self._generate_provider_reply(session, user_message, **fallback_kwargs)
-
-        yield from retry_provider_stream(
-            stream_factory,
-            fallback_factory,
-            attempts=_stream_attempts(),
-            retry_base_delay_ms=_retry_base_delay_ms(),
-            retry_max_delay_ms=_retry_max_delay_ms(),
-            fallback_delay_ms=_fallback_delay_ms(),
-            diagnostic_context={
-                "provider_id": provider_id or "default",
-                "model_configured": bool(model_id),
-            },
-        )
-
-    PromptChatSessionStore.stream_provider_reply_chunks = patched
-    setattr(PromptChatSessionStore, _HOOK_SENTINEL, True)
+def stream_with_retry(
+    stream_factory: Callable[[], Iterator[dict[str, Any]]],
+    fallback_factory: Callable[[], dict[str, Any]],
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+) -> Iterator[dict[str, Any]]:
+    """Apply bounded retry/fallback policy to the direct Chat stream stage."""
+    return retry_provider_stream(
+        stream_factory,
+        fallback_factory,
+        attempts=_stream_attempts(),
+        retry_base_delay_ms=_retry_base_delay_ms(),
+        retry_max_delay_ms=_retry_max_delay_ms(),
+        fallback_delay_ms=_fallback_delay_ms(),
+        diagnostic_context={
+            "provider_id": provider_id or "default",
+            "model_configured": bool(model_id),
+        },
+    )

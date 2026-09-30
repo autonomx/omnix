@@ -684,6 +684,45 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]] | None = None,
         routing_deadline_at: float | None = None,
     ):
+        from app.live_voice.llm.retry import stream_with_retry
+
+        def stream_factory():
+            return self._stream_provider_reply_chunks_once(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
+            )
+
+        def fallback_factory() -> dict[str, Any]:
+            return self._generate_provider_reply(
+                session,
+                user_message,
+                provider_id=provider_id,
+                model_id=model_id,
+                context_items=context_items or [],
+                routing_deadline_at=routing_deadline_at,
+            )
+
+        yield from stream_with_retry(
+            stream_factory,
+            fallback_factory,
+            provider_id=provider_id,
+            model_id=model_id,
+        )
+
+    def _stream_provider_reply_chunks_once(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        *,
+        provider_id: str | None,
+        model_id: str | None,
+        context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
+    ):
         command = parse_memory_command(user_message.content)
         if command is not None:
             result = execute_memory_command(

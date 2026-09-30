@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.live_voice.prompt.profile import install_live_chat_live_voice_profile_hook
 from app.chat.live_chat_provider_routing import install_live_chat_provider_routing_hook
-from app.chat.live_chat_stream_retry import install_live_chat_stream_retry_hook
 from app.rpg.jobs.turn_job_mirror import install_rpg_turn_job_mirror_hook
 
 
@@ -101,6 +100,5 @@ def initialize_gateway_runtime_hooks():
 
     configure_delivery_checkpoint_recorder(persist_live_voice_delivery)
     install_companion_activity_user_turn_hook()
-    install_live_chat_stream_retry_hook()
     install_live_chat_provider_routing_hook()
     install_live_chat_live_voice_profile_hook()
