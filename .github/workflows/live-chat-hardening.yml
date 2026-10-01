@@ -123,7 +123,7 @@ jobs:
             src/parakeet_stt_server.py \
             src/tests/app/test_chat_response_metrics.py \
             src/tests/app/test_desktop_companion_identity_api.py \
-            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
             src/tests/app/test_live_chat_live_voice_profile.py \
@@ -170,7 +170,7 @@ jobs:
         run: |
           set -o pipefail
           python -m pytest \
-            src/tests/app/test_gateway_blocking_route_offload.py \
+            src/tests/api/gateway/test_event_loop_lag.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
             src/tests/app/test_live_voice_runtime_offload.py \
