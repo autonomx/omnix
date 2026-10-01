@@ -85,6 +85,48 @@ def migration_violations(sources: dict[str, str], protected: dict[str, str]) -> 
             violations.append(Violation("AL014", path, "new_duplicate_numeric_prefix:" + str(int(prefix[1])), 1))
         if highest and name <= highest:
             violations.append(Violation("AL014", path, "new_migration_before_latest:" + highest, 1))
+        violations.extend(migration_sql_violations(path, current[path]))
+    return violations
+
+
+# Tables whose indexes must be built concurrently (WP-5.11); keep in step
+# with docs/architecture/MIGRATION_POLICY.md.
+LARGE_TABLES = frozenset({
+    "omnix_agent_run_events",
+    "omnix_assets",
+    "omnix_audit_events",
+    "omnix_chat_messages",
+    "omnix_job_events",
+    "omnix_job_logs",
+    "omnix_jobs",
+    "omnix_memory_records",
+    "omnix_module_records",
+    "omnix_outbox_events",
+    "omnix_trading_strategy_events",
+})
+_HEADER = re.compile(r"^--\s*omnix-migration:\s*phase=(expand|contract|data)\s+transactional=(true|false)\s*$")
+_DESTRUCTIVE = re.compile(r"\bDROP\s+(COLUMN|TABLE)\b", re.I)
+_CREATE_INDEX = re.compile(
+    r"\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+(CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?\w+\s+ON\s+(?:ONLY\s+)?(\w+)",
+    re.I,
+)
+
+
+def migration_sql_violations(path: str, sql: str) -> list[Violation]:
+    """Header, expand-safety and large-table index checks for one new migration."""
+    lines = [line.strip() for line in sql.splitlines() if line.strip()]
+    header = _HEADER.match(lines[0]) if lines else None
+    if header is None:
+        return [Violation("AL014", path, "missing_migration_header", 1)]
+    phase, transactional = header[1], header[2] == "true"
+    body = re.sub(r"--[^\n]*", "", sql)
+    violations = []
+    if phase == "expand" and _DESTRUCTIVE.search(body):
+        violations.append(Violation("AL014", path, "destructive_change_in_expand_migration", 1))
+    for match in _CREATE_INDEX.finditer(body):
+        table = match[2].lower()
+        if table in LARGE_TABLES and (match[1] is None or transactional):
+            violations.append(Violation("AL014", path, "blocking_index_on_large_table:" + table, 1))
     return violations
 
 

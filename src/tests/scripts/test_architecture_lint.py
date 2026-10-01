@@ -286,10 +286,37 @@ def test_invalid_checksum_registry_fails_closed(registry):
         lint.registry_checksums(registry)
 
 
+HEADER = "-- omnix-migration: phase=expand transactional=true\n"
+
+
+def test_new_migrations_need_a_header_and_expand_safety():
+    assert [item.fingerprint for item in lint.migration_violations({NEW: "SELECT 1"}, {})] == ["missing_migration_header"]
+    destructive = HEADER + "ALTER TABLE omnix_things DROP COLUMN legacy;"
+    assert [item.fingerprint for item in lint.migration_violations({NEW: destructive}, {})] == [
+        "destructive_change_in_expand_migration"
+    ]
+    contract = destructive.replace("phase=expand", "phase=contract")
+    assert lint.migration_violations({NEW: contract}, {}) == []
+
+
+def test_indexes_on_large_tables_must_be_built_concurrently():
+    blocking = HEADER + "CREATE INDEX idx_jobs_kind ON omnix_jobs (kind);"
+    assert [item.fingerprint for item in lint.migration_violations({NEW: blocking}, {})] == [
+        "blocking_index_on_large_table:omnix_jobs"
+    ]
+    concurrent = (
+        "-- omnix-migration: phase=expand transactional=false\n"
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_jobs_kind ON omnix_jobs (kind)"
+    )
+    assert lint.migration_violations({NEW: concurrent}, {}) == []
+    small_table = HEADER + "CREATE INDEX idx_policy ON omnix_retention_policies (record_type);"
+    assert lint.migration_violations({NEW: small_table}, {}) == []
+
+
 def test_migrations_append_without_editing_or_renumbering_historical_duplicates():
     second_old = lint.MIGRATIONS + "0001_legacy.sql"
     protected = {OLD: lint.checksum("SELECT 1\n"), second_old: lint.checksum("SELECT 2\n")}
-    current = {OLD: "SELECT 1\r\n", second_old: "SELECT 2\n", NEW: "SELECT 3\n"}
+    current = {OLD: "SELECT 1\r\n", second_old: "SELECT 2\n", NEW: HEADER + "SELECT 3\n"}
     assert lint.migration_violations(current, protected) == []
     current[OLD] = "SELECT 4\n"
     assert lint.migration_violations(current, protected)[0].fingerprint == "existing_migration_changed_or_removed"
