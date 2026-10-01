@@ -8,9 +8,9 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.capabilities import default_capability_registry
@@ -18,6 +18,7 @@ from app.assistant_tools.gate import review_assistant_tool_request
 from app.capabilities.executor import LEGACY_APPROVER, CapabilityGrant, execute_capability
 from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 from app.persistence.unit_of_work import unit_of_work
+from app.security.run_tokens import RunTokenClaims, issue_run_token, verify_run_token
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentApproval, AgentEvent, RunChangeSet
@@ -28,6 +29,7 @@ from .evidence import (
     resolve_evidence_call,
 )
 from .repository import PostgresAgentRunRepository
+from .run_token_guard import require_live_run_token
 from .service import default_agent_run_service
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
@@ -539,6 +541,26 @@ def read_agent_run_change_set(run_id: str) -> BrokerRunChangeSetResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return BrokerRunChangeSetResponse(change_set=change_set, patch=patch)
+
+
+class BrokerRunTokenResponse(BaseModel):
+    token: str
+    expires_at: int
+
+
+@router.post("/{run_id}/run-token", response_model=BrokerRunTokenResponse)
+def renew_agent_run_token(
+    run_id: str,
+    claims: Annotated[RunTokenClaims, Depends(require_live_run_token)],
+) -> BrokerRunTokenResponse:
+    """A fresh token for a live run, requested with its current token (WP-4.6)."""
+    token = issue_run_token(
+        run_id=claims.run_id,
+        workspace_id=claims.workspace_id,
+        owner=claims.owner,
+        caps_digest=claims.caps_digest,
+    )
+    return BrokerRunTokenResponse(token=token, expires_at=verify_run_token(token, run_id=run_id).expires_at)
 
 
 @router.post(

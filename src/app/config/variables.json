@@ -1428,6 +1428,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls run token key for security.",
+    "feature": "security",
+    "name": "OMNIX_RUN_TOKEN_KEY",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls s3 access key id for kernel.",
     "feature": "kernel",

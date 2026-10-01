@@ -4,7 +4,9 @@ Credentials accepted, in order:
 
 * the ``omnix_session`` cookie (browsers; unsafe methods also need CSRF);
 * ``Authorization: Bearer`` access tokens (OIDC mode, API clients);
-* the internal service token, on internal routes only.
+* the internal service token, on internal routes only;
+* ``Authorization: OmnixRun`` run tokens, on agent-runtime routes only
+  (WP-4.6), whether or not sign-in is enforced.
 
 Tokens in query parameters are never read.
 """
@@ -12,7 +14,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 import hmac
-import ipaddress
 import logging
 import re
 
@@ -22,6 +23,7 @@ from starlette.routing import compile_path
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.runtime.tenant_context import LOCAL_USER_ID, LOCAL_WORKSPACE_ID, TenantContext
+from app.security.run_tokens import RunTokenClaims
 from app.security.service_token import valid_service_token
 
 from .service import (
@@ -39,10 +41,10 @@ PUBLIC_PATHS = frozenset({"/health", "/ready", "/api/health"})
 PUBLIC_PREFIXES = ("/api/auth/",)
 INTERNAL_PREFIXES = ("/internal/",)
 
-# Pending WP-4.6 (run-scoped tokens): the Pi broker, guard and model-provider
-# extensions call these routes without user credentials. They stay reachable
-# from loopback clients only; the list is pinned by a test so it cannot grow.
-AGENT_RUNTIME_LOOPBACK_PATTERNS = (
+# Routes called by the Pi broker, guard and model-provider extensions. They
+# accept only a run token for the run they name (WP-4.6), never a session or
+# a bare run id header; the list is pinned by a test so it cannot grow.
+AGENT_RUNTIME_PATTERNS = (
     r"/api/agent-model/v1/.+",
     r"/api/agent-runs/[^/]+/planning/[a-z_-]+",
     r"/api/agent-runs/[^/]+/run-change-set",
@@ -50,8 +52,12 @@ AGENT_RUNTIME_LOOPBACK_PATTERNS = (
     r"/api/agent-runs/[^/]+/command-authorization",
     r"/api/agent-runs/[^/]+/workspace-authorization",
     r"/api/agent-runs/[^/]+/budget/tool",
+    r"/api/agent-runs/[^/]+/run-token",
 )
-_AGENT_RUNTIME_LOOPBACK = re.compile("^(?:" + "|".join(AGENT_RUNTIME_LOOPBACK_PATTERNS) + ")$")
+_AGENT_RUNTIME_PATH = re.compile("^(?:" + "|".join(AGENT_RUNTIME_PATTERNS) + ")$")
+_AGENT_RUN_PATH = re.compile(r"^/api/agent-runs/([^/]+)/")
+AGENT_RUN_ROLE = "agent_run"
+RUN_TOKEN_STATE_KEY = "omnix_run_token"
 
 
 def _header_values(scope: Scope, name: bytes) -> list[str]:
@@ -72,29 +78,45 @@ def _cookie(scope: Scope, name: str) -> str | None:
     return found[0] if len(found) == 1 else None
 
 
-_FORWARDING_HEADERS = (b"forwarded", b"x-forwarded-for", b"x-real-ip")
-
-
-def _direct_loopback_client(scope: Scope) -> bool:
-    """A same-host caller that did not come through a reverse proxy.
-
-    A proxy on this host (nginx ingress, the Vite dev server) makes every
-    remote client look like loopback; both mark proxied requests with
-    forwarding headers.
-    """
-    client = scope.get("client")
-    if not client:
-        return False
-    if any(_header_values(scope, name) for name in _FORWARDING_HEADERS):
-        return False
-    try:
-        return ipaddress.ip_address(str(client[0])).is_loopback
-    except ValueError:
-        return False
-
-
 def _templates(paths: Iterable[str]) -> tuple[re.Pattern[str], ...]:
     return tuple(compile_path(path)[0] for path in paths)
+
+
+def run_token_claims(scope: Scope) -> RunTokenClaims | None:
+    """Claims of the run token that authenticated this request, if any."""
+    state = scope.get("state") or {}
+    return state.get(RUN_TOKEN_STATE_KEY) if isinstance(state, dict) else None
+
+
+def _agent_run_principal(scope: Scope) -> AuthenticatedPrincipal | None:
+    """The run named by the path (or model-gateway header), proven by its token."""
+    from urllib.parse import unquote
+
+    from app.security.run_tokens import RunTokenError, token_from_authorization, verify_run_token
+
+    path = str(scope.get("path") or "")
+    match = _AGENT_RUN_PATH.match(path)
+    if match:
+        run_id = unquote(match.group(1))
+    else:
+        headers = _header_values(scope, b"x-omnix-agent-run-id")
+        run_id = headers[0] if len(headers) == 1 else ""
+    token = token_from_authorization(_header_values(scope, b"authorization"))
+    if not run_id or token is None:
+        return None
+    try:
+        claims = verify_run_token(token, run_id=run_id)
+    except RunTokenError:
+        return None
+    user_id = f"agent-run:{claims.run_id}"
+    context = TenantContext(
+        user_id=user_id,
+        workspace_id=claims.workspace_id,
+        membership_id=f"run:{claims.run_id}",
+        roles=frozenset({AGENT_RUN_ROLE}),
+    )
+    scope.setdefault("state", {})[RUN_TOKEN_STATE_KEY] = claims
+    return AuthenticatedPrincipal(user_id=user_id, context=context, auth_method="run_token")
 
 
 def _local_service_principal() -> AuthenticatedPrincipal:
@@ -141,12 +163,21 @@ class AuthenticationMiddleware:
             return "public"
         if path.startswith(INTERNAL_PREFIXES) or any(p.match(path) for p in internal):
             return "internal"
-        if _AGENT_RUNTIME_LOOPBACK.match(path):
-            return "agent_runtime"
         return "protected"
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] not in {"http", "websocket"}:
+            await self.app(scope, receive, send)
+            return
+        path = str(scope.get("path") or "/")
+        if _AGENT_RUNTIME_PATH.match(path):
+            # Agent processes authenticate with their run token whether or
+            # not sign-in is enforced (WP-4.6).
+            run_principal = _agent_run_principal(scope)
+            if run_principal is None:
+                await self._reject(scope, receive, send, 401, "run_token_required")
+                return
+            scope.setdefault("state", {})[PRINCIPAL_STATE_KEY] = run_principal
             await self.app(scope, receive, send)
             return
         authenticator = self._authenticator_or_none()
@@ -154,12 +185,8 @@ class AuthenticationMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path = str(scope.get("path") or "/")
         kind = self._classify(scope, path)
         if kind == "public":
-            await self.app(scope, receive, send)
-            return
-        if kind == "agent_runtime" and _direct_loopback_client(scope):
             await self.app(scope, receive, send)
             return
         if kind == "internal":

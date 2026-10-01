@@ -208,6 +208,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
+| `OMNIX_RUN_TOKEN_KEY` | string | — | security | Controls run token key for security. |
 | `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
 | `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |
 | `OMNIX_S3_ENDPOINT` | string | — | kernel | Controls s3 endpoint for kernel. |

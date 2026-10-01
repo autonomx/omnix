@@ -255,12 +255,14 @@ class PiAgentRuntime(_CorePiAgentRuntime):
         event_sink: Callable[[AgentEvent], None] | None = None,
         argv_builder: Callable[..., list[str]] = pi_rpc_argv,
         event_normalizer: Callable[..., AgentEvent | None] = normalize_pi_event,
+        run_token_issuer: Callable[[AgentRunSpec], str] | None = None,
     ) -> None:
         super().__init__(
             pi_path=pi_path,
             event_sink=event_sink,
             argv_builder=argv_builder,
             event_normalizer=event_normalizer,
+            run_token_issuer=run_token_issuer,
         )
 
     @staticmethod

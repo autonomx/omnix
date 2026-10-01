@@ -285,6 +285,7 @@ class AgentRunService:
         self.runtime = PiAgentRuntime(
             pi_path=pi_path or _env_str("OMNIX_PI_PATH", "pi"),
             event_sink=self._persist_runtime_event,
+            run_token_issuer=self._issue_run_token,
         )
         self.budgets = AgentBudgetManager(self.database, context=self.context)
         self._run_locks = RunLockRegistry()
@@ -292,6 +293,17 @@ class AgentRunService:
         self._supervisor_started = False
         self._supervisor_stop = threading.Event()
         self._supervisor_thread: threading.Thread | None = None
+
+    def _issue_run_token(self, spec: AgentRunSpec) -> str:
+        """Token the Pi process uses for the broker and model gateway (WP-4.6)."""
+        from app.security.run_tokens import capabilities_digest, issue_run_token
+
+        return issue_run_token(
+            run_id=spec.run_id,
+            workspace_id=self.context.workspace_id,
+            owner=self.worker_id,
+            caps_digest=capabilities_digest(spec.capabilities, spec.external_capabilities),
+        )
 
     def _run_lock(self, run_id: str) -> ContextManager[None]:
         return self._run_locks.hold(run_id)

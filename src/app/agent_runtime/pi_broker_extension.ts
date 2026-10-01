@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { runAuthorization, runTokenState } from "./pi_run_token.ts";
 
 const planningConfidence = Type.Union([
   Type.Literal("low"),
@@ -128,13 +129,15 @@ export default function (pi: ExtensionAPI) {
   // Approval identities stay in trusted extension state, outside the model's
   // parameters and results. The server binds each identity to this exact input.
   const pendingApprovals = new Map<string, string>();
+  // Take the run token out of the environment before any tool runs (WP-4.6).
+  runTokenState();
   if (!runId) return;
 
   const planningInspection = async (signal: AbortSignal): Promise<any | null> => {
     try {
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/inspect`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(baseUrl, runId) },
         body: JSON.stringify({ queries: [], paths: [] }),
         signal,
       });
@@ -277,7 +280,7 @@ export default function (pi: ExtensionAPI) {
 
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/${encodeURIComponent(action)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(baseUrl, runId) },
         body: JSON.stringify(
           action === "inspect"
             ? { queries: params.queries || [], paths: params.paths || [] }
@@ -324,7 +327,10 @@ export default function (pi: ExtensionAPI) {
       ],
       parameters: Type.Object({}),
       async execute(_toolCallId, _params, signal) {
-        const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/run-change-set`, { signal });
+        const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/run-change-set`, {
+          signal,
+          headers: { "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(baseUrl, runId) },
+        });
         let payload: any = {};
         try { payload = await response.json(); } catch { payload = { detail: `HTTP ${response.status}` }; }
         payload = agentVisiblePayload(payload);
@@ -371,7 +377,7 @@ export default function (pi: ExtensionAPI) {
       const approvalKey = canonicalInput({ capability_id: params.capability_id, input: params.input || {} });
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/capabilities/${params.capability_id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+        headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(baseUrl, runId) },
         body: JSON.stringify({ input: params.input || {}, approval_id: pendingApprovals.get(approvalKey), proposal_id: toolCallId }),
         signal,
       });

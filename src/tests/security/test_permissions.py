@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.runtime.tenant_context import TenantContext, pop_tenant, push_tenant
-from app.security.auth import PUBLIC_PATHS, PUBLIC_PREFIXES
+from app.security.auth import AGENT_RUNTIME_PATTERNS, PUBLIC_PATHS, PUBLIC_PREFIXES
 from app.security.permissions import (
     CATALOG,
     DEFAULT_ROLE_PERMISSIONS,
@@ -75,6 +75,11 @@ def test_every_route_requires_a_permission_unless_public(gateway) -> None:
             if method == "HEAD":
                 continue
             response = client.request(method, _concrete(path))
+            if any(re.fullmatch(pattern, _concrete(path)) for pattern in AGENT_RUNTIME_PATTERNS):
+                # Agent routes accept only run tokens, never a user session (WP-4.6).
+                assert response.status_code == 401, (method, path, response.status_code)
+                checked += 1
+                continue
             assert response.status_code == 403, (method, path, response.status_code)
             assert response.json()["detail"]["error"] == "permission_denied"
             checked += 1

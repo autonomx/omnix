@@ -5395,6 +5395,24 @@
         "title": "BrokerRunChangeSetResponse",
         "type": "object"
       },
+      "BrokerRunTokenResponse": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_at"
+        ],
+        "title": "BrokerRunTokenResponse",
+        "type": "object"
+      },
       "BrokerToolBudgetRequest": {
         "properties": {
           "tool_name": {
@@ -48288,6 +48306,49 @@
           }
         },
         "summary": "Read Agent Run Change Set",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/run-token": {
+      "post": {
+        "description": "A fresh token for a live run, requested with its current token (WP-4.6).",
+        "operationId": "renew_agent_run_token_api_agent_runs__run_id__run_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerRunTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Renew Agent Run Token",
         "tags": [
           "agent-runtime"
         ]

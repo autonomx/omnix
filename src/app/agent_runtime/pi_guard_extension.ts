@@ -1,11 +1,14 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import fs from "node:fs";
 import path from "node:path";
+import { runAuthorization, runTokenState } from "./pi_run_token.ts";
 
 const workspace = path.resolve(process.env.OMNIX_AGENT_WORKSPACE || process.cwd());
 const realWorkspace = fs.realpathSync(workspace);
 const runId = process.env.OMNIX_AGENT_RUN_ID || "";
 const brokerUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
+// Take the run token out of the environment before any tool runs (WP-4.6).
+runTokenState();
 const approvalPolicy = process.env.OMNIX_AGENT_APPROVAL_POLICY || "ask_sensitive";
 
 function stringList(name: string, fallback: string[]): string[] {
@@ -343,7 +346,7 @@ async function currentApprovedPlanRevisionId(): Promise<string | null | undefine
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/check`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
     });
     let payload: any = {};
     try {
@@ -480,7 +483,7 @@ async function authorizePlanningOperation(
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/authorize`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({
         tool_name: toolName,
         input,
@@ -526,7 +529,7 @@ async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<s
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/command-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({
         command,
         cwd: typeof cwd === "string" ? cwd : workspace,
@@ -557,7 +560,7 @@ async function authorizeWorkspaceTool(toolName: string, input: Record<string, un
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/workspace-authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({ tool_name: toolName, input, workspace_root: workspace }),
     });
     let payload: any = {};
@@ -584,7 +587,7 @@ async function authorizeTool(toolName: string): Promise<string | null> {
   try {
     const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/budget/tool`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime" },
+      headers: { "Content-Type": "application/json", "X-Omnix-Client": "agent-runtime", Authorization: await runAuthorization(brokerUrl, runId) },
       body: JSON.stringify({ tool_name: toolName }),
     });
     if (response.ok) return null;

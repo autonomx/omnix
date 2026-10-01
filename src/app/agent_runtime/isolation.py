@@ -7,6 +7,7 @@ operator; otherwise the launch fails closed.
 from __future__ import annotations
 
 from app.config.env import env_str, environment
+from app.security.run_tokens import TOKEN_ENVIRONMENT_KEY as RUN_TOKEN_ENVIRONMENT_KEY
 
 from dataclasses import dataclass
 import os
@@ -119,6 +120,11 @@ class DockerStrongIsolation:
         ]
         container_env = self._container_env(spec, env)
         for key, value in sorted(container_env.items()):
+            if key == RUN_TOKEN_ENVIRONMENT_KEY:
+                # Passed by name: docker reads the value from its own
+                # environment, so the token stays out of the process list.
+                command.extend(["--env", key])
+                continue
             command.extend(["--env", f"{key}={value}"])
         command.extend([str(self.image), *rewritten])
         return command
@@ -126,6 +132,8 @@ class DockerStrongIsolation:
     def launch(self, spec: AgentRunSpec, *, argv: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen[str]:
         command = self.build_command(spec, argv=argv, cwd=cwd, env=env)
         host_env = {"PATH": environment().get("PATH", ""), "SYSTEMROOT": environment().get("SYSTEMROOT", "")}
+        if RUN_TOKEN_ENVIRONMENT_KEY in env:
+            host_env[RUN_TOKEN_ENVIRONMENT_KEY] = env[RUN_TOKEN_ENVIRONMENT_KEY]
         return _popen(command, cwd=cwd, env=host_env)
 
     @staticmethod

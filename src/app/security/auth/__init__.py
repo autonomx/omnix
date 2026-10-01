@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from .middleware import (
-    AGENT_RUNTIME_LOOPBACK_PATTERNS,
+    AGENT_RUNTIME_PATTERNS,
     PRINCIPAL_STATE_KEY,
     PUBLIC_PATHS,
     PUBLIC_PREFIXES,
@@ -53,7 +53,7 @@ def bootstrap_authentication(service: AuthService, *, bind_host: str | None) -> 
 
 
 __all__ = [
-    "AGENT_RUNTIME_LOOPBACK_PATTERNS",
+    "AGENT_RUNTIME_PATTERNS",
     "AUTH_ENFORCED_WHEN_UNSET",
     "CSRF_COOKIE",
     "CSRF_HEADER",

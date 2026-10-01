@@ -795,3 +795,28 @@ def test_coding_prompt_treats_listed_governed_capabilities_as_already_issued() -
     assert "capabilities listed under `Issued governed external capabilities` are already issued" in prompt
     assert "invoke it through `omnix_capability`" in prompt
 
+
+
+def test_pi_session_launches_with_the_issued_run_token() -> None:
+    """The run token reaches Pi through its environment only (WP-4.6)."""
+    captured: dict[str, object] = {}
+
+    def factory(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs["env"]
+        return _IdleProcess()
+
+    spec = AgentRunSpec(
+        run_id="run-token",
+        task="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=None,
+    )
+    session = PiRpcSession(
+        spec, pi_path="pi", process_factory=factory, run_token_issuer=lambda issued: f"token-for-{issued.run_id}",
+    )
+    try:
+        assert captured["env"]["OMNIX_AGENT_RUN_TOKEN"] == "token-for-run-token"
+        assert "token-for-run-token" not in " ".join(captured["argv"])
+    finally:
+        session.close()

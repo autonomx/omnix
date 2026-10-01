@@ -2,7 +2,7 @@
 
 An approval is a decision by a principal: a user with the approval
 permission. Service and system identities (service tokens, worker contexts)
-and agent runs never approve, whatever roles they were given.
+and agent runs (run tokens) never approve, whatever roles they were given.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from app.config.env import env_str
 from app.runtime.tenant_context import current_tenant
 from app.security.permissions import has_permission
 
-NON_PRINCIPAL_ROLES = frozenset({"service", "system"})
+NON_PRINCIPAL_ROLES = frozenset({"service", "system", "agent_run"})
 RiskLevel = Literal["low", "medium", "high"]
 _RISK_ORDER: dict[str, int] = {"none": -1, "low": 0, "medium": 1, "high": 2}
 

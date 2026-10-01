@@ -453,6 +453,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-runs/{run_id}/run-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew Agent Run Token
+         * @description A fresh token for a live run, requested with its current token (WP-4.6).
+         */
+        post: operations["renew_agent_run_token_api_agent_runs__run_id__run_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-runs/{run_id}/task-revisions": {
         parameters: {
             query?: never;
@@ -11240,6 +11260,13 @@ export interface components {
             change_set: components["schemas"]["RunChangeSet"];
             /** Patch */
             patch: string;
+        };
+        /** BrokerRunTokenResponse */
+        BrokerRunTokenResponse: {
+            /** Expires At */
+            expires_at: number;
+            /** Token */
+            token: string;
         };
         /** BrokerToolBudgetRequest */
         BrokerToolBudgetRequest: {
@@ -29385,6 +29412,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BrokerRunChangeSetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_agent_run_token_api_agent_runs__run_id__run_token_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerRunTokenResponse"];
                 };
             };
             /** @description Validation Error */

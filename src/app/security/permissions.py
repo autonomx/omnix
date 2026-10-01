@@ -112,6 +112,9 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "service": frozenset({"internal:service"}),
     # Background system contexts never serve requests.
     "system": frozenset(),
+    # An agent process proven by its run token (WP-4.6): it may act on its
+    # own run through the broker and model gateway, never approve.
+    "agent_run": frozenset({"agent:read", "agent:run"}),
 }
 
 # Feature id -> (read permission, write permission).

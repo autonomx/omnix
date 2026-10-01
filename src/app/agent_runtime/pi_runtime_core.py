@@ -22,7 +22,12 @@ from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnaps
 from app.observability.agent_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
 from .isolation import launch_agent_process
-from app.runtime.process_environment import bounded_process_environment, normalize_windows_process_environment
+from app.runtime.process_environment import (
+    NEVER_FORWARDED_ENVIRONMENT_KEYS,
+    bounded_process_environment,
+    normalize_windows_process_environment,
+)
+from app.security.run_tokens import TOKEN_ENVIRONMENT_KEY as RUN_TOKEN_ENVIRONMENT_KEY
 
 
 class PiRuntimeError(RuntimeError):
@@ -130,6 +135,7 @@ def build_agent_environment(
         if (
             normalized
             and not normalized.startswith("OMNIX_AGENT_")
+            and normalized.upper() not in NEVER_FORWARDED_ENVIRONMENT_KEYS
             and normalized in source
         ):
             env[normalized] = str(source[normalized])
@@ -508,10 +514,12 @@ class PiRpcSession:
         process_factory: Callable[..., subprocess.Popen[str]] | None = None,
         argv_builder: Callable[..., list[str]] | None = None,
         event_normalizer: Callable[..., AgentEvent | None] | None = None,
+        run_token_issuer: Callable[[AgentRunSpec], str] | None = None,
     ) -> None:
         configure_agent_debug_logging()
         self.spec = spec
         self.on_event = on_event
+        self._run_token_issuer = run_token_issuer
         self._argv_builder = argv_builder or pi_rpc_argv
         self._event_normalizer = event_normalizer or normalize_pi_event
         self._events: deque[AgentEvent] = deque(maxlen=10_000)
@@ -545,6 +553,10 @@ class PiRpcSession:
                 cwd,
                 model_session_id=uuid.uuid4().hex,
             )
+            if self._run_token_issuer is not None:
+                # The extensions take it out of their environment before any
+                # tool runs (WP-4.6); it never appears in argv or logs.
+                env[RUN_TOKEN_ENVIRONMENT_KEY] = self._run_token_issuer(spec)
             argv = self._argv_builder(spec, pi_path=pi_path)
             log_agent_activity(
                 "pi.process.launch_requested",
@@ -1021,10 +1033,12 @@ class PiAgentRuntime(AgentRuntime):
         event_sink: Callable[[AgentEvent], None] | None = None,
         argv_builder: Callable[..., list[str]] | None = None,
         event_normalizer: Callable[..., AgentEvent | None] | None = None,
+        run_token_issuer: Callable[[AgentRunSpec], str] | None = None,
     ) -> None:
         configure_agent_debug_logging()
         self.pi_path = pi_path
         self.event_sink = event_sink
+        self.run_token_issuer = run_token_issuer
         self.argv_builder = argv_builder or pi_rpc_argv
         self.event_normalizer = event_normalizer or normalize_pi_event
         self._sessions: dict[str, PiRpcSession] = {}
@@ -1073,6 +1087,7 @@ class PiAgentRuntime(AgentRuntime):
                     on_event=self._on_event,
                     argv_builder=self.argv_builder,
                     event_normalizer=self.event_normalizer,
+                    run_token_issuer=self.run_token_issuer,
                 )
                 self._sessions[spec.run_id] = session
                 observed = self._snapshots.get(spec.run_id, snapshot)

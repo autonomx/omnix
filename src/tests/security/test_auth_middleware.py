@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.security.auth import (
-    AGENT_RUNTIME_LOOPBACK_PATTERNS,
+    AGENT_RUNTIME_PATTERNS,
     PUBLIC_PATHS,
     PUBLIC_PREFIXES,
     resolve_auth_settings,
@@ -66,7 +66,9 @@ def test_every_non_public_route_requires_authentication(gateway) -> None:
                 continue
             response = client.request(method, _concrete(path))
             assert response.status_code == 401, (method, path, response.status_code)
-            assert response.json() == {"detail": "authentication_required"}
+            agent_route = any(re.fullmatch(pattern, _concrete(path)) for pattern in AGENT_RUNTIME_PATTERNS)
+            expected = "run_token_required" if agent_route else "authentication_required"
+            assert response.json() == {"detail": expected}
             checked += 1
     # The gateway exposes hundreds of routes; a tiny count means enumeration broke.
     assert checked > 300
@@ -151,17 +153,23 @@ def test_service_token_is_accepted_only_on_internal_routes(gateway, monkeypatch)
     assert wrong.post("/internal/jobs/__probe__").status_code == 401
 
 
-def test_agent_runtime_routes_are_loopback_only_until_run_tokens(gateway) -> None:
+def test_agent_runtime_routes_require_a_run_token_for_that_run(gateway) -> None:
+    from app.security.run_tokens import issue_run_token
+
     app, _ = gateway
     path = "/api/agent-model/v1/__probe__"
-    assert _client(app, client=REMOTE).get(path).status_code == 401
-    assert _client(app, client=LOOPBACK).get(path).status_code == 404
-    # Loopback does not open any other route.
-    assert _client(app, client=LOOPBACK).get(PROBE).status_code == 401
-    # A reverse proxy on this host makes remote clients look like loopback.
-    for header in ("X-Forwarded-For", "Forwarded", "X-Real-IP"):
-        proxied = _client(app, client=LOOPBACK, **{header: "203.0.113.9"})
-        assert proxied.get(path).status_code == 401, header
+    token = issue_run_token(run_id="run-1", workspace_id="workspace:local", owner="worker", caps_digest="d")
+    authorization = {"Authorization": f"OmnixRun {token}"}
+    # Loopback alone and a bare run id header no longer open the route.
+    assert _client(app, client=LOOPBACK).get(path).status_code == 401
+    assert _client(app, client=LOOPBACK, **{"X-Omnix-Agent-Run-Id": "run-1"}).get(path).status_code == 401
+    # The token of the named run is accepted from any address (the probe route is absent).
+    assert _client(app, **{"X-Omnix-Agent-Run-Id": "run-1"}, **authorization).get(path).status_code == 404
+    # Another run's id, in the header or the path, is rejected.
+    assert _client(app, **{"X-Omnix-Agent-Run-Id": "run-2"}, **authorization).get(path).status_code == 401
+    assert _client(app, **authorization).post("/api/agent-runs/run-2/budget/tool", json={}).status_code == 401
+    # A run token opens no other route.
+    assert _client(app, **authorization).get(PROBE).status_code == 401
 
 
 def test_cors_preflight_is_answered_before_authentication(gateway) -> None:
@@ -175,9 +183,9 @@ def test_cors_preflight_is_answered_before_authentication(gateway) -> None:
     assert response.headers["access-control-allow-origin"] == origin
 
 
-def test_agent_runtime_exemption_list_is_pinned() -> None:
-    # Shrinks to nothing when WP-4.6 run-scoped tokens land; must never grow.
-    assert AGENT_RUNTIME_LOOPBACK_PATTERNS == (
+def test_agent_runtime_route_list_is_pinned() -> None:
+    # Routes that accept run tokens instead of sessions (WP-4.6); must not grow silently.
+    assert AGENT_RUNTIME_PATTERNS == (
         r"/api/agent-model/v1/.+",
         r"/api/agent-runs/[^/]+/planning/[a-z_-]+",
         r"/api/agent-runs/[^/]+/run-change-set",
@@ -185,6 +193,7 @@ def test_agent_runtime_exemption_list_is_pinned() -> None:
         r"/api/agent-runs/[^/]+/command-authorization",
         r"/api/agent-runs/[^/]+/workspace-authorization",
         r"/api/agent-runs/[^/]+/budget/tool",
+        r"/api/agent-runs/[^/]+/run-token",
     )
 
 

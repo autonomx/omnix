@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import secrets
 import signal
 import socket
 import subprocess
@@ -54,6 +55,16 @@ def start_local_job_worker(cwd: Path, env: Mapping[str, str] | None = None):
     )
     print(f"Job worker started: pid={child.pid}", flush=True)
     return child
+
+
+def ensure_shared_run_token_key(env) -> None:
+    """Replicas must agree on the agent run-token key (WP-4.6).
+
+    The launcher's service token already derives one. Without it, give all
+    children of this cluster one generated key.
+    """
+    if not env.get("OMNIX_RUN_TOKEN_KEY") and not env.get("OMNIX_SERVICE_TOKEN"):
+        env["OMNIX_RUN_TOKEN_KEY"] = secrets.token_urlsafe(32)
 
 
 def child_environment(role: str) -> dict[str, str]:
@@ -121,6 +132,7 @@ def serve_cluster(args, count: int) -> int:
         if signum is not None:
             previous[signum] = signal.signal(signum, lambda *_: stopping.set())
     runner = Path(__file__).with_name("run_omnix_gateway.py")
+    ensure_shared_run_token_key(os.environ)
     try:
         job_worker = start_local_job_worker(runner.parent.parent, os.environ)
         if job_worker is not None:

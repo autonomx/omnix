@@ -614,6 +614,22 @@ with sign-in on.
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.
 
+## Agent run tokens
+
+An agent's Pi process talks to the broker and the model gateway with a token
+that belongs to its run (`Authorization: OmnixRun <token>`). The token names
+the run, its workspace and the process that owns it, lasts 15 minutes and is
+renewed while the run is active. It stops working when the run finishes, its
+capabilities change or another process takes the run over. A run id alone,
+or a signed-in browser session, is refused on these routes. Pi's extensions
+remove the token from their environment before any tool runs, so shell
+commands never see it.
+
+Every Omnix process of an installation must share the signing key. The
+launcher's service token provides it; otherwise set `OMNIX_RUN_TOKEN_KEY` (at
+least 32 characters) on every gateway and worker. `scripts/gateway_cluster.py`
+generates one shared key for its replicas when neither is set.
+
 ## Agent request ceilings
 
 Public agent-run requests may tighten the selected profile's approval policy;

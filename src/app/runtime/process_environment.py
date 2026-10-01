@@ -7,6 +7,14 @@ import os
 import re
 
 
+# Credentials no child process inherits from Omnix, whatever an allowlist
+# says (WP-4.6). The Pi process gets its run token explicitly.
+NEVER_FORWARDED_ENVIRONMENT_KEYS = frozenset({
+    "OMNIX_AGENT_RUN_TOKEN",
+    "OMNIX_RUN_TOKEN_KEY",
+    "OMNIX_SERVICE_TOKEN",
+})
+
 _WINDOWS_ENV_REFERENCE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:$")
 
@@ -165,9 +173,14 @@ def bounded_process_environment(
     is_windows = _is_windows_environment(source) if windows is None else bool(windows)
     environment: dict[str, str] = {}
     for key in keys:
+        if str(key).upper() in NEVER_FORWARDED_ENVIRONMENT_KEYS:
+            continue
         value = _lookup(source, str(key), case_insensitive=is_windows)
         if value:
             environment[str(key)] = value
     if overrides:
-        environment.update({str(key): str(value) for key, value in overrides.items()})
+        environment.update({
+            str(key): str(value) for key, value in overrides.items()
+            if str(key).upper() not in NEVER_FORWARDED_ENVIRONMENT_KEYS
+        })
     return normalize_windows_process_environment(environment, windows=is_windows)

@@ -126,3 +126,16 @@ def test_private_shutdown_reader_does_not_block_numpy_initialization():
         child.stdin.close()
         child.stdout.close()
         child.stderr.close()
+
+
+def test_cluster_children_share_one_run_token_key() -> None:
+    ensure_shared_run_token_key = cluster["ensure_shared_run_token_key"]
+    env: dict[str, str] = {}
+    ensure_shared_run_token_key(env)
+    generated = env["OMNIX_RUN_TOKEN_KEY"]
+    assert len(generated) >= 32
+    ensure_shared_run_token_key(env)
+    assert env["OMNIX_RUN_TOKEN_KEY"] == generated
+    launcher = {"OMNIX_SERVICE_TOKEN": "s" * 43}
+    ensure_shared_run_token_key(launcher)
+    assert "OMNIX_RUN_TOKEN_KEY" not in launcher
