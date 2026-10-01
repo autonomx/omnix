@@ -9,6 +9,7 @@ from __future__ import annotations
 from app.config.env import environment_copy as _process_environment
 
 import atexit
+from contextlib import contextmanager
 from collections import deque
 import hashlib
 import json
@@ -24,6 +25,7 @@ import time
 from typing import Any, Iterator, Optional, Union
 
 from .base import (
+    current_turn_owner,
     BaseProvider,
     ChatMessage,
     ChatResponse,
@@ -100,6 +102,10 @@ class ChatGPTCodexProvider(BaseProvider):
         self._request_id = 0
         self._threads: dict[str, dict[str, str]] = {}
         self._pending_dynamic_calls: dict[str, dict[str, Any]] = {}
+        # Turns are serialised; a cancel for a job that is still waiting is
+        # recorded instead of killing the turn another job is running.
+        self._active_owner: str | None = None
+        self._cancelled_owners: deque[str] = deque(maxlen=64)
         self._closed = False
         super().__init__(config)
         atexit.register(self.close)
@@ -431,6 +437,7 @@ class ChatGPTCodexProvider(BaseProvider):
         effort = str(kwargs.get("reasoning_effort") or self.reasoning_effort).strip()
         fast_mode = bool(kwargs.get("fast_mode", self.fast_mode))
         conversation_id = str(kwargs.get("conversation_id") or "").strip() or None
+        owner = current_turn_owner()
         tools = self._tool_definitions(kwargs.get("tools"))
         request_timeout = self._request_timeout_seconds(
             kwargs.get("request_timeout_seconds")
@@ -462,6 +469,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 output_schema=_schema_from_response_format(
                     kwargs.get("response_format")
                 ),
+                owner=owner,
             )
             if stream:
                 def traced_stream() -> Iterator[ChatResponse]:
@@ -511,6 +519,7 @@ class ChatGPTCodexProvider(BaseProvider):
         tools: list[dict[str, Any]],
         request_timeout_seconds: float,
         output_schema: dict[str, Any] | None,
+        owner: str | None = None,
     ) -> Iterator[ChatResponse]:
         deadline_at = time.monotonic() + request_timeout_seconds
         system_instructions = self._system_instructions(messages)
@@ -518,7 +527,7 @@ class ChatGPTCodexProvider(BaseProvider):
         tool_fingerprint = hashlib.sha256(
             json.dumps(tools, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
-        with self._lock:
+        with self._lock, self._owned_turn(owner):
             self._ensure_app_server()
             thread_id: str | None = None
             pending = self._pending_dynamic_calls.pop(conversation_id, None) if conversation_id else None
@@ -1220,9 +1229,27 @@ class ChatGPTCodexProvider(BaseProvider):
         self._threads.clear()
         self._pending_dynamic_calls.clear()
 
-    def cancel_active_request(self) -> bool:
-        """Interrupt the current Codex turn without permanently closing the provider."""
+    @contextmanager
+    def _owned_turn(self, owner: str | None) -> Iterator[None]:
+        if owner is not None and owner in self._cancelled_owners:
+            self._cancelled_owners.remove(owner)
+            raise ConnectionError("Codex turn was cancelled before it started")
+        self._active_owner = owner
+        try:
+            yield
+        finally:
+            self._active_owner = None
 
+    def cancel_active_request(self, owner: str | None = None) -> bool:
+        """Interrupt a Codex turn without permanently closing the provider.
+
+        With ``owner``, only that job's turn is interrupted: a job still
+        waiting for the provider is marked so its turn ends as it starts.
+        """
+        if owner is not None and owner != self._active_owner:
+            self._cancelled_owners.append(owner)
+            if owner != self._active_owner:  # it may have started meanwhile
+                return True
         process = self._process
         if process is None or process.poll() is not None:
             return False

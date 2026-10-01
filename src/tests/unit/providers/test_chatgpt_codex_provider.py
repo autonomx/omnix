@@ -5,6 +5,8 @@ import io
 import subprocess
 from types import SimpleNamespace
 
+import pytest
+
 from app.providers import ChatGPTCodexProvider, ChatMessage, ProviderConfig, ProviderRegistry
 import app.providers.chatgpt_codex_provider as codex_module
 
@@ -700,3 +702,55 @@ def test_fresh_thread_recovery_marks_old_messages_as_history():
     assert "USER: First question" in prompt
     assert "ASSISTANT: First answer" in prompt
     assert prompt.endswith("USER: Second question")
+
+
+def test_cancelling_a_waiting_job_leaves_the_running_turn_alone():
+    class LiveProcess:
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+    provider = _provider()
+    process = LiveProcess()
+    provider._process = process
+    provider._active_owner = "job-a"  # job A's turn is running
+    try:
+        assert provider.cancel_active_request(owner="job-b") is True
+        assert process.terminated is False
+
+        with pytest.raises(codex_module.ConnectionError, match="cancelled before it started"):
+            with provider._owned_turn("job-b"):
+                pass
+        assert "job-b" not in provider._cancelled_owners
+
+        assert provider.cancel_active_request(owner="job-a") is True
+        assert process.terminated is True
+    finally:
+        provider._process = None
+        provider._active_owner = None
+        provider.close()
+
+
+def test_generation_names_its_job_when_interrupting_a_provider():
+    from app.chat import generation_jobs
+
+    calls: list[object] = []
+
+    class OwnerAwareProvider:
+        def cancel_active_request(self, owner=None):
+            calls.append(owner)
+            return True
+
+    generation_jobs._register_active_chat_provider("job-7", OwnerAwareProvider())
+    try:
+        assert generation_jobs._interrupt_active_chat_provider("job-7") is True
+    finally:
+        generation_jobs._drop_active_chat_provider("job-7")
+    assert calls == ["job-7"]

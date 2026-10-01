@@ -6,11 +6,31 @@ along with standardized data structures for requests and responses.
 """
 
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 from app.runtime.http_client import HttpPolicy, PooledHttpClient
+
+
+# The job a provider call runs for (WP-7.2), so a cancel aimed at one job
+# cannot interrupt another job's turn on a shared provider.
+_TURN_OWNER: ContextVar[Optional[str]] = ContextVar("omnix_provider_turn_owner", default=None)
+
+
+@contextmanager
+def provider_turn_owner(owner: Optional[str]) -> Iterator[None]:
+    token = _TURN_OWNER.set(owner)
+    try:
+        yield
+    finally:
+        _TURN_OWNER.reset(token)
+
+
+def current_turn_owner() -> Optional[str]:
+    return _TURN_OWNER.get()
 
 
 class ProviderCapability(Enum):
@@ -294,8 +314,8 @@ class BaseProvider(ABC):
         """Check if provider supports streaming."""
         return ProviderCapability.STREAMING in self.get_capabilities()
 
-    def cancel_active_request(self) -> bool:
-        """Best-effort interruption hook for an in-flight provider request."""
+    def cancel_active_request(self, owner: Optional[str] = None) -> bool:
+        """Best-effort interruption of an in-flight request; ``owner`` names the job's turn."""
         return False
 
     def requires_api_key(self) -> bool:

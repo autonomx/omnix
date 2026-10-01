@@ -1,6 +1,7 @@
 """Background execution for accepted Chat generation jobs."""
 from __future__ import annotations
 
+import inspect
 import logging
 import queue
 import threading
@@ -15,6 +16,7 @@ from weakref import WeakValueDictionary
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
 from app.persistence.device_permits import device_permit_slot
+from app.providers.base import provider_turn_owner
 
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
@@ -246,6 +248,9 @@ def _interrupt_active_chat_provider(job_id: str) -> bool:
     if not callable(interrupt):
         return False
     try:
+        # Name the job so a shared provider interrupts only this job's turn.
+        if "owner" in inspect.signature(interrupt).parameters:
+            return bool(interrupt(owner=job_id))
         return bool(interrupt())
     except Exception:
         logger.warning("Could not interrupt Chat provider for job %s", job_id, exc_info=True)
@@ -592,7 +597,7 @@ def _generate_reply_with_interrupt(
 
     def invoke() -> None:
         try:
-            with _chat_provider_slot(provider_id):
+            with _chat_provider_slot(provider_id), provider_turn_owner(job.id):
                 result["value"] = _generate_reply(
                     chat_store,
                     session,
