@@ -14,6 +14,9 @@ from .rpg_repository import canonical_json
 from app.persistence.tenant import TenantContext
 
 
+# RPG is being retired; reads stay bounded until it is removed (WP-5.5).
+MAX_ROWS_PER_READ = 10_000
+
 class NpcSpatialRevisionConflict(RevisionConflict):
     pass
 
@@ -306,8 +309,8 @@ class PostgresRpgNpcSpatialRepository:
         rows = self.connection.execute(
             f"SELECT {_GOAL_COLUMNS} FROM omnix_rpg_npc_spatial_goals "
             "WHERE workspace_id = %s AND campaign_id = %s AND status = 'active' "
-            "ORDER BY actor_id, priority DESC, issued_tick, goal_id",
-            (context.workspace_id, campaign_id),
+            "ORDER BY actor_id, priority DESC, issued_tick, goal_id LIMIT %s",
+            (context.workspace_id, campaign_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [_goal_row(row) for row in rows]
 
@@ -447,8 +450,8 @@ class PostgresRpgNpcSpatialRepository:
         rows = self.connection.execute(
             f"SELECT {_ROUTINE_COLUMNS} FROM omnix_rpg_npc_spatial_routines "
             "WHERE workspace_id = %s AND campaign_id = %s AND enabled = TRUE "
-            "AND next_due_tick <= %s ORDER BY routine_id FOR UPDATE",
-            (context.workspace_id, campaign_id, int(world_tick)),
+            "AND next_due_tick <= %s ORDER BY routine_id LIMIT %s FOR UPDATE",
+            (context.workspace_id, campaign_id, int(world_tick), MAX_ROWS_PER_READ),
         ).fetchall()
         return [_routine_row(row) for row in rows]
 
@@ -496,8 +499,8 @@ class PostgresRpgNpcSpatialRepository:
             "map_definition_revision, definition_hash, map_state_revision, "
             "applied_event_sequence, snapshot_jsonb, created_at, updated_at "
             "FROM omnix_rpg_campaign_map_instances WHERE workspace_id = %s "
-            "AND campaign_id = %s ORDER BY map_instance_id FOR UPDATE",
-            (context.workspace_id, campaign_id),
+            "AND campaign_id = %s ORDER BY map_instance_id LIMIT %s FOR UPDATE",
+            (context.workspace_id, campaign_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [
             {

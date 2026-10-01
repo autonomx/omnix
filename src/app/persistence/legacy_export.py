@@ -37,7 +37,11 @@ def _rows(path: Path | None, table: str) -> list[dict[str, Any]]:
         ).fetchone()
         if exists is None:
             return []
-        return [dict(row) for row in connection.execute(f'SELECT * FROM "{table}"').fetchall()]
+        cursor = connection.execute(f'SELECT * FROM "{table}"')
+        rows: list[dict[str, Any]] = []
+        while batch := cursor.fetchmany(1000):
+            rows.extend(dict(row) for row in batch)
+        return rows
     finally:
         connection.close()
 

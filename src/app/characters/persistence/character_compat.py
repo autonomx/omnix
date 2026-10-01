@@ -21,6 +21,9 @@ from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
+# Segments of one session returned by a read; the newest are kept.
+MAX_SESSION_SEGMENTS = 1000
+
 
 class PostgresCharacterRepositoryAdapter:
     context = RequestTenant()
@@ -207,15 +210,18 @@ class PostgresCharacterRepositoryAdapter:
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
-                SELECT id, session_id, interaction_mode, character_id,
-                       character_version, transcript_policy, read_memory,
-                       write_memory, shared_memory_access, carryover_summary,
-                       started_at, ended_at
-                  FROM omnix_conversation_segments
-                 WHERE workspace_id = %s AND session_id = %s
-                 ORDER BY started_at ASC, id ASC
+                SELECT * FROM (
+                    SELECT id, session_id, interaction_mode, character_id,
+                           character_version, transcript_policy, read_memory,
+                           write_memory, shared_memory_access, carryover_summary,
+                           started_at, ended_at
+                      FROM omnix_conversation_segments
+                     WHERE workspace_id = %s AND session_id = %s
+                     ORDER BY started_at DESC, id DESC LIMIT %s
+                ) AS newest ORDER BY started_at ASC, id ASC
                 """,
-                (self.context.workspace_id, session_id),
+                # The newest segments of a session, oldest first (WP-5.5).
+                (self.context.workspace_id, session_id, MAX_SESSION_SEGMENTS),
             ).fetchall()
         return [self._segment(row) for row in rows]
 

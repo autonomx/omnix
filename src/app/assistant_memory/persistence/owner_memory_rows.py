@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from app.memory_contracts import (
+    MAX_MEMORY_SNAPSHOT_ITEMS,
     MemoryCandidate,
     MemoryRecord,
     MemorySnapshot,
@@ -54,8 +55,8 @@ class OwnerMemoryRowSupport:
         return connection.execute(
             "SELECT memory_record_id, record_revision, frozen_content, revoked_at "
             "FROM omnix_memory_snapshot_items "
-            "WHERE snapshot_id = %s ORDER BY position ASC",
-            (snapshot_id,),
+            "WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s",
+            (snapshot_id, MAX_MEMORY_SNAPSHOT_ITEMS),
         ).fetchall()
 
     @staticmethod

@@ -109,6 +109,11 @@ class MemorySnapshotItem(BaseModel):
     revoked_at: str | None = None
 
 
+# Snapshots are chosen by token budget; this bound keeps every read of a
+# snapshot's items bounded (WP-5.5).
+MAX_MEMORY_SNAPSHOT_ITEMS = 5000
+
+
 class MemorySnapshot(BaseModel):
     """Stable per-session, per-owner memory selection."""
 
@@ -118,7 +123,7 @@ class MemorySnapshot(BaseModel):
     owner_type: MemoryOwnerType = "system"
     owner_id: str = Field(default=SYSTEM_MEMORY_OWNER_ID, min_length=1, max_length=160)
     revision: int = Field(default=1, ge=1)
-    items: list[MemorySnapshotItem] = Field(default_factory=list)
+    items: list[MemorySnapshotItem] = Field(default_factory=list, max_length=MAX_MEMORY_SNAPSHOT_ITEMS)
     token_estimate: int = Field(default=0, ge=0)
     created_at: str
     refreshed_at: str | None = None

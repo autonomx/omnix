@@ -7,6 +7,9 @@ from .rpg_repository import canonical_json
 from app.persistence.tenant import TenantContext
 
 
+# RPG is being retired; reads stay bounded until it is removed (WP-5.5).
+MAX_ROWS_PER_READ = 10_000
+
 class MapInstanceRevisionConflict(RevisionConflict):
     pass
 
@@ -238,8 +241,8 @@ class PostgresRpgMapInstanceRepository:
         rows = self.connection.execute(
             "SELECT payload_jsonb FROM omnix_rpg_campaign_map_events "
             "WHERE workspace_id = %s AND map_instance_id = %s "
-            "AND event_sequence > %s ORDER BY event_sequence",
-            (context.workspace_id, map_instance_id, int(after_sequence)),
+            "AND event_sequence > %s ORDER BY event_sequence LIMIT %s",
+            (context.workspace_id, map_instance_id, int(after_sequence), MAX_ROWS_PER_READ),
         ).fetchall()
         return [dict(row[0]) for row in rows]
 

@@ -63,6 +63,9 @@ def _expired_retry_delay(job: dict[str, Any]) -> int:
         return 1
 
 
+# Leases released per recovery pass (WP-5.5).
+EXPIRED_LEASE_BATCH = 200
+
 _JOB_COLUMNS = """
 id, workspace_id, owner_user_id, module, job_type, status, resource_class,
 priority, input_payload, output_refs, progress, error, attempt_count,
@@ -177,8 +180,10 @@ class PostgresJobRepository:
                    AND status IN ('leased', 'running', 'cancel_requested')
                    AND lease_expires_at <= clock_timestamp()
                  ORDER BY lease_expires_at, id
+                 LIMIT %s
                  FOR UPDATE SKIP LOCKED""",
-            (context.workspace_id, job_id, job_id, job_type, job_type),
+            # The recovery task runs every few seconds; the rest follow then.
+            (context.workspace_id, job_id, job_id, job_type, job_type, EXPIRED_LEASE_BATCH),
         ).fetchall()
         results: list[dict[str, Any]] = []
         for expired_row in expired:

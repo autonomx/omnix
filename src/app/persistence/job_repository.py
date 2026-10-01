@@ -54,6 +54,8 @@ NOT EXISTS (
 )
 """
 _UNSET = object()
+# A per-job event read returns at most this many of the newest events.
+MAX_JOB_EVENTS_PER_READ = 1000
 _JOB_ORDERINGS = {
     "created_asc": "jobs.created_at ASC, jobs.id ASC",
     "created_desc": "jobs.created_at DESC, jobs.id DESC",
@@ -553,13 +555,18 @@ class PostgresJobRepository(_BaseJobRepository):
             )
         return result
 
-    def list_job_events(self, context: TenantContext, *, job_id: str) -> list[Any]:
+    def list_job_events(
+        self, context: TenantContext, *, job_id: str, limit: int = MAX_JOB_EVENTS_PER_READ,
+    ) -> list[Any]:
+        """The job's newest ``limit`` events, oldest first."""
         return self.connection.execute(
-            """SELECT id, job_id, event_type, payload, created_at
-                 FROM omnix_job_events
-                WHERE workspace_id = %s AND job_id = %s
-                ORDER BY id ASC""",
-            (context.workspace_id, job_id),
+            """SELECT id, job_id, event_type, payload, created_at FROM (
+                   SELECT id, job_id, event_type, payload, created_at
+                     FROM omnix_job_events
+                    WHERE workspace_id = %s AND job_id = %s
+                    ORDER BY id DESC LIMIT %s
+               ) AS newest ORDER BY id ASC""",
+            (context.workspace_id, job_id, max(1, min(int(limit), MAX_JOB_EVENTS_PER_READ))),
         ).fetchall()
 
     def count_job_events(self) -> int:

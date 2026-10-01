@@ -14512,7 +14512,7 @@
     "unbounded_fetchall": {
       "direction": "lower",
       "target": 0,
-      "value": 30
+      "value": 0
     },
     "unbounded_module_caches": {
       "direction": "lower",

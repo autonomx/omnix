@@ -27,18 +27,20 @@ class PostgresOwnerAwareMemoryRepository(
         owner_id: str,
     ) -> tuple[int, int, int]:
         with self.database.transaction() as connection:
-            snapshot_rows = connection.execute(
-                "SELECT id FROM omnix_memory_snapshots "
-                "WHERE workspace_id = %s AND owner_type = %s AND owner_id = %s",
-                (self.workspace_id, owner_type, owner_id),
-            ).fetchall()
-            snapshot_ids = [str(row[0]) for row in snapshot_rows]
-            if snapshot_ids:
+            snapshot_count = int(
                 connection.execute(
-                    "UPDATE omnix_chat_sessions SET memory_snapshot_id = NULL "
-                    "WHERE workspace_id = %s AND memory_snapshot_id = ANY(%s)",
-                    (self.workspace_id, snapshot_ids),
-                )
+                    "SELECT COUNT(*) FROM omnix_memory_snapshots "
+                    "WHERE workspace_id = %s AND owner_type = %s AND owner_id = %s",
+                    (self.workspace_id, owner_type, owner_id),
+                ).fetchone()[0]
+            )
+            connection.execute(
+                "UPDATE omnix_chat_sessions SET memory_snapshot_id = NULL "
+                "WHERE workspace_id = %s AND memory_snapshot_id IN ("
+                "SELECT id FROM omnix_memory_snapshots "
+                "WHERE workspace_id = %s AND owner_type = %s AND owner_id = %s)",
+                (self.workspace_id, self.workspace_id, owner_type, owner_id),
+            )
             candidate_count = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM omnix_memory_candidates "
@@ -78,10 +80,10 @@ class PostgresOwnerAwareMemoryRepository(
                 {
                     "record_count": record_count,
                     "candidate_count": candidate_count,
-                    "snapshot_count": len(snapshot_ids),
+                    "snapshot_count": snapshot_count,
                 },
             )
-        return record_count, candidate_count, len(snapshot_ids)
+        return record_count, candidate_count, snapshot_count
 
 
 __all__ = ["PostgresOwnerAwareMemoryRepository"]

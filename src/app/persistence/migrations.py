@@ -28,6 +28,8 @@ _MIGRATION_HEADER = re.compile(
     re.IGNORECASE,
 )
 
+# Far above the number of migration files; keeps the history read bounded.
+MAX_APPLIED_MIGRATIONS = 100_000
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
@@ -126,6 +128,7 @@ def _has_metadata_columns(connection: Any) -> bool:
          WHERE table_schema = current_schema()
            AND table_name = 'omnix_schema_migrations'
            AND column_name IN ('phase', 'transactional')
+         LIMIT 2
         """
     ).fetchall()
     return {str(row[0]) for row in rows} == {"phase", "transactional"}
@@ -138,7 +141,8 @@ def _applied(connection: Any, *, initialize_table: bool = True) -> dict[str, dic
     if _has_metadata_columns(connection):
         rows = connection.execute(
             "SELECT version, checksum, applied_at, execution_ms, phase, transactional "
-            "FROM omnix_schema_migrations ORDER BY version"
+            "FROM omnix_schema_migrations ORDER BY version LIMIT %s",
+            (MAX_APPLIED_MIGRATIONS,),
         ).fetchall()
         return {
             str(row[0]): {
@@ -152,7 +156,8 @@ def _applied(connection: Any, *, initialize_table: bool = True) -> dict[str, dic
         }
     rows = connection.execute(
         "SELECT version, checksum, applied_at, execution_ms "
-        "FROM omnix_schema_migrations ORDER BY version"
+        "FROM omnix_schema_migrations ORDER BY version LIMIT %s",
+        (MAX_APPLIED_MIGRATIONS,),
     ).fetchall()
     return {
         str(row[0]): {

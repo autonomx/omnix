@@ -5,6 +5,9 @@ from typing import Any
 from app.persistence.tenant import TenantContext
 
 
+# RPG is being retired; reads stay bounded until it is removed (WP-5.5).
+MAX_ROWS_PER_READ = 10_000
+
 class PostgresRpgWorldLibraryRepository:
     """Read models for the Worlds & Campaigns authoring library."""
 
@@ -97,8 +100,9 @@ class PostgresRpgWorldLibraryRepository:
               FROM omnix_rpg_world_revisions
              WHERE workspace_id = %s AND world_id = %s
              ORDER BY revision DESC
+              LIMIT %s
             """,
-            (context.workspace_id, world_id),
+            (context.workspace_id, world_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [
             {
@@ -121,8 +125,9 @@ class PostgresRpgWorldLibraryRepository:
               FROM omnix_rpg_world_releases
              WHERE workspace_id = %s AND world_id = %s
              ORDER BY world_revision DESC, release DESC
+              LIMIT %s
             """,
-            (context.workspace_id, world_id),
+            (context.workspace_id, world_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [
             {
@@ -147,8 +152,9 @@ class PostgresRpgWorldLibraryRepository:
               FROM omnix_rpg_scenario_revisions
              WHERE workspace_id = %s AND scenario_id = %s
              ORDER BY revision DESC
+              LIMIT %s
             """,
-            (context.workspace_id, scenario_id),
+            (context.workspace_id, scenario_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [
             {
@@ -175,8 +181,9 @@ class PostgresRpgWorldLibraryRepository:
               FROM omnix_rpg_world_topics
              WHERE workspace_id = %s AND world_id = %s
              ORDER BY topic_id
+              LIMIT %s
             """,
-            (context.workspace_id, world_id),
+            (context.workspace_id, world_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [
             {

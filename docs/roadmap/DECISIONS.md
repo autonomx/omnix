@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.5 | Reads that must see every row (backup capture and verification) page by keyset in batches of 1,000; reads of naturally small sets (applied migrations, required constraints, runtime nodes, import counts) get explicit limits far above their size. | A cap on a backup manifest would silently drop assets; a keyset loop keeps each query bounded without losing rows. |
+| 2026-10-01 | WP-5.5 | Per-job events and per-session segments return the newest 1,000, oldest first. | These reads are diagnostic views; the newest entries are the ones a caller acts on, and the full event stream stays available through `/events`. |
 | 2026-10-01 | WP-5.5 | The pagination helpers live in `app.runtime.pagination`, not `app.persistence`. | `app.persistence` already imports `app.assets`; asset paging importing persistence would create a package cycle (AL002). Both already depend on `app.runtime`, which holds the store contracts. |
 | 2026-10-01 | WP-5.5 | `/api/assets` keeps the `assets` field and adds `next_cursor`/`has_more`; the web client's `listAssets()` follows cursors so existing screens see every asset. | Backward compatible for clients that read `assets`; moving each screen to incremental loading is a UI change for later. |
 | 2026-10-01 | WP-5.3 | Coverage is measured per aggregate type (agent run, task-graph run, workflow run), not per event type. | Run event types are open-ended (each runtime step names its own); consumers subscribe to a run's whole stream, so the aggregate type is the unit that can be left without a consumer. |

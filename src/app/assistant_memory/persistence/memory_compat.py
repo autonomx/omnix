@@ -6,6 +6,7 @@ from typing import Any
 from app.memory_contracts import (
     MemoryCandidate,
     MemoryRecord,
+    MAX_MEMORY_SNAPSHOT_ITEMS,
     MemorySnapshot,
     MemorySnapshotItem,
 )
@@ -324,9 +325,9 @@ class PostgresMemoryRepositoryAdapter:
                 """
                 SELECT memory_record_id, record_revision, position
                   FROM omnix_memory_snapshot_items
-                 WHERE snapshot_id = %s ORDER BY position ASC
+                 WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
                 """,
-                (snapshot_id,),
+                (snapshot_id, MAX_MEMORY_SNAPSHOT_ITEMS),
             ).fetchall()
         return self._snapshot(row, items)
 
@@ -366,9 +367,9 @@ class PostgresMemoryRepositoryAdapter:
                     """
                     SELECT memory_record_id, record_revision, position
                       FROM omnix_memory_snapshot_items
-                     WHERE snapshot_id = %s ORDER BY position ASC
+                     WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
                     """,
-                    (row[0],),
+                    (row[0], MAX_MEMORY_SNAPSHOT_ITEMS),
                 ).fetchall()
                 snapshots.append(self._snapshot(row, items))
         return snapshots
@@ -389,9 +390,9 @@ class PostgresMemoryRepositoryAdapter:
                 """
                 SELECT memory_record_id, record_revision, position
                   FROM omnix_memory_snapshot_items
-                 WHERE snapshot_id = %s ORDER BY position ASC
+                 WHERE snapshot_id = %s ORDER BY position ASC LIMIT %s
                 """,
-                (snapshot_id,),
+                (snapshot_id, MAX_MEMORY_SNAPSHOT_ITEMS),
             ).fetchall()
         return self._snapshot(row, items)
 

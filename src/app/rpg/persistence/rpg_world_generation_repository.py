@@ -26,6 +26,9 @@ _PERSISTENT_PROGRESS_KEYS = {
 }
 
 
+# RPG is being retired; reads stay bounded until it is removed (WP-5.5).
+MAX_ROWS_PER_READ = 10_000
+
 def _run_row(row: Any) -> dict[str, Any]:
     return {
         "workspace_id": str(row[0]),
@@ -320,8 +323,8 @@ class PostgresRpgWorldGenerationRepository:
         rows = self.connection.execute(
             f"SELECT {_RESULT_COLUMNS} "
             "FROM omnix_rpg_world_generation_topic_results "
-            "WHERE workspace_id = %s AND run_id = %s ORDER BY topic_id",
-            (context.workspace_id, run_id),
+            "WHERE workspace_id = %s AND run_id = %s ORDER BY topic_id LIMIT %s",
+            (context.workspace_id, run_id, MAX_ROWS_PER_READ),
         ).fetchall()
         return [_result_row(row) for row in rows]
 
@@ -359,8 +362,9 @@ class PostgresRpgWorldGenerationRepository:
               FROM omnix_rpg_world_topics
              WHERE workspace_id = %s AND world_id = %s AND draft_revision = %s
              ORDER BY topic_id
+              LIMIT %s
             """,
-            (context.workspace_id, world_id, int(draft_revision)),
+            (context.workspace_id, world_id, int(draft_revision), MAX_ROWS_PER_READ),
         ).fetchall()
         return [_topic_row(row) for row in rows]
 

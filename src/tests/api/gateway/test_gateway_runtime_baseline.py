@@ -357,6 +357,9 @@ def test_job_read_does_not_block_health():
             transport=httpx.ASGITransport(app=gateway), base_url="http://127.0.0.1",
             headers={"X-Omnix-Client": "test"},
         ) as client:
+            # FastAPI builds its route state on the first request; warm it so
+            # the timing below measures the blocking job read, not cold start.
+            assert (await client.get("/health")).status_code == 200
             job = asyncio.create_task(client.get("/api/jobs/missing"))
             try:
                 assert await asyncio.to_thread(entered.wait, 2)

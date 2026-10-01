@@ -323,6 +323,7 @@ class PostgresLegacyImporter:
                   FROM omnix_legacy_import_items
                  WHERE import_run_id = %s
                  GROUP BY entity_type, status
+                 LIMIT 1000
                 """,
                 (run_id,),
             ).fetchall()
