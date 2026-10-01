@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 import uuid
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from app.persistence.outbox_repository import PostgresOutboxRepository
@@ -23,6 +24,9 @@ from .contracts import (
     WorkerLease,
 )
 from app.observability.agent_logging import log_agent_activity
+
+# Events read per page when walking a whole run (WP-7.4).
+EVENT_PAGE_SIZE = 1000
 
 
 def _json_default(value: Any) -> Any:
@@ -566,21 +570,29 @@ class PostgresAgentRunRepository:
         return stored
 
     def _append_event(self, event: AgentEvent) -> AgentEvent:
-        # Lock the run row so MAX(sequence)+1 remains deterministic under concurrent writers.
-        locked = self.connection.execute(
-            "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s FOR UPDATE",
-            (self.context.workspace_id, event.run_id),
-        ).fetchone()
-        if locked is None:
-            raise KeyError(event.run_id)
+        # The run's counter row orders its appends (WP-7.4) without locking
+        # the run row. GREATEST with the indexed MAX lets the counter catch up
+        # with events written by code that predates it.
         row = self.connection.execute(
             """
-            SELECT COALESCE(MAX(sequence), 0) + 1
-              FROM omnix_agent_run_events
-             WHERE workspace_id = %s AND run_id = %s
+            INSERT INTO omnix_agent_run_event_counters AS counter (workspace_id, run_id, last_sequence)
+            SELECT run.workspace_id, run.run_id,
+                   COALESCE((SELECT MAX(sequence) FROM omnix_agent_run_events AS event
+                              WHERE event.workspace_id = run.workspace_id AND event.run_id = run.run_id), 0) + 1
+              FROM omnix_agent_runs AS run
+             WHERE run.workspace_id = %s AND run.run_id = %s
+            ON CONFLICT (workspace_id, run_id) DO UPDATE
+               SET last_sequence = GREATEST(
+                       counter.last_sequence,
+                       COALESCE((SELECT MAX(sequence) FROM omnix_agent_run_events AS event
+                                  WHERE event.workspace_id = counter.workspace_id AND event.run_id = counter.run_id), 0)
+                   ) + 1
+            RETURNING last_sequence
             """,
             (self.context.workspace_id, event.run_id),
         ).fetchone()
+        if row is None:
+            raise KeyError(event.run_id)
         sequence = int(row[0])
         stored = event.model_copy(update={"sequence": sequence})
         self.connection.execute(
@@ -616,16 +628,75 @@ class PostgresAgentRunRepository:
         return stored
 
     def list_events(self, run_id: str, *, after_sequence: int = 0, limit: int = 500) -> list[AgentEvent]:
+        return self._event_page(run_id, after_sequence=after_sequence, limit=max(1, min(limit, 5000)))
+
+    def iter_events(
+        self,
+        run_id: str,
+        *,
+        event_types: Iterable[str] | None = None,
+        page_size: int = EVENT_PAGE_SIZE,
+    ) -> Iterator[AgentEvent]:
+        """Every event of a run (optionally of some types), read in pages (WP-7.4)."""
+        types = sorted(set(event_types)) if event_types is not None else None
+        after = 0
+        while True:
+            page = self._event_page(run_id, after_sequence=after, limit=page_size, event_types=types)
+            yield from page
+            if len(page) < page_size:
+                return
+            after = int(page[-1].sequence or after)
+
+    def latest_event(
+        self,
+        run_id: str,
+        event_type: str,
+        *,
+        payload_contains: dict[str, Any] | None = None,
+    ) -> AgentEvent | None:
+        """The run's most recent event of ``event_type`` (whose payload contains ``payload_contains``)."""
+        rows = self.connection.execute(
+            """
+            SELECT event_id, sequence, event_type, payload, correlation_id, causation_id, created_at
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s AND run_id = %s AND event_type = %s
+               AND (%s::jsonb IS NULL OR payload @> %s::jsonb)
+             ORDER BY sequence DESC
+             LIMIT 1
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                event_type,
+                _json(payload_contains) if payload_contains is not None else None,
+                _json(payload_contains) if payload_contains is not None else None,
+            ),
+        ).fetchall()
+        return self._events_from_rows(run_id, rows)[0] if rows else None
+
+    def _event_page(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int,
+        limit: int,
+        event_types: list[str] | None = None,
+    ) -> list[AgentEvent]:
         rows = self.connection.execute(
             """
             SELECT event_id, sequence, event_type, payload, correlation_id, causation_id, created_at
               FROM omnix_agent_run_events
              WHERE workspace_id = %s AND run_id = %s AND sequence > %s
+               AND (%s::text[] IS NULL OR event_type = ANY(%s::text[]))
              ORDER BY sequence
              LIMIT %s
             """,
-            (self.context.workspace_id, run_id, max(0, after_sequence), max(1, min(limit, 5000))),
+            (self.context.workspace_id, run_id, max(0, after_sequence), event_types, event_types, limit),
         ).fetchall()
+        return self._events_from_rows(run_id, rows)
+
+    @staticmethod
+    def _events_from_rows(run_id: str, rows: list[Any]) -> list[AgentEvent]:
         return [
             AgentEvent(
                 event_id=str(row[0]),

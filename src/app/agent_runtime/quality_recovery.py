@@ -8,6 +8,7 @@ reviewer how to recover.
 """
 from __future__ import annotations
 
+from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
@@ -241,7 +242,7 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
             ):
                 continue
             text = latest_reviewer_text(
-                repository.list_events(child.run_id, after_sequence=0, limit=5000)
+                events_of_types(repository, child.run_id, {"model.message"})
             )
             get_attempt = getattr(quality, "get_review_attempt_by_reviewer", None)
             attempt = get_attempt(child.run_id) if callable(get_attempt) else None

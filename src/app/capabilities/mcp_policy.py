@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 McpTransport = Literal["http", "stdio"]
 McpEffect = Literal["read", "create", "mutate", "delete", "execute"]
 McpRisk = Literal["low", "medium", "high"]
@@ -135,11 +137,27 @@ def load_mcp_policy(path: Path | None = None) -> McpPolicy:
     falling back to MCPorter's user/project configuration discovery.
     """
 
-    target = path or mcp_policy_path()
-    if not target.exists():
+    signature = mcp_policy_signature(path)
+    if signature is None:
         return McpPolicy()
+    return _parsed_mcp_policy(*signature)
+
+
+def mcp_policy_signature(path: Path | None = None) -> tuple[str, int, int] | None:
+    """(path, modification time, size) of the policy file, or None when absent."""
+    target = path or mcp_policy_path()
     try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
+        stat = target.stat()
+    except OSError:
+        return None
+    return str(target), stat.st_mtime_ns, stat.st_size
+
+
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
+def _parsed_mcp_policy(path: str, _mtime_ns: int, _size: int) -> McpPolicy:
+    """Parsed once per file version (WP-7.4): an edit changes the signature."""
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
         return McpPolicy.model_validate(raw)
     except (OSError, json.JSONDecodeError, ValueError):
         return McpPolicy()

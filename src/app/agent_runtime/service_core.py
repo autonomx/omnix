@@ -1,6 +1,7 @@
 """Durable orchestration service for generalized agent runs."""
 from __future__ import annotations
 
+from .event_queries import all_events, events_of_types, latest_event
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
@@ -1791,10 +1792,10 @@ class AgentRunService:
             current.spec,
             task_revision_id=revision_id,
         )
-        all_events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        run_events = all_events(repository, current.run_id)
         all_artifacts = repository.list_artifacts(current.run_id)
         all_receipts = repository.list_evidence_receipts(current.run_id)
-        events = self._events_for_revision(all_events, task_revision)
+        events = self._events_for_revision(run_events, task_revision)
         artifacts = self._artifacts_for_revision(all_artifacts, task_revision)
         receipts = self._receipts_for_revision(all_receipts, task_revision)
         effective_policy = (
@@ -1834,7 +1835,7 @@ class AgentRunService:
                 failures.append(f"workspace_promotion_failed:{exc}")
                 passed = False
 
-        retry_count = _acceptance_retry_count(all_events, revision_id)
+        retry_count = _acceptance_retry_count(run_events, revision_id)
         runtime_available = (
             self._runtime_owns_run(current.run_id)
             or repository.get_active_lease(current.run_id) is not None
@@ -2732,18 +2733,8 @@ class AgentRunService:
                     # Persist one advisory warning per progress checkpoint and
                     # leave interruption/recovery to an explicit user command.
                     prior_warning = None
-                    list_events = getattr(repository, "list_events", None)
-                    if callable(list_events):
-                        prior_warning = next(
-                            (
-                                event
-                                for event in reversed(
-                                    list_events(run_id, after_sequence=0, limit=5000)
-                                )
-                                if event.event_type == "run.stall_suspected"
-                            ),
-                            None,
-                        )
+                    if callable(getattr(repository, "list_events", None)):
+                        prior_warning = latest_event(repository, run_id, "run.stall_suspected")
                     progress_sequence = progress_event.sequence if progress_event else None
                     warned_sequence = (
                         prior_warning.payload.get("last_progress_sequence")
@@ -2780,12 +2771,10 @@ class AgentRunService:
 
                 attempt = repository.count_events(run_id, "run.recovery_requested") + 1
                 quality_stage = None
-                list_events = getattr(repository, "list_events", None)
-                if callable(list_events):
-                    for event in reversed(list_events(run_id, after_sequence=0, limit=5000)):
-                        if event.event_type == "quality.stage":
-                            quality_stage = str(event.payload.get("stage") or "").strip() or None
-                            break
+                if callable(getattr(repository, "list_events", None)):
+                    stage_event = latest_event(repository, run_id, "quality.stage")
+                    if stage_event is not None:
+                        quality_stage = str(stage_event.payload.get("stage") or "").strip() or None
                 reason = (
                     f"no durable agent progress for {int((now - progress_at).total_seconds())}s"
                     f" after {progress_event.event_type if progress_event else 'run start'}"
@@ -3160,9 +3149,7 @@ class AgentRunService:
         if source == target:
             return {"status": "already_in_main", "paths": []}
 
-        for event in reversed(repository.list_events(current.run_id, after_sequence=0, limit=5000)):
-            if event.event_type != "run.completed":
-                continue
+        for event in reversed(events_of_types(repository, current.run_id, {"run.completed"})):
             marker = event.payload.get("workspace_promotion")
             if isinstance(marker, dict) and marker.get("change_set_id"):
                 return dict(marker)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .event_queries import all_events
 from . import review_orchestration_core as _core
 from .candidate_test_validation import (
     candidate_test_validation_specs,
@@ -99,7 +100,7 @@ def _redirect_missing_candidate_tests_before_review(
                 parent_run_id,
                 task_revision_id=revision.revision_id,
             )
-            events = repository.list_events(parent_run_id, after_sequence=0, limit=5000)
+            events = all_events(repository, parent_run_id)
 
             reconciled = reconcile_candidate_test_validation_results(
                 snapshot.subject_paths,

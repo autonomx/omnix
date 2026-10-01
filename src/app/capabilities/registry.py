@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.caching.bounded_cache import bounded_lru_cache
+
 CapabilityExecutionZone = Literal["worker", "broker", "model", "context"]
 CapabilityEffect = Literal["read", "create", "mutate", "delete", "execute"]
 CapabilityRisk = Literal["low", "medium", "high"]
@@ -243,4 +245,13 @@ def browser_capability_ids() -> tuple[str, ...]:
 
 
 def default_capability_registry() -> CapabilityRegistry:
+    """The built-in capabilities plus the operator's MCP tools, rebuilt only
+    when the MCP policy file changes (WP-7.4)."""
+    from .mcp_policy import mcp_policy_signature
+
+    return _capability_registry_for(mcp_policy_signature())
+
+
+@bounded_lru_cache(max_entries=8, ttl_seconds=3600.0)
+def _capability_registry_for(_policy_signature: tuple[str, int, int] | None) -> CapabilityRegistry:
     return CapabilityRegistry((*_DEFAULT_CAPABILITIES, *_configured_mcp_capabilities()))

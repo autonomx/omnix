@@ -7,6 +7,7 @@ Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
 
+from .event_queries import all_events, events_of_types, latest_event
 from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
@@ -991,15 +992,8 @@ class AgentRunService(_CoreAgentRunService):
                 )
                 work.rollback()
                 return
-            events = repository.list_events(event.run_id, after_sequence=0, limit=5000)
-            started = next(
-                (
-                    item
-                    for item in reversed(events)
-                    if item.event_type == "tool.started"
-                    and str(item.payload.get("tool_call_id") or "") == call_id
-                ),
-                None,
+            started = latest_event(
+                repository, event.run_id, "tool.started", payload_contains={"tool_call_id": call_id}
             )
             tool = str(event.payload.get("tool") or (started.payload.get("tool") if started else "") or "")
             args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
@@ -1122,7 +1116,7 @@ class AgentRunService(_CoreAgentRunService):
             for item in existing
             if item.validation_id == "final-diff-review"
         }
-        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        events = events_of_types(repository, current.run_id, {"tool.started", "tool.completed"})
         started_by_call_id = {
             str(item.payload.get("tool_call_id") or ""): item
             for item in events
@@ -2127,7 +2121,7 @@ class AgentRunService(_CoreAgentRunService):
         if revision is None or revision.revision_id != snapshot.task_revision_id:
             return None
         text = latest_reviewer_text(
-            repository.list_events(child.run_id, after_sequence=0, limit=5000)
+            events_of_types(repository, child.run_id, {"model.message"})
         )
         if not review_payload_is_protocol_valid(text, revision):
             return None
@@ -2371,10 +2365,10 @@ class AgentRunService(_CoreAgentRunService):
             task_revision_id=revision_id,
             workspace_state_id=state.state_id if state else None,
         )
-        all_events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        run_events = all_events(repository, current.run_id)
         all_artifacts = repository.list_artifacts(current.run_id)
         all_receipts = repository.list_evidence_receipts(current.run_id)
-        events = self._events_for_revision(all_events, revision)
+        events = self._events_for_revision(run_events, revision)
         artifacts = self._artifacts_for_revision(all_artifacts, revision)
         receipts = self._receipts_for_revision(all_receipts, revision)
         effective_policy = revision.evidence_decision.policy if revision is not None else current.spec.evidence_policy

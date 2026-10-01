@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import deque
 from io import StringIO
 from pathlib import Path
@@ -820,3 +821,36 @@ def test_pi_session_launches_with_the_issued_run_token() -> None:
         assert "token-for-run-token" not in " ".join(captured["argv"])
     finally:
         session.close()
+
+
+def test_token_deltas_are_sampled_not_each_persisted():
+    session = PiRpcSession.__new__(PiRpcSession)
+    session.spec = type("Spec", (), {"run_id": "agent-run:deltas"})()
+    deltas = [f"word{index} " for index in range(200)]
+    lines = ['{"type":"turn_start"}']
+    lines += [
+        json.dumps({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": delta}})
+        for delta in deltas
+    ]
+    lines.append('{"type":"agent_settled"}')
+    session.process = type("Process", (), {"stdout": StringIO("\n".join(lines) + "\n")})()
+    session._task_revision_id = "revision-1"
+    session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
+    session._events = deque()
+    session._stderr = deque(maxlen=10)
+    session._assistant_text_parts = []
+    session._terminal_assistant_text_emitted = False
+    session._turn_active = False
+    session._terminal_seen = False
+    session.on_event = None
+
+    session._read_stdout()
+
+    updates = [
+        event for event in session._events
+        if event.event_type == "model.message" and event.payload.get("phase") == "message_update"
+    ]
+    assert len(updates) == 1  # 200 deltas arrive within a second
+    recovered = next(event for event in session._events if event.payload.get("recovered_from_text_deltas"))
+    assert recovered.payload["text"] == "".join(deltas).strip()

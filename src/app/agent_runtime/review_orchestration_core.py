@@ -6,6 +6,7 @@ execution/recovery semantics shared without creating a service import cycle.
 """
 from __future__ import annotations
 
+from .event_queries import events_of_types
 from .exception_logging import log_recovered_exception
 
 import hashlib
@@ -488,8 +489,7 @@ def consume_terminal_reviewer_in_repository(
     if attempt.status != "running":
         return None
 
-    events = repository.list_events(child.run_id, after_sequence=0, limit=5000)
-    text = latest_reviewer_text(events)
+    text = latest_reviewer_text(events_of_types(repository, child.run_id, {"model.message"}))
     result: ReviewResult | None = None
     if child.status != "completed":
         finished = finish_runtime_failed_attempt(attempt, child)

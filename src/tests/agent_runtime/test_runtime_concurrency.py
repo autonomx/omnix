@@ -614,3 +614,57 @@ def test_agent_run_start_steer_approve_complete_across_processes() -> None:
                 )
                 work.commit()
         database.close()
+
+
+def test_appending_an_event_does_not_wait_for_a_run_update() -> None:
+    """Appends lock the run's counter row, not the run row (WP-7.4)."""
+    database = _database()
+    try:
+        context, run_id, _ = _create_run(database)
+        with unit_of_work(database) as work:
+            previous = work.connection.execute(
+                "SELECT MAX(sequence) FROM omnix_agent_run_events WHERE workspace_id = %s AND run_id = %s",
+                (context.workspace_id, run_id),
+            ).fetchone()[0] or 0
+            work.rollback()
+        with unit_of_work(database) as holder:
+            # An uncommitted run update, as a status change holds while it runs.
+            holder.connection.execute(
+                "UPDATE omnix_agent_runs SET updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND run_id = %s",
+                (context.workspace_id, run_id),
+            )
+            with unit_of_work(database) as work:
+                work.connection.execute("SET LOCAL lock_timeout = '2s'")
+                stored = PostgresAgentRunRepository(work.connection, context).append_event(
+                    AgentEvent(run_id=run_id, event_type="model.message", payload={})
+                )
+                work.commit()
+            holder.rollback()
+        assert stored.sequence == previous + 1
+    finally:
+        database.close()
+
+
+def test_the_event_counter_catches_up_with_events_written_without_it() -> None:
+    database = _database()
+    try:
+        context, run_id, _ = _create_run(database)
+        with unit_of_work(database) as work:
+            # An event appended by code that predates the counter table.
+            work.connection.execute(
+                """
+                INSERT INTO omnix_agent_run_events (workspace_id, run_id, sequence, event_id, event_type, payload)
+                VALUES (%s, %s, 7, %s, 'model.message', '{}'::jsonb)
+                """,
+                (context.workspace_id, run_id, f"legacy-{uuid.uuid4().hex}"),
+            )
+            stored = PostgresAgentRunRepository(work.connection, context).append_event(
+                AgentEvent(run_id=run_id, event_type="model.message", payload={})
+            )
+            following = PostgresAgentRunRepository(work.connection, context).append_event(
+                AgentEvent(run_id=run_id, event_type="model.message", payload={})
+            )
+            work.commit()
+        assert (stored.sequence, following.sequence) == (8, 9)
+    finally:
+        database.close()

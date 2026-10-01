@@ -131,7 +131,9 @@
     "src/app/persistence/migrations/0108_retention_policies.sql": "87bcff096ba8a4cd42f5f9a4461c0b44827d77495498cc71d5be047308af94b4",
     "src/app/persistence/migrations/0109_job_event_commit_order.sql": "e606168695c72b70e8927ee3b5797f8272f545f90bc1d97b4414f048a6a6c0da",
     "src/app/persistence/migrations/0110_chat_message_search_index.sql": "e35e0230423f69acd7e17691208002e9d888ed8877c6edc59efb9522a7583e62",
-    "src/app/persistence/migrations/0111_conversation_summary_session_index.sql": "f76d53240d4785f3226df64dd6d8fa23c4a6e8864a7942d97dce80a020cbcc8d"
+    "src/app/persistence/migrations/0111_conversation_summary_session_index.sql": "f76d53240d4785f3226df64dd6d8fa23c4a6e8864a7942d97dce80a020cbcc8d",
+    "src/app/persistence/migrations/0112_agent_run_event_counters.sql": "f4e373b706763d5602307c37519bb3f1ace051d040fd12e4ecaed53728d19f20",
+    "src/app/persistence/migrations/0113_agent_run_event_type_index.sql": "856494f4ca97f4f712cdc5ccf0df3b4347fe7d55494c150e06433dfde735ca09"
   },
   "normalization": "UTF-8 without BOM; CRLF normalized to LF",
   "schema_version": 1,

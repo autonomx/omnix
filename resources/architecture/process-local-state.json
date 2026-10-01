@@ -334,6 +334,24 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/capabilities/mcp_policy.py",
+      "symbol": "_parsed_mcp_policy.__cache__",
+      "category": "cache",
+      "reason": "Parsed operator MCP policy per file version (path, modification time, size), WP-7.4; the file stays the source of truth and an edit changes the key.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_parsed_mcp_policy.cache_clear"
+    },
+    {
+      "path": "src/app/capabilities/registry.py",
+      "symbol": "_capability_registry_for.__cache__",
+      "category": "cache",
+      "reason": "The immutable capability registry built from the built-in capabilities and one MCP policy file version (WP-7.4); rebuilt when the policy file changes.",
+      "max_entries": 8,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_capability_registry_for.cache_clear"
+    },
+    {
       "path": "src/app/characters/avatar_generation_logging.py",
       "symbol": "_HANDLER_LOCK",
       "category": "cache",

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 from typing import Any
 import uuid
 
@@ -302,6 +303,8 @@ def _assistant_text_delta(payload: dict[str, Any]) -> str:
 
 
 _PI_SHELL_TOOLS = frozenset({"bash", "powershell"})
+# At most one persisted message-progress event a second per run (WP-7.4).
+MESSAGE_PROGRESS_INTERVAL_SECONDS = 1.0
 _PI_EXIT_CODE_MARKER = re.compile(r"\bcommand\s+exited\s+with\s+code\s+(-?\d+)\b", re.IGNORECASE)
 
 
@@ -942,6 +945,10 @@ class PiRpcSession:
                                 error=exc,
                                 include_traceback=True,
                             )
+            if event_type == "message_update" and not self._message_progress_due():
+                # Token deltas stay in memory (above); the event log gets at
+                # most one progress event a second (WP-7.4).
+                continue
             tool_call_id = str(payload.get("toolCallId") or "")
             revision_id = self._task_revision_id
             if event_type == "tool_execution_start" and tool_call_id:
@@ -1001,6 +1008,14 @@ class PiRpcSession:
                     run_id=self.spec.run_id,
                     fields={"raw_event_type": event_type, "payload": _rpc_payload_for_log(payload)},
                 )
+
+    def _message_progress_due(self) -> bool:
+        now = time.monotonic()
+        last = getattr(self, "_last_message_progress_at", float("-inf"))
+        if now - last < MESSAGE_PROGRESS_INTERVAL_SECONDS:
+            return False
+        self._last_message_progress_at = now
+        return True
 
     def _read_stderr(self) -> None:
         stream = self.process.stderr
