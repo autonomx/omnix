@@ -1,7 +1,6 @@
 """PostgreSQL-backed Live Conversation profiles."""
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -18,14 +17,15 @@ class PostgresLiveConversationProfileStore(LiveConversationProfileStore):
         if path is not None:
             raise RuntimeError("file-backed live-conversation profiles are retired")
         self.path = Path("postgresql:/live-conversation-profiles")
-        self._lock = threading.RLock()
         self._documents = PostgresDocumentStore()
+        # Serializes read-modify-write across processes (WP-5.9).
+        self._lock = self._documents.lock(module="live-chat", record_type="conversation-profiles")
 
     def _read(self) -> dict[str, Any]:
-        payload = self._documents.read(
-            module="live-chat",
-            record_type="conversation-profiles",
-            default=None,
+        payload = (
+            self._lock.read(default=None)
+            if self._lock.held
+            else self._documents.read(module="live-chat", record_type="conversation-profiles", default=None)
         )
         if not isinstance(payload, dict):
             return {"format_version": 1, "defaults": {}, "sessions": {}}
@@ -36,8 +36,7 @@ class PostgresLiveConversationProfileStore(LiveConversationProfileStore):
         return result
 
     def _write(self, payload: dict[str, Any]) -> None:
-        self._documents.write(
-            dict(payload),
-            module="live-chat",
-            record_type="conversation-profiles",
-        )
+        if self._lock.held:
+            self._lock.write(dict(payload))
+            return
+        self._documents.write(dict(payload), module="live-chat", record_type="conversation-profiles")

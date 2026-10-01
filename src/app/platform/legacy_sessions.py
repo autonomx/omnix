@@ -109,7 +109,7 @@ def update_legacy_session(
     session_id: str, request: LegacySessionUpdateRequest
 ) -> LegacySuccessResponse | None:
     store = _store()
-    session = store.read(
+    session, revision = store.read_versioned(
         module=_MODULE,
         record_type=_RECORD_TYPE,
         record_id=session_id,
@@ -122,7 +122,8 @@ def update_legacy_session(
     if request.system_prompt is not None:
         session["system_prompt"] = request.system_prompt
     session["updated_at"] = datetime.now(timezone.utc).isoformat()
-    store.write(session, module=_MODULE, record_type=_RECORD_TYPE, record_id=session_id)
+    # Conditional: a concurrent edit raises DocumentRevisionConflict (409).
+    store.write(session, module=_MODULE, record_type=_RECORD_TYPE, record_id=session_id, expected_revision=revision)
     return LegacySuccessResponse()
 
 

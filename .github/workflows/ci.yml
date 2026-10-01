@@ -43,6 +43,8 @@ jobs:
         run: python scripts/check_ruff_baseline.py --report artifacts/ruff.json
       - name: Check gateway ingress output
         run: python scripts/render_gateway_ingress.py --check
+      - name: Check the JSONB inventory
+        run: python scripts/jsonb_inventory.py --check
       - name: Verify architecture lint detectors
         run: python -m pytest src/tests/scripts/test_architecture_lint.py -q --tb=short
       - name: Check architecture and migration invariants

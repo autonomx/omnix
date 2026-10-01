@@ -16,6 +16,7 @@ if str(SRC_DIR) not in sys.path:
 class InMemoryDocumentStore:
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
+        self.revisions: dict[str, int] = {}
 
     def list(self, *, module: str, record_type: str, limit: int):
         del module, record_type
@@ -25,6 +26,12 @@ class InMemoryDocumentStore:
         del module, record_type
         return self.records.get(record_id, default)
 
+    def read_versioned(self, *, module: str, record_type: str, record_id: str, default: Any = None):
+        del module, record_type
+        if record_id not in self.records:
+            return default, 0
+        return dict(self.records[record_id]), self.revisions.get(record_id, 1)
+
     def write(
         self,
         payload: dict[str, Any],
@@ -32,9 +39,16 @@ class InMemoryDocumentStore:
         module: str,
         record_type: str,
         record_id: str,
+        expected_revision: int | None = None,
     ) -> None:
         del module, record_type
+        current = self.revisions.get(record_id, 1) if record_id in self.records else 0
+        if expected_revision is not None and expected_revision != current:
+            from app.persistence.document_store import DocumentRevisionConflict
+
+            raise DocumentRevisionConflict(record_id)
         self.records[record_id] = dict(payload)
+        self.revisions[record_id] = current + 1
 
     def delete(self, *, module: str, record_type: str, record_id: str) -> bool:
         del module, record_type

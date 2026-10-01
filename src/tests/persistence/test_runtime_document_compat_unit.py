@@ -8,6 +8,31 @@ from app.characters.persistence import live_profile_store
 from app.chat.persistence import assistant_turn_store, legacy_sessions
 
 
+class _Lock:
+    """In-process stand-in for DocumentLock."""
+
+    def __init__(self, documents, key) -> None:
+        self.documents, self.key, self.depth = documents, key, 0
+
+    def __enter__(self):
+        self.depth += 1
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.depth -= 1
+
+    @property
+    def held(self) -> bool:
+        return self.depth > 0
+
+    def read(self, *, default=None):
+        return self.documents.values.get(self.key, default)
+
+    def write(self, payload) -> None:
+        self.documents.values[self.key] = payload
+        self.documents.revisions[self.key] = self.documents.revisions.get(self.key, 0) + 1
+
+
 class _Documents:
     def __init__(self) -> None:
         self.database = object()
@@ -32,6 +57,9 @@ class _Documents:
         self.values[key] = payload
         self.revisions[key] = self.revisions.get(key, 0) + 1
         return self.revisions[key]
+
+    def lock(self, *, module, record_type, record_id="default"):
+        return _Lock(self, (module, record_type, record_id))
 
     def list(self, *, module, record_type, limit=500):
         rows = [

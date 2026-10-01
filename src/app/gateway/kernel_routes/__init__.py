@@ -61,6 +61,7 @@ from app.runtime.worker_health import (
     get_worker_payload_policy,
 )
 from app.settings.api import settings_payload, save_settings_patch
+from app.persistence.document_store import DocumentRevisionConflict
 from app.settings.service import SettingRevisionConflict, SettingsPatch
 from app.settings.access import load_settings
 from app.platform.settings_profile_repository import load_settings_profile
@@ -275,7 +276,10 @@ def create_kernel_router(
     def update_session(
         session_id: str, request: LegacySessionUpdateRequest
     ) -> LegacySuccessResponse:
-        result = update_legacy_session(session_id, request)
+        try:
+            result = update_legacy_session(session_id, request)
+        except DocumentRevisionConflict as exc:
+            raise HTTPException(status_code=409, detail="legacy_session_changed") from exc
         if result is None:
             raise HTTPException(status_code=404, detail="Not found")
         return result

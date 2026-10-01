@@ -27,9 +27,13 @@ def write_assist_pending(data: dict[str, Any]) -> None:
 
 
 def add_assist_pending(item: Any) -> None:
-    data = read_assist_pending()
-    data[str(item.confirmation_id)] = asdict(item)
-    write_assist_pending(data)
+    # Conditional read-modify-write: concurrent additions are not lost (WP-5.9).
+    PostgresDocumentStore().update(
+        lambda current: {**dict(current or {}), str(item.confirmation_id): asdict(item)},
+        module="assist-core",
+        record_type="pending-reviews",
+        default={},
+    )
 
 
 def append_assist_action_log(entry: Any) -> None:

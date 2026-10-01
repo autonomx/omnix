@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.9 | No queried JSONB field is promoted to a column yet; each is filtered after a selective indexed key (run, session, project, owner), sits on a tiny table, is already expression-indexed, or is RPG. | Promotion needs an expand/contract migration per field; none of the 20 shows a scan without a narrowing index. Decisions are in `resources/architecture/jsonb-decisions.json`. |
+| 2026-10-01 | WP-5.9 | Document writes keyed by a unique id (ledger entries, summaries, residency records, refresh snapshots, assistant turns) stay unconditional upserts; aggregate documents changed by read-modify-write use `update()` or `lock()`. | Last-writer-wins only loses data when the writer derived its payload from an older read; unique-id writes do not. |
 | 2026-10-01 | WP-5.7 | History search uses PostgreSQL full-text search (`to_tsvector('simple', content)`, word-prefix queries) instead of `pg_trgm`. | No extension is needed, so any PostgreSQL build can run the migration; matching changes from any substring to word prefixes, which fits searching earlier conversations by word. |
 | 2026-10-01 | WP-5.7 | Transcript windowing is a separate change. | Prompt assembly builds an exact summary of every older message each turn; loading only a window means relying on persisted summaries, which changes prompt content and needs its own tests. |
 | 2026-10-01 | WP-5.5 | The 11 RPG list sites capped at 500 stay until RPG is removed; capped_500_queries is ratcheted at 11 and reaches 0 with the removal. | RPG is being retired; building cursor pagination into it would be discarded work. |

@@ -45,8 +45,15 @@ def probe_role():
                 END IF;
             END $$"""
         )
-        admin.execute(f"GRANT USAGE ON SCHEMA public TO {PROBE_ROLE}")
-        admin.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {PROBE_ROLE}")
+        # A grant rewrites catalog rows; a parallel test's DDL can race it.
+        for attempt in range(5):
+            try:
+                admin.execute(f"GRANT USAGE ON SCHEMA public TO {PROBE_ROLE}")
+                admin.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {PROBE_ROLE}")
+                break
+            except psycopg.errors.InternalError:
+                if attempt == 4:
+                    raise
     return PROBE_ROLE
 
 

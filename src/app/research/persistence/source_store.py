@@ -27,14 +27,15 @@ class PostgresResearchSourceStore(ResearchSourceStore):
         self.path = Path("postgresql://research-sources")
         self.clock = clock or _utcnow
         self.id_factory = id_factory or (lambda: __import__("uuid").uuid4().hex)
-        self._lock = __import__("threading").Lock()
         self._documents = PostgresDocumentStore()
+        # Serializes read-modify-write across processes (WP-5.9).
+        self._lock = self._documents.lock(module="research", record_type="source-provenance-store")
 
     def _load(self) -> dict[str, dict]:
-        payload = self._documents.read(
-            module="research",
-            record_type="source-provenance-store",
-            default=None,
+        payload = (
+            self._lock.read(default=None)
+            if self._lock.held
+            else self._documents.read(module="research", record_type="source-provenance-store", default=None)
         )
         if not isinstance(payload, dict):
             return {"sources": {}, "snapshots": {}, "manifests": {}}
@@ -45,11 +46,10 @@ class PostgresResearchSourceStore(ResearchSourceStore):
         }
 
     def _save(self, payload: dict[str, dict]) -> None:
-        self._documents.write(
-            payload,
-            module="research",
-            record_type="source-provenance-store",
-        )
+        if self._lock.held:
+            self._lock.write(payload)
+            return
+        self._documents.write(payload, module="research", record_type="source-provenance-store")
 
     def save_extraction(self, snapshot_id: str, page: Any):
         """Store extracted content as an asset reference, not a mutable side file."""

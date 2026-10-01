@@ -16,14 +16,15 @@ class PostgresLiveChatEvaluationStore(LiveChatEvaluationStore):
                 "file-backed live-chat evaluation authority is retired; use the legacy importer"
             )
         self.path = Path("postgresql://live-chat-evaluations")
-        self._lock = __import__("threading").RLock()
         self._documents = PostgresDocumentStore()
+        # Serializes read-modify-write across processes (WP-5.9).
+        self._lock = self._documents.lock(module="live-chat", record_type="evaluation-policy-store")
 
     def _read(self) -> dict:
-        payload = self._documents.read(
-            module="live-chat",
-            record_type="evaluation-policy-store",
-            default=None,
+        payload = (
+            self._lock.read(default=None)
+            if self._lock.held
+            else self._documents.read(module="live-chat", record_type="evaluation-policy-store", default=None)
         )
         if not isinstance(payload, dict):
             return self._fresh_payload()
@@ -35,10 +36,9 @@ class PostgresLiveChatEvaluationStore(LiveChatEvaluationStore):
         return payload
 
     def _write(self, payload: dict) -> None:
-        self._documents.write(
-            payload,
-            module="live-chat",
-            record_type="evaluation-policy-store",
-        )
+        if self._lock.held:
+            self._lock.write(payload)
+            return
+        self._documents.write(payload, module="live-chat", record_type="evaluation-policy-store")
 
 
