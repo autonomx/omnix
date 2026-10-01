@@ -16,6 +16,7 @@ from .coordinated_recovery import CoordinatedRecoveryRepository
 from .cutover_state import PostgresCutoverStateRepository
 from .database import PostgresDatabase
 from .migrations import apply_migrations, migration_status
+from .tenant_scope import system_scope
 
 
 _SECRET_KEY_PARTS = (
@@ -283,7 +284,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = build_parser().parse_args(list(argv) if argv is not None else None)
         settings = (
             migration_database_settings()
-            if args.command in {"migrate", "status", "verify"}
+            # Backups read every workspace and restores recreate the schema, so
+            # both use the DDL owner like migrations (row-level security, WP-4.4).
+            if args.command in {"migrate", "status", "verify", "backup", "restore"}
             else database_settings()
         )
         database = PostgresDatabase(settings)
@@ -340,12 +343,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 report = {"ok": True, "restored": str(args.input.resolve())}
             _render(report)
             return 0
-        if args.command == "cutover":
-            report = _cutover_command(args, database)
-        elif args.command == "recovery":
-            report = _recovery_command(args, database)
-        else:  # pragma: no cover
-            raise RuntimeError(f"unsupported command: {args.command}")
+        with system_scope("operator.cli"):
+            if args.command == "cutover":
+                report = _cutover_command(args, database)
+            elif args.command == "recovery":
+                report = _recovery_command(args, database)
+            else:  # pragma: no cover
+                raise RuntimeError(f"unsupported command: {args.command}")
         _render(report)
         return 0 if report.get("ok") is True else 1
     except Exception as exc:

@@ -175,8 +175,13 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
-      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      # The application connects as a restricted runtime role (DML only, no
+      # BYPASSRLS), so row-level security applies (WP-4.4). The superuser is
+      # the migrator and the admin for test setup that needs DDL.
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix_app:omnix_app@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix_app:omnix_app@127.0.0.1:5432/omnix_test
+      OMNIX_MIGRATION_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_TEST_ADMIN_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
       OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
       OMNIX_LIVE_CALL_MEASUREMENT_PATH: artifacts/live-call-capacity.json
     steps:
@@ -187,8 +192,18 @@ jobs:
           cache: pip
       - name: Install locked test dependencies
         run: python -m pip install --require-hashes -r requirements/dev.lock.txt
+      - name: Create the restricted runtime role
+        run: >-
+          psql "$OMNIX_MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "CREATE ROLE omnix_app LOGIN PASSWORD 'omnix_app' NOSUPERUSER NOBYPASSRLS"
       - name: Apply migrations to the disposable database
         run: python -m app.persistence migrate
+      - name: Let the runtime role reset test data
+        # Tests truncate tables between cases; production grants only DML.
+        run: >-
+          psql "$OMNIX_MIGRATION_DATABASE_URL" -v ON_ERROR_STOP=1
+          -c "GRANT TRUNCATE ON ALL TABLES IN SCHEMA public TO omnix_app"
+          -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT TRUNCATE ON TABLES TO omnix_app"
       - name: Initialize disposable PostgreSQL runtime authority
         run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
       - name: Prepare measurement artifact directory
@@ -203,6 +218,10 @@ jobs:
           path: artifacts/live-call-capacity.json
           if-no-files-found: ignore
       - name: Run PostgreSQL architecture gate
+        # Migration contracts and persistence fixtures that create tables run
+        # as the migrator; everything else in this job runs as omnix_app.
+        env:
+          OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
         run: python scripts/run_architecture_gates.py --group postgresql
       - name: Run multiprocess architecture gate
         run: python scripts/run_architecture_gates.py --group multiprocess

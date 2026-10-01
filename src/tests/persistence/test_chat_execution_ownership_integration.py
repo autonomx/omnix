@@ -23,11 +23,13 @@ from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.gateway_runtime import GatewayRuntimeOwner
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.identity_service import PostgresIdentityRepository
+from app.persistence.tenant_scope import system_scope
 from app.persistence.runtime_coordination import (
     PostgresRuntimeCoordinationRepository,
     RuntimeNodeConflict,
 )
 from app.persistence.unit_of_work import unit_of_work
+from app.runtime.tenant_context import pop_tenant, push_tenant
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -48,7 +50,7 @@ def runtime():
 
     def new_store():
         workspace_id = f"workspace:chat-ownership-test:{uuid.uuid4().hex}"
-        with database.transaction() as connection:
+        with system_scope("identity.provision"), database.transaction() as connection:
             connection.execute(
                 "INSERT INTO omnix_workspaces (id, name, created_by) VALUES (%s, 'Chat ownership test', %s)",
                 (workspace_id, seed.context.user_id),
@@ -71,10 +73,13 @@ def runtime():
         return store
 
     store = new_store()
+    # The test runs as the first store's workspace (row-level security, WP-4.4).
+    tenant_token = push_tenant(store.context)
     try:
         yield database, store, new_store
     finally:
-        with database.transaction() as connection:
+        pop_tenant(tenant_token)
+        with system_scope("identity.provision"), database.transaction() as connection:
             for workspace_id in workspaces:
                 connection.execute(
                     "DELETE FROM omnix_runtime_nodes WHERE metadata ->> 'workspace_id' = %s",

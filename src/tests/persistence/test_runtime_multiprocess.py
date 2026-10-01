@@ -189,7 +189,12 @@ def _durable_job_worker_process(
 
 
 def _prepare_worker_acceptance_tables(database):
-    with database.transaction() as connection:
+    """Create the probe tables as the DDL owner; workers write them as the runtime role."""
+    import psycopg
+
+    from tests.support.database import admin_database_url
+
+    with psycopg.connect(admin_database_url()) as connection:
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS omnix_test_job_worker_attempts (
@@ -724,11 +729,12 @@ def _claim_chat_process(url, workspace, user, session, control):
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.persistence.job_store import PostgresJobStoreAdapter
     from app.persistence.identity_service import PostgresIdentityRepository
+    from app.persistence.tenant_scope import system_scope
     from app.runtime.tenant_context import pop_tenant, push_tenant
 
     database = PostgresDatabase(DatabaseSettings(url=url))
     try:
-        with database.connection() as connection:
+        with system_scope("identity.memberships"), database.connection() as connection:
             context = PostgresIdentityRepository(connection).load_context(
                 user_id=user, workspace_id=workspace
             )
@@ -769,6 +775,7 @@ def _mutate_chat_process(
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import PostgresIdentityRepository
+    from app.persistence.tenant_scope import system_scope
     from app.runtime.tenant_context import pop_tenant, push_tenant
     from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
     from app.settings.access import install_settings_service
@@ -776,7 +783,7 @@ def _mutate_chat_process(
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_max=2))
     try:
-        with database.connection() as connection:
+        with system_scope("identity.memberships"), database.connection() as connection:
             context = PostgresIdentityRepository(connection).load_context(
                 user_id=user,
                 workspace_id=workspace,

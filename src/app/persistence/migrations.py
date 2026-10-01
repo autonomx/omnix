@@ -31,7 +31,7 @@ _MIGRATION_HEADER = re.compile(
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0105_auth_sessions"
+SCHEMA_KNOWN = "0106_row_level_security"
 APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
 APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
@@ -313,6 +313,7 @@ def apply_migrations(
 ) -> dict[str, Any]:
     """Apply migrations from an operator/release path, never a request transaction."""
     from time import perf_counter
+    from .tenant_scope import system_scope
     from .transaction_binding import shared_work
 
     db = database or default_database()
@@ -321,7 +322,8 @@ def apply_migrations(
 
     migrations = discover_migrations(root)
     applied_now: list[str] = []
-    with db.connection() as connection:
+    # Data migrations span every workspace (row-level security, WP-4.4).
+    with system_scope("migrations"), db.connection() as connection:
         connection.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_ADVISORY_LOCK_KEY,))
         connection.commit()
         try:

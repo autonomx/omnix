@@ -1,7 +1,8 @@
 """Session, install-credential and login-code authentication (WP-4.1)."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import hmac
@@ -93,7 +94,16 @@ class AuthService:
 
     # Infrastructure -------------------------------------------------------
 
-    def _work(self) -> Any:
+    @contextmanager
+    def _work(self) -> Iterator[Any]:
+        # Sessions and login codes are looked up before the caller's
+        # workspace is known, so they bypass row-level security (WP-4.4).
+        from app.persistence.tenant_scope import system_scope
+
+        with system_scope("auth.sessions"), self._unit_of_work() as work:
+            yield work
+
+    def _unit_of_work(self) -> Any:
         if self._unit_of_work_factory is not None:
             return self._unit_of_work_factory()
         from app.persistence.database import default_database

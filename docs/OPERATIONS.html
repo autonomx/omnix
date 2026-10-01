@@ -384,8 +384,19 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <p>PostgreSQL stores authoritative structured state used by sessions, jobs, provider/model metadata, settings, agent lifecycle, RPG state, trading paper state, and other durable workflows. Migrations are forward changes under src/app/persistence/migrations.</p>
 <p>Before a schema or runtime change:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>python -m app.persistence verify</code></pre></div>
-<p>For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Example:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>pg_dump --dbname=&quot;$OMNIX_DATABASE_URL&quot; --format=custom --file=omnix-backup.dump</code></pre></div>
+<p>For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Back up as the migration role (<code>OMNIX_MIGRATION_DATABASE_URL</code>, or <code>OMNIX_DATABASE_URL</code> when you use one role); <code>python -m app.persistence backup</code> does this for you. Example:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>pg_dump --dbname=&quot;$OMNIX_MIGRATION_DATABASE_URL&quot; --format=custom --file=omnix-backup.dump</code></pre></div>
+<h3 id="database-roles-and-row-level-security">Database roles and row-level security</h3>
+<p>Every table with a <code>workspace_id</code> has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in <code>src/app/persistence/tenant_scope.py</code>.</p>
+<p>PostgreSQL does not apply these policies to superusers or roles with <code>BYPASSRLS</code>. A single superuser role (the default local install) keeps working, but has no database-level isolation. For isolation, use two roles:</p>
+<ul>
+<li>a migration role that owns the tables and runs migrations and backups (<code>OMNIX_MIGRATION_DATABASE_URL</code>). Backups read every workspace, so this role must be a superuser or have <code>BYPASSRLS</code>;</li>
+<li>a runtime role for the application (<code>OMNIX_DATABASE_URL</code>): not a superuser, not the owner, no <code>BYPASSRLS</code>.</li>
+</ul>
+<p>Create the runtime role before applying migrations; migrations grant it data access to every table:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>CREATE ROLE omnix_app LOGIN PASSWORD &#x27;&lt;secret&gt;&#x27; NOSUPERUSER NOBYPASSRLS;
+python -m app.persistence migrate    # with OMNIX_MIGRATION_DATABASE_URL set</code></pre></div>
+<p>Upgrades: migration <code>0106_row_level_security</code> is a contract migration. Upgrade every Omnix process first, then apply it; older processes do not set the workspace and would see no rows.</p>
 <p>Do not commit dumps, credentials, runtime blobs, model weights, or generated private assets. A restore should be tested against an isolated database before replacing an active environment.</p>
 <p>For recovery-sensitive agent or job incidents, preserve the durable identifiers and logs before restarting or cleaning anything:</p>
 <ul>

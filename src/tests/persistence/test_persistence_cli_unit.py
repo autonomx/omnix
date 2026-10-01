@@ -87,11 +87,28 @@ def test_postgresql_tools_receive_password_via_environment_not_process_arguments
     assert environment["PGPASSWORD"] == "p@ss"
 
 
+def test_backup_reads_through_the_migration_role(monkeypatch, tmp_path, capsys) -> None:
+    """Row-level security hides other workspaces from the runtime role (WP-4.4)."""
+    runtime = DatabaseSettings(url="postgresql://omnix_app:runtime@localhost/omnix")
+    owner = DatabaseSettings(url="postgresql://omnix_owner:owner@localhost/omnix")
+    monkeypatch.setattr(cli, "database_settings", lambda: runtime)
+    monkeypatch.setattr(cli, "migration_database_settings", lambda: owner)
+    monkeypatch.setattr(cli, "PostgresDatabase", _Database)
+    monkeypatch.setattr(cli, "_require_tool", lambda name: name)
+    calls = []
+    monkeypatch.setattr(cli, "_run_tool", lambda arguments, environment: calls.append((arguments, environment)))
+    assert cli.main(["backup", str(tmp_path / "omnix.dump")]) == 0
+    arguments, environment = calls[0]
+    assert "--dbname=postgresql://omnix_owner@localhost/omnix" in arguments
+    assert environment["PGPASSWORD"] == "owner"
+    capsys.readouterr()
+
+
 def test_failed_restore_returns_nonzero_json(monkeypatch, tmp_path, capsys) -> None:
     backup = tmp_path / "broken.dump"
     backup.write_bytes(b"not-a-dump")
     settings = DatabaseSettings(url="postgresql://user:password@localhost/omnix")
-    monkeypatch.setattr(cli, "database_settings", lambda: settings)
+    monkeypatch.setattr(cli, "migration_database_settings", lambda: settings)
     monkeypatch.setattr(cli, "PostgresDatabase", _Database)
     monkeypatch.setattr(cli, "_require_tool", lambda name: name)
     monkeypatch.setattr(

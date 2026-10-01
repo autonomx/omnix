@@ -14482,7 +14482,7 @@
     "rls_coverage_pct": {
       "direction": "higher",
       "target": 100,
-      "value": 0.0
+      "value": 100.0
     },
     "routes_without_permission": {
       "direction": "lower",

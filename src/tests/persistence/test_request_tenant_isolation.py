@@ -4,15 +4,18 @@ from __future__ import annotations
 import os
 import uuid
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
+from app.persistence.tenant_scope import system_scope
 from app.persistence.unit_of_work import unit_of_work
 from app.security.auth import AuthenticatedPrincipal
 from tests.support.auth import FakeAuthenticator
+from tests.support.database import admin_database_url
 
 pytestmark = [
     pytest.mark.postgres,
@@ -36,7 +39,7 @@ def database():
 def _workspace_with_member(database: PostgresDatabase, label: str):
     suffix = uuid.uuid4().hex[:10]
     user_id, workspace_id = f"user:{label}-{suffix}", f"workspace:{label}-{suffix}"
-    with unit_of_work(database) as work:
+    with system_scope("identity.provision"), unit_of_work(database) as work:
         work.connection.execute(
             "INSERT INTO omnix_users (id, display_name) VALUES (%s, %s)", (user_id, label)
         )
@@ -117,11 +120,12 @@ def test_two_users_in_two_workspaces_cannot_see_each_others_jobs(database) -> No
     assert bob_job in bob_ids and alice_job not in bob_ids
     assert bob_client.get(f"/api/jobs/{alice_job}").status_code == 404
 
-    with unit_of_work(database) as work:
-        stored = dict(work.connection.execute(
+    # Read storage directly as the DDL owner: the runtime role only sees its
+    # current workspace (row-level security, WP-4.4).
+    with psycopg.connect(admin_database_url()) as admin:
+        stored = dict(admin.execute(
             "SELECT id, workspace_id FROM omnix_jobs WHERE id = ANY(%s)", ([alice_job, bob_job],)
         ).fetchall())
-        work.rollback()
     assert stored == {alice_job: alice.workspace_id, bob_job: bob.workspace_id}
 
     # Naming another workspace never widens access.

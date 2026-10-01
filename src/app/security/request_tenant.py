@@ -51,9 +51,11 @@ def current_principal() -> AuthenticatedPrincipal | None:
 def load_membership(user_id: str, workspace_id: str) -> TenantContext:
     """Active membership of ``user_id`` in ``workspace_id`` from PostgreSQL."""
     from app.persistence.database import default_database
+    from app.persistence.tenant_scope import system_scope
     from app.persistence.unit_of_work import unit_of_work
 
-    with unit_of_work(default_database()) as work:
+    # The caller's workspace is not bound yet (WP-4.4 row-level security).
+    with system_scope("identity.memberships"), unit_of_work(default_database()) as work:
         try:
             return work.identities.load_context(user_id=user_id, workspace_id=workspace_id)
         finally:

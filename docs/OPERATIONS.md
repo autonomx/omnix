@@ -328,9 +328,25 @@ Before a schema or runtime change:
 
     python -m app.persistence verify
 
-For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Example:
+For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Back up as the migration role (`OMNIX_MIGRATION_DATABASE_URL`, or `OMNIX_DATABASE_URL` when you use one role); `python -m app.persistence backup` does this for you. Example:
 
-    pg_dump --dbname="$OMNIX_DATABASE_URL" --format=custom --file=omnix-backup.dump
+    pg_dump --dbname="$OMNIX_MIGRATION_DATABASE_URL" --format=custom --file=omnix-backup.dump
+
+### Database roles and row-level security
+
+Every table with a `workspace_id` has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in `src/app/persistence/tenant_scope.py`.
+
+PostgreSQL does not apply these policies to superusers or roles with `BYPASSRLS`. A single superuser role (the default local install) keeps working, but has no database-level isolation. For isolation, use two roles:
+
+- a migration role that owns the tables and runs migrations and backups (`OMNIX_MIGRATION_DATABASE_URL`). Backups read every workspace, so this role must be a superuser or have `BYPASSRLS`;
+- a runtime role for the application (`OMNIX_DATABASE_URL`): not a superuser, not the owner, no `BYPASSRLS`.
+
+Create the runtime role before applying migrations; migrations grant it data access to every table:
+
+    CREATE ROLE omnix_app LOGIN PASSWORD '<secret>' NOSUPERUSER NOBYPASSRLS;
+    python -m app.persistence migrate    # with OMNIX_MIGRATION_DATABASE_URL set
+
+Upgrades: migration `0106_row_level_security` is a contract migration. Upgrade every Omnix process first, then apply it; older processes do not set the workspace and would see no rows.
 
 Do not commit dumps, credentials, runtime blobs, model weights, or generated private assets. A restore should be tested against an isolated database before replacing an active environment.
 

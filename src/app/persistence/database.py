@@ -182,6 +182,7 @@ class PostgresDatabase:
     def connection(self) -> Iterator[Any]:
         from .transaction_binding import shared_work
         from .background_authority import require_background_owner
+        from .tenant_scope import apply_session_scope
 
         require_background_owner()
         work = shared_work(self)
@@ -192,6 +193,8 @@ class PostgresDatabase:
         assert self._pool is not None
         try:
             with self._pool.connection() as connection:
+                # Row-level security follows the tenant of this checkout (WP-4.4).
+                apply_session_scope(connection)
                 yield connection
         except Exception as exc:
             if exc.__class__.__module__.startswith("psycopg"):

@@ -172,9 +172,10 @@ def ensure_local_identity(
     This function never applies migrations. It emits the bootstrap audit event
     only when the local membership did not already exist.
     """
+    from .tenant_scope import system_scope
     from .unit_of_work import unit_of_work
 
-    with unit_of_work(database, authority_operation=authority_operation) as work:
+    with system_scope("identity.provision"), unit_of_work(database, authority_operation=authority_operation) as work:
         existed = work.connection.execute(
             """
             SELECT 1
@@ -206,9 +207,12 @@ def list_active_workspace_contexts(database: PostgresDatabase, *, limit: int = 1
     local workspace. The context acts as the workspace's creator with only
     the ``system`` role; it is never a request principal.
     """
+    from .tenant_scope import system_scope
     from .unit_of_work import unit_of_work
 
-    with unit_of_work(database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ) as work:
+    with system_scope("identity.workspaces"), unit_of_work(
+        database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ
+    ) as work:
         rows = work.connection.execute(
             """SELECT id, created_by FROM omnix_workspaces
                 WHERE status = 'active' ORDER BY id LIMIT %s""",

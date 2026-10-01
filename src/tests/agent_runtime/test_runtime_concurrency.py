@@ -75,7 +75,7 @@ def _agent_run_owner_process(url: str, tenant_values: tuple, control) -> None:
     from app.jobs.handlers import JobHandlerRegistry
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
-    from app.runtime.tenant_context import TenantContext
+    from app.runtime.tenant_context import TenantContext, install_process_tenant
     from app.worker_runtime.durable_feature_worker import DurableFeatureJobWorker
 
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=6))
@@ -85,6 +85,9 @@ def _agent_run_owner_process(url: str, tenant_values: tuple, control) -> None:
         membership_id=tenant_values[2],
         roles=frozenset(tenant_values[3]),
     )
+    # Like application processes (persistence.startup), this owner process
+    # runs as its tenant, which row-level security requires (WP-4.4).
+    install_process_tenant(context)
     try:
         jobs = PostgresJobStoreAdapter(database, context=context)
         service = AgentRunService(
