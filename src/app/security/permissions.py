@@ -22,7 +22,7 @@ from fastapi import HTTPException, WebSocketException
 from starlette.requests import HTTPConnection
 
 from app.config.env import env_str
-from app.runtime.tenant_context import current_tenant
+from app.runtime.tenant_context import current_tenant, local_tenant_context
 
 logger = logging.getLogger(__name__)
 
@@ -277,10 +277,24 @@ def _deny(connection: HTTPConnection, permission: str) -> None:
     raise HTTPException(status_code=403, detail={"error": "permission_denied", "permission": permission})
 
 
+def _caller_roles() -> frozenset[str]:
+    try:
+        return current_tenant().roles
+    except RuntimeError:
+        # A signed-in caller always carries its tenant. Without one, sign-in
+        # is off and the gateway runs without persistence (benchmarks, tests):
+        # the caller is the local owner, as with a bootstrapped install.
+        from app.security.request_tenant import current_principal
+
+        if current_principal() is not None:
+            raise
+        return local_tenant_context().roles
+
+
 def _enforce(connection: HTTPConnection, permission: str | None) -> None:
     if permission is None:
         return
-    if not has_permission(current_tenant().roles, permission):
+    if not has_permission(_caller_roles(), permission):
         _deny(connection, permission)
 
 
@@ -305,7 +319,7 @@ def ensure_permission(permission: str) -> None:
     """For handlers whose required permission depends on the payload."""
     if permission not in CATALOG:
         raise ValueError(f"unknown permission {permission!r}")
-    if not has_permission(current_tenant().roles, permission):
+    if not has_permission(_caller_roles(), permission):
         raise HTTPException(status_code=403, detail={"error": "permission_denied", "permission": permission})
 
 

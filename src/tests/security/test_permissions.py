@@ -180,3 +180,19 @@ def test_permissions_document_is_current() -> None:
     assert module["TARGET"].read_text(encoding="utf-8") == module["render"](), (
         "run scripts/generate_permissions_doc.py"
     )
+
+
+def test_gateway_without_installed_tenant_serves_the_local_owner(monkeypatch) -> None:
+    """Sign-in off and no persistence bootstrap (benchmarks): not a 500."""
+    from app.gateway.main import create_gateway_app
+    from app.runtime import tenant_context
+
+    class EmptyStore:
+        def get_job(self, job_id):
+            return None
+
+    monkeypatch.setattr(tenant_context, "_PROCESS_DEFAULT", None)
+    monkeypatch.delenv("OMNIX_AUTH_MODE", raising=False)
+    app = create_gateway_app(job_store_factory=lambda: EmptyStore())
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
+    assert client.get("/api/jobs/missing").status_code == 404

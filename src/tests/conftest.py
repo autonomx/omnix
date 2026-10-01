@@ -68,6 +68,7 @@ def postgres_local_identity(request):
     if not url or request.node.get_closest_marker("postgres") is None:
         yield
         return
+    from app.persistence.authority import PostgresAuthorityError
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import ensure_local_identity
@@ -75,6 +76,8 @@ def postgres_local_identity(request):
     database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=1))
     try:
         ensure_local_identity(database)
+    except PostgresAuthorityError:
+        pass  # Runtime writes are closed (cutover tests own that state).
     finally:
         database.close()
     yield
