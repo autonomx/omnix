@@ -30,6 +30,7 @@ from app.providers import ChatMessage as ProviderMessage
 
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
+from app.runtime.cancellation import CancellationToken
 
 _SPECULATION_TTL_SECONDS = 90.0
 _SESSION_CACHE_TTL_SECONDS = 120.0
@@ -391,7 +392,7 @@ def _generate_side_effect_free(
     session: Any,
     speculation: _Speculation,
     *,
-    cancel_event: threading.Event | None = None,
+    cancel_event: CancellationToken | None = None,
 ) -> Iterator[str]:
     live_voice = getattr(store, "live_voice_chat_port", None)
     if live_voice is None:
@@ -421,7 +422,7 @@ def _generate_side_effect_free(
     ]
     provider_kwargs: dict[str, Any] = {}
     if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
-        provider_kwargs["_cancel_event"] = cancel_event
+        provider_kwargs["cancel"] = cancel_event
     if str(getattr(provider, "provider_name", "")).strip().casefold() == "lmstudio":
         provider_kwargs.update(live_voice.lmstudio_live_voice_options(user_message))
         provider_kwargs["include_metrics"] = True

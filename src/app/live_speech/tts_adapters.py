@@ -8,8 +8,9 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-import requests
+import httpx
 
+from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
 
 from .tts import AudioDelta, DeterministicSpeechSynthesizer, StreamingSpeechSynthesizer
@@ -35,8 +36,9 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
             return []
         payload = {"text": clean, "voice": voice, "sample_rate": self.sample_rate}
         try:
-            response = requests.post(f"{self.base_url.rstrip('/')}/tts", json=payload, timeout=self.timeout_seconds,
-                                     headers=service_headers(), allow_redirects=False)
+            response = shared_http_client("tts-service").post(
+                f"{self.base_url.rstrip('/')}/tts", json=payload, timeout=self.timeout_seconds, headers=service_headers()
+            )
             response.raise_for_status()
             pcm = self._decode_response(response)
         except Exception:
@@ -55,7 +57,7 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
         self._sequence += 1
         return [delta]
 
-    def _decode_response(self, response: requests.Response) -> bytes:
+    def _decode_response(self, response: httpx.Response) -> bytes:
         content_type = response.headers.get("content-type", "").lower()
         if "application/json" in content_type:
             payload: dict[str, Any] = response.json()

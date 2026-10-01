@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-import requests
+import httpx
 from app.runtime.net import bind_host
 
 from .base import (
@@ -22,6 +22,7 @@ from .base import (
     ModelNotFoundError,
     ProviderCapability,
 )
+from .http_calls import transport_errors
 from .structured.transport import (
     pop_structured_transport_options,
     raise_if_structured_mode_rejected,
@@ -71,7 +72,7 @@ class LlamaCppProvider(BaseProvider):
 
     def _is_server_running(self) -> bool:
         try:
-            response = requests.get(f"{self.config.base_url}/v1/models", timeout=2)
+            response = self.http.request("GET", f"{self.config.base_url}/v1/models", timeout=2, retry=False)
             return response.status_code == 200
         except Exception:
             return False
@@ -214,37 +215,30 @@ class LlamaCppProvider(BaseProvider):
         *,
         timeout: float | None,
         stream: bool,
-    ) -> requests.Response:
-        try:
-            response = requests.post(
-                f"{self.config.base_url}/v1/chat/completions",
-                json=payload,
-                timeout=timeout if timeout is not None else self.config.timeout,
-                stream=stream,
-            )
-            response.raise_for_status()
+    ) -> Any:
+        """POST a chat completion; with ``stream`` the caller closes the response."""
+        url = f"{self.config.base_url}/v1/chat/completions"
+        timeout = timeout if timeout is not None else self.config.timeout
+        with transport_errors("llama.cpp server", timeout_target="llama.cpp"):
+            if stream:
+                response = self.http.open_stream("POST", url, json=payload, timeout=timeout)
+            else:
+                response = self.http.request("POST", url, json=payload, timeout=timeout)
+        if response.is_success:
             return response
-        except requests.exceptions.ConnectionError as exc:
-            raise ConnectionError(f"Failed to connect to llama.cpp server: {exc}") from exc
-        except requests.exceptions.Timeout as exc:
-            raise ConnectionError(f"Request to llama.cpp timed out: {exc}") from exc
-        except requests.exceptions.HTTPError as exc:
-            response = exc.response
-            status = response.status_code if response is not None else None
+        try:
+            body = response.read().decode("utf-8", "replace")[:2000]
+        except Exception:
             body = ""
-            if response is not None:
-                try:
-                    body = response.text[:2000]
-                except Exception:
-                    body = ""
-            raise_if_structured_mode_rejected(
-                status_code=status,
-                response_body=body,
-                error=exc,
-            )
-            raise ConnectionError(
-                f"HTTP error {status}: {exc}; response_body={body}"
-            ) from exc
+        finally:
+            response.close()
+        error = httpx.HTTPStatusError(
+            f"{response.status_code} {response.reason_phrase}",
+            request=response.request,
+            response=getattr(response, "response", response),
+        )
+        raise_if_structured_mode_rejected(status_code=response.status_code, response_body=body, error=error)
+        raise ConnectionError(f"HTTP error {response.status_code}: {error}; response_body={body}") from error
 
     def _non_stream_completion(
         self,
@@ -319,6 +313,8 @@ class LlamaCppProvider(BaseProvider):
                     continue
         except Exception as exc:
             raise ConnectionError(f"Stream error: {exc}") from exc
+        finally:
+            response.close()
 
     def get_models(self) -> List[ModelInfo]:
         try:

@@ -149,7 +149,7 @@ class HermesSidecarRecoveryClient:
         if not base_url:
             result = self._sidecar.rpg_plan({"context": dict(payload)})
             return dict(result) if isinstance(result, Mapping) else {}
-        import requests
+        from app.runtime.http_client import shared_http_client
 
         headers = {"Content-Type": "application/json"}
         api_key = getattr(self._sidecar, "api_key", None)
@@ -176,7 +176,7 @@ class HermesSidecarRecoveryClient:
                 },
             ],
         }
-        response = requests.post(
+        response = shared_http_client("hermes").post(
             f"{base_url}/v1/chat/completions",
             headers=headers,
             data=json.dumps(request_payload),

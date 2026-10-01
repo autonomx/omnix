@@ -4,6 +4,7 @@ import json
 import time
 from typing import Literal
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.providers.base import (
@@ -13,6 +14,7 @@ from app.providers.base import (
     ProviderConfig,
 )
 from app.providers.openai_compatible_provider import OpenAICompatibleProvider
+from tests.support.http import install_provider_http, read_timeout, request_json
 from app.providers.structured import (
     ProviderTimeout,
     StructuredContract,
@@ -183,43 +185,33 @@ def test_negative_capability_cache_is_scoped_to_schema_hash() -> None:
     assert second.calls[0]["response_format"]["type"] == "json_schema"
 
 
-def test_openai_compatible_forwards_structured_fields_and_timeout(monkeypatch) -> None:
+def test_openai_compatible_forwards_structured_fields_and_timeout() -> None:
     captured: dict = {}
-
-    class _Response:
-        status_code = 200
-        text = ""
-
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self):
-            return {
-                "model": "remote-model",
-                "choices": [
-                    {
-                        "message": {
-                            "content": "",
-                            "tool_calls": [
-                                {
-                                    "type": "function",
-                                    "function": {
-                                        "name": "return_value",
-                                        "arguments": '{"value":1}',
-                                    },
-                                }
-                            ],
-                        },
-                        "finish_reason": "tool_calls",
-                    }
-                ],
+    completion = {
+        "model": "remote-model",
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "return_value",
+                                "arguments": '{"value":1}',
+                            },
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
             }
+        ],
+    }
 
-    def request(method, url, **kwargs):
-        captured.update({"method": method, "url": url, **kwargs})
-        return _Response()
+    def handle(request):
+        captured.update({"method": request.method, "url": str(request.url), "json": request_json(request), "timeout": read_timeout(request)})
+        return httpx.Response(200, json=completion)
 
-    monkeypatch.setattr("app.providers.openai_compatible_provider.requests.request", request)
     provider = OpenAICompatibleProvider(
         ProviderConfig(
             provider_type="openai_compatible",
@@ -228,6 +220,7 @@ def test_openai_compatible_forwards_structured_fields_and_timeout(monkeypatch) -
             model="remote-model",
         )
     )
+    install_provider_http(provider, handle)
 
     response = provider.chat_completion(
         _messages(),

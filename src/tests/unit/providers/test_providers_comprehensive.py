@@ -3,9 +3,10 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
-import requests
 
+from tests.support.http import install_provider_http
 from app.providers import (
     AuthenticationError,
     CerebrasProvider,
@@ -21,6 +22,16 @@ from app.providers import (
     ProviderConfig,
 )
 
+
+
+def _lmstudio(handler, **config):
+    provider = LMStudioProvider(ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", **config))
+    install_provider_http(provider, handler)
+    return provider
+
+
+def _refuse(request):
+    raise httpx.ConnectError("Connection failed")
 
 class TestChatMessageFull:
     """Full test suite for ChatMessage."""
@@ -233,120 +244,75 @@ class TestBaseProviderHelperMethods:
 
 class TestLMStudioProviderFull:
     """Full test suite for LMStudioProvider."""
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_with_streaming(self, mock_requests):
+
+    def test_chat_completion_with_streaming(self):
         """Test streaming chat completion."""
-        def mock_stream():
-            lines = [
-                b'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n',
-                b'data: {"choices": [{"delta": {"content": " World"}}]}\n\n',
-                b'data: [DONE]\n\n'
-            ]
-            for line in lines:
-                yield line
-        
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = mock_stream()
-        mock_requests.request.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
-        provider = LMStudioProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        stream = provider.chat_completion(messages, stream=True)
-        
-        chunks = list(stream)
+        body = (
+            b'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n'
+            b'data: {"choices": [{"delta": {"content": " World"}}]}\n\n'
+            b"data: [DONE]\n\n"
+        )
+        provider = _lmstudio(lambda request: httpx.Response(200, content=body), model="test-model")
+
+        chunks = list(provider.chat_completion([ChatMessage(role="user", content="Hi")], stream=True))
+
         assert len(chunks) >= 2
         assert any(c.content for c in chunks)
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_connection_error(self, mock_requests):
+
+    def test_chat_completion_connection_error(self):
         """Test chat completion with connection error."""
-        mock_requests.request.side_effect = requests.exceptions.ConnectionError("Connection failed")
-        
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
-        provider = LMStudioProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
+        provider = _lmstudio(_refuse, model="test-model")
+
         with pytest.raises(ConnectionError):
-            provider.chat_completion(messages)
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_empty_messages(self, mock_requests):
+            provider.chat_completion([ChatMessage(role="user", content="Hi")])
+
+    def test_chat_completion_empty_messages(self):
         """Test chat completion with empty messages."""
-        config = ProviderConfig(provider_type="lmstudio")
-        provider = LMStudioProvider(config)
-        
+        provider = _lmstudio(_refuse)
+
         with pytest.raises(ValueError):
             provider.chat_completion([])
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_get_models_success(self, mock_requests):
+
+    def test_get_models_success(self):
         """Test successful get_models."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
+        models_payload = {
             "data": [
                 {"id": "model-1", "context_length": 4096, "description": "Model 1"},
-                {"id": "model-2", "context_length": 8192}
+                {"id": "model-2", "context_length": 8192},
             ]
         }
-        mock_requests.request.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234")
-        provider = LMStudioProvider(config)
-        
+        provider = _lmstudio(lambda request: httpx.Response(200, json=models_payload))
+
         models = provider.get_models()
-        
+
         assert len(models) == 2
         assert models[0].id == "model-1"
         assert models[0].context_length == 4096
         assert models[1].id == "model-2"
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_get_models_empty(self, mock_requests):
-        """Test get_models with empty response."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"data": []}
-        mock_requests.request.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio")
-        provider = LMStudioProvider(config)
-        models = provider.get_models()
-        assert models == []
 
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_get_models_connection_error(self, mock_requests):
+    def test_get_models_empty(self):
+        """Test get_models with empty response."""
+        provider = _lmstudio(lambda request: httpx.Response(200, json={"data": []}))
+
+        assert provider.get_models() == []
+
+    def test_get_models_connection_error(self):
         """Test get_models with connection error."""
-        mock_requests.request.side_effect = ConnectionError("Connection failed")
-        
-        config = ProviderConfig(provider_type="lmstudio")
-        provider = LMStudioProvider(config)
-        
+        provider = _lmstudio(_refuse)
+
         with pytest.raises(ConnectionError):
             provider.get_models()
 
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_test_connection_success(self, mock_requests):
+    def test_test_connection_success(self):
         """Test successful test_connection."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_requests.request.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234")
-        provider = LMStudioProvider(config)
-        
-        result = provider.test_connection()
-        assert result is True
+        provider = _lmstudio(lambda request: httpx.Response(200, json={"data": []}))
 
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_test_connection_failure(self, mock_requests):
+        assert provider.test_connection() is True
+
+    def test_test_connection_failure(self):
         """Test failed test_connection."""
-        mock_requests.request.side_effect = ConnectionError("Connection failed")
-        
-        config = ProviderConfig(provider_type="lmstudio")
-        provider = LMStudioProvider(config)
-        
+        provider = _lmstudio(_refuse)
+
         result = provider.test_connection()
         assert result is False
     
@@ -455,8 +421,7 @@ class TestLlamaCppProviderFull:
         provider = LlamaCppProvider(config)
         assert provider.requires_api_key() is False
     
-    @patch('app.providers.llamacpp_provider.requests')
-    def test_chat_completion_model_not_found(self, mock_requests):
+    def test_chat_completion_model_not_found(self):
         """Test chat completion when model not found."""
         config = ProviderConfig(provider_type="llamacpp", model="nonexistent.gguf")
         provider = LlamaCppProvider(config)
@@ -464,8 +429,7 @@ class TestLlamaCppProviderFull:
         with pytest.raises(ModelNotFoundError):
             provider.chat_completion([ChatMessage(role="user", content="Hi")])
     
-    @patch('app.providers.llamacpp_provider.requests')
-    def test_chat_completion_empty_messages(self, mock_requests):
+    def test_chat_completion_empty_messages(self):
         """Test chat completion with empty messages."""
         config = ProviderConfig(provider_type="llamacpp")
         provider = LlamaCppProvider(config)
@@ -513,13 +477,11 @@ class TestLlamaCppProviderFull:
         assert models[0].metadata["size"] == 1024 * 1024 * 1024
         assert models[1].id == "model2.gguf"
     
-    @patch('app.providers.llamacpp_provider.requests')
-    def test_test_connection_server_not_running(self, mock_requests):
+    def test_test_connection_server_not_running(self):
         """Test test_connection when server is not running."""
-        mock_requests.get.side_effect = ConnectionError()
-        
         config = ProviderConfig(provider_type="llamacpp", base_url="http://localhost:8080")
         provider = LlamaCppProvider(config)
+        install_provider_http(provider, _refuse)
         
         result = provider.test_connection()
         assert result is False
@@ -527,31 +489,18 @@ class TestLlamaCppProviderFull:
 class TestStreamingEdgeCases:
     """Test streaming edge cases across providers."""
     
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_streaming_malformed_lines(self, mock_requests):
+    def test_streaming_malformed_lines(self):
         """Test streaming with malformed SSE lines."""
-        def mock_stream():
-            lines = [
-                b'data: malformed json\n\n',
-                b'data: {"not": "a proper SSE"}\n\n',
-                b'data: {"choices": [{"delta": {"content": "Valid"}}]}\n\n',
-                b'data: [DONE]\n\n'
-            ]
-            for line in lines:
-                yield line
-        
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = mock_stream()
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio", model="test-model")
-        provider = LMStudioProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        stream = provider.chat_completion(messages, stream=True)
-        
+        body = (
+            b"data: malformed json\n\n"
+            b'data: {"not": "a proper SSE"}\n\n'
+            b'data: {"choices": [{"delta": {"content": "Valid"}}]}\n\n'
+            b"data: [DONE]\n\n"
+        )
+        provider = _lmstudio(lambda request: httpx.Response(200, content=body), model="test-model")
+
         # Should yield at least one valid chunk without raising
-        chunks = list(stream)
+        chunks = list(provider.chat_completion([ChatMessage(role="user", content="Hi")], stream=True))
         assert isinstance(chunks, list)
     
 class TestProviderConfiguration:

@@ -6,8 +6,9 @@ import uuid
 import wave
 from typing import Any
 
-import requests
+import httpx
 
+from app.runtime.http_client import PooledHttpClient, shared_http_client
 from app.security.service_token import service_headers
 
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
@@ -25,18 +26,23 @@ def _tts_base_url() -> str:
     return endpoint.url if endpoint else 'http://127.0.0.1:5101'
 
 
+def _http() -> PooledHttpClient:
+    """The pooled client for the TTS model service (WP-7.2)."""
+    return shared_http_client("tts-service")
+
+
 def _trace_id(prefix: str) -> str:
     return f"{prefix}:{uuid.uuid4()}"
 
 
 def tts_health(timeout: float = 5.0) -> dict[str, Any]:
     try:
-        response = requests.get(f"{_tts_base_url()}/health", timeout=timeout)
+        response = _http().get(f"{_tts_base_url()}/health", timeout=timeout, retry=False)
         response.raise_for_status()
         data = response.json()
         data["reachable"] = True
         return data
-    except (requests.RequestException, ValueError) as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         return {
             "ok": False,
             "reachable": False,
@@ -56,7 +62,7 @@ def tts_speakers(timeout: float = 10.0) -> dict[str, Any]:
         log_path=voice_debug_log_path("backend"),
     )
     try:
-        response = requests.get(endpoint, timeout=timeout, headers=service_headers(), allow_redirects=False)
+        response = _http().get(endpoint, timeout=timeout, headers=service_headers())
         voice_debug_log(
             "backend",
             "tts_speakers_response",
@@ -79,7 +85,7 @@ def tts_speakers(timeout: float = 10.0) -> dict[str, Any]:
             ][:100] if isinstance(speakers, list) else [],
         )
         return data
-    except (requests.RequestException, ValueError) as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         voice_debug_log(
             "backend",
             "tts_speakers_failed",
@@ -128,7 +134,7 @@ def tts_generate_audio(
         log_path=voice_debug_log_path("backend"),
     )
     try:
-        response = requests.post(endpoint, json=payload, timeout=timeout, headers=service_headers(), allow_redirects=False)
+        response = _http().post(endpoint, json=payload, timeout=timeout, headers=service_headers())
         voice_debug_log(
             "backend",
             "tts_audio_response",
@@ -149,7 +155,7 @@ def tts_generate_audio(
             error=result.get("error") if isinstance(result, dict) else None,
         )
         return result
-    except (requests.RequestException, ValueError, RuntimeError) as exc:
+    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         voice_debug_log(
             "backend",
             "tts_audio_failed",
@@ -202,11 +208,11 @@ def tts_generate_stream_audio(
         log_path=voice_debug_log_path("backend"),
     )
     try:
-        response = requests.post(
+        response = _http().post(
             endpoint,
             json=payload,
             timeout=timeout,
-            headers=service_headers(), allow_redirects=False,
+            headers=service_headers(),
         )
         content_type = (response.headers.get("content-type") or "").lower()
         voice_debug_log(
@@ -264,7 +270,7 @@ def tts_generate_stream_audio(
             error=result.get("error") if isinstance(result, dict) else None,
         )
         return result
-    except (requests.RequestException, ValueError, RuntimeError) as exc:
+    except (httpx.HTTPError, ValueError, RuntimeError) as exc:
         voice_debug_log(
             "backend",
             "tts_stream_failed",
@@ -296,12 +302,12 @@ def tts_voice_clone(
         files = {
             "file": (filename, audio_bytes, "audio/wav"),
         }
-    response = requests.post(
+    response = _http().post(
         f"{_tts_base_url()}/api/tts/voice_clone",
         data=data,
         files=files,
         timeout=timeout,
-        headers=service_headers(), allow_redirects=False,
+        headers=service_headers(),
     )
     response.raise_for_status()
     return response.json()

@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterator, List, Optional, Union
 
+from app.runtime.http_client import HttpPolicy, PooledHttpClient
+
 
 class ProviderCapability(Enum):
     """Capabilities that a provider may support."""
@@ -187,6 +189,27 @@ class BaseProvider(ABC):
         """
         self.config = config
         self._validate_config()
+
+    @property
+    def http(self) -> PooledHttpClient:
+        """This provider's pooled HTTP client (WP-7.2), created on first use."""
+        client = self.__dict__.get("_http_client")
+        if client is None:
+            client = PooledHttpClient(
+                self.provider_name,
+                HttpPolicy(
+                    read_seconds=float(self.config.timeout or 300),
+                    max_retries=max(0, int(self.config.max_retries)),
+                ),
+            )
+            client = self.__dict__.setdefault("_http_client", client)
+        return client
+
+    def close(self) -> None:
+        """Release the provider's pooled connections."""
+        client = self.__dict__.pop("_http_client", None)
+        if client is not None:
+            client.close()
     
     def _validate_config(self):
         """Validate the provider configuration. Override in subclasses if needed."""

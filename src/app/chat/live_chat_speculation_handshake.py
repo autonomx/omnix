@@ -23,6 +23,7 @@ from app.chat import ChatSessionStore, default_chat_store
 from . import live_chat_speculation as speculation_runtime
 from app.runtime.live_voice_config import resolve_live_voice_chat_route
 from app.observability.tts_stream_diagnostics import stream_log
+from app.runtime.cancellation import CancellationToken
 
 _MAX_BUFFERED_EVENTS = 256
 _MAX_BUFFERED_BYTES = 256 * 1024
@@ -47,7 +48,8 @@ class _HandshakeGeneration:
     stream_started: bool = False
     completed: bool = False
     terminal_emitted: bool = False
-    cancel_event: threading.Event = field(default_factory=threading.Event)
+    # A token, not an Event: a cancel also aborts the provider's HTTP stream.
+    cancel_event: CancellationToken = field(default_factory=CancellationToken)
     worker: threading.Thread | None = None
 
 

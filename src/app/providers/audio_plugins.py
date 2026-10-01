@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
 import numpy as np
-import requests
 
+from app.runtime.http_client import PooledHttpClient, shared_http_client
 from app.security.service_token import service_headers
 from app.runtime.config import get_runtime_config
 
@@ -32,6 +32,11 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PARAKEET_BASE_URL = "http://127.0.0.1:5201"
 LEGACY_PARAKEET_BASE_URLS = {"http://localhost:8000", "http://127.0.0.1:8000"}
+
+
+def _stt_http() -> PooledHttpClient:
+    """The pooled client for the speech-to-text service (WP-7.2)."""
+    return shared_http_client("stt-service")
 
 
 def _parakeet_base_url(config: Dict[str, Any]) -> str:
@@ -97,7 +102,7 @@ class ParakeetSTT(BaseSTTProvider):
     def health_check(self) -> bool:
         try:
             base_url = _parakeet_base_url(self.config)
-            response = requests.get(f"{base_url}/health", timeout=5)
+            response = _stt_http().get(f"{base_url}/health", timeout=5, retry=False)
             return response.status_code == 200
         except Exception:
             return False
@@ -158,8 +163,8 @@ class ParakeetSTT(BaseSTTProvider):
                     data['language'] = language
                 data.update(kwargs)
                 
-                response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
-                                         headers=service_headers(), allow_redirects=False)
+                response = _stt_http().post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
+                                            headers=service_headers())
             
             return self._parse_response(response)
             
@@ -200,8 +205,8 @@ class ParakeetSTT(BaseSTTProvider):
                     data.update(kwargs)
                     
                     print(f"[PARAKEET-PLUGIN] Sending audio to {base_url}/transcribe. Size: {len(audio_data)} bytes, {len(int16_data)} samples, {sample_rate}Hz")
-                    response = requests.post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
-                                             headers=service_headers(), allow_redirects=False)
+                    response = _stt_http().post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
+                                                headers=service_headers())
                     
                 return self._parse_response(response)
             finally:

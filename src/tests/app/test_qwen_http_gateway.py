@@ -1,11 +1,13 @@
-from types import SimpleNamespace
+import json
+import secrets
 
+import httpx
 import numpy as np
 import pytest
-import secrets
 
 from app.providers.qwen_http_gateway import QwenHttpGatewayProvider, TtsServiceSaturated
 from app.providers import service as shared
+from tests.support.http import mock_http_client
 
 
 @pytest.fixture(autouse=True)
@@ -13,69 +15,60 @@ def issued_service_token(monkeypatch):
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
-def test_streaming_pcm16_is_decoded_without_loading_a_gpu_model(monkeypatch):
+class _ClosingStream(httpx.SyncByteStream):
+    def __init__(self, parts):
+        self.parts = parts
+        self.closed = False
+
+    def __iter__(self):
+        yield from self.parts
+
+    def close(self):
+        self.closed = True
+
+
+def _gateway(handler):
+    provider = QwenHttpGatewayProvider('http://127.0.0.1:5101/')
+    provider.http = mock_http_client(handler)
+    return provider
+
+
+def test_streaming_pcm16_is_decoded_without_loading_a_gpu_model():
     pcm = np.array([8192, -8192] * 2500, dtype='<i2').tobytes()
     calls = []
-    class Response:
-        status_code = 200
-        headers = {
+    body = _ClosingStream((pcm[:1], pcm[1:3001], pcm[3001:]))
+
+    def handle(request):
+        calls.append(request)
+        return httpx.Response(200, headers={
             'X-Omnix-Audio-Format': 'pcm_s16le',
             'X-Omnix-Sample-Rate': '24000',
             'X-Omnix-Channels': '1',
-        }
-        closed = False
+        }, stream=body)
 
-        def raise_for_status(self):
-            return None
-
-        def iter_content(self, chunk_size):
-            assert chunk_size == 4800
-            return iter((pcm[:1], pcm[1:3001], pcm[3001:]))
-
-        def close(self):
-            self.closed = True
-
-    response = Response()
-    def post(url, **kwargs):
-        calls.append((url, kwargs))
-        return response
-    monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', post)
-    chunks = list(QwenHttpGatewayProvider('http://127.0.0.1:5101/').generate_audio_stream('hello', speaker='Alex', max_new_tokens=32, parity_mode=False))
+    chunks = list(_gateway(handle).generate_audio_stream('hello', speaker='Alex', max_new_tokens=32, parity_mode=False))
     assert sum(len(audio) for audio, _, _ in chunks) == 5000
     np.testing.assert_allclose(chunks[0][0][:2], [.25, -.25])
     assert chunks[0][1] == 24000
-    assert calls[0][1]['json'] == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32}
-    assert calls[0][1]['headers']['X-Omnix-Client'] == 'gateway'
-    assert calls[0][0].endswith('/api/tts/live-call/stream')
-    assert calls[0][1]['stream'] is True
-    assert response.closed
+    assert json.loads(calls[0].content) == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32}
+    assert calls[0].headers['X-Omnix-Client'] == 'gateway'
+    assert str(calls[0].url).endswith('/api/tts/live-call/stream')
+    assert body.closed
 
 
-def test_remote_synthesis_failure_has_no_synthetic_fallback(monkeypatch):
-    import requests
-
-    response = SimpleNamespace(
-        status_code=503,
-        headers={},
-        raise_for_status=lambda: (_ for _ in ()).throw(requests.HTTPError('service unavailable')),
-        close=lambda: None,
-    )
-    monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', lambda *args, **kwargs: response)
-    with pytest.raises(requests.HTTPError, match='service unavailable'):
-        list(QwenHttpGatewayProvider('http://127.0.0.1:5101').generate_audio_stream('hello'))
+def test_remote_synthesis_failure_has_no_synthetic_fallback():
+    gateway = _gateway(lambda request: httpx.Response(503))
+    with pytest.raises(httpx.HTTPStatusError, match='503'):
+        list(gateway.generate_audio_stream('hello'))
 
 
-def test_remote_synthesis_saturation_preserves_retry_after(monkeypatch):
-    response = SimpleNamespace(
-        status_code=429,
-        headers={'Retry-After': '2'},
-        raise_for_status=lambda: None,
-        close=lambda: None,
-    )
-    monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', lambda *args, **kwargs: response)
+def test_remote_synthesis_saturation_preserves_retry_after_without_retrying():
+    calls = []
+    gateway = _gateway(lambda request: calls.append(request) or httpx.Response(429, headers={'Retry-After': '2'}))
     with pytest.raises(TtsServiceSaturated) as captured:
-        list(QwenHttpGatewayProvider('http://127.0.0.1:5101').generate_audio_stream('hello'))
+        list(gateway.generate_audio_stream('hello'))
     assert captured.value.retry_after == '2'
+    assert len(calls) == 1  # realtime: the caller decides whether to wait
 
 
 def test_gateway_http_selection_does_not_construct_local_provider(monkeypatch):
@@ -116,11 +109,9 @@ def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatc
         provider_service.get_tts_provider()
 
 
-def test_runtime_status_reports_the_remote_gpu_service(monkeypatch):
+def test_runtime_status_reports_the_remote_gpu_service():
     payload = {'ok': True, 'status': 'ready', 'details': {'runtime_status': {'model_loaded': True}}}
-    response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
-    monkeypatch.setattr('app.providers.qwen_http_gateway.requests.get', lambda *args, **kwargs: response)
-    provider = QwenHttpGatewayProvider('http://127.0.0.1:5101')
+    provider = _gateway(lambda request: httpx.Response(200, json=payload))
     assert provider.start()['running'] is True
     assert provider.get_runtime_status()['runtime_status']['model_loaded'] is True
     assert provider.get_runtime_status()['transport'] == 'http_streaming_pcm16'

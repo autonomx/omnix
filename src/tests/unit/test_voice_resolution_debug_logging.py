@@ -5,8 +5,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import httpx
 import tts_server
 from app import tts_http_client
+from tests.support.http import mock_http_client
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
 
@@ -86,38 +88,11 @@ def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, mo
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", "t" * 43)
     captured: dict[str, Any] = {}
 
-    class FakeResponse:
-        def __init__(self) -> None:
-            self.status_code = 200
-            self.headers = {"content-type": "application/json"}
-            self.content = b'{"success": false, "error": "debug-only"}'
+    def handle(request: httpx.Request) -> httpx.Response:
+        captured.update({"url": str(request.url), "json": json.loads(request.content), "headers": dict(request.headers)})
+        return httpx.Response(200, json={"success": False, "error": "debug-only"})
 
-        @staticmethod
-        def raise_for_status() -> None:
-            return None
-
-        @staticmethod
-        def json() -> dict[str, Any]:
-            return {"success": False, "error": "debug-only"}
-
-    def fake_post(
-        url: str,
-        *,
-        json: dict[str, Any],
-        timeout: float,
-        headers: dict[str, str] | None = None,
-        allow_redirects: bool = True,
-    ) -> FakeResponse:
-        captured.update({
-            "url": url,
-            "json": json,
-            "timeout": timeout,
-            "headers": headers,
-            "allow_redirects": allow_redirects,
-        })
-        return FakeResponse()
-
-    monkeypatch.setattr(tts_http_client.requests, "post", fake_post)
+    monkeypatch.setattr(tts_http_client, "_http", lambda: mock_http_client(handle))
     result = tts_http_client.tts_generate_stream_audio(text="hello", speaker="Inigo")
 
     assert result == {"success": False, "error": "debug-only"}
@@ -125,4 +100,3 @@ def test_backend_stream_forward_includes_speaker_and_trace_id(tmp_path: Path, mo
     assert captured["json"]["trace_id"].startswith("tts-stream:")
     assert captured["json"]["text"] == "hello"
     assert captured["headers"]
-    assert captured["allow_redirects"] is False

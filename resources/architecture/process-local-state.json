@@ -1198,6 +1198,15 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/runtime/http_client.py",
+      "symbol": "shared_http_client.__cache__",
+      "category": "cache",
+      "reason": "Pooled HTTP clients per service name and policy (WP-7.2). Each holds only reusable connections and a circuit-breaker state, never request data; losing one costs a reconnect. Bounded, expiring, and cleared with cache_clear.",
+      "max_entries": 64,
+      "ttl_seconds": 86400.0,
+      "invalidation": "shared_http_client.cache_clear"
+    },
+    {
       "path": "src/app/runtime/worker_health.py",
       "symbol": "_health_probes",
       "category": "cache",

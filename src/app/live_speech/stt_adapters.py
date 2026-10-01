@@ -14,8 +14,7 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from typing import Any
 
-import requests
-
+from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
 
 from .stt import BufferedStreamingTranscriber, StreamingTranscriber, TranscriptUpdate
@@ -68,11 +67,11 @@ class ParakeetServiceTranscriber(StreamingTranscriber):
 
     def _transcribe_with_service(self, pcm: bytes) -> str:
         wav_bytes = _pcm16_wav_bytes(pcm, sample_rate=self.sample_rate)
-        response = requests.post(
+        response = shared_http_client("stt-service").post(
             f"{self.base_url.rstrip('/')}/transcribe",
             files={"file": ("utterance.wav", wav_bytes, "audio/wav")},
             timeout=self.timeout_seconds,
-            headers=service_headers(), allow_redirects=False,
+            headers=service_headers(),
         )
         response.raise_for_status()
         payload: dict[str, Any] = response.json()

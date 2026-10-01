@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack, contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Union
 
-import requests
+import httpx
 
 from .base import (
     AuthenticationError,
@@ -13,12 +14,11 @@ from .base import (
     ChatResponse,
     ConnectionError,
     ModelInfo,
-    ModelNotFoundError,
     ProviderCapability,
 )
+from .http_calls import raise_for_provider_status, transport_errors
 from .structured.transport import (
     pop_structured_transport_options,
-    raise_if_structured_mode_rejected,
 )
 
 
@@ -43,55 +43,29 @@ class CerebrasProvider(BaseProvider):
             raise AuthenticationError("Cerebras requires an API key")
         self.config.base_url = self.config.base_url.rstrip("/")
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+    def _request_target(self, endpoint: str, kwargs: dict[str, Any]) -> tuple[str, dict[str, str]]:
         url = f"{self.config.base_url}{endpoint}"
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {self.config.api_key}"
         headers["Content-Type"] = "application/json"
-        timeout = kwargs.pop("timeout", self.config.timeout)
-        try:
-            response = requests.request(
-                method,
-                url,
-                headers=headers,
-                timeout=timeout,
-                **kwargs,
-            )
-            response.raise_for_status()
-            return response
-        except requests.exceptions.ConnectionError as exc:
-            raise ConnectionError(f"Failed to connect to Cerebras at {url}: {exc}") from exc
-        except requests.exceptions.Timeout as exc:
-            raise ConnectionError(f"Connection to Cerebras timed out: {exc}") from exc
-        except requests.exceptions.HTTPError as exc:
-            response = exc.response
-            status = response.status_code if response is not None else None
-            body = ""
-            if response is not None:
-                try:
-                    body = response.text[:2000]
-                except Exception:
-                    body = ""
-            raise_if_structured_mode_rejected(
-                status_code=status,
-                response_body=body,
-                error=exc,
-            )
-            if status in {401, 403}:
-                raise AuthenticationError(f"Authentication failed: {exc}") from exc
-            if status == 404:
-                raise ModelNotFoundError(f"Resource not found: {exc}") from exc
-            if status == 429:
-                from .exceptions import RateLimitError
+        kwargs.setdefault("timeout", self.config.timeout)
+        return url, headers
 
-                raise RateLimitError(f"Rate limit exceeded: {exc}") from exc
-            raise ConnectionError(
-                f"HTTP error {status}: {exc}; response_body={body}"
-            ) from exc
-        except Exception as exc:
-            if isinstance(exc, (AuthenticationError, ModelNotFoundError, ConnectionError)):
-                raise
-            raise ConnectionError(f"Unexpected error: {exc}") from exc
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> httpx.Response:
+        url, headers = self._request_target(endpoint, kwargs)
+        with transport_errors(f"Cerebras at {url}", timeout_target="Cerebras"):
+            response = self.http.request(method, url, headers=headers, **kwargs)
+        raise_for_provider_status(response)
+        return response
+
+    @contextmanager
+    def _stream_request(self, endpoint: str, **kwargs) -> Iterator[httpx.Response]:
+        url, headers = self._request_target(endpoint, kwargs)
+        with ExitStack() as stack:
+            with transport_errors(f"Cerebras at {url}", timeout_target="Cerebras"):
+                response = stack.enter_context(self.http.stream("POST", url, headers=headers, **kwargs))
+            raise_for_provider_status(response)
+            yield response
 
     def chat_completion(
         self,
@@ -163,13 +137,17 @@ class CerebrasProvider(BaseProvider):
         *,
         timeout: float | None = None,
     ) -> Iterator[ChatResponse]:
-        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        request_kwargs: Dict[str, Any] = {"json": payload}
         if timeout is not None:
             request_kwargs["timeout"] = timeout
-        try:
-            response = self._make_request("post", self.CHAT_ENDPOINT, **request_kwargs)
-        except Exception as exc:
-            raise ConnectionError(f"Failed to start stream: {exc}") from exc
+        with ExitStack() as stack:
+            try:
+                response = stack.enter_context(self._stream_request(self.CHAT_ENDPOINT, **request_kwargs))
+            except Exception as exc:
+                raise ConnectionError(f"Failed to start stream: {exc}") from exc
+            yield from self._stream_events(response, payload)
+
+    def _stream_events(self, response: httpx.Response, payload: dict[str, Any]) -> Iterator[ChatResponse]:
         try:
             for line in response.iter_lines():
                 if not line:

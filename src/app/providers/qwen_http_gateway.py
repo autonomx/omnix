@@ -4,8 +4,8 @@ from __future__ import annotations
 import time
 
 import numpy as np
-import requests
 
+from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
 
 
@@ -22,13 +22,15 @@ class QwenHttpGatewayProvider:
 
     def __init__(self, base_url: str):
         self.base_url = base_url.strip().strip('"').strip("'").replace(' ', '').rstrip('/')
+        # Shares the TTS service's connection pool with app.tts_http_client.
+        self.http = shared_http_client("tts-service")
 
     def start(self):
         health = self._health()
         return {'running': bool(health.get('ok')), 'message': health.get('error', '')}
 
     def _health(self):
-        response = requests.get(self.base_url + '/health', timeout=5)
+        response = self.http.get(self.base_url + '/health', timeout=5, retry=False)
         response.raise_for_status()
         return response.json()
 
@@ -45,15 +47,14 @@ class QwenHttpGatewayProvider:
         return True
 
     def get_speakers(self):
-        response = requests.get(self.base_url + '/api/tts/speakers', timeout=10,
-                                headers=service_headers(), allow_redirects=False)
+        response = self.http.get(self.base_url + '/api/tts/speakers', timeout=10, headers=service_headers())
         response.raise_for_status()
         return response.json().get('speakers', [])
 
     def generate_audio(self, text, speaker=None, language=None, **kwargs):
-        response = requests.post(self.base_url + '/api/tts/generate_audio',
+        response = self.http.post(self.base_url + '/api/tts/generate_audio',
             json={'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}, timeout=120,
-            headers=service_headers(), allow_redirects=False)
+            headers=service_headers())
         response.raise_for_status()
         result = response.json()
         if not result.get('success') or result.get('is_fallback'):
@@ -65,13 +66,15 @@ class QwenHttpGatewayProvider:
         allowed = {'chunk_size', 'temperature', 'top_k', 'top_p', 'repetition_penalty', 'append_silence', 'max_new_tokens'}
         payload = {key: value for key, value in kwargs.items() if key in allowed and value is not None}
         payload.update(text=text, speaker=speaker or 'default', language=language or 'en')
-        response = requests.post(
+        # Realtime: a saturated service is reported at once (no retry); the
+        # caller decides whether to wait for Retry-After.
+        response = self.http.open_stream(
+            'POST',
             self.base_url + '/api/tts/live-call/stream',
             json=payload,
             timeout=(5, 120),
             headers=service_headers(),
-            allow_redirects=False,
-            stream=True,
+            retry=False,
         )
         try:
             if response.status_code == 429:
@@ -83,7 +86,7 @@ class QwenHttpGatewayProvider:
                 raise ValueError('Qwen service must return mono PCM16 audio')
             rate = int(response.headers.get('X-Omnix-Sample-Rate', '24000'))
             remainder = b''
-            for chunk in response.iter_content(chunk_size=4800):
+            for chunk in response.iter_bytes(chunk_size=4800):
                 if not chunk:
                     continue
                 pcm = remainder + chunk

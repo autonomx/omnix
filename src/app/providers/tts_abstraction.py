@@ -12,7 +12,9 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from typing import Any, Dict, Iterator, List, Optional
 
-import requests
+import httpx
+
+from app.runtime.http_client import HttpPolicy, PooledHttpClient
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ class OpenAITTSProvider(TTSProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._voice = voice
+        self.http = PooledHttpClient("openai-tts", HttpPolicy(read_seconds=30))
 
     @property
     def name(self) -> str:
@@ -77,15 +80,10 @@ class OpenAITTSProvider(TTSProvider):
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         try:
-            resp = requests.post(
-                f"{self._base_url}/audio/speech",
-                json=payload,
-                headers=headers,
-                timeout=30,
-            )
+            resp = self.http.post(f"{self._base_url}/audio/speech", json=payload, headers=headers)
             resp.raise_for_status()
             return resp.content
-        except requests.RequestException as exc:
+        except httpx.HTTPError as exc:
             logger.error("OpenAI TTS request failed: %s", exc)
             return b""
 
@@ -107,18 +105,12 @@ class OpenAITTSProvider(TTSProvider):
             headers["Authorization"] = f"Bearer {self._api_key}"
 
         try:
-            resp = requests.post(
-                f"{self._base_url}/audio/speech",
-                json=payload,
-                headers=headers,
-                timeout=30,
-                stream=True,
-            )
-            resp.raise_for_status()
-            for chunk in resp.iter_content(chunk_size=4096):
-                if chunk:
-                    yield chunk
-        except requests.RequestException as exc:
+            with self.http.stream("POST", f"{self._base_url}/audio/speech", json=payload, headers=headers) as resp:
+                resp.raise_for_status()
+                for chunk in resp.iter_bytes(chunk_size=4096):
+                    if chunk:
+                        yield chunk
+        except httpx.HTTPError as exc:
             logger.error("OpenAI TTS streaming request failed: %s", exc)
 
 

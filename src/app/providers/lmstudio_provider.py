@@ -3,15 +3,12 @@ from __future__ import annotations
 from app.config.env import env_str as _env_str
 
 import json
-import threading
 from typing import Any, Dict, Iterator, List, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
 
-import requests
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from requests.exceptions import HTTPError as RequestsHTTPError
-from requests.exceptions import Timeout as RequestsTimeout
+import httpx
 
+from app.runtime.cancellation import CancellationToken
 from app.security.url_policy import UrlPolicyError, check_outbound_url
 
 from .base import (
@@ -23,6 +20,7 @@ from .base import (
     ModelInfo,
     ProviderCapability,
 )
+from .http_calls import transport_errors
 from .provider_trace import provider_call_enter, provider_call_exit
 from .structured.transport import (
     pop_structured_transport_options,
@@ -104,7 +102,16 @@ class LMStudioProvider(BaseProvider):
         configured = str(self.config.api_key or "").strip()
         return configured or _env_str("LM_API_TOKEN", "").strip()
 
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        *,
+        stream: bool = False,
+        cancel: CancellationToken | None = None,
+        **kwargs,
+    ) -> Any:
+        """Send a request; with ``stream`` the caller closes the returned response."""
         url = f"{self.config.base_url}{endpoint}"
         try:
             check_outbound_url(url, resolve=True)
@@ -117,42 +124,39 @@ class LMStudioProvider(BaseProvider):
             headers["Authorization"] = f"Bearer {api_token}"
         if headers:
             kwargs["headers"] = headers
+        with transport_errors(f"LM Studio at {url}", timeout_target="LM Studio"):
+            if stream:
+                response = self.http.open_stream(method, url, timeout=timeout, cancel=cancel, **kwargs)
+            else:
+                response = self.http.request(method, url, timeout=timeout, cancel=cancel, **kwargs)
         try:
-            response = requests.request(method, url, timeout=timeout, **kwargs)
-            try:
-                response.raise_for_status()
-            except Exception as exc:
-                body = ""
-                try:
-                    body = response.text[:2000]
-                except Exception:
-                    body = ""
-                raise_if_structured_mode_rejected(
-                    status_code=response.status_code,
-                    response_body=body,
-                    error=exc,
-                )
-                if response.status_code == 401:
-                    raise AuthenticationError(
-                        "LM Studio rejected the request as unauthorized. "
-                        "Set LM_API_TOKEN or provide ProviderConfig.api_key."
-                    ) from exc
-                raise ConnectionError(
-                    f"HTTP error {response.status_code}: {exc}; response_body={body}"
-                ) from exc
-            return response
-        except RequestsConnectionError as exc:
-            raise ConnectionError(f"Failed to connect to LM Studio at {url}: {exc}") from exc
-        except RequestsTimeout as exc:
-            raise ConnectionError(f"Connection to LM Studio timed out: {exc}") from exc
-        except RequestsHTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 401:
-                raise AuthenticationError(f"Authentication failed: {exc}") from exc
-            raise ConnectionError(f"HTTP error: {exc}") from exc
-        except Exception as exc:
-            if isinstance(exc, (ConnectionError, AuthenticationError)):
-                raise
-            raise ConnectionError(f"Unexpected error: {exc}") from exc
+            self._raise_for_status(response)
+        except BaseException:
+            response.close()
+            raise
+        return response
+
+    @staticmethod
+    def _raise_for_status(response: Any) -> None:
+        if response.is_success:
+            return
+        status = response.status_code
+        try:
+            body = response.read().decode("utf-8", "replace")[:2000]
+        except Exception:
+            body = ""
+        error = httpx.HTTPStatusError(
+            f"{status} {response.reason_phrase}",
+            request=response.request,
+            response=getattr(response, "response", response),  # an OpenStream wraps one
+        )
+        raise_if_structured_mode_rejected(status_code=status, response_body=body, error=error)
+        if status == 401:
+            raise AuthenticationError(
+                "LM Studio rejected the request as unauthorized. "
+                "Set LM_API_TOKEN or provide ProviderConfig.api_key."
+            ) from error
+        raise ConnectionError(f"HTTP error {status}: {error}; response_body={body}") from error
 
     def _make_chat_completion_request(
         self,
@@ -161,8 +165,9 @@ class LMStudioProvider(BaseProvider):
         stream: bool,
         include_metrics: bool,
         timeout: float | None = None,
-    ) -> requests.Response:
-        request_kwargs: Dict[str, Any] = {"json": payload, "stream": stream}
+        cancel: CancellationToken | None = None,
+    ) -> Any:
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": stream, "cancel": cancel}
         if timeout is not None:
             request_kwargs["timeout"] = timeout
         if not include_metrics:
@@ -186,34 +191,6 @@ class LMStudioProvider(BaseProvider):
                 _OPENAI_CHAT_COMPLETIONS_ENDPOINT,
                 **request_kwargs,
             )
-
-    @staticmethod
-    def _start_stream_cancel_watcher(
-        response: requests.Response,
-        cancel_event: threading.Event | None,
-    ) -> threading.Event | None:
-        """Close a streaming response promptly when private work is cancelled."""
-        if cancel_event is None:
-            return None
-        watcher_done = threading.Event()
-
-        def watch() -> None:
-            while not watcher_done.is_set():
-                if cancel_event.wait(timeout=_STREAM_CANCEL_POLL_SECONDS):
-                    if watcher_done.is_set():
-                        return
-                    try:
-                        response.close()
-                    except Exception:
-                        return
-                    return
-
-        threading.Thread(
-            target=watch,
-            name="omnix-lmstudio-stream-cancel",
-            daemon=True,
-        ).start()
-        return watcher_done
 
     def _native_v1_payload(
         self,
@@ -302,7 +279,7 @@ class LMStudioProvider(BaseProvider):
         native_v1 = bool(kwargs.pop("_lmstudio_native_v1", False))
         native_store = bool(kwargs.pop("_lmstudio_store", False))
         previous_response_id = kwargs.pop("_lmstudio_previous_response_id", None)
-        cancel_event = kwargs.pop("_cancel_event", None)
+        cancel = kwargs.pop("cancel", None)
         trace_row = provider_call_enter(
             provider="lmstudio",
             method="chat_completion",
@@ -315,7 +292,7 @@ class LMStudioProvider(BaseProvider):
                 "native_v1": native_v1,
                 "native_store": native_store,
                 "has_previous_response_id": bool(previous_response_id),
-                "cancellable_stream": bool(stream and cancel_event is not None),
+                "cancellable_stream": bool(stream and cancel is not None),
             },
         )
         try:
@@ -345,7 +322,7 @@ class LMStudioProvider(BaseProvider):
                     self._native_v1_stream_completion(
                         payload,
                         timeout=timeout,
-                        cancel_event=cancel_event,
+                        cancel=cancel,
                     )
                     if stream
                     else self._native_v1_non_stream_completion(payload, timeout=timeout)
@@ -368,7 +345,7 @@ class LMStudioProvider(BaseProvider):
                         payload,
                         include_metrics=include_metrics,
                         timeout=timeout,
-                        cancel_event=cancel_event,
+                        cancel=cancel,
                     )
                     if stream
                     else self._non_stream_completion(
@@ -422,9 +399,9 @@ class LMStudioProvider(BaseProvider):
         payload: Dict[str, Any],
         *,
         timeout: float | None = None,
-        cancel_event: threading.Event | None = None,
+        cancel: CancellationToken | None = None,
     ) -> Iterator[ChatResponse]:
-        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True}
+        request_kwargs: Dict[str, Any] = {"json": payload, "stream": True, "cancel": cancel}
         if timeout is not None:
             request_kwargs["timeout"] = timeout
         try:
@@ -436,13 +413,12 @@ class LMStudioProvider(BaseProvider):
         except Exception as exc:
             raise ConnectionError(f"Failed to start LM Studio native v1 stream: {exc}") from exc
 
-        watcher_done = self._start_stream_cancel_watcher(response, cancel_event)
         model_name = str(payload.get("model") or "")
         event_name = ""
         stream_error: str | None = None
         try:
             for line in response.iter_lines():
-                if cancel_event is not None and cancel_event.is_set():
+                if cancel is not None and cancel.cancelled:
                     return
                 if not line:
                     continue
@@ -512,7 +488,7 @@ class LMStudioProvider(BaseProvider):
                     if stream_error:
                         raise ConnectionError(f"LM Studio native v1 stream error: {stream_error}")
                     return
-            if cancel_event is not None and cancel_event.is_set():
+            if cancel is not None and cancel.cancelled:
                 return
             if stream_error:
                 raise ConnectionError(f"LM Studio native v1 stream error: {stream_error}")
@@ -520,12 +496,10 @@ class LMStudioProvider(BaseProvider):
         except ConnectionError:
             raise
         except Exception as exc:
-            if cancel_event is not None and cancel_event.is_set():
+            if cancel is not None and cancel.cancelled:
                 return
             raise ConnectionError(f"LM Studio native v1 stream error: {exc}") from exc
         finally:
-            if watcher_done is not None:
-                watcher_done.set()
             response.close()
 
     def _non_stream_completion(
@@ -589,7 +563,7 @@ class LMStudioProvider(BaseProvider):
         *,
         include_metrics: bool = False,
         timeout: float | None = None,
-        cancel_event: threading.Event | None = None,
+        cancel: CancellationToken | None = None,
     ) -> Iterator[ChatResponse]:
         try:
             response = self._make_chat_completion_request(
@@ -597,10 +571,10 @@ class LMStudioProvider(BaseProvider):
                 stream=True,
                 include_metrics=include_metrics,
                 timeout=timeout,
+                cancel=cancel,
             )
         except Exception as exc:
             raise ConnectionError(f"Failed to start stream: {exc}") from exc
-        watcher_done = self._start_stream_cancel_watcher(response, cancel_event)
         thinking_buffer = ""
         usage: Dict[str, Any] | None = None
         finish_reason: str | None = None
@@ -608,7 +582,7 @@ class LMStudioProvider(BaseProvider):
         last_response: Dict[str, Any] | None = None
         try:
             for line in response.iter_lines():
-                if cancel_event is not None and cancel_event.is_set():
+                if cancel is not None and cancel.cancelled:
                     return
                 if not line:
                     continue
@@ -663,7 +637,7 @@ class LMStudioProvider(BaseProvider):
                     )
                 except (ValueError, SyntaxError, KeyError, IndexError, TypeError):
                     continue
-            if cancel_event is not None and cancel_event.is_set():
+            if cancel is not None and cancel.cancelled:
                 return
             yield ChatResponse(
                 content="",
@@ -675,12 +649,10 @@ class LMStudioProvider(BaseProvider):
                 raw_response=last_response,
             )
         except Exception as exc:
-            if cancel_event is not None and cancel_event.is_set():
+            if cancel is not None and cancel.cancelled:
                 return
             raise ConnectionError(f"Stream error: {exc}") from exc
         finally:
-            if watcher_done is not None:
-                watcher_done.set()
             response.close()
 
     def get_models(self) -> List[ModelInfo]:

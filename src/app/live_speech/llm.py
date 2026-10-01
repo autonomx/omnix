@@ -8,7 +8,7 @@ import os
 from dataclasses import dataclass
 from typing import Iterable
 
-import requests
+from app.runtime.http_client import shared_http_client
 
 
 class StreamingTextGenerator:
@@ -47,16 +47,16 @@ class OpenAICompatibleTextGenerator(StreamingTextGenerator):
             api_token = environment().get("LM_API_TOKEN", "").strip()
             if api_token:
                 headers["Authorization"] = f"Bearer {api_token}"
-            with requests.post(
+            with shared_http_client("live-speech-llm").stream(
+                "POST",
                 f"{self.base_url.rstrip('/')}/chat/completions",
                 headers=headers,
                 json=payload,
-                stream=True,
                 timeout=self.timeout_seconds,
             ) as response:
                 response.raise_for_status()
                 yielded = False
-                for line in response.iter_lines(decode_unicode=True):
+                for line in response.iter_lines():
                     token = _parse_sse_delta(line)
                     if token:
                         yielded = True

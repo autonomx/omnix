@@ -1,12 +1,49 @@
 """Simple test for Cerebras model status and connection using settings.json API key."""
 
 import os
-from unittest.mock import Mock, patch
 
+import httpx
 import pytest
 
 from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
 from app.providers.base import AuthenticationError
+from tests.support.http import install_provider_http
+
+
+
+_MODELS = {
+    "data": [
+        {
+            "id": "llama-3.3-70b-versatile",
+            "name": "Llama 3.3 70B Versatile",
+            "owned_by": "cerebras",
+            "context_length": 128000,
+            "description": "General-purpose model",
+        },
+        {
+            "id": "llama-3.1-8b-instruct",
+            "name": "Llama 3.1 8B Instruct",
+            "owned_by": "cerebras",
+            "context_length": 128000,
+            "description": "Instruction-tuned model",
+        },
+    ]
+}
+
+
+def _provider_with_http(reply, *, api_key="test-key", model=None):
+    """A Cerebras provider whose HTTP calls all get ``reply`` (a response or an error)."""
+    calls: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if isinstance(reply, Exception):
+            raise reply
+        return httpx.Response(reply.status_code, headers=reply.headers, content=reply.content)
+
+    provider = CerebrasProvider(ProviderConfig(provider_type="cerebras", api_key=api_key, model=model))
+    install_provider_http(provider, handle)
+    return provider, calls
 
 
 class TestCerebrasModelStatusSimple:
@@ -59,154 +96,71 @@ class TestCerebrasModelStatusSimple:
         provider = CerebrasProvider(config)
         assert provider.requires_api_key() is True
     
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_get_models_success(self, mock_request):
+    def test_cerebras_get_models_success(self):
         """Test successful retrieval of models from Cerebras."""
-        # Mock successful response with models
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'data': [
-                {
-                    'id': 'llama-3.3-70b-versatile',
-                    'name': 'Llama 3.3 70B Versatile',
-                    'owned_by': 'cerebras',
-                    'context_length': 128000,
-                    'description': 'General-purpose model'
-                },
-                {
-                    'id': 'llama-3.1-8b-instruct',
-                    'name': 'Llama 3.1 8B Instruct',
-                    'owned_by': 'cerebras',
-                    'context_length': 128000,
-                    'description': 'Instruction-tuned model'
-                }
-            ]
-        }
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key'
-        )
-        provider = CerebrasProvider(config)
-        
+        provider, calls = _provider_with_http(httpx.Response(200, json=_MODELS))
+
         models = provider.get_models()
-        
+
         assert len(models) == 2
         assert isinstance(models[0], ModelInfo)
-        assert models[0].id == 'llama-3.3-70b-versatile'
-        assert models[0].name == 'Llama 3.3 70B Versatile'
-        assert models[0].provider == 'cerebras'
+        assert models[0].id == "llama-3.3-70b-versatile"
+        assert models[0].name == "Llama 3.3 70B Versatile"
+        assert models[0].provider == "cerebras"
         assert models[0].context_length == 128000
-        assert models[0].description == 'General-purpose model'
-        
-        # Verify the request was made correctly
-        mock_request.assert_called_once()
-        call_args = mock_request.call_args
-        assert call_args[0][0] == 'get'  # HTTP method
-        assert call_args[0][1] == 'https://api.cerebras.ai/v1/models'  # URL
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_get_models_empty_response(self, mock_request):
+        assert models[0].description == "General-purpose model"
+        assert len(calls) == 1
+        assert calls[0].method == "GET"
+        assert str(calls[0].url) == "https://api.cerebras.ai/v1/models"
+
+    def test_cerebras_get_models_empty_response(self):
         """Test handling of empty models response."""
-        # Mock response with empty data
-        mock_response = Mock()
-        mock_response.json.return_value = {'data': []}
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key'
-        )
-        provider = CerebrasProvider(config)
-        
-        models = provider.get_models()
-        assert models == []
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_chat_completion_non_streaming(self, mock_request):
+        provider, _calls = _provider_with_http(httpx.Response(200, json={"data": []}))
+
+        assert provider.get_models() == []
+
+    def test_cerebras_chat_completion_non_streaming(self):
         """Test non-streaming chat completion."""
-        # Mock successful response
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'choices': [{
-                'message': {
-                    'content': 'Hello! How can I help you?',
-                    'reasoning': 'Analyzing user request...'
-                },
-                'finish_reason': 'stop'
+        provider, _calls = _provider_with_http(httpx.Response(200, json={
+            "choices": [{
+                "message": {"content": "Hello! How can I help you?", "reasoning": "Analyzing user request..."},
+                "finish_reason": "stop",
             }],
-            'model': 'llama-3.3-70b-versatile',
-            'usage': {'total_tokens': 15}
-        }
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key',
-            model='llama-3.3-70b-versatile'
-        )
-        provider = CerebrasProvider(config)
-        
+            "model": "llama-3.3-70b-versatile",
+            "usage": {"total_tokens": 15},
+        }), model="llama-3.3-70b-versatile")
+
         from app.providers import ChatMessage
-        messages = [ChatMessage(role='user', content='Hello')]
-        
-        response = provider.chat_completion(messages, stream=False)
-        
-        assert response.content == 'Hello! How can I help you?'
-        assert response.model == 'llama-3.3-70b-versatile'
-        assert response.thinking == 'Analyzing user request...'
-        assert response.finish_reason == 'stop'
-        assert response.usage == {'total_tokens': 15}
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_chat_completion_streaming(self, mock_request):
+        response = provider.chat_completion([ChatMessage(role="user", content="Hello")], stream=False)
+
+        assert response.content == "Hello! How can I help you?"
+        assert response.model == "llama-3.3-70b-versatile"
+        assert response.thinking == "Analyzing user request..."
+        assert response.finish_reason == "stop"
+        assert response.usage == {"total_tokens": 15}
+
+    def test_cerebras_chat_completion_streaming(self):
         """Test streaming chat completion."""
-        # Mock streaming response
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = [
-            b'data: {"choices":[{"delta":{"content":"Hello"}}]}',
-            b'data: {"choices":[{"delta":{"content":"!"}}]}',
-            b'data: [DONE]'
-        ]
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key',
-            model='llama-3.3-70b-versatile'
+        body = (
+            b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'
+            b'data: {"choices":[{"delta":{"content":"!"}}]}\n\n'
+            b"data: [DONE]\n\n"
         )
-        provider = CerebrasProvider(config)
-        
+        provider, _calls = _provider_with_http(httpx.Response(200, content=body), model="llama-3.3-70b-versatile")
+
         from app.providers import ChatMessage
-        messages = [ChatMessage(role='user', content='Hello')]
-        
-        responses = list(provider.chat_completion(messages, stream=True))
-        
-        assert len(responses) == 2
-        assert responses[0].content == 'Hello'
-        assert responses[1].content == '!'
-    
+        responses = list(provider.chat_completion([ChatMessage(role="user", content="Hello")], stream=True))
+
+        assert [response.content for response in responses] == ["Hello", "!"]
+
     def test_cerebras_make_request_with_authorization(self):
         """Test that _make_request adds proper authorization headers."""
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-api-key'
-        )
-        provider = CerebrasProvider(config)
-        
-        with patch('app.providers.cerebras_provider.requests.request') as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_request.return_value = mock_response
-            
-            provider._make_request('get', '/test/endpoint')
-            
-            # Verify authorization header was added
-            call_args = mock_request.call_args
-            headers = call_args[1]['headers']
-            assert headers['Authorization'] == 'Bearer test-api-key'
-            assert headers['Content-Type'] == 'application/json'
+        provider, calls = _provider_with_http(httpx.Response(200), api_key="test-api-key")
+
+        provider._make_request("get", "/test/endpoint")
+
+        assert calls[0].headers["Authorization"] == "Bearer test-api-key"
+        assert calls[0].headers["Content-Type"] == "application/json"
 
 
 class TestCerebrasProviderServiceSettings:

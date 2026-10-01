@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
 from app.assist_core.hermes_client import HermesSidecarClient
+from tests.support.http import mock_http_client
 import app.research.planner as planner_module
 from app.research.planner import (
     ResearchOperation,
@@ -92,11 +94,11 @@ def test_hermes_research_prompt_contains_no_general_tool_catalog(monkeypatch) ->
         "completion_conditions": ["Sources evaluated"],
     }
 
-    def fake_post(url, headers, data, timeout):
-        captured.update(json.loads(data))
-        return FakeResponse(json.dumps(response_plan))
+    def handle(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=FakeResponse(json.dumps(response_plan)).json())
 
-    monkeypatch.setattr("app.assist_core.hermes_client.requests.post", fake_post)
+    monkeypatch.setattr("app.assist_core.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
     plan = HermesSidecarClient().plan_research(
         ResearchPlanningRequest(question="Compare current options")
     )

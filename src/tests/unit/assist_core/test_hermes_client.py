@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 
+import httpx
+
 from app.assist_core.core import AssistantRequest
 from app.assist_core.hermes_client import HermesSidecarClient
+from tests.support.http import mock_http_client
 
 
 class _Response:
@@ -35,11 +38,11 @@ class _Response:
 def test_plan_requests_strict_nonexecuting_json(monkeypatch) -> None:
     captured: dict = {}
 
-    def post(url, *, headers, data, timeout):
-        captured.update(json.loads(data))
-        return _Response()
+    def handle(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_Response().json())
 
-    monkeypatch.setattr("app.assist_core.hermes_client.requests.post", post)
+    monkeypatch.setattr("app.assist_core.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
 
     result = HermesSidecarClient().plan(
         AssistantRequest(

@@ -1,8 +1,10 @@
 """Tests for individual provider implementations."""
 
 
+import httpx
 import pytest
 
+from tests.support.http import install_provider_http
 from app.providers import (
     CerebrasProvider,
     ChatMessage,
@@ -58,37 +60,25 @@ class TestLMStudioProvider:
         assert provider.requires_api_key() is False
 
     def test_configured_api_key_is_sent_as_bearer_token(self, monkeypatch):
-        response = type("Response", (), {"raise_for_status": lambda self: None})()
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured.update({"method": method, "url": url, **kwargs})
-            return response
-
-        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
+        captured = []
         provider = LMStudioProvider(
             ProviderConfig(provider_type="lmstudio", api_key="config-token")
         )
+        install_provider_http(provider, lambda request: captured.append(request) or httpx.Response(200))
 
         provider._make_request("get", "/v1/models")
 
-        assert captured["headers"] == {"Authorization": "Bearer config-token"}
+        assert captured[0].headers["Authorization"] == "Bearer config-token"
 
     def test_environment_api_token_is_sent_as_bearer_token(self, monkeypatch):
-        response = type("Response", (), {"raise_for_status": lambda self: None})()
-        captured = {}
-
-        def fake_request(method, url, **kwargs):
-            captured.update({"method": method, "url": url, **kwargs})
-            return response
-
+        captured = []
         monkeypatch.setenv("LM_API_TOKEN", "environment-token")
-        monkeypatch.setattr("app.providers.lmstudio_provider.requests.request", fake_request)
         provider = LMStudioProvider(ProviderConfig(provider_type="lmstudio"))
+        install_provider_http(provider, lambda request: captured.append(request) or httpx.Response(200))
 
         provider._make_request("get", "/v1/models")
 
-        assert captured["headers"] == {"Authorization": "Bearer environment-token"}
+        assert captured[0].headers["Authorization"] == "Bearer environment-token"
 
 
 class TestOpenRouterProvider:

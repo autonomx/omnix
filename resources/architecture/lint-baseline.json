@@ -1414,7 +1414,7 @@
       "count": 1,
       "fingerprint": "CerebrasProvider.test_connection:except",
       "lines": [
-        236
+        214
       ],
       "path": "src/app/providers/cerebras_provider.py",
       "rule": "AL009"
@@ -1430,18 +1430,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "LMStudioProvider._start_stream_cancel_watcher.watch:except",
-      "lines": [
-        207
-      ],
-      "path": "src/app/providers/lmstudio_provider.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "OpenAICompatibleProvider.get_models:except",
       "lines": [
-        264
+        247
       ],
       "path": "src/app/providers/openai_compatible_provider.py",
       "rule": "AL009"

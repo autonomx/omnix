@@ -8,6 +8,7 @@ import threading
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import httpx
 import pytest
 
 from app import image_http_client, tts_http_client
@@ -121,8 +122,8 @@ def test_credentials_are_never_forwarded_through_redirects(sidecar, name):
     state["redirect"] = True
     try:
         _call(name, url)
-    except (ValueError, RuntimeError, EOFError, wave.Error):
-        pass
+    except (ValueError, RuntimeError, EOFError, wave.Error, httpx.HTTPError):
+        pass  # a pooled client reports the unfollowed redirect as an error status
     assert len(calls) == 1
     assert calls[0][0] != "/redirect-target"
 

@@ -1,8 +1,13 @@
-from types import SimpleNamespace
-import pytest
+import io
 import secrets
+import wave
 
+import httpx
+import pytest
+
+from app import tts_http_client
 from app.tts_http_client import _tts_base_url, tts_generate_stream_audio
+from tests.support.http import mock_http_client
 
 
 @pytest.fixture(autouse=True)
@@ -24,16 +29,18 @@ def test_tts_endpoint_uses_bound_process_config(monkeypatch):
 
 
 def test_tts_generate_stream_audio_normalizes_binary_wav(monkeypatch):
-    def fake_post(*args, **kwargs):
-        assert kwargs["headers"]["X-Omnix-Client"] == "gateway"
-        return SimpleNamespace(
-            status_code=200,
-            headers={"content-type": "audio/wav"},
-            content=b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00\x80>\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00",
-            raise_for_status=lambda: None,
-        )
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as writer:  # an empty 8 kHz mono WAV
+        writer.setnchannels(1)
+        writer.setsampwidth(2)
+        writer.setframerate(8000)
+    wav = buffer.getvalue()
 
-    monkeypatch.setattr("app.tts_http_client.requests.post", fake_post)
+    def handle(request):
+        assert request.headers["X-Omnix-Client"] == "gateway"
+        return httpx.Response(200, headers={"content-type": "audio/wav"}, content=wav)
+
+    monkeypatch.setattr(tts_http_client, "_http", lambda: mock_http_client(handle))
 
     payload = tts_generate_stream_audio(text="hello", speaker="default")
 
