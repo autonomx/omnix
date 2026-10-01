@@ -160,13 +160,17 @@ from app.assistant_tools.credentials import (
     save_assistant_tool_credentials,
 )
 
+from app.security.secrets import SecretStoreUnavailable
+
+# Credentials go to the secret store only (WP-4.9); with the read-only env
+# store, saving fails closed and nothing is written in plaintext.
 assert load_assistant_tool_credentials().credentials == []
 try:
     save_assistant_tool_credentials(AssistantToolCredentialsPayload())
-except LegacyPersistenceRetired:
+except SecretStoreUnavailable:
     pass
 else:
-    raise AssertionError("plaintext assistant-tool credentials unexpectedly remained writable")
+    raise AssertionError("assistant-tool credentials were saved without a writable secret store")
 
 from app.assist_core.house_state import load_house_state, save_house_state
 
@@ -379,6 +383,8 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(
             "OMNIX_ASSISTANT_TURN_STORE_PATH": str(tmp_path / "assistant-turns.json"),
             "OMNIX_LIVE_CONVERSATION_PROFILE_PATH": str(tmp_path / "conversation-profiles.json"),
             "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
+            "OMNIX_SECRET_STORE": "env",
+            # Former plaintext locations: they must never be created.
             "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH": str(tmp_path / "assistant-tool-credentials.json"),
             "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH": str(tmp_path / "assistant-tool-oauth-clients.json"),
             "OMNIX_PROVIDER_SECRETS_PATH": str(tmp_path / "provider-api-keys.dpapi"),

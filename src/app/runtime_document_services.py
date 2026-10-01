@@ -16,15 +16,6 @@ class DocumentServices:
     save_house_state: Callable[..., Any]
     append_assistant_tool_ledger_entry: Callable[..., Any]
     load_assistant_tool_ledger: Callable[..., Any]
-    load_assistant_tool_credentials: Callable[..., Any]
-    load_assistant_tool_oauth_clients: Callable[..., Any]
-    save_assistant_tool_credentials: Callable[..., Any]
-    save_assistant_tool_oauth_clients: Callable[..., Any]
-    credential_for_tool: Callable[..., Any]
-    oauth_client_for_provider: Callable[..., Any]
-    upsert_tool_credential: Callable[..., Any]
-    upsert_oauth_client: Callable[..., Any]
-    delete_tool_credential: Callable[..., Any]
     read_pending: Callable[..., Any]
     write_pending: Callable[..., Any]
     add_pending: Callable[..., Any]
@@ -63,15 +54,6 @@ def production_document_services() -> DocumentServices:
         save_house_state=assist_house_state.save_house_state_postgres,
         append_assistant_tool_ledger_entry=assistant_tool_documents.append_assistant_tool_ledger_entry_postgres,
         load_assistant_tool_ledger=assistant_tool_documents.load_assistant_tool_ledger_postgres,
-        load_assistant_tool_credentials=assistant_tool_documents.load_empty_assistant_tool_credentials,
-        load_assistant_tool_oauth_clients=assistant_tool_documents.load_empty_assistant_tool_oauth_clients,
-        save_assistant_tool_credentials=assistant_tool_documents.unavailable_assistant_tool_secret,
-        save_assistant_tool_oauth_clients=assistant_tool_documents.unavailable_assistant_tool_secret,
-        credential_for_tool=assistant_tool_documents.no_assistant_tool_credential,
-        oauth_client_for_provider=assistant_tool_documents.no_assistant_tool_credential,
-        upsert_tool_credential=assistant_tool_documents.unavailable_assistant_tool_secret,
-        upsert_oauth_client=assistant_tool_documents.unavailable_assistant_tool_secret,
-        delete_tool_credential=assistant_tool_documents.no_assistant_tool_credential,
         read_pending=configuration.read_assist_pending,
         write_pending=configuration.write_assist_pending,
         add_pending=configuration.add_assist_pending,

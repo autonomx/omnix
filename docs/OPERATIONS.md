@@ -409,6 +409,27 @@ moving them into blob-backed asset records is a follow-up.
 
 ## Secrets and networked integrations
 
+Connected assistant tools (Gmail, Calendar, GitHub and others) keep their
+OAuth tokens and OAuth client secrets in the secret store, one entry per
+workspace. They never go to PostgreSQL, the settings document or a plain file.
+Choose the store with `OMNIX_SECRET_STORE`:
+
+- `auto` (default): Windows DPAPI on Windows; the OS keychain elsewhere when
+  the `keyring` package is installed; otherwise the read-only environment
+  store;
+- `dpapi`: an encrypted file under `%LOCALAPPDATA%\Omnix\secrets`
+  (`OMNIX_SECRET_STORE_PATH` to move it);
+- `keyring`: macOS Keychain or Secret Service on Linux
+  (`pip install keyring`);
+- `env`: read-only `OMNIX_SECRET_<NAME>` variables, for containers that
+  receive secrets from their platform.
+
+With the read-only store, connecting a tool fails with a clear error instead
+of writing a plaintext file. To use an external vault (HashiCorp Vault, Azure
+Key Vault), implement the `SecretStore` protocol in
+`src/app/security/secrets.py` and install it at startup.
+
+
 Provider secrets are environment- or protected-store-owned. Examples include LLM/search, market-data, and integration credentials.
 
 - Never paste a secret into a chat message, issue, log, source file, or committed settings fixture.

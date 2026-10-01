@@ -5,33 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from app.persistence.document_store import PostgresDocumentStore
-from app.errors import LegacyPersistenceRetired
-
-
-def load_empty_assistant_tool_credentials(path: Path | None = None):
-    if path is not None:
-        raise LegacyPersistenceRetired("plaintext assistant-tool credential JSON is retired")
-    from app.assistant_tools.credentials import AssistantToolCredentialsPayload
-    return AssistantToolCredentialsPayload()
-
-
-def load_empty_assistant_tool_oauth_clients(path: Path | None = None):
-    if path is not None:
-        raise LegacyPersistenceRetired("plaintext assistant-tool OAuth client JSON is retired")
-    from app.assistant_tools.credentials import AssistantToolOAuthClientsPayload
-    return AssistantToolOAuthClientsPayload()
-
-
-def unavailable_assistant_tool_secret(*args: Any, **kwargs: Any):
-    del args, kwargs
-    raise LegacyPersistenceRetired(
-        "assistant-tool credential persistence requires an encrypted or OS credential store"
-    )
-
-
-def no_assistant_tool_credential(*args: Any, **kwargs: Any) -> None:
-    del args, kwargs
-    return None
 
 
 def append_assistant_tool_ledger_entry_postgres(entry: Any, path: Path | None = None) -> Any:

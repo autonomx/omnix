@@ -56,9 +56,7 @@ def test_default_proposal_service_reads_current_tenant_each_call(monkeypatch):
 @pytest.mark.postgres
 def test_assistant_tool_config_routes_persist_payload(monkeypatch, tmp_path):
     path = tmp_path / "assistant_tools_config.json"
-    credentials_path = tmp_path / "assistant_tool_credentials.json"
     monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(credentials_path))
     client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     initial = client.get("/api/assistant/tools/config")
@@ -79,7 +77,6 @@ def test_assistant_tool_config_routes_persist_payload(monkeypatch, tmp_path):
 
 
 def test_assistant_tool_connect_route_reports_missing_google_oauth(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
@@ -98,7 +95,6 @@ def test_assistant_tool_connect_route_reports_missing_google_oauth(monkeypatch, 
 
 
 def test_assistant_tool_connect_route_builds_google_auth_url(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)
     client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
@@ -117,7 +113,6 @@ def test_assistant_tool_connect_route_builds_google_auth_url(monkeypatch, tmp_pa
 
 
 def test_assistant_tool_google_callback_reports_missing_secret(monkeypatch, tmp_path):
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-123")
     monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
     monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_GOOGLE_REDIRECT_URI", raising=False)

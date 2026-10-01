@@ -84,9 +84,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_ASSETS_MANIFEST_PATH` | string | — | assets | Controls assets manifest path for assets. |
 | `OMNIX_ASSISTANT_TOOLS_CONFIG_PATH` | string | — | assistant-tools | Controls assistant tools config path for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL` | string | `/chatbot` | assistant-tools | Controls assistant tools connect return url for assistant-tools. |
-| `OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH` | string | — | assistant-tools | Controls assistant tools credentials path for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_LEDGER_PATH` | string | — | assistant-tools | Controls assistant tools ledger path for assistant-tools. |
-| `OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH` | string | — | assistant-tools | Controls assistant tools oauth clients path for assistant-tools. |
 | `OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV` | string | — | assistant-tools | Controls assistant tools skip local env for assistant-tools. |
 | `OMNIX_ASSISTANT_TURN_STORE_PATH` | string | — | chat | Controls assistant turn store path for chat. |
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
@@ -219,6 +217,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_S3_TIMEOUT_SECONDS` | integer | `60` | kernel | Controls s3 timeout seconds for kernel. |
 | `OMNIX_SCHEDULER_PROCESS_WORKERS` | integer | `2` | kernel | Controls scheduler process workers for kernel. |
 | `OMNIX_SCHEDULER_THREAD_WORKERS` | integer | `4` | kernel | Controls scheduler thread workers for kernel. |
+| `OMNIX_SECRET_STORE` | string | — | security | Controls secret store for security. |
+| `OMNIX_SECRET_STORE_PATH` | string | — | security | Controls secret store path for security. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |
 | `OMNIX_SOFTWARE_REVISION` | string | — | kernel | Controls software revision for kernel. |
 | `OMNIX_SSE_FLUSH_PREAMBLE_BYTES` | string | — | live-voice | Controls sse flush preamble bytes for live-voice. |

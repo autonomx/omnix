@@ -446,6 +446,18 @@ python -m app.persistence migrate    # with OMNIX_MIGRATION_DATABASE_URL set</co
 <p>Assets keep a relative <code>storage_key</code>. Feature code reads content through <code>app.assets.content</code>; tools that need a file path get a checksum-verified copy from a content-addressed cache under <code>resources/data/cache/blobs</code>. Audio assets stream from <code>/api/assets/{asset_id}/audio</code>, which supports Range requests. Job rows reference assets and never embed audio. Voice-clone samples submitted inline are moved into the blob store when the job is admitted.</p>
 <p>With <code>s3</code>, the image service also uploads each output to the bucket and returns its key. A gateway on another host then never needs the image service&#x27;s disk. Voice clones are still file-managed on the voice/TTS host; moving them into blob-backed asset records is a follow-up.</p>
 <h2 id="secrets-and-networked-integrations">Secrets and networked integrations</h2>
+<p>Connected assistant tools (Gmail, Calendar, GitHub and others) keep their OAuth tokens and OAuth client secrets in the secret store, one entry per workspace. They never go to PostgreSQL, the settings document or a plain file. Choose the store with <code>OMNIX_SECRET_STORE</code>:</p>
+<ul>
+<li><code>auto</code> (default): Windows DPAPI on Windows; the OS keychain elsewhere when</li>
+<p>the <code>keyring</code> package is installed; otherwise the read-only environment store;</p>
+<li><code>dpapi</code>: an encrypted file under <code>%LOCALAPPDATA%\Omnix\secrets</code></li>
+<p>(<code>OMNIX_SECRET_STORE_PATH</code> to move it);</p>
+<li><code>keyring</code>: macOS Keychain or Secret Service on Linux</li>
+<p>(<code>pip install keyring</code>);</p>
+<li><code>env</code>: read-only <code>OMNIX_SECRET_&lt;NAME&gt;</code> variables, for containers that</li>
+<p>receive secrets from their platform.</p>
+</ul>
+<p>With the read-only store, connecting a tool fails with a clear error instead of writing a plaintext file. To use an external vault (HashiCorp Vault, Azure Key Vault), implement the <code>SecretStore</code> protocol in <code>src/app/security/secrets.py</code> and install it at startup.</p>
 <p>Provider secrets are environment- or protected-store-owned. Examples include LLM/search, market-data, and integration credentials.</p>
 <ul>
 <li>Never paste a secret into a chat message, issue, log, source file, or committed settings fixture.</li>

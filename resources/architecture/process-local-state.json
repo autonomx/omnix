@@ -871,6 +871,12 @@
       "reason": "Guards the reference to the process's installed audit sink (set once at persistence startup); audit events themselves are written to PostgreSQL, never held in this process."
     },
     {
+      "path": "src/app/security/secrets.py",
+      "symbol": "_STORE_LOCK",
+      "category": "cache",
+      "reason": "Guards one-time construction of the process's secret store client; secrets live in the OS store (DPAPI, keychain) or the environment, never in this process's memory between calls."
+    },
+    {
       "path": "src/app/persistence/config.py",
       "symbol": "database_settings.__cache__",
       "category": "cache",

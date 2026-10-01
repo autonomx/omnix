@@ -561,23 +561,9 @@
   },
   {
     "default": null,
-    "description": "Controls assistant tools credentials path for assistant-tools.",
-    "feature": "assistant-tools",
-    "name": "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH",
-    "type": "string"
-  },
-  {
-    "default": null,
     "description": "Controls assistant tools ledger path for assistant-tools.",
     "feature": "assistant-tools",
     "name": "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls assistant tools oauth clients path for assistant-tools.",
-    "feature": "assistant-tools",
-    "name": "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH",
     "type": "string"
   },
   {
@@ -1503,6 +1489,20 @@
     "feature": "kernel",
     "name": "OMNIX_SCHEDULER_THREAD_WORKERS",
     "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls secret store for security.",
+    "feature": "security",
+    "name": "OMNIX_SECRET_STORE",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls secret store path for security.",
+    "feature": "security",
+    "name": "OMNIX_SECRET_STORE_PATH",
+    "type": "string"
   },
   {
     "default": null,

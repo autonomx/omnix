@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import pytest
-
 from app.assistant_tools.ledger import AssistantToolLedgerEntry
 from app.assistant_tools.persistence import runtime_documents as tool_documents
 from app.assist_core.persistence import house_state as house_state_store
 from app.characters.live_conversation_profile import LiveConversationProfileUpdate
 from app.characters.persistence import live_profile_store
 from app.chat.persistence import assistant_turn_store, legacy_sessions
-from app.errors import LegacyPersistenceRetired
 
 
 class _Documents:
@@ -110,6 +107,6 @@ def test_turn_coordinators_preserve_independent_writes_and_read_legacy_records(m
     assert documents.revisions[("chat", "assistant-turn", two.assistant_turn_id)] == 1
 
 
-def test_assistant_tool_secret_surface_fails_closed() -> None:
-    with pytest.raises(LegacyPersistenceRetired):
-        tool_documents.unavailable_assistant_tool_secret(object())
+def test_assistant_tool_secrets_are_not_document_services() -> None:
+    # Credentials live in the secret store (WP-4.9), not in PostgreSQL documents.
+    assert not hasattr(tool_documents, "unavailable_assistant_tool_secret")

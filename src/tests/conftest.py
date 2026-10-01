@@ -60,6 +60,20 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def isolated_secret_store():
+    # Never touch the developer's real DPAPI file or keychain (WP-4.9).
+    from app.security.secrets import install_secret_store
+    from tests.support.secrets import MemorySecretStore
+
+    store = MemorySecretStore()
+    install_secret_store(store)
+    try:
+        yield store
+    finally:
+        install_secret_store(None)
+
+
+@pytest.fixture(autouse=True)
 def capability_runtime_installed():
     # Composition installs the assistant-tools runtime behind
     # app.capabilities.executor (WP-4.5); tests that call capability paths
