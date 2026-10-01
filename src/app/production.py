@@ -207,9 +207,15 @@ def create_production_app(config: RuntimeConfig | None = None):
         authority_check=background_authority_check,
         execution_scope=background_execution,
     )
+    def active_workspaces():
+        from app.persistence.identity_service import list_active_workspace_contexts
+
+        return list_active_workspace_contexts(services.jobs.database)
+
     scheduler = SchedulerRuntime(
         services.jobs.database,
         services.jobs.context.workspace_id,
+        workspace_contexts=active_workspaces,
         capabilities=capabilities,
         authority_check=background_authority_check,
         execution_scope=background_execution,
@@ -237,6 +243,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         scheduler.register_task(
             ScheduledTaskSpec(
                 task_id="platform.chat-generation-recovery",
+                per_workspace=True,
                 run=recover_chat_generations,
                 interval_seconds=owner.recovery_seconds,
                 timeout_seconds=60,
@@ -251,6 +258,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         scheduler.register_task(
             ScheduledTaskSpec(
                 task_id="platform.job-lease-recovery",
+                per_workspace=True,
                 run=release_expired_job_leases,
                 interval_seconds=5,
                 timeout_seconds=60,

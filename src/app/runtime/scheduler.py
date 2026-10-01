@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
@@ -22,6 +22,7 @@ from typing import Any
 
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .logging import runtime_transition
+from .tenant_context import pop_tenant, push_tenant
 
 
 class SchedulerOwnershipUnavailable(RuntimeError):
@@ -65,8 +66,12 @@ class ScheduledTaskSpec:
     enabled: Callable[[], bool] = lambda: True
     on_startup: tuple[Callable[[], Any], ...] = ()
     on_shutdown: tuple[Callable[[], Any], ...] = ()
+    # Run once per active workspace, as that workspace's tenant (WP-4.2).
+    per_workspace: bool = False
 
     def __post_init__(self) -> None:
+        if self.per_workspace and self.executor in {TaskExecutor.PROCESS, TaskExecutor.PROCESS.value}:
+            raise ValueError("per-workspace scheduled tasks run in the event loop or a thread, not a process")
         normalized_id = self.task_id.strip()
         if not normalized_id or normalized_id != self.task_id:
             raise ValueError("scheduled task id must be a non-empty stable identifier")
@@ -390,6 +395,7 @@ class SchedulerRuntime:
         poll_seconds: float = 1.0,
         startup_jitter_seconds: float = 0.5,
         logger: logging.Logger | None = None,
+        workspace_contexts: Callable[[], Sequence[Any]] | None = None,
     ) -> None:
         if not workspace_id:
             raise ValueError("scheduler workspace id is required")
@@ -399,6 +405,7 @@ class SchedulerRuntime:
             raise ValueError("scheduler startup jitter cannot be negative")
         self.database = database
         self.workspace_id = workspace_id
+        self.workspace_contexts = workspace_contexts
         self.capabilities = capabilities
         self.authority_check = authority_check or (lambda _connection: None)
         self.execution_scope = execution_scope
@@ -704,17 +711,38 @@ class SchedulerRuntime:
             await asyncio.gather(task, return_exceptions=True)
             raise
 
+    def _workspace_runs(self, spec: ScheduledTaskSpec, context: TaskContext) -> list[tuple[TaskContext, Any]]:
+        """``(context, tenant)`` per run: one per active workspace, or the scheduler's own."""
+        if not spec.per_workspace or self.workspace_contexts is None:
+            return [(context, None)]
+        return [
+            (replace(context, workspace_id=tenant.workspace_id), tenant)
+            for tenant in self.workspace_contexts()
+        ]
+
     async def _invoke(
         self, spec: ScheduledTaskSpec, context: TaskContext, owner: _TaskOwner
     ) -> None:
+        runs = self._workspace_runs(spec, context)
         if spec.executor is TaskExecutor.ASYNC:
             async def invoke_async() -> None:
+                errors: list[Exception] = []
                 with self.execution_scope(owner):
-                    result = spec.run(context)
-                    if inspect.isawaitable(result):
-                        await result
-                    else:
-                        raise TypeError("async scheduled task returned a non-awaitable value")
+                    for run_context, tenant in runs:
+                        token = push_tenant(tenant) if tenant is not None else None
+                        try:
+                            result = spec.run(run_context)
+                            if not inspect.isawaitable(result):
+                                raise TypeError("async scheduled task returned a non-awaitable value")
+                            await result
+                        except Exception as exc:
+                            # One workspace's failure must not skip the others.
+                            errors.append(exc)
+                        finally:
+                            if token is not None:
+                                pop_tenant(token)
+                if errors:
+                    raise errors[0]
 
             task = asyncio.create_task(invoke_async())
             try:
@@ -741,8 +769,21 @@ class SchedulerRuntime:
         loop = asyncio.get_running_loop()
         if spec.executor is TaskExecutor.THREAD:
             def invoke_thread():
+                errors: list[Exception] = []
+                result = None
                 with self.execution_scope(owner):
-                    return spec.run(context)
+                    for run_context, tenant in runs:
+                        token = push_tenant(tenant) if tenant is not None else None
+                        try:
+                            result = spec.run(run_context)
+                        except Exception as exc:
+                            errors.append(exc)
+                        finally:
+                            if token is not None:
+                                pop_tenant(token)
+                if errors:
+                    raise errors[0]
+                return result
 
             future = loop.run_in_executor(executor, invoke_thread)
         else:

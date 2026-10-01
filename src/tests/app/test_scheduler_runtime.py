@@ -664,3 +664,51 @@ def test_timeout_fails_closed_after_callback_finishes_without_rescheduling():
     assert metric["timeout_count"] == 1
     assert metric["failure_count"] == 1
     assert database.keys == set()
+
+
+def test_per_workspace_tasks_run_once_per_active_workspace_as_its_tenant():
+    """Recovery tasks serve every workspace, not only the process's (WP-4.2)."""
+    from app.runtime.tenant_context import TenantContext, current_tenant
+
+    tenants = [
+        TenantContext(user_id="u", workspace_id=f"workspace:{name}", membership_id=f"system:{name}",
+                      roles=frozenset({"system"}))
+        for name in ("a", "b", "c")
+    ]
+    seen: list[tuple[str, str]] = []
+
+    async def run(context: TaskContext):
+        seen.append((context.workspace_id, current_tenant().workspace_id))
+        if context.workspace_id == "workspace:b":
+            raise RuntimeError("workspace b failed")
+
+    def thread_run(context: TaskContext):
+        seen.append((context.workspace_id, current_tenant().workspace_id))
+
+    scheduler = SchedulerRuntime(
+        _FakeDatabase(), "workspace-a", capabilities=_capabilities(), execution_scope=_execution_scope,
+        startup_jitter_seconds=0, thread_workers=1, process_workers=1, workspace_contexts=lambda: tenants,
+    )
+    spec = ScheduledTaskSpec(task_id="test.per-workspace", run=run, interval_seconds=1, per_workspace=True)
+    context = TaskContext(task_id=spec.task_id, workspace_id="workspace-a", scheduled_at=datetime.now(timezone.utc))
+    with pytest.raises(RuntimeError, match="workspace b failed"):
+        asyncio.run(scheduler._invoke(spec, context, owner=None))
+    # Workspace c still ran after b failed, each as its own tenant.
+    assert seen == [(t.workspace_id, t.workspace_id) for t in tenants]
+
+    seen.clear()
+    thread_spec = ScheduledTaskSpec(task_id="test.thread", run=thread_run, interval_seconds=1,
+                                    executor="thread", per_workspace=True)
+
+    async def thread_scenario():
+        await scheduler.startup()
+        try:
+            await scheduler._invoke(thread_spec, context, owner=None)
+        finally:
+            await scheduler.shutdown()
+
+    asyncio.run(thread_scenario())
+    assert seen == [(t.workspace_id, t.workspace_id) for t in tenants]
+    with pytest.raises(ValueError, match="per-workspace"):
+        ScheduledTaskSpec(task_id="bad", run=_process_task_callback, interval_seconds=1,
+                          executor="process", per_workspace=True)

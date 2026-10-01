@@ -4,6 +4,7 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-4.2 | Scheduled tasks opt into `per_workspace`: the scheduler keeps one advisory lock per task, and each run iterates the active workspaces, pushing that workspace's system tenant. Trading tasks stay single-workspace. | Recovery tasks (lease release, chat recovery) must reach every workspace once multi-workspace sign-in is on; one lock per task keeps exactly-one scheduling (WP-6.3). Trading has one account per installation. Process-executor tasks cannot carry a tenant and are refused. |
 | 2026-10-01 | WP-4.9 | Assistant-tool credentials and OAuth clients are one secret per workspace and kind (`assistant-tools/<workspace>/credentials`); the plaintext file branch and the document-service stubs are removed. | One read-modify-write per change keeps the store simple and naturally tenant-scoped; the old non-PostgreSQL branch was the only plaintext writer. |
 | 2026-10-01 | WP-4.9 | `auto` falls back to the read-only environment store when neither DPAPI nor keyring is available; saving then fails closed (`SecretStoreUnavailable`). `keyring` stays an optional extra. | No plaintext backend, as the roadmap requires; containers usually receive secrets as environment variables. |
 | 2026-10-01 | WP-4.9 | Provider API keys stay in the existing DPAPI provider store (`provider_secret_store.py`). | It already meets the requirement (OS-protected, environment authoritative); moving it is a separate migration of existing user data. |
