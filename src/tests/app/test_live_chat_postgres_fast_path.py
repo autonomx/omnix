@@ -8,6 +8,7 @@ from typing import Any
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.chat.persistence import chat_runtime_compat as fast_path
 from app.chat.persistence import chat_runtime_compat
+from app.chat.persistence.chat_compat import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
 
 
 NOW = "2026-07-18T00:00:00+00:00"
@@ -49,7 +50,7 @@ def test_load_single_session_avoids_workspace_scan(monkeypatch) -> None:
         ) -> list[dict[str, Any]]:
             self.list_message_calls += 1
             assert session_id == session.id
-            assert limit == 500
+            assert limit == _MESSAGE_PAGE_SIZE
             assert after_position == -1
             return []
 
@@ -74,6 +75,10 @@ def test_load_single_session_avoids_workspace_scan(monkeypatch) -> None:
         database=object(),
         context=object(),
         _to_session=lambda record, messages: session,
+    )
+    # The real paged transcript loader, over the fake repository.
+    adapter._list_all_messages = lambda work, session_id: PostgresChatRepositoryAdapter._list_all_messages(
+        adapter, work, session_id
     )
     store = SimpleNamespace(_repository=adapter)
     monkeypatch.setattr(fast_path, "unit_of_work", fake_unit_of_work)
