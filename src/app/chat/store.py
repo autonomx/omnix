@@ -356,53 +356,53 @@ class ChatSessionStore:
         from app.providers.structured.errors import ProviderTimeout
 
         provider_name = _provider_key(provider_id)
-        from app.providers.service import get_provider
-        provider = get_provider(provider_name)
-        if provider is None:
-            raise RuntimeError("Chat provider is not available")
+        from app.providers.service import provider_lease
+        with provider_lease(provider_name) as provider:
+            if provider is None:
+                raise RuntimeError("Chat provider is not available")
 
-        messages = self._provider_messages(session, user_message, context_items or [])
-        model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
-        remaining = remaining_turn_seconds(routing_deadline_at)
-        if remaining is not None:
-            if remaining <= 0:
-                raise ProviderTimeout("chat turn deadline has expired")
-            completion_kwargs["request_timeout_seconds"] = remaining
-        response = provider.chat_completion(
-            messages=messages,
-            model=model_name,
-            stream=True,
-            **completion_kwargs,
-        )
-        pending = ""
-        full_text = ""
-        resolved_model = model_name
-        usage = None
-        for chunk in response:
-            resolved_model = getattr(chunk, "model", None) or resolved_model
-            usage = getattr(chunk, "usage", None) or usage
-            text = (getattr(chunk, "content", "") or "")
-            if not text:
-                continue
-            full_text += text
-            pending += text
-            ready, pending = _pop_ready_sentences(pending)
-            for sentence in ready:
-                yield {"type": "text_chunk", "text": sentence}
-        if pending.strip():
-            yield {"type": "text_chunk", "text": pending.strip()}
-        yield {
-            "type": "complete",
-            "content": full_text.strip(),
-            "metadata": {
-                "generation_status": "completed",
-                "provider_id": provider_id,
-                "model_id": model_id,
-                "resolved_model": resolved_model,
-                **({"usage": usage} if usage else {}),
-            },
-        }
+            messages = self._provider_messages(session, user_message, context_items or [])
+            model_name = _model_key(model_id)
+            completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+            remaining = remaining_turn_seconds(routing_deadline_at)
+            if remaining is not None:
+                if remaining <= 0:
+                    raise ProviderTimeout("chat turn deadline has expired")
+                completion_kwargs["request_timeout_seconds"] = remaining
+            response = provider.chat_completion(
+                messages=messages,
+                model=model_name,
+                stream=True,
+                **completion_kwargs,
+            )
+            pending = ""
+            full_text = ""
+            resolved_model = model_name
+            usage = None
+            for chunk in response:
+                resolved_model = getattr(chunk, "model", None) or resolved_model
+                usage = getattr(chunk, "usage", None) or usage
+                text = (getattr(chunk, "content", "") or "")
+                if not text:
+                    continue
+                full_text += text
+                pending += text
+                ready, pending = _pop_ready_sentences(pending)
+                for sentence in ready:
+                    yield {"type": "text_chunk", "text": sentence}
+            if pending.strip():
+                yield {"type": "text_chunk", "text": pending.strip()}
+            yield {
+                "type": "complete",
+                "content": full_text.strip(),
+                "metadata": {
+                    "generation_status": "completed",
+                    "provider_id": provider_id,
+                    "model_id": model_id,
+                    "resolved_model": resolved_model,
+                    **({"usage": usage} if usage else {}),
+                },
+            }
 
     @serialized_chat_mutation
     def complete_streamed_reply(
@@ -672,54 +672,54 @@ class ChatSessionStore:
 
             return agent_provider_boundary_reply(user_message)
 
-        from app.providers.service import get_provider
+        from app.providers.service import provider_lease
 
         provider_name = _provider_key(provider_id)
-        provider = get_provider(provider_name)
-        if provider is None:
-            raise RuntimeError("Chat provider is not available")
+        with provider_lease(provider_name) as provider:
+            if provider is None:
+                raise RuntimeError("Chat provider is not available")
 
-        messages = self._provider_messages(session, user_message, context_items)
+            messages = self._provider_messages(session, user_message, context_items)
 
-        model_name = _model_key(model_id)
-        completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
-        from app.providers.structured.errors import ProviderTimeout
-        from .routing_deadline import remaining_turn_seconds
+            model_name = _model_key(model_id)
+            completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+            from app.providers.structured.errors import ProviderTimeout
+            from .routing_deadline import remaining_turn_seconds
 
-        remaining = remaining_turn_seconds(
-            routing_deadline_at
-            if routing_deadline_at is not None
-            else provider_turn_deadline(
-                provider_id,
-                session_provider_id=getattr(session, "provider_id", None),
+            remaining = remaining_turn_seconds(
+                routing_deadline_at
+                if routing_deadline_at is not None
+                else provider_turn_deadline(
+                    provider_id,
+                    session_provider_id=getattr(session, "provider_id", None),
+                )
             )
-        )
-        if remaining is not None:
-            if remaining <= 0:
-                raise ProviderTimeout("chat turn deadline has expired")
-            completion_kwargs["request_timeout_seconds"] = remaining
-        response = provider.chat_completion(
-            messages=messages,
-            model=model_name,
-            stream=False,
-            **completion_kwargs,
-        )
-        content = (getattr(response, "content", "") or "").strip()
-        if not content:
-            raise RuntimeError("Chat response was empty")
-        metadata: dict[str, Any] = {
-            "generation_status": "completed",
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "resolved_model": getattr(response, "model", None) or model_name,
-        }
-        usage = getattr(response, "usage", None)
-        if usage:
-            metadata["usage"] = usage
-        thinking = getattr(response, "thinking", None) or getattr(response, "reasoning", None)
-        if thinking:
-            metadata["thinking"] = thinking
-        return {"content": content, "metadata": metadata}
+            if remaining is not None:
+                if remaining <= 0:
+                    raise ProviderTimeout("chat turn deadline has expired")
+                completion_kwargs["request_timeout_seconds"] = remaining
+            response = provider.chat_completion(
+                messages=messages,
+                model=model_name,
+                stream=False,
+                **completion_kwargs,
+            )
+            content = (getattr(response, "content", "") or "").strip()
+            if not content:
+                raise RuntimeError("Chat response was empty")
+            metadata: dict[str, Any] = {
+                "generation_status": "completed",
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "resolved_model": getattr(response, "model", None) or model_name,
+            }
+            usage = getattr(response, "usage", None)
+            if usage:
+                metadata["usage"] = usage
+            thinking = getattr(response, "thinking", None) or getattr(response, "reasoning", None)
+            if thinking:
+                metadata["thinking"] = thinking
+            return {"content": content, "metadata": metadata}
 
     def _provider_messages(
         self,

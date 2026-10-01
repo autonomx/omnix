@@ -8,7 +8,10 @@ import os
 import threading
 import time
 import weakref
-from typing import Any, Optional
+from collections import OrderedDict
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any, Iterator, Optional
 
 from app.config.env import env_str
 from app.settings.access import current_settings_service, load_secrets, load_settings
@@ -21,7 +24,7 @@ from .registry import get_registry
 from .audio_registry import get_audio_registry
 
 _PROVIDER_CACHE_TTL_SECONDS = 3600.0
-_PROVIDER_CACHE: tuple[str | None, Any, float] = (None, None, 0.0)
+_PROVIDER_CACHE_MAX_ENTRIES = 16
 _PROVIDER_SETTINGS_LOCK = threading.RLock()
 _PROVIDER_SETTINGS_SUBSCRIPTIONS: weakref.WeakSet[Any] = weakref.WeakSet()
 _tts_provider_instance: Any = None
@@ -84,11 +87,32 @@ def _close(instance: Any) -> None:
             _LOG.warning("Provider close failed; cached instance was still retired")
 
 
+@dataclass
+class _CachedProvider:
+    instance: Any
+    expires_at: float
+    leases: int = 0
+    retired: bool = False
+
+
+# One instance per (provider, configuration), WP-7.2. A retired entry (settings
+# change, expiry, eviction) is closed once no lease holds it, so a provider
+# streaming for one session is never closed because another one is needed.
+_PROVIDERS: OrderedDict[str, _CachedProvider] = OrderedDict()
+_PROVIDERS_LOCK = threading.RLock()
+
+
+def _retire_locked(entry: _CachedProvider) -> list[Any]:
+    entry.retired = True
+    return [entry.instance] if entry.leases == 0 else []
+
+
 def invalidate_provider_cache() -> None:
-    global _PROVIDER_CACHE
-    instance = _PROVIDER_CACHE[1]
-    _PROVIDER_CACHE = (None, None, 0.0)
-    if instance is not None:
+    """Retire every cached provider; each is closed once no lease holds it."""
+    with _PROVIDERS_LOCK:
+        closable = [instance for entry in _PROVIDERS.values() for instance in _retire_locked(entry)]
+        _PROVIDERS.clear()
+    for instance in closable:
         _close(instance)
 
 
@@ -110,11 +134,11 @@ def _subscribe_provider_cache_invalidation() -> None:
             service.subscribe(key, lambda _key, _value: invalidate_provider_cache())
 
 
-def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
-    global _PROVIDER_CACHE
-    _subscribe_provider_cache_invalidation()
-    settings = load_settings()
-    secrets = load_secrets()
+def _provider_config(
+    provider_name: Optional[str],
+    settings: dict[str, Any],
+    secrets: dict[str, Any],
+) -> tuple[str, ProviderConfig]:
     name = provider_name or str(settings.get("provider") or "lmstudio")
     if name == "openrouter":
         cfg = dict(settings.get("openrouter") or {})
@@ -168,20 +192,74 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
             model=str(cfg.get("model") or ""),
         )
 
+    return name, config
+
+
+def _cached_provider(provider_name: Optional[str], *, lease: bool) -> _CachedProvider:
+    _subscribe_provider_cache_invalidation()
+    name, config = _provider_config(provider_name, load_settings(), load_secrets())
     key = _cache_key(name, config)
-    cached_key, cached, expires_at = _PROVIDER_CACHE
-    now = time.monotonic()
-    if cached is not None and expires_at <= now:
-        invalidate_provider_cache()
-        cached = None
-        cached_key = None
-    if cached_key == key and cached is not None:
-        return cached
+    closable: list[Any] = []
+    try:
+        with _PROVIDERS_LOCK:
+            now = time.monotonic()
+            for cached_key, cached in list(_PROVIDERS.items()):
+                if cached.expires_at <= now:
+                    del _PROVIDERS[cached_key]
+                    closable.extend(_retire_locked(cached))
+            entry = _PROVIDERS.get(key)
+            if entry is not None:
+                _PROVIDERS.move_to_end(key)
+                entry.leases += int(lease)
+                return entry
+    finally:
+        for instance in closable:
+            _close(instance)
+        closable.clear()
+
     instance = get_registry().create_provider(name, provider_config=config)
-    if cached is not None and cached is not instance:
-        _close(cached)
-    _PROVIDER_CACHE = (key, instance, now + _PROVIDER_CACHE_TTL_SECONDS)
-    return instance
+    with _PROVIDERS_LOCK:
+        entry = _PROVIDERS.get(key)
+        if entry is None:  # this thread built it
+            entry = _CachedProvider(instance, time.monotonic() + _PROVIDER_CACHE_TTL_SECONDS)
+            _PROVIDERS[key] = entry
+            while len(_PROVIDERS) > _PROVIDER_CACHE_MAX_ENTRIES:
+                _oldest_key, oldest = _PROVIDERS.popitem(last=False)
+                closable.extend(_retire_locked(oldest))
+        elif entry.instance is not instance:  # another thread built it first
+            closable.append(instance)
+        entry.leases += int(lease)
+    for retired in closable:
+        _close(retired)
+    return entry
+
+
+def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
+    """The cached provider. A long call (a stream) should hold ``provider_lease``."""
+    return _cached_provider(provider_name, lease=False).instance
+
+
+_CACHED_GET_PROVIDER = get_provider
+
+
+@contextmanager
+def provider_lease(provider_name: Optional[str] = None) -> Iterator[BaseProvider]:
+    """Use a provider that is not closed until this block ends, even if retired."""
+    lookup = globals()["get_provider"]
+    if lookup is not _CACHED_GET_PROVIDER:
+        # get_provider was replaced (a test double); its instances are not
+        # cached here, so there is nothing to lease.
+        yield lookup(provider_name)
+        return
+    entry = _cached_provider(provider_name, lease=True)
+    try:
+        yield entry.instance
+    finally:
+        with _PROVIDERS_LOCK:
+            entry.leases -= 1
+            close = entry.retired and entry.leases == 0
+        if close:
+            _close(entry.instance)
 
 
 def get_provider_config() -> dict[str, Any]:

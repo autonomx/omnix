@@ -1,13 +1,8 @@
 """
-Provider Registry - Dynamic plugin discovery and management system.
-
-This module implements a registry that automatically discovers provider plugins
-in the providers directory and provides a factory for creating provider instances.
+Provider Registry - the LLM providers listed in ``app.providers.catalog``,
+plus a factory for creating provider instances.
 """
 
-import importlib
-import inspect
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
 from .base import BaseProvider, ProviderConfig
@@ -28,51 +23,28 @@ class ProviderRegistry:
         self._discovered = False
         
     def discover_providers(self) -> None:
-        """
-        Auto-discover provider classes from the providers package.
-        
-        Scans all .py files in the providers directory (excluding base and registry)
-        and registers any classes that inherit from BaseProvider.
+        """Load the LLM providers listed in ``app.providers.catalog`` (WP-7.2).
+
+        A provider whose module fails to import is reported and skipped; the
+        rest stay available.
         """
         if self._discovered:
             return
-            
-        providers_dir = Path(__file__).parent
-        self._providers = {}
-        
-        # Import all Python modules in the providers package
-        skip_modules = {"__init__", "base", "registry", "exceptions"}
+        from .catalog import specs
 
-        for module_file in providers_dir.glob("*.py"):
-            module_name = module_file.stem
-            
-            # Skip these files
-            if module_name in skip_modules or module_name.startswith("audio_"):
-                continue
-                
+        self._providers = {}
+        for spec in specs("llm"):
             try:
-                # Import the module
-                full_module_name = f"app.providers.{module_name}"
-                module = importlib.import_module(full_module_name)
-                
-                # Find all classes that inherit from BaseProvider
-                for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if (issubclass(obj, BaseProvider) and 
-                        obj != BaseProvider and 
-                        obj.__module__ == full_module_name):
-                        
-                        provider_name = obj.provider_name
-                        if provider_name in self._providers:
-                            print(f"Warning: Provider '{provider_name}' already registered, overwriting")
-                        self._providers[provider_name] = obj
-                        print(f"Registered provider: {provider_name}")
-                        
-            except Exception as e:
-                print(f"Error discovering provider in {module_name}: {e}")
-                
+                provider_class = spec.load()
+            except Exception as exc:
+                print(f"Error loading provider {spec.id} from {spec.module}: {exc}")
+                continue
+            if not issubclass(provider_class, BaseProvider):
+                raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a BaseProvider")
+            self._providers[spec.id] = provider_class
         self._discovered = True
         print(f"Provider discovery complete. {len(self._providers)} providers available")
-    
+
     def register_provider(self, provider_class: Type[BaseProvider]) -> None:
         """
         Manually register a provider class.

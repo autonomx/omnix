@@ -10,6 +10,7 @@ from app.chat import ChatMessage, ChatSession
 from app.chat import live_chat_speculation as speculation
 from app.chat import live_chat_speculation_handshake as handshake
 from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
 from tests.support.routers import include_router_registrar
 
 
@@ -152,7 +153,7 @@ def test_json_handshake_starts_generation_before_stream_attachment(monkeypatch) 
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -246,7 +247,7 @@ def test_generation_stream_is_single_consumer(monkeypatch) -> None:
     store = _FakeStore()
     provider = _FakeProvider()
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -280,7 +281,7 @@ def test_cancel_marks_eager_generation_failed_without_persistence(monkeypatch) -
     store = _FakeStore()
     provider = _BlockingProvider()
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )

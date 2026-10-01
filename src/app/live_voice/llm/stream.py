@@ -7,6 +7,7 @@ live voice while provider-specific adapters add their own metrics.
 from __future__ import annotations
 
 import time
+from contextlib import ExitStack
 from typing import Any, Iterator
 
 from app.chat.contracts import (
@@ -16,7 +17,7 @@ from app.chat.contracts import (
     provider_turn_deadline,
     remaining_turn_seconds,
 )
-from app.providers.service import get_provider
+from app.providers.service import provider_lease
 
 from app.observability.tts_stream_diagnostics import stream_log
 
@@ -181,141 +182,142 @@ def stream_low_latency_reply(
 
     started = time.perf_counter()
     provider_name = provider_key(provider_id)
-    if provider is None:
-        provider = get_provider(provider_name)
-    if provider is None:
-        raise RuntimeError("Chat provider is not available")
+    with ExitStack() as leases:
+        if provider is None:
+            provider = leases.enter_context(provider_lease(provider_name))
+        if provider is None:
+            raise RuntimeError("Chat provider is not available")
 
-    prompt_started = time.perf_counter()
-    assembly, rendered = self.build_provider_prompt(
-        session,
-        user_message,
-        context_items or [],
-    )
-    prompt_build_ms = (time.perf_counter() - prompt_started) * 1000.0
-    messages = [
-        ProviderMessage(role=message.role, content=message.content)
-        for message in rendered.messages
-    ]
-    model_name = model_key(model_id)
-    completion_kwargs: dict[str, Any] = {}
-    if provider_name == "chatgpt_codex":
-        conversation_id = str(getattr(session, "id", "") or "").strip()
-        if conversation_id:
-            completion_kwargs["conversation_id"] = conversation_id
-    routing_deadline_at = provider_turn_deadline(
-        provider_id,
-        session_provider_id=getattr(session, "provider_id", None),
-        existing_deadline_at=routing_deadline_at,
-    )
-    remaining = remaining_turn_seconds(routing_deadline_at)
-    if remaining is not None:
-        if remaining <= 0:
-            from app.providers.structured.errors import ProviderTimeout
+        prompt_started = time.perf_counter()
+        assembly, rendered = self.build_provider_prompt(
+            session,
+            user_message,
+            context_items or [],
+        )
+        prompt_build_ms = (time.perf_counter() - prompt_started) * 1000.0
+        messages = [
+            ProviderMessage(role=message.role, content=message.content)
+            for message in rendered.messages
+        ]
+        model_name = model_key(model_id)
+        completion_kwargs: dict[str, Any] = {}
+        if provider_name == "chatgpt_codex":
+            conversation_id = str(getattr(session, "id", "") or "").strip()
+            if conversation_id:
+                completion_kwargs["conversation_id"] = conversation_id
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+            existing_deadline_at=routing_deadline_at,
+        )
+        remaining = remaining_turn_seconds(routing_deadline_at)
+        if remaining is not None:
+            if remaining <= 0:
+                from app.providers.structured.errors import ProviderTimeout
 
-            raise ProviderTimeout("chat turn deadline has expired")
-        completion_kwargs["request_timeout_seconds"] = remaining
-    if provider_name == "lmstudio":
-        from app.live_voice.llm.policy import lmstudio_live_voice_options
+                raise ProviderTimeout("chat turn deadline has expired")
+            completion_kwargs["request_timeout_seconds"] = remaining
+        if provider_name == "lmstudio":
+            from app.live_voice.llm.policy import lmstudio_live_voice_options
 
-        completion_kwargs.update(lmstudio_live_voice_options(user_message))
-    response = provider.chat_completion(
-        messages=messages,
-        model=model_name,
-        stream=True,
-        **completion_kwargs,
-    )
-    chunker = LowLatencyTextChunker(
-        emit_initial_fragment=not _is_live_voice_turn(user_message),
-    )
-    full_text = ""
-    resolved_model = model_name
-    usage = None
-    provider_iteration_started = time.perf_counter()
-    first_provider_text_ms: float | None = None
-    first_client_chunk_ms: float | None = None
+            completion_kwargs.update(lmstudio_live_voice_options(user_message))
+        response = provider.chat_completion(
+            messages=messages,
+            model=model_name,
+            stream=True,
+            **completion_kwargs,
+        )
+        chunker = LowLatencyTextChunker(
+            emit_initial_fragment=not _is_live_voice_turn(user_message),
+        )
+        full_text = ""
+        resolved_model = model_name
+        usage = None
+        provider_iteration_started = time.perf_counter()
+        first_provider_text_ms: float | None = None
+        first_client_chunk_ms: float | None = None
 
-    for chunk in response:
-        resolved_model = getattr(chunk, "model", None) or resolved_model
-        usage = getattr(chunk, "usage", None) or usage
-        text = getattr(chunk, "content", "") or ""
-        if not text:
-            continue
-        if first_provider_text_ms is None:
-            first_provider_text_ms = (time.perf_counter() - provider_iteration_started) * 1000.0
-            stream_log(
-                "gateway-live-chat-first-token",
-                "runtime",
-                "live_chat_first_provider_text",
-                provider_id=provider_id,
-                prompt_build_ms=round(prompt_build_ms, 3),
-                provider_first_text_ms=round(first_provider_text_ms, 3),
-            )
-        full_text += text
-        for ready in chunker.push(text):
-            if first_client_chunk_ms is None:
-                first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
+        for chunk in response:
+            resolved_model = getattr(chunk, "model", None) or resolved_model
+            usage = getattr(chunk, "usage", None) or usage
+            text = getattr(chunk, "content", "") or ""
+            if not text:
+                continue
+            if first_provider_text_ms is None:
+                first_provider_text_ms = (time.perf_counter() - provider_iteration_started) * 1000.0
                 stream_log(
                     "gateway-live-chat-first-token",
                     "runtime",
-                    "live_chat_first_client_chunk",
+                    "live_chat_first_provider_text",
                     provider_id=provider_id,
-                    first_client_chunk_ms=round(first_client_chunk_ms, 3),
                     prompt_build_ms=round(prompt_build_ms, 3),
-                    provider_first_text_ms=(
-                        round(first_provider_text_ms, 3)
-                        if first_provider_text_ms is not None
-                        else None
-                    ),
-                    text_chars=len(ready),
+                    provider_first_text_ms=round(first_provider_text_ms, 3),
                 )
-            yield {"type": "text_chunk", "text": ready}
+            full_text += text
+            for ready in chunker.push(text):
+                if first_client_chunk_ms is None:
+                    first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
+                    stream_log(
+                        "gateway-live-chat-first-token",
+                        "runtime",
+                        "live_chat_first_client_chunk",
+                        provider_id=provider_id,
+                        first_client_chunk_ms=round(first_client_chunk_ms, 3),
+                        prompt_build_ms=round(prompt_build_ms, 3),
+                        provider_first_text_ms=(
+                            round(first_provider_text_ms, 3)
+                            if first_provider_text_ms is not None
+                            else None
+                        ),
+                        text_chars=len(ready),
+                    )
+                yield {"type": "text_chunk", "text": ready}
 
-    remaining = chunker.flush()
-    if remaining:
-        if first_client_chunk_ms is None:
-            first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
-        yield {"type": "text_chunk", "text": remaining}
+        remaining = chunker.flush()
+        if remaining:
+            if first_client_chunk_ms is None:
+                first_client_chunk_ms = (time.perf_counter() - started) * 1000.0
+            yield {"type": "text_chunk", "text": remaining}
 
-    completion_log_started = time.perf_counter()
-    stream_log(
-        "gateway-live-chat-first-token",
-        "runtime",
-        "live_chat_provider_stream_completed",
-        provider_id=provider_id,
-        prompt_build_ms=round(prompt_build_ms, 3),
-        provider_first_text_ms=(
-            round(first_provider_text_ms, 3) if first_provider_text_ms is not None else None
-        ),
-        first_client_chunk_ms=(
-            round(first_client_chunk_ms, 3) if first_client_chunk_ms is not None else None
-        ),
-        total_ms=round((time.perf_counter() - started) * 1000.0, 3),
-    )
-    completion_log_ms = (time.perf_counter() - completion_log_started) * 1000.0
+        completion_log_started = time.perf_counter()
+        stream_log(
+            "gateway-live-chat-first-token",
+            "runtime",
+            "live_chat_provider_stream_completed",
+            provider_id=provider_id,
+            prompt_build_ms=round(prompt_build_ms, 3),
+            provider_first_text_ms=(
+                round(first_provider_text_ms, 3) if first_provider_text_ms is not None else None
+            ),
+            first_client_chunk_ms=(
+                round(first_client_chunk_ms, 3) if first_client_chunk_ms is not None else None
+            ),
+            total_ms=round((time.perf_counter() - started) * 1000.0, 3),
+        )
+        completion_log_ms = (time.perf_counter() - completion_log_started) * 1000.0
 
-    terminal_metadata_started = time.perf_counter()
-    usage_payload = _json_safe_provider_value(usage)
-    memory_metadata = self._active_memory_metadata(assembly, rendered)
-    history_metadata = self._active_history_metadata(assembly)
-    terminal_metadata_ms = (time.perf_counter() - terminal_metadata_started) * 1000.0
-    yield {
-        "type": "complete",
-        "content": full_text.strip(),
-        "diagnostics": {
-            "provider_completion_log_ms": round(completion_log_ms, 3),
-            "terminal_metadata_ms": round(terminal_metadata_ms, 3),
-        },
-        "metadata": {
-            "generation_status": "completed",
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "resolved_model": resolved_model,
-            **memory_metadata,
-            **history_metadata,
-            **({"usage": usage_payload} if usage_payload is not None else {}),
-        },
-    }
+        terminal_metadata_started = time.perf_counter()
+        usage_payload = _json_safe_provider_value(usage)
+        memory_metadata = self._active_memory_metadata(assembly, rendered)
+        history_metadata = self._active_history_metadata(assembly)
+        terminal_metadata_ms = (time.perf_counter() - terminal_metadata_started) * 1000.0
+        yield {
+            "type": "complete",
+            "content": full_text.strip(),
+            "diagnostics": {
+                "provider_completion_log_ms": round(completion_log_ms, 3),
+                "terminal_metadata_ms": round(terminal_metadata_ms, 3),
+            },
+            "metadata": {
+                "generation_status": "completed",
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "resolved_model": resolved_model,
+                **memory_metadata,
+                **history_metadata,
+                **({"usage": usage_payload} if usage_payload is not None else {}),
+            },
+        }
 
 
 def observe_live_voice_provider_stream(response: Any) -> Iterator[Any]:

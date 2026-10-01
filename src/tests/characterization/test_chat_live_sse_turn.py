@@ -109,11 +109,6 @@ def test_chat_live_sse_turn_matches_pre_refactor_golden(
         }
     )
     monkeypatch.setattr(provider_service, "get_provider", lambda _name=None: provider)
-    from app.live_voice.llm import stream as live_voice_stream
-
-    monkeypatch.setattr(
-        live_voice_stream, "get_provider", lambda _name=None: provider
-    )
 
     from app.live_voice.chat_integration import create_live_voice_chat_port
 

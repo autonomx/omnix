@@ -737,9 +737,9 @@
       "count": 3,
       "fingerprint": "LlamaCppInstaller.download_model_from_url:print",
       "lines": [
-        549,
-        574,
-        576
+        551,
+        576,
+        578
       ],
       "path": "src/app/llamacpp_installer.py",
       "rule": "AL008"
@@ -748,8 +748,8 @@
       "count": 2,
       "fingerprint": "LlamaCppInstaller.install_complete:print",
       "lines": [
-        453,
-        465
+        455,
+        467
       ],
       "path": "src/app/llamacpp_installer.py",
       "rule": "AL008"
@@ -819,7 +819,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.create_stt_provider:print",
       "lines": [
-        347
+        284
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -828,21 +828,17 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.create_tts_provider:print",
       "lines": [
-        295
+        232
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
     },
     {
-      "count": 6,
+      "count": 2,
       "fingerprint": "AudioProviderRegistry.discover_providers:print",
       "lines": [
-        78,
-        80,
-        102,
-        104,
-        107,
-        110
+        41,
+        47
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -851,7 +847,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.list_stt_providers:print",
       "lines": [
-        266
+        203
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -860,7 +856,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.list_tts_providers:print",
       "lines": [
-        240
+        177
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -869,7 +865,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.register_stt_provider:print",
       "lines": [
-        156
+        93
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -878,7 +874,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.register_tts_provider:print",
       "lines": [
-        133
+        70
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -887,7 +883,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.unregister_stt_provider:print",
       "lines": [
-        186
+        123
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -896,7 +892,7 @@
       "count": 1,
       "fingerprint": "AudioProviderRegistry.unregister_tts_provider:print",
       "lines": [
-        170
+        107
       ],
       "path": "src/app/providers/audio_registry.py",
       "rule": "AL008"
@@ -952,19 +948,17 @@
       "count": 1,
       "fingerprint": "ProviderRegistry.create_provider:print",
       "lines": [
-        211
+        183
       ],
       "path": "src/app/providers/registry.py",
       "rule": "AL008"
     },
     {
-      "count": 4,
+      "count": 2,
       "fingerprint": "ProviderRegistry.discover_providers:print",
       "lines": [
-        66,
-        68,
-        71,
-        74
+        40,
+        46
       ],
       "path": "src/app/providers/registry.py",
       "rule": "AL008"
@@ -973,7 +967,7 @@
       "count": 1,
       "fingerprint": "ProviderRegistry.list_providers:print",
       "lines": [
-        150
+        122
       ],
       "path": "src/app/providers/registry.py",
       "rule": "AL008"
@@ -982,7 +976,7 @@
       "count": 1,
       "fingerprint": "ProviderRegistry.register_provider:print",
       "lines": [
-        97
+        69
       ],
       "path": "src/app/providers/registry.py",
       "rule": "AL008"
@@ -991,7 +985,7 @@
       "count": 1,
       "fingerprint": "ProviderRegistry.unregister_provider:print",
       "lines": [
-        111
+        83
       ],
       "path": "src/app/providers/registry.py",
       "rule": "AL008"
@@ -1340,7 +1334,7 @@
       "count": 1,
       "fingerprint": "LlamaCppInstaller.get_available_models:except",
       "lines": [
-        620
+        622
       ],
       "path": "src/app/llamacpp_installer.py",
       "rule": "AL009"
@@ -1398,16 +1392,6 @@
         29
       ],
       "path": "src/app/platform/audio_cache.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "AudioProviderRegistry.discover_providers:except",
-      "lines": [
-        73,
-        97
-      ],
-      "path": "src/app/providers/audio_registry.py",
       "rule": "AL009"
     },
     {

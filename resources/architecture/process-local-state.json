@@ -962,6 +962,21 @@
     },
     {
       "path": "src/app/providers/service.py",
+      "symbol": "_PROVIDERS",
+      "category": "cache",
+      "reason": "Provider instances per (provider, configuration) for this process (WP-7.2): connection pools and, for Codex, its local process. Settings and secrets stay in their stores; a retired instance is closed once no lease holds it.",
+      "max_entries_symbol": "_PROVIDER_CACHE_MAX_ENTRIES",
+      "ttl_symbol": "_PROVIDER_CACHE_TTL_SECONDS",
+      "invalidation": "invalidate_provider_cache"
+    },
+    {
+      "path": "src/app/providers/service.py",
+      "symbol": "_PROVIDERS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/service.py",
       "symbol": "_PROVIDER_SETTINGS_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

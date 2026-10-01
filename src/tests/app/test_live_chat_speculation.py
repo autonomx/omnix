@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.chat import ChatMessage, ChatSession
 from app.chat import live_chat_speculation as speculation
 from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
 from tests.support.routers import include_router_registrar
 
 
@@ -142,7 +143,7 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     store = _FakeStore()
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: _FakeProvider(),
     )
@@ -233,7 +234,7 @@ def test_primed_session_avoids_speculation_reload(monkeypatch) -> None:
     store = _FakeStore()
     speculation.prime_live_speculation_session(store.session)
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: _FakeProvider(),
     )

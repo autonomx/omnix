@@ -11,6 +11,7 @@ from app.live_voice.chat_integration import create_live_voice_chat_port
 from app.providers import ChatMessage as ProviderMessage
 from app.providers import ChatResponse, LMStudioProvider, ProviderConfig
 from app.runtime.cancellation import CancellationToken
+from app.providers import service as provider_service
 
 
 class _BlockingStreamResponse:
@@ -100,7 +101,7 @@ def test_lmstudio_stream_cancel_closes_blocked_response_before_ttft(monkeypatch)
 def test_side_effect_free_lmstudio_speculation_receives_cancel_event(monkeypatch) -> None:
     provider = _CapturingProvider()
     monkeypatch.setattr(
-        speculation_runtime,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )

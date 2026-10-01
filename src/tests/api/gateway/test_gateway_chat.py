@@ -39,13 +39,6 @@ def _client(tmp_path: Path) -> TestClient:
 
 def _patch_prompt_provider_from_service(monkeypatch, prompt_store, provider_service) -> None:
     monkeypatch.setattr(prompt_store.provider_service, "get_provider", provider_service.get_provider)
-    from app.live_voice.llm import stream as live_voice_stream
-
-    monkeypatch.setattr(
-        live_voice_stream,
-        "get_provider",
-        provider_service.get_provider,
-    )
 
 
 def _wait_for_job(client: TestClient, job_id: str, *, timeout: float = 2.0) -> dict:

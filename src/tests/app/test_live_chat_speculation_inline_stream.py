@@ -10,6 +10,7 @@ from app.chat import live_chat_speculation as speculation
 from app.chat import live_chat_speculation_handshake as handshake
 from app.chat import live_chat_speculation_inline_stream as inline_stream
 from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
 from app.chat.live_chat_speculation_inline_stream import (
     register_live_chat_speculation_inline_stream_routes,
 )
@@ -78,7 +79,7 @@ def _event_payloads(body: str) -> list[dict]:
 
 def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClient:
     monkeypatch.setattr(
-        speculation,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )

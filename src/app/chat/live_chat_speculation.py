@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.providers.service import get_provider
+from app.providers.service import provider_lease
 from app.chat import (
     ChatMessage,
     ChatSessionStore,
@@ -397,85 +397,85 @@ def _generate_side_effect_free(
     live_voice = getattr(store, "live_voice_chat_port", None)
     if live_voice is None:
         raise RuntimeError("live_voice_chat_port_required")
-    provider = get_provider(_provider_key(speculation.provider_id))
-    if provider is None:
-        raise RuntimeError("Chat provider is not available")
-    user_message = ChatMessage(
-        id=f"speculation-user-{speculation.generation_id}",
-        role="user",
-        content=speculation.candidate_text,
-        created_at=datetime.now(timezone.utc).isoformat(),
-        metadata={
-            "speculative": True,
-            "side_effects_allowed": False,
-            "tools_allowed": False,
-            "memory_writes_allowed": False,
-            "user_turn_id": f"voice-user-turn:{speculation.generation_id}"[:160],
-            "speech_segment_id": f"voice-segment:{speculation.segment_id}"[:160],
-            "live_execution_lane": speculation.execution_lane,
-        },
-    )
-    assembly, rendered = store.build_provider_prompt(session, user_message, [])
-    messages = [
-        ProviderMessage(role=item.role, content=item.content)
-        for item in rendered.messages
-    ]
-    provider_kwargs: dict[str, Any] = {}
-    if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
-        provider_kwargs["cancel"] = cancel_event
-    if str(getattr(provider, "provider_name", "")).strip().casefold() == "lmstudio":
-        provider_kwargs.update(live_voice.lmstudio_live_voice_options(user_message))
-        provider_kwargs["include_metrics"] = True
-    raw_response = provider.chat_completion(
-        messages=messages,
-        model=_model_key(speculation.model_id),
-        stream=True,
-        **provider_kwargs,
-    )
-    response = live_voice.observe_live_voice_provider_stream(raw_response)
-    chunker = live_voice.new_text_chunker()
-    full_text = ""
-    for chunk in response:
+    with provider_lease(_provider_key(speculation.provider_id)) as provider:
+        if provider is None:
+            raise RuntimeError("Chat provider is not available")
+        user_message = ChatMessage(
+            id=f"speculation-user-{speculation.generation_id}",
+            role="user",
+            content=speculation.candidate_text,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            metadata={
+                "speculative": True,
+                "side_effects_allowed": False,
+                "tools_allowed": False,
+                "memory_writes_allowed": False,
+                "user_turn_id": f"voice-user-turn:{speculation.generation_id}"[:160],
+                "speech_segment_id": f"voice-segment:{speculation.segment_id}"[:160],
+                "live_execution_lane": speculation.execution_lane,
+            },
+        )
+        assembly, rendered = store.build_provider_prompt(session, user_message, [])
+        messages = [
+            ProviderMessage(role=item.role, content=item.content)
+            for item in rendered.messages
+        ]
+        provider_kwargs: dict[str, Any] = {}
+        if cancel_event is not None and getattr(provider, "provider_name", None) == "lmstudio":
+            provider_kwargs["cancel"] = cancel_event
+        if str(getattr(provider, "provider_name", "")).strip().casefold() == "lmstudio":
+            provider_kwargs.update(live_voice.lmstudio_live_voice_options(user_message))
+            provider_kwargs["include_metrics"] = True
+        raw_response = provider.chat_completion(
+            messages=messages,
+            model=_model_key(speculation.model_id),
+            stream=True,
+            **provider_kwargs,
+        )
+        response = live_voice.observe_live_voice_provider_stream(raw_response)
+        chunker = live_voice.new_text_chunker()
+        full_text = ""
+        for chunk in response:
+            if cancel_event is not None and cancel_event.is_set():
+                return
+            text = getattr(chunk, "content", "") or ""
+            if not text:
+                continue
+            full_text += text
+            for ready in chunker.push(text):
+                yield _sse({
+                    "type": "text_chunk",
+                    "generation_id": speculation.generation_id,
+                    "text": ready,
+                })
         if cancel_event is not None and cancel_event.is_set():
             return
-        text = getattr(chunk, "content", "") or ""
-        if not text:
-            continue
-        full_text += text
-        for ready in chunker.push(text):
+        remaining = chunker.flush()
+        if remaining:
             yield _sse({
                 "type": "text_chunk",
                 "generation_id": speculation.generation_id,
-                "text": ready,
+                "text": remaining,
             })
-    if cancel_event is not None and cancel_event.is_set():
-        return
-    remaining = chunker.flush()
-    if remaining:
+        with _SPECULATION_LOCK:
+            speculation.content = full_text.strip()
+            speculation.metadata = {
+                "provider_id": speculation.provider_id,
+                "model_id": speculation.model_id,
+                "resolved_model": speculation.model_id,
+                "live_execution_lane": speculation.execution_lane,
+                "speculation_side_effects": "disabled",
+                "speculation_tools": "disabled",
+                "speculation_memory_writes": "disabled",
+                "prompt_source_count": len(getattr(assembly, "sources", []) or []),
+            }
+            speculation.completed = True
         yield _sse({
-            "type": "text_chunk",
+            "type": "complete",
             "generation_id": speculation.generation_id,
-            "text": remaining,
+            "content": speculation.content,
+            "metadata": speculation.metadata,
         })
-    with _SPECULATION_LOCK:
-        speculation.content = full_text.strip()
-        speculation.metadata = {
-            "provider_id": speculation.provider_id,
-            "model_id": speculation.model_id,
-            "resolved_model": speculation.model_id,
-            "live_execution_lane": speculation.execution_lane,
-            "speculation_side_effects": "disabled",
-            "speculation_tools": "disabled",
-            "speculation_memory_writes": "disabled",
-            "prompt_source_count": len(getattr(assembly, "sources", []) or []),
-        }
-        speculation.completed = True
-    yield _sse({
-        "type": "complete",
-        "generation_id": speculation.generation_id,
-        "content": speculation.content,
-        "metadata": speculation.metadata,
-    })
 
 
 def _prune_speculations() -> None:

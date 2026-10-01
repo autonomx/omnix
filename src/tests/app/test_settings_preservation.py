@@ -41,8 +41,8 @@ def test_provider_secret_update_uses_secret_store_and_invalidates_cache(monkeypa
         monkeypatch,
         secrets={"api_keys": {"openrouter": "or-secret-1234"}},
     )
-    provider_service._PROVIDER_CACHE = (
-        "cached-provider", object(), provider_service.time.monotonic() + 60.0
+    provider_service._PROVIDERS["cached-provider"] = provider_service._CachedProvider(
+        object(), provider_service.time.monotonic() + 60.0
     )
 
     result = settings_control.save_settings_payload(
@@ -58,7 +58,7 @@ def test_provider_secret_update_uses_secret_store_and_invalidates_cache(monkeypa
     assert secret_store["api_keys"]["openrouter"] == "or-secret-5678"
     assert service.values["openrouter"]["model"] == "anthropic/claude-sonnet"
     assert "api_key" not in service.values["openrouter"]
-    assert provider_service._PROVIDER_CACHE == (None, None, 0.0)
+    assert not provider_service._PROVIDERS
     assert settings_control.get_settings_payload().settings["openrouter"]["api_key"] == "***5678"
 
 
@@ -86,7 +86,7 @@ def test_provider_cache_subscribes_to_provider_settings(monkeypatch) -> None:
     assert provider_service.get_provider() is provider
     service.set("provider", "cerebras", expected_revision=0)
 
-    assert provider_service._PROVIDER_CACHE == (None, None, 0.0)
+    assert not provider_service._PROVIDERS
     assert closed == [True]
 
 
@@ -104,10 +104,9 @@ def test_global_prompt_change_does_not_invalidate_provider_cache(monkeypatch) ->
     )
     assert initialized.success is True
     cached_instance = object()
-    cached_state = (
-        "cached-provider", cached_instance, provider_service.time.monotonic() + 60.0
+    provider_service._PROVIDERS["cached-provider"] = provider_service._CachedProvider(
+        cached_instance, provider_service.time.monotonic() + 60.0
     )
-    provider_service._PROVIDER_CACHE = cached_state
 
     result = settings_control.save_settings_payload(
         {"global_system_prompt": "Updated system prompt"}
@@ -116,7 +115,8 @@ def test_global_prompt_change_does_not_invalidate_provider_cache(monkeypatch) ->
     assert result.success is True
     assert service.values["global_system_prompt"] == "Updated system prompt"
     assert secret_store["api_keys"]["openrouter"] == "or-secret-1234"
-    assert provider_service._PROVIDER_CACHE == cached_state
+    assert provider_service._PROVIDERS["cached-provider"].instance is cached_instance
+    provider_service.invalidate_provider_cache()
 
 
 def test_worker_and_audio_settings_use_typed_settings_entries(monkeypatch) -> None:
