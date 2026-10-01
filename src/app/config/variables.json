@@ -1379,6 +1379,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls role permissions for security.",
+    "feature": "security",
+    "name": "OMNIX_ROLE_PERMISSIONS",
+    "type": "string"
+  },
+  {
     "default": "1",
     "description": "Controls rpg debug logs for rpg.",
     "feature": "rpg",

@@ -175,7 +175,7 @@ same routing policy as `deploy/nginx/omnix.conf`
 (`python scripts/render_gateway_ingress.py`).
 
     docker compose -f docker-compose.multihost-test.yml up -d --build --wait
-    docker compose -f docker-compose.multihost-test.yml run --rm driver
+    docker compose -f docker-compose.multihost-test.yml run --no-deps --rm driver
     docker compose -f docker-compose.multihost-test.yml down -v
 
 The driver (`scripts/multihost_topology_test.py`) checks:
@@ -578,6 +578,14 @@ Each request runs in one workspace:
 - **Sign-in off:** the local workspace.
 
 Job workers run jobs from every active workspace, each in its own workspace.
+
+### Roles and permissions
+
+Each workspace membership has roles: `owner`, `admin`, `member`, `approver`
+(adds approvals) and `viewer` (read-only). Every route requires a permission
+from the catalog; a missing one gets 403 `permission_denied` naming the
+permission. The full table is `docs/security/PERMISSIONS.md`. With
+sign-in off the local user is `owner`, so nothing changes for local installs.
 
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.

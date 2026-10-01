@@ -126,7 +126,7 @@ jobs:
       - name: Drive traffic through Nginx and measure
         run: |
           mkdir -p artifacts
-          docker compose -f docker-compose.multihost-test.yml run --rm driver
+          docker compose -f docker-compose.multihost-test.yml run --no-deps --rm driver
       - name: Service logs on failure
         if: failure()
         run: |

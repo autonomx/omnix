@@ -14487,7 +14487,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 629
+      "value": 47
     },
     "rpg_nondeterminism": {
       "direction": "lower",

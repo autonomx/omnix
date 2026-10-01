@@ -201,6 +201,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_REQUIRE_ROLE_SEPARATION` | boolean | `false` | kernel | Controls require role separation for kernel. |
 | `OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED` | string | `1` | research | Controls research legacy aliases enabled for research. |
 | `OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET` | string | — | research | Controls research legacy alias sunset for research. |
+| `OMNIX_ROLE_PERMISSIONS` | string | — | security | Controls role permissions for security. |
 | `OMNIX_RPG_DEBUG_LOGS` | string | `1` | rpg | Controls rpg debug logs for rpg. |
 | `OMNIX_RPG_LOG_DIR` | string | — | rpg | Controls rpg log dir for rpg. |
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |

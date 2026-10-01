@@ -552,6 +552,24 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     evidence["package_cycles"] = analysis.package_cycles()
     values["package_cycles"] = len(evidence["package_cycles"])
     blob_owners = {"src/" + path for path in analysis.config.get("owners", {}).get("blob_store_construction", [])}
+    # WP-4.3: composition attaches a permission guard to every feature router
+    # and to the kernel router; their routes are authorized even without a
+    # per-route dependency. Sidecar apps outside the gateway still count.
+    composition_guarded = (
+        "Depends(permission_guard)" in analysis.sources.get("src/app/gateway/feature_registry.py", "")
+        and "Depends(kernel_permission_guard)" in analysis.sources.get("src/app/gateway/app_factory.py", "")
+    )
+    feature_package_paths = tuple(
+        "src/" + package.replace(".", "/") + "/"
+        for package in analysis.config.get("layers", {}).get("features", {}).get("packages", [])
+    ) + (
+        # Composed into the gateway through guarded routers as well; the
+        # runtime test in src/tests/security/test_permissions.py proves every
+        # composed route refuses a caller without permissions.
+        "src/app/gateway/",
+        "src/app/assist_core/",
+        "src/app/assistant_context/",
+    )
     evidence["other_fixed_sleeps_in_tests"] = []
     values["files_over_1200_lines"] = sum(
         path.endswith((".py", ".ts", ".tsx")) and len(source.splitlines()) > 1200
@@ -629,7 +647,12 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                         values["schema_excluded_routes"] += 1
                     full_path = router_prefixes.get(qualified_name(route.func.value), "") + route_path
                     if full_path not in PUBLIC_PATHS and not full_path.startswith(PUBLIC_PREFIXES) and not internal:
-                        permitted = qualified_name(route.func.value) in router_permissions or _permission(keyword(route, "dependencies")) or any(_permission(default) for default in node.args.defaults + node.args.kw_defaults)
+                        permitted = (
+                            (composition_guarded and path.startswith(feature_package_paths))
+                            or qualified_name(route.func.value) in router_permissions
+                            or _permission(keyword(route, "dependencies"))
+                            or any(_permission(default) for default in node.args.defaults + node.args.kw_defaults)
+                        )
                         values["routes_without_permission"] += not permitted
             if isinstance(node, ast.Call):
                 name = qualified_name(node.func, aliases)

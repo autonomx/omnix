@@ -16,6 +16,7 @@ from app.runtime.feature_catalog import enabled_feature_ids, load_feature
 from app.runtime.features import FeatureContext, FeatureLifecycle
 from app.runtime.hooks import install_runtime_hooks
 from app.runtime.scheduler import ScheduledTaskSpec as RuntimeScheduledTaskSpec
+from app.security.permissions import feature_permission_guard, internal_permission_guard
 
 
 def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
@@ -95,17 +96,20 @@ def _register_feature_modules(gateway) -> None:
             logger=logging.getLogger(f"app.feature.{feature.id}"),
             runtime_state=gateway.state,
         )
+        # Every feature route is authorized (WP-4.3): its declared permission,
+        # else the feature's read/write default.
+        permission_guard = feature_permission_guard(feature.id)
         for router_factory in feature.routers:
             gateway.include_router(
                 router_factory(context),
-                dependencies=[Depends(feature_guard(feature.id))],
+                dependencies=[Depends(feature_guard(feature.id)), Depends(permission_guard)],
             )
         for router_factory in feature.internal_routers:
             internal_router = router_factory(context)
             internal_paths.extend(_router_paths(internal_router))
             gateway.include_router(
                 internal_router,
-                dependencies=[Depends(feature_guard(feature.id))],
+                dependencies=[Depends(feature_guard(feature.id)), Depends(internal_permission_guard)],
                 include_in_schema=False,
             )
         public_paths.extend(sorted(feature.public_paths))

@@ -1,6 +1,8 @@
 """HTTP control surface for durable multi-profile TaskGraph runs."""
 from __future__ import annotations
 
+from app.security.permissions import ensure_permission
+
 import asyncio
 import json
 from typing import Literal
@@ -72,6 +74,7 @@ def command_task_graph_run(
         if request.command == "cancel":
             return runtime.cancel(run_id)
         if request.command in {"approve", "reject"}:
+            ensure_permission("agent:approve")
             if not request.node_id:
                 raise HTTPException(status_code=422, detail="node_id_required")
             if request.command == "approve":

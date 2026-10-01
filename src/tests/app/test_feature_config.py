@@ -9,6 +9,7 @@ from app.runtime.capabilities import RuntimeCapabilities
 from app.runtime.config import RuntimeConfig
 from app.runtime.features import FeatureModule
 from app.runtime.scheduler import ScheduledTaskSpec
+from app.security.permissions import FEATURE_DEFAULTS
 
 
 class SampleFeatureConfig(BaseModel):
@@ -85,6 +86,7 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
     monkeypatch.setattr(feature_registry, "install_runtime_hooks", lambda _hooks: None)
+    monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
 
     gateway = FastAPI()
     gateway.state.runtime_config = RuntimeConfig()
@@ -107,6 +109,7 @@ def test_feature_composition_passes_validated_config_to_router_factory(monkeypat
     assert len(included) == 1
     dependencies = included[0][1]["dependencies"]
     assert dependencies[0].dependency.__name__ == "feature_guard_sample_feature"
+    assert dependencies[1].dependency.__name__ == "permission_guard_sample_feature"
 
 
 def test_feature_composition_registers_scheduled_tasks(monkeypatch):
@@ -136,6 +139,7 @@ def test_feature_composition_registers_scheduled_tasks(monkeypatch):
     monkeypatch.setattr(feature_registry, "install_repository_specs", lambda _specs: None)
     monkeypatch.setattr(feature_registry, "shared_repository_specs", lambda: ())
     monkeypatch.setattr(feature_registry, "install_runtime_hooks", lambda _hooks: None)
+    monkeypatch.setitem(FEATURE_DEFAULTS, "sample_feature", ("chat:read", "chat:write"))
 
     gateway = FastAPI()
     gateway.state.runtime_config = RuntimeConfig()

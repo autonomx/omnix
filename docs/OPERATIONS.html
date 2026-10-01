@@ -254,7 +254,7 @@ http://127.0.0.1:8000/api/health</code></pre></div>
 </ul>
 <p>Each Omnix service has its own container filesystem, and blobs use the <code>s3</code> backend. The Nginx config <code>deploy/multihost/nginx.conf</code> is generated from the same routing policy as <code>deploy/nginx/omnix.conf</code> (<code>python scripts/render_gateway_ingress.py</code>).</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>docker compose -f docker-compose.multihost-test.yml up -d --build --wait
-docker compose -f docker-compose.multihost-test.yml run --rm driver
+docker compose -f docker-compose.multihost-test.yml run --no-deps --rm driver
 docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <p>The driver (<code>scripts/multihost_topology_test.py</code>) checks:</p>
 <ul>
@@ -572,6 +572,8 @@ npm run web:build</code></pre></div>
 <li><strong>Sign-in off:</strong> the local workspace.</li>
 </ul>
 <p>Job workers run jobs from every active workspace, each in its own workspace.</p>
+<h3 id="roles-and-permissions">Roles and permissions</h3>
+<p>Each workspace membership has roles: <code>owner</code>, <code>admin</code>, <code>member</code>, <code>approver</code> (adds approvals) and <code>viewer</code> (read-only). Every route requires a permission from the catalog; a missing one gets 403 <code>permission_denied</code> naming the permission. The full table is <code>docs/security/PERMISSIONS.md</code>. With sign-in off the local user is <code>owner</code>, so nothing changes for local installs.</p>
 <p>The launcher control app (port 5055) does not ask you to sign in. It is an operator surface and refuses every non-loopback client.</p>
 <h2 id="agent-request-ceilings">Agent request ceilings</h2>
 <p>Public agent-run requests may tighten the selected profile&#x27;s approval policy; <code>allow_automatic</code> is rejected when the profile default is <code>ask_sensitive</code>. Allowed file patterns must remain within the profile ceiling, and isolation cannot be lowered. Reviewer requests use immutable review snapshots.</p>

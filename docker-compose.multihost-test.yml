@@ -3,7 +3,7 @@
 # the S3-compatible store keep data, so nothing can rely on a shared local disk.
 #
 #   docker compose -f docker-compose.multihost-test.yml up -d --build --wait
-#   docker compose -f docker-compose.multihost-test.yml run --rm driver
+#   docker compose -f docker-compose.multihost-test.yml run --no-deps --rm driver
 #   docker compose -f docker-compose.multihost-test.yml down -v
 
 x-omnix-env: &omnix-env

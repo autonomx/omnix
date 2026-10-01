@@ -1,6 +1,8 @@
 """HTTP surface for deterministic reusable workflows."""
 from __future__ import annotations
 
+from app.security.permissions import ensure_permission
+
 from typing import Literal, Any
 
 from fastapi import APIRouter, HTTPException
@@ -59,6 +61,7 @@ def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[s
         elif request.command == "cancel":
             runtime.cancel(run_id)
         elif request.command in {"approve", "reject"}:
+            ensure_permission("agent:approve")
             if not request.step_id:
                 raise HTTPException(status_code=422, detail="step_id_required")
             if request.command == "approve":

@@ -60,6 +60,27 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def postgres_local_identity(request):
+    # Persistence tests truncate shared tables (cascading to workspaces) and
+    # rebuild their own fixtures. Under xdist another PostgreSQL test can run
+    # in that window, so re-ensure the local identity before each one.
+    url = os.environ.get("OMNIX_TEST_DATABASE_URL")
+    if not url or request.node.get_closest_marker("postgres") is None:
+        yield
+        return
+    from app.persistence.config import DatabaseSettings
+    from app.persistence.database import PostgresDatabase
+    from app.persistence.identity_service import ensure_local_identity
+
+    database = PostgresDatabase(DatabaseSettings(url=url, pool_min=1, pool_max=1))
+    try:
+        ensure_local_identity(database)
+    finally:
+        database.close()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
     # Each test models a fresh process; production policy is immutable once bound.
     from copy import deepcopy

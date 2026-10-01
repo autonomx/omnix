@@ -198,7 +198,14 @@ def create_gateway_app(
 
     from app.security.auth import create_auth_router
 
-    gateway.include_router(create_auth_router(lambda: gateway.state.auth_service))
+    from fastapi import Depends
+
+    from app.security.permissions import kernel_permission_guard
+
+    gateway.include_router(
+        create_auth_router(lambda: gateway.state.auth_service),
+        dependencies=[Depends(kernel_permission_guard)],
+    )
 
     from .kernel_routes import create_kernel_router
 
@@ -213,7 +220,8 @@ def create_gateway_app(
             get_replay_adapter=get_replay_adapter,
             get_model_residency_store=get_model_residency_store,
             allow_offline_model_residency_store=model_residency_store_is_injected,
-        )
+        ),
+        dependencies=[Depends(kernel_permission_guard)],
     )
 
     return gateway

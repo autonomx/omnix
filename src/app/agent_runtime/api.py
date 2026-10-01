@@ -1,6 +1,8 @@
 """HTTP API for durable generalized agent runs."""
 from __future__ import annotations
 
+from app.security.permissions import ensure_permission
+
 import asyncio
 import json
 from typing import Literal
@@ -237,6 +239,11 @@ def command_agent_run(
     request: AgentCommandRequest,
     http_request: Request,
 ) -> AgentRunSnapshot:
+    # The command type decides the permission (WP-4.3).
+    if request.command_type in {"approve", "reject"}:
+        ensure_permission("agent:approve")
+    elif request.command_type == "steer":
+        ensure_permission("agent:steer")
     try:
         return _service(http_request).command(
             AgentRunCommand(
