@@ -80,7 +80,9 @@ class PostgresUnitOfWork:
         self.connection = self._connection_context.__enter__()
         try:
             require_authority_operation(self.connection, self.authority_operation)
-            apply_statement_class(self.connection, self.database.settings.statement_timeout_ms)
+            settings = getattr(self.database, "settings", None)
+            if settings is not None:
+                apply_statement_class(self.connection, settings.statement_timeout_ms)
         except BaseException:
             context, self._connection_context = self._connection_context, None
             self.connection = None
