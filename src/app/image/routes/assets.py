@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 
+from app.assets.content import AssetContentUnavailable, materialize_asset
 from app.assets import AssetRecord, AssetType
 from app.runtime.contracts import AssetService
 
@@ -58,9 +59,11 @@ def create_image_asset_file_router(asset_store: AssetService) -> APIRouter:
             raise HTTPException(status_code=415, detail="asset_content_not_image")
         if asset.mime_type.lower() == "image/svg+xml" and not _is_trusted_svg(asset):
             raise HTTPException(status_code=415, detail="asset_svg_not_trusted")
-        path = Path(asset.storage_path)
-        if not path.is_file():
-            raise HTTPException(status_code=404, detail="asset_file_not_found")
+        try:
+            # Local blobs serve in place; remote blobs from a verified cache.
+            path = materialize_asset(asset)
+        except AssetContentUnavailable:
+            raise HTTPException(status_code=404, detail="asset_file_not_found") from None
         try:
             stat_result = path.stat()
         except OSError as exc:

@@ -10,6 +10,9 @@ from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> None:
+    # Manifest-backed stores only: do not read through to PostgreSQL image
+    # assets that other tests in the same database created.
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
     jobs_path = tmp_path / "jobs.sqlite"
     manifest_path = tmp_path / "assets" / "manifest.json"
     jobs = InMemoryJobStore(jobs_path)

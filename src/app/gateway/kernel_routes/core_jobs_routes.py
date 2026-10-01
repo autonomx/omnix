@@ -40,7 +40,11 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
             raise HTTPException(status_code=422, detail="job_execution_authority_is_server_owned")
         registry = getattr(state, "job_handler_registry", None)
         if registry is not None:
-            request = registry.validate_submission(request)
+            try:
+                request = registry.validate_submission(request)
+            except ValueError as exc:
+                # Includes pydantic validation of the job input model.
+                raise HTTPException(status_code=422, detail=f"job_input_invalid:{type(exc).__name__}") from exc
         job_store = get_job_store()
         idempotency_key = str((request.compat or {}).get("idempotency_key") or "").strip()
         if idempotency_key and hasattr(job_store, "create_job_once"):

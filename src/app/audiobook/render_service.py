@@ -13,9 +13,11 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from app.assets.content import asset_available, materialize_asset
 from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+from app.persistence.contracts import BlobStore
 from app.assets.voice_clone_identity import voice_reference_revision
-from app.persistence.blob_store import LocalBlobStore
+
 from app.persistence.database import PostgresDatabase
 from app.persistence.job_repository import PostgresJobRepository
 from app.persistence.tenant import TenantContext
@@ -220,9 +222,9 @@ def _pause_if_requested(
 
 def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> str:
     profile = profiles.get(unit.voice_profile_id)
-    if profile is None or not profile.storage_path:
+    if profile is None or not asset_available(profile):
         raise RenderFailure(f"voice profile {unit.voice_profile_id} is unavailable", retryable=False)
-    if voice_reference_revision(profile.storage_path) != unit.voice_revision_hash:
+    if voice_reference_revision(materialize_asset(profile)) != unit.voice_revision_hash:
         raise RenderFailure(f"voice profile {unit.voice_profile_id} changed since casting", retryable=False)
     if provider_id == "faster-qwen3-tts":
         return unit.voice_profile_id
@@ -230,7 +232,7 @@ def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> 
 
 
 def _save_render(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext, *,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext, *,
     job_id: str, worker_id: str, lease_token: str, batch_id: str | None,
     unit: RenderUnit, render_key: str, provider_id: str, model_id: str,
     model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
@@ -308,7 +310,7 @@ def _save_render(
 
 
 def run_render_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
@@ -558,7 +560,7 @@ def run_render_once(
 
 
 def _complete_span_preview(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext, *,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext, *,
     job_id: str, worker_id: str, lease_token: str, refs: list[dict[str, str]],
 ) -> None:
     """Publish one playable clip after every segment is attested."""
@@ -575,7 +577,7 @@ def _complete_span_preview(
                     (context.workspace_id, ref["audio_asset_id"]),
                 ).fetchone() for ref in refs]
                 work.rollback()
-            with tempfile.TemporaryDirectory(prefix="omnix-preview-", dir=blobs.root) as temporary:
+            with tempfile.TemporaryDirectory(prefix="omnix-preview-", dir=blobs.scratch_dir()) as temporary:
                 path = Path(temporary) / "preview.wav"
                 concatenate_preview_audio(blobs, assets, path)
                 asset_id = f"ab:preview-audio:{uuid4().hex}"
@@ -610,7 +612,7 @@ def _complete_span_preview(
             blobs.delete(storage_key)
 
 
-def concatenate_preview_audio(blobs: LocalBlobStore, assets: list[Any], path: Path) -> None:
+def concatenate_preview_audio(blobs: BlobStore, assets: list[Any], path: Path) -> None:
     """Concatenate lossless segments in source order without mastering or pauses."""
     if not assets or any(asset is None for asset in assets):
         raise RenderFailure("preview segment asset is unavailable")
@@ -632,7 +634,7 @@ def concatenate_preview_audio(blobs: LocalBlobStore, assets: list[Any], path: Pa
 
 
 def run_preview_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     """Render one explicitly requested span with the same identity as offline work."""

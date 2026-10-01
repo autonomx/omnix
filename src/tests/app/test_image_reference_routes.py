@@ -10,7 +10,10 @@ from app.assets import SharedAssetStore
 from app.image.routes.references import create_image_reference_router
 
 
-def test_reference_routes_list_and_upload(tmp_path) -> None:
+def test_reference_routes_list_and_upload(tmp_path, monkeypatch) -> None:
+    # Manifest-backed stores only: do not read through to PostgreSQL image
+    # assets that other tests in the same database created.
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
     store = SharedAssetStore(tmp_path / "assets.json")
     app = FastAPI()
     app.include_router(create_image_reference_router(store))

@@ -1,9 +1,9 @@
 """Validated import of portable RPG world archives into durable authoring state."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from app.assets.content import asset_available, asset_checksum
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.security.tenant_context import current_tenant
 from app.rpg.persistence.rpg_repository import canonical_json
@@ -84,8 +84,7 @@ def _prepare_assets(
         asset_map[source_id] = target_id
         current = existing.get(target_id)
         if current is not None:
-            current_path = Path(str(current.storage_path or ""))
-            if current_path.is_file() and sha256_hex(current_path.read_bytes()) == descriptor.checksum_sha256:
+            if asset_available(current) and asset_checksum(current) == descriptor.checksum_sha256:
                 reused.append(target_id)
                 continue
             raise WorldBundleImportConflict(f"world_bundle_asset_conflict:{target_id}")

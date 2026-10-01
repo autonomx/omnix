@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "5bfa973c97e165a32549683f6f3c571276e7b5e66a1e2a5a3ebe75378c3a7bb6",
+  "policy_digest": "157d1c04bbf961436c3c8acb7b8b306e9e729053e0213767ed07fb71af10aa23",
   "rules": [
     "AL001",
     "AL002",
@@ -132,7 +132,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.repo_adapter",
       "lines": [
-        23
+        24
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL001"
@@ -177,7 +177,7 @@
       "count": 1,
       "fingerprint": "default_asset_store:app.runtime_composition",
       "lines": [
-        266
+        267
       ],
       "path": "src/app/assets/__init__.py",
       "rule": "AL001"
@@ -186,7 +186,7 @@
       "count": 1,
       "fingerprint": "SharedAssetStore.preview_image_manifest_import:app.image.asset_store",
       "lines": [
-        239
+        238
       ],
       "path": "src/app/assets/store.py",
       "rule": "AL001"
@@ -303,7 +303,7 @@
       "count": 1,
       "fingerprint": "CharacterService.__init__:app.runtime_composition",
       "lines": [
-        85
+        86
       ],
       "path": "src/app/characters/service.py",
       "rule": "AL001"
@@ -1230,7 +1230,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:activate_live2d_avatar",
       "lines": [
-        570
+        572
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -1239,7 +1239,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:disable_live2d_avatar",
       "lines": [
-        586
+        588
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -1248,7 +1248,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_model_catalog",
       "lines": [
-        559
+        561
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -1257,7 +1257,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_model_file",
       "lines": [
-        632
+        634
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -1266,7 +1266,7 @@
       "count": 1,
       "fingerprint": "register_character_live2d_avatar_routes:live2d_runtime_file",
       "lines": [
-        607
+        609
       ],
       "path": "src/app/characters/live2d_avatar.py",
       "rule": "AL005"
@@ -2668,7 +2668,7 @@
       "count": 1,
       "fingerprint": "SharedAssetStore._load_manifest:except",
       "lines": [
-        488
+        487
       ],
       "path": "src/app/assets/store.py",
       "rule": "AL009"
@@ -2843,7 +2843,7 @@
       "count": 1,
       "fingerprint": "close_image_references:except",
       "lines": [
-        168
+        166
       ],
       "path": "src/app/image/reference_assets.py",
       "rule": "AL009"
@@ -4054,42 +4054,6 @@
       "rule": "AL009"
     },
     {
-      "count": 1,
-      "fingerprint": "AgentRunService.__init__:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        282
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_service_and_context:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        201
-      ],
-      "path": "src/app/audiobook/routes.py",
-      "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        761
-      ],
-      "path": "src/app/audiobook/worker.py",
-      "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresSharedAssetStoreAdapter.__init__:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        29
-      ],
-      "path": "src/app/persistence/asset_compat.py",
-      "rule": "AL011"
-    },
-    {
       "count": 3,
       "fingerprint": "_recovery_command:app.persistence.blob_store.LocalBlobStore",
       "lines": [
@@ -4098,24 +4062,6 @@
         270
       ],
       "path": "src/app/persistence/cli.py",
-      "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresLegacyImporter.__init__:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        193
-      ],
-      "path": "src/app/persistence/cutover.py",
-      "rule": "AL011"
-    },
-    {
-      "count": 1,
-      "fingerprint": "TradingReplayRuntimeRepository.__init__:app.persistence.blob_store.LocalBlobStore",
-      "lines": [
-        14
-      ],
-      "path": "src/app/trading/replay_runtime_repository.py",
       "rule": "AL011"
     }
   ]

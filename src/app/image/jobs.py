@@ -5,6 +5,7 @@ import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from pydantic import ValidationError
@@ -222,6 +223,20 @@ def execute_image_job(
     return completed or job
 
 
+def _shared_output_path(result: Any) -> str:
+    """Verified local copy of an output the image service put in the shared bucket."""
+    blob_key = str(getattr(result, "blob_key", "") or "").strip()
+    checksum = str(getattr(result, "checksum_sha256", "") or "").strip()
+    if not blob_key or not checksum:
+        return ""
+    from app.assets.content import AssetContentUnavailable, materialize_asset
+
+    try:
+        return str(materialize_asset(SimpleNamespace(id=blob_key, storage_key=blob_key, checksum_sha256=checksum)))
+    except AssetContentUnavailable:
+        return ""
+
+
 def _store_image_asset(
     job: JobRecord,
     request: ImageGenerateInput,
@@ -230,6 +245,8 @@ def _store_image_asset(
 ) -> tuple[AssetRecord, ImageOutputRef]:
     storage_path = str(getattr(result, "local_path", "") or "").strip()
     if not storage_path or not Path(storage_path).is_file():
+        storage_path = _shared_output_path(result)
+    if not storage_path:
         raise FileNotFoundError(
             "Image provider did not produce a readable local file"
         )

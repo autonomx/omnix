@@ -8,10 +8,12 @@ from typing import Any, BinaryIO
 
 from PIL import Image, UnidentifiedImageError
 
+from app.assets.content import asset_available, materialize_asset
 from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+from app.persistence.contracts import BlobStore
 from app.assets.voice_clone_identity import voice_reference_revision
 
-from app.persistence.blob_store import LocalBlobStore
+
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -61,7 +63,7 @@ if set(_MIME) != set(SUPPORTED_SOURCE_FORMATS):  # pragma: no cover - developer 
 
 
 class AudiobookService:
-    def __init__(self, database: PostgresDatabase, blobs: LocalBlobStore) -> None:
+    def __init__(self, database: PostgresDatabase, blobs: BlobStore) -> None:
         self.database = database
         self.blobs = blobs
 
@@ -196,7 +198,7 @@ class AudiobookService:
         return [{"id": item.id,
                  "name": str(item.metadata.get("profile_name") or item.metadata.get("speaker") or item.id),
                  "language": str(item.metadata.get("language") or "")}
-                for item in discover_canonical_voice_clone_assets() if item.storage_path]
+                for item in discover_canonical_voice_clone_assets() if asset_available(item)]
 
     def get_project(self, context: TenantContext, project_id: str, *,
                     include_text: bool = True) -> dict[str, object]:
@@ -1139,9 +1141,9 @@ class AudiobookService:
     ) -> dict[str, object]:
         profile = next((item for item in discover_canonical_voice_clone_assets()
                         if item.id == voice_profile_id), None)
-        if profile is None or not profile.storage_path:
+        if profile is None or not asset_available(profile):
             raise ValueError("voice profile is unavailable")
-        voice_hash = voice_reference_revision(profile.storage_path)
+        voice_hash = voice_reference_revision(materialize_asset(profile))
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).assign_voice(
@@ -1718,9 +1720,9 @@ class AudiobookService:
         if voice_profile_id is not None:
             profile = next((item for item in discover_canonical_voice_clone_assets()
                             if item.id == voice_profile_id), None)
-            if profile is None or not profile.storage_path:
+            if profile is None or not asset_available(profile):
                 raise ValueError("preview voice profile is unavailable")
-            voice_revision_hash = voice_reference_revision(profile.storage_path)
+            voice_revision_hash = voice_reference_revision(materialize_asset(profile))
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT current_source_revision_id FROM omnix_audiobook_projects

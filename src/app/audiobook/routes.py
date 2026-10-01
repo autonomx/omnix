@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
-from app.persistence.blob_store import LocalBlobStore
+from app.persistence.blob_store import default_blob_store
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
 from app.runtime.paths import resources_data_root
@@ -198,7 +198,7 @@ def _service_and_context() -> tuple["AudiobookService", Any]:
 
                 database = default_database()
                 context = current_tenant()
-                _SERVICE_CONTEXT = (AudiobookService(database, LocalBlobStore()), context)
+                _SERVICE_CONTEXT = (AudiobookService(database, default_blob_store()), context)
     assert _SERVICE_CONTEXT is not None
     return _SERVICE_CONTEXT
 
@@ -339,10 +339,28 @@ def create_audiobook_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
+    @router.post(
+        "/api/audiobook/projects/{project_id}/source",
+        tags=["audiobook"],
+        status_code=202,
+        # The body is read as a stream (below); declare it for the contract.
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/octet-stream": {
+                        "schema": {
+                            "contentMediaType": "application/octet-stream",
+                            "title": "Source Content",
+                            "type": "string",
+                        }
+                    }
+                },
+            }
+        },
+    )
     async def upload_source(
         project_id: str, request: Request,
-        source_content: bytes = Body(..., media_type="application/octet-stream"),
         source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
         filename: str = Query(default="book"),
         exclude_pages: str | None = Query(default=None, max_length=500),
@@ -351,9 +369,16 @@ def create_audiobook_router() -> APIRouter:
 
         if int(request.headers.get("content-length", "0") or 0) > MAX_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="source is too large")
-        content = source_content
-        if len(content) > MAX_SOURCE_BYTES:
-            raise HTTPException(status_code=413, detail="source is too large")
+        # Stop reading as soon as the cap is exceeded, including chunked
+        # uploads that send no Content-Length.
+        received = bytearray()
+        async for chunk in request.stream():
+            received.extend(chunk)
+            if len(received) > MAX_SOURCE_BYTES:
+                raise HTTPException(status_code=413, detail="source is too large")
+        if not received:
+            raise HTTPException(status_code=422, detail="source content is required")
+        content = bytes(received)
         service, context = await asyncio.to_thread(_service_and_context)
         try:
             extraction_settings = _page_extraction_settings(source_format, exclude_pages)

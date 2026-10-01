@@ -1,9 +1,9 @@
 """Read-only export of one reusable RPG world into a portable archive."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
+from app.assets.content import AssetContentUnavailable, read_asset_bytes
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -252,10 +252,10 @@ def _selected_image_assets(
 def _asset_rows(assets: list[AssetRecord]) -> list[tuple[WorldBundleAsset, bytes]]:
     rows: list[tuple[WorldBundleAsset, bytes]] = []
     for asset in assets:
-        path = Path(str(asset.storage_path or ""))
-        if not path.is_file():
-            raise ValueError(f"world_bundle_asset_file_missing:{asset.id}")
-        content = path.read_bytes()
+        try:
+            content = read_asset_bytes(asset)
+        except AssetContentUnavailable:
+            raise ValueError(f"world_bundle_asset_file_missing:{asset.id}") from None
         if not content:
             raise ValueError(f"world_bundle_asset_file_empty:{asset.id}")
         mime_type = str(asset.mime_type or "").lower()

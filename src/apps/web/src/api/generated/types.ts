@@ -598,6 +598,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Asset Audio
+         * @description Stream a stored audio asset (with Range support) from any blob backend.
+         */
+        get: operations["asset_audio_api_assets__asset_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/content": {
         parameters: {
             query?: never;
@@ -9769,6 +9789,8 @@ export interface components {
         };
         /** AssetRecord */
         AssetRecord: {
+            /** Checksum Sha256 */
+            checksum_sha256?: string | null;
             /** Compat */
             compat?: {
                 [key: string]: unknown;
@@ -9793,7 +9815,12 @@ export interface components {
             parent_asset_ids?: string[];
             /** Source Job Id */
             source_job_id?: string | null;
-            /** Storage Path */
+            /** Storage Key */
+            storage_key?: string | null;
+            /**
+             * Storage Path
+             * @default
+             */
             storage_path: string;
             type: components["schemas"]["AssetType"];
         };
@@ -29585,6 +29612,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SavedStoryAssetResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    asset_audio_api_assets__asset_id__audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -387,6 +387,33 @@ http://127.0.0.1:8000/api/health</code></pre></div>
 <li>Treat paths returned by compatibility routes as untrusted until they pass the gateway&#x27;s content/type/size policy.</li>
 <li>Keep large model files and runtime caches out of version control.</li>
 </ul>
+<h3 id="blob-storage-backends">Blob storage backends</h3>
+<p><code>OMNIX_BLOB_BACKEND</code> selects where blobs live. Every process (gateway, job workers, image service) must use the same settings.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Value</th>
+<th>Storage</th>
+</tr></thead><tbody>
+<tr>
+<td><code>local</code> (default)</td>
+<td>Files under <code>OMNIX_BLOB_ROOT</code>, or <code>resources/data/blobs</code> when unset. Single-host deployments.</td>
+</tr>
+<tr>
+<td><code>s3</code></td>
+<td>Any S3-compatible bucket: AWS S3, SeaweedFS, MinIO. Required when gateways and workers run on different hosts.</td>
+</tr>
+</tbody></table></div>
+<p>The <code>s3</code> backend uses these settings:</p>
+<ul>
+<li><code>OMNIX_S3_ENDPOINT</code>: an http(s) origin with no path.</li>
+<li><code>OMNIX_S3_BUCKET</code>: the bucket must already exist.</li>
+<li><code>OMNIX_S3_ACCESS_KEY_ID</code> and <code>OMNIX_S3_SECRET_ACCESS_KEY</code>.</li>
+<li><code>OMNIX_S3_REGION</code>: default <code>us-east-1</code>.</li>
+<li><code>OMNIX_S3_PREFIX</code>: optional key prefix.</li>
+<li><code>OMNIX_S3_TIMEOUT_SECONDS</code>: default 60.</li>
+</ul>
+<p>Requests use path-style addressing with AWS Signature Version 4. Every object&#x27;s SHA-256 is stored as metadata and verified on read.</p>
+<p>Assets keep a relative <code>storage_key</code>. Feature code reads content through <code>app.assets.content</code>; tools that need a file path get a checksum-verified copy from a content-addressed cache under <code>resources/data/cache/blobs</code>. Audio assets stream from <code>/api/assets/{asset_id}/audio</code>, which supports Range requests. Job rows reference assets and never embed audio. Voice-clone samples submitted inline are moved into the blob store when the job is admitted.</p>
+<p>With <code>s3</code>, the image service also uploads each output to the bucket and returns its key. A gateway on another host then never needs the image service&#x27;s disk. Voice clones are still file-managed on the voice/TTS host; moving them into blob-backed asset records is a follow-up.</p>
 <h2 id="secrets-and-networked-integrations">Secrets and networked integrations</h2>
 <p>Provider secrets are environment- or protected-store-owned. Examples include LLM/search, market-data, and integration credentials.</p>
 <ul>

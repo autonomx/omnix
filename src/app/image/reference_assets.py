@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from app.assets.content import AssetContentUnavailable, asset_available, open_asset
 from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.runtime.paths import resources_data_root
 
@@ -139,15 +140,12 @@ def load_image_reference_assets(
                 raise ImageReferenceError(f"image_reference_not_image:{asset_id}")
             if asset.mime_type.lower() not in SUPPORTED_REFERENCE_MIME_TYPES:
                 raise ImageReferenceError(f"image_reference_unsupported_type:{asset_id}")
-            path = Path(asset.storage_path)
             try:
-                usable = path.is_file() and path.stat().st_size > 0
-            except OSError:
-                usable = False
-            if not usable:
-                raise ImageReferenceError(f"image_reference_file_missing:{asset_id}")
+                content = open_asset(asset)
+            except (AssetContentUnavailable, OSError):
+                raise ImageReferenceError(f"image_reference_file_missing:{asset_id}") from None
             try:
-                with Image.open(path) as source:
+                with content, Image.open(content) as source:
                     prepared = ImageOps.exif_transpose(source)
                     prepared.seek(0)
                     prepared = prepared.convert("RGB")
@@ -181,8 +179,7 @@ def _normalize_reference_ids(values: Iterable[str]) -> list[str]:
 def _usable_reference_asset(asset: AssetRecord) -> bool:
     if asset.mime_type.lower() not in SUPPORTED_REFERENCE_MIME_TYPES:
         return False
-    path = Path(asset.storage_path)
     try:
-        return path.is_file() and path.stat().st_size > 0
+        return asset_available(asset)
     except OSError:
         return False

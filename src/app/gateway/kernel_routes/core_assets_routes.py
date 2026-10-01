@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from app.assets import (
     AssetLegacyImportDryRun,
@@ -11,6 +12,7 @@ from app.assets import (
     AssetRecord,
     SharedAssetStore,
 )
+from app.assets.content import AssetContentUnavailable, materialize_asset
 from app.gateway.schemas import AssetContentResponse
 from app.assets.models import AssetContentTooLarge
 
@@ -69,6 +71,26 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
         if asset is None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         return _read_text_asset(asset_store, asset)
+
+    @router.get("/api/assets/{asset_id}/audio", response_class=FileResponse, tags=["assets"])
+    def asset_audio(asset_id: str) -> FileResponse:
+        """Stream a stored audio asset (with Range support) from any blob backend."""
+        asset_store = get_asset_store()
+        asset = _asset_by_id(asset_store, asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset_not_found")
+        mime_type = asset.mime_type.lower().split(";", 1)[0]
+        if not mime_type.startswith("audio/"):
+            raise HTTPException(status_code=415, detail="asset_content_not_audio")
+        try:
+            path = materialize_asset(asset)
+        except AssetContentUnavailable as exc:
+            raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+        return FileResponse(
+            path,
+            media_type=mime_type,
+            headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+        )
 
     @router.post(
         "/api/assets/migrations/image/dry-run",

@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .authority import AuthorityOperation
-from .blob_store import LocalBlobStore
+from .blob_store import default_blob_store
+from .contracts import BlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
 from .tenant import TenantContext
@@ -187,10 +188,10 @@ class PostgresLegacyImporter:
         self,
         database: PostgresDatabase,
         *,
-        blob_store: LocalBlobStore | None = None,
+        blob_store: BlobStore | None = None,
     ) -> None:
         self.database = database
-        self.blob_store = blob_store or LocalBlobStore()
+        self.blob_store = blob_store or default_blob_store()
 
     def import_bundle(
         self,

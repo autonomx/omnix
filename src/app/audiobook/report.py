@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -13,7 +14,7 @@ from .integrity import SourceIntegrityError, validate_revision
 from .models import CanonicalChapter, SourceRevision, SourceSpan
 
 
-def _asset_check(connection: Any, blobs: LocalBlobStore, context: TenantContext,
+def _asset_check(connection: Any, blobs: BlobStore, context: TenantContext,
                  asset_id: str, checksum: str) -> bool:
     row = connection.execute(
         """SELECT checksum_sha256, storage_provider, storage_key, lifecycle_status
@@ -29,7 +30,7 @@ def _asset_check(connection: Any, blobs: LocalBlobStore, context: TenantContext,
         return False
 
 
-def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
+def audit_export(database: PostgresDatabase, blobs: BlobStore,
                  context: TenantContext, *, project_id: str,
                  export_id: str) -> dict[str, Any]:
     with unit_of_work(database) as work:

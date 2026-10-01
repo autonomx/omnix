@@ -76,6 +76,12 @@
       "invalidation": "default_workflow_runtime.cache_clear"
     },
     {
+      "path": "src/app/assets/content.py",
+      "symbol": "_MATERIALIZE_LOCK",
+      "category": "coordination",
+      "reason": "Serializes this process's writes into the content-addressed blob cache so two threads do not download the same object at once; the cache is derived from the shared blob store and safe to lose."
+    },
+    {
       "path": "src/app/assets/store.py",
       "symbol": "_PROCESS_LOCK",
       "category": "cache",
@@ -845,6 +851,12 @@
       "max_entries_symbol": "_MAX_ACTIVE_STREAMS",
       "ttl_symbol": "_ACTIVE_STREAM_TTL_SECONDS",
       "invalidation": "clear_active_streams"
+    },
+    {
+      "path": "src/app/persistence/blob_store.py",
+      "symbol": "_DEFAULT_STORE_LOCK",
+      "category": "cache",
+      "reason": "Guards one-time construction of the process's BlobStore client (HTTP connection pool for S3); blob content and metadata live in the configured store, never in this process."
     },
     {
       "path": "src/app/persistence/config.py",

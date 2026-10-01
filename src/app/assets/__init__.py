@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
+from .content import asset_location, open_asset
 from .canonical_voice_clones import (
     canonical_voice_clone_root,
     discover_canonical_voice_clone_assets,
@@ -102,7 +103,7 @@ def _voice_debug_rows(assets: Iterable[AssetRecord]) -> list[dict[str, str]]:
                     or metadata.get("speaker")
                     or asset.id
                 ),
-                "path": str(asset.storage_path),
+                "path": asset_location(asset),
             }
         )
     return rows
@@ -182,7 +183,7 @@ class SharedAssetStore(ManifestSharedAssetStore):
         asset = self.get_asset(asset_id)
         if asset is None:
             raise FileNotFoundError(asset_id)
-        with Path(asset.storage_path).open("rb") as handle:
+        with open_asset(asset) as handle:
             content = handle.read(max_bytes + 1)
         if len(content) > max_bytes:
             from app.assets.models import AssetContentTooLarge

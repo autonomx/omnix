@@ -6,7 +6,8 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import LocalBlobStore
+from app.persistence.blob_store import default_blob_store
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
@@ -135,7 +136,7 @@ def _reuse_existing_dialogue_segmentation(
 
 
 def run_ingest_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
@@ -758,7 +759,7 @@ def main() -> None:
     database = default_database()
     ensure_postgresql_runtime_ready(database)
     context = current_tenant()
-    blobs = LocalBlobStore()
+    blobs = default_blob_store()
     worker_id = f"audiobook:ingest:{uuid4().hex}"
     while True:
         try:

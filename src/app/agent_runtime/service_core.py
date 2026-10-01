@@ -16,7 +16,8 @@ import tempfile
 import threading
 from typing import Any, Callable, ContextManager, TypedDict
 
-from app.persistence.blob_store import LocalBlobStore
+from app.persistence.blob_store import default_blob_store
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
@@ -248,7 +249,7 @@ class AgentRunService:
         job_store=None,
         pi_path: str | None = None,
         worker_id: str | None = None,
-        blob_store: LocalBlobStore | None = None,
+        blob_store: BlobStore | None = None,
         unit_of_work_fn: Callable[..., Any] | None = None,
         repository_factory: Callable[..., Any] | None = None,
         quality_repository_factory: Callable[..., Any] | None = None,
@@ -279,7 +280,7 @@ class AgentRunService:
             terminal_reviewer_consumer or consume_terminal_reviewer_in_repository
         )
         self.worker_id = worker_id or f"agent-worker:{os.getpid()}"
-        self.blob_store = blob_store or LocalBlobStore()
+        self.blob_store = blob_store or default_blob_store()
         self.runtime = PiAgentRuntime(
             pi_path=pi_path or _env_str("OMNIX_PI_PATH", "pi"),
             event_sink=self._persist_runtime_event,

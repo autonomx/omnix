@@ -10,6 +10,7 @@ from typing import Any
 
 from app.runtime.paths import resources_root
 
+from .content import asset_location
 from .models import AssetRecord, AssetType
 
 LOGGER = logging.getLogger("uvicorn.error")
@@ -109,7 +110,7 @@ def discover_canonical_voice_clone_assets() -> list[AssetRecord]:
                 "name": asset.metadata.get("profile_name"),
                 "voice_id": asset.metadata.get("voice_id"),
                 "voice_clone_id": asset.metadata.get("voice_clone_id"),
-                "path": asset.storage_path,
+                "path": asset_location(asset),
             }
             for asset in records.values()
         ][:100],

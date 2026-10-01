@@ -209,18 +209,19 @@ class CoordinatedRecoveryRepository:
                 str(row[2]),
                 int(row[3]),
             )
+            # Stream each blob (bounded memory) instead of loading it whole.
             try:
-                content = source.read_bytes(storage_key, expected_checksum=checksum)
+                with source.open_verified(storage_key, expected_checksum=checksum) as reader:
+                    copied = destination.put_stream(storage_key, reader)
             except Exception as exc:
                 raise CoordinatedRecoveryError(
                     f"cannot copy manifested blob {asset_id}: {exc}"
                 ) from exc
-            if len(content) != byte_size:
+            if int(copied["byte_size"]) != byte_size:
                 raise CoordinatedRecoveryError(
                     f"cannot copy manifested blob {asset_id}: expected {byte_size} bytes, "
-                    f"got {len(content)}"
+                    f"got {copied['byte_size']}"
                 )
-            destination.put_bytes(storage_key, content)
             copied_bytes += byte_size
         self.connection.execute(
             """

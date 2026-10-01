@@ -97,6 +97,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_BINANCE_FUTURES_WS_PROXY` | string | — | trading | Controls binance futures ws proxy for trading. |
 | `OMNIX_BINANCE_WS_PROXY` | string | — | trading | Controls binance ws proxy for trading. |
 | `OMNIX_BIND_HOST` | string | `127.0.0.1` | kernel | Controls bind host for kernel. |
+| `OMNIX_BLOB_BACKEND` | string | `local` | kernel | Controls blob backend for kernel. |
+| `OMNIX_BLOB_ROOT` | string | — | kernel | Controls blob root for kernel. |
 | `OMNIX_BROWSER_EXE` | string | — | launcher | Controls browser exe for launcher. |
 | `OMNIX_CHARACTER_CLOUD_SYNC_ENABLED` | boolean | — | tooling | Controls character cloud sync enabled for tooling. |
 | `OMNIX_CHARACTER_HERMES_SYNC_ENABLED` | boolean | — | characters | Controls character hermes sync enabled for characters. |
@@ -204,6 +206,13 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_RPG_LOG_MAX_FIELD_CHARS` | string | — | rpg | Controls rpg log max field chars for rpg. |
 | `OMNIX_RPG_LOG_RETENTION_DAYS` | string | — | rpg | Controls rpg log retention days for rpg. |
 | `OMNIX_RPG_SLOW_SPAN_MS` | string | — | rpg | Controls rpg slow span ms for rpg. |
+| `OMNIX_S3_ACCESS_KEY_ID` | string | — | kernel | Controls s3 access key id for kernel. |
+| `OMNIX_S3_BUCKET` | string | — | kernel | Controls s3 bucket for kernel. |
+| `OMNIX_S3_ENDPOINT` | string | — | kernel | Controls s3 endpoint for kernel. |
+| `OMNIX_S3_PREFIX` | string | — | kernel | Controls s3 prefix for kernel. |
+| `OMNIX_S3_REGION` | string | `us-east-1` | kernel | Controls s3 region for kernel. |
+| `OMNIX_S3_SECRET_ACCESS_KEY` | string | — | kernel | Controls s3 secret access key for kernel. |
+| `OMNIX_S3_TIMEOUT_SECONDS` | integer | `60` | kernel | Controls s3 timeout seconds for kernel. |
 | `OMNIX_SCHEDULER_PROCESS_WORKERS` | integer | `2` | kernel | Controls scheduler process workers for kernel. |
 | `OMNIX_SCHEDULER_THREAD_WORKERS` | integer | `4` | kernel | Controls scheduler thread workers for kernel. |
 | `OMNIX_SERVICE_TOKEN` | string | — | security | Controls service token for security. |

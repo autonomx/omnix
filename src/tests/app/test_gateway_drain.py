@@ -121,14 +121,20 @@ def test_first_exit_signal_drains_and_second_falls_through(monkeypatch) -> None:
 
     monkeypatch.setenv("OMNIX_DRAIN_SECONDS", "5")
     server = create_draining_server(uvicorn.Config(FastAPI()))
+    exiting = threading.Event()
+    request_exit = server._request_exit
+
+    def observed_exit() -> None:
+        request_exit()
+        exiting.set()
+
+    server._request_exit = observed_exit
     process_drain().enter()
     server.handle_exit(signal.SIGTERM, None)
     assert process_drain().draining is True
     assert server.should_exit is False
     process_drain().exit()
-    deadline = time.monotonic() + 2
-    while not server.should_exit and time.monotonic() < deadline:
-        time.sleep(0.02)
+    assert exiting.wait(2)
     assert server.should_exit is True
     # Once exiting, signals fall through to uvicorn: Ctrl+C again forces it.
     server.handle_exit(signal.SIGINT, None)

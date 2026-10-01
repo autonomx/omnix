@@ -11,7 +11,7 @@ from app.persistence.asset_service import (
     delete_asset,
     import_legacy_asset_manifest,
     put_setting,
-    read_asset,
+    open_asset_stream,
     register_secret_reference,
 )
 from app.persistence.blob_store import LocalBlobStore
@@ -72,9 +72,10 @@ def test_asset_metadata_and_blob_lifecycle(tmp_path: Path) -> None:
         )
         assert asset["revision"] == 1
         assert asset["byte_size"] == len(b"png-content")
-        loaded, content = read_asset(database, store, context, asset["id"])
+        loaded, stream = open_asset_stream(database, store, context, asset["id"])
+        with stream:
+            assert stream.read() == b"png-content"
         assert loaded["checksum_sha256"] == asset["checksum_sha256"]
-        assert content == b"png-content"
 
         deleted = delete_asset(
             database,
@@ -87,7 +88,7 @@ def test_asset_metadata_and_blob_lifecycle(tmp_path: Path) -> None:
         assert deleted["revision"] == 2
         assert store.exists("image/test.png") is False
         with pytest.raises(KeyError):
-            read_asset(database, store, context, asset["id"])
+            open_asset_stream(database, store, context, asset["id"])
     finally:
         database.close()
 

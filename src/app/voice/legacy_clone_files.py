@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.assets.content import local_asset_path
 from app.assets import AssetRecord
 from app.assets.canonical_voice_clones import canonical_voice_clone_root
 from app.runtime.paths import VOICE_CLONES_DIR, VOICE_CLONES_FILE
@@ -68,7 +69,10 @@ def delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
                 continue
             target.unlink()
             file_deleted = True
-    source = Path(str(asset.storage_path or "")).resolve()
+    # Legacy clones are local files (possibly already removed above); remote
+    # blob-backed profiles have no local path.
+    local = local_asset_path(asset)
+    source = local.resolve() if local is not None else Path()
     allowed_roots = (clone_dir, canonical_voice_clone_root().resolve())
     if (
         source.suffix.lower()

@@ -4,9 +4,9 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
-from .blob_store import LocalBlobStore
+from .contracts import BlobStore
 from .database import PostgresDatabase
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
@@ -14,7 +14,7 @@ from .unit_of_work import unit_of_work
 
 def create_asset(
     database: PostgresDatabase,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     context: TenantContext,
     *,
     asset_id: str,
@@ -65,26 +65,30 @@ def create_asset(
         raise
 
 
-def read_asset(
+def open_asset_stream(
     database: PostgresDatabase,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     context: TenantContext,
     asset_id: str,
-) -> tuple[dict[str, Any], bytes]:
+) -> tuple[dict[str, Any], BinaryIO]:
+    """Return the asset record and a checksum-verified, rewound content stream.
+
+    Callers stream the content (bounded memory) and close the handle.
+    """
     with unit_of_work(database) as work:
         asset = work.assets.get_asset(context, asset_id)
         if asset is None or asset["lifecycle_status"] == "deleted":
             raise KeyError(asset_id)
         work.rollback()
-    content = blob_store.read_bytes(
+    handle = blob_store.open_verified(
         asset["storage_key"], expected_checksum=asset["checksum_sha256"]
     )
-    return asset, content
+    return asset, handle
 
 
 def delete_asset(
     database: PostgresDatabase,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     context: TenantContext,
     *,
     asset_id: str,
@@ -171,7 +175,7 @@ def register_secret_reference(
 
 def import_legacy_asset_manifest(
     database: PostgresDatabase,
-    blob_store: LocalBlobStore,
+    blob_store: BlobStore,
     context: TenantContext,
     manifest_path: str | Path,
     *,

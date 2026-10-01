@@ -58,6 +58,10 @@ jobs:
       PYTHONPATH: src
       OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
       OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      # Disposable S3-compatible server for the BlobStore contract (WP-5.8).
+      OMNIX_TEST_S3_ENDPOINT: http://127.0.0.1:8333
+      OMNIX_TEST_S3_ACCESS_KEY_ID: omnixtest
+      OMNIX_TEST_S3_SECRET_ACCESS_KEY: omnixtestsecret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,6 +75,18 @@ jobs:
         run: python -m app.persistence migrate
       - name: Initialize empty PostgreSQL authority and local identity
         run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Start disposable S3-compatible server (SeaweedFS)
+        run: |
+          mkdir -p "$RUNNER_TEMP/s3"
+          printf '%s' '{"identities":[{"name":"omnix","credentials":[{"accessKey":"omnixtest","secretKey":"omnixtestsecret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > "$RUNNER_TEMP/s3/s3.json"
+          docker run -d --name omnix-s3 -p 127.0.0.1:8333:8333 -v "$RUNNER_TEMP/s3:/config:ro"             chrislusf/seaweedfs:latest server -s3 -s3.config=/config/s3.json -dir=/data
+          for _ in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8333/ || true)
+            [ "$code" = "403" ] && exit 0
+            sleep 1
+          done
+          docker logs omnix-s3
+          exit 1
       - name: Compile hardening modules
         run: |
           python -m py_compile \

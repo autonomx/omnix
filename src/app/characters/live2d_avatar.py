@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.assets.content import asset_available, materialize_asset
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.runtime.paths import resources_data_root
 
@@ -284,7 +285,7 @@ class CharacterLive2DAvatarService:
         for entry in _MODEL_CATALOG:
             asset_id = _asset_id(entry["id"])
             asset = assets.get(asset_id)
-            installed = bool(asset and Path(asset.storage_path).is_file())
+            installed = bool(asset and asset_available(asset))
             models.append(
                 Live2DModelCatalogItem(
                     **{
@@ -365,7 +366,8 @@ class CharacterLive2DAvatarService:
         if asset is None or asset.module != "character-live2d" or asset.type != AssetType.SETTINGS_ARTIFACT:
             raise FileNotFoundError(asset_id)
         root_value = str(dict(asset.metadata or {}).get("root_path") or "")
-        root = Path(root_value) if root_value else Path(asset.storage_path).parent
+        # Live2D models are installed directory trees on local disk.
+        root = Path(root_value) if root_value else materialize_asset(asset).parent
         root = root.resolve()
         requested = (root / _safe_relative_path(asset_path)).resolve()
         if requested != root and root not in requested.parents:
@@ -379,7 +381,7 @@ class CharacterLive2DAvatarService:
         asset_store = self.asset_store_factory()
         asset_id = _asset_id(entry["id"])
         existing = asset_store.get_asset(asset_id)
-        if existing is not None and Path(existing.storage_path).is_file():
+        if existing is not None and asset_available(existing):
             return existing, False
 
         model_root = self.models_root / entry["id"]

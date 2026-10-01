@@ -401,6 +401,8 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
             error=_safe_str(data.get("error")),
             asset_url=_safe_str(data.get("asset_url")),
             local_path=_safe_str(data.get("local_path")),
+            blob_key=_safe_str(data.get("blob_key")),
+            checksum_sha256=_safe_str(data.get("checksum_sha256")),
             seed=data.get("seed"),
             width=_safe_int(data.get("width"), 0),
             height=_safe_int(data.get("height"), 0),

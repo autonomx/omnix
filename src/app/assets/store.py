@@ -16,6 +16,7 @@ from typing import Any, BinaryIO, Iterator
 
 from app.runtime.paths import resources_data_root
 
+from .content import delete_asset_content
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
 
 
@@ -213,11 +214,9 @@ class SharedAssetStore:
 
         file_deleted = False
         file_error = ""
-        path = Path(str(asset.storage_path or ""))
-        if delete_file and str(asset.storage_path or "").strip() and path.is_file():
+        if delete_file:
             try:
-                path.unlink()
-                file_deleted = True
+                file_deleted = delete_asset_content(asset)
             except OSError as exc:
                 file_error = str(exc)
 

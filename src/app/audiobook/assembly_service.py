@@ -8,7 +8,8 @@ from dataclasses import asdict
 from pathlib import Path
 from uuid import uuid4
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -28,7 +29,7 @@ class _AssemblyCancelled(Exception):
 
 
 def run_assemble_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
@@ -117,7 +118,7 @@ def run_assemble_once(
             work.rollback()
         if selected is None:
             with tempfile.NamedTemporaryFile(prefix="omnix-chapter-", suffix=".wav",
-                                             dir=blobs.root, delete=False) as output:
+                                             dir=blobs.scratch_dir(), delete=False) as output:
                 output_path = Path(output.name)
             last_renewal = time.monotonic()
 

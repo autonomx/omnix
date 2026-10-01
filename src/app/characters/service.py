@@ -4,9 +4,9 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
+from app.assets.content import asset_available
 from app.assets import (
     AssetRecord,
     AssetType,
@@ -192,8 +192,7 @@ class CharacterService:
             raise CharacterVoiceAssetError(
                 f"asset is not a voice profile: {asset_id} ({asset.type.value})"
             )
-        storage_path = Path(asset.storage_path)
-        if asset.mime_type == "audio/wav" and not storage_path.is_file():
+        if asset.mime_type == "audio/wav" and not asset_available(asset):
             raise CharacterVoiceAssetError(f"voice profile audio is missing: {asset.id}")
         self.validate_voice_for_use(asset.id, "character")
         return asset

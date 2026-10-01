@@ -8,11 +8,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
-from app.persistence.blob_store import LocalBlobStore
 
 from .assembly import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,
                        _active_energy, _normalization_gains)
 from .hashing import object_hash
+from app.persistence.contracts import BlobStore
 
 
 _FRAMES_PER_CHUNK = 65536
@@ -57,7 +57,7 @@ def _pause_frames(previous: AudioFileSpan | None, span: AudioFileSpan,
     return round(rate * pause_ms / 1000)
 
 
-def _reader(blobs: LocalBlobStore, span: AudioFileSpan):
+def _reader(blobs: BlobStore, span: AudioFileSpan):
     handle = blobs.open_verified(span.storage_key, expected_checksum=span.audio_checksum)
     try:
         reader = wave.open(handle, "rb")
@@ -94,7 +94,7 @@ def assembly_key_for(
 
 
 def assemble_chapter_file(
-    blobs: LocalBlobStore, spans: list[AudioFileSpan], output_path: Path, *,
+    blobs: BlobStore, spans: list[AudioFileSpan], output_path: Path, *,
     policy: PausePolicy = PausePolicy(), target_rms_dbfs: float = -20.0,
     on_chunk: Callable[[], None] | None = None,
 ) -> AssembledFileChapter:

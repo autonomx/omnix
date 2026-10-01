@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from app.assets.content import materialize_asset
 from app.assets.models import AssetListResponse, AssetMigrationPreview, AssetRecord
 from app.assets.models import AssetContentTooLarge
 
-from .blob_store import LocalBlobStore
+from .blob_store import default_blob_store
+from .contracts import BlobStore
 from .database import PostgresDatabase, default_database
 from app.runtime.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
@@ -18,7 +20,7 @@ class PostgresSharedAssetStoreAdapter:
         manifest_path: str | Path | None = None,
         *,
         database: PostgresDatabase | None = None,
-        blob_store: LocalBlobStore | None = None,
+        blob_store: BlobStore | None = None,
     ) -> None:
         if manifest_path is not None:
             raise RuntimeError(
@@ -26,7 +28,7 @@ class PostgresSharedAssetStoreAdapter:
             )
         self.database = database or default_database()
         self.context = current_tenant()
-        self.blob_store = blob_store or LocalBlobStore()
+        self.blob_store = blob_store or default_blob_store()
 
     def list_assets(self) -> AssetListResponse:
         with unit_of_work(self.database) as work:
@@ -86,9 +88,7 @@ class PostgresSharedAssetStoreAdapter:
                 raise RuntimeError(f"asset update disappeared: {asset.id}")
             return self._asset(record)
 
-        source = Path(str(asset.storage_path or ""))
-        if not source.is_file():
-            raise FileNotFoundError(str(source))
+        source = materialize_asset(asset)  # FileNotFoundError when absent
         storage_key = f"assets/{self._safe(asset.id)}/{source.name}"
         blob = self.blob_store.put_file(storage_key, source)
         try:
@@ -170,13 +170,16 @@ class PostgresSharedAssetStoreAdapter:
         )
 
     def _asset(self, record: dict[str, Any]) -> AssetRecord:
-        path = self.blob_store.root.joinpath(*record["storage_key"].split("/"))
+        local_path = getattr(self.blob_store, "local_path", None)
         return AssetRecord(
             id=record["id"],
             module=record["module"],
             type=record["asset_type"],
             mime_type=record["mime_type"],
-            storage_path=str(path),
+            # Kept for local deployments' API compatibility; S3 has no path.
+            storage_path=str(local_path(record["storage_key"])) if callable(local_path) else "",
+            storage_key=record["storage_key"],
+            checksum_sha256=record.get("checksum_sha256"),
             metadata=dict(record.get("metadata") or {}),
             created_at=record["created_at"],
             compat=dict(record.get("compat") or {}),

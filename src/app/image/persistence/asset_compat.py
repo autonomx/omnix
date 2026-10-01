@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.assets.content import asset_location
 from app.assets.models import AssetRecord, AssetType
 
 from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
@@ -39,7 +40,7 @@ def save_image_asset_bytes_postgres(
                 created_at=_now(),
             )
         )
-    return str(stored.storage_path)
+    return asset_location(stored)
 
 
 def register_image_asset_file_postgres(
@@ -59,7 +60,7 @@ def register_image_asset_file_postgres(
             created_at=_now(),
         )
     )
-    return str(stored.storage_path)
+    return asset_location(stored)
 
 
 def get_image_asset_manifest_postgres() -> dict[str, Any]:
@@ -68,9 +69,9 @@ def get_image_asset_manifest_postgres() -> dict[str, Any]:
         "format_version": "postgresql_image_assets_v1",
         "assets": {
             item.id: {
-                "path": item.storage_path,
+                "path": asset_location(item),
                 "mime_type": item.mime_type,
-                "hash": str(item.compat.get("checksum_sha256") or ""),
+                "hash": str(item.checksum_sha256 or item.compat.get("checksum_sha256") or ""),
                 "metadata": dict(item.metadata),
             }
             for item in assets

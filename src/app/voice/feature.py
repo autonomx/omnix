@@ -10,7 +10,7 @@ from app.platform.effective_defaults import apply_job_defaults
 from app.platform.voice_cloning_defaults import apply_voice_cloning_defaults
 from app.runtime.features import FeatureModule
 
-from .jobs import execute_voice_studio_job
+from .jobs import execute_voice_studio_job, store_inline_clone_sample
 
 
 class VoiceJobInput(BaseModel):
@@ -25,6 +25,7 @@ def voice_submission_defaults(request: CreateJobRequest) -> CreateJobRequest:
     value = request.model_dump(mode="python")
     if request.module == "voice-cloning":
         value = apply_voice_cloning_defaults(value)
+        value["input_payload"] = store_inline_clone_sample(dict(value.get("input_payload") or {}))
     else:
         value = apply_job_defaults(value)
     return CreateJobRequest.model_validate(value)

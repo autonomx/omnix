@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import LocalBlobStore
+
 from app.persistence.database import PostgresDatabase
+from app.persistence.contracts import BlobStore
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -24,7 +25,7 @@ from .hashing import canonical_json
 _LOG = logging.getLogger(__name__)
 
 
-def _stage_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
+def _stage_book_input(blobs: BlobStore, assets: list[tuple[str, str]],
                       root: Path) -> Path:
     """Prepare verified chapter files for FFmpeg's concat demuxer."""
     if not assets:
@@ -50,7 +51,7 @@ def _stage_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
     return playlist
 
 
-def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
+def start_export(database: PostgresDatabase, blobs: BlobStore,
                  context: TenantContext, *, project_id: str,
                  format: str = "m4b") -> dict[str, str]:
     if format not in FORMAT_MIME:
@@ -219,7 +220,7 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
             "manifest_hash": manifest_hash(manifest)}
 
 
-def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
+def run_export_once(database: PostgresDatabase, blobs: BlobStore,
                     context: TenantContext, *, worker_id: str) -> bool:
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
@@ -274,7 +275,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:
             raise ValueError("FFmpeg version differs from frozen manifest")
         with tempfile.TemporaryDirectory(prefix="omnix-audiobook-",
-                                         dir=blobs.root) as temporary:
+                                         dir=blobs.scratch_dir()) as temporary:
             root = Path(temporary)
             input_path = _stage_book_input(blobs, assets, root)
             staged_audio_bytes = sum(path.stat().st_size for path in root.glob("chapter-*.wav"))

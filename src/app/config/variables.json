@@ -651,6 +651,20 @@
     "type": "string"
   },
   {
+    "default": "local",
+    "description": "Controls blob backend for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_BLOB_BACKEND",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls blob root for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_BLOB_ROOT",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls browser exe for launcher.",
     "feature": "launcher",
@@ -1398,6 +1412,55 @@
     "feature": "rpg",
     "name": "OMNIX_RPG_SLOW_SPAN_MS",
     "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls s3 access key id for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_ACCESS_KEY_ID",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls s3 bucket for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_BUCKET",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls s3 endpoint for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_ENDPOINT",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls s3 prefix for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_PREFIX",
+    "type": "string"
+  },
+  {
+    "default": "us-east-1",
+    "description": "Controls s3 region for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_REGION",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls s3 secret access key for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_SECRET_ACCESS_KEY",
+    "type": "string"
+  },
+  {
+    "default": "60",
+    "description": "Controls s3 timeout seconds for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_S3_TIMEOUT_SECONDS",
+    "type": "integer"
   },
   {
     "default": "2",

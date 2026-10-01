@@ -1,6 +1,9 @@
 """Standalone image service runtime with explicit multi-model lifecycle."""
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from app.config.env import environment
 
 import os
@@ -166,6 +169,26 @@ def image_model_status(provider: str | None = None) -> Dict[str, Any]:
     }
 
 
+def _publish_shared_output(local_path: str) -> dict[str, str]:
+    """Copy the output to the shared bucket when blobs are remote (S3).
+
+    Gateways on other hosts then read it from the bucket instead of this
+    service's disk. Local blob storage keeps the single-host file handoff.
+    """
+    from app.persistence.blob_store import blob_backend, default_blob_store
+
+    path = Path(local_path) if local_path else None
+    if blob_backend() != "s3" or path is None or not path.is_file():
+        return {}
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    checksum = digest.hexdigest()
+    record = default_blob_store().put_file(f"image-outputs/{checksum[:2]}/{checksum}{path.suffix or '.png'}", path)
+    return {"blob_key": record["storage_key"], "checksum_sha256": record["checksum_sha256"]}
+
+
 def _generation_response(result) -> Dict[str, Any]:
     return {
         "ok": result.ok,
@@ -174,6 +197,7 @@ def _generation_response(result) -> Dict[str, Any]:
         "error": result.error,
         "asset_url": result.asset_url,
         "local_path": result.local_path,
+        **(_publish_shared_output(result.local_path) if result.ok else {}),
         "seed": result.seed,
         "width": result.width,
         "height": result.height,

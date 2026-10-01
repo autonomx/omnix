@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.assets.content import asset_available
 from app.assets import AssetListResponse, AssetRecord, AssetType
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus
 from app.runtime.contracts import AssetService, JobService
@@ -135,12 +135,8 @@ def create_image_workspace_router(
 def _is_usable_image_asset(asset: AssetRecord) -> bool:
     if str(asset.mime_type or "").lower() not in SUPPORTED_IMAGE_MIME_TYPES:
         return False
-    storage_path = str(asset.storage_path or "").strip()
-    if not storage_path:
-        return False
-    path = Path(storage_path)
     try:
-        return path.is_file() and path.stat().st_size > 0
+        return asset_available(asset)
     except OSError:
         return False
 

@@ -326,6 +326,41 @@ Operational rules:
 - Treat paths returned by compatibility routes as untrusted until they pass the gateway's content/type/size policy.
 - Keep large model files and runtime caches out of version control.
 
+### Blob storage backends
+
+`OMNIX_BLOB_BACKEND` selects where blobs live. Every process (gateway, job
+workers, image service) must use the same settings.
+
+| Value | Storage |
+|---|---|
+| `local` (default) | Files under `OMNIX_BLOB_ROOT`, or `resources/data/blobs` when unset. Single-host deployments. |
+| `s3` | Any S3-compatible bucket: AWS S3, SeaweedFS, MinIO. Required when gateways and workers run on different hosts. |
+
+The `s3` backend uses these settings:
+
+- `OMNIX_S3_ENDPOINT`: an http(s) origin with no path.
+- `OMNIX_S3_BUCKET`: the bucket must already exist.
+- `OMNIX_S3_ACCESS_KEY_ID` and `OMNIX_S3_SECRET_ACCESS_KEY`.
+- `OMNIX_S3_REGION`: default `us-east-1`.
+- `OMNIX_S3_PREFIX`: optional key prefix.
+- `OMNIX_S3_TIMEOUT_SECONDS`: default 60.
+
+Requests use path-style addressing with AWS Signature Version 4. Every
+object's SHA-256 is stored as metadata and verified on read.
+
+Assets keep a relative `storage_key`. Feature code reads content through
+`app.assets.content`; tools that need a file path get a checksum-verified
+copy from a content-addressed cache under `resources/data/cache/blobs`. Audio
+assets stream from `/api/assets/{asset_id}/audio`, which supports Range
+requests. Job rows reference assets and never embed audio. Voice-clone
+samples submitted inline are moved into the blob store when the job is
+admitted.
+
+With `s3`, the image service also uploads each output to the bucket and
+returns its key. A gateway on another host then never needs the image
+service's disk. Voice clones are still file-managed on the voice/TTS host;
+moving them into blob-backed asset records is a follow-up.
+
 ## Secrets and networked integrations
 
 Provider secrets are environment- or protected-store-owned. Examples include LLM/search, market-data, and integration credentials.

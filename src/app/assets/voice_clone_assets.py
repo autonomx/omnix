@@ -11,6 +11,7 @@ from typing import Any
 from app.config.env import env_str
 from app.runtime.paths import repo_root, resources_root
 
+from .content import asset_location
 from .models import AssetRecord, AssetType
 
 LOGGER = logging.getLogger("uvicorn.error")
@@ -228,7 +229,7 @@ def discover_voice_clone_assets() -> list[AssetRecord]:
             {
                 "id": asset.id,
                 "name": asset.metadata.get("profile_name") or asset.metadata.get("voice_id"),
-                "path": asset.storage_path,
+                "path": asset_location(asset),
             }
             for asset in discovered[:100]
         ],

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import math
 import mimetypes
@@ -12,8 +13,11 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
+from app.assets.content import asset_location
 from app.assets import AssetRecord, AssetType, default_asset_store
+from app.persistence.blob_store import default_blob_store
 from app.runtime.paths import resources_data_root
 
 from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
@@ -71,7 +75,7 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
 def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]:
     payload = job.input_payload or {}
     profile_name = _require_text(payload.get("profile_name"), "Voice name is required")
-    audio_bytes = _decode_audio_payload(payload.get("sample_audio_base64"))
+    audio_bytes = _sample_audio_bytes(payload)
     source_file_name = _text(payload.get("source_file_name")) or f"{profile_name}.wav"
     suffix = Path(source_file_name).suffix.lower() or ".wav"
     if suffix not in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"}:
@@ -143,7 +147,7 @@ def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, An
 def _execute_transcribe_sample_job(job: JobRecord) -> dict[str, Any]:
     """Transcribe a clone sample without creating a voice-library entry."""
     payload = job.input_payload or {}
-    audio_bytes = _decode_audio_payload(payload.get("sample_audio_base64"))
+    audio_bytes = _sample_audio_bytes(payload)
     source_file_name = _text(payload.get("source_file_name")) or "voice-sample.wav"
     suffix = Path(source_file_name).suffix.lower() or ".wav"
     if suffix not in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"}:
@@ -315,7 +319,8 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     output_ref = _asset_output_ref(asset, title=title)
     output_ref.update(
         {
-            "data_url": f"data:audio/wav;base64,{base64.b64encode(wav_bytes).decode('utf-8')}",
+            # Served from the stored asset; job rows never embed the audio.
+            "audio_url": asset_audio_url(asset.id),
             "duration": combined_metadata.get("duration"),
             "segments": segment_outputs,
         }
@@ -546,6 +551,45 @@ def _assignments_by_speaker(assignments: list[Any]) -> dict[str, dict[str, Any]]
     return mapped
 
 
+MAX_CLONE_SAMPLE_BYTES = 50 * 1024 * 1024
+
+
+def asset_audio_url(asset_id: str) -> str:
+    return f"/api/assets/{quote(asset_id, safe='')}/audio"
+
+
+def store_inline_clone_sample(input_payload: dict[str, Any]) -> dict[str, Any]:
+    """Move an inline base64 sample into the blob store at job admission.
+
+    The job row then carries only the content-addressed blob key and digest,
+    never the audio itself.
+    """
+    if not input_payload.get("sample_audio_base64"):
+        return input_payload
+    audio = _decode_audio_payload(input_payload["sample_audio_base64"])
+    if not audio:
+        raise ValueError("Audio sample is required")
+    if len(audio) > MAX_CLONE_SAMPLE_BYTES:
+        raise ValueError("Audio sample is too large")
+    digest = hashlib.sha256(audio).hexdigest()
+    suffix = Path(_text(input_payload.get("source_file_name")) or "sample.wav").suffix.lower()
+    if suffix not in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"}:
+        suffix = ".wav"
+    record = default_blob_store().put_bytes(f"voice-samples/{digest[:2]}/{digest}{suffix}", audio)
+    updated = {key: value for key, value in input_payload.items() if key != "sample_audio_base64"}
+    updated["sample_blob_key"] = record["storage_key"]
+    updated["sample_sha256"] = digest
+    return updated
+
+
+def _sample_audio_bytes(payload: dict[str, Any]) -> bytes:
+    key = _text(payload.get("sample_blob_key"))
+    if key:
+        return default_blob_store().read_bytes(key, expected_checksum=_text(payload.get("sample_sha256")) or None)
+    # Jobs queued before samples moved to the blob store.
+    return _decode_audio_payload(payload.get("sample_audio_base64"))
+
+
 def _decode_audio_payload(value: Any) -> bytes:
     encoded = _require_text(value, "Audio sample is required")
     if "," in encoded and encoded.strip().lower().startswith("data:"):
@@ -601,7 +645,7 @@ def _asset_output_ref(asset: AssetRecord, *, title: str) -> dict[str, Any]:
         "type": asset.type.value if hasattr(asset.type, "value") else str(asset.type),
         "asset_id": asset.id,
         "title": title,
-        "storage_path": asset.storage_path,
+        "storage_path": asset_location(asset),
         "mime_type": asset.mime_type,
     }
 

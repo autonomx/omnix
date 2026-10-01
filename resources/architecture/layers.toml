@@ -17,7 +17,7 @@ may_import = ["*"]
 
 [owners]
 platform_table_sql = ["app/persistence/job_repository.py", "app/persistence/execution_repositories.py", "app/persistence/outbox_repository.py", "app/persistence/identity_service.py", "app/persistence/audit.py", "app/persistence/migrations.py", "app/persistence/retention.py"]
-blob_store_construction = ["app/persistence/blob_store.py", "app/persistence/storage.py"]
+blob_store_construction = ["app/persistence/blob_store.py", "app/persistence/storage.py", "app/assets/content.py"]
 tenant_bootstrap = ["app/persistence/identity_service.py", "app/persistence/startup.py", "app/production.py", "app/runtime_composition.py", "app/worker.py"]
 
 [rpg_core]

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from app.assets.content import AssetContentUnavailable, materialize_asset
 from app.assets import AssetType, SharedAssetStore
 
 _DEFAULT_MOUTH_ANCHOR = {
@@ -62,12 +63,13 @@ def stabilize_generated_avatar_frame(
             f"avatar_stabilization_reference_not_image:{reference_id}"
         )
 
-    reference_path = Path(reference.storage_path)
     output_path = Path(generated_path)
-    if not reference_path.is_file():
+    try:
+        reference_path = materialize_asset(reference)
+    except AssetContentUnavailable:
         raise AvatarFrameStabilizationError(
             f"avatar_stabilization_reference_file_missing:{reference_id}"
-        )
+        ) from None
     if not output_path.is_file():
         raise AvatarFrameStabilizationError(
             f"avatar_stabilization_output_missing:{output_path}"
