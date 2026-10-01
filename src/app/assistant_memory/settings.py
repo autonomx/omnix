@@ -178,6 +178,14 @@ def effective_memory_settings(
 
 
 def load_memory_runtime_status() -> AssistantMemoryRuntimeStatus:
+    from app.assistant_memory.persistence.settings_store import ASSISTANT_MEMORY_SETTINGS_KEY
+    from app.settings.access import current_settings_service
+
+    if ASSISTANT_MEMORY_SETTINGS_KEY not in current_settings_service().specs:
+        # The assistant-memory feature is disabled, so its settings are not
+        # registered. Chat still consults these policies through the contract;
+        # use the registered defaults (plus environment overrides).
+        return effective_memory_settings(AssistantMemoryRuntimeSettings(), source="feature_disabled_defaults")
     return default_memory_settings_store().load_effective()
 
 

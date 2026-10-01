@@ -160,6 +160,36 @@ To upgrade replicas one at a time:
 The nightly `rolling-upgrade` job runs this sequence under load
 (`scripts/rolling_upgrade_test.py`).
 
+## Multi-host topology test
+
+`docker-compose.multihost-test.yml` runs Omnix as separate hosts behind Nginx:
+
+- two API replicas and one worker/scheduler gateway;
+- two job workers;
+- a fake model service (LM Studio–compatible chat and remote TTS, CPU only);
+- PostgreSQL and an S3-compatible store (SeaweedFS).
+
+Each Omnix service has its own container filesystem, and blobs use the `s3`
+backend. The Nginx config `deploy/multihost/nginx.conf` is generated from the
+same routing policy as `deploy/nginx/omnix.conf`
+(`python scripts/render_gateway_ingress.py`).
+
+    docker compose -f docker-compose.multihost-test.yml up -d --build --wait
+    docker compose -f docker-compose.multihost-test.yml run --rm driver
+    docker compose -f docker-compose.multihost-test.yml down -v
+
+The driver (`scripts/multihost_topology_test.py`) checks:
+
+- chat across replicas;
+- the event stream;
+- an asset saved on one host and read on another;
+- live-call PCM streaming.
+
+It then runs a mixed load and writes p50/p95/p99 latency and throughput to
+`artifacts/multihost-topology.json`. The nightly `multihost-topology` job runs
+it. When you re-run `up --build` against an existing stack, recreate Nginx
+(`--force-recreate`): it resolves replica addresses only at startup.
+
 ## Triage decision tree
 
 ### 1. The page does not open

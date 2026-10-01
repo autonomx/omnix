@@ -41,6 +41,11 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
         @app.get('/api/tts/speakers')
         def speakers():
             return {'speakers': ['default']}
+        @app.post('/api/tts/live-call/stream')
+        def live_call_stream():
+            # Streaming PCM16 contract used by the gateway's remote TTS client.
+            return Response(bytes.fromhex('0020 00e0') * 2400, media_type='application/octet-stream', headers={
+                'X-Omnix-Audio-Format': 'pcm_s16le', 'X-Omnix-Channels': '1', 'X-Omnix-Sample-Rate': '24000'})
         @app.post('/api/tts/generate_stream_audio')
         def synthesize():
             output = io.BytesIO()
@@ -113,6 +118,11 @@ def certify(url, duration):
     import httpx
     from websockets.sync.client import connect
     context = multiprocessing.get_context('spawn')
+    # Gateways authenticate to their model sidecars with the shared service
+    # token (WP-0.5); spawned processes inherit this disposable one.
+    if not os.environ.get('OMNIX_SERVICE_TOKEN'):
+        import secrets
+        os.environ['OMNIX_SERVICE_TOKEN'] = secrets.token_urlsafe(32)
     cohort = []
     def start(role, tts=''):
         parent, child = context.Pipe()
@@ -130,7 +140,8 @@ def certify(url, duration):
     try:
         tts, _ = start('tts')
         gateways = [start(role, tts) for role in ('worker', 'api', 'api')]
-        with httpx.Client(timeout=20) as client:
+        # Mutations need the request-guard client header (WP-0.3).
+        with httpx.Client(timeout=20, headers={"X-Omnix-Client": "certification"}) as client:
             def request(method, address, **kwargs):
                 started = time.perf_counter()
                 response = client.request(method, address, **kwargs)

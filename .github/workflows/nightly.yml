@@ -11,6 +11,10 @@ on:
       - ".github/workflows/nightly.yml"
       - "scripts/rolling_upgrade_test.py"
       - "src/app/runtime/drain.py"
+      - "docker-compose.multihost-test.yml"
+      - "deploy/multihost/**"
+      - "scripts/multihost_topology_test.py"
+      - "scripts/multihost/**"
 
 permissions:
   contents: read
@@ -108,3 +112,31 @@ jobs:
           name: nightly-rolling-upgrade
           path: artifacts/rolling-upgrade.json
           if-no-files-found: ignore
+
+  multihost-topology:
+    # WP-6.8: Nginx, two API replicas, one worker/scheduler gateway, two job
+    # workers, fake model services, PostgreSQL and S3-compatible storage, each
+    # on its own container filesystem.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the topology
+        run: docker compose -f docker-compose.multihost-test.yml up -d --build --wait --wait-timeout 600
+      - name: Drive traffic through Nginx and measure
+        run: |
+          mkdir -p artifacts
+          docker compose -f docker-compose.multihost-test.yml run --rm driver
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.multihost-test.yml logs --no-color --tail 300
+      - name: Upload topology evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-multihost-topology
+          path: artifacts/multihost-topology.json
+          if-no-files-found: ignore
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.multihost-test.yml down -v

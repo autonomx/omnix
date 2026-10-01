@@ -244,6 +244,26 @@ http://127.0.0.1:8000/api/health</code></pre></div>
 <li>Repeat for each replica, then each job worker.</li>
 </ol>
 <p>The nightly <code>rolling-upgrade</code> job runs this sequence under load (<code>scripts/rolling_upgrade_test.py</code>).</p>
+<h2 id="multi-host-topology-test">Multi-host topology test</h2>
+<p><code>docker-compose.multihost-test.yml</code> runs Omnix as separate hosts behind Nginx:</p>
+<ul>
+<li>two API replicas and one worker/scheduler gateway;</li>
+<li>two job workers;</li>
+<li>a fake model service (LM Studio–compatible chat and remote TTS, CPU only);</li>
+<li>PostgreSQL and an S3-compatible store (SeaweedFS).</li>
+</ul>
+<p>Each Omnix service has its own container filesystem, and blobs use the <code>s3</code> backend. The Nginx config <code>deploy/multihost/nginx.conf</code> is generated from the same routing policy as <code>deploy/nginx/omnix.conf</code> (<code>python scripts/render_gateway_ingress.py</code>).</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>docker compose -f docker-compose.multihost-test.yml up -d --build --wait
+docker compose -f docker-compose.multihost-test.yml run --rm driver
+docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
+<p>The driver (<code>scripts/multihost_topology_test.py</code>) checks:</p>
+<ul>
+<li>chat across replicas;</li>
+<li>the event stream;</li>
+<li>an asset saved on one host and read on another;</li>
+<li>live-call PCM streaming.</li>
+</ul>
+<p>It then runs a mixed load and writes p50/p95/p99 latency and throughput to <code>artifacts/multihost-topology.json</code>. The nightly <code>multihost-topology</code> job runs it. When you re-run <code>up --build</code> against an existing stack, recreate Nginx (<code>--force-recreate</code>): it resolves replica addresses only at startup.</p>
 <h2 id="triage-decision-tree">Triage decision tree</h2>
 <h3 id="1-the-page-does-not-open">1. The page does not open</h3>
 <ul>

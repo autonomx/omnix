@@ -1,7 +1,10 @@
 """Storyteller shared-asset save helpers for the browser gateway."""
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import re
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,11 +46,22 @@ def _safe_story_slug(value: str) -> str:
     return normalized or "untitled-story"
 
 
-def _story_asset_dir(asset_store: SharedAssetStore) -> Path:
-    manifest_parent = Path(asset_store.manifest_path).parent
-    path = manifest_parent / "stories"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+@contextmanager
+def _story_staging_dir(asset_store: SharedAssetStore) -> Iterator[Path]:
+    """Where the manuscript file is written before the asset is recorded.
+
+    The legacy manifest store keeps files beside its manifest. The PostgreSQL
+    store copies the file into the blob store on upsert, so a temporary
+    directory suffices (and works on any host).
+    """
+    manifest_path = getattr(asset_store, "manifest_path", None)
+    if manifest_path:
+        path = Path(manifest_path).parent / "stories"
+        path.mkdir(parents=True, exist_ok=True)
+        yield path
+        return
+    with tempfile.TemporaryDirectory(prefix="omnix-story-") as directory:
+        yield Path(directory)
 
 
 def save_story_asset(asset_store: SharedAssetStore, request: SaveStoryAssetRequest) -> SavedStoryAssetResponse:
@@ -60,14 +74,20 @@ def save_story_asset(asset_store: SharedAssetStore, request: SaveStoryAssetReque
     unique = uuid.uuid4().hex[:12]
     created_at = _utcnow()
     timestamp = created_at.replace(":", "-").replace("+", "-")
-    path = _story_asset_dir(asset_store) / f"{slug}-{timestamp}-{unique}.md"
+    with _story_staging_dir(asset_store) as directory:
+        path = directory / f"{slug}-{timestamp}-{unique}.md"
+        try:
+            path.write_text(content + "\n", encoding="utf-8")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="story_asset_write_failed") from exc
+        stored = asset_store.upsert_asset(_story_record(request, title, slug, unique, created_at, path))
+    return SavedStoryAssetResponse(asset=stored, content=content)
 
-    try:
-        path.write_text(content + "\n", encoding="utf-8")
-    except OSError as exc:
-        raise HTTPException(status_code=500, detail="story_asset_write_failed") from exc
 
-    asset = AssetRecord(
+def _story_record(
+    request: SaveStoryAssetRequest, title: str, slug: str, unique: str, created_at: str, path: Path,
+) -> AssetRecord:
+    return AssetRecord(
         id=f"story:{slug}:{unique}",
         module="storyteller",
         type=AssetType.STORY,
@@ -85,5 +105,3 @@ def save_story_asset(asset_store: SharedAssetStore, request: SaveStoryAssetReque
         created_at=created_at,
         compat={"contract": "storyteller_saved_asset_v1"},
     )
-    asset_store.upsert_asset(asset)
-    return SavedStoryAssetResponse(asset=asset, content=content)

@@ -1,0 +1,148 @@
+# WP-6.8 multi-host topology test. Disposable, test-only credentials.
+# Every Omnix service has its own container filesystem: only PostgreSQL and
+# the S3-compatible store keep data, so nothing can rely on a shared local disk.
+#
+#   docker compose -f docker-compose.multihost-test.yml up -d --build --wait
+#   docker compose -f docker-compose.multihost-test.yml run --rm driver
+#   docker compose -f docker-compose.multihost-test.yml down -v
+
+x-omnix-env: &omnix-env
+  PYTHONUNBUFFERED: "1"
+  PYTHONPATH: /app/src
+  OMNIX_ENV: test
+  OMNIX_DATABASE_URL: postgresql://omnix:omnix@postgres:5432/omnix_multihost
+  OMNIX_BLOB_BACKEND: s3
+  OMNIX_S3_ENDPOINT: http://s3:8333
+  OMNIX_S3_BUCKET: omnix-multihost
+  OMNIX_S3_ACCESS_KEY_ID: omnixmultihost
+  OMNIX_S3_SECRET_ACCESS_KEY: omnixmultihostsecret
+  OMNIX_SERVICE_TOKEN: multihost-test-service-token-not-a-secret-0123456789
+  OMNIX_BIND_HOST: 0.0.0.0
+  OMNIX_ALLOW_LAN: "true"
+  OMNIX_ALLOWED_HOSTS: nginx,nginx:8080,localhost,localhost:8080,127.0.0.1,gateway-worker,gateway-worker:8000,api-1,api-1:8000,api-2,api-2:8000
+  OMNIX_ALLOWED_ORIGINS: http://nginx:8080,http://localhost:8080
+  OMNIX_FEATURES: chat,voice,story
+  OMNIX_TTS_URL: http://fake-models:8020
+  OMNIX_GATEWAY_TTS_HTTP: "1"
+  OMNIX_TTS_STARTUP_WARMUP: "0"
+  OMNIX_LOCAL_JOB_WORKER: "0"
+  OMNIX_DRAIN_SECONDS: "10"
+  OMNIX_JOB_WORKER_POOLS: cpu=2
+
+x-omnix: &omnix
+  image: omnix:multihost-test
+  build: .
+  environment: *omnix-env
+  restart: "no"
+
+x-gateway-health: &gateway-health
+  test: ["CMD", "curl", "-fsS", "http://localhost:8000/ready"]
+  interval: 3s
+  timeout: 5s
+  retries: 60
+  start_period: 20s
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: omnix_multihost
+      POSTGRES_USER: omnix
+      POSTGRES_PASSWORD: omnix
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnix -d omnix_multihost"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  s3:
+    image: chrislusf/seaweedfs:latest
+    command: ["server", "-s3", "-s3.config=/config/s3.json", "-dir=/data"]
+    volumes:
+      - ./deploy/multihost/s3.json:/config/s3.json:ro
+
+  migrate:
+    <<: *omnix
+    command:
+      - sh
+      - -c
+      - >-
+        python -m app.persistence migrate
+        && python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+        && python scripts/multihost_topology_test.py --create-bucket
+    depends_on:
+      postgres: {condition: service_healthy}
+      s3: {condition: service_started}
+
+  fake-models:
+    <<: *omnix
+    command: ["python", "scripts/multihost/fake_model_service.py", "--port", "8020"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8020/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  gateway-worker:
+    <<: *omnix
+    command: ["python", "scripts/run_omnix_gateway.py", "--host", "0.0.0.0", "--port", "8000", "--api-replicas", "0"]
+    environment:
+      <<: *omnix-env
+      OMNIX_GATEWAY_BACKGROUND_ROLE: worker
+      OMNIX_SOFTWARE_REVISION: multihost-worker
+    healthcheck: *gateway-health
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      s3: {condition: service_started}
+      fake-models: {condition: service_healthy}
+
+  api-1: &api
+    <<: *omnix
+    command: ["python", "scripts/run_omnix_gateway.py", "--host", "0.0.0.0", "--port", "8000", "--api-replicas", "0"]
+    environment:
+      <<: *omnix-env
+      OMNIX_GATEWAY_BACKGROUND_ROLE: api
+      OMNIX_SOFTWARE_REVISION: multihost-api
+    healthcheck: *gateway-health
+    depends_on:
+      gateway-worker: {condition: service_healthy}
+
+  api-2: *api
+
+  job-worker-1: &job-worker
+    <<: *omnix
+    command: ["python", "-m", "app.worker", "--metrics-host", "0.0.0.0"]
+    environment:
+      <<: *omnix-env
+      OMNIX_GATEWAY_BACKGROUND_ROLE: job-worker
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health/ready"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+    depends_on:
+      gateway-worker: {condition: service_healthy}
+
+  job-worker-2: *job-worker
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:18080:8080"
+    volumes:
+      - ./deploy/multihost/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api-1: {condition: service_healthy}
+      api-2: {condition: service_healthy}
+
+  driver:
+    <<: *omnix
+    profiles: [driver]
+    command: ["python", "scripts/multihost_topology_test.py", "--output", "/artifacts/multihost-topology.json"]
+    volumes:
+      - ./artifacts:/artifacts
+    depends_on:
+      nginx: {condition: service_started}
+      job-worker-1: {condition: service_healthy}
+      job-worker-2: {condition: service_healthy}
