@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from .errors import EntityNotFound, RevisionConflict
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 from .tenant import TenantContext
 
 
@@ -118,19 +119,25 @@ class PostgresAssetRepository:
         context: TenantContext,
         *,
         asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
         limit: int = 100,
         before_created_at: str | None = None,
         before_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Newest first, keyset-paged by ``(created_at, id)`` (WP-5.5)."""
         clauses = ["workspace_id = %s", "lifecycle_status <> 'deleted'"]
         parameters: list[Any] = [context.workspace_id]
         if asset_type is not None:
             clauses.append("asset_type = %s")
             parameters.append(asset_type)
+        if modules:
+            clauses.append("module = ANY(%s)")
+            parameters.append(list(modules))
         if before_created_at is not None and before_id is not None:
             clauses.append("(created_at, id) < (%s::timestamptz, %s)")
             parameters.extend([before_created_at, before_id])
-        parameters.append(max(1, min(int(limit), 500)))
+        # One more than a page, so callers can tell whether another follows.
+        parameters.append(page_limit(limit, maximum=MAX_PAGE_SIZE + 1))
         rows = self.connection.execute(
             f"SELECT {_ASSET_COLUMNS} FROM omnix_assets WHERE "
             + " AND ".join(clauses)

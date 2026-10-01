@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.assets.content import AssetContentUnavailable, read_asset_bytes
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
 from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
@@ -233,8 +233,7 @@ def _selected_image_assets(
     world_id = str(payload.world.get("id") or "")
     assets_by_id = {
         asset.id: asset
-        for asset in store.list_assets().assets
-        if asset.type == AssetType.IMAGE
+        for asset in iter_assets(store, asset_type=AssetType.IMAGE.value)
     }
     selected_ids = set(referenced_ids)
     for asset in assets_by_id.values():

@@ -13,6 +13,7 @@ from app.assets import (
     SharedAssetStore,
     default_asset_store,
     discover_canonical_voice_clone_assets,
+    iter_assets,
 )
 
 from .models import (
@@ -147,7 +148,7 @@ class CharacterService:
 
         candidates: dict[str, AssetRecord] = {}
         try:
-            for item in self.asset_store_factory().list_assets().assets:
+            for item in iter_assets(self.asset_store_factory()):
                 candidates.setdefault(item.id, item)
         except (OSError, TypeError, ValueError) as exc:
             LOGGER.warning(

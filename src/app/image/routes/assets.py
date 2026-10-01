@@ -151,10 +151,7 @@ def _normalized_browser_preview(
 
 
 def _asset_by_id(asset_id: str, store: AssetService) -> AssetRecord | None:
-    get_asset = getattr(store, "get_asset", None)
-    if callable(get_asset):
-        return get_asset(asset_id)
-    return next((asset for asset in store.list_assets().assets if asset.id == asset_id), None)
+    return store.get_asset(asset_id)
 
 
 def _is_trusted_svg(asset: AssetRecord) -> bool:

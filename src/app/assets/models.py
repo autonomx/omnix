@@ -52,7 +52,11 @@ class AssetContentTooLarge(ValueError):
 
 
 class AssetListResponse(BaseModel):
+    """A page of assets, newest first (WP-5.5)."""
+
     assets: list[AssetRecord]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class AssetMigrationPreview(BaseModel):

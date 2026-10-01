@@ -27,7 +27,7 @@ from app.persistence.runtime import reset_persistence_mode_cache
 
 
 class _EmptyAssetStore:
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(self, **_page) -> AssetListResponse:
         return AssetListResponse(assets=[])
 
 

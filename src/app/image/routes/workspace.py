@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import logging
+from itertools import islice
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.assets.content import asset_available
-from app.assets import AssetListResponse, AssetRecord, AssetType
+from app.assets import AssetListResponse, AssetRecord, AssetType, iter_assets
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus
 from app.runtime.contracts import AssetService, JobService
 
@@ -16,6 +17,7 @@ from app.jobs.projections import summarize_job
 
 DEFAULT_IMAGE_JOB_LIMIT = 25
 MAX_IMAGE_JOB_LIMIT = 100
+IMAGE_GALLERY_MODULES = ("image", "image-generation")
 DEFAULT_IMAGE_ASSET_LIMIT = 100
 MAX_IMAGE_ASSET_LIMIT = 250
 RETRYABLE_IMAGE_JOB_STATUSES = {JobStatus.FAILED, JobStatus.CANCELED, JobStatus.STALE}
@@ -69,18 +71,17 @@ def create_image_workspace_router(
     @router.get("/api/image-generation/assets", response_model=AssetListResponse, tags=["image"])
     def image_assets(limit: int = Query(default=DEFAULT_IMAGE_ASSET_LIMIT, ge=1, le=MAX_IMAGE_ASSET_LIMIT)) -> AssetListResponse:
         rpg_world_asset_ids = _rpg_world_image_asset_ids(job_store)
-        assets = [
+        # Type and module are filtered in SQL, newest first (WP-5.5); the
+        # remaining checks need the job store, so stop once the page is full.
+        gallery = (
             asset
-            for asset in asset_store.list_assets().assets
-            if asset.type == AssetType.IMAGE
-            and asset.module in {"image", "image-generation"}
-            and _is_usable_image_asset(asset)
+            for asset in iter_assets(asset_store, asset_type=AssetType.IMAGE.value, modules=IMAGE_GALLERY_MODULES)
+            if _is_usable_image_asset(asset)
             and not _is_character_avatar_asset(asset, job_store)
             and not _is_rpg_world_image_asset(asset, job_store)
             and asset.id not in rpg_world_asset_ids
-        ]
-        assets.sort(key=lambda asset: (asset.created_at, asset.id), reverse=True)
-        return AssetListResponse(assets=assets[:limit])
+        )
+        return AssetListResponse(assets=list(islice(gallery, limit)))
 
     @router.delete(
         "/api/image-generation/assets/{asset_id}",
@@ -96,7 +97,7 @@ def create_image_workspace_router(
     )
     def delete_image_asset(asset_id: str) -> ImageAssetDeleteResponse:
         store = asset_store
-        asset = next((item for item in store.list_assets().assets if item.id == asset_id), None)
+        asset = store.get_asset(asset_id)
         if asset is None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         if asset.type != AssetType.IMAGE or asset.module not in {"image", "image-generation"}:
@@ -231,10 +232,8 @@ def _prune_deleted_image_asset_jobs(
     try:
         current_image_asset_ids = {
             asset.id
-            for asset in asset_store.list_assets().assets
-            if asset.type == AssetType.IMAGE
-            and asset.module in {"image", "image-generation"}
-            and _is_usable_image_asset(asset)
+            for asset in iter_assets(asset_store, asset_type=AssetType.IMAGE.value, modules=IMAGE_GALLERY_MODULES)
+            if _is_usable_image_asset(asset)
         }
     except Exception:
         _LOGGER.exception("Unable to load image assets while pruning stale jobs")

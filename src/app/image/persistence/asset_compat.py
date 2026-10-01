@@ -10,6 +10,7 @@ from typing import Any
 
 from app.assets.content import asset_location
 from app.assets.models import AssetRecord, AssetType
+from app.assets.paging import iter_assets
 
 from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
 
@@ -64,7 +65,14 @@ def register_image_asset_file_postgres(
 
 
 def get_image_asset_manifest_postgres() -> dict[str, Any]:
-    assets = PostgresSharedAssetStoreAdapter().list_assets().assets
+    store = PostgresSharedAssetStoreAdapter()
+    assets = {
+        asset.id: asset
+        for asset in (
+            *iter_assets(store, asset_type=AssetType.IMAGE.value),
+            *iter_assets(store, modules=("image",)),
+        )
+    }.values()
     return {
         "format_version": "postgresql_image_assets_v1",
         "assets": {

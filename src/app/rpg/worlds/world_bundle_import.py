@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
 from app.assets.content import asset_available, asset_checksum
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
 from app.security.tenant_context import current_tenant
 from app.rpg.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
@@ -59,7 +59,7 @@ def _prepare_assets(
     transformed: TransformedWorldBundle,
     store: SharedAssetStore,
 ) -> tuple[list[AssetRecord], list[str], dict[str, str]]:
-    existing = {asset.id: asset for asset in store.list_assets().assets}
+    existing = {asset.id: asset for asset in iter_assets(store)}
     occupied = set(existing)
     created: list[AssetRecord] = []
     reused: list[str] = []
@@ -444,7 +444,7 @@ def import_world_bundle(
         bundle_sha256=parsed.bundle_sha256,
         existing_scenario_ids=existing["scenario"],
         existing_map_ids=existing["map"],
-        existing_asset_ids={asset.id for asset in store.list_assets().assets},
+        existing_asset_ids={asset.id for asset in iter_assets(store)},
         existing_run_ids=existing["run"],
     )
     created_assets, reused_assets, asset_map = _prepare_assets(parsed, transformed, store)

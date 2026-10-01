@@ -280,11 +280,11 @@ class CharacterLive2DAvatarService:
 
     def catalog(self, character_id: str) -> Live2DModelCatalogResponse:
         current = self.avatar_service_factory().optional_get(character_id)
-        assets = {asset.id: asset for asset in self.asset_store_factory().list_assets().assets}
+        store = self.asset_store_factory()
         models = []
         for entry in _MODEL_CATALOG:
             asset_id = _asset_id(entry["id"])
-            asset = assets.get(asset_id)
+            asset = store.get_asset(asset_id)
             installed = bool(asset and asset_available(asset))
             models.append(
                 Live2DModelCatalogItem(

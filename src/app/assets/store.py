@@ -18,6 +18,7 @@ from app.runtime.paths import resources_data_root
 
 from .content import delete_asset_content
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
+from .paging import paginate_assets
 
 
 _AUDIO_MIME_TYPES = {
@@ -168,13 +169,22 @@ class SharedAssetStore:
         self.manifest_path = Path(manifest_path) if manifest_path else default_asset_manifest_path()
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> AssetListResponse:
         assets = self._load_manifest()
         for asset in self._legacy_voice_clone_assets():
             assets.setdefault(asset.id, asset)
         for asset in self._legacy_audio_assets():
             assets.setdefault(asset.id, asset)
-        return AssetListResponse(assets=list(assets.values()))
+        return paginate_assets(
+            assets.values(), asset_type=asset_type, modules=modules, limit=limit, cursor=cursor
+        )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         normalized_id = str(asset_id)

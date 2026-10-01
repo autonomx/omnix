@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.5 | The pagination helpers live in `app.runtime.pagination`, not `app.persistence`. | `app.persistence` already imports `app.assets`; asset paging importing persistence would create a package cycle (AL002). Both already depend on `app.runtime`, which holds the store contracts. |
+| 2026-10-01 | WP-5.5 | `/api/assets` keeps the `assets` field and adds `next_cursor`/`has_more`; the web client's `listAssets()` follows cursors so existing screens see every asset. | Backward compatible for clients that read `assets`; moving each screen to incremental loading is a UI change for later. |
 | 2026-10-01 | WP-5.3 | Coverage is measured per aggregate type (agent run, task-graph run, workflow run), not per event type. | Run event types are open-ended (each runtime step names its own); consumers subscribe to a run's whole stream, so the aggregate type is the unit that can be left without a consumer. |
 | 2026-10-01 | WP-5.3 | Stopped writing `rpg.campaign_created` and `rpg.turn_committed` to the outbox. | They had no consumer; RPG is being retired, so the turn-job mirror consumer from the roadmap is not built. |
 | 2026-10-01 | WP-5.3 | No settings or provider cache-invalidation consumer yet. | Settings writes do not go through the outbox and nothing subscribes to setting changes today; add both together when a cross-process cache needs it. Agent-run projections remain WP-7.4. |

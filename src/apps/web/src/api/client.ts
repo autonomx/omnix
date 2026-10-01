@@ -5,6 +5,7 @@ export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
 export type AssetLegacyImportDryRun = components['schemas']['AssetLegacyImportDryRun'];
 export type AssetListResponse = components['schemas']['AssetListResponse'];
+
 export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];
 export type ChatSessionListResponse = components['schemas']['ChatSessionListResponse'];
@@ -357,6 +358,10 @@ export interface ApiRequestOptions {
   timeoutMs?: number;
 }
 
+const ASSET_PAGE_SIZE = 200;
+// Stops a runaway loop; 200 pages hold 40,000 assets.
+const MAX_ASSET_PAGES = 200;
+
 export class ApiError extends Error {
   readonly status: number;
   readonly body: string;
@@ -680,8 +685,26 @@ export class OmnixApiClient {
     return this.post<CancelJobRequest, JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { reason });
   }
 
-  async listAssets(): Promise<AssetListResponse> {
-    return this.get<AssetListResponse>('/api/assets');
+  /**
+   * Every asset matching the filter, newest first. The gateway returns pages
+   * of at most 200; this follows `next_cursor` until the last page.
+   */
+  async listAssets(filter: { type?: string; module?: string } = {}): Promise<AssetListResponse> {
+    const assets: AssetListResponse['assets'] = [];
+    let cursor: string | null | undefined;
+    for (let page = 0; page < MAX_ASSET_PAGES; page += 1) {
+      const params = new URLSearchParams({ limit: String(ASSET_PAGE_SIZE) });
+      if (filter.type) params.set('type', filter.type);
+      if (filter.module) params.set('module', filter.module);
+      if (cursor) params.set('cursor', cursor);
+      const response = await this.get<AssetListResponse>(`/api/assets?${params.toString()}`);
+      assets.push(...response.assets);
+      if (!response.has_more || !response.next_cursor) {
+        break;
+      }
+      cursor = response.next_cursor;
+    }
+    return { assets, next_cursor: null, has_more: false };
   }
 
   async listVoiceLibrary(): Promise<AssetListResponse> {

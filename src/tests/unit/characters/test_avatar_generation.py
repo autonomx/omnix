@@ -195,7 +195,7 @@ def test_uploaded_image_is_governed_and_used_as_base_reference(tmp_path: Path, m
     assert base_job.input_payload["reference_asset_ids"] == [source_asset_id]
     assert base_job.input_payload["no_cache"] is True
     assert base_job.input_payload["metadata"]["source_asset_id"] == source_asset_id
-    source = next(asset for asset in assets.list_assets().assets if asset.id == source_asset_id)
+    source = assets.get_asset(source_asset_id)
     assert source.owner_id == "user:local"
     assert source.metadata["source_image_consent_confirmed"] is True
     assert source.metadata["linked_character_ids"] == ["self-avatar"]

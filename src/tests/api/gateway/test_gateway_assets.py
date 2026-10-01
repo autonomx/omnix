@@ -115,7 +115,7 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
     from app.gateway.main import create_gateway_app
 
     class FakeAssetStore:
-        def list_assets(self) -> AssetListResponse:
+        def list_assets(self, **_page) -> AssetListResponse:
             return AssetListResponse(assets=[])
 
         def import_image_manifest_dry_run(self) -> AssetMigrationPreview:
@@ -136,7 +136,7 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
 
     response = client.get("/api/assets")
     assert response.status_code == 200
-    assert response.json() == {"assets": []}
+    assert response.json() == {"assets": [], "next_cursor": None, "has_more": False}
 
     dry_run = client.post("/api/assets/migrations/image/dry-run")
     assert dry_run.status_code == 200
@@ -202,8 +202,11 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
     )
 
     class FakeAssetStore:
-        def list_assets(self) -> AssetListResponse:
+        def list_assets(self, **_page) -> AssetListResponse:
             return AssetListResponse(assets=[asset])
+
+        def get_asset(self, asset_id: str):
+            return asset if asset_id == asset.id else None
 
         def delete_asset(self, asset_id: str) -> dict[str, object]:
             assert asset_id == asset.id
@@ -254,3 +257,31 @@ def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeyp
     assert not sidecar.exists()
     assert not duplicate.exists()
     assert other_voice.exists()
+
+
+def test_gateway_assets_endpoint_pages_with_filters() -> None:
+    from app.assets import AssetListResponse
+    from app.gateway.main import create_gateway_app
+    from app.runtime.pagination import InvalidCursor
+
+    calls: list[dict[str, object]] = []
+
+    class PagedAssetStore:
+        def list_assets(self, **page) -> AssetListResponse:
+            calls.append(page)
+            if page.get("cursor") == "bad":
+                raise InvalidCursor("cursor is invalid")
+            return AssetListResponse(assets=[], next_cursor="next", has_more=True)
+
+    client = TestClient(
+        create_gateway_app(asset_store_factory=lambda: PagedAssetStore()),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+    )
+
+    response = client.get("/api/assets?type=image&module=image&limit=20&cursor=abc")
+    assert response.status_code == 200
+    assert response.json() == {"assets": [], "next_cursor": "next", "has_more": True}
+    assert calls[-1] == {"asset_type": "image", "modules": ("image",), "limit": 20, "cursor": "abc"}
+    assert client.get("/api/assets?limit=201").status_code == 422
+    assert client.get("/api/assets?cursor=bad").status_code == 400

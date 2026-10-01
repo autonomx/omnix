@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.assets import (
@@ -10,21 +12,17 @@ from app.assets import (
     AssetListResponse,
     AssetMigrationPreview,
     AssetRecord,
+    AssetType,
     SharedAssetStore,
 )
+from app.runtime.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, InvalidCursor
 from app.assets.content import AssetContentUnavailable, materialize_asset
 from app.gateway.schemas import AssetContentResponse
 from app.assets.models import AssetContentTooLarge
 
 
 def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | None:
-    get_asset = getattr(asset_store, "get_asset", None)
-    if callable(get_asset):
-        return get_asset(asset_id)
-    return next(
-        (asset for asset in asset_store.list_assets().assets if asset.id == asset_id),
-        None,
-    )
+    return asset_store.get_asset(asset_id)
 
 
 def _text_asset_supported(asset: AssetRecord) -> bool:
@@ -58,8 +56,22 @@ def _read_text_asset(asset_store: SharedAssetStore, asset: AssetRecord) -> Asset
 
 def register_core_assets_routes(router: APIRouter, *, get_asset_store):
     @router.get("/api/assets", response_model=AssetListResponse, tags=["assets"])
-    def assets() -> AssetListResponse:
-        return get_asset_store().list_assets()
+    def assets(
+        asset_type: Annotated[AssetType | None, Query(alias="type")] = None,
+        module: str | None = Query(default=None, max_length=100),
+        limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+        cursor: str | None = Query(default=None, max_length=512),
+    ) -> AssetListResponse:
+        """One page of assets, newest first; follow ``next_cursor`` (WP-5.5)."""
+        try:
+            return get_asset_store().list_assets(
+                asset_type=asset_type.value if asset_type is not None else None,
+                modules=(module,) if module else None,
+                limit=limit,
+                cursor=cursor,
+            )
+        except InvalidCursor as error:
+            raise HTTPException(status_code=400, detail="invalid_cursor") from error
 
     @router.get(
         "/api/assets/{asset_id}/content",

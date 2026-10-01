@@ -83,7 +83,7 @@ class _Store:
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         return self.assets.get(asset_id)
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(self, **_page) -> AssetListResponse:
         return AssetListResponse(assets=list(self.assets.values()))
 
 

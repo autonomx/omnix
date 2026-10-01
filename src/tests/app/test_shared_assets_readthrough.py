@@ -5,7 +5,7 @@ import os
 
 from fastapi.testclient import TestClient
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore
+from app.assets import AssetRecord, AssetType, SharedAssetStore, iter_assets
 from app.gateway.main import create_gateway_app
 
 
@@ -40,7 +40,7 @@ def test_shared_asset_store_reads_legacy_voice_clone_profiles(tmp_path, monkeypa
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
 
-    assets = store.list_assets().assets
+    assets = list(iter_assets(store))
 
     voice_assets = [asset for asset in assets if asset.type == AssetType.VOICE_PROFILE]
     assert len(voice_assets) == 1
@@ -81,7 +81,7 @@ def test_manifest_asset_overrides_matching_legacy_voice_clone(tmp_path, monkeypa
         )
     )
 
-    assets = {asset.id: asset for asset in store.list_assets().assets}
+    assets = {asset.id: asset for asset in iter_assets(store)}
 
     assert assets["voice-cloning:Narrator"].storage_path == "shared/profile.bin"
     assert assets["voice-cloning:Narrator"].metadata == {"source": "shared-manifest"}
@@ -99,7 +99,7 @@ def test_shared_asset_store_reads_legacy_generated_audio(tmp_path, monkeypatch) 
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
 
-    assets = {asset.id: asset for asset in store.list_assets().assets if asset.type == AssetType.AUDIO}
+    assets = {asset.id: asset for asset in iter_assets(store) if asset.type == AssetType.AUDIO}
 
     assert set(assets) == {"audio:tts-narration.wav", "audio:stt-mic-capture.mp3"}
     assert assets["audio:tts-narration.wav"].module == "voice"
@@ -133,7 +133,7 @@ def test_manifest_asset_overrides_matching_legacy_audio_file(tmp_path, monkeypat
         )
     )
 
-    assets = {asset.id: asset for asset in store.list_assets().assets}
+    assets = {asset.id: asset for asset in iter_assets(store)}
 
     assert assets["audio:tts-narration.wav"].storage_path == "shared/audio/narration.wav"
     assert assets["audio:tts-narration.wav"].metadata == {"source": "shared-manifest"}
@@ -160,7 +160,7 @@ def test_shared_asset_store_reads_legacy_document_artifacts(tmp_path, monkeypatc
 
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
 
-    assets = {asset.id: asset for asset in store.list_assets().assets if asset.id.startswith("artifact:")}
+    assets = {asset.id: asset for asset in iter_assets(store) if asset.id.startswith("artifact:")}
 
     assert set(assets) == {
         "artifact:artifact_docs-bundle.zip",
@@ -261,7 +261,7 @@ def test_manifest_asset_overrides_matching_legacy_document_artifact(tmp_path, mo
         )
     )
 
-    assets = {asset.id: asset for asset in store.list_assets().assets}
+    assets = {asset.id: asset for asset in iter_assets(store)}
 
     assert assets["artifact:stories-adventure.md"].storage_path == "shared/stories/adventure.md"
     assert assets["artifact:stories-adventure.md"].metadata == {"source": "shared-manifest"}

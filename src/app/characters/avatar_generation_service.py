@@ -6,7 +6,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
 from app.image.reference_assets import (
     ImageReferenceError,
     close_image_references,
@@ -124,9 +124,8 @@ class CharacterAvatarGenerationService:
     ) -> BackfillClonedVoiceCharactersResponse:
         character_service = self.character_service_factory()
         avatar_service = self.avatar_service_factory()
-        assets = self.asset_store_factory().list_assets().assets
         voices = sorted(
-            (asset for asset in assets if asset.type == AssetType.VOICE_PROFILE),
+            iter_assets(self.asset_store_factory(), asset_type=AssetType.VOICE_PROFILE.value),
             key=lambda asset: (_voice_display_name(asset).lower(), asset.id),
         )
         existing = character_service.list(include_archived=True).characters
@@ -415,10 +414,7 @@ class CharacterAvatarGenerationService:
         if not consent_confirmed:
             raise ValueError("avatar_source_consent_required")
         store = self.asset_store_factory()
-        asset = next(
-            (candidate for candidate in store.list_assets().assets if candidate.id == source_asset_id),
-            None,
-        )
+        asset = store.get_asset(source_asset_id)
         if asset is None:
             raise ValueError(f"avatar_source_not_found:{source_asset_id}")
         if asset.type != AssetType.IMAGE:

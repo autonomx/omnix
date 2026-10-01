@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import io
 import uuid
+from itertools import islice
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from app.assets.content import AssetContentUnavailable, asset_available, open_asset
-from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store
+from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
 from app.runtime.paths import resources_data_root
 
 REFERENCE_ASSET_MODULE = "image-reference"
@@ -40,15 +41,17 @@ def list_image_reference_assets(
     store: SharedAssetStore | None = None,
 ) -> AssetListResponse:
     asset_store = store or default_asset_store()
-    assets = [
+    # Newest first from the store; stop once the page is full.
+    usable = (
         asset
-        for asset in asset_store.list_assets().assets
-        if asset.type == AssetType.IMAGE
-        and asset.module in {"image", "image-generation", REFERENCE_ASSET_MODULE}
-        and _usable_reference_asset(asset)
-    ]
-    assets.sort(key=lambda asset: (asset.created_at, asset.id), reverse=True)
-    return AssetListResponse(assets=assets[: max(1, int(limit))])
+        for asset in iter_assets(
+            asset_store,
+            asset_type=AssetType.IMAGE.value,
+            modules=("image", "image-generation", REFERENCE_ASSET_MODULE),
+        )
+        if _usable_reference_asset(asset)
+    )
+    return AssetListResponse(assets=list(islice(usable, max(1, int(limit)))))
 
 
 def save_image_reference_upload(
@@ -129,11 +132,10 @@ def load_image_reference_assets(
 
     Image, ImageOps, UnidentifiedImageError = _pillow()
     asset_store = store or default_asset_store()
-    by_id = {asset.id: asset for asset in asset_store.list_assets().assets}
     images: list[Any] = []
     try:
         for asset_id in normalized_ids:
-            asset = by_id.get(asset_id)
+            asset = asset_store.get_asset(asset_id)
             if asset is None:
                 raise ImageReferenceError(f"image_reference_not_found:{asset_id}")
             if asset.type != AssetType.IMAGE:

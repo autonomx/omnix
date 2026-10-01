@@ -10,6 +10,7 @@ from app.assets.models import AssetContentTooLarge
 from .blob_store import default_blob_store
 from .contracts import BlobStore
 from .database import PostgresDatabase, default_database
+from app.runtime.pagination import decode_cursor, encode_cursor, page_limit
 from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import unit_of_work
 
@@ -31,11 +32,34 @@ class PostgresSharedAssetStoreAdapter:
         self.context = None  # follows the request tenant
         self.blob_store = blob_store or default_blob_store()
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> AssetListResponse:
+        """One page, newest first; follow ``next_cursor`` for the rest (WP-5.5)."""
+        size = page_limit(limit)
+        before = decode_cursor(cursor, arity=2)
         with unit_of_work(self.database) as work:
-            records = work.assets.list_assets(self.context, limit=500)
+            records = work.assets.list_assets(
+                self.context,
+                asset_type=asset_type,
+                modules=modules,
+                limit=size + 1,
+                before_created_at=before[0] if before else None,
+                before_id=before[1] if before else None,
+            )
             work.rollback()
-        return AssetListResponse(assets=[self._asset(record) for record in records])
+        page = records[:size]
+        has_more = len(records) > size
+        return AssetListResponse(
+            assets=[self._asset(record) for record in page],
+            next_cursor=encode_cursor(page[-1]["created_at"], page[-1]["id"]) if has_more else None,
+            has_more=has_more,
+        )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         with unit_of_work(self.database) as work:

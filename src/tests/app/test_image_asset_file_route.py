@@ -114,7 +114,7 @@ def test_image_asset_file_uses_direct_lookup_beyond_list_page(tmp_path, monkeypa
     )
 
     class PaginatedStore:
-        def list_assets(self):
+        def list_assets(self, **_page):
             raise AssertionError("file delivery must not scan the paginated asset list")
 
         def get_asset(self, asset_id: str):

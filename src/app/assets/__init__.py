@@ -25,6 +25,7 @@ from .models import (
     AssetRecord,
     AssetType,
 )
+from .paging import iter_assets, paginate_assets
 from .rpg_map_pack import curated_rpg_map_assets
 from .store import (
     _AUDIO_MIME_TYPES,
@@ -116,7 +117,14 @@ class SharedAssetStore(ManifestSharedAssetStore):
         """Read voice profiles from configured and compatibility directories."""
         return discover_voice_clone_assets()
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> AssetListResponse:
         # The shared manifest remains authoritative, but each compatibility source
         # is isolated. The canonical clone directory is scanned independently so an
         # environment override can never hide resources/voice_clones.
@@ -153,7 +161,9 @@ class SharedAssetStore(ManifestSharedAssetStore):
             len(voice_rows),
             voice_rows[:50],
         )
-        return AssetListResponse(assets=list(assets.values()))
+        return paginate_assets(
+            assets.values(), asset_type=asset_type, modules=modules, limit=limit, cursor=cursor
+        )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         normalized_id = str(asset_id)
@@ -278,4 +288,6 @@ __all__ = [
     "AssetType",
     "SharedAssetStore",
     "default_asset_store",
+    "iter_assets",
+    "paginate_assets",
 ]

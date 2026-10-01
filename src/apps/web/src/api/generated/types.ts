@@ -540,7 +540,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Assets */
+        /**
+         * Assets
+         * @description One page of assets, newest first; follow ``next_cursor`` (WP-5.5).
+         */
         get: operations["assets_api_assets_get"];
         put?: never;
         post?: never;
@@ -9789,10 +9792,20 @@ export interface components {
             /** Path */
             path: string;
         };
-        /** AssetListResponse */
+        /**
+         * AssetListResponse
+         * @description A page of assets, newest first (WP-5.5).
+         */
         AssetListResponse: {
             /** Assets */
             assets: components["schemas"]["AssetRecord"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** AssetMigrationPreview */
         AssetMigrationPreview: {
@@ -29571,7 +29584,12 @@ export interface operations {
     };
     assets_api_assets_get: {
         parameters: {
-            query?: never;
+            query?: {
+                type?: components["schemas"]["AssetType"] | null;
+                module?: string | null;
+                limit?: number;
+                cursor?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -29585,6 +29603,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssetListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

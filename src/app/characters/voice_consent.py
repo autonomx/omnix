@@ -124,10 +124,7 @@ class VoiceProfileGovernanceService:
         store: SharedAssetStore | None = None,
     ) -> AssetRecord:
         resolved_store = store or self.asset_store_factory()
-        asset = next(
-            (item for item in resolved_store.list_assets().assets if item.id == asset_id),
-            None,
-        )
+        asset = resolved_store.get_asset(asset_id)
         if asset is None:
             raise VoiceConsentError(f"voice asset not found: {asset_id}")
         if asset.type != AssetType.VOICE_PROFILE:

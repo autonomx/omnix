@@ -80,9 +80,9 @@ class CharacterAvatarService:
         }
         if request.renderer == "sprite" and not image_asset_ids:
             raise CharacterAvatarAssetError("sprite avatar pack requires at least one image asset")
-        assets = {asset.id: asset for asset in self.asset_store_factory().list_assets().assets}
+        store = self.asset_store_factory()
         for asset_id in sorted(image_asset_ids):
-            asset = assets.get(asset_id)
+            asset = store.get_asset(asset_id)
             if asset is None:
                 raise CharacterAvatarAssetError(f"avatar image asset not found: {asset_id}")
             if asset.type != AssetType.IMAGE:
@@ -95,7 +95,7 @@ class CharacterAvatarService:
             rig_asset_id = request.rig_asset_id
             if not rig_asset_id:
                 raise CharacterAvatarAssetError("rigged avatar pack requires a rig asset")
-            rig_asset = assets.get(rig_asset_id)
+            rig_asset = store.get_asset(rig_asset_id)
             if rig_asset is None:
                 raise CharacterAvatarAssetError(f"avatar rig asset not found: {rig_asset_id}")
             allowed_rig_types = {AssetType.EXPORT, AssetType.SETTINGS_ARTIFACT}
