@@ -374,6 +374,14 @@ Find one with:
     SELECT pid, state, xact_start, query FROM pg_stat_activity
      WHERE backend_xid IS NOT NULL ORDER BY xact_start LIMIT 5;
 
+### Index migrations
+
+Some migrations build indexes with `CREATE INDEX CONCURRENTLY` (for example
+`0110_chat_message_search_index`), so chat keeps working while they run. If
+such a migration is interrupted, PostgreSQL leaves an INVALID index; drop it
+(`DROP INDEX CONCURRENTLY <name>`) and run `python -m app.persistence migrate`
+again.
+
 ### Outbox
 
 Agent, task-graph and workflow run events are also written to

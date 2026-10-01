@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 import uuid
 
 import psycopg
@@ -80,34 +79,28 @@ def test_reconnecting_with_a_cursor_resumes_without_duplicates(setup) -> None:
     with psycopg.connect(admin_database_url(), autocommit=True) as admin:
         for label in ("a", "b", "c"):
             _insert(admin, tenant, job_id, label)
-    # A transaction still open elsewhere (a parallel test) holds back
-    # delivery until it ends; wait until all three are deliverable.
-    deadline = time.monotonic() + 20
-    while True:
-        events = [event for event in reader.events_after(start) if event["job_id"] == job_id]
-        if len(events) == 3 or time.monotonic() > deadline:
-            break
-        time.sleep(0.1)
-    assert len(events) == 3
-    resume_after = event_cursor(events[0])
 
-    async def collect() -> list[str]:
+    async def collect(after: EventCursor, count: int) -> list[str]:
+        # The stream waits until the events are deliverable (a transaction
+        # still open elsewhere can hold them back), so no polling is needed.
         received: list[str] = []
-        stream = committed_event_stream(reader, resume_after)
+        stream = committed_event_stream(reader, after)
         async for chunk in stream:
             if chunk.startswith("id:") and job_id in chunk:
                 received.append(chunk)
-            if len(received) == 2:
+            if len(received) == count:
                 await stream.aclose()
                 break
         return received
 
     try:
-        received = asyncio.run(asyncio.wait_for(collect(), timeout=20))
+        first_connection = asyncio.run(asyncio.wait_for(collect(start, 3), timeout=30))
+        cursors = [chunk.splitlines()[0].removeprefix("id: ") for chunk in first_connection]
+        resumed = asyncio.run(asyncio.wait_for(collect(EventCursor.parse(cursors[0]), 2), timeout=30))
     finally:
         reader.stop()
-    assert [chunk.split("\n")[0] for chunk in received] == [f"id: {event_cursor(event)}" for event in events[1:]]
-    assert '"label": "b"' in received[0] and '"label": "c"' in received[1]
+    assert [chunk.splitlines()[0] for chunk in resumed] == [f"id: {cursor}" for cursor in cursors[1:]]
+    assert '"label": "b"' in resumed[0] and '"label": "c"' in resumed[1]
 
 
 def test_legacy_integer_cursors_restart_conservatively() -> None:

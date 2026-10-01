@@ -11,28 +11,29 @@ def test_postgres_chat_adapter_paginates_full_message_history() -> None:
     adapter = object.__new__(PostgresChatRepositoryAdapter)
     adapter.context = object()
 
-    first_page = [{"id": f"msg:{index}", "position": index} for index in range(500)]
-    second_page = [{"id": "msg:500", "position": 500}]
+    page_size = chat_compat._MESSAGE_PAGE_SIZE
+    first_page = [{"id": f"msg:{index}", "position": index} for index in range(page_size)]
+    second_page = [{"id": f"msg:{page_size}", "position": page_size}]
 
     class FakeChats:
         def list_messages(self, context, session_id, *, limit: int, after_position: int):
             assert context is adapter.context
             assert session_id == "chat:test"
-            assert limit == 500
+            assert limit == page_size
             if after_position == -1:
                 return first_page
-            if after_position == 499:
+            if after_position == page_size - 1:
                 return second_page
-            assert after_position == 500
+            assert after_position == page_size
             return []
 
     work = SimpleNamespace(chats=FakeChats())
 
     messages = adapter._list_all_messages(work, "chat:test")
 
-    assert len(messages) == 501
+    assert len(messages) == page_size + 1
     assert messages[0]["id"] == "msg:0"
-    assert messages[-1]["id"] == "msg:500"
+    assert messages[-1]["id"] == f"msg:{page_size}"
 
 
 def test_postgres_chat_adapter_lists_summaries_without_loading_messages(monkeypatch) -> None:
@@ -117,7 +118,7 @@ def test_postgres_chat_adapter_gets_only_the_requested_transcript(monkeypatch) -
         def list_messages(self, context, session_id, *, limit: int, after_position: int):
             assert context is adapter.context
             assert session_id == "chat:test"
-            assert limit == 500
+            assert limit == chat_compat._MESSAGE_PAGE_SIZE
             return [message] if after_position == -1 else []
 
     class FakeWork:

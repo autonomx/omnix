@@ -5,6 +5,7 @@ import base64
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
+from app.runtime.pagination import MAX_PAGE_SIZE
 from app.chat.retention_policy import transcript_retention_allowed
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -18,7 +19,8 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-_MESSAGE_PAGE_SIZE = 500
+# The repository's page maximum: a shorter page is the last one.
+_MESSAGE_PAGE_SIZE = MAX_PAGE_SIZE
 
 
 def _encode_session_cursor(record: dict[str, Any]) -> str:

@@ -543,21 +543,21 @@ class PostgresConversationSummaryRepository:
     def latest(self, session_id: str) -> ConversationSummary | None:
         records = [
             ConversationSummary.model_validate(payload)
-            for _, payload, _ in self.documents.list(
-                module="chat", record_type="conversation-summary", limit=5000
+            for _, payload, _ in self.documents.list_for_session(
+                module="chat", record_type="conversation-summary", session_id=session_id
             )
-            if isinstance(payload, dict) and payload.get("session_id") == session_id
+            if isinstance(payload, dict)
         ]
         records.sort(key=lambda item: (item.revision, item.created_at, item.id), reverse=True)
         return records[0] if records else None
 
     def _by_through(self, session_id: str, through_message_id: str) -> ConversationSummary | None:
-        for _, payload, _ in self.documents.list(
-            module="chat", record_type="conversation-summary", limit=5000
+        for _, payload, _ in self.documents.list_for_session(
+            module="chat", record_type="conversation-summary", session_id=session_id
         ):
             if not isinstance(payload, dict):
                 continue
-            if payload.get("session_id") == session_id and payload.get("through_message_id") == through_message_id:
+            if payload.get("through_message_id") == through_message_id:
                 return ConversationSummary.model_validate(payload)
         return None
 
@@ -592,7 +592,9 @@ class PostgresHistorySearchService:
         limit: int = 6,
     ) -> HistorySearchResult:
         terms = list(dict.fromkeys(term.casefold() for term in _TERM_PATTERN.findall(query)))[:12]
-        status = self.ensure_index()
+        # No per-search COUNT(*) of the workspace (WP-5.7); ensure_index()
+        # still reports the count when asked for status.
+        status = HistorySearchStatus(available=True, reason="postgresql_full_text")
         if not terms or workspace_id != self.context.workspace_id:
             return HistorySearchResult(items=[], query_terms=terms, status=status)
         clauses = [
@@ -605,11 +607,10 @@ class PostgresHistorySearchService:
         if exclude_session_id:
             clauses.append("message.session_id <> %s")
             params.append(exclude_session_id)
-        term_clauses: list[str] = []
-        for term in terms:
-            term_clauses.append("message.content ILIKE %s")
-            params.append(f"%{term}%")
-        clauses.append("(" + " OR ".join(term_clauses) + ")")
+        # Word-prefix match on the full-text index (migration 0110). Terms are
+        # [A-Za-z0-9_] only, so they cannot carry tsquery operators.
+        clauses.append("to_tsvector('simple', message.content) @@ to_tsquery('simple', %s)")
+        params.append(" | ".join(f"{term}:*" for term in terms))
         params.append(max(0, min(int(limit), 50)))
         with self.database.connection() as connection:
             rows = connection.execute(

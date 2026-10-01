@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.persistence.errors import EntityNotFound, RevisionConflict
+from app.runtime.pagination import page_limit
 from app.persistence.tenant import TenantContext
 
 
@@ -233,7 +234,7 @@ class PostgresChatRepository:
                 context.workspace_id,
                 session_id,
                 int(after_position),
-                max(1, min(int(limit), 100)),
+                page_limit(limit, default=100),
             ),
         ).fetchall()
         return [

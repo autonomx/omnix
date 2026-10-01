@@ -33,7 +33,7 @@ MAX_APPLIED_MIGRATIONS = 100_000
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0109_job_event_commit_order"
+SCHEMA_KNOWN = "0111_conversation_summary_session_index"
 APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
 APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
@@ -370,6 +370,10 @@ def apply_migrations(
                         raise MigrationError(
                             f"non-transactional migration {migration.version} must contain one statement"
                         )
+                    # End the read transaction left by _applied(); the
+                    # session advisory lock is kept. CREATE INDEX CONCURRENTLY
+                    # cannot run inside a transaction block.
+                    connection.commit()
                     previous = connection.autocommit
                     connection.autocommit = True
                     try:

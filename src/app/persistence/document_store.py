@@ -123,6 +123,34 @@ class PostgresDocumentStore:
             for row in rows
         ]
 
+    def list_for_session(
+        self,
+        *,
+        module: str,
+        record_type: str,
+        session_id: str,
+        limit: int = 1000,
+    ) -> list[tuple[str, Any, int]]:
+        """Records whose payload ``session_id`` matches, newest first (WP-5.7).
+
+        Chat conversation summaries have a partial index on this lookup
+        (migration 0111); other record types fall back to the module index.
+        """
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT record_id, payload, revision
+                  FROM omnix_module_records
+                 WHERE workspace_id = %s AND module = %s AND record_type = %s
+                   AND payload->>'session_id' = %s
+                   AND status = 'active'
+                   AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+                 ORDER BY updated_at DESC, record_id ASC LIMIT %s
+                """,
+                (self.context.workspace_id, module, record_type, session_id, max(1, min(int(limit), 5000))),
+            ).fetchall()
+        return [(str(row[0]), row[1], int(row[2])) for row in rows]
+
     def delete(
         self,
         *,
