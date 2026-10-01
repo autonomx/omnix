@@ -6,6 +6,7 @@ from typing import Any
 
 from app.memory_contracts import MemoryCandidate, MemoryRecord
 from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
+from app.runtime.pagination import bounded_count
 
 from .owner_memory_rows import OwnerMemoryRowSupport
 
@@ -83,6 +84,7 @@ class OwnerMemoryCandidateMixin(OwnerMemoryRowSupport):
         owner_id: str | None = None,
         status: str = "pending",
         limit: int = 100,
+        offset: int = 0,
     ) -> list[MemoryCandidate]:
         clauses = ["workspace_id = %s", "status = %s"]
         parameters: list[Any] = [self.workspace_id, status]
@@ -92,13 +94,13 @@ class OwnerMemoryCandidateMixin(OwnerMemoryRowSupport):
         if owner_id is not None:
             clauses.append("proposed_owner_id = %s")
             parameters.append(owner_id)
-        parameters.append(max(0, min(int(limit), 500)))
+        parameters.extend([bounded_count(limit), max(0, int(offset))])
         with self.database.connection() as connection:
             rows = connection.execute(
                 self.candidate_select()
                 + " WHERE "
                 + " AND ".join(clauses)
-                + " ORDER BY created_at ASC, id ASC LIMIT %s",
+                + " ORDER BY created_at ASC, id ASC LIMIT %s OFFSET %s",
                 tuple(parameters),
             ).fetchall()
         return [self.candidate_from_row(row) for row in rows]

@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.runtime.pagination import MAX_PAGE_SIZE
+
 from .models import CharacterProfile, CharacterProfileVersion
 from .service import CharacterService
 
@@ -13,6 +15,15 @@ from .service import CharacterService
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+
+
+def _all_pages(list_page: Any, **filters: Any) -> list[Any]:
+    items: list[Any] = []
+    while True:
+        page = list_page(limit=MAX_PAGE_SIZE, offset=len(items), **filters)
+        items.extend(page)
+        if len(page) < MAX_PAGE_SIZE:
+            return items
 
 class CharacterSessionSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -87,20 +98,21 @@ class CharacterManagementService:
 
     def export(self, character_id: str) -> CharacterDataExport:
         profile = self.character_service.get(character_id, include_archived=True)
-        records = self.memory_repository.list_records(
+        # Every memory and candidate of the character, page by page (WP-5.5).
+        records = _all_pages(
+            self.memory_repository.list_records,
             owner_type="character",
             owner_id=character_id,
             status=None,
-            limit=500,
         )
         candidates = []
         for status in ("pending", "accepted", "rejected"):
             candidates.extend(
-                self.memory_repository.list_candidates(
+                _all_pages(
+                    self.memory_repository.list_candidates,
                     owner_type="character",
                     owner_id=character_id,
                     status=status,
-                    limit=500,
                 )
             )
         sessions = self._session_summaries(character_id)

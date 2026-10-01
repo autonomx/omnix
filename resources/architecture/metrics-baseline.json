@@ -14362,7 +14362,7 @@
     "capped_500_queries": {
       "direction": "lower",
       "target": 0,
-      "value": 32
+      "value": 11
     },
     "collection_errors": {
       "direction": "lower",

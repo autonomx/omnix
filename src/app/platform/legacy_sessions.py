@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.document_store import PostgresDocumentStore
 from app.providers.service import get_global_system_prompt
+from app.runtime.pagination import MAX_PAGE_SIZE
 
 _MODULE = "platform"
 _RECORD_TYPE = "legacy-session"
@@ -61,7 +62,7 @@ def _store() -> PostgresDocumentStore:
 def list_legacy_sessions() -> LegacySessionListResponse:
     items: list[LegacySessionListItem] = []
     for session_id, payload, _revision in _store().list(
-        module=_MODULE, record_type=_RECORD_TYPE, limit=500
+        module=_MODULE, record_type=_RECORD_TYPE, limit=MAX_PAGE_SIZE
     ):
         if not isinstance(payload, dict):
             continue

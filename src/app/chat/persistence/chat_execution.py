@@ -8,6 +8,7 @@ from app.persistence.errors import EntityNotFound
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
+from app.runtime.pagination import MAX_PAGE_SIZE
 
 
 class ChatExecutionTransactions:
@@ -71,7 +72,7 @@ class ChatExecutionTransactions:
                 job_type="chat.generate",
                 input_fields=(("session_id", session_id),),
                 statuses=("queued", "leased", "running", "waiting", "retrying"),
-                limit=500,
+                limit=MAX_PAGE_SIZE,
             )
             work.rollback()
         return [self._record(record) for record in records]

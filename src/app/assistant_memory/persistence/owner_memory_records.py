@@ -5,6 +5,7 @@ from typing import Any
 
 from app.memory_contracts import MemoryRecord
 from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundError
+from app.runtime.pagination import bounded_count
 
 from .owner_memory_rows import OwnerMemoryRowSupport
 
@@ -93,7 +94,7 @@ class OwnerMemoryRecordMixin(OwnerMemoryRowSupport):
             if value is not None:
                 clauses.append(f"{column} = %s")
                 parameters.append(value)
-        parameters.extend([max(0, min(int(limit), 500)), max(0, int(offset))])
+        parameters.extend([bounded_count(limit), max(0, int(offset))])
         with self.database.connection() as connection:
             rows = connection.execute(
                 self.record_select()

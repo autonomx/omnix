@@ -450,8 +450,9 @@ class PostgresDevicePermitService:
                         WHERE device_id = %s AND model_class = %s
                           AND lease_expires_at > clock_timestamp()
                         ORDER BY acquired_at, permit_id
-                        LIMIT 500""",
-                    (device_id, model_class),
+                        LIMIT %s""",
+                    # Every holder holds at least one unit.
+                    (device_id, model_class, max(1, int(capacity))),
                 ).fetchall()
                 waiting = connection.execute(
                     """SELECT priority, count(*)

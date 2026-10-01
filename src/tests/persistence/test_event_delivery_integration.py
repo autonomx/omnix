@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 import uuid
 
 import psycopg
@@ -79,7 +80,15 @@ def test_reconnecting_with_a_cursor_resumes_without_duplicates(setup) -> None:
     with psycopg.connect(admin_database_url(), autocommit=True) as admin:
         for label in ("a", "b", "c"):
             _insert(admin, tenant, job_id, label)
-    events = [event for event in reader.events_after(start) if event["job_id"] == job_id]
+    # A transaction still open elsewhere (a parallel test) holds back
+    # delivery until it ends; wait until all three are deliverable.
+    deadline = time.monotonic() + 20
+    while True:
+        events = [event for event in reader.events_after(start) if event["job_id"] == job_id]
+        if len(events) == 3 or time.monotonic() > deadline:
+            break
+        time.sleep(0.1)
+    assert len(events) == 3
     resume_after = event_cursor(events[0])
 
     async def collect() -> list[str]:

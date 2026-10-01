@@ -83,10 +83,7 @@ def _load_single_session(store: Any, session_id: str) -> ChatSession | None:
         if record is None:
             work.rollback()
             return None
-        loader = getattr(adapter, '_list_all_messages', None)
-        messages = loader(work, session_id) if callable(loader) else work.chats.list_messages(
-            adapter.context, session_id, limit=500, after_position=-1,
-        )
+        messages = adapter._list_all_messages(work, session_id)
         session = adapter._to_session(record, messages)
         work.rollback()
     return session

@@ -19,6 +19,7 @@ from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
+from app.runtime.pagination import MAX_PAGE_SIZE
 from app.characters.persistence.repository_specs import CHARACTER_REPOSITORY_SPECS
 
 # Segments of one session returned by a read; the newest are kept.
@@ -61,14 +62,22 @@ class PostgresCharacterRepositoryAdapter:
         return self._profile(record) if record is not None else None
 
     def list(self, *, include_archived: bool = False) -> list[CharacterProfile]:
-        with unit_of_work(self.database) as work:
-            records = work.characters.list_characters(
-                self.context,
-                include_archived=include_archived,
-                limit=500,
-            )
-            work.rollback()
-        return [self._profile(record) for record in records]
+        """Every character, by name, read one page at a time (WP-5.5)."""
+        records: list[dict[str, Any]] = []
+        after_id: str | None = None
+        while True:
+            with unit_of_work(self.database) as work:
+                page = work.characters.list_characters(
+                    self.context,
+                    include_archived=include_archived,
+                    limit=MAX_PAGE_SIZE,
+                    after_id=after_id,
+                )
+                work.rollback()
+            records.extend(page)
+            if len(page) < MAX_PAGE_SIZE:
+                return [self._profile(record) for record in records]
+            after_id = str(page[-1]["id"])
 
     def update(self, character_id: str, request: UpdateCharacterRequest) -> CharacterProfile:
         current = self.get(character_id)

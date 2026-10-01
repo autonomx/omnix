@@ -25,6 +25,11 @@ def page_limit(limit: int | None, *, default: int = DEFAULT_PAGE_SIZE, maximum: 
     return max(1, min(int(limit), maximum))
 
 
+def bounded_count(limit: int, *, maximum: int = MAX_PAGE_SIZE) -> int:
+    """A row count between 0 and ``maximum`` (``limit=0`` asks for none)."""
+    return max(0, min(int(limit), maximum))
+
+
 def encode_cursor(*key: str | int) -> str:
     payload = json.dumps(list(key), separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
@@ -44,4 +49,12 @@ def decode_cursor(cursor: str | None, *, arity: int) -> tuple[Any, ...] | None:
     return tuple(key)
 
 
-__all__ = ["DEFAULT_PAGE_SIZE", "MAX_PAGE_SIZE", "InvalidCursor", "decode_cursor", "encode_cursor", "page_limit"]
+__all__ = [
+    "DEFAULT_PAGE_SIZE",
+    "MAX_PAGE_SIZE",
+    "InvalidCursor",
+    "bounded_count",
+    "decode_cursor",
+    "encode_cursor",
+    "page_limit",
+]

@@ -22,6 +22,7 @@ from app.jobs.executor import JobHandler
 from app.jobs.models import CreateJobRequest, JobRecord, JobStage, ResourceClass
 from app.providers.facade import default_provider_facade
 from app.runtime.paths import resources_models_root
+from app.runtime.pagination import page_limit
 
 CacheStatus = Literal["available", "configured", "missing_path", "not_configured", "unreachable"]
 RefreshScope = Literal["providers", "models", "all"]
@@ -134,7 +135,7 @@ class InMemoryProviderModelRefreshStore:
                 reverse=True,
             )
             _REFRESH_HISTORY.move_to_end(self._key)
-            return deepcopy(values[: max(1, min(int(limit), 500))])
+            return deepcopy(values[: page_limit(limit, default=20)])
 
     def history(self, *, limit: int = 20) -> ProviderModelRefreshHistory:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))

@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.memory_contracts import MemorySnapshot
+from app.runtime.pagination import bounded_count
 
 from .owner_memory_rows import OwnerMemoryRowSupport
 
@@ -116,7 +117,7 @@ class OwnerMemorySnapshotMixin(OwnerMemoryRowSupport):
             if value is not None:
                 clauses.append(f"{column} = %s")
                 parameters.append(value)
-        parameters.append(max(0, min(int(limit), 500)))
+        parameters.append(bounded_count(limit))
         values: list[MemorySnapshot] = []
         with self.database.connection() as connection:
             rows = connection.execute(

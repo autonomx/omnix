@@ -11,6 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.runtime.pagination import bounded_count
 from .repository import InMemoryMemoryRepository
 
 
@@ -45,7 +46,7 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             and (owner_id is None or record.owner_id == owner_id)
         ]
         start = max(0, int(offset))
-        return deepcopy(values[start : start + max(0, min(int(limit), 500))])
+        return deepcopy(values[start : start + bounded_count(limit)])
 
     def create_candidate(self, candidate: MemoryCandidate) -> MemoryCandidate:
         return super().create_candidate(candidate)
@@ -57,6 +58,7 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
         owner_id: str | None = None,
         status: str = "pending",
         limit: int = 100,
+        offset: int = 0,
     ) -> list[MemoryCandidate]:
         values = super().list_candidates(status=status, limit=10_000)
         values = [
@@ -65,7 +67,8 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             if (owner_type is None or candidate.owner_type == owner_type)
             and (owner_id is None or candidate.owner_id == owner_id)
         ]
-        return deepcopy(values[: max(0, min(int(limit), 500))])
+        start = max(0, int(offset))
+        return deepcopy(values[start : start + bounded_count(limit)])
 
     def latest_snapshot(
         self,

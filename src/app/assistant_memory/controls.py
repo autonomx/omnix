@@ -10,6 +10,7 @@ from app.conversation.contracts import TranscriptReader
 
 from .companion_context import invalidate_companion_context
 from app.memory_contracts import MemoryCandidate, MemoryRecord, MemoryRecordStatus, MemoryScopeContext
+from .paging import iter_candidates, iter_records
 from .policy import is_visible_in_scope
 from .service import MemoryPolicyError, MemoryService
 from .temporal_retrieval import invalidate_temporal_retrieval
@@ -64,13 +65,13 @@ def _visible_records(
         }[scope]
         if scope_id is None:
             continue
-        records = service.repository.list_records(
+        records = iter_records(
+            service.repository,
             owner_type=context.owner_type,
             owner_id=context.owner_id,
             scope=scope,
             scope_id=scope_id,
             status=status,
-            limit=500,
         )
         for record in records:
             if record.id not in seen and is_visible_in_scope(record, context):
@@ -165,11 +166,11 @@ def export_owner_memory(service: MemoryService, context: MemoryScopeContext) -> 
     candidates: list[MemoryCandidate] = []
     for status in ("pending", "accepted", "rejected"):
         candidates.extend(
-            service.repository.list_candidates(
+            iter_candidates(
+                service.repository,
                 owner_type=context.owner_type,
                 owner_id=context.owner_id,
                 status=status,
-                limit=500,
             )
         )
     candidates.sort(key=lambda item: (item.status, item.created_at, item.id))

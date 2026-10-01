@@ -14,6 +14,7 @@ from app.providers.cache_status import (
     _utcnow,
 )
 from app.persistence.document_store import PostgresDocumentStore
+from app.runtime.pagination import page_limit
 
 
 class PostgresProviderModelRefreshStore:
@@ -71,12 +72,12 @@ class PostgresProviderModelRefreshStore:
             for _, payload, _ in self.documents.list(
                 module="providers",
                 record_type="model-refresh-snapshot",
-                limit=max(1, min(int(limit), 500)),
+                limit=page_limit(limit, default=20),
             )
             if isinstance(payload, dict)
         ]
         values.sort(key=lambda item: (item.created_at, item.id), reverse=True)
-        return values[: max(1, min(int(limit), 500))]
+        return values[: page_limit(limit, default=20)]
 
     def history(self, *, limit: int = 20) -> ProviderModelRefreshHistory:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))

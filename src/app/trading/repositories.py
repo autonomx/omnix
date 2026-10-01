@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from app.persistence.errors import RevisionConflict
 from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
+from app.runtime.pagination import MAX_PAGE_SIZE
 
 
 TRADING_MODULE = "trading"
@@ -71,6 +72,24 @@ class TradingDocumentRepository:
                 record_type=clean_type,
                 limit=limit,
             )
+
+    def iter(self, record_type: str) -> Iterator[dict[str, Any]]:
+        """Every record of ``record_type``, one page at a time (WP-5.5)."""
+        clean_type = self._require_type(record_type)
+        after: tuple[str, str] | None = None
+        while True:
+            with self.uow_factory() as uow:
+                page = uow.module_records.list(
+                    self.context,
+                    module=TRADING_MODULE,
+                    record_type=clean_type,
+                    limit=MAX_PAGE_SIZE,
+                    after=after,
+                )
+            yield from page
+            if len(page) < MAX_PAGE_SIZE:
+                return
+            after = (page[-1]["updated_at"], page[-1]["record_id"])
 
     def create(self, record_type: str, record_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         clean_type = self._require_type(record_type)

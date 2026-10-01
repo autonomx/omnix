@@ -4,6 +4,9 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.5 | The 11 RPG list sites capped at 500 stay until RPG is removed; capped_500_queries is ratcheted at 11 and reaches 0 with the removal. | RPG is being retired; building cursor pagination into it would be discarded work. |
+| 2026-10-01 | WP-5.5 | Memory list routes accept `limit` up to 200 (was 500) and keep offset paging; internal readers that need every row walk pages. | Matches the 200 page maximum; offset paging already existed for these lists and their order is stable. |
+| 2026-10-01 | WP-5.5 | The legacy `/api/sessions` list shows the newest 200 legacy sessions. | It is a compatibility view retired with the legacy UI; full history stays in the document store. |
 | 2026-10-01 | WP-5.5 | `/api/jobs` rejects `limit` above 200 (was 500). | The roadmap sets a 200 maximum per page; every in-repository client asks for 100 or fewer, and larger sets are read with `next_cursor`. |
 | 2026-10-01 | WP-5.5 | Reads that must see every row (backup capture and verification) page by keyset in batches of 1,000; reads of naturally small sets (applied migrations, required constraints, runtime nodes, import counts) get explicit limits far above their size. | A cap on a backup manifest would silently drop assets; a keyset loop keeps each query bounded without losing rows. |
 | 2026-10-01 | WP-5.5 | Per-job events and per-session segments return the newest 1,000, oldest first. | These reads are diagnostic views; the newest entries are the ones a caller acts on, and the full event stream stays available through `/events`. |

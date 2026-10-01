@@ -185,6 +185,9 @@ def test_provider_status_rehydrates_symbols_saved_in_workspace() -> None:
     persisted = "equity:NASDAQ:RESTARTCAP"
 
     class PersistedRepository:
+        def iter(self, record_type: str):
+            return iter(self.list(record_type, limit=10_000))
+
         def list(self, record_type: str, *, limit: int = 100) -> list[dict[str, object]]:
             if record_type != "workspace":
                 return []

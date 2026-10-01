@@ -5,6 +5,8 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.runtime.pagination import MAX_PAGE_SIZE
+
 from app.conversation.contracts import TranscriptReader
 
 from .controls import (
@@ -29,12 +31,15 @@ from .management import (
     RevisionedMemoryRequest,
     UpdateManagedMemoryRequest,
     candidates_for_session,
+    is_candidate_visible,
     records_for_session,
     require_memory_write,
     resolve_session_scope,
+    session_record,
 )
 from app.memory_contracts import MemoryCandidate, MemoryCategory, MemoryRecord, MemoryScope
 from .observability import MemoryUsageResponse, memory_usage_snapshot
+from .paging import iter_records
 from .repository import MemoryConflictError, MemoryNotFoundError
 from .service import MemoryPolicyError, MemoryService, default_memory_service
 
@@ -89,7 +94,7 @@ def register_memory_management_routes(
             category: MemoryCategory | None = None,
             pinned_only: bool = False,
             query: str | None = None,
-            limit: int = Query(default=100, ge=0, le=500),
+            limit: int = Query(default=100, ge=0, le=MAX_PAGE_SIZE),
             offset: int = Query(default=0, ge=0),
         ) -> MemoryListResponse:
             result = records_for_session(
@@ -146,13 +151,13 @@ def register_memory_management_routes(
                 if scope_id is None:
                     continue
                 records.extend(
-                    service.repository.list_records(
+                    iter_records(
+                        service.repository,
                         owner_type=context.owner_type,
                         owner_id=context.owner_id,
                         scope=scope,
                         scope_id=scope_id,
                         status="archived",
-                        limit=500,
                     )
                 )
             records.sort(key=lambda item: (item.scope, item.category, item.id))
@@ -216,7 +221,7 @@ def register_memory_management_routes(
         )
         async def assistant_memory_candidates_endpoint(
             session_id: str,
-            limit: int = Query(default=100, ge=0, le=500),
+            limit: int = Query(default=100, ge=0, le=MAX_PAGE_SIZE),
         ) -> MemoryCandidateListResponse:
             result = candidates_for_session(
                 chat_store_factory(),
@@ -234,15 +239,14 @@ def register_memory_management_routes(
             name="assistant_memory_read_endpoint",
         )
         async def assistant_memory_read_endpoint(memory_id: str, session_id: str) -> MemoryRecord:
-            result = records_for_session(
+            session_found, record = session_record(
                 chat_store_factory(),
                 memory_service_factory(),
                 session_id,
-                limit=500,
+                memory_id,
             )
-            if result is None:
+            if not session_found:
                 raise _not_found("chat session not found")
-            record = next((item for item in result.records if item.id == memory_id), None)
             if record is None:
                 raise _not_found("memory record not found")
             return record
@@ -447,13 +451,7 @@ def register_memory_management_routes(
                 raise _not_found("memory candidate not found")
             if (candidate.owner_type, candidate.owner_id) != (context.owner_type, context.owner_id):
                 raise HTTPException(status_code=403, detail={"code": "candidate_scope_mismatch"})
-            visible = candidates_for_session(
-                chat_store_factory(),
-                memory_service_factory(),
-                request.session_id,
-                limit=500,
-            )
-            if visible is None or not any(item.id == candidate_id for item in visible.candidates):
+            if not is_candidate_visible(candidate, context):
                 raise HTTPException(status_code=403, detail={"code": "candidate_scope_mismatch"})
             try:
                 return memory_service_factory().reject_candidate(candidate_id)

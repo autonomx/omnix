@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from app.runtime.pagination import page_limit
+
 from .errors import RevisionConflict
 from .tenant import TenantContext
 
@@ -117,7 +119,9 @@ class PostgresModuleRecordRepository:
         record_type: str,
         status: str = "active",
         limit: int = 100,
+        after: tuple[str, str] | None = None,
     ) -> list[dict[str, Any]]:
+        """Most recently updated first; ``after`` is the last ``(updated_at, record_id)`` seen."""
         rows = self.connection.execute(
             """
             SELECT module, record_type, record_id, owner_user_id, payload,
@@ -125,6 +129,9 @@ class PostgresModuleRecordRepository:
               FROM omnix_module_records
              WHERE workspace_id = %s AND module = %s AND record_type = %s
                AND status = %s AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+               AND (%s::timestamptz IS NULL
+                    OR updated_at < %s::timestamptz
+                    OR (updated_at = %s::timestamptz AND record_id > %s))
              ORDER BY updated_at DESC, record_id LIMIT %s
             """,
             (
@@ -132,7 +139,11 @@ class PostgresModuleRecordRepository:
                 module,
                 record_type,
                 status,
-                max(1, min(int(limit), 500)),
+                after[0] if after else None,
+                after[0] if after else None,
+                after[0] if after else None,
+                after[1] if after else None,
+                page_limit(limit, default=100),
             ),
         ).fetchall()
         return [self._record(row) for row in rows]

@@ -166,7 +166,7 @@ def _rehydrate_persisted_bindings(
     instrument_ids: set[str] = set()
     for record_type in ("workspace", "watchlist", "drawing", "indicator_preset"):
         try:
-            records = repository_factory().list(record_type, limit=500)
+            records = list(repository_factory().iter(record_type))
         except Exception:
             # Provider status should remain available when persistence is
             # temporarily unavailable; chart requests can still rehydrate on use.

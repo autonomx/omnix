@@ -17,6 +17,7 @@ from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
+from app.runtime.pagination import bounded_count
 from app.assistant_memory.persistence.repository_specs import (
     ASSISTANT_MEMORY_REPOSITORY_SPECS,
 )
@@ -50,43 +51,35 @@ class PostgresMemoryRepositoryAdapter:
         limit: int = 100,
         offset: int = 0,
     ) -> list[MemoryRecord]:
-        if scope is None or scope_id is None:
-            with self.database.connection() as connection:
-                clauses = ["workspace_id = %s"]
-                parameters: list[Any] = [self.context.workspace_id]
-                if scope is not None:
-                    clauses.append("owner_type = %s")
-                    parameters.append(scope)
-                if scope_id is not None:
-                    clauses.append("owner_id = %s")
-                    parameters.append(scope_id)
-                if status is not None:
-                    clauses.append("status = %s")
-                    parameters.append(status)
-                parameters.extend([max(0, min(int(limit), 500)), max(0, int(offset))])
-                rows = connection.execute(
-                    """
-                    SELECT id, workspace_id, owner_type, owner_id, category, content,
-                           normalized_content, confidence, pinned, trust_level,
-                           sensitivity, provenance_type, provenance_id, source,
-                           status, revision, created_at, updated_at, expires_at
-                      FROM omnix_memory_records WHERE
-                    """
-                    + " AND ".join(clauses)
-                    + " ORDER BY pinned DESC, updated_at DESC, id ASC LIMIT %s OFFSET %s",
-                    tuple(parameters),
-                ).fetchall()
-            return [self._record_from_row(row) for row in rows]
-        with unit_of_work(self.database) as work:
-            records = work.memories.list_records(
-                self.context,
-                owner_type=scope,
-                owner_id=scope_id,
-                status=status or "active",
-                limit=max(1, min(int(limit) + max(0, int(offset)), 500)),
-            )
-            work.rollback()
-        return [self._record(item) for item in records[max(0, int(offset)) :]]
+        if scope is not None and scope_id is not None and status is None:
+            status = "active"
+        # One SQL path for every filter, paged by LIMIT/OFFSET (WP-5.5).
+        with self.database.connection() as connection:
+            clauses = ["workspace_id = %s"]
+            parameters: list[Any] = [self.context.workspace_id]
+            if scope is not None:
+                clauses.append("owner_type = %s")
+                parameters.append(scope)
+            if scope_id is not None:
+                clauses.append("owner_id = %s")
+                parameters.append(scope_id)
+            if status is not None:
+                clauses.append("status = %s")
+                parameters.append(status)
+            parameters.extend([bounded_count(limit), max(0, int(offset))])
+            rows = connection.execute(
+                """
+                SELECT id, workspace_id, owner_type, owner_id, category, content,
+                       normalized_content, confidence, pinned, trust_level,
+                       sensitivity, provenance_type, provenance_id, source,
+                       status, revision, created_at, updated_at, expires_at
+                  FROM omnix_memory_records WHERE
+                """
+                + " AND ".join(clauses)
+                + " ORDER BY pinned DESC, updated_at DESC, id ASC LIMIT %s OFFSET %s",
+                tuple(parameters),
+            ).fetchall()
+        return [self._record_from_row(row) for row in rows]
 
     def update_record(self, record: MemoryRecord, *, expected_revision: int) -> MemoryRecord:
         try:
@@ -170,13 +163,13 @@ class PostgresMemoryRepositoryAdapter:
             ).fetchone()
         return self._candidate_from_row(row) if row is not None else None
 
-    def list_candidates(self, *, status: str = "pending", limit: int = 100) -> list[MemoryCandidate]:
+    def list_candidates(self, *, status: str = "pending", limit: int = 100, offset: int = 0) -> list[MemoryCandidate]:
         with self.database.connection() as connection:
             rows = connection.execute(
                 self._candidate_select()
                 + " WHERE workspace_id = %s AND status = %s "
-                "ORDER BY created_at ASC, id ASC LIMIT %s",
-                (self.context.workspace_id, status, max(0, min(int(limit), 500))),
+                "ORDER BY created_at ASC, id ASC LIMIT %s OFFSET %s",
+                (self.context.workspace_id, status, bounded_count(limit), max(0, int(offset))),
             ).fetchall()
         return [self._candidate_from_row(row) for row in rows]
 
@@ -350,7 +343,7 @@ class PostgresMemoryRepositoryAdapter:
         if status is not None:
             clauses.append("status = %s")
             parameters.append(status)
-        parameters.append(max(0, min(int(limit), 500)))
+        parameters.append(bounded_count(limit))
         with self.database.connection() as connection:
             rows = connection.execute(
                 """

@@ -49256,7 +49256,7 @@
             "required": false,
             "schema": {
               "default": 100,
-              "maximum": 500,
+              "maximum": 200,
               "minimum": 0,
               "title": "Limit",
               "type": "integer"
@@ -49393,7 +49393,7 @@
             "required": false,
             "schema": {
               "default": 100,
-              "maximum": 500,
+              "maximum": 200,
               "minimum": 0,
               "title": "Limit",
               "type": "integer"

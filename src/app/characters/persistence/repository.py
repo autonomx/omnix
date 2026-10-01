@@ -5,6 +5,7 @@ from typing import Any
 
 from app.persistence.errors import EntityNotFound, RevisionConflict
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import page_limit
 
 
 def _json(value: Any) -> str:
@@ -93,13 +94,28 @@ class PostgresCharacterRepository:
         *,
         include_archived: bool = False,
         limit: int = 100,
+        after_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """By display name; ``after_id`` is the last character seen (WP-5.5).
+
+        The database computes the sort key of ``after_id``, so paging uses the
+        same collation as the ordering.
+        """
         status_clause = "" if include_archived else " AND status = 'active'"
         rows = self.connection.execute(
             f"SELECT {_CHARACTER_COLUMNS} FROM omnix_characters "
             f"WHERE workspace_id = %s{status_clause} "
+            "AND (%s::text IS NULL OR (lower(profile->>'display_name'), id) > ("
+            "SELECT lower(last.profile->>'display_name'), last.id FROM omnix_characters AS last "
+            "WHERE last.workspace_id = %s AND last.id = %s)) "
             "ORDER BY lower(profile->>'display_name'), id LIMIT %s",
-            (context.workspace_id, max(1, min(int(limit), 100))),
+            (
+                context.workspace_id,
+                after_id,
+                context.workspace_id,
+                after_id,
+                page_limit(limit, default=100),
+            ),
         ).fetchall()
         return [_character(row) for row in rows]
 

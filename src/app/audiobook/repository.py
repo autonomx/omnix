@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.persistence.tenant import TenantContext
+from app.runtime.pagination import page_limit
 
 from .annotation import narrator_id
 from .hashing import canonical_json
@@ -113,7 +114,7 @@ class PostgresAudiobookRepository:
              FROM omnix_audiobook_projects
              WHERE workspace_id = %s AND deleted_at IS NULL
              ORDER BY updated_at DESC, id LIMIT %s OFFSET %s
-            """, (context.workspace_id, max(1, min(limit, 500)), max(0, offset)),
+            """, (context.workspace_id, page_limit(limit, default=100), max(0, offset)),
         ).fetchall()
         return [self._project(row) for row in rows]
 
