@@ -168,15 +168,17 @@ def create_production_app(config: RuntimeConfig | None = None):
     dispatcher = _ChatGenerationDispatcher()
     if config.gateway_role is not GatewayRole.JOB_WORKER:
         capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
+    # No pinned context: request-serving stores follow the request's tenant
+    # (WP-4.2); background threads resolve the process tenant as before.
     jobs = production_job_store(
         database=database,
-        context=tenant_context,
+        context=None,
         chat_execution_owner=owner,
         chat_dispatcher=dispatcher,
     )
     from app.agent_runtime.service import AgentRunService
 
-    agent_runs = AgentRunService(database, context=tenant_context, job_store=jobs)
+    agent_runs = AgentRunService(database, job_store=jobs)
     from app.chat.live_agent_store import default_live_agent_planner
 
     services = GatewayRuntimeServices(

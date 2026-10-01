@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { VoiceWorkspace } from './VoiceWorkspace';
@@ -35,6 +35,13 @@ function requestPath(input: RequestInfo | URL): string {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+// Mantine transitions schedule state updates on timers. Let the last ones
+// run while jsdom still exists; otherwise they can fire after teardown
+// ("window is not defined") and fail an otherwise green run.
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 400));
 });
 
 describe('VoiceWorkspace', () => {

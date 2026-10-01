@@ -8,7 +8,7 @@ from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.chat.retention_policy import transcript_retention_allowed
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.chat.persistence.repository_specs import CHAT_REPOSITORY_SPECS
@@ -49,11 +49,12 @@ class PostgresChatRepositoryAdapter:
     sole authority. Message history is append-only; an attempted transcript
     rewrite is rejected rather than implemented as delete/reinsert persistence.
     """
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         install_repository_specs(CHAT_REPOSITORY_SPECS)
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def list_session_summaries(
         self, *, limit: int = 100, cursor: str | None = None

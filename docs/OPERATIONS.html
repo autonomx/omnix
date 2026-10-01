@@ -564,6 +564,14 @@ npm run web:build</code></pre></div>
 </ul>
 <p>New users are added to <code>OMNIX_OIDC_WORKSPACE_ID</code> with <code>OMNIX_OIDC_DEFAULT_ROLE</code>, which is <code>member</code> or <code>viewer</code>. Grant higher roles explicitly. Accounts are matched by issuer and subject, never by email.</p>
 <p>Every successful sign-in, failed attempt, sign-out and credential rotation is written to <code>omnix_audit_events</code>.</p>
+<h3 id="workspaces">Workspaces</h3>
+<p>Each request runs in one workspace:</p>
+<ul>
+<li><strong>Signed in:</strong> the user&#x27;s default workspace, or the one named in the</li>
+<p><code>X-Omnix-Workspace</code> header if the user is an active member of it. A workspace the user does not belong to gets 403 <code>workspace_access_denied</code>.</p>
+<li><strong>Sign-in off:</strong> the local workspace.</li>
+</ul>
+<p>Job workers run jobs from every active workspace, each in its own workspace.</p>
 <p>The launcher control app (port 5055) does not ask you to sign in. It is an operator surface and refuses every non-loopback client.</p>
 <h2 id="agent-request-ceilings">Agent request ceilings</h2>
 <p>Public agent-run requests may tighten the selected profile&#x27;s approval policy; <code>allow_automatic</code> is rejected when the profile default is <code>ask_sensitive</code>. Allowed file patterns must remain within the profile ceiling, and isolation cannot be lowered. Reviewer requests use immutable review snapshots.</p>

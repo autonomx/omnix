@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 
-from app.security.tenant_context import TenantContext, current_tenant
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .bounce_training import BounceModelArtifact
 
 
 class TradingBounceModelRepository:
+    context = RequestTenant()
     def __init__(self, *, context: TenantContext | None = None, uow_factory=unit_of_work) -> None:
-        self.context = context or current_tenant()
+        self.context = context
         self.uow_factory = uow_factory
 
     def save(self, artifact: BounceModelArtifact) -> BounceModelArtifact:

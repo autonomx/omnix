@@ -12,7 +12,7 @@ from app.characters.avatar_generation_models import (
 )
 from app.characters.avatar_viseme_generation import CharacterVisemeGenerationBatch
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 
 
 _MODULE = "character-avatar"
@@ -30,10 +30,11 @@ def _utcnow() -> str:
 
 class PostgresCharacterAvatarGenerationRepositoryAdapter:
     """Persist avatar generation batch state in tenant-scoped module records."""
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def create(
         self,
@@ -161,10 +162,11 @@ class PostgresCharacterAvatarGenerationRepositoryAdapter:
 
 class PostgresCharacterVisemeGenerationRepositoryAdapter:
     """Persist generated viseme batches in the shared module-record authority."""
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def create(
         self,

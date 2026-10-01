@@ -196,6 +196,36 @@ def ensure_local_identity(
         return context
 
 
+SYSTEM_ROLE = "system"
+
+
+def list_active_workspace_contexts(database: PostgresDatabase, *, limit: int = 1000) -> list[TenantContext]:
+    """System contexts for per-workspace background work (WP-4.2).
+
+    Job workers and scheduled tasks iterate these instead of assuming the
+    local workspace. The context acts as the workspace's creator with only
+    the ``system`` role; it is never a request principal.
+    """
+    from .unit_of_work import unit_of_work
+
+    with unit_of_work(database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ) as work:
+        rows = work.connection.execute(
+            """SELECT id, created_by FROM omnix_workspaces
+                WHERE status = 'active' ORDER BY id LIMIT %s""",
+            (limit,),
+        ).fetchall()
+        work.rollback()
+    return [
+        TenantContext(
+            user_id=str(row[1]),
+            workspace_id=str(row[0]),
+            membership_id=f"system:{row[0]}",
+            roles=frozenset({SYSTEM_ROLE}),
+        )
+        for row in rows
+    ]
+
+
 def get_workspace(database: PostgresDatabase, context: TenantContext) -> dict[str, Any]:
     from .unit_of_work import unit_of_work
 

@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from app.persistence.errors import RevisionConflict
-from app.security.tenant_context import TenantContext, current_tenant
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .scanner import (
@@ -96,13 +96,14 @@ _RESULT_COLUMNS = """
 
 
 class TradingScannerRepository:
+    context = RequestTenant()
     def __init__(
         self,
         *,
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
     ) -> None:
-        self.context = context or current_tenant()
+        self.context = context
         self.uow_factory = uow_factory
 
     def list_definitions(self, limit: int = 100) -> list[TradingScannerDefinition]:

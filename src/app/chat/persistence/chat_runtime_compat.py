@@ -37,7 +37,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.document_store import PostgresDocumentStore
 from app.persistence.transaction_binding import after_commit, share_transaction
 from app.persistence.unit_of_work import unit_of_work
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 
 from .chat_compat import PostgresChatRepositoryAdapter
 
@@ -566,9 +566,10 @@ class PostgresConversationSummaryRepository:
 
 
 class PostgresHistorySearchService:
+    context = RequestTenant()
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def ensure_index(self) -> HistorySearchStatus:
         with self.database.connection() as connection:

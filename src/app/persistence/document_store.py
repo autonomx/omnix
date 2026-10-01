@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from .database import PostgresDatabase, default_database
-from app.runtime.tenant_context import current_tenant
+from app.runtime.tenant_context import RequestTenant
 
 
 def _json(value: Any) -> str:
@@ -20,10 +20,11 @@ class PostgresDocumentStore:
     as read/modify/write over a bounded JSON document. New high-volume or
     independently queried domains should receive dedicated relational tables.
     """
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None, *, context=None) -> None:
         self.database = database or default_database()
-        self.context = context if context is not None else current_tenant()
+        self.context = context
 
     def read(
         self,

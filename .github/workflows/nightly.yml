@@ -129,7 +129,9 @@ jobs:
           docker compose -f docker-compose.multihost-test.yml run --rm driver
       - name: Service logs on failure
         if: failure()
-        run: docker compose -f docker-compose.multihost-test.yml logs --no-color --tail 300
+        run: |
+          docker compose -f docker-compose.multihost-test.yml logs --no-color nginx
+          docker compose -f docker-compose.multihost-test.yml logs --no-color --tail 2000 gateway-worker api-1 api-2 job-worker-1 job-worker-2 fake-models
       - name: Upload topology evidence
         if: always()
         uses: actions/upload-artifact@v4

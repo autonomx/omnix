@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from app.assistant_tools.models import AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import AgentRunCommand, AgentRunSpec, ModelRef
@@ -65,6 +65,7 @@ class PostgresTaskGraphRuntime:
     launch already-compiled node envelopes, observe status, pass declared
     outputs over graph edges, and cancel work.
     """
+    context = RequestTenant()
 
     def __init__(
         self,
@@ -75,7 +76,7 @@ class PostgresTaskGraphRuntime:
         model_overrides: dict[str, ModelRef] | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
         self._agent_service = agent_service
         self.capability_executor = capability_executor or _default_capability_executor
         self.model_overrides = dict(model_overrides or {})

@@ -51,7 +51,7 @@ def _gateway_lifespan(app, *, get_chat_store, get_job_store):
 
 
 
-def _install_request_middleware(gateway: FastAPI, auth_service) -> None:
+def _install_request_middleware(gateway: FastAPI, auth_service, membership_resolver=None) -> None:
     """Install request middleware; each one added wraps the ones before it."""
     from app.runtime.net import allowed_origins
     from app.security.request_guard import RequestGuardMiddleware
@@ -63,6 +63,13 @@ def _install_request_middleware(gateway: FastAPI, auth_service) -> None:
     # injected service, every composition resolves the same configuration.
     # Added before CORS so preflights and CORS headers wrap auth rejections.
     gateway.state.auth_service = auth_service or AuthService(resolve_auth_settings())
+    from app.security.request_tenant import RequestTenantMiddleware
+
+    # Inside authentication: binds the caller's workspace for the request (WP-4.2).
+    gateway.add_middleware(
+        RequestTenantMiddleware,
+        resolver=membership_resolver,
+    )
     gateway.add_middleware(
         AuthenticationMiddleware,
         authenticator_factory=lambda: gateway.state.auth_service,
@@ -98,6 +105,7 @@ def create_gateway_app(
     runtime_config=None,
     runtime_services=None,
     auth_service=None,
+    membership_resolver=None,
 ) -> FastAPI:
     from app.runtime.config import get_runtime_config
     from app.runtime.capabilities import RuntimeCapabilities
@@ -185,7 +193,7 @@ def create_gateway_app(
     gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)
     from .feature_registry import compose_features
 
-    _install_request_middleware(gateway, auth_service)
+    _install_request_middleware(gateway, auth_service, membership_resolver)
     compose_features(gateway)
 
     from app.security.auth import create_auth_router

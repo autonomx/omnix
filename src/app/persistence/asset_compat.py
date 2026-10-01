@@ -10,11 +10,12 @@ from app.assets.models import AssetContentTooLarge
 from .blob_store import default_blob_store
 from .contracts import BlobStore
 from .database import PostgresDatabase, default_database
-from app.runtime.tenant_context import current_tenant
+from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import unit_of_work
 
 
 class PostgresSharedAssetStoreAdapter:
+    context = RequestTenant()
     def __init__(
         self,
         manifest_path: str | Path | None = None,
@@ -27,7 +28,7 @@ class PostgresSharedAssetStoreAdapter:
                 "manifest-backed asset authority is retired; use the Phase 8 importer"
             )
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
         self.blob_store = blob_store or default_blob_store()
 
     def list_assets(self) -> AssetListResponse:

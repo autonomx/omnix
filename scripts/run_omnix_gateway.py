@@ -69,7 +69,16 @@ def main() -> int:
         # SIGTERM drains first (WP-6.7); the short graceful timeout only covers
         # what is still open after the drain window.
         server = create_draining_server(
-            uvicorn.Config(args.app, host=args.host, port=args.port, timeout_graceful_shutdown=5)
+            uvicorn.Config(
+                args.app,
+                host=args.host,
+                port=args.port,
+                timeout_graceful_shutdown=5,
+                # Outlive the ingress's pooled upstream connections (Nginx
+                # keeps them 60 s): if uvicorn closes first, Nginx can reuse a
+                # dying connection and return 502 without retrying.
+                timeout_keep_alive=75,
+            )
         )
         if args.managed_stdin:
             watch_parent_stdin(server)

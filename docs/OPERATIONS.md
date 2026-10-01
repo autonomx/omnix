@@ -568,6 +568,17 @@ explicitly. Accounts are matched by issuer and subject, never by email.
 Every successful sign-in, failed attempt, sign-out and credential rotation is
 written to `omnix_audit_events`.
 
+### Workspaces
+
+Each request runs in one workspace:
+
+- **Signed in:** the user's default workspace, or the one named in the
+  `X-Omnix-Workspace` header if the user is an active member of it. A
+  workspace the user does not belong to gets 403 `workspace_access_denied`.
+- **Sign-in off:** the local workspace.
+
+Job workers run jobs from every active workspace, each in its own workspace.
+
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.
 

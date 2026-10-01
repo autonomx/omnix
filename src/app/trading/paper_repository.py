@@ -6,7 +6,7 @@ from contextlib import AbstractContextManager
 from decimal import Decimal
 from typing import Protocol
 
-from app.security.tenant_context import TenantContext, current_tenant
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 from .paper import (
@@ -82,13 +82,14 @@ _ORDER_COLUMNS = """
 
 
 class TradingPaperRepository:
+    context = RequestTenant()
     def __init__(
         self,
         *,
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
     ) -> None:
-        self.context = context or current_tenant()
+        self.context = context
         self.uow_factory = uow_factory
 
     def create_account(self, request: PaperAccountCreate) -> PaperAccountSnapshot:

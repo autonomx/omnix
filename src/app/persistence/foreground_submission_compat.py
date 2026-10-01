@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .database import PostgresDatabase, default_database
-from app.runtime.tenant_context import current_tenant
+from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import unit_of_work
 
 _TERMINAL = {"completed", "failed"}
@@ -29,10 +29,11 @@ class ForegroundSubmissionClaim:
 
 class PostgresForegroundSubmissionStoreAdapter:
     """Preserve the foreground-store contract over PostgreSQL authority."""
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def claim(
         self,

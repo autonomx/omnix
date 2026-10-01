@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from .owner_memory_candidates import OwnerMemoryCandidateMixin
 from .owner_memory_records import OwnerMemoryRecordMixin
 from .owner_memory_snapshots import OwnerMemorySnapshotMixin
@@ -14,10 +14,11 @@ class PostgresOwnerAwareMemoryRepository(
     OwnerMemorySnapshotMixin,
 ):
     """Persist logical owner and memory scope as independent dimensions."""
+    context = RequestTenant()
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def delete_owner(
         self,

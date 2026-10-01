@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from app.security.tenant_context import TenantContext, current_tenant
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .binding_authority import infer_binding_purpose
@@ -34,8 +34,9 @@ def _protection(row) -> PaperPositionProtection:
 
 
 class TradingPaperProtectionRepository:
+    context = RequestTenant()
     def __init__(self, *, context: TenantContext | None = None, uow_factory=unit_of_work) -> None:
-        self.context = context or current_tenant()
+        self.context = context
         self.uow_factory = uow_factory
 
     def list(

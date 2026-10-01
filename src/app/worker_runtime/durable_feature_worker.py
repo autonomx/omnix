@@ -1,6 +1,7 @@
 """Lease-fenced executor for feature-owned durable jobs."""
 from __future__ import annotations
 
+import contextvars
 from dataclasses import dataclass
 import logging
 import threading
@@ -11,6 +12,8 @@ from typing import Any
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
+from app.persistence.identity_service import list_active_workspace_contexts
+from app.runtime.tenant_context import TenantContext, current_tenant, pop_tenant, push_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 logger = logging.getLogger(__name__)
@@ -114,6 +117,7 @@ class _ActiveExecution:
     job: JobRecord
     cancellation: threading.Event
     thread: threading.Thread
+    context: contextvars.Context | None = None
 
 
 class DurableFeatureJobWorker:
@@ -157,6 +161,9 @@ class DurableFeatureJobWorker:
         self.worker_id = worker_id or f"job-worker:{uuid.uuid4().hex}:{pool_name}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._workspaces: list[TenantContext] | None = None
+        self._workspaces_loaded_at = 0.0
+        self._next_workspace = 0
         self._ready = threading.Event()
         self._active_lock = threading.Lock()
         self._active: dict[str, _ActiveExecution] = {}
@@ -208,7 +215,10 @@ class DurableFeatureJobWorker:
         for execution in abandoned:
             execution.cancellation.set()
         for execution in abandoned:
-            self._release_lease(execution.job, "worker shutdown drain deadline elapsed")
+            release_context = execution.context or contextvars.copy_context()
+            release_context.copy().run(
+                self._release_lease, execution.job, "worker shutdown drain deadline elapsed"
+            )
         for execution in abandoned:
             execution.thread.join(timeout=0.2)
 
@@ -248,15 +258,16 @@ class DurableFeatureJobWorker:
                 if saturated:
                     self._stop.wait(self.poll_seconds)
                     continue
-                job = self._claim_one()
+                claimed = self._claim_any_workspace()
                 self._ready.set()
-                if job is None:
+                if claimed is None:
                     self._stop.wait(self.poll_seconds)
                     continue
+                job, job_context = claimed
                 if self._stop.is_set():
-                    self._release_lease(job, "worker stopping before execution")
+                    job_context.run(self._release_lease, job, "worker stopping before execution")
                     break
-                self._launch_claimed(job)
+                self._launch_claimed(job, job_context)
             except JobClaimConflict:
                 continue
             except Exception as exc:
@@ -266,16 +277,51 @@ class DurableFeatureJobWorker:
                 logger.exception("Durable feature job pool iteration failed pool=%s", self.pool_name)
                 self._stop.wait(min(2.0, self.poll_seconds * 4))
 
-    def _launch_claimed(self, job: JobRecord) -> None:
+    def _workspace_contexts(self) -> list[TenantContext]:
+        """Active workspaces, refreshed at most every 30 seconds."""
+        now = time.monotonic()
+        if self._workspaces is None or now - self._workspaces_loaded_at > 30.0:
+            database = getattr(self.store, "database", None)
+            # Stores without a database (in-memory test doubles) serve the
+            # current tenant only.
+            self._workspaces = (
+                list_active_workspace_contexts(database) if database is not None else [current_tenant()]
+            )
+            self._workspaces_loaded_at = now
+        return self._workspaces
+
+    def _claim_any_workspace(self) -> tuple[JobRecord, contextvars.Context] | None:
+        """Claim the next job in any active workspace, rotating for fairness.
+
+        The returned context carries that workspace's tenant, so execution,
+        lease renewal and release all act within the job's own workspace.
+        """
+        workspaces = self._workspace_contexts()
+        if not workspaces:
+            return None
+        start = self._next_workspace % len(workspaces)
+        self._next_workspace += 1
+        for workspace in workspaces[start:] + workspaces[:start]:
+            token = push_tenant(workspace)
+            try:
+                job = self._claim_one()
+                if job is not None:
+                    return job, contextvars.copy_context()
+            finally:
+                pop_tenant(token)
+        return None
+
+    def _launch_claimed(self, job: JobRecord, job_context: contextvars.Context | None = None) -> None:
         cancellation = threading.Event()
+        run_context = job_context or contextvars.copy_context()
         execution = threading.Thread(
-            target=self._run_claimed,
-            args=(job, cancellation),
+            target=run_context.run,
+            args=(self._run_claimed, job, cancellation),
             name=f"omnix-job-{self.pool_name}-{job.id[-8:]}",
             daemon=True,
         )
         with self._active_lock:
-            self._active[job.id] = _ActiveExecution(job, cancellation, execution)
+            self._active[job.id] = _ActiveExecution(job, cancellation, execution, run_context)
         execution.start()
 
     def _run_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
@@ -320,8 +366,9 @@ class DurableFeatureJobWorker:
             return
         renewal_stop = threading.Event()
         renewal = threading.Thread(
-            target=self._renew_loop,
-            args=(job.id, lease.worker_id, lease.token, renewal_stop),
+            # Threads do not inherit context variables: keep the job's tenant.
+            target=contextvars.copy_context().run,
+            args=(self._renew_loop, job.id, lease.worker_id, lease.token, renewal_stop),
             name=f"omnix-job-lease-{job.id[-8:]}",
             daemon=True,
         )

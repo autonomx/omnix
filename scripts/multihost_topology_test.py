@@ -358,7 +358,11 @@ def main() -> int:
         "threads": args.threads,
         "operations": recorder.summary(elapsed),
     }
-    report["jobs"] = wait_jobs(database_url, job_ids, timeout=180)
+    # Submission is open-loop, so a backlog can remain when the load stops;
+    # measure how long the workers take to drain it.
+    drain_started = time.monotonic()
+    report["jobs"] = wait_jobs(database_url, job_ids, timeout=600)
+    report["jobs"]["backlog_drain_seconds"] = round(time.monotonic() - drain_started, 1)
     if report["jobs"]["not_completed"]:
         report["problems"].append("jobs did not all complete")
     if report["jobs"]["duplicate_completions"]:

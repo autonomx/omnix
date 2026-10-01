@@ -19,7 +19,7 @@ from typing import Any, Callable, ContextManager, TypedDict
 from app.persistence.blob_store import default_blob_store
 from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.capabilities import default_capability_registry
@@ -241,6 +241,7 @@ def _diff_file_stats(diff: str, modified_paths: list[str]) -> list[_DiffFileStat
 
 
 class AgentRunService:
+    context = RequestTenant()
     def __init__(
         self,
         database: PostgresDatabase | None = None,
@@ -259,7 +260,7 @@ class AgentRunService:
     ) -> None:
         configure_agent_debug_logging()
         self.database = database or default_database()
-        self.context = context or current_tenant()
+        self.context = context
         self.job_store = job_store
         self.unit_of_work = unit_of_work_fn or unit_of_work
         self._lease_tokens: dict[str, str] = {}

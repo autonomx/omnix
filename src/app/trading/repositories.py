@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from app.persistence.errors import RevisionConflict
-from app.security.tenant_context import TenantContext, current_tenant
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import PostgresUnitOfWork, unit_of_work
 
 
@@ -34,6 +34,7 @@ def _record(row: Any) -> dict[str, Any]:
 
 class TradingDocumentRepository:
     """Revisioned Trading documents backed by Omnix PostgreSQL module records."""
+    context = RequestTenant()
 
     def __init__(
         self,
@@ -41,7 +42,7 @@ class TradingDocumentRepository:
         context: TenantContext | None = None,
         uow_factory: UnitOfWorkFactory = unit_of_work,
     ) -> None:
-        self.context = context or current_tenant()
+        self.context = context
         self.uow_factory = uow_factory
 
     @staticmethod

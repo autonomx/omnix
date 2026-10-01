@@ -13,7 +13,7 @@ from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundE
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.errors import EntityNotFound, RevisionConflict
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 from app.persistence.repository_registry import install_repository_specs
 from app.assistant_memory.persistence.repository_specs import (
@@ -22,10 +22,11 @@ from app.assistant_memory.persistence.repository_specs import (
 
 
 class PostgresMemoryRepositoryAdapter:
+    context = RequestTenant()
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         install_repository_specs(ASSISTANT_MEMORY_REPOSITORY_SPECS)
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
 
     def create_record(self, record: MemoryRecord) -> MemoryRecord:
         with unit_of_work(self.database) as work:

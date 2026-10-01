@@ -15,7 +15,7 @@ from typing import Any
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolExecutor, AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.unit_of_work import unit_of_work
 
@@ -42,6 +42,7 @@ def _json(value: Any) -> str:
 
 
 class PostgresWorkflowRuntime(WorkflowRuntime):
+    context = RequestTenant()
     def __init__(
         self,
         database: PostgresDatabase | None = None,
@@ -49,7 +50,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         capability_executor: AssistantToolExecutor = hermes_assistant_tool_execute_payload,
     ) -> None:
         self.database = database or default_database()
-        self.context = current_tenant()
+        self.context = None  # follows the request tenant
         self.capability_executor = capability_executor
         self.worker_id = f"workflow:{os.getpid()}:{uuid.uuid4().hex[:12]}"
         self._supervisor_started = False

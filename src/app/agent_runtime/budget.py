@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from app.caching.bounded_cache import bounded_lru_cache
 
 from app.persistence.database import PostgresDatabase, default_database
-from app.security.tenant_context import current_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -27,6 +27,7 @@ def normalize_budget_provider_id(provider_id: str) -> str:
 
 
 class AgentBudgetManager:
+    context = RequestTenant()
     def __init__(
         self,
         database: PostgresDatabase | None = None,
@@ -34,7 +35,7 @@ class AgentBudgetManager:
         context: TenantContext | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = context or current_tenant()
+        self.context = context
 
     def usage(self, run_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:

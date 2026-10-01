@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.runtime.tenant_context import current_tenant
+
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 import threading
@@ -68,8 +70,10 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         *, database, context, chat_execution_owner, chat_dispatcher
     ):
         assert database is fake_database
-        assert context is not None
-        assert chat_execution_owner.workspace_id == context.workspace_id
+        # Request-serving stores follow each request's tenant (WP-4.2); the
+        # runtime owner stays on the process tenant.
+        assert context is None
+        assert chat_execution_owner.workspace_id == current_tenant().workspace_id
         assert chat_execution_owner.database is fake_database
         assert chat_dispatcher is not None
         return stores[0]

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 LOCAL_USER_ID = "user:local"
 LOCAL_WORKSPACE_ID = "workspace:local"
@@ -124,6 +124,28 @@ def pop_tenant(token: Token) -> None:
     _CURRENT_TENANT.reset(token)
 
 
+class RequestTenant:
+    """``self.context`` that follows the current request's tenant (WP-4.2).
+
+    Services built once per process used to capture the tenant at
+    construction, so every later request ran as that tenant. With this
+    descriptor, an explicitly injected context still wins; otherwise each
+    read resolves ``current_tenant()`` for the request (or job) in progress.
+    """
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self._slot = f"_{name}_explicit"
+
+    def __get__(self, instance: object, owner: type | None = None) -> Any:
+        if instance is None:
+            return self
+        explicit = instance.__dict__.get(self._slot)
+        return explicit if explicit is not None else current_tenant()
+
+    def __set__(self, instance: object, value: TenantContext | None) -> None:
+        instance.__dict__[self._slot] = value
+
+
 @dataclass(frozen=True, slots=True)
 class TenantProvider:
     def current(self) -> TenantContext:
@@ -136,6 +158,7 @@ __all__ = [
     "LOCAL_WORKSPACE_ID",
     "TenantAccessDenied",
     "TenantContext",
+    "RequestTenant",
     "TenantProvider",
     "TrustedPrincipal",
     "current_tenant",

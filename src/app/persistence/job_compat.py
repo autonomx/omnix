@@ -24,7 +24,7 @@ from app.jobs.models import (
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
-from app.runtime.tenant_context import current_tenant
+from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import unit_of_work
 
 
@@ -43,6 +43,7 @@ def _utcnow() -> str:
 
 class PostgresJobStoreAdapter:
     """Compatibility facade over the authoritative PostgreSQL job ledger."""
+    context = RequestTenant()
 
     def __init__(
         self,
@@ -53,7 +54,7 @@ class PostgresJobStoreAdapter:
         chat_dispatcher=None,
     ) -> None:
         self.database = database or default_database()
-        self.context = context or current_tenant()
+        self.context = context
         self.chat_execution_owner = chat_execution_owner
         self.chat_dispatcher = chat_dispatcher
         self.handler_registry = None
