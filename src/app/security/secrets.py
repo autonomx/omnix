@@ -95,6 +95,8 @@ class DpapiSecretStore:
 
     name = "dpapi"
     writable = True
+    path: Path
+    _lock: threading.Lock
 
     def __init__(self, path: Path | None = None) -> None:
         if sys.platform != "win32":

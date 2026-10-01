@@ -332,6 +332,28 @@ For a local backup, use the PostgreSQL tooling appropriate to your environment a
 
     pg_dump --dbname="$OMNIX_MIGRATION_DATABASE_URL" --format=custom --file=omnix-backup.dump
 
+### Retention
+
+The scheduler deletes old rows every hour, in small batches, following
+`omnix_retention_policies`:
+
+| Data | Kept for |
+|---|---|
+| Finished jobs (with their events, logs and attempts) | 30 days |
+| Job events | 90 days |
+| Agent run events of finished runs | 30 days; evidence, approval, acceptance, artifact and lifecycle events stay |
+| Published outbox events, processed inbox entries | 7 days |
+| Resolved dead letters | 90 days |
+| Expired sign-in sessions | 7 days after expiry |
+| Stopped runtime nodes | 7 days |
+| Audit events | 365 days, maintenance only |
+| Trading strategy events | 180 days, disabled by default |
+
+Change a policy by updating its row (`retention_days`, `enabled`). Audit
+retention runs only through `python -m app.persistence retention`, which
+uses the migration role and runs every enabled policy. Each run is recorded
+in `omnix_lifecycle_cleanup_runs`.
+
 ### Database roles and row-level security
 
 Every table with a `workspace_id` has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in `src/app/persistence/tenant_scope.py`.

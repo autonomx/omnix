@@ -116,6 +116,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit the machine-readable JSON migration report (the default output).",
     )
     subparsers.add_parser("verify", help="Require healthy PostgreSQL and zero migration drift")
+    retention = subparsers.add_parser(
+        "retention", help="Run every enabled retention policy, including maintenance-only ones (audit)"
+    )
+    retention.add_argument("--batch-size", type=int, default=5000)
 
     backup = subparsers.add_parser("backup", help="Create a pg_dump custom-format backup")
     backup.add_argument("output", type=Path)
@@ -286,7 +290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             migration_database_settings()
             # Backups read every workspace and restores recreate the schema, so
             # both use the DDL owner like migrations (row-level security, WP-4.4).
-            if args.command in {"migrate", "status", "verify", "backup", "restore"}
+            if args.command in {"migrate", "status", "verify", "backup", "restore", "retention"}
             else database_settings()
         )
         database = PostgresDatabase(settings)
@@ -311,6 +315,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             ok = status.get("ok") is True and status.get("pending") == []
             _render({"ok": ok, "health": health, "migrations": status})
             return 0 if ok else 1
+        if args.command == "retention":
+            from .retention import RetentionWorker
+
+            outcome = RetentionWorker(database, batch_size=args.batch_size).run_once(include_maintenance=True)
+            _render({"ok": True, "run_id": outcome.run_id, "deleted": outcome.deleted, "skipped": outcome.skipped})
+            return 0
         if args.command in {"backup", "restore"}:
             safe_url, environment = _tool_database_arguments(settings)
             if args.command == "backup":

@@ -255,6 +255,20 @@ def create_production_app(config: RuntimeConfig | None = None):
                 ),
             )
         )
+        def run_retention(_task_context) -> None:
+            from app.persistence.retention import RetentionWorker
+
+            RetentionWorker(services.jobs.database).run_once()
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="platform.retention",
+                run=run_retention,
+                interval_seconds=3600,
+                timeout_seconds=900,
+                executor="thread",
+            )
+        )
         scheduler.register_task(
             ScheduledTaskSpec(
                 task_id="platform.job-lease-recovery",

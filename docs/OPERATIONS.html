@@ -386,6 +386,50 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>python -m app.persistence verify</code></pre></div>
 <p>For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Back up as the migration role (<code>OMNIX_MIGRATION_DATABASE_URL</code>, or <code>OMNIX_DATABASE_URL</code> when you use one role); <code>python -m app.persistence backup</code> does this for you. Example:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>pg_dump --dbname=&quot;$OMNIX_MIGRATION_DATABASE_URL&quot; --format=custom --file=omnix-backup.dump</code></pre></div>
+<h3 id="retention">Retention</h3>
+<p>The scheduler deletes old rows every hour, in small batches, following <code>omnix_retention_policies</code>:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Data</th>
+<th>Kept for</th>
+</tr></thead><tbody>
+<tr>
+<td>Finished jobs (with their events, logs and attempts)</td>
+<td>30 days</td>
+</tr>
+<tr>
+<td>Job events</td>
+<td>90 days</td>
+</tr>
+<tr>
+<td>Agent run events of finished runs</td>
+<td>30 days; evidence, approval, acceptance, artifact and lifecycle events stay</td>
+</tr>
+<tr>
+<td>Published outbox events, processed inbox entries</td>
+<td>7 days</td>
+</tr>
+<tr>
+<td>Resolved dead letters</td>
+<td>90 days</td>
+</tr>
+<tr>
+<td>Expired sign-in sessions</td>
+<td>7 days after expiry</td>
+</tr>
+<tr>
+<td>Stopped runtime nodes</td>
+<td>7 days</td>
+</tr>
+<tr>
+<td>Audit events</td>
+<td>365 days, maintenance only</td>
+</tr>
+<tr>
+<td>Trading strategy events</td>
+<td>180 days, disabled by default</td>
+</tr>
+</tbody></table></div>
+<p>Change a policy by updating its row (<code>retention_days</code>, <code>enabled</code>). Audit retention runs only through <code>python -m app.persistence retention</code>, which uses the migration role and runs every enabled policy. Each run is recorded in <code>omnix_lifecycle_cleanup_runs</code>.</p>
 <h3 id="database-roles-and-row-level-security">Database roles and row-level security</h3>
 <p>Every table with a <code>workspace_id</code> has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in <code>src/app/persistence/tenant_scope.py</code>.</p>
 <p>PostgreSQL does not apply these policies to superusers or roles with <code>BYPASSRLS</code>. A single superuser role (the default local install) keeps working, but has no database-level isolation. For isolation, use two roles:</p>

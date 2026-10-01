@@ -29,6 +29,7 @@ SYSTEM_OPERATIONS: dict[str, str] = {
     "migrations": "Data migrations and migration metadata span every workspace.",
     "operator.cli": "Operator commands (cutover, coordinated recovery) act on the whole database.",
     "audit.write": "Audit events record actions before a tenant is bound (sign-in) and for system work.",
+    "retention": "Retention deletes rows by age and state across every workspace.",
 }
 
 _SYSTEM_OPERATION: ContextVar[str | None] = ContextVar("omnix_system_operation", default=None)
