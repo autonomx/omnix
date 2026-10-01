@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, Tuple
 
 from app.settings.access import load_settings
@@ -15,11 +16,27 @@ from .registry import (
     resolve_visual_provider_key,
 )
 
-_IMAGE_PROVIDER_CACHE: Dict[str, Any] = {
-    "key": None,
-    "instance": None,
-    "provider_key": None,
-}
+_IMAGE_PROVIDER_CACHE: Dict[str, Any] = {}
+MAX_CACHED_IMAGE_PROVIDERS = 1
+IMAGE_PROVIDER_CACHE_TTL_SECONDS = 24 * 60 * 60.0
+_IMAGE_PROVIDER_CACHE_TOUCHED_AT = 0.0
+
+
+def _expire_image_provider_cache() -> None:
+    if (
+        _IMAGE_PROVIDER_CACHE.get("entry") is not None
+        and time.monotonic() - _IMAGE_PROVIDER_CACHE_TOUCHED_AT
+        > IMAGE_PROVIDER_CACHE_TTL_SECONDS
+    ):
+        unload_image_provider_cache()
+
+
+def _store_image_provider(cache_key: str, provider_key: str, instance: BaseImageProvider) -> None:
+    global _IMAGE_PROVIDER_CACHE_TOUCHED_AT
+    if len(_IMAGE_PROVIDER_CACHE) >= MAX_CACHED_IMAGE_PROVIDERS:
+        unload_image_provider_cache()
+    _IMAGE_PROVIDER_CACHE["entry"] = (cache_key, instance, provider_key)
+    _IMAGE_PROVIDER_CACHE_TOUCHED_AT = time.monotonic()
 
 
 def __getattr__(name: str) -> Any:
@@ -42,34 +59,40 @@ def image_generation_enabled() -> bool:
 
 
 def is_image_provider_loaded() -> bool:
-    return _IMAGE_PROVIDER_CACHE.get("instance") is not None
+    _expire_image_provider_cache()
+    return _IMAGE_PROVIDER_CACHE.get("entry") is not None
 
 
 def get_loaded_image_provider_name() -> str:
-    provider_key = _IMAGE_PROVIDER_CACHE.get("provider_key")
+    _expire_image_provider_cache()
+    entry = _IMAGE_PROVIDER_CACHE.get("entry")
+    provider_key = entry[2] if entry else None
     if provider_key:
         return str(provider_key)
-    instance = _IMAGE_PROVIDER_CACHE.get("instance")
+    instance = entry[1] if entry else None
     if instance is None:
         return ""
     return str(getattr(instance, "provider_name", "") or "").strip()
 
 
 def get_loaded_image_provider() -> BaseImageProvider | None:
-    instance = _IMAGE_PROVIDER_CACHE.get("instance")
-    if instance is None:
-        return None
-    return instance
+    _expire_image_provider_cache()
+    entry = _IMAGE_PROVIDER_CACHE.get("entry")
+    return entry[1] if entry else None
 
 
 def get_image_provider_cache_key() -> str:
-    return str(_IMAGE_PROVIDER_CACHE.get("key") or "")
+    _expire_image_provider_cache()
+    entry = _IMAGE_PROVIDER_CACHE.get("entry")
+    return str(entry[0] or "") if entry else ""
 
 
 def is_loaded_image_provider_ready() -> bool:
-    instance = _IMAGE_PROVIDER_CACHE.get("instance")
-    if instance is None:
+    _expire_image_provider_cache()
+    entry = _IMAGE_PROVIDER_CACHE.get("entry")
+    if not entry:
         return False
+    instance = entry[1]
     is_available = getattr(instance, "is_available", None)
     if callable(is_available):
         return bool(is_available())
@@ -77,7 +100,9 @@ def is_loaded_image_provider_ready() -> bool:
 
 
 def unload_image_provider_cache() -> None:
-    instance = _IMAGE_PROVIDER_CACHE.get("instance")
+    global _IMAGE_PROVIDER_CACHE_TOUCHED_AT
+    entry = _IMAGE_PROVIDER_CACHE.get("entry")
+    instance = entry[1] if entry else None
     if instance is not None:
         try:
             unload = getattr(instance, "unload", None)
@@ -85,9 +110,8 @@ def unload_image_provider_cache() -> None:
                 unload()
         except Exception:
             pass
-    _IMAGE_PROVIDER_CACHE["key"] = None
-    _IMAGE_PROVIDER_CACHE["instance"] = None
-    _IMAGE_PROVIDER_CACHE["provider_key"] = None
+    _IMAGE_PROVIDER_CACHE.clear()
+    _IMAGE_PROVIDER_CACHE_TOUCHED_AT = 0.0
 
 
 def get_image_provider() -> BaseImageProvider:
@@ -98,22 +122,24 @@ def get_image_provider() -> BaseImageProvider:
     the app migrates toward explicit registry-based construction.
     """
     visual = _visual_settings()
+    _expire_image_provider_cache()
     provider_key = resolve_visual_provider_key(visual)
     cache_key = f"{provider_key}:{visual!r}"
 
     if (
-        _IMAGE_PROVIDER_CACHE.get("key") == cache_key
-        and _IMAGE_PROVIDER_CACHE.get("instance") is not None
+        (entry := _IMAGE_PROVIDER_CACHE.get("entry")) is not None
+        and entry[0] == cache_key
+        and entry[1] is not None
     ):
-        return _IMAGE_PROVIDER_CACHE["instance"]
+        global _IMAGE_PROVIDER_CACHE_TOUCHED_AT
+        _IMAGE_PROVIDER_CACHE_TOUCHED_AT = time.monotonic()
+        return entry[1]
 
     unload_image_provider_cache()
 
     selected_key, instance = build_visual_provider(visual)
 
-    _IMAGE_PROVIDER_CACHE["key"] = cache_key
-    _IMAGE_PROVIDER_CACHE["instance"] = instance
-    _IMAGE_PROVIDER_CACHE["provider_key"] = selected_key
+    _store_image_provider(cache_key, selected_key, instance)
     return instance
 
 
@@ -149,9 +175,7 @@ def switch_image_provider_runtime(
         unload_image_provider_cache()
 
     selected_key, provider = build_visual_provider(cfg)
-    _IMAGE_PROVIDER_CACHE["key"] = f"runtime:{selected_key}:{cfg!r}"
-    _IMAGE_PROVIDER_CACHE["instance"] = provider
-    _IMAGE_PROVIDER_CACHE["provider_key"] = selected_key
+    _store_image_provider(f"runtime:{selected_key}:{cfg!r}", selected_key, provider)
     return selected_key, provider
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import secrets
-from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pytest
@@ -10,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.gateway.kernel_routes.core_jobs_routes import register_core_jobs_routes
-from app.worker_runtime.durable_feature_worker import _AuthorityBoundJobStore
+from app.worker_runtime.durable_feature_worker import _LeaseBoundJobStore
 from app.jobs.foreground_execution import ForegroundExecution, current_foreground_execution, foreground_execution
 from app.jobs.models import (
     CompleteJobRequest,
@@ -177,7 +176,7 @@ def test_durable_executor_passes_originally_claimed_credentials(client, operatio
     job = _job(client)
     _claim(client)
     claimed = client.store.get_job(job.id)
-    bound = _AuthorityBoundJobStore(client.store, SimpleNamespace(require_live=lambda: None), claimed)
+    bound = _LeaseBoundJobStore(client.store, claimed)
     model = FailJobRequest if operation == "fail" else CompleteJobRequest
     request = model(**({"message": "Failed"} if operation == "fail" else {}))
     result = getattr(bound, f"{operation}_job")(job.id, request)
@@ -187,7 +186,7 @@ def test_durable_executor_passes_originally_claimed_credentials(client, operatio
 def test_bound_executor_cannot_finalize_a_different_job(client):
     job = _job(client)
     _claim(client)
-    bound = _AuthorityBoundJobStore(client.store, SimpleNamespace(require_live=lambda: None), client.store.get_job(job.id))
+    bound = _LeaseBoundJobStore(client.store, client.store.get_job(job.id))
     with pytest.raises(JobClaimConflict, match="another job"):
         bound.complete_job("other-job", CompleteJobRequest())
 

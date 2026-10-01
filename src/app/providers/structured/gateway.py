@@ -1,6 +1,8 @@
 """Central provider-independent structured-output gateway."""
 from __future__ import annotations
 
+import math
+
 import hashlib
 import json
 import threading
@@ -260,7 +262,9 @@ def _provider_call_with_deadline(
     ``request_timeout_seconds`` to stop the underlying request as well.
     """
 
-    remaining = deadline - monotonic()
+    # Floor to whole microseconds: ``(start + budget) - now`` can exceed the
+    # budget by float error when the monotonic clock has not advanced.
+    remaining = math.floor((deadline - monotonic()) * 1_000_000) / 1_000_000
     if remaining <= 0:
         raise ProviderTimeout(f"structured operation {operation_id} exceeded its deadline")
 

@@ -5,6 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.memory_contracts import MemoryRecord, MemoryScopeContext
+from app.assistant_memory import temporal_retrieval
 from app.assistant_memory.temporal_retrieval import (
     invalidate_temporal_retrieval,
     rank_temporal_records,
@@ -188,3 +189,25 @@ def test_preload_deadline_falls_back_and_warms_cache() -> None:
     assert second.preload_cache_hit is True
     assert second.preload_timed_out is False
     assert [item.memory_id for item in second.items] == ["memory:route-x"]
+
+
+def test_preload_cache_expires_and_can_be_invalidated(monkeypatch) -> None:
+    invalidate_temporal_retrieval()
+    now = [10.0]
+    monkeypatch.setattr(temporal_retrieval, "_preload_now", lambda: now[0])
+    route = _record(
+        "memory:route-cache",
+        kind="semantic_fact",
+        content="The user takes Route X.",
+        payload={},
+    )
+
+    temporal_retrieval._store_preload("test-key", [route])
+    assert temporal_retrieval._get_cached_preload("test-key") == (route,)
+    now[0] += temporal_retrieval._CACHE_TTL_SECONDS + 1
+    assert temporal_retrieval._get_cached_preload("test-key") is None
+    assert "test-key" not in temporal_retrieval._PRELOAD_CACHE
+
+    temporal_retrieval._store_preload("test-key", [route])
+    invalidate_temporal_retrieval()
+    assert temporal_retrieval._get_cached_preload("test-key") is None

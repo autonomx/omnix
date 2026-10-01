@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 import weakref
@@ -19,17 +20,19 @@ from .base import BaseProvider, ChatMessage, ProviderConfig
 from .registry import get_registry
 from .audio_registry import get_audio_registry
 
-_PROVIDER_CACHE: dict[str, Any] = {"key": None, "instance": None}
+_PROVIDER_CACHE_TTL_SECONDS = 3600.0
+_PROVIDER_CACHE: tuple[str | None, Any, float] = (None, None, 0.0)
 _PROVIDER_SETTINGS_LOCK = threading.RLock()
 _PROVIDER_SETTINGS_SUBSCRIPTIONS: weakref.WeakSet[Any] = weakref.WeakSet()
 _tts_provider_instance: Any = None
 _tts_provider_name: str | None = None
+_tts_model_owner_guard: Any = None
 _stt_provider_instance: Any = None
 _stt_provider_name: str | None = None
 _LOG = logging.getLogger(__name__)
 _GLOBAL_PROMPT_LOCK = threading.RLock()
 _GLOBAL_PROMPT_CACHE: tuple[int, float, str] | None = None
-_GLOBAL_PROMPT_SUBSCRIPTIONS: set[int] = set()
+_GLOBAL_PROMPT_SUBSCRIPTIONS: weakref.WeakSet[Any] = weakref.WeakSet()
 _GLOBAL_PROMPT_CACHE_HIT = False
 _GLOBAL_PROMPT_CACHE_MODE = "defaults"
 
@@ -82,9 +85,9 @@ def _close(instance: Any) -> None:
 
 
 def invalidate_provider_cache() -> None:
-    instance = _PROVIDER_CACHE.get("instance")
-    _PROVIDER_CACHE["key"] = None
-    _PROVIDER_CACHE["instance"] = None
+    global _PROVIDER_CACHE
+    instance = _PROVIDER_CACHE[1]
+    _PROVIDER_CACHE = (None, None, 0.0)
     if instance is not None:
         _close(instance)
 
@@ -108,6 +111,7 @@ def _subscribe_provider_cache_invalidation() -> None:
 
 
 def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
+    global _PROVIDER_CACHE
     _subscribe_provider_cache_invalidation()
     settings = load_settings()
     secrets = load_secrets()
@@ -165,14 +169,18 @@ def get_provider(provider_name: Optional[str] = None) -> Optional[BaseProvider]:
         )
 
     key = _cache_key(name, config)
-    cached = _PROVIDER_CACHE.get("instance")
-    if _PROVIDER_CACHE.get("key") == key and cached is not None:
+    cached_key, cached, expires_at = _PROVIDER_CACHE
+    now = time.monotonic()
+    if cached is not None and expires_at <= now:
+        invalidate_provider_cache()
+        cached = None
+        cached_key = None
+    if cached_key == key and cached is not None:
         return cached
     instance = get_registry().create_provider(name, provider_config=config)
     if cached is not None and cached is not instance:
         _close(cached)
-    _PROVIDER_CACHE["key"] = key
-    _PROVIDER_CACHE["instance"] = instance
+    _PROVIDER_CACHE = (key, instance, now + _PROVIDER_CACHE_TTL_SECONDS)
     return instance
 
 
@@ -197,12 +205,12 @@ def get_global_system_prompt() -> str:
     _GLOBAL_PROMPT_CACHE_MODE = "service" if service is not None else "defaults"
     if service is not None:
         with _GLOBAL_PROMPT_LOCK:
-            if service_id not in _GLOBAL_PROMPT_SUBSCRIPTIONS:
+            if service not in _GLOBAL_PROMPT_SUBSCRIPTIONS:
                 service.subscribe(
                     "global_system_prompt",
                     lambda _key, _value: invalidate_global_system_prompt_cache(),
                 )
-                _GLOBAL_PROMPT_SUBSCRIPTIONS.add(service_id)
+                _GLOBAL_PROMPT_SUBSCRIPTIONS.add(service)
     now = time.monotonic()
     ttl = _global_prompt_ttl_seconds()
     with _GLOBAL_PROMPT_LOCK:
@@ -221,6 +229,7 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
     """Stop and clear cached TTS/STT providers owned by this service."""
     global _tts_provider_instance, _tts_provider_name
     global _stt_provider_instance, _stt_provider_name
+    global _tts_model_owner_guard
 
     if kind in (None, "tts"):
         instance = _tts_provider_instance
@@ -232,6 +241,12 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
                 stop()
             except Exception:
                 _LOG.warning("Audio provider stop failed during cache invalidation")
+        guard, _tts_model_owner_guard = _tts_model_owner_guard, None
+        if guard is not None:
+            try:
+                guard.close()
+            except Exception:
+                _LOG.warning("TTS model-owner lease release failed during cache invalidation")
     if kind in (None, "stt"):
         instance = _stt_provider_instance
         _stt_provider_instance = None
@@ -245,7 +260,7 @@ def invalidate_audio_provider_cache(kind: str | None = None) -> None:
 
 
 def get_tts_provider(provider_name: str | None = None) -> Any:
-    global _tts_provider_instance, _tts_provider_name
+    global _tts_provider_instance, _tts_provider_name, _tts_model_owner_guard
     settings = load_settings()
     name = provider_name or str(settings.get("audio_provider_tts") or "faster-qwen3-tts")
     runtime = get_runtime_config()
@@ -276,6 +291,12 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
                 stop()
             except Exception:
                 _LOG.warning("TTS provider stop failed during replacement")
+        guard, _tts_model_owner_guard = _tts_model_owner_guard, None
+        if guard is not None:
+            try:
+                guard.close()
+            except Exception:
+                _LOG.warning("TTS model-owner lease release failed during replacement")
     provider_settings = dict(settings.get(name) or {})
     if name == "faster-qwen3-tts":
         config = provider_settings
@@ -286,13 +307,55 @@ def get_tts_provider(provider_name: str | None = None) -> Any:
             "max_retries": provider_settings.get("max_retries", 3),
             "extra_params": provider_settings.get("extra_params", {}),
         }
-    instance = get_audio_registry().create_tts_provider(name, config=config)
-    if instance is not None and hasattr(instance, "start"):
-        state = instance.start()
-        if isinstance(state, dict) and not state.get("running", False):
-            raise RuntimeError(str(state.get("message") or "TTS provider failed to start"))
-    _tts_provider_instance = instance
-    _tts_provider_name = name
+    claimed_guard = None
+    instance = None
+    try:
+        if name == "faster-qwen3-tts":
+            from app.persistence.device_permits import default_device_permit_service
+
+            permit_service = default_device_permit_service()
+            if permit_service is not None and _tts_model_owner_guard is None:
+                claimed_guard = permit_service.hold_model_owner(
+                    "tts",
+                    holder_id=f"{runtime.gateway_role.value}:{os.getpid()}",
+                    process_role=(
+                        "gateway"
+                        if runtime.gateway_role is GatewayRole.WORKER
+                        else runtime.gateway_role.value
+                    ),
+                )
+                _tts_model_owner_guard = claimed_guard
+        instance = get_audio_registry().create_tts_provider(name, config=config)
+        if instance is not None and hasattr(instance, "start"):
+            state = instance.start()
+            if isinstance(state, dict) and not state.get("running", False):
+                raise RuntimeError(str(state.get("message") or "TTS provider failed to start"))
+        _tts_provider_instance = instance
+        _tts_provider_name = name
+        if claimed_guard is not None:
+            stop = getattr(instance, "stop", None)
+            if callable(stop):
+                def stop_unowned_provider() -> None:
+                    global _tts_provider_instance, _tts_provider_name, _tts_model_owner_guard
+                    stop()
+                    if _tts_provider_instance is instance:
+                        _tts_provider_instance = None
+                        _tts_provider_name = None
+                    if _tts_model_owner_guard is claimed_guard:
+                        _tts_model_owner_guard = None
+
+                if not claimed_guard.set_on_lost(stop_unowned_provider):
+                    raise RuntimeError(
+                        "local TTS model-owner lease was lost during provider startup"
+                    )
+    except Exception:
+        if _tts_provider_instance is instance:
+            _tts_provider_instance = None
+            _tts_provider_name = None
+        if claimed_guard is not None:
+            _tts_model_owner_guard = None
+            claimed_guard.close()
+        raise
     return instance
 
 

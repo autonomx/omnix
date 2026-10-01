@@ -88,23 +88,27 @@ def _stabilize_equivalent_io_schemas(schema: dict[str, object]) -> None:
     rewrite(schema)
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("usage: python scripts/export_gateway_openapi.py <output-json>", file=sys.stderr)
-        return 2
-
-    root = _repo_root()
-    src_dir = root / "src"
+def export_schema() -> dict[str, object]:
+    """Return the gateway OpenAPI document exactly as the web contract stores it."""
+    src_dir = _repo_root() / "src"
     if str(src_dir) not in sys.path:
         sys.path.insert(0, str(src_dir))
 
     from app.gateway.main import create_gateway_app
 
-    output_path = (root / argv[1]).resolve()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     schema = create_gateway_app().openapi()
     _stabilize_equivalent_io_schemas(schema)
-    schema = _stabilize_integral_json_numbers(schema)
+    return _stabilize_integral_json_numbers(schema)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print("usage: python scripts/export_gateway_openapi.py <output-json>", file=sys.stderr)
+        return 2
+
+    output_path = (_repo_root() / argv[1]).resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    schema = export_schema()
     output_path.write_text(
         json.dumps(schema, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

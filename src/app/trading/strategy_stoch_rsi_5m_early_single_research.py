@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import time
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -75,18 +76,19 @@ StochRsiEarlySingleResearchArm = Literal[
     "early_failure_15m_vwap_mfe3",
 ]
 
-EARLY_FAILURE_ARM_SPECS: dict[str, tuple[int, str, Decimal | None]] = {}
-for _minutes in (5, 10, 15):
-    for _condition, _token in (("entry", "entry"), ("vwap", "vwap")):
-        for _mfe_token, _mfe in (
+EARLY_FAILURE_ARM_SPECS = MappingProxyType(
+    {
+        f"early_failure_{minutes}m_{token}_{mfe_token}": (minutes, condition, mfe)
+        for minutes in (5, 10, 15)
+        for condition, token in (("entry", "entry"), ("vwap", "vwap"))
+        for mfe_token, mfe in (
             ("any", None),
             ("mfe1", Decimal("1")),
             ("mfe2", Decimal("2")),
             ("mfe3", Decimal("3")),
-        ):
-            EARLY_FAILURE_ARM_SPECS[
-                f"early_failure_{_minutes}m_{_token}_{_mfe_token}"
-            ] = (_minutes, _condition, _mfe)
+        )
+    }
+)
 
 ONE_MINUTE_STOP_ARMS = {
     "hard_stop_2pct": Decimal("2"),

@@ -4,13 +4,14 @@ from __future__ import annotations
 from app.config.env import environment
 
 import json
-import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from contextlib import nullcontext
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage
+from app.persistence.device_permits import device_permit_slot
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputError,
@@ -19,10 +20,9 @@ from app.providers.structured import (
 )
 
 _PROVIDER_EXECUTOR = ThreadPoolExecutor(
-    max_workers=1,
+    max_workers=4,
     thread_name_prefix="omnix-memory-structured-provider",
 )
-_PROVIDER_SLOT = threading.BoundedSemaphore(1)
 
 
 class MemoryProposal(BaseModel):
@@ -134,15 +134,28 @@ class ProviderStructuredProposalProvider:
         return [row.model_dump(mode="python") for row in value.proposals]
 
     def propose(self, content: str) -> list[dict[str, Any]]:
-        if not _PROVIDER_SLOT.acquire(blocking=False):
-            raise RuntimeError("structured memory provider is busy")
-        future = _PROVIDER_EXECUTOR.submit(self._call, content)
-        future.add_done_callback(lambda _completed: _PROVIDER_SLOT.release())
+        provider_name = str(
+            getattr(getattr(self.provider, "config", None), "provider_name", "")
+        ).strip().casefold()
+        admission = (
+            device_permit_slot(
+                "llm-local",
+                priority="batch",
+                timeout_seconds=self.timeout_seconds,
+            )
+            if provider_name in {"lmstudio", "ollama", "local", "vllm"}
+            else nullcontext()
+        )
+        future = _PROVIDER_EXECUTOR.submit(self._call_admitted, content, admission)
         try:
             return future.result(timeout=self.timeout_seconds)
         except TimeoutError as exc:
             future.cancel()
             raise TimeoutError("structured memory provider deadline exceeded") from exc
+
+    def _call_admitted(self, content: str, admission) -> list[dict[str, Any]]:
+        with admission:
+            return self._call(content)
 
 
 def default_structured_proposal_provider() -> StructuredProposalProvider | None:

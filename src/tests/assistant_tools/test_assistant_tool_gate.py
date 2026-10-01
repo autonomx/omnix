@@ -1,4 +1,3 @@
-from fastapi.testclient import TestClient
 
 from app.assistant_tools import AssistantToolRequest, review_assistant_tool_request
 from app.assistant_tools.config_store import (
@@ -6,9 +5,7 @@ from app.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
-    save_assistant_tools_config,
 )
-from app.gateway.main import create_gateway_app
 
 
 def _connected_config(tool_id: str, *, enabled_actions: dict[str, bool] | None = None) -> AssistantToolsConfigPayload:
@@ -123,19 +120,3 @@ def test_missing_connection_blocks_even_enabled_read_action():
     assert decision.reason == "missing_connection"
 
 
-def test_review_route_uses_persisted_config(monkeypatch, tmp_path):
-    path = tmp_path / "assistant_tools_config.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(path))
-    save_assistant_tools_config(_connected_config("contacts"), path)
-    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
-
-    response = client.post(
-        "/api/assistant/tools/review",
-        json={"tool_id": "contacts", "action_id": "contacts.search_contacts", "session_id": "chat:1", "input": {"q": "Ada"}},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["allowed"] is True
-    assert payload["executable"] is True
-    assert payload["approval_required"] is False

@@ -8,6 +8,7 @@ import re
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -35,6 +36,8 @@ _SESSION_CACHE_TTL_SECONDS = 120.0
 _SESSION_LOAD_WAIT_SECONDS = 5.0
 _MAX_SPECULATIONS = 64
 _MAX_PRIMED_SESSIONS = 64
+_MAX_SESSION_LOADS = 64
+_SESSION_LOAD_TTL_SECONDS = 30.0
 _MIN_SINGLE_WORD_CHARS = 4
 _SPECULATION_PREAMBLE_CHARS = 2_048
 _WORD_PATTERN = re.compile(r"[\w]+(?:['’][\w]+)?", re.UNICODE)
@@ -83,9 +86,15 @@ class _PrimedSession:
     primed_at: float
 
 
+@dataclass
+class _SessionLoad:
+    event: threading.Event
+    started_at: float
+
+
 _SPECULATIONS: dict[str, _Speculation] = {}
 _PRIMED_SESSIONS: dict[str, _PrimedSession] = {}
-_SESSION_LOADS: dict[str, threading.Event] = {}
+_SESSION_LOADS: OrderedDict[str, _SessionLoad] = OrderedDict()
 _SPECULATION_LOCK = threading.RLock()
 
 
@@ -125,11 +134,18 @@ def prime_live_speculation_session(session: Any) -> None:
 
 
 def clear_live_speculation_session_cache() -> None:
-    """Clear session snapshots and single-flight state for focused tests."""
+    """Compatibility alias for clearing all in-process speculation caches."""
+
+    clear_live_speculation_cache()
+
+
+def clear_live_speculation_cache() -> None:
+    """Invalidate speculative generations, session snapshots, and single-flight state."""
 
     with _SPECULATION_LOCK:
+        _SPECULATIONS.clear()
         _PRIMED_SESSIONS.clear()
-        waiting = list(_SESSION_LOADS.values())
+        waiting = [load.event for load in _SESSION_LOADS.values()]
         _SESSION_LOADS.clear()
     for event in waiting:
         event.set()
@@ -326,14 +342,10 @@ async def _resolve_speculation_session(
         cached = _get_primed_session_locked(session_id)
         if cached is not None:
             return cached, True, (time.perf_counter() - started) * 1000.0
-        load_event = _SESSION_LOADS.get(session_id)
-        owns_load = load_event is None
-        if load_event is None:
-            load_event = threading.Event()
-            _SESSION_LOADS[session_id] = load_event
+        load, owns_load = _session_load_locked(session_id, time.monotonic())
 
     if not owns_load:
-        await asyncio.to_thread(load_event.wait, _SESSION_LOAD_WAIT_SECONDS)
+        await asyncio.to_thread(load.event.wait, _SESSION_LOAD_WAIT_SECONDS)
         cached = _get_primed_session(session_id)
         if cached is not None:
             return cached, True, (time.perf_counter() - started) * 1000.0
@@ -347,9 +359,9 @@ async def _resolve_speculation_session(
     finally:
         if owns_load:
             with _SPECULATION_LOCK:
-                event = _SESSION_LOADS.pop(session_id, None)
-            if event is not None:
-                event.set()
+                if _SESSION_LOADS.get(session_id) is load:
+                    _SESSION_LOADS.pop(session_id, None)
+            load.event.set()
 
 
 def _get_primed_session(session_id: str) -> Any | None:
@@ -493,6 +505,32 @@ def _prune_primed_sessions() -> None:
         _PRIMED_SESSIONS.pop(key, None)
 
 
+def _prune_session_loads_locked(now: float) -> None:
+    expired = [
+        session_id
+        for session_id, load in _SESSION_LOADS.items()
+        if now - load.started_at > _SESSION_LOAD_TTL_SECONDS
+    ]
+    for session_id in expired:
+        load = _SESSION_LOADS.pop(session_id, None)
+        if load is not None:
+            load.event.set()
+
+
+def _session_load_locked(session_id: str, now: float) -> tuple[_SessionLoad, bool]:
+    _prune_session_loads_locked(now)
+    existing = _SESSION_LOADS.get(session_id)
+    if existing is not None:
+        _SESSION_LOADS.move_to_end(session_id)
+        return existing, False
+    while len(_SESSION_LOADS) >= _MAX_SESSION_LOADS:
+        _old_session_id, oldest = _SESSION_LOADS.popitem(last=False)
+        oldest.event.set()
+    created = _SessionLoad(threading.Event(), now)
+    _SESSION_LOADS[session_id] = created
+    return created, True
+
+
 def _speculation_started_sse(payload: dict[str, Any]) -> str:
     """Send enough initial SSE bytes to defeat small-chunk buffering."""
 
@@ -506,6 +544,7 @@ def _sse(payload: dict[str, Any]) -> str:
 
 __all__ = [
     "clear_live_speculation_session_cache",
+    "clear_live_speculation_cache",
     "normalized_transcript_words",
     "prime_live_speculation_session",
     "register_live_chat_speculation_routes",

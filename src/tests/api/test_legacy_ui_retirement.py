@@ -3,6 +3,10 @@ from pathlib import Path
 import sys
 
 from fastapi.testclient import TestClient
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 SRC_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SRC_DIR))

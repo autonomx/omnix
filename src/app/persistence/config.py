@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from urllib.parse import urlparse
 
 from app.config.env import env_int, env_str
@@ -70,7 +70,7 @@ class DatabaseSettings:
         return f"postgresql://{user}{host}{port}/{database}"
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def database_settings() -> DatabaseSettings:
     database_url = (env_str("OMNIX_DATABASE_URL", "") or "").strip()
     if not database_url:
@@ -109,7 +109,7 @@ def reset_database_settings_cache() -> None:
     database_settings.cache_clear()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def migration_database_settings() -> DatabaseSettings:
     """Return DDL-owner settings, falling back to the runtime URL for local installs."""
     migration_url = (env_str("OMNIX_MIGRATION_DATABASE_URL", "") or "").strip()

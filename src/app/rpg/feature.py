@@ -67,12 +67,7 @@ def _campaign_genesis_worker(context):
         monitor=object(),
         startup=(recover,),
         shutdown=(stop,),
-        requires=frozenset(
-            {
-                RuntimeCapability.OWN_BACKGROUND_RUNTIME,
-                RuntimeCapability.RUN_RECOVERY,
-            }
-        ),
+        requires=frozenset({RuntimeCapability.RUN_JOB_WORKERS}),
     )
 
 FEATURE = FeatureModule(

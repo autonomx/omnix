@@ -56,3 +56,37 @@ def test_health_reports_not_ready_when_provider_is_not_initialized():
     assert result["ok"] is False
     assert result["provider"] == "qwen3_tts"
     assert "provider_not_initialized" in result["error"]
+
+
+def test_model_owner_loss_stops_provider_and_marks_server_not_ready():
+    import tts_server
+
+    class FakeProvider:
+        stopped = False
+
+        def stop(self):
+            self.stopped = True
+
+    provider = FakeProvider()
+    guard = object()
+    previous = (
+        tts_server._TTS_PROVIDER,
+        tts_server._TTS_PROVIDER_ERROR,
+        tts_server._TTS_MODEL_OWNER_GUARD,
+    )
+    try:
+        tts_server._TTS_PROVIDER = provider
+        tts_server._TTS_PROVIDER_ERROR = ""
+        tts_server._TTS_MODEL_OWNER_GUARD = guard
+        tts_server._handle_tts_model_owner_loss(provider, guard)
+
+        assert provider.stopped
+        assert tts_server.get_tts_service_status()["ok"] is False
+        assert "lease was lost" in tts_server.get_tts_service_status()["error"]
+        assert tts_server._TTS_MODEL_OWNER_GUARD is None
+    finally:
+        (
+            tts_server._TTS_PROVIDER,
+            tts_server._TTS_PROVIDER_ERROR,
+            tts_server._TTS_MODEL_OWNER_GUARD,
+        ) = previous

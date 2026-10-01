@@ -73,26 +73,10 @@ def _b(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
-def _load_manual_session_override(session_id: str) -> dict[str, Any]:
-    """Best-effort bridge for manual scenario sessions."""
-    if not _s(session_id).startswith("manual_service_"):
-        return {}
-    try:
-        from tests.rpg.manual.session_helpers import _ensure_manual_session
-
-        return _d(_ensure_manual_session(session_id))
-    except Exception:
-        return {}
-
-
 def _select_session(session_id: str, session_override: dict[str, Any] | None = None) -> dict[str, Any]:
     override = _d(session_override)
     if override:
         return deepcopy(override)
-
-    manual = _load_manual_session_override(session_id)
-    if manual:
-        return manual
 
     loaded = load_runtime_session(session_id)
     return _d(loaded)

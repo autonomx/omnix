@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 from app.gateway.main import create_gateway_app
 
 
@@ -19,13 +21,7 @@ HERMES_HIDDEN_ROUTES = {
 
 def test_hermes_gateway_routes_are_registered() -> None:
     app = create_gateway_app()
-    paths = {route.path for route in app.routes}
+    paths = {route.path for route in effective_routes(app)}
 
     assert HERMES_HIDDEN_ROUTES.issubset(paths)
 
-
-def test_hermes_gateway_routes_are_hidden_from_openapi() -> None:
-    schema_paths = create_gateway_app().openapi()["paths"]
-
-    for path in HERMES_HIDDEN_ROUTES:
-        assert path not in schema_paths

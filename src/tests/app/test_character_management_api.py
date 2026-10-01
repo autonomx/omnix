@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 from pathlib import Path
 
 import pytest
@@ -40,7 +42,7 @@ def test_character_data_export_and_confirmed_archive(tmp_path: Path, monkeypatch
     exported = client.get("/api/characters/maya/data")
     assert exported.status_code == 200, (
         exported.text,
-        [getattr(route, "path", "") for route in app.routes if "characters" in getattr(route, "path", "")],
+        [route.path for route in effective_routes(app) if "characters" in (route.path or "")],
     )
     assert exported.json()["character"]["id"] == "maya"
     assert exported.json()["versions"][0]["version"] == 1

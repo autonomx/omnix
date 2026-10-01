@@ -156,7 +156,6 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
             speculation_runtime._SPECULATIONS[generation_id] = pending
             handshake_runtime._HANDSHAKE_GENERATIONS[generation_id] = generation
             generation.stream_started = True
-            handshake_runtime._STREAM_STARTED.add(generation_id)
 
         if superseded_generation_ids:
             stream_log(
@@ -218,7 +217,6 @@ def register_live_chat_speculation_inline_stream_routes(router: APIRouter,
             )
             worker.start()
             yield from handshake_runtime._subscribe_generation(
-                generation_id,
                 pending,
                 generation,
             )

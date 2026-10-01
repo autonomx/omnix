@@ -1,22 +1,13 @@
-"""Lease-backed execution for legacy feature jobs still using the shared Job API.
-
-The HTTP/API process only enqueues these jobs. A worker-role gateway owns this
-poller through GatewayBackgroundRuntime, claims PostgreSQL leases, renews them
-while provider work runs, and fences durable mutations if singleton background
-authority is lost.
-"""
+"""Lease-fenced executor for feature-owned durable jobs."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import threading
+import time
 import uuid
 from typing import Any
 
-from app.runtime.background import (
-    BackgroundOwnershipUnavailable,
-    BackgroundWorker,
-    register_background_worker,
-)
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
@@ -25,8 +16,8 @@ from app.persistence.unit_of_work import unit_of_work
 logger = logging.getLogger(__name__)
 
 
-class _AuthorityBoundJobStore:
-    """Require live singleton authority before durable executor mutations."""
+class _LeaseBoundJobStore:
+    """Bind every mutation to the one job and lease assigned to this attempt."""
 
     _MUTATING = frozenset(
         {
@@ -41,25 +32,23 @@ class _AuthorityBoundJobStore:
         }
     )
 
-    def __init__(self, store: Any, authority: Any, job: JobRecord) -> None:
+    def __init__(self, store: Any, job: JobRecord) -> None:
+        lease = job.lease
+        if lease is None:
+            raise JobClaimConflict("Durable feature execution requires a live job lease")
         self._store = store
-        self._authority = authority
         self._job_id = job.id
-        self._lease_token = job.lease.token if job.lease is not None else None
-        self._worker_id = job.lease.worker_id if job.lease is not None else None
+        self._lease_token = lease.token
+        self._worker_id = lease.worker_id
 
     def require_execution_authority(self, job_id: str | None = None) -> None:
         target = job_id or self._job_id
         if target != self._job_id:
             raise JobClaimConflict("Durable feature executor cannot mutate another job")
-        self._authority.require_live()
 
     def require_execution_authority_in(self, work: Any, job_id: str | None = None) -> None:
         del work
-        target = job_id or self._job_id
-        if target != self._job_id:
-            raise JobClaimConflict("Durable feature executor cannot mutate another job")
-        self._authority.require_live()
+        self.require_execution_authority(job_id)
 
     def complete_job_in_transaction(
         self,
@@ -87,15 +76,23 @@ class _AuthorityBoundJobStore:
 
     def complete_job(self, job_id: str, request: CompleteJobRequest) -> JobRecord | None:
         self.require_execution_authority(job_id)
-        return self._store.complete_job(job_id, request.model_copy(update={
-            "worker_id": self._worker_id, "lease_token": self._lease_token,
-        }))
+        return self._store.complete_job(
+            job_id,
+            request.model_copy(update={
+                "worker_id": self._worker_id,
+                "lease_token": self._lease_token,
+            }),
+        )
 
     def fail_job(self, job_id: str, request: FailJobRequest) -> JobRecord | None:
         self.require_execution_authority(job_id)
-        return self._store.fail_job(job_id, request.model_copy(update={
-            "worker_id": self._worker_id, "lease_token": self._lease_token,
-        }))
+        return self._store.fail_job(
+            job_id,
+            request.model_copy(update={
+                "worker_id": self._worker_id,
+                "lease_token": self._lease_token,
+            }),
+        )
 
     def __getattr__(self, name: str) -> Any:
         value = getattr(self._store, name)
@@ -103,74 +100,117 @@ class _AuthorityBoundJobStore:
             return value
 
         def guarded(*args: Any, **kwargs: Any) -> Any:
-            self.require_execution_authority()
-            kwargs.setdefault("worker_id", self._worker_id)
-            kwargs.setdefault("lease_token", self._lease_token)
+            target = args[0] if args else kwargs.get("job_id")
+            self.require_execution_authority(target)
+            kwargs["worker_id"] = self._worker_id
+            kwargs["lease_token"] = self._lease_token
             return value(*args, **kwargs)
 
         return guarded
 
 
+@dataclass(slots=True)
+class _ActiveExecution:
+    job: JobRecord
+    cancellation: threading.Event
+    thread: threading.Thread
+
+
 class DurableFeatureJobWorker:
+    """Poll one set of resource classes at an independent concurrency limit."""
+
     lease_seconds = 30
     renewal_seconds = 10
 
     def __init__(
         self,
         store: Any,
-        authority: Any,
         registry: JobHandlerRegistry,
         *,
+        pool_name: str = "default",
+        resource_classes: tuple[str, ...] | list[str] | None = None,
         services: Any = None,
         poll_seconds: float = 0.25,
         max_concurrency: int = 4,
+        shutdown_grace_seconds: float = 30,
+        worker_id: str | None = None,
     ) -> None:
+        if not pool_name or pool_name.strip() != pool_name:
+            raise ValueError("pool_name must be a non-empty normalized string")
+        if shutdown_grace_seconds < 0:
+            raise ValueError("shutdown_grace_seconds cannot be negative")
         self.store = store
-        self.authority = authority
         self.registry = registry
+        self.pool_name = pool_name
+        self.resource_classes = tuple(sorted(set(resource_classes or registry.resource_classes())))
+        self.job_types = tuple(sorted(
+            spec.type
+            for spec in (registry.require(job_type) for job_type in registry.types())
+            if spec.resource_class.value in self.resource_classes
+        ))
         self.services = services
+        if services is not None:
+            setattr(store, "runtime_services", services)
         self.poll_seconds = max(0.05, float(poll_seconds))
-        self.max_concurrency = max(1, min(int(max_concurrency), 16))
-        self.worker_id = f"gateway-feature:{uuid.uuid4().hex}"
+        self.max_concurrency = max(1, min(int(max_concurrency), 64))
+        self.shutdown_grace_seconds = float(shutdown_grace_seconds)
+        self.worker_id = worker_id or f"job-worker:{uuid.uuid4().hex}:{pool_name}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._ready = threading.Event()
         self._active_lock = threading.Lock()
-        self._active: dict[str, threading.Thread] = {}
+        self._active: dict[str, _ActiveExecution] = {}
         self.claim_count = 0
         self.completed_count = 0
         self.failure_count = 0
         self.last_error: str | None = None
-        self.active_job_id: str | None = None
 
     @property
     def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
+        thread = self._thread
+        return thread is not None and thread.is_alive()
+
+    @property
+    def ready(self) -> bool:
+        return self.running and not self._stop.is_set() and self._ready.is_set()
 
     def start(self) -> None:
-        self.authority.require_live()
         if self.running:
             return
         self._stop.clear()
+        self._ready.clear()
         self._thread = threading.Thread(
             target=self._loop,
-            name="omnix-durable-feature-jobs",
+            name=f"omnix-job-pool-{self.pool_name}",
             daemon=True,
         )
         self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, *, grace_seconds: float | None = None) -> None:
+        """Stop claims, drain work, then release any lease still in flight."""
         self._stop.set()
-        thread = self._thread
-        self._thread = None
-        if thread is not None:
-            thread.join(timeout=1.0)
+        grace = self.shutdown_grace_seconds if grace_seconds is None else max(0.0, grace_seconds)
+        deadline = time.monotonic() + grace
+        poller = self._thread
+        if poller is not None:
+            poller.join(timeout=max(0.0, deadline - time.monotonic()))
+
+        while time.monotonic() < deadline:
+            with self._active_lock:
+                active = list(self._active.values())
+            if not active:
+                break
+            remaining = deadline - time.monotonic()
+            active[0].thread.join(timeout=min(0.1, max(0.0, remaining)))
+
         with self._active_lock:
-            active = list(self._active.values())
-        for execution in active:
-            # Provider calls are not forcibly interrupted. Threads are daemon
-            # scoped and all later publications are authority/lease fenced once
-            # the gateway releases singleton ownership.
-            execution.join(timeout=1.0)
+            abandoned = list(self._active.values())
+        for execution in abandoned:
+            execution.cancellation.set()
+        for execution in abandoned:
+            self._release_lease(execution.job, "worker shutdown drain deadline elapsed")
+        for execution in abandoned:
+            execution.thread.join(timeout=0.2)
 
     @property
     def active_job_ids(self) -> tuple[str, ...]:
@@ -178,12 +218,17 @@ class DurableFeatureJobWorker:
             return tuple(sorted(self._active))
 
     def diagnostics(self) -> dict[str, Any]:
+        active_job_ids = self.active_job_ids
         return {
+            "pool": self.pool_name,
+            "ready": self.ready,
             "running": self.running,
             "worker_id": self.worker_id,
+            "resource_classes": list(self.resource_classes),
+            "job_types": list(self.job_types),
             "max_concurrency": self.max_concurrency,
-            "active_job_id": self.active_job_id,
-            "active_job_ids": list(self.active_job_ids),
+            "active_job_ids": list(active_job_ids),
+            "active_jobs": len(active_job_ids),
             "claim_count": self.claim_count,
             "completed_count": self.completed_count,
             "failure_count": self.failure_count,
@@ -193,64 +238,66 @@ class DurableFeatureJobWorker:
     def _loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self.authority.require_live()
                 self._reap_finished()
                 with self._active_lock:
                     saturated = len(self._active) >= self.max_concurrency
+                if not self.job_types:
+                    self._ready.set()
+                    self._stop.wait(self.poll_seconds)
+                    continue
                 if saturated:
                     self._stop.wait(self.poll_seconds)
                     continue
                 job = self._claim_one()
+                self._ready.set()
                 if job is None:
                     self._stop.wait(self.poll_seconds)
                     continue
+                if self._stop.is_set():
+                    self._release_lease(job, "worker stopping before execution")
+                    break
                 self._launch_claimed(job)
-            except BackgroundOwnershipUnavailable:
-                return
+            except JobClaimConflict:
+                continue
             except Exception as exc:
+                self._ready.clear()
                 self.failure_count += 1
                 self.last_error = f"{type(exc).__name__}: {exc}"
-                logger.exception("Durable feature worker iteration failed")
+                logger.exception("Durable feature job pool iteration failed pool=%s", self.pool_name)
                 self._stop.wait(min(2.0, self.poll_seconds * 4))
 
     def _launch_claimed(self, job: JobRecord) -> None:
+        cancellation = threading.Event()
         execution = threading.Thread(
             target=self._run_claimed,
-            args=(job,),
-            name=f"omnix-feature-job-{job.id[-8:]}",
+            args=(job, cancellation),
+            name=f"omnix-job-{self.pool_name}-{job.id[-8:]}",
             daemon=True,
         )
         with self._active_lock:
-            self._active[job.id] = execution
-            self.active_job_id = job.id
+            self._active[job.id] = _ActiveExecution(job, cancellation, execution)
         execution.start()
 
-    def _run_claimed(self, job: JobRecord) -> None:
+    def _run_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         try:
-            self._execute_claimed(job)
+            self._execute_claimed(job, cancellation)
         finally:
             with self._active_lock:
                 self._active.pop(job.id, None)
-                self.active_job_id = next(iter(self._active), None)
 
     def _reap_finished(self) -> None:
         with self._active_lock:
-            finished = [
-                (job_id, execution)
-                for job_id, execution in self._active.items()
-                if not execution.is_alive()
-            ]
-            for job_id, _ in finished:
-                self._active.pop(job_id, None)
-            self.active_job_id = next(iter(self._active), None)
+            for job_id, execution in tuple(self._active.items()):
+                if not execution.thread.is_alive():
+                    self._active.pop(job_id, None)
 
     def _claim_one(self) -> JobRecord | None:
         with unit_of_work(self.store.database) as work:
             record = work.jobs.claim_next(
                 self.store.context,
                 worker_id=self.worker_id,
-                resource_classes=list(self.registry.resource_classes()),
-                job_types=list(self.registry.types()),
+                resource_classes=list(self.resource_classes),
+                job_types=list(self.job_types),
                 lease_seconds=self.lease_seconds,
             )
             if record is None:
@@ -266,22 +313,28 @@ class DurableFeatureJobWorker:
         self.claim_count += 1
         return self.store._record(record)
 
-    def _execute_claimed(self, job: JobRecord) -> None:
+    def _execute_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         lease = job.lease
         if lease is None:
-            raise RuntimeError(f"Claimed job has no lease: {job.id}")
-        token = lease.token
+            self._record_unexpected_failure(job, RuntimeError("claimed job has no lease"))
+            return
         renewal_stop = threading.Event()
         renewal = threading.Thread(
             target=self._renew_loop,
-            args=(job.id, token, renewal_stop),
-            name=f"omnix-feature-lease-{job.id[-8:]}",
+            args=(job.id, lease.worker_id, lease.token, renewal_stop),
+            name=f"omnix-job-lease-{job.id[-8:]}",
             daemon=True,
         )
         renewal.start()
         try:
-            authority_store = _AuthorityBoundJobStore(self.store, self.authority, job)
-            result = execute_durable_feature_job(authority_store, job, self.registry)
+            lease_store = _LeaseBoundJobStore(self.store, job)
+            result = execute_durable_feature_job(
+                lease_store,
+                job,
+                self.registry,
+                services=self.services,
+                cancellation=cancellation,
+            )
             if result.status in {
                 JobStatus.COMPLETED,
                 JobStatus.FAILED,
@@ -290,9 +343,8 @@ class DurableFeatureJobWorker:
             }:
                 self.completed_count += 1
             self.last_error = None
-        except (BackgroundOwnershipUnavailable, JobClaimConflict):
-            # Ownership/lease loss is intentionally not converted into a second
-            # write. Expiry/reclaim decides the durable outcome.
+        except JobClaimConflict:
+            # An expired or explicitly released token cannot publish a late result.
             return
         except Exception as exc:
             self.failure_count += 1
@@ -302,20 +354,26 @@ class DurableFeatureJobWorker:
             renewal_stop.set()
             renewal.join(timeout=1.0)
 
-    def _renew_loop(self, job_id: str, lease_token: str, stop: threading.Event) -> None:
+    def _renew_loop(
+        self,
+        job_id: str,
+        worker_id: str,
+        lease_token: str,
+        stop: threading.Event,
+    ) -> None:
         while not stop.wait(self.renewal_seconds):
             try:
-                self.authority.require_live()
                 with unit_of_work(self.store.database) as work:
                     work.jobs.renew_lease(
                         self.store.context,
                         job_id=job_id,
-                        worker_id=self.worker_id,
+                        worker_id=worker_id,
                         lease_token=lease_token,
                         lease_seconds=self.lease_seconds,
                     )
                     work.commit()
             except Exception:
+                self._ready.clear()
                 logger.warning(
                     "Durable job lease renewal failed; stopping renewal job_id=%s",
                     job_id,
@@ -323,12 +381,31 @@ class DurableFeatureJobWorker:
                 )
                 return
 
+    def _release_lease(self, job: JobRecord, reason: str) -> None:
+        lease = job.lease
+        if lease is None:
+            return
+        try:
+            with unit_of_work(self.store.database) as work:
+                work.jobs.release(
+                    self.store.context,
+                    job_id=job.id,
+                    worker_id=lease.worker_id,
+                    lease_token=lease.token,
+                    reason=reason,
+                )
+                work.commit()
+        except JobClaimConflict:
+            # Completion, expiry, or a new claim already consumed this lease.
+            return
+        except Exception:
+            logger.exception("Could not release job lease during shutdown: %s", job.id)
+
     def _record_unexpected_failure(self, job: JobRecord, exc: Exception) -> None:
         lease = job.lease
         if lease is None:
             return
         try:
-            self.authority.require_live()
             with unit_of_work(self.store.database) as work:
                 work.jobs.fail(
                     self.store.context,
@@ -348,11 +425,8 @@ class DurableFeatureJobWorker:
                 )
                 work.commit()
         except JobClaimConflict:
-            # A later claim owns the job. The stale executor must not mutate it.
             return
         except Exception:
-            # Lease expiry/recovery remains authoritative if this write cannot
-            # be proven to belong to the current worker.
             logger.exception("Could not persist durable feature worker failure: %s", job.id)
 
 
@@ -360,8 +434,11 @@ def execute_durable_feature_job(
     job_store: Any,
     job: JobRecord,
     registry: JobHandlerRegistry,
+    *,
+    services: Any = None,
+    cancellation: threading.Event | None = None,
 ) -> JobRecord:
-    """Dispatch an already-leased job through the feature-owned handler registry."""
+    """Dispatch an already-leased job through its feature-owned handler."""
     spec = registry.get(job.type)
     if spec is None:
         failed = job_store.fail_job(
@@ -380,37 +457,11 @@ def execute_durable_feature_job(
     return registry.execute(
         JobExecutionContext(
             job_store=retry_aware_store,
-            services=getattr(job_store, "runtime_services", None),
+            services=services if services is not None else getattr(job_store, "runtime_services", None),
+            cancellation=cancellation,
         ),
         job,
     )
 
 
-def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeatureJobWorker:
-    runtime = getattr(gateway.state, "background_runtime", None)
-    registry = getattr(gateway.state, "job_handler_registry", None)
-    if runtime is None:
-        raise RuntimeError("Durable feature worker requires composed background runtime")
-    if registry is None:
-        raise RuntimeError("Durable feature worker requires composed job handlers")
-    services = getattr(gateway.state, "runtime_services", None)
-    setattr(store, "runtime_services", services)
-    worker = DurableFeatureJobWorker(store, runtime, registry, services=services)
-    register_background_worker(
-        gateway.state.background_registry,
-        BackgroundWorker(
-            name="durable-feature-jobs",
-            monitor=worker,
-            startup=(worker.start,),
-            shutdown=(worker.stop,),
-        ),
-    )
-    gateway.state.durable_feature_job_worker = worker
-    return worker
-
-
-__all__ = [
-    "DurableFeatureJobWorker",
-    "execute_durable_feature_job",
-    "register_durable_feature_job_worker",
-]
+__all__ = ["DurableFeatureJobWorker", "execute_durable_feature_job"]

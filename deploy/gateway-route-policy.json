@@ -3,7 +3,11 @@
   "chat_pattern": "^/api/chat/sessions(?:/[^/]+(?:/(?:attachments|messages(?:/stream)?))?)?$",
   "read_pattern": "^(?:/events|/api/jobs(?:/[^/]+)?|/api/trading/(?:bars|quotes))$",
   "read_methods": ["GET", "HEAD"],
-  "speech_paths": ["/api/tts/stream/websocket", "/api/tts/stream/server-sent-events"],
+  "speech_paths": ["/api/tts/stream/websocket", "/api/tts/stream/server-sent-events", "/api/tts/live-call/websocket"],
+  "live_call_websocket_path": "/api/tts/live-call/websocket",
+  "live_chat_pattern": "^/api/chat/sessions/[^/]+/messages/stream$",
+  "call_id_header": "x-omnix-call-id",
+  "call_affinity_cookie": "omnix_call_affinity",
   "default_target": "worker",
   "worker_affinity_header": "x-omnix-gateway-affinity"
 }

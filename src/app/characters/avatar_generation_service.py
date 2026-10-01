@@ -56,7 +56,19 @@ class CharacterAvatarGenerationService:
         job_store_factory: Callable[[], Any] = default_job_store,
         asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
     ) -> None:
-        self.repository = repository or CharacterAvatarGenerationRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+
+            if uses_postgresql_runtime():
+                # Feature-owned adapter; the composition root is not imported here.
+                from app.characters.persistence.avatar_generation_repository import (
+                    PostgresCharacterAvatarGenerationRepositoryAdapter,
+                )
+
+                repository = PostgresCharacterAvatarGenerationRepositoryAdapter()
+            else:
+                repository = CharacterAvatarGenerationRepository()
+        self.repository = repository
         self.character_service_factory = character_service_factory
         self.avatar_service_factory = avatar_service_factory
         self.job_store_factory = job_store_factory
@@ -354,13 +366,17 @@ class CharacterAvatarGenerationService:
             avatar_pack_version=pack.version,
             error="",
         )
-        from .avatar_viseme_generation import (
-            CharacterVisemeGenerationRepository,
-            CharacterVisemeGenerationService,
-        )
+        from .avatar_viseme_generation import CharacterVisemeGenerationService
+
+        viseme_repository = None
+        repository_path = getattr(self.repository, "db_path", None)
+        if repository_path is not None:
+            from .avatar_viseme_generation import CharacterVisemeGenerationRepository
+
+            viseme_repository = CharacterVisemeGenerationRepository(repository_path)
 
         CharacterVisemeGenerationService(
-            CharacterVisemeGenerationRepository(self.repository.db_path),
+            viseme_repository,
             character_service=self.character_service_factory(),
             avatar_service=self.avatar_service_factory(),
             job_store=self.job_store_factory(),

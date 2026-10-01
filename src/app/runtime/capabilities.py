@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from .config import RuntimeConfig
+from .config import GatewayRole, RuntimeConfig
 
 
 class RuntimeCapability(str, Enum):
@@ -14,6 +14,7 @@ class RuntimeCapability(str, Enum):
     RUN_CHAT_DISPATCH = "run_chat_dispatch"
     RUN_RECOVERY = "run_recovery"
     RUN_SCHEDULERS = "run_schedulers"
+    RUN_JOB_WORKERS = "run_job_workers"
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,13 +29,19 @@ class RuntimeCapabilities:
         # Request-driven Chat execution has a durable per-process owner on all
         # serving roles. Recovery stays with the singleton worker, while
         # independent schedulers may be spread across scheduler-role replicas.
-        granted = {RuntimeCapability.SERVE_API, RuntimeCapability.RUN_CHAT_DISPATCH}
+        # The standalone job worker composes the feature catalog to build its
+        # handler registry, but does not serve the composed gateway app.
+        granted: set[RuntimeCapability] = {RuntimeCapability.SERVE_API}
+        if config.gateway_role is not GatewayRole.JOB_WORKER:
+            granted.add(RuntimeCapability.RUN_CHAT_DISPATCH)
         if config.owns_background_runtime:
             granted.update(
                 {RuntimeCapability.OWN_BACKGROUND_RUNTIME, RuntimeCapability.RUN_RECOVERY}
             )
         if config.runs_schedulers:
             granted.add(RuntimeCapability.RUN_SCHEDULERS)
+        if config.runs_job_workers:
+            granted.add(RuntimeCapability.RUN_JOB_WORKERS)
         if config.allow_local_tts:
             granted.add(RuntimeCapability.RUN_LOCAL_TTS)
         if config.use_remote_tts:

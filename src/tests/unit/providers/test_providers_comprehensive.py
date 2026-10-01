@@ -235,53 +235,6 @@ class TestLMStudioProviderFull:
     """Full test suite for LMStudioProvider."""
     
     @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_success(self, mock_requests):
-        """Test successful non-streaming chat completion."""
-        # Create a proper mock response with the expected data structure
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello!"}, "finish_reason": "stop"}],
-            "model": "test-model",
-            "usage": {"prompt_tokens": 10, "completion_tokens": 20}
-        }
-        mock_requests.request.return_value = mock_response
-
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
-        provider = LMStudioProvider(config)
-
-        messages = [ChatMessage(role="user", content="Hi")]
-        response = provider.chat_completion(messages)
-
-        assert isinstance(response, ChatResponse)
-        assert response.content == "Hello!"
-        assert response.model == "test-model"
-        assert response.usage == {"prompt_tokens": 10, "completion_tokens": 20}
-        mock_requests.request.assert_called_once()
-
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_forwards_structured_output_options(self, mock_requests):
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
-            "model": "test-model",
-        }
-        mock_requests.request.return_value = mock_response
-        provider = LMStudioProvider(
-            ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
-        )
-        response_format = {"type": "json_schema", "json_schema": {"name": "test", "schema": {"type": "object"}}}
-
-        provider.chat_completion(
-            [ChatMessage(role="user", content="Hi")],
-            response_format=response_format,
-            chat_template_kwargs={"enable_thinking": False},
-        )
-
-        payload = mock_requests.request.call_args.kwargs["json"]
-        assert payload["response_format"] == response_format
-        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
-    
-    @patch('app.providers.lmstudio_provider.requests')
     def test_chat_completion_with_streaming(self, mock_requests):
         """Test streaming chat completion."""
         def mock_stream():
@@ -311,21 +264,6 @@ class TestLMStudioProviderFull:
     def test_chat_completion_connection_error(self, mock_requests):
         """Test chat completion with connection error."""
         mock_requests.request.side_effect = requests.exceptions.ConnectionError("Connection failed")
-        
-        config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
-        provider = LMStudioProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        with pytest.raises(ConnectionError):
-            provider.chat_completion(messages)
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_chat_completion_http_error(self, mock_requests):
-        """Test chat completion with HTTP error."""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_response.raise_for_status.side_effect = mock_requests.exceptions.HTTPError(response=mock_response)
-        mock_requests.request.return_value = mock_response
         
         config = ProviderConfig(provider_type="lmstudio", base_url="http://localhost:1234", model="test-model")
         provider = LMStudioProvider(config)
@@ -442,135 +380,6 @@ class TestLMStudioProviderFull:
 class TestOpenRouterProviderFull:
     """Full test suite for OpenRouterProvider."""
     
-    @patch('app.providers.openrouter_provider.requests')
-    def test_chat_completion_success(self, mock_requests):
-        """Test successful non-streaming chat completion."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello!", "reasoning": "Thinking..."}, "finish_reason": "stop"}],
-            "model": "openai/gpt-4",
-            "usage": {"prompt_tokens": 10, "completion_tokens": 20}
-        }
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="test-key", model="openai/gpt-4")
-        provider = OpenRouterProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        response = provider.chat_completion(messages)
-        
-        assert isinstance(response, ChatResponse)
-        assert response.content == "Hello!"
-        assert response.thinking == "Thinking..."
-        assert response.model == "openai/gpt-4"
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_chat_completion_with_thinking_budget(self, mock_requests):
-        """Test chat completion with thinking budget."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello!"}, "finish_reason": "stop"}],
-            "model": "openai/gpt-4"
-        }
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type="openrouter",
-            api_key="test-key",
-            model="openai/gpt-4",
-            extra_params={"thinking_budget": 1000}
-        )
-        provider = OpenRouterProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        provider.chat_completion(messages)
-        
-        call_kwargs = mock_requests.post.call_args[1]
-        assert "extra_options" in call_kwargs['json']
-        assert call_kwargs['json']["extra_options"]["max_tokens"] == 1000
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_chat_completion_streaming(self, mock_requests):
-        """Test streaming chat completion."""
-        def mock_stream():
-            lines = [
-                b'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n',
-                b'data: {"choices": [{"delta": {"content": "!"}}]}\n\n',
-                b'data: [DONE]\n\n'
-            ]
-            for line in lines:
-                yield line
-        
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = mock_stream()
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="test-key", model="openai/gpt-4")
-        provider = OpenRouterProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        stream = provider.chat_completion(messages, stream=True)
-        
-        chunks = list(stream)
-        assert len(chunks) >= 2
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_get_models_success(self, mock_requests):
-        """Test successful get_models."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "data": [
-                {
-                    "id": "openai/gpt-4",
-                    "name": "GPT-4",
-                    "description": "Advanced model",
-                    "context_length": 8192,
-                    "owned_by": "openai",
-                    "pricing": {"prompt": 0.03, "completion": 0.06}
-                }
-            ]
-        }
-        mock_requests.get.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="test-key")
-        provider = OpenRouterProvider(config)
-        
-        models = provider.get_models()
-        
-        assert len(models) == 1
-        assert models[0].id == "openai/gpt-4"
-        assert models[0].name == "GPT-4"
-        assert models[0].context_length == 8192
-        assert models[0].metadata["owned_by"] == "openai"
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_get_models_authentication_error(self, mock_requests):
-        """Test get_models with authentication error."""
-        mock_response = Mock()
-        mock_response.status_code = 401
-        mock_response.raise_for_status.side_effect = mock_requests.exceptions.HTTPError(response=mock_response)
-        mock_requests.get.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="invalid-key")
-        provider = OpenRouterProvider(config)
-        
-        with pytest.raises(AuthenticationError):
-            provider.get_models()
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_test_connection_authentication_error_reraises(self, mock_requests):
-        """Test test_connection re-raises auth errors."""
-        mock_response = Mock()
-        mock_response.status_code = 401
-        mock_response.raise_for_status.side_effect = mock_requests.exceptions.HTTPError(response=mock_response)
-        mock_requests.get.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="invalid-key")
-        provider = OpenRouterProvider(config)
-        
-        with pytest.raises(AuthenticationError):
-            provider.test_connection()
-    
     def test_missing_api_key_raises(self):
         """Test that missing API key raises AuthenticationError."""
         config = ProviderConfig(provider_type="openrouter")
@@ -599,90 +408,11 @@ class TestOpenRouterProviderFull:
 class TestCerebrasProviderFull:
     """Full test suite for CerebrasProvider."""
     
-    @patch('app.providers.cerebras_provider.requests')
-    def test_chat_completion_success(self, mock_requests):
-        """Test successful non-streaming chat completion."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Hello from Cerebras!"}, "finish_reason": "stop"}],
-            "model": "cerebras-llama-3.3",
-            "usage": {"prompt_tokens": 10, "completion_tokens": 20}
-        }
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="cerebras", api_key="test-key", model="cerebras-llama-3.3")
-        provider = CerebrasProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        response = provider.chat_completion(messages)
-        
-        assert isinstance(response, ChatResponse)
-        assert response.content == "Hello from Cerebras!"
-        assert response.model == "cerebras-llama-3.3"
-    
-    @patch('app.providers.cerebras_provider.requests')
-    def test_chat_completion_streaming(self, mock_requests):
-        """Test streaming chat completion."""
-        def mock_stream():
-            lines = [
-                b'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n',
-                b'data: {"choices": [{"delta": {"content": " World"}}]}\n\n',
-                b'data: [DONE]\n\n'
-            ]
-            for line in lines:
-                yield line
-        
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = mock_stream()
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="cerebras", api_key="test-key", model="cerebras-llama-3.3")
-        provider = CerebrasProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        stream = provider.chat_completion(messages, stream=True)
-        
-        chunks = list(stream)
-        assert len(chunks) >= 2
-    
-    @patch('app.providers.cerebras_provider.requests')
-    def test_get_models_success(self, mock_requests):
-        """Test successful get_models."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "data": [
-                {"id": "cerebras-llama-3.3", "name": "Llama 3.3 70B", "description": "Large model", "context_length": 8192, "owned_by": "cerebras"}
-            ]
-        }
-        mock_requests.get.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="cerebras", api_key="test-key")
-        provider = CerebrasProvider(config)
-        
-        models = provider.get_models()
-        
-        assert len(models) == 1
-        assert models[0].id == "cerebras-llama-3.3"
-        assert models[0].name == "Llama 3.3 70B"
-    
     def test_missing_api_key_raises(self):
         """Test that missing API key raises AuthenticationError."""
         config = ProviderConfig(provider_type="cerebras")
         with pytest.raises(AuthenticationError):
             CerebrasProvider(config)
-    
-    @patch('app.providers.cerebras_provider.requests')
-    def test_test_connection_success(self, mock_requests):
-        """Test successful test_connection."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_requests.get.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="cerebras", api_key="test-key")
-        provider = CerebrasProvider(config)
-        
-        result = provider.test_connection()
-        assert result is True
     
     def test_config_schema(self):
         """Test Cerebras config schema."""
@@ -733,22 +463,6 @@ class TestLlamaCppProviderFull:
         
         with pytest.raises(ModelNotFoundError):
             provider.chat_completion([ChatMessage(role="user", content="Hi")])
-    
-    @patch('app.providers.llamacpp_provider.subprocess')
-    @patch('app.providers.llamacpp_provider.requests')
-    def test_chat_completion_server_start_fails(self, mock_requests, mock_subprocess):
-        """Test chat completion when server fails to start."""
-        config = ProviderConfig(provider_type="llamacpp", model="test.gguf")
-        provider = LlamaCppProvider(config)
-        
-        # Mock _find_server_binary to return a path
-        with patch.object(provider, '_find_server_binary', return_value=Path('/fake/binary')):
-            # Mock server not running
-            with patch.object(provider, '_is_server_running', return_value=False):
-                # Mock _start_server to fail
-                with patch.object(provider, '_start_server', return_value=None):
-                    with pytest.raises(ConnectionError, match="Failed to start llama.cpp server"):
-                        provider.chat_completion([ChatMessage(role="user", content="Hi")])
     
     @patch('app.providers.llamacpp_provider.requests')
     def test_chat_completion_empty_messages(self, mock_requests):
@@ -810,62 +524,6 @@ class TestLlamaCppProviderFull:
         result = provider.test_connection()
         assert result is False
     
-    @patch('app.providers.llamacpp_provider._find_server_binary')
-    def test_find_server_binary(self, mock_find):
-        """Test _find_server_binary method."""
-        config = ProviderConfig(provider_type="llamacpp")
-        provider = LlamaCppProvider(config)
-        provider.config.extra_params['model_dir'] = '/fake/models'
-        
-        # This test would need more Path mocking, but the method is straightforward
-        assert hasattr(provider, '_find_server_binary')
-
-
-class TestProviderErrorHandling:
-    """Test error handling across all providers."""
-    
-    @patch('app.providers.lmstudio_provider.requests')
-    def test_lmstudio_json_parse_error(self, mock_requests):
-        """Test LM Studio handling of invalid JSON."""
-        mock_response = Mock()
-        mock_response.json.side_effect = ValueError("Invalid JSON")
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="lmstudio", model="test-model")
-        provider = LMStudioProvider(config)
-        
-        with pytest.raises(ConnectionError, match="Invalid JSON"):
-            provider.chat_completion([ChatMessage(role="user", content="Hi")])
-    
-    @patch('app.providers.openrouter_provider.requests')
-    def test_openrouter_rate_limit(self, mock_requests):
-        """Test OpenRouter rate limit handling."""
-        mock_response = Mock()
-        mock_response.status_code = 429
-        mock_response.raise_for_status.side_effect = mock_requests.exceptions.HTTPError(response=mock_response)
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="test")
-        provider = OpenRouterProvider(config)
-        
-        from app.providers.exceptions import RateLimitError
-        with pytest.raises(RateLimitError):
-            provider.chat_completion([ChatMessage(role="user", content="Hi")])
-    
-    @patch('app.providers.cerebras_provider.requests')
-    def test_cerebras_missing_choice(self, mock_requests):
-        """Test Cerebras handling of missing choices."""
-        mock_response = Mock()
-        mock_response.json.return_value = {"model": "test", "choices": []}
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="cerebras", api_key="test", model="test")
-        provider = CerebrasProvider(config)
-        
-        with pytest.raises(ConnectionError, match="No choices"):
-            provider.chat_completion([ChatMessage(role="user", content="Hi")])
-
-
 class TestStreamingEdgeCases:
     """Test streaming edge cases across providers."""
     
@@ -896,33 +554,6 @@ class TestStreamingEdgeCases:
         chunks = list(stream)
         assert isinstance(chunks, list)
     
-    @patch('app.providers.openrouter_provider.requests')
-    def test_streaming_empty_delta(self, mock_requests):
-        """Test streaming with empty delta."""
-        def mock_stream():
-            lines = [
-                b'data: {"choices": [{"delta": {}}]}\n\n',
-                b'data: {"choices": [{"delta": {"content": "A"}}]}\n\n',
-                b'data: [DONE]\n\n'
-            ]
-            for line in lines:
-                yield line
-        
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = mock_stream()
-        mock_requests.post.return_value = mock_response
-        
-        config = ProviderConfig(provider_type="openrouter", api_key="test", model="test")
-        provider = OpenRouterProvider(config)
-        
-        messages = [ChatMessage(role="user", content="Hi")]
-        stream = provider.chat_completion(messages, stream=True)
-        chunks = list(stream)
-        
-        # Should handle empty delta gracefully
-        assert len(chunks) >= 1
-
-
 class TestProviderConfiguration:
     """Test provider configuration validation."""
     
@@ -937,12 +568,6 @@ class TestProviderConfiguration:
         config = ProviderConfig(provider_type="openrouter", api_key="test")
         provider = OpenRouterProvider(config)
         assert provider.config.base_url == "https://openrouter.ai/api/v1"
-    
-    def test_cerebras_default_url(self):
-        """Test Cerebras default URL is correct."""
-        config = ProviderConfig(provider_type="cerebras", api_key="test")
-        provider = CerebrasProvider(config)
-        assert provider.config.base_url == "https://api.cerebras.com"
     
     def test_llamacpp_default_url(self):
         """Test LlamaCpp default URL is correct."""

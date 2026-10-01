@@ -21,48 +21,6 @@
     "type": "boolean"
   },
   {
-    "default": "http://127.0.0.1:8188",
-    "description": "Controls comfy base url for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_BASE_URL",
-    "type": "string"
-  },
-  {
-    "default": "v1-5-pruned-emaonly.safetensors",
-    "description": "Controls comfy checkpoint name for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_CHECKPOINT_NAME",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls comfy max polls for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_MAX_POLLS",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls comfy poll interval sec for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_POLL_INTERVAL_SEC",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls comfy prompt graph json for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_PROMPT_GRAPH_JSON",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls comfy timeout sec for rpg.",
-    "feature": "rpg",
-    "name": "COMFY_TIMEOUT_SEC",
-    "type": "string"
-  },
-  {
     "default": null,
     "description": "Controls hermes api key for hermes, research, trading.",
     "feature": "hermes, research, trading",
@@ -777,6 +735,13 @@
     "type": "string"
   },
   {
+    "default": "120",
+    "description": "Controls device permit lease seconds for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DEVICE_PERMIT_LEASE_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": "development",
     "description": "Controls env for kernel, production.py.",
     "feature": "kernel, production.py",
@@ -966,6 +931,41 @@
     "type": "integer"
   },
   {
+    "default": "127.0.0.1",
+    "description": "Controls job worker metrics host for worker.",
+    "feature": "worker",
+    "name": "OMNIX_JOB_WORKER_METRICS_HOST",
+    "type": "string"
+  },
+  {
+    "default": "8090",
+    "description": "Controls job worker metrics port for worker.",
+    "feature": "worker",
+    "name": "OMNIX_JOB_WORKER_METRICS_PORT",
+    "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls job worker pools for worker.",
+    "feature": "worker",
+    "name": "OMNIX_JOB_WORKER_POOLS",
+    "type": "string"
+  },
+  {
+    "default": "30",
+    "description": "Controls job worker shutdown grace seconds for worker.",
+    "feature": "worker",
+    "name": "OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS",
+    "type": "integer"
+  },
+  {
+    "default": "120",
+    "description": "Controls job worker startup timeout seconds for worker.",
+    "feature": "worker",
+    "name": "OMNIX_JOB_WORKER_STARTUP_TIMEOUT_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": "",
     "description": "Controls kasa device alias for assistant-tools.",
     "feature": "assistant-tools",
@@ -1078,6 +1078,13 @@
     "type": "string"
   },
   {
+    "default": null,
+    "description": "Controls live max calls for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_LIVE_MAX_CALLS",
+    "type": "integer"
+  },
+  {
     "default": "",
     "description": "Controls live pronunciation path for characters.",
     "feature": "characters",
@@ -1117,6 +1124,13 @@
     "description": "Controls live voice provider id for kernel.",
     "feature": "kernel",
     "name": "OMNIX_LIVE_VOICE_PROVIDER_ID",
+    "type": "string"
+  },
+  {
+    "default": "info",
+    "description": "Controls log level for worker.",
+    "feature": "worker",
+    "name": "OMNIX_LOG_LEVEL",
     "type": "string"
   },
   {
@@ -1918,13 +1932,6 @@
     "type": "string"
   },
   {
-    "default": null,
-    "description": "Controls openai api key for rpg.",
-    "feature": "rpg",
-    "name": "OPENAI_API_KEY",
-    "type": "string"
-  },
-  {
     "default": "100",
     "description": "Controls parakeet live edge padding ms for providers.",
     "feature": "providers",
@@ -1985,20 +1992,6 @@
     "description": "Controls pythonpath for rpg.",
     "feature": "rpg",
     "name": "PYTHONPATH",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls rpg fast model id for rpg.",
-    "feature": "rpg",
-    "name": "RPG_FAST_MODEL_ID",
-    "type": "string"
-  },
-  {
-    "default": null,
-    "description": "Controls rpg fast provider id for rpg.",
-    "feature": "rpg",
-    "name": "RPG_FAST_PROVIDER_ID",
     "type": "string"
   },
   {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 
 import pytest
 
@@ -170,13 +169,3 @@ def test_candidate_cannot_be_approved_from_an_unrelated_scope(tmp_path):
     assert service.repository.get_candidate(candidate.id).status == "pending"
 
 
-def test_schema_initialization_is_idempotent(tmp_path):
-    path = tmp_path / "memory.sqlite3"
-    InMemoryMemoryRepository(path)
-    InMemoryMemoryRepository(path)
-
-    with sqlite3.connect(path) as connection:
-        version = connection.execute(
-            "SELECT version FROM memory_schema_version LIMIT 1"
-        ).fetchone()[0]
-    assert version == 1

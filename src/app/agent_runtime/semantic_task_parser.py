@@ -5,6 +5,8 @@ capabilities, evidence source classes, trust policy, or approval policy.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from app.config.env import env_str
 
 from collections import OrderedDict
@@ -41,6 +43,8 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
+_MAX_CACHE_ENTRIES = 4096
+_MAX_CACHE_TTL_SECONDS = 3600.0
 _PARSER_VERSION = "semantic-task-v2-bounded-intent-v21"
 
 
@@ -211,7 +215,7 @@ def _cache_enabled() -> bool:
 def _cache_size() -> int:
     raw = str(env_str("OMNIX_AGENT_SEMANTIC_TASK_CACHE_SIZE", "256") or "256")
     try:
-        return max(0, min(int(raw), 4096))
+        return max(0, min(int(raw), _MAX_CACHE_ENTRIES))
     except ValueError:
         return 256
 
@@ -219,7 +223,7 @@ def _cache_size() -> int:
 def _cache_ttl_seconds() -> float:
     raw = str(env_str("OMNIX_AGENT_SEMANTIC_TASK_CACHE_TTL_SECONDS", "300") or "300")
     try:
-        return max(0.0, min(float(raw), 3600.0))
+        return max(0.0, min(float(raw), _MAX_CACHE_TTL_SECONDS))
     except ValueError:
         return 300.0
 
@@ -287,6 +291,11 @@ def _cache_put(key: str, value: SemanticTask) -> None:
         _CACHE.move_to_end(key)
         while len(_CACHE) > size:
             _CACHE.popitem(last=False)
+
+
+def clear_semantic_task_cache() -> None:
+    with _CACHE_LOCK:
+        _CACHE.clear()
 
 
 class ProviderSemanticTaskParser:
@@ -504,7 +513,8 @@ def default_semantic_task_parser(
             model=model,
             timeout_seconds=timeout,
         )
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("semantic task parser construction", exc)
         return None
 
 
@@ -630,10 +640,11 @@ def _parse_semantic_task_once(
         return value
     try:
         return SemanticTask.model_validate(value)
-    except Exception:
+    except Exception as exc:
         # Compatibility only: third-party/tests may still return v1
         # SemanticIntentDecision. Convert its semantic facts, but do not trust
         # the model-selected profile/evidence policy.
+        log_recovered_exception("legacy semantic task conversion", exc, level="DEBUG")
         return semantic_task_from_legacy(value)
 
 
@@ -695,9 +706,10 @@ def _record_workspace_context_retry(
         current["context_retry_initial_error"] = str(initial_diagnostics["error"])[:500]
     try:
         setattr(parser, "last_diagnostics", current)
-    except Exception:
+    except Exception as exc:
         # Diagnostics are observability only; a read-only third-party parser
         # must not turn semantic recovery into a routing failure.
+        log_recovered_exception("semantic parser diagnostics update", exc, level="DEBUG")
         pass
 
 

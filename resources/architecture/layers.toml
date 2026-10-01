@@ -1,5 +1,5 @@
 [layers.kernel]
-packages = ["app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.memory_contracts", "app.memory_policy", "app.errors", "app.text"]
+packages = ["app.caching", "app.runtime", "app.config", "app.settings", "app.security", "app.observability", "app.events", "app.persistence", "app.jobs", "app.assets", "app.capabilities", "app.conversation", "app.memory_contracts", "app.memory_policy", "app.errors", "app.text"]
 may_import = ["kernel"]
 
 [layers.shared_services]

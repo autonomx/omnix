@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
 
 from app.config.env import env_bool, env_str
@@ -44,7 +44,7 @@ def _under_pytest() -> bool:
     return "pytest" in sys.modules or bool(env_str("PYTEST_CURRENT_TEST", ""))
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def persistence_mode() -> PersistenceMode:
     raw = (env_str("OMNIX_PERSISTENCE_MODE", "postgresql") or "postgresql").strip().lower()
     try:

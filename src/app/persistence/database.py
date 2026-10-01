@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from time import perf_counter
 from typing import Any, Iterator
 
@@ -247,7 +247,7 @@ class PostgresDatabase:
         return stats
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0, on_evict=lambda database: database.close())
 def default_database() -> PostgresDatabase:
     return PostgresDatabase(database_settings())
 

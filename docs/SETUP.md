@@ -2,13 +2,18 @@
 
 ## Gateway roles and deployment inputs
 
-The normal development launcher can run `python scripts/run_omnix_gateway.py --api-replicas 2`, supervising one worker and two API processes. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative `OMNIX_DATABASE_URL` and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.
+The normal development launcher can run `python scripts/run_omnix_gateway.py --api-replicas 2`, supervising one gateway worker, two API processes, and one standalone job worker. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative `OMNIX_DATABASE_URL` and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.
 
 | Input | Meaning |
 | --- | --- |
-| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker`, `api`, or `scheduler` | Worker owns grouped background workers and may run scheduled tasks; scheduler runs independently locked tasks without owning the grouped background runtime; API serves requests without scheduled-task ownership. Default is worker. |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker`, `api`, `scheduler`, or `job-worker` | Gateway worker owns the singleton scheduler/recovery runtime; scheduler runs independently locked tasks; API serves requests; job-worker runs lease-fenced resource pools and feature job loops without singleton scheduler ownership. Default is worker. |
 | `OMNIX_TTS_URL`, `OMNIX_STT_URL`, `OMNIX_IMAGE_URL` | HTTP(S) compute service endpoints without credentials/query/fragment. APIs use configured TTS remotely. |
 | `OMNIX_GATEWAY_TTS_HTTP=1` | Worker also uses HTTP TTS; requires a TTS endpoint. |
+| `OMNIX_TTS_MODEL_OWNER=gateway` or `tts-server` | Selects the sole process allowed to load local TTS. With `tts-server`, set `OMNIX_TTS_URL` for every gateway and job worker. |
+| `OMNIX_DEVICE_ID` | Stable device label shared by processes using the same physical device; defaults to `<hostname>:gpu0`. |
+| `OMNIX_DEVICE_{TTS,STT,IMAGE,LLM_LOCAL}_CAPACITY` and `..._REALTIME_RESERVED` | Per-device/model permit capacity and realtime reservation. Defaults to capacity 1 and reservation 0; configure identical values on all processes sharing the device. |
+| `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | Lease lifetime before a dead holder can be reclaimed; default 120 seconds. |
+| `OMNIX_LIVE_MAX_CALLS` | Maximum concurrent live-call WebSockets per gateway/API replica; defaults to the configured TTS permit capacity. Readiness reports the maximum, active and available slots. |
 | `OMNIX_GATEWAY_REQUIRED_WORKERS` | Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness. |
 | `OMNIX_GATEWAY_API_ORIGINS` | Up to eight distinct API origins, for diagnostics and local routing. |
 | `OMNIX_SOFTWARE_REVISION` | Build identifier in runtime diagnostics and durable node registration. |
@@ -17,6 +22,10 @@ The normal development launcher can run `python scripts/run_omnix_gateway.py --a
 | `VITE_ASSISTANT_STT_URL=/api/stt?authority=auto` | Browser speech routes through its gateway origin. The gateway sends the private credential to `OMNIX_STT_URL`. |
 
 Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API and scheduler replicas cannot instantiate local CUDA TTS. Multiple scheduler-role processes divide eligible scheduled work through per-task PostgreSQL locks and surviving processes take over locks released by a failed owner; singleton-worker recovery tasks remain on the worker role. Keep scheduler processes on trusted service networking and route control requests to the task owner. `OMNIX_SCHEDULER_THREAD_WORKERS` and `OMNIX_SCHEDULER_PROCESS_WORKERS` bound their respective executors. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
+
+The local launcher starts one job worker with the default resource pools. Run `PYTHONPATH=src python -m app.worker --pools llm=2,image=1,tts=1,research=2,cpu=4,stt=1` to configure them directly. The worker exposes per-pool readiness and Prometheus metrics on `127.0.0.1:8090` by default.
+
+GPU/model calls use PostgreSQL device permits, not per-process semaphores. The gateway `/api/diagnostics` response lists configured capacity, active holders, queued priorities and the local TTS model owner. The first configured capacity for a device/model class is persisted; drain users before changing it and update `omnix_device_capacity` to the new value before restarting all processes. A live model-owner lease prevents a second process from loading local TTS; use `OMNIX_TTS_MODEL_OWNER` to choose the owner explicitly.
 
 This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.
 

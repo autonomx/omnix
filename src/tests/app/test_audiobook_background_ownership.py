@@ -28,7 +28,7 @@ def test_audiobook_threads_inherit_ownership_and_stop_after_revocation(monkeypat
     from app.persistence.background_authority import require_background_owner
 
     owner = GatewayBackgroundRuntime(
-        object(), "workspace", role="worker", execution_scope=background_execution
+        object(), "workspace", role="job-worker", execution_scope=background_execution
     )
     live = threading.Event()
     live.set()

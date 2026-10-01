@@ -6,6 +6,8 @@ authority; it only derives requirements, captures workspace truth, classifies
 validation evidence and parses structured review evidence.
 """
 from __future__ import annotations
+
+from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
 from datetime import datetime, timezone
@@ -741,14 +743,16 @@ def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, 
         if isinstance(row, dict):
             try:
                 requirements.append(ReviewRequirementResult.model_validate(row))
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("self-review requirement parsing", exc, level="DEBUG")
                 pass
     findings: list[ReviewFinding] = []
     for row in payload.get("findings") or []:
         if isinstance(row, dict):
             try:
                 findings.append(ReviewFinding.model_validate(row))
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("self-review finding parsing", exc, level="DEBUG")
                 pass
     if not payload:
         findings.append(ReviewFinding(severity="high", category="self_review_protocol", problem="Implementer did not return the required structured self-review JSON.", recommended_fix="Repeat the mandatory self-review against the same final state."))
@@ -878,7 +882,8 @@ def parse_review_result(
             continue
         try:
             requirements.append(ReviewRequirementResult.model_validate(row))
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("review requirement parsing", exc, level="DEBUG")
             continue
     findings: list[ReviewFinding] = []
     for row in payload.get("findings") or []:
@@ -887,7 +892,8 @@ def parse_review_result(
         try:
             parsed_finding = ReviewFinding.model_validate(row)
             findings.append(_authoritative_review_finding(parsed_finding, snapshot))
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("review finding parsing", exc, level="DEBUG")
             continue
     return ReviewResult(
         run_id=parent_run_id,

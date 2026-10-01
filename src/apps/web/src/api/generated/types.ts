@@ -13821,6 +13821,10 @@ export interface components {
         };
         /** DiagnosticsPayload */
         DiagnosticsPayload: {
+            /** Device Permits */
+            device_permits?: {
+                [key: string]: unknown;
+            }[];
             /** Event Stream */
             event_stream?: {
                 [key: string]: string;
@@ -28462,7 +28466,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -28683,7 +28687,7 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };

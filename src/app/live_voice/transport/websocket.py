@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.conversation.performance_contract import apply_performance_plan_to_provider
+from app.live_voice.capacity import live_call_capacity
 from app.text import remove_emojis
 from app.live_voice.contracts import TTSProviderResolver
 from app.live_voice.speech.pcm_diagnostics import (
@@ -634,12 +636,21 @@ async def _stream_phrase(
                     return
                 emit(FrameMessage("done", None, DEFAULT_SAMPLE_RATE, {}))
             except Exception as exc:  # pragma: no cover
+                retry_after = getattr(exc, "retry_after", None)
                 emit(
                     FrameMessage(
                         "error",
                         None,
                         DEFAULT_SAMPLE_RATE,
-                        {"message": str(exc) or "TTS stream failed."},
+                        {
+                            "message": (
+                                "Speech capacity is busy; this phrase was not generated."
+                                if retry_after is not None
+                                else str(exc) or "TTS stream failed."
+                            ),
+                            "retry_after": retry_after,
+                            "capacity_saturated": retry_after is not None,
+                        },
                     )
                 )
             finally:
@@ -786,6 +797,8 @@ async def _stream_phrase(
                     **ownership_fields,
                     "phrase_index": phrase_index,
                     "message": metadata.get("message") or "TTS stream failed.",
+                    "retry_after": metadata.get("retry_after"),
+                    "capacity_saturated": metadata.get("capacity_saturated", False),
                 }
             )
             return
@@ -837,44 +850,58 @@ def register_tts_live_call_websocket(
 
     @router.websocket(TTS_LIVE_CALL_WEBSOCKET_PATH)
     async def tts_live_call_websocket(websocket: WebSocket) -> None:
-        await websocket.accept()
-        state = ConnectionState(
-            stop_event=threading.Event(),
-            requests=asyncio.Queue(),
-        )
-        receiver = asyncio.create_task(_receive_messages(websocket, state))
-        try:
-            while not state.stop_event.is_set():
-                payload = await state.requests.get()
-                if payload is None:
-                    return
-                output_id, generation_epoch, segment_id = _output_identity(payload)
-                if (output_id, generation_epoch) in state.cancelled_outputs:
-                    ownership_fields = _ownership_fields(
-                        payload,
-                        output_id,
-                        generation_epoch,
-                        segment_id,
-                        payload.get("output_order"),
-                    )
-                    await websocket.send_json(
-                        {
-                            "type": "cancelled",
-                            **ownership_fields,
-                            "generated_through_frame": -1,
-                        }
-                    )
-                    continue
-                await _stream_phrase(
-                    websocket,
-                    payload,
-                    state,
-                    provider_resolver=provider_resolver,
+        capacity = live_call_capacity()
+        if not capacity.try_acquire():
+            await websocket.send_denial_response(
+                JSONResponse(
+                    {"error": "live_call_capacity_saturated"},
+                    status_code=429,
+                    headers={"Retry-After": "1"},
                 )
+            )
+            return
+
+        try:
+            await websocket.accept()
+            state = ConnectionState(
+                stop_event=threading.Event(),
+                requests=asyncio.Queue(),
+            )
+            receiver = asyncio.create_task(_receive_messages(websocket, state))
+            try:
+                while not state.stop_event.is_set():
+                    payload = await state.requests.get()
+                    if payload is None:
+                        return
+                    output_id, generation_epoch, segment_id = _output_identity(payload)
+                    if (output_id, generation_epoch) in state.cancelled_outputs:
+                        ownership_fields = _ownership_fields(
+                            payload,
+                            output_id,
+                            generation_epoch,
+                            segment_id,
+                            payload.get("output_order"),
+                        )
+                        await websocket.send_json(
+                            {
+                                "type": "cancelled",
+                                **ownership_fields,
+                                "generated_through_frame": -1,
+                            }
+                        )
+                        continue
+                    await _stream_phrase(
+                        websocket,
+                        payload,
+                        state,
+                        provider_resolver=provider_resolver,
+                    )
+            finally:
+                _stop_connection(state, "route-cleanup")
+                receiver.cancel()
+                with suppress(asyncio.CancelledError):
+                    await receiver
+                with suppress(Exception):
+                    await websocket.close()
         finally:
-            _stop_connection(state, "route-cleanup")
-            receiver.cancel()
-            with suppress(asyncio.CancelledError):
-                await receiver
-            with suppress(Exception):
-                await websocket.close()
+            capacity.release()

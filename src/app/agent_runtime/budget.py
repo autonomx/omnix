@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
@@ -402,6 +402,6 @@ class AgentBudgetManager:
         )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_agent_budget_manager() -> AgentBudgetManager:
     return AgentBudgetManager()

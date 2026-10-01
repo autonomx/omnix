@@ -30,8 +30,6 @@ from app.image.job_contracts import (
 )
 
 IMAGE_JOB_TYPE = "image.generate"
-IMAGE_GENERATION_CONCURRENCY = 2
-_IMAGE_GENERATION_SLOTS = threading.BoundedSemaphore(IMAGE_GENERATION_CONCURRENCY)
 
 
 def enqueue_image_job(
@@ -118,6 +116,7 @@ def execute_image_job(
         from app.image.service import generate_image
 
         generate_fn = generate_image
+    provider_payload["_device_permit_priority"] = "batch"
 
     _update_progress(
         job_store,
@@ -127,29 +126,28 @@ def execute_image_job(
         "Waiting for image service",
         stage_id="generate-image",
     )
-    with _IMAGE_GENERATION_SLOTS:
-        _update_progress(
+    _update_progress(
+        job_store,
+        job.id,
+        0,
+        100,
+        "Generating image - 0%",
+        stage_id="generate-image",
+    )
+    progress_poller = _start_image_generation_progress_poll(job_store, job.id)
+    try:
+        result = generate_fn(provider_payload)
+    except Exception as exc:
+        return _fail(
             job_store,
-            job.id,
-            0,
-            100,
-            "Generating image - 0%",
-            stage_id="generate-image",
+            job,
+            "image_generation_failed",
+            str(exc) or "Image generation failed",
+            retryable=True,
         )
-        progress_poller = _start_image_generation_progress_poll(job_store, job.id)
-        try:
-            result = generate_fn(provider_payload)
-        except Exception as exc:
-            return _fail(
-                job_store,
-                job,
-                "image_generation_failed",
-                str(exc) or "Image generation failed",
-                retryable=True,
-            )
-        finally:
-            if progress_poller is not None:
-                progress_poller()
+    finally:
+        if progress_poller is not None:
+            progress_poller()
 
     if not bool(getattr(result, "ok", False)):
         message = str(getattr(result, "error", "") or "Image generation failed")

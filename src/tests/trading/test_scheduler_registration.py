@@ -1,6 +1,7 @@
 """Trading monitor ownership is composed as per-task scheduler work."""
 
 import asyncio
+import inspect
 from datetime import datetime, timezone
 from logging import getLogger
 from types import SimpleNamespace
@@ -34,6 +35,8 @@ def test_all_trading_monitors_are_declared_as_unique_scheduler_tasks(monkeypatch
     task_ids = [task.task_id for task in tasks]
     assert len(task_ids) == len(set(task_ids)) == 22
     assert all(task.interval_seconds > 0 for task in tasks)
+    assert any(task.executor.value == "async" for task in tasks)
+    assert any(task.executor.value == "thread" for task in tasks)
     assert all(
         RuntimeCapability.RUN_SCHEDULERS in task.requires for task in tasks
     )
@@ -77,14 +80,14 @@ def test_alpaca_status_stream_starts_from_its_scheduled_task(monkeypatch):
         if task is not None and task.task_id.endswith("alpaca_iex_status")
     )
 
-    asyncio.run(
-        task.run(
-            TaskContext(
-                task_id=task.task_id,
-                workspace_id="workspace-a",
-                scheduled_at=datetime.now(timezone.utc),
-            )
+    result = task.run(
+        TaskContext(
+            task_id=task.task_id,
+            workspace_id="workspace-a",
+            scheduled_at=datetime.now(timezone.utc),
         )
     )
+    if inspect.isawaitable(result):
+        asyncio.run(result)
 
     assert len(started) == 1

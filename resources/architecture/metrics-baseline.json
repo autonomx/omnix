@@ -14347,7 +14347,7 @@
     "async_handlers_without_await": {
       "direction": "lower",
       "target": 0,
-      "value": 264
+      "value": 167
     },
     "boot_imported_modules": {
       "direction": "lower",
@@ -14357,7 +14357,7 @@
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
       "target": 0,
-      "value": 152
+      "value": 0
     },
     "capped_500_queries": {
       "direction": "lower",
@@ -14372,17 +14372,17 @@
     "compat_modules": {
       "direction": "lower",
       "target": 0,
-      "value": 25
+      "value": 19
     },
     "direct_requests_calls": {
       "direction": "lower",
       "target": 0,
-      "value": 33
+      "value": 32
     },
     "env_reads_outside_config": {
       "direction": "lower",
       "target": 0,
-      "value": 526
+      "value": 0
     },
     "eslint_baseline_disables": {
       "direction": "lower",
@@ -14392,52 +14392,52 @@
     "fastapi_init_patchers": {
       "direction": "lower",
       "target": 0,
-      "value": 48
+      "value": 0
     },
     "files_over_1200_lines": {
       "direction": "lower",
       "target": 5,
-      "value": 51
+      "value": 46
     },
     "fixed_sleeps_in_tests": {
       "direction": "lower",
       "target": 5,
-      "value": 44
+      "value": 38
     },
     "foreign_attribute_assignments": {
       "direction": "lower",
       "target": 0,
-      "value": 499
+      "value": 0
     },
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 462
+      "value": 392
     },
     "inline_prompt_strings": {
       "direction": "lower",
       "target": 10,
-      "value": 252
+      "value": 200
     },
     "install_hook_functions": {
       "direction": "lower",
       "target": 0,
-      "value": 136
+      "value": 0
     },
     "largest_class_lines": {
       "direction": "lower",
       "target": 800,
-      "value": 3058
+      "value": 3057
     },
     "layer_violations": {
       "direction": "lower",
       "target": 0,
-      "value": 304
+      "value": 73
     },
     "local_blob_store_constructions": {
       "direction": "lower",
       "target": 1,
-      "value": 12
+      "value": 9
     },
     "mypy_ignored_modules": {
       "direction": "lower",
@@ -14452,27 +14452,27 @@
     "package_cycles": {
       "direction": "lower",
       "target": 0,
-      "value": 22
+      "value": 0
     },
     "platform_table_sql_outside_owner": {
       "direction": "lower",
       "target": 0,
-      "value": 93
+      "value": 0
     },
     "print_calls": {
       "direction": "lower",
       "target": 0,
-      "value": 198
+      "value": 100
     },
     "process_local_state_unapproved": {
       "direction": "lower",
       "target": 0,
-      "value": 1751
+      "value": 0
     },
     "quarantined_tests": {
       "direction": "lower",
       "target": 0,
-      "value": 92
+      "value": 0
     },
     "retention_policies_executed_pct": {
       "direction": "higher",
@@ -14487,42 +14487,47 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 804
+      "value": 628
     },
     "rpg_nondeterminism": {
       "direction": "lower",
       "target": 0,
-      "value": 43
+      "value": 0
     },
     "schema_excluded_routes": {
       "direction": "lower",
       "target": 0,
-      "value": 291
+      "value": 0
     },
     "silent_broad_excepts": {
       "direction": "lower",
       "target": 10,
-      "value": 276
+      "value": 173
     },
     "star_imports": {
       "direction": "lower",
       "target": 0,
-      "value": 246
+      "value": 0
     },
     "unbounded_fetchall": {
       "direction": "lower",
       "target": 0,
       "value": 30
     },
+    "unbounded_module_caches": {
+      "direction": "lower",
+      "target": 0,
+      "value": 0
+    },
     "unreachable_rpg_modules": {
       "direction": "lower",
       "target": 0,
-      "value": 507
+      "value": 8
     },
     "untyped_body_routes": {
       "direction": "lower",
       "target": 0,
-      "value": 24
+      "value": 0
     },
     "web_custom_event_dispatch_files": {
       "direction": "lower",
@@ -14542,7 +14547,7 @@
     "web_handwritten_api_types": {
       "direction": "lower",
       "target": 0,
-      "value": 310
+      "value": 261
     },
     "web_hardcoded_colors": {
       "direction": "lower",
@@ -14567,7 +14572,7 @@
     "web_openapi_path_coverage_pct": {
       "direction": "higher",
       "target": 100,
-      "value": 30.623306
+      "value": 73.98374
     },
     "web_raw_fetch_outside_api": {
       "direction": "lower",

@@ -109,6 +109,7 @@ from app.jobs.models import (
 from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
+_MAX_RESEARCH_THREAD_JOBS = 32
 _RESEARCH_THREADS_LOCK = threading.Lock()
 _RESEARCH_THREAD_JOB_IDS: set[str] = set()
 ResearchWorkflow = Callable[
@@ -363,8 +364,9 @@ def start_research_job(job_store: Any, job: JobRecord) -> JobRecord:
     with _RESEARCH_THREADS_LOCK:
         if job.id in _RESEARCH_THREAD_JOB_IDS:
             return current
+        if len(_RESEARCH_THREAD_JOB_IDS) >= _MAX_RESEARCH_THREAD_JOBS:
+            return current
         _RESEARCH_THREAD_JOB_IDS.add(job.id)
-    running = job_store.mark_running(job.id) or current
 
     def run() -> None:
         try:
@@ -401,7 +403,13 @@ def start_research_job(job_store: Any, job: JobRecord) -> JobRecord:
         name=f"omnix-research-{job.id.removeprefix('job:')[:8]}",
         daemon=True,
     )
-    thread.start()
+    try:
+        running = job_store.mark_running(job.id) or current
+        thread.start()
+    except BaseException:
+        with _RESEARCH_THREADS_LOCK:
+            _RESEARCH_THREAD_JOB_IDS.discard(job.id)
+        raise
     return running
 
 

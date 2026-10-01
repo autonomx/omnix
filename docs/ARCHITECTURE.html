@@ -231,6 +231,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <li>cancellation/retry information.</li>
 </ul>
 <p>Common resource classes include CPU plus GPU classes for LLM, TTS, STT, and image work. Feature workspaces can show filtered job subsets, while <code>/jobs</code> exposes the shared operational view.</p>
+<p>Standalone job-worker processes claim registered job types through independently bounded resource pools. PostgreSQL <code>SKIP LOCKED</code> claims and per-attempt lease tokens let workers run on any host without gateway singleton ownership. Each pool reports readiness and Prometheus metrics separately.</p>
 <p>Representative staged workflows:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Image:       generate image → store image asset
 Voice clone: ingest sample → build profile → preview → store profile
@@ -424,6 +425,7 @@ input/output schema</code></pre></div>
 <li>Add typed API contracts instead of feature-specific transport hacks.</li>
 <li>Use the shared provider/model registry.</li>
 <li>Use the shared job system for long-running work.</li>
+<li>Run durable job execution in standalone resource pools; keep the gateway worker role responsible for singleton schedulers and recovery.</li>
 <li>Store outputs through the shared asset/artifact model.</li>
 <li>Use the shared event transport.</li>
 <li>Register settings in the settings infrastructure with an explicit persistence owner.</li>

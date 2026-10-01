@@ -1,6 +1,6 @@
 {
   "errors": [],
-  "policy_digest": "00fe8d10768ed781db2542208a10b8d471b60b97aded15a19f838c828fd56911",
+  "policy_digest": "5bfa973c97e165a32549683f6f3c571276e7b5e66a1e2a5a3ebe75378c3a7bb6",
   "rules": [
     "AL001",
     "AL002",
@@ -51,7 +51,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
-        22
+        24
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -60,7 +60,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
       "lines": [
-        23
+        25
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -69,7 +69,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        24
+        26
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -78,7 +78,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.prompt_assembly",
       "lines": [
-        385
+        396
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -87,7 +87,7 @@
       "count": 1,
       "fingerprint": "_resolve_routing_context:app.chat.routing_context",
       "lines": [
-        386
+        397
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -96,7 +96,7 @@
       "count": 1,
       "fingerprint": "_security_subject:app.trading.catalog",
       "lines": [
-        351
+        354
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -105,7 +105,7 @@
       "count": 1,
       "fingerprint": "_security_subject:app.trading.models",
       "lines": [
-        352
+        355
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -114,7 +114,7 @@
       "count": 1,
       "fingerprint": "validate_required_evidence_capabilities:app.assistant_tools.gate",
       "lines": [
-        1211
+        1215
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -123,7 +123,7 @@
       "count": 1,
       "fingerprint": "validate_required_evidence_capabilities:app.assistant_tools.models",
       "lines": [
-        1212
+        1216
       ],
       "path": "src/app/agent_runtime/evidence.py",
       "rule": "AL001"
@@ -132,7 +132,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.repo_adapter",
       "lines": [
-        21
+        23
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL001"
@@ -141,7 +141,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        11
+        13
       ],
       "path": "src/app/agent_runtime/task_graph_runtime.py",
       "rule": "AL001"
@@ -150,7 +150,7 @@
       "count": 1,
       "fingerprint": "_default_capability_executor:app.assistant_tools.hermes_bridge",
       "lines": [
-        54
+        56
       ],
       "path": "src/app/agent_runtime/task_graph_runtime.py",
       "rule": "AL001"
@@ -159,7 +159,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
       "lines": [
-        13
+        15
       ],
       "path": "src/app/agent_runtime/workflow_runtime.py",
       "rule": "AL001"
@@ -168,7 +168,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        14
+        16
       ],
       "path": "src/app/agent_runtime/workflow_runtime.py",
       "rule": "AL001"
@@ -186,7 +186,7 @@
       "count": 1,
       "fingerprint": "SharedAssetStore.preview_image_manifest_import:app.image.asset_store",
       "lines": [
-        247
+        239
       ],
       "path": "src/app/assets/store.py",
       "rule": "AL001"
@@ -195,7 +195,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.capability_dashboard",
       "lines": [
-        12
+        13
       ],
       "path": "src/app/assistant_memory/initiative.py",
       "rule": "AL001"
@@ -231,7 +231,7 @@
       "count": 1,
       "fingerprint": "_workspace_for_preview:app.agent_runtime.service",
       "lines": [
-        837
+        937
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL001"
@@ -303,7 +303,7 @@
       "count": 1,
       "fingerprint": "CharacterService.__init__:app.runtime_composition",
       "lines": [
-        84
+        85
       ],
       "path": "src/app/characters/service.py",
       "rule": "AL001"
@@ -537,7 +537,7 @@
       "count": 1,
       "fingerprint": "default_provider_model_refresh_store:app.runtime_composition",
       "lines": [
-        138
+        174
       ],
       "path": "src/app/providers/cache_status.py",
       "rule": "AL001"
@@ -625,96 +625,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.image.downloads",
-      "lines": [
-        23
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_common.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.lifecycle",
-      "lines": [
-        24
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_common.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.settings_api",
-      "lines": [
-        25
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_common.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "download_flux_klein_status_route:app.image.downloads",
-      "lines": [
-        288
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_narrative_event_store:app.runtime_composition",
-      "lines": [
-        117
-      ],
-      "path": "src/app/rpg/narrative/narrative_persistence.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.asset_store",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/visual/asset_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.downloads",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/visual/downloads.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.flux_pipeline_compat",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/visual/flux_pipeline_compat.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.service",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/visual/global_image_adapter.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.job_queue",
-      "lines": [
-        6
-      ],
-      "path": "src/app/rpg/visual/job_queue.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.image.providers.base",
       "lines": [
         4
@@ -729,33 +639,6 @@
         4
       ],
       "path": "src/app/rpg/visual/providers/flux_klein_provider.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.asset_store",
-      "lines": [
-        7
-      ],
-      "path": "src/app/rpg/visual/queue_runner.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.job_queue",
-      "lines": [
-        8
-      ],
-      "path": "src/app/rpg/visual/queue_runner.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.image.runtime_status",
-      "lines": [
-        4
-      ],
-      "path": "src/app/rpg/visual/runtime_status.py",
       "rule": "AL001"
     },
     {
@@ -798,7 +681,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_agent_events",
       "lines": [
-        307
+        332
       ],
       "path": "src/app/agent_runtime/api.py",
       "rule": "AL005"
@@ -1437,7 +1320,7 @@
       "count": 1,
       "fingerprint": "register_live_chat_speculation_handshake_routes:stream_started_live_speculation",
       "lines": [
-        157
+        158
       ],
       "path": "src/app/chat/live_chat_speculation_handshake.py",
       "rule": "AL005"
@@ -1671,7 +1554,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_progress",
       "lines": [
-        359
+        407
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -1680,7 +1563,7 @@
       "count": 1,
       "fingerprint": "<module>:health",
       "lines": [
-        265
+        313
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -1689,7 +1572,7 @@
       "count": 1,
       "fingerprint": "<module>:provider_status",
       "lines": [
-        279
+        327
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -1761,7 +1644,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:evaluate_live_voice_release_gate_payload",
       "lines": [
-        104
+        109
       ],
       "path": "src/app/live_voice/transport/diagnostics_routes.py",
       "rule": "AL005"
@@ -1770,7 +1653,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:ingest_live_voice_diagnostics",
       "lines": [
-        61
+        62
       ],
       "path": "src/app/live_voice/transport/diagnostics_routes.py",
       "rule": "AL005"
@@ -1779,7 +1662,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:live_voice_diagnostics_status",
       "lines": [
-        78
+        79
       ],
       "path": "src/app/live_voice/transport/diagnostics_routes.py",
       "rule": "AL005"
@@ -1788,7 +1671,7 @@
       "count": 1,
       "fingerprint": "register_live_voice_diagnostics_routes:live_voice_release_gate",
       "lines": [
-        85
+        90
       ],
       "path": "src/app/live_voice/transport/diagnostics_routes.py",
       "rule": "AL005"
@@ -1827,177 +1710,6 @@
         504
       ],
       "path": "src/app/rpg/api/feature_routes/rpg_world_library_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:delete_rpg_game",
-      "lines": [
-        234
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_history",
-      "lines": [
-        440
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_npcs",
-      "lines": [
-        396
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_player_state",
-      "lines": [
-        362
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_quests",
-      "lines": [
-        418
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_replay",
-      "lines": [
-        462
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_rpg_game",
-      "lines": [
-        217
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_world_state",
-      "lines": [
-        379
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:list_rpg_games",
-      "lines": [
-        63
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:run_replay",
-      "lines": [
-        477
-      ],
-      "path": "src/app/rpg/api/rpg_game_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:list_rpg_sessions",
-      "lines": [
-        355
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_session_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:download_flux_klein_route",
-      "lines": [
-        275
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:download_flux_klein_status_route",
-      "lines": [
-        282
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_visual_provider_settings_route",
-      "lines": [
-        234
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:normalize_visual_queue_route",
-      "lines": [
-        105
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:visual_provider_status_route",
-      "lines": [
-        337
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:visual_queue_stats_route",
-      "lines": [
-        92
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:stream_rpg_session",
-      "lines": [
-        1033
-      ],
-      "path": "src/app/rpg/api/rpg_session_routes.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:stream_rpg_session_narration_events",
-      "lines": [
-        1106
-      ],
-      "path": "src/app/rpg/api/rpg_session_routes.py",
       "rule": "AL005"
     },
     {
@@ -2265,7 +1977,7 @@
       "count": 1,
       "fingerprint": "create_trading_strategy_router:backtest_strategy_range",
       "lines": [
-        857
+        836
       ],
       "path": "src/app/trading/strategy_api.py",
       "rule": "AL005"
@@ -2274,7 +1986,7 @@
       "count": 1,
       "fingerprint": "create_trading_strategy_router:get_backtest_range_progress",
       "lines": [
-        915
+        871
       ],
       "path": "src/app/trading/strategy_api.py",
       "rule": "AL005"
@@ -2310,7 +2022,7 @@
       "count": 1,
       "fingerprint": "create_trading_solana_ai_control_router:solana_ai_decisions",
       "lines": [
-        488
+        507
       ],
       "path": "src/app/trading/strategy_solana_ai_monitor.py",
       "rule": "AL005"
@@ -2319,7 +2031,7 @@
       "count": 1,
       "fingerprint": "create_trading_solana_ai_control_router:solana_ai_strategy",
       "lines": [
-        484
+        503
       ],
       "path": "src/app/trading/strategy_solana_ai_monitor.py",
       "rule": "AL005"
@@ -2328,7 +2040,7 @@
       "count": 1,
       "fingerprint": "create_trading_solana_ai_control_router:start_solana_ai_monitor",
       "lines": [
-        505
+        530
       ],
       "path": "src/app/trading/strategy_solana_ai_monitor.py",
       "rule": "AL005"
@@ -2427,7 +2139,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_audio",
       "lines": [
-        391
+        489
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -2436,7 +2148,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_stream_audio",
       "lines": [
-        492
+        590
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -2445,7 +2157,7 @@
       "count": 1,
       "fingerprint": "<module>:health",
       "lines": [
-        339
+        437
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -2454,7 +2166,7 @@
       "count": 1,
       "fingerprint": "<module>:speakers",
       "lines": [
-        353
+        451
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -2463,7 +2175,7 @@
       "count": 1,
       "fingerprint": "<module>:voice_clone",
       "lines": [
-        590
+        791
       ],
       "path": "src/tts_server.py",
       "rule": "AL005"
@@ -2518,14 +2230,14 @@
       "count": 8,
       "fingerprint": "startup_load_provider:print",
       "lines": [
-        224,
-        228,
-        233,
-        235,
-        237,
-        243,
-        259,
-        261
+        272,
+        276,
+        281,
+        283,
+        285,
+        291,
+        307,
+        309
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL008"
@@ -2741,7 +2453,7 @@
       "count": 1,
       "fingerprint": "_metric:print",
       "lines": [
-        59
+        61
       ],
       "path": "src/app/providers/nemotron_eou_live_websocket.py",
       "rule": "AL008"
@@ -2842,90 +2554,16 @@
       "rule": "AL008"
     },
     {
-      "count": 1,
-      "fingerprint": "_extract_json_payload:print",
-      "lines": [
-        172
-      ],
-      "path": "src/app/rpg/ai/semantic_state_change_capture.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_runtime_actor_id:print",
-      "lines": [
-        154
-      ],
-      "path": "src/app/rpg/ai/semantic_state_change_capture.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 24,
-      "fingerprint": "capture_semantic_state_change_proposals_for_session:print",
-      "lines": [
-        277,
-        281,
-        282,
-        283,
-        292,
-        297,
-        299,
-        304,
-        309,
-        313,
-        316,
-        323,
-        324,
-        328,
-        332,
-        336,
-        343,
-        344,
-        351,
-        392,
-        437,
-        480,
-        481,
-        482
-      ],
-      "path": "src/app/rpg/ai/semantic_state_change_capture.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 16,
-      "fingerprint": "should_capture_semantic_state_change_proposals:print",
-      "lines": [
-        226,
-        229,
-        242,
-        243,
-        250,
-        251,
-        252,
-        253,
-        254,
-        255,
-        256,
-        257,
-        258,
-        259,
-        262,
-        265
-      ],
-      "path": "src/app/rpg/ai/semantic_state_change_capture.py",
-      "rule": "AL008"
-    },
-    {
       "count": 7,
       "fingerprint": "_llm_text:print",
       "lines": [
-        115,
-        128,
-        131,
-        140,
+        116,
+        129,
+        132,
         141,
-        155,
-        162
+        142,
+        156,
+        163
       ],
       "path": "src/app/rpg/ai/world_scene_narrator_common.py",
       "rule": "AL008"
@@ -2961,84 +2599,6 @@
       "rule": "AL008"
     },
     {
-      "count": 3,
-      "fingerprint": "run_one_queued_job_route:print",
-      "lines": [
-        117,
-        132,
-        224
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_provider_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "request_character_portrait:print",
-      "lines": [
-        95,
-        139
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_request_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 3,
-      "fingerprint": "request_scene_illustration:print",
-      "lines": [
-        245,
-        292,
-        318
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_visual_request_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 4,
-      "fingerprint": "_run_semantic_capture_background._worker:print",
-      "lines": [
-        193,
-        194,
-        195,
-        208
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_run_semantic_capture_background:print",
-      "lines": [
-        166,
-        172
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 7,
-      "fingerprint": "idle_tick_rpg_session:print",
-      "lines": [
-        341,
-        358,
-        367,
-        380,
-        385,
-        386,
-        405
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "get_rpg_session:print",
-      "lines": [
-        458
-      ],
-      "path": "src/app/rpg/api/rpg_session_routes.py",
-      "rule": "AL008"
-    },
-    {
       "count": 1,
       "fingerprint": "ActionResolver.resolve:print",
       "lines": [
@@ -3054,26 +2614,6 @@
         391
       ],
       "path": "src/app/rpg/core/event_bus.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "main:print",
-      "lines": [
-        107,
-        115
-      ],
-      "path": "src/app/rpg/local_acceptance.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "main:print",
-      "lines": [
-        269,
-        275
-      ],
-      "path": "src/app/rpg/local_dialogue_quality_smoke.py",
       "rule": "AL008"
     },
     {
@@ -3126,347 +2666,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "on_any_event:print",
-      "lines": [
-        16
-      ],
-      "path": "src/app/rpg/systems/debug_system.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "claim_next_visual_job:print",
-      "lines": [
-        38
-      ],
-      "path": "src/app/rpg/visual/job_queue.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "enqueue_visual_job:print",
-      "lines": [
-        24
-      ],
-      "path": "src/app/rpg/visual/job_queue.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "_generate_preview_image_for_request:print",
-      "lines": [
-        380,
-        382
-      ],
-      "path": "src/app/rpg/visual/queue_runner.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "run_one_queued_job:print",
-      "lines": [
-        176,
-        217
-      ],
-      "path": "src/app/rpg/visual/queue_runner.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_authoritative_diff_text:except",
-      "lines": [
-        378
-      ],
-      "path": "src/app/agent_runtime/acceptance.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_agent_reasoning_effort:except",
-      "lines": [
-        347
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_latest_agent_run:except",
-      "lines": [
-        2843
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_agent_model_route:except",
-      "lines": [
-        323
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_resolve_routing_context:except",
-      "lines": [
-        381
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_workflow_lookup:except",
-      "lines": [
-        1807
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "parse_review_result:except",
-      "lines": [
-        881,
-        890
-      ],
-      "path": "src/app/agent_runtime/coding_quality.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "parse_self_review_result:except",
-      "lines": [
-        744,
-        751
-      ],
-      "path": "src/app/agent_runtime/coding_quality.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_security_subject:except",
-      "lines": [
-        363
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_semantic_evidence_adviser:except",
-      "lines": [
-        205
-      ],
-      "path": "src/app/agent_runtime/evidence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_provider_reasoning_effort:except",
-      "lines": [
-        28
-      ],
-      "path": "src/app/agent_runtime/model_fidelity.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PiRpcSession.close:except",
-      "lines": [
-        751
-      ],
-      "path": "src/app/agent_runtime/pi_runtime_core.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_plan_semantic_reviewer:except",
-      "lines": [
-        640
-      ],
-      "path": "src/app/agent_runtime/planning_review.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "profile_external_ceiling:except",
-      "lines": [
-        116
-      ],
-      "path": "src/app/agent_runtime/profiles.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_promote_protocol_complete_reviewers:except",
-      "lines": [
-        262
-      ],
-      "path": "src/app/agent_runtime/quality_recovery.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_renew_owned_leases:except",
-      "lines": [
-        109
-      ],
-      "path": "src/app/agent_runtime/quality_recovery.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "reconcile_orphaned_quality_reviews:except",
-      "lines": [
-        339,
-        344
-      ],
-      "path": "src/app/agent_runtime/quality_recovery.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "launch_reviewer_children:except",
-      "lines": [
-        345
-      ],
-      "path": "src/app/agent_runtime/review_orchestration_core.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "run_change_set_from_artifact:except",
-      "lines": [
-        64
-      ],
-      "path": "src/app/agent_runtime/run_change_set.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "classify_semantic_intent_safely:except",
-      "lines": [
-        831
-      ],
-      "path": "src/app/agent_runtime/semantic_classifier.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_semantic_intent_classifier:except",
-      "lines": [
-        798
-      ],
-      "path": "src/app/agent_runtime/semantic_classifier.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_record_workspace_context_retry:except",
-      "lines": [
-        698
-      ],
-      "path": "src/app/agent_runtime/semantic_task_parser.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "default_semantic_task_parser:except",
-      "lines": [
-        507
-      ],
-      "path": "src/app/agent_runtime/semantic_task_parser.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService._dispatch_pending_quality_commands:except",
-      "lines": [
-        2101
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService._execute_quality_action:except",
-      "lines": [
-        2074
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService.command_with_context:except",
-      "lines": [
-        900
-      ],
-      "path": "src/app/agent_runtime/service.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "AgentRunService._prepare_workspace:except",
-      "lines": [
-        2711
-      ],
-      "path": "src/app/agent_runtime/service_core.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresTaskGraphRuntime._cancel_child:except",
-      "lines": [
-        1387
-      ],
-      "path": "src/app/agent_runtime/task_graph_runtime.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresTaskGraphRuntime._child_result:except",
-      "lines": [
-        458
-      ],
-      "path": "src/app/agent_runtime/task_graph_runtime.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresWorkflowRuntime._dispatch_pending_schedule_fires:except",
-      "lines": [
-        1381
-      ],
-      "path": "src/app/agent_runtime/workflow_runtime.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresWorkflowRuntime._supervise_once:except",
-      "lines": [
-        1265
-      ],
-      "path": "src/app/agent_runtime/workflow_runtime.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PostgresWorkflowRuntime._supervisor_loop:except",
-      "lines": [
-        1152
-      ],
-      "path": "src/app/agent_runtime/workflow_runtime.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "SharedAssetStore._load_manifest:except",
       "lines": [
-        496
+        488
       ],
       "path": "src/app/assets/store.py",
       "rule": "AL009"
@@ -3475,7 +2677,7 @@
       "count": 1,
       "fingerprint": "default_structured_proposal_provider:except",
       "lines": [
-        182
+        195
       ],
       "path": "src/app/assistant_memory/structured_provider.py",
       "rule": "AL009"
@@ -3484,7 +2686,7 @@
       "count": 1,
       "fingerprint": "_log_browser_activity:except",
       "lines": [
-        716
+        816
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -3493,7 +2695,7 @@
       "count": 1,
       "fingerprint": "_log_playwright_worker_event:except",
       "lines": [
-        391
+        426
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -3502,10 +2704,10 @@
       "count": 4,
       "fingerprint": "_playwright_worker:except",
       "lines": [
-        546,
-        584,
-        589,
-        594
+        581,
+        619,
+        624,
+        629
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL009"
@@ -3613,7 +2815,7 @@
       "count": 1,
       "fingerprint": "_unload_instances:except",
       "lines": [
-        46
+        50
       ],
       "path": "src/app/image/lifecycle.py",
       "rule": "AL009"
@@ -3622,8 +2824,8 @@
       "count": 2,
       "fingerprint": "_validate_load_budget:except",
       "lines": [
-        74,
-        80
+        93,
+        99
       ],
       "path": "src/app/image/lifecycle.py",
       "rule": "AL009"
@@ -3732,7 +2934,7 @@
       "count": 1,
       "fingerprint": "_json_default:except",
       "lines": [
-        39
+        41
       ],
       "path": "src/app/observability/tts_stream_diagnostics.py",
       "rule": "AL009"
@@ -3821,29 +3023,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "_extract_json_object:except",
-      "lines": [
-        57
-      ],
-      "path": "src/app/rpg/ai/npc_roleplay.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "CandidateGenerator.generate_with_combos:except",
       "lines": [
         246
       ],
       "path": "src/app/rpg/ai/planner/candidate_generator.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_get_llm_provider:except",
-      "lines": [
-        193
-      ],
-      "path": "src/app/rpg/ai/semantic_state_change_capture.py",
       "rule": "AL009"
     },
     {
@@ -3886,97 +3070,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_load_visual_request_simulation_state:except",
-      "lines": [
-        255
-      ],
-      "path": "src/app/rpg/api/rpg_presentation_common.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_mark_semantic_capture_worker:except",
-      "lines": [
-        148
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_parse_iso_datetime:except",
-      "lines": [
-        79
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_run_semantic_capture_background._worker:except",
-      "lines": [
-        205
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_run_semantic_capture_background:except",
-      "lines": [
-        184
-      ],
-      "path": "src/app/rpg/api/rpg_session_management_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 2,
-      "fingerprint": "resume_rpg_session:except",
-      "lines": [
-        1177,
-        1223
-      ],
-      "path": "src/app/rpg/api/rpg_session_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_parse_iso_datetime:except",
-      "lines": [
-        35
-      ],
-      "path": "src/app/rpg/api/rpg_world_routes.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_load_candidate_states_from_zip:except",
-      "lines": [
-        166
-      ],
-      "path": "src/app/rpg/autoplay_item_report_hook.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_observed_turn_count:except",
-      "lines": [
-        258
-      ],
-      "path": "src/app/rpg/autoplay_item_report_hook.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_safe_float:except",
-      "lines": [
-        57
-      ],
-      "path": "src/app/rpg/autoplay_performance_artifacts.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "OptionEngine._build_location_options:except",
       "lines": [
         197
@@ -3992,33 +3085,6 @@
         171
       ],
       "path": "src/app/rpg/control/option_engine.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_plan_npc_actions:except",
-      "lines": [
-        303
-      ],
-      "path": "src/app/rpg/core/orchestrator.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PlayerLoop._generate_narration:except",
-      "lines": [
-        479
-      ],
-      "path": "src/app/rpg/core/player_loop.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "PlayerLoop.step:except",
-      "lines": [
-        280
-      ],
-      "path": "src/app/rpg/core/player_loop.py",
       "rule": "AL009"
     },
     {
@@ -4055,15 +3121,6 @@
         413
       ],
       "path": "src/app/rpg/debug_logging.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_safe_int_or_none:except",
-      "lines": [
-        32
-      ],
-      "path": "src/app/rpg/escalation/state.py",
       "rule": "AL009"
     },
     {
@@ -4188,33 +3245,6 @@
       "rule": "AL009"
     },
     {
-      "count": 1,
-      "fingerprint": "collect_active_objectives:except",
-      "lines": [
-        278
-      ],
-      "path": "src/app/rpg/objectives/affordances.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "apply_generic_quest_handoff:except",
-      "lines": [
-        262
-      ],
-      "path": "src/app/rpg/objectives/handoff.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "reconcile_objective_progression_into_quests:except",
-      "lines": [
-        195
-      ],
-      "path": "src/app/rpg/objectives/reconciliation.py",
-      "rule": "AL009"
-    },
-    {
       "count": 2,
       "fingerprint": "_rss_bytes:except",
       "lines": [
@@ -4235,83 +3265,11 @@
     },
     {
       "count": 1,
-      "fingerprint": "_safe_int_or_none:except",
-      "lines": [
-        26
-      ],
-      "path": "src/app/rpg/puzzles/state.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_safe_int_or_none:except",
-      "lines": [
-        29
-      ],
-      "path": "src/app/rpg/quests/state.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "ProfileBoundProvider._apply_attributes:except",
       "lines": [
         94
       ],
       "path": "src/app/rpg/response_generation/production_pipeline.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "render_with_llm_flavor:except",
-      "lines": [
-        163
-      ],
-      "path": "src/app/rpg/scene/renderer.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_read_json:except",
-      "lines": [
-        62
-      ],
-      "path": "src/app/rpg/session/bundle_a_artifacts.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_read_json:except",
-      "lines": [
-        56
-      ],
-      "path": "src/app/rpg/session/bundle_b_artifacts.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_read_json:except",
-      "lines": [
-        40
-      ],
-      "path": "src/app/rpg/session/bundle_c_artifacts.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_read_json:except",
-      "lines": [
-        67
-      ],
-      "path": "src/app/rpg/session/bundle_d_report_projection.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_phase8_part30_json_objects_from_text:except",
-      "lines": [
-        148
-      ],
-      "path": "src/app/rpg/session/complete_narration_fallback.py",
       "rule": "AL009"
     },
     {
@@ -4363,7 +3321,7 @@
       "count": 1,
       "fingerprint": "_prepare_stateful_runtime_session:except",
       "lines": [
-        194
+        178
       ],
       "path": "src/app/rpg/session/interactive_first_call_runtime.py",
       "rule": "AL009"
@@ -4416,15 +3374,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "_maybe_save_session:except",
-      "lines": [
-        262
-      ],
-      "path": "src/app/rpg/session/survival_autoplay_cadence.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "_persist_session_best_effort:except",
       "lines": [
         470
@@ -4471,45 +3420,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "DirectorAgent.decide:except",
-      "lines": [
-        183
-      ],
-      "path": "src/app/rpg/story/director_agent.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "NarrativeRenderer._build_memory_summary:except",
-      "lines": [
-        180
-      ],
-      "path": "src/app/rpg/story/narrative_renderer.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_safe_int_or_none:except",
-      "lines": [
-        47
-      ],
-      "path": "src/app/rpg/story_arcs/state.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
-      "fingerprint": "VisualWorkerRunner.start._run:except",
-      "lines": [
-        29
-      ],
-      "path": "src/app/rpg/visual/background_runner.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "unload_image_provider_cache:except",
       "lines": [
-        86
+        111
       ],
       "path": "src/app/rpg/visual/providers/__init__.py",
       "rule": "AL009"
@@ -4690,7 +3603,7 @@
       "count": 1,
       "fingerprint": "_decimal:except",
       "lines": [
-        159
+        196
       ],
       "path": "src/app/trading/strategy_ai_shadow_monitor.py",
       "rule": "AL009"
@@ -4862,8 +3775,8 @@
       "count": 2,
       "fingerprint": "PersistedCatalystIntelligenceSource.capture:except",
       "lines": [
-        115,
-        138
+        116,
+        139
       ],
       "path": "src/app/trading/strategy_discovery_acquisition.py",
       "rule": "AL009"
@@ -5016,7 +3929,7 @@
       "count": 1,
       "fingerprint": "TradingSolanaAIMonitor.recent_decisions:except",
       "lines": [
-        160
+        162
       ],
       "path": "src/app/trading/strategy_solana_ai_monitor.py",
       "rule": "AL009"
@@ -5025,7 +3938,7 @@
       "count": 1,
       "fingerprint": "TradingSolanaAIMonitor.strategy_record:except",
       "lines": [
-        141
+        143
       ],
       "path": "src/app/trading/strategy_solana_ai_monitor.py",
       "rule": "AL009"
@@ -5117,7 +4030,7 @@
       "count": 1,
       "fingerprint": "_kill_windows_port_owners:except",
       "lines": [
-        151
+        163
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -5126,7 +4039,7 @@
       "count": 1,
       "fingerprint": "get_tts_service_status:except",
       "lines": [
-        246
+        291
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -5135,7 +4048,7 @@
       "count": 1,
       "fingerprint": "initialize_tts_provider:except",
       "lines": [
-        224
+        236
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -5144,7 +4057,7 @@
       "count": 1,
       "fingerprint": "AgentRunService.__init__:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        251
+        282
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL011"
@@ -5153,7 +4066,7 @@
       "count": 1,
       "fingerprint": "_service_and_context:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        200
+        201
       ],
       "path": "src/app/audiobook/routes.py",
       "rule": "AL011"

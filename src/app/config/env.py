@@ -1,13 +1,17 @@
 """Typed environment access. This is the only package allowed to read os.environ."""
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterator, Mapping, MutableMapping
 import os
 from threading import Lock
+import time
 from urllib.parse import urlsplit
 
 _READ_LOCK = Lock()
-_READ_NAMES: set[str] = set()
+_MAX_READ_NAMES = 4096
+_READ_NAME_TTL_SECONDS = 86_400.0
+_READ_NAMES: OrderedDict[str, float] = OrderedDict()
 
 
 class _EnvironmentAccess(MutableMapping[str, str]):
@@ -60,13 +64,31 @@ def set_environment_value(name: str, value: str) -> None:
 
 
 def _record(name: str) -> None:
+    now = time.monotonic()
     with _READ_LOCK:
-        _READ_NAMES.add(name)
+        expired = [key for key, touched in _READ_NAMES.items() if now - touched > _READ_NAME_TTL_SECONDS]
+        for key in expired:
+            _READ_NAMES.pop(key, None)
+        _READ_NAMES[name] = now
+        _READ_NAMES.move_to_end(name)
+        while len(_READ_NAMES) > _MAX_READ_NAMES:
+            _READ_NAMES.popitem(last=False)
 
 
 def read_names() -> tuple[str, ...]:
     with _READ_LOCK:
+        now = time.monotonic()
+        expired = [key for key, touched in _READ_NAMES.items() if now - touched > _READ_NAME_TTL_SECONDS]
+        for key in expired:
+            _READ_NAMES.pop(key, None)
         return tuple(sorted(_READ_NAMES))
+
+
+def clear_read_names() -> None:
+    """Clear bounded environment-access diagnostics."""
+
+    with _READ_LOCK:
+        _READ_NAMES.clear()
 
 
 def env_str(name: str, default: str | None = None, *, env: Mapping[str, str] | None = None) -> str | None:

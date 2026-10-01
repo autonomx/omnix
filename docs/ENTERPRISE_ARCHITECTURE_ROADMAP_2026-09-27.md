@@ -2532,6 +2532,7 @@ Measure baselines in WP-1.1. Values marked "measure" must be computed then.
 | `mypy_ignored_modules` | Override patterns with `ignore_errors` | measure | lower | 0 kernel, ≤ 10% total |
 | `compat_modules` | `*_compat.py` files | 17+ | lower | 0 (renamed stable adapters) |
 | `process_local_state_unapproved` | Inventory entries not approved (WP-6.6) | measure | lower | 0 |
+| `unbounded_module_caches` | Scanned module-level caches without a positive size bound, TTL, and invalidation policy (WP-6.6) | measure | lower | 0 |
 | `unreachable_rpg_modules` | Reachability report | 526 | lower | 0 |
 | `rls_coverage_pct` | Tenant tables with RLS | 0 | higher | 100 |
 | `retention_policies_executed_pct` | Policies with a successful run in the last 48 h (test env) | 0 | higher | 100 |

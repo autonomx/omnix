@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 import pytest
 import secrets
 
@@ -37,6 +38,49 @@ def _status(*, loaded: bool) -> dict:
             "missing": [],
             "local_dir": "resources/models/image/flux2-klein-4b",
         },
+    }
+
+
+def test_image_progress_state_is_bounded_expiring_and_invalidatable(monkeypatch):
+    now = {"value": 0.0}
+    monkeypatch.setattr(image_service_app, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(image_service_app, "_GENERATION_PROGRESS_MAX_ENTRIES", 2)
+    monkeypatch.setattr(image_service_app, "_GENERATION_PROGRESS_TTL_SECONDS", 5.0)
+    image_service_app._clear_generation_progress()
+
+    for request_id in ("progress-a", "progress-b", "progress-c"):
+        image_service_app._set_generation_progress(
+            request_id,
+            current=1,
+            total=2,
+            message="Working",
+            status="running",
+        )
+
+    assert image_service_app._get_generation_progress("progress-a")["status"] == "missing"
+    assert image_service_app._get_generation_progress("progress-c")["status"] == "running"
+    image_service_app._clear_generation_progress("progress-c")
+    assert image_service_app._get_generation_progress("progress-c")["status"] == "missing"
+
+    now["value"] = 10.0
+    assert image_service_app._get_generation_progress("progress-b")["status"] == "missing"
+
+
+def test_image_model_operation_diagnostic_expires(monkeypatch):
+    now = {"value": 1.0}
+    monkeypatch.setattr(image_service_app, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(image_service_app, "_MODEL_OPERATION_TTL_SECONDS", 5.0)
+
+    image_service_app._set_model_operation("downloading", "flux_klein")
+    assert image_service_app._get_model_operation() == {
+        "kind": "downloading",
+        "provider": "flux_klein",
+    }
+
+    now["value"] = 7.0
+    assert image_service_app._get_model_operation() == {
+        "kind": "idle",
+        "provider": "",
     }
 
 
@@ -265,7 +309,7 @@ def test_atomic_load_switch_keeps_only_one_resident_provider(monkeypatch):
         providers[name] = provider
         return provider
 
-    monkeypatch.setattr(lifecycle, "_PROVIDER_CACHE", {})
+    monkeypatch.setattr(lifecycle, "_PROVIDER_CACHE", OrderedDict())
     monkeypatch.setattr(lifecycle, "_build_provider", build_provider)
     monkeypatch.setattr(lifecycle, "_validate_load_budget", lambda _provider: None)
 

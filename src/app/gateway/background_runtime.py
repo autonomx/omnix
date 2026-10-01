@@ -19,9 +19,12 @@ class GatewayBackgroundRegistryAdapter(BackgroundRegistry):
 
     def register_worker(self, worker: BackgroundWorker) -> None:
         runtime = getattr(self.gateway.state, "background_runtime", None)
-        required = RuntimeCapability.OWN_BACKGROUND_RUNTIME
-        if required not in worker.requires:
-            raise ValueError("Background workers must declare background ownership")
+        supported = {
+            RuntimeCapability.OWN_BACKGROUND_RUNTIME,
+            RuntimeCapability.RUN_JOB_WORKERS,
+        }
+        if len(worker.requires) != 1 or not worker.requires <= supported:
+            raise ValueError("Background workers must declare one supported runtime role")
 
         if runtime is not None:
             register_runtime_background_worker(runtime, worker)

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from threading import BoundedSemaphore
+from contextlib import nullcontext
 from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.providers.base import BaseProvider, ChatMessage
+from app.persistence.device_permits import device_permit_slot
 from app.providers.registry import get_provider
 from app.providers.structured import (
     StructuredContract,
@@ -31,7 +32,6 @@ from app.rpg.session.genesis.world_forge_profiles import (
 )
 from app.rpg.worlds.providers.world_forge import WorldForgeProviderConfig
 
-_PROFILE_CALLS = BoundedSemaphore(1)
 _CORE_DOMAINS = _core_domains()
 _ALLOWED_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS)
 _LAUNCH_CORE_IDS = tuple(domain.domain_id for domain in _CORE_DOMAINS if domain.required_before_launch)
@@ -319,7 +319,13 @@ class ProviderGenreProfileGenerator:
         ]
         gateway = StructuredOutputGateway(self.provider)
         total_calls = max(1, self.config.max_retries + 2)
-        with _PROFILE_CALLS:
+        provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
+        call_limiter = (
+            device_permit_slot("llm-local", priority="batch")
+            if provider_key in {"lmstudio", "ollama", "local"}
+            else nullcontext()
+        )
+        with call_limiter:
             outcome = gateway.try_generate(
                 messages,
                 contract=replace(

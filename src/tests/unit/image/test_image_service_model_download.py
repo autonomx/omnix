@@ -151,6 +151,8 @@ def test_explicit_hf_token_is_used_only_for_snapshot_download(monkeypatch, tmp_p
         },
     )
     monkeypatch.setattr(image_downloads, "save_settings", lambda _settings: None)
+    # Never resolve to (or write into) the operator's resources/models tree.
+    monkeypatch.setattr(image_downloads, "MODELS_DIR", str(tmp_path / "models"))
 
     result = image_downloads.download_image_model("krea2_turbo", "hf_direct_token")
 

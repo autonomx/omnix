@@ -5,7 +5,7 @@ only here. No request transaction or imported module is mutated by this object.
 """
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
 
 
@@ -49,7 +49,7 @@ class DocumentServices:
     load_npc_evolution_profiles_for_runtime: Callable[..., Any]
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_document_services() -> DocumentServices:
     from app.assistant_tools.persistence import configuration
     from app.assistant_tools.persistence import runtime_documents as assistant_tool_documents

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -127,3 +128,23 @@ def test_profile_cache_uses_file_signature_and_observes_updates(
     assert updated.effective.talkativeness == 20
     assert updated.effective.profile_version == 2
     assert read_calls == 2
+
+
+def test_prompt_dependency_cache_expires_and_supports_invalidation(monkeypatch) -> None:
+    now = [5.0]
+    cache: OrderedDict[str, object] = OrderedDict()
+    monkeypatch.setattr(prompt_cache, "_cache_now", lambda: now[0])
+
+    prompt_cache._bounded_put(cache, "identity", {"value": 1})
+    assert prompt_cache._cache_get(cache, "identity") == {"value": 1}
+
+    now[0] += prompt_cache._CACHE_TTL_SECONDS + 1
+    assert prompt_cache._cache_get(cache, "identity") is None
+
+    prompt_cache._bounded_put(cache, "identity", {"value": 2})
+    prompt_cache.clear_live_prompt_caches()
+    snapshot = SimpleNamespace(id="sofia", version=99)
+    prompt_cache.cache_character_snapshot(snapshot)
+    assert ("sofia", 99) in prompt_cache._CHARACTER_SNAPSHOTS
+    prompt_cache.clear_live_prompt_caches()
+    assert ("sofia", 99) not in prompt_cache._CHARACTER_SNAPSHOTS

@@ -32,8 +32,8 @@ from .voice_consent import governance_from_asset
 
 LOGGER = logging.getLogger("uvicorn.error")
 _SNAPSHOT_CACHE_LOCK = threading.RLock()
-_SNAPSHOT_CACHE_WRITERS: set[Callable[[Any], None]] = set()
-_SNAPSHOT_CACHE_INVALIDATORS: set[Callable[[str], None]] = set()
+_SNAPSHOT_CACHE_WRITER: Callable[[Any], None] | None = None
+_SNAPSHOT_CACHE_INVALIDATOR: Callable[[str], None] | None = None
 
 
 def subscribe_character_snapshot_cache(
@@ -42,15 +42,16 @@ def subscribe_character_snapshot_cache(
     on_change: Callable[[str], None],
 ) -> None:
     """Register bounded-cache ports for immutable snapshots and mutations."""
+    global _SNAPSHOT_CACHE_WRITER, _SNAPSHOT_CACHE_INVALIDATOR
     with _SNAPSHOT_CACHE_LOCK:
-        _SNAPSHOT_CACHE_WRITERS.add(on_resolve)
-        _SNAPSHOT_CACHE_INVALIDATORS.add(on_change)
+        _SNAPSHOT_CACHE_WRITER = on_resolve
+        _SNAPSHOT_CACHE_INVALIDATOR = on_change
 
 
 def _publish_snapshot(snapshot: Any) -> None:
     with _SNAPSHOT_CACHE_LOCK:
-        writers = tuple(_SNAPSHOT_CACHE_WRITERS)
-    for writer in writers:
+        writer = _SNAPSHOT_CACHE_WRITER
+    if writer is not None:
         try:
             writer(snapshot)
         except Exception:
@@ -59,8 +60,8 @@ def _publish_snapshot(snapshot: Any) -> None:
 
 def _invalidate_snapshot_caches(character_id: str) -> None:
     with _SNAPSHOT_CACHE_LOCK:
-        invalidators = tuple(_SNAPSHOT_CACHE_INVALIDATORS)
-    for invalidate in invalidators:
+        invalidate = _SNAPSHOT_CACHE_INVALIDATOR
+    if invalidate is not None:
         try:
             invalidate(character_id)
         except Exception:

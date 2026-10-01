@@ -15,9 +15,12 @@ from app.assistant_memory.initiative import (
 from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from app.assistant_memory.observability import (
     companion_metrics_snapshot,
+    memory_usage_snapshot,
     record_companion_diagnostics,
+    record_memory_usage,
     reset_companion_metrics,
 )
+from app.assistant_memory import observability
 from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryRepository
 from app.assistant_memory.owner_service import OwnerAwareMemoryService
 from app.assistant_memory.paralinguistic_state import (
@@ -257,6 +260,32 @@ def test_observability_is_content_free_and_metrics_route_is_hidden() -> None:
     schema = client.get("/openapi.json").json()
     assert "/api/assistant/memory/metrics" in schema["paths"]
     assert "get" in schema["paths"]["/api/assistant/memory/metrics"]
+
+
+def test_observability_registries_are_bounded_expiring_and_clearable(monkeypatch) -> None:
+    reset_companion_metrics()
+    now = 100.0
+    monkeypatch.setattr(observability, "_metrics_now", lambda: now)
+    monkeypatch.setattr(observability, "_MAX_METRIC_KEYS", 1)
+    monkeypatch.setattr(observability, "_MAX_USAGE_SESSIONS", 1)
+
+    record_companion_diagnostics({"companion_context": {"cache_hit": True}})
+    assert len(observability._METRIC_TOUCHED) == 1
+    now += observability._METRIC_TTL_SECONDS + 1
+    assert companion_metrics_snapshot().counters == {}
+    assert not observability._METRIC_TOUCHED
+
+    record_memory_usage("first", [])
+    record_memory_usage("second", [])
+    assert len(observability._LATEST_USAGE) == 1
+    assert memory_usage_snapshot("first").items == ()
+    now += observability._USAGE_TTL_SECONDS + 1
+    assert memory_usage_snapshot("second").items == ()
+    assert not observability._LATEST_USAGE
+
+    reset_companion_metrics()
+    assert not observability._METRIC_TOUCHED
+    assert not observability._USAGE_TOUCHED
 
 
 def test_high_volume_temporal_ranking_stays_bounded() -> None:

@@ -35,16 +35,14 @@ class _Database:
 @pytest.fixture
 def isolated_repository_registry():
     with repository_registry._LOCK:
-        prior_types = dict(repository_registry._SPECS_BY_TYPE)
-        prior_aliases = dict(repository_registry._SPECS_BY_ALIAS)
+        prior_specs = tuple(repository_registry._SPECS_BY_TYPE.values())
+        repository_registry.reset_repository_specs()
     try:
         yield repository_registry.install_repository_specs
     finally:
         with repository_registry._LOCK:
-            repository_registry._SPECS_BY_TYPE.clear()
-            repository_registry._SPECS_BY_TYPE.update(prior_types)
-            repository_registry._SPECS_BY_ALIAS.clear()
-            repository_registry._SPECS_BY_ALIAS.update(prior_aliases)
+            repository_registry.reset_repository_specs()
+            repository_registry.install_repository_specs(prior_specs)
 
 
 def test_feature_repository_factories_are_lazy_and_cached_per_unit_of_work(

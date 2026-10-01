@@ -2,7 +2,6 @@ from types import SimpleNamespace
 import pytest
 import secrets
 
-from app.runtime_services import _normalize_base_url
 from app.tts_http_client import _tts_base_url, tts_generate_stream_audio
 
 
@@ -22,10 +21,6 @@ def test_tts_endpoint_uses_bound_process_config(monkeypatch):
     install_runtime_config(RuntimeConfig(tts=ServiceEndpoint('http://localhost:5101/')))
     monkeypatch.setenv('OMNIX_TTS_URL', 'http://other:5201')
     assert _tts_base_url() == 'http://localhost:5101'
-
-
-def test_runtime_services_normalize_base_url():
-    assert _normalize_base_url(" 'http://127.0.0.1:5201/ ' ", "http://127.0.0.1:5201") == "http://127.0.0.1:5201"
 
 
 def test_tts_generate_stream_audio_normalizes_binary_wav(monkeypatch):

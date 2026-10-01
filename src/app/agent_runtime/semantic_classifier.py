@@ -6,6 +6,8 @@ but Omnix still compiles and validates all authority deterministically.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from app.config.env import env_str
 
 import json
@@ -795,7 +797,8 @@ def default_semantic_intent_classifier(
             model=model,
             timeout_seconds=timeout,
         )
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("semantic classifier construction", exc, level="DEBUG")
         return None
 
 
@@ -828,7 +831,8 @@ def classify_semantic_intent_safely(
             value = method(legacy_input) if callable(method) else classifier(legacy_input)
         validated = SemanticIntentDecision.model_validate(value)
         return _normalize_semantic_decision(content, validated)
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("semantic intent classification", exc, level="DEBUG")
         return None
 
 

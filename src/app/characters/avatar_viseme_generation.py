@@ -173,7 +173,19 @@ class CharacterVisemeGenerationService:
         avatar_service: CharacterAvatarService | None = None,
         job_store: Any | None = None,
     ) -> None:
-        self.repository = repository or CharacterVisemeGenerationRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+
+            if uses_postgresql_runtime():
+                # Feature-owned adapter; the composition root is not imported here.
+                from app.characters.persistence.avatar_generation_repository import (
+                    PostgresCharacterVisemeGenerationRepositoryAdapter,
+                )
+
+                repository = PostgresCharacterVisemeGenerationRepositoryAdapter()
+            else:
+                repository = CharacterVisemeGenerationRepository()
+        self.repository = repository
         self.character_service = character_service or default_character_service()
         self.avatar_service = avatar_service or default_character_avatar_service()
         self.job_store = job_store or default_job_store()

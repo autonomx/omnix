@@ -7,12 +7,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `APCA_API_KEY_ID` | string | — | trading | Controls apca api key id for trading. |
 | `APCA_API_SECRET_KEY` | string | — | trading | Controls apca api secret key for trading. |
 | `CI` | boolean | `false` | kernel | Controls ci for kernel. |
-| `COMFY_BASE_URL` | string | `http://127.0.0.1:8188` | rpg | Controls comfy base url for rpg. |
-| `COMFY_CHECKPOINT_NAME` | string | `v1-5-pruned-emaonly.safetensors` | rpg | Controls comfy checkpoint name for rpg. |
-| `COMFY_MAX_POLLS` | string | — | rpg | Controls comfy max polls for rpg. |
-| `COMFY_POLL_INTERVAL_SEC` | string | — | rpg | Controls comfy poll interval sec for rpg. |
-| `COMFY_PROMPT_GRAPH_JSON` | string | — | rpg | Controls comfy prompt graph json for rpg. |
-| `COMFY_TIMEOUT_SEC` | string | — | rpg | Controls comfy timeout sec for rpg. |
 | `HERMES_API_KEY` | string | — | hermes, research, trading | Controls hermes api key for hermes, research, trading. |
 | `HERMES_BASE_URL` | string | `http://127.0.0.1:8642` | hermes, launcher | Controls hermes base url for hermes, launcher. |
 | `HERMES_ENABLED` | string | — | hermes, launcher, research | Controls hermes enabled for hermes, launcher, research. |
@@ -115,6 +109,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEEP_RESEARCH_HERMES_ENABLED` | string | `0` | research | Controls deep research hermes enabled for research. |
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
+| `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
 | `OMNIX_ENV` | string | `development` | kernel, production.py | Controls env for kernel, production.py. |
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
@@ -142,6 +137,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IMAGE_WARMUP` | string | `0` | image-service-runtime.py, launcher | Controls image warmup for image-service-runtime.py, launcher. |
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
 | `OMNIX_JOB_PRIORITY_AGING_SECONDS` | integer | `60` | kernel | Controls job priority aging seconds for kernel. |
+| `OMNIX_JOB_WORKER_METRICS_HOST` | string | `127.0.0.1` | worker | Controls job worker metrics host for worker. |
+| `OMNIX_JOB_WORKER_METRICS_PORT` | integer | `8090` | worker | Controls job worker metrics port for worker. |
+| `OMNIX_JOB_WORKER_POOLS` | string | — | worker | Controls job worker pools for worker. |
+| `OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS` | integer | `30` | worker | Controls job worker shutdown grace seconds for worker. |
+| `OMNIX_JOB_WORKER_STARTUP_TIMEOUT_SECONDS` | integer | `120` | worker | Controls job worker startup timeout seconds for worker. |
 | `OMNIX_KASA_DEVICE_ALIAS` | string | — | assistant-tools | Controls kasa device alias for assistant-tools. |
 | `OMNIX_KASA_DEVICE_HOST` | string | — | assistant-tools | Controls kasa device host for assistant-tools. |
 | `OMNIX_KASA_ENABLED` | boolean | — | assistant-tools | Controls kasa enabled for assistant-tools. |
@@ -158,12 +158,14 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LIVE_CONVERSATION_PROFILE_PATH` | string | — | characters | Controls live conversation profile path for characters. |
 | `OMNIX_LIVE_GLOBAL_PROMPT_CACHE_TTL_SECONDS` | string | `60` | providers | Controls live global prompt cache ttl seconds for providers. |
 | `OMNIX_LIVE_LMSTUDIO_STATEFUL_RESPONSES` | string | `true` | launcher | Controls live lmstudio stateful responses for launcher. |
+| `OMNIX_LIVE_MAX_CALLS` | integer | — | kernel | Controls live max calls for kernel. |
 | `OMNIX_LIVE_PRONUNCIATION_PATH` | string | — | characters | Controls live pronunciation path for characters. |
 | `OMNIX_LIVE_TTS_PROVIDER_NAME` | string | — | kernel | Controls live tts provider name for kernel. |
 | `OMNIX_LIVE_TTS_SPECULATIVE_CHUNK_STEPS` | string | `2` | launcher | Controls live tts speculative chunk steps for launcher. |
 | `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | kernel | Controls live voice execution mode for kernel. |
 | `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | kernel | Controls live voice model id for kernel. |
 | `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | kernel | Controls live voice provider id for kernel. |
+| `OMNIX_LOG_LEVEL` | string | `info` | worker | Controls log level for worker. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER` | string | — | assistant-memory | Controls memory structured extraction provider for assistant-memory. |
@@ -278,7 +280,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_WEB_SEARCH_API_KEY` | string | — | research, security | Controls web search api key for research, security. |
 | `OMNIX_WEB_SEARCH_PROVIDER` | string | — | research, security | Controls web search provider for research, security. |
 | `OMNIX_WEB_SEARCH_TIMEOUT_SECONDS` | string | `8.0` | research | Controls web search timeout seconds for research. |
-| `OPENAI_API_KEY` | string | — | rpg | Controls openai api key for rpg. |
 | `PARAKEET_LIVE_EDGE_PADDING_MS` | integer | `100` | providers | Controls parakeet live edge padding ms for providers. |
 | `PARAKEET_LIVE_MAX_QUEUED_SEGMENTS` | integer | `32` | providers | Controls parakeet live max queued segments for providers. |
 | `PARAKEET_LIVE_MAX_SESSION_SEGMENTS` | integer | `8` | providers | Controls parakeet live max session segments for providers. |
@@ -288,8 +289,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `PROGRAMFILES` | string | — | launcher | Controls programfiles for launcher. |
 | `PYTEST_CURRENT_TEST` | string | — | kernel | Controls pytest current test for kernel. |
 | `PYTHONPATH` | string | — | rpg | Controls pythonpath for rpg. |
-| `RPG_FAST_MODEL_ID` | string | — | rpg | Controls rpg fast model id for rpg. |
-| `RPG_FAST_PROVIDER_ID` | string | — | rpg | Controls rpg fast provider id for rpg. |
 | `RPG_TRACE_PROVIDER_CALLS` | string | — | providers | Controls rpg trace provider calls for providers. |
 | `RPG_TRACE_SESSION_TURN` | string | — | rpg | Controls rpg trace session turn for rpg. |
 | `SYSTEMROOT` | string | — | agent-runtime | Controls systemroot for agent-runtime. |

@@ -1,16 +1,12 @@
-from fastapi.testclient import TestClient
 
 from app.assistant_tools.config_store import (
     AssistantToolConfigRecord,
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
-    save_assistant_tools_config,
 )
 from app.assistant_tools.credentials import AssistantToolCredentialRecord
 from app.assistant_tools.gmail_adapter import FakeGmailRuntimeAdapter, GmailMessageRecord, GoogleGmailRuntimeAdapter, run_gmail_tool_request
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
-from app.gateway.main import create_gateway_app
 
 
 def _connected_gmail_config() -> AssistantToolsConfigPayload:
@@ -90,60 +86,3 @@ def test_connected_gmail_adapter_reads_messages_through_google_api(monkeypatch):
     assert messages == [GmailMessageRecord(id="msg-1", sender="ada@example.com", subject="Hello", snippet="Hello from Gmail", thread_id="thread-1")]
 
 
-def test_gmail_draft_request_runs_through_hermes_when_approved(monkeypatch, tmp_path):
-    config_path = tmp_path / "assistant_tools_config.json"
-    ledger_path = tmp_path / "assistant_tools_ledger.jsonl"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH", str(ledger_path))
-    save_assistant_tools_config(_connected_gmail_config(), config_path)
-
-    payload = hermes_assistant_tool_execute_payload(
-        "Draft Ada a follow-up",
-        AssistantToolRequest(
-            tool_id="gmail",
-            action_id="gmail.create_draft",
-            input={"to": "ada@example.com", "subject": "Follow-up", "body": "Thanks for the note."},
-        ),
-        approved=True,
-    )
-
-    assert payload.approval_decision.approval_required is True
-    assert payload.approval_decision.executable is True
-    assert payload.execution_result.error is None
-    assert payload.execution_result.state_changed is True
-    assert payload.execution_result.output["draft"]["to"] == "ada@example.com"
-
-
-def test_gmail_send_requires_explicit_approval_before_adapter_can_run(monkeypatch, tmp_path):
-    config_path = tmp_path / "assistant_tools_config.json"
-    ledger_path = tmp_path / "assistant_tools_ledger.jsonl"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH", str(ledger_path))
-    save_assistant_tools_config(_connected_gmail_config(), config_path)
-
-    payload = hermes_assistant_tool_execute_payload(
-        "Send Ada an email",
-        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", input={"to": "ada@example.com"}),
-    )
-
-    assert payload.approval_decision.approval_required is True
-    assert payload.approval_decision.executable is False
-    assert payload.execution_result.error == "approval_required"
-    assert payload.state_changed is False
-
-
-def test_gmail_review_route_keeps_delete_blocked_by_default(monkeypatch, tmp_path):
-    config_path = tmp_path / "assistant_tools_config.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CONFIG_PATH", str(config_path))
-    save_assistant_tools_config(_connected_gmail_config(), config_path)
-    client = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
-
-    response = client.post(
-        "/api/assistant/tools/review",
-        json={"tool_id": "gmail", "action_id": "gmail.delete_email", "approved": True, "input": {"message_id": "m1"}},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["allowed"] is False
-    assert payload["reason"] == "action_disabled"

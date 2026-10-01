@@ -12,7 +12,13 @@ from contextlib import asynccontextmanager
 from app.config.env import environment
 from app.config.env import env_bool, env_str
 
-from app.runtime.config import RuntimeConfig, get_runtime_config, install_runtime_config
+from app.runtime.config import (
+    DevicePermitSettings,
+    GatewayRole,
+    RuntimeConfig,
+    get_runtime_config,
+    install_runtime_config,
+)
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 from app.runtime.contracts import JobService, AssetService, ChatService, ModelResidencyService
 
@@ -28,6 +34,7 @@ class GatewayRuntimeServices:
     database: Any
     tenant: Any
     settings: Any
+    agent_runs: Any | None = None
 
 
 def production_readiness(config: RuntimeConfig | None = None) -> dict:
@@ -71,6 +78,9 @@ def maybe_apply_migrations_on_start(
     source = environment() if env is None else env
     if not env_bool("OMNIX_MIGRATE_ON_START", False, env=source):
         return False
+    if config.gateway_role is GatewayRole.JOB_WORKER:
+        # The singleton gateway remains the only local DDL owner.
+        return False
 
     auth_mode = (env_str("OMNIX_AUTH_MODE", "local", env=source) or "local").strip().lower()
     deployment = (env_str("OMNIX_ENV", "development", env=source) or "development").strip().lower()
@@ -95,6 +105,9 @@ def create_production_app(config: RuntimeConfig | None = None):
     config = config or RuntimeConfig.from_environment(environment())
     maybe_apply_migrations_on_start(config)
     install_runtime_config(config)
+    from app.live_voice.capacity import configure_live_call_capacity
+
+    configure_live_call_capacity(config.live_max_calls)
     capabilities = RuntimeCapabilities.from_config(config)
     from app.persistence.startup import bootstrap_status_payload
 
@@ -108,6 +121,19 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.settings.registry import core_setting_specs
 
     database = default_database()
+    permit_config = DevicePermitSettings.from_environment(environment())
+    from app.persistence.device_permits import configure_default_device_permit_service
+
+    configure_default_device_permit_service(
+        database,
+        device_id=permit_config.device_id,
+        capacities={
+            model_class: (capacity, reserved)
+            for model_class, capacity, reserved in permit_config.capacities
+        },
+        lease_seconds=permit_config.lease_seconds,
+        tts_model_owner=permit_config.tts_model_owner,
+    )
     tenant_provider = TenantProvider()
     settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
     from app.settings.access import install_settings_service
@@ -135,13 +161,17 @@ def create_production_app(config: RuntimeConfig | None = None):
     tenant_context = tenant_provider.current()
     owner = GatewayRuntimeOwner(database, tenant_context.workspace_id, config=config)
     dispatcher = _ChatGenerationDispatcher()
-    capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
+    if config.gateway_role is not GatewayRole.JOB_WORKER:
+        capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
     jobs = production_job_store(
         database=database,
         context=tenant_context,
         chat_execution_owner=owner,
         chat_dispatcher=dispatcher,
     )
+    from app.agent_runtime.service import AgentRunService
+
+    agent_runs = AgentRunService(database, context=tenant_context, job_store=jobs)
     from app.chat.live_agent_store import default_live_agent_planner
 
     services = GatewayRuntimeServices(
@@ -155,6 +185,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         database=database,
         tenant=tenant_provider,
         settings=settings_service,
+        agent_runs=agent_runs,
     )
     from app.persistence.authority import AuthorityOperation, require_authority_operation
     from app.persistence.background_authority import background_execution
@@ -225,20 +256,36 @@ def create_production_app(config: RuntimeConfig | None = None):
             )
         )
 
-    @asynccontextmanager
-    async def lifecycle():
-        async with owner.lifespan(), background.lifespan(), scheduler.lifespan():
-            try:
-                yield
-            finally:
-                remaining = await asyncio.to_thread(dispatcher.close)
-                if remaining:
-                    logging.getLogger(__name__).warning(
-                        "Chat dispatcher shutdown deadline exceeded: %s workers", remaining
-                    )
+    if config.gateway_role is GatewayRole.JOB_WORKER:
+        @asynccontextmanager
+        async def lifecycle():
+            async with background.lifespan():
+                try:
+                    yield
+                finally:
+                    remaining = await asyncio.to_thread(dispatcher.close)
+                    if remaining:
+                        logging.getLogger(__name__).warning(
+                            "Chat dispatcher shutdown deadline exceeded: %s workers", remaining
+                        )
+    else:
+        @asynccontextmanager
+        async def lifecycle():
+            async with owner.lifespan(), background.lifespan(), scheduler.lifespan():
+                try:
+                    yield
+                finally:
+                    remaining = await asyncio.to_thread(dispatcher.close)
+                    if remaining:
+                        logging.getLogger(__name__).warning(
+                            "Chat dispatcher shutdown deadline exceeded: %s workers", remaining
+                        )
 
     def readiness():
+        from app.live_voice.capacity import live_call_capacity_snapshot
+
         payload = production_readiness(config)
+        payload["live_voice_capacity"] = live_call_capacity_snapshot()
         payload["execution_owner_ready"] = owner.ready()
         payload['background_role'] = background.role
         payload['background_ready'] = background.ready()
@@ -263,9 +310,6 @@ def create_production_app(config: RuntimeConfig | None = None):
         runtime_config=config,
         runtime_services=services,
     )
-    from app.worker_runtime.durable_feature_worker import register_durable_feature_job_worker
-
-    register_durable_feature_job_worker(gateway, services.jobs)
     gateway.state.persistence_startup = status
     gateway.state.runtime_services = services
     gateway.state.execution_owner = owner

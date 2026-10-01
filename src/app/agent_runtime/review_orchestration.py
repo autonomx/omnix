@@ -54,7 +54,7 @@ def _redirect_missing_candidate_tests_before_review(
 
     action: tuple | None = None
     redirected = False
-    with service._lock:
+    with service._run_lock(parent_run_id):
         with service.unit_of_work(service.database) as work:
             repository = service.repository_factory(work.connection, service.context)
             locked = work.connection.execute(

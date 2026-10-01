@@ -11,6 +11,7 @@ from app.providers.cache_status import (
     ProviderModelCacheStatusService,
     ProviderModelRefreshRequest,
     InMemoryProviderModelRefreshStore,
+    clear_provider_refresh_history,
     create_provider_model_refresh_handlers,
     create_provider_model_refresh_job_request,
 )
@@ -197,6 +198,30 @@ def test_in_memory_provider_model_refresh_store_shares_snapshots(tmp_path: Path)
     assert latest.cache_status == "degraded"
     assert latest.diagnostics == [{"kind": "cache_degraded", "id": "llm:test"}]
     assert history.snapshots[0].id == snapshot.id
+
+
+def test_provider_refresh_fallback_history_is_bounded_and_clearable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers import cache_status
+
+    clear_provider_refresh_history()
+    monkeypatch.setattr(cache_status, "MAX_REFRESH_HISTORY_KEYS", 1)
+    first = InMemoryProviderModelRefreshStore(tmp_path / "first")
+    second = InMemoryProviderModelRefreshStore(tmp_path / "second")
+    for store in (first, second):
+        store.record_snapshot(
+            scope="all",
+            reason=None,
+            provider_payload=_provider_payload(),
+            cache_payload=_cache_payload(),
+        )
+
+    assert first.list_snapshots() == []
+    assert len(second.list_snapshots()) == 1
+    clear_provider_refresh_history()
+    assert second.list_snapshots() == []
 
 
 @pytest.mark.anyio

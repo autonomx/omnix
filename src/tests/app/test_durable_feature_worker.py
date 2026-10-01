@@ -4,24 +4,14 @@ import threading
 import pytest
 
 from app.worker_runtime.durable_feature_worker import (
-    _AuthorityBoundJobStore,
+    _LeaseBoundJobStore,
     DurableFeatureJobWorker,
     execute_durable_feature_job,
 )
 from app.jobs.handlers import AnyJobInput, Backoff, JobHandlerRegistry, JobHandlerSpec
 from app.jobs.models import FailJobRequest, ResourceClass
+from app.persistence.execution_repositories import JobClaimConflict
 from app.runtime.feature_catalog import FEATURE_CATALOG, load_feature
-
-
-class _Authority:
-    def __init__(self, live=True):
-        self.live = live
-        self.checks = 0
-
-    def require_live(self):
-        self.checks += 1
-        if not self.live:
-            raise RuntimeError("authority lost")
 
 
 class _Store:
@@ -36,16 +26,32 @@ class _Store:
         return job_id
 
 
-def test_authority_bound_store_fences_mutations_but_allows_reads():
-    authority = _Authority(live=False)
-    job = SimpleNamespace(id="job:1", lease=None)
-    store = _AuthorityBoundJobStore(_Store(), authority, job)
+def test_lease_bound_store_fences_mutations_to_its_job_and_token():
+    from app.jobs.models import CompleteJobRequest
 
-    assert store.get_job("job:1") == "job:1"
-    with pytest.raises(RuntimeError, match="authority lost"):
-        from app.jobs.models import CompleteJobRequest
-        store.complete_job("job:1", CompleteJobRequest())
-    assert authority.checks == 1
+    class Store:
+        def __init__(self):
+            self.completed = []
+
+        def get_job(self, job_id):
+            return job_id
+
+        def complete_job(self, job_id, request):
+            self.completed.append((job_id, request.worker_id, request.lease_token))
+            return job_id
+
+    job = SimpleNamespace(
+        id="job:1",
+        lease=SimpleNamespace(worker_id="pool:cpu", token="lease:one"),
+    )
+    store = Store()
+    fenced = _LeaseBoundJobStore(store, job)
+
+    assert fenced.get_job("job:1") == "job:1"
+    with pytest.raises(JobClaimConflict, match="cannot mutate another job"):
+        fenced.complete_job("job:other", CompleteJobRequest())
+    assert fenced.complete_job("job:1", CompleteJobRequest()) == "job:1"
+    assert store.completed == [("job:1", "pool:cpu", "lease:one")]
 
 
 def test_feature_catalog_owns_durable_job_types():
@@ -219,51 +225,39 @@ def test_unknown_durable_type_fails_nonretryably_with_lease_credentials():
     assert failure.lease_token == "lease:test"
 
 
-@pytest.mark.parametrize("live", [True, False])
-def test_authority_bound_store_is_the_execution_fence(live):
+def test_lease_bound_store_injects_credentials_for_mutations():
     events = []
 
     class Store:
-        database = SimpleNamespace()
-        context = SimpleNamespace(workspace_id="workspace:test")
-
         def update_progress(self, job_id, progress, **credentials):
             events.append(("progress", job_id, progress, credentials))
             return SimpleNamespace(status="running")
 
-        def complete_job(self, job_id, request):
-            events.append("complete")
-            return SimpleNamespace(status="completed")
-
-    authority = _Authority(live=live)
     job = SimpleNamespace(
         id="job:rpg",
         lease=SimpleNamespace(token="lease-token", worker_id="worker:test"),
     )
-    fenced = _AuthorityBoundJobStore(Store(), authority, job)
-
-    if live:
-        fenced.update_progress("job:rpg", progress={"current": 1})
-        assert events == [(
-            "progress",
-            "job:rpg",
-            {"current": 1},
-            {"worker_id": "worker:test", "lease_token": "lease-token"},
-        )]
-        assert authority.checks == 1
-    else:
-        with pytest.raises(RuntimeError, match="authority lost"):
-            fenced.update_progress("job:rpg", progress={"current": 1})
-        assert events == []
-        assert authority.checks == 1
+    fenced = _LeaseBoundJobStore(Store(), job)
+    fenced.update_progress("job:rpg", progress={"current": 1})
+    assert events == [(
+        "progress",
+        "job:rpg",
+        {"current": 1},
+        {"worker_id": "worker:test", "lease_token": "lease-token"},
+    )]
 
 
 def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
-    authority = _Authority(live=True)
+    registry = JobHandlerRegistry((
+        JobHandlerSpec(
+            type="feature.concurrent",
+            handler=lambda context, job: job,
+            resource_class=ResourceClass.CPU,
+        ),
+    ))
     worker = DurableFeatureJobWorker(
         object(),
-        authority,
-        JobHandlerRegistry(),
+        registry,
         poll_seconds=0.01,
         max_concurrency=2,
     )
@@ -276,7 +270,7 @@ def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
     def claim():
         return jobs.pop(0) if jobs else None
 
-    def execute(_job):
+    def execute(_job, _cancellation):
         nonlocal entered_count
         with count_lock:
             entered_count += 1

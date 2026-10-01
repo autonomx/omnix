@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -51,7 +52,7 @@ _STAGE_NAMES = (
 _CACHE_LOCK = threading.RLock()
 _MEMORY_SETTINGS_CACHE: OrderedDict[tuple[Any, ...], tuple[float, Any]] = OrderedDict()
 _MEMORY_SETTINGS_OVERRIDE_REVISION = 0
-_SETTINGS_SUBSCRIPTIONS: set[int] = set()
+_SETTINGS_SUBSCRIPTIONS: weakref.WeakSet[Any] = weakref.WeakSet()
 _DEPENDENCY_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_dependency_timings",
     default=None,
@@ -131,15 +132,14 @@ def _ensure_settings_subscription() -> None:
         service = current_settings_service()
     except RuntimeError:
         return
-    service_key = id(service)
     with _CACHE_LOCK:
-        if service_key in _SETTINGS_SUBSCRIPTIONS:
+        if service in _SETTINGS_SUBSCRIPTIONS:
             return
         service.subscribe(
             ASSISTANT_MEMORY_SETTINGS_KEY,
             lambda _key, _value: _invalidate_memory_settings_cache(),
         )
-        _SETTINGS_SUBSCRIPTIONS.add(service_key)
+        _SETTINGS_SUBSCRIPTIONS.add(service)
 
 
 @contextmanager

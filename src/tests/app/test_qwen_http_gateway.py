@@ -1,12 +1,10 @@
-import io
 from types import SimpleNamespace
-import wave
 
 import numpy as np
 import pytest
 import secrets
 
-from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+from app.providers.qwen_http_gateway import QwenHttpGatewayProvider, TtsServiceSaturated
 from app.providers import service as shared
 
 
@@ -15,17 +13,32 @@ def issued_service_token(monkeypatch):
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
-def test_pcm16_wav_is_decoded_without_loading_a_gpu_model(monkeypatch):
-    data = io.BytesIO()
-    with wave.open(data, 'wb') as audio:
-        audio.setnchannels(1)
-        audio.setsampwidth(2)
-        audio.setframerate(24000)
-        audio.writeframes(np.array([8192, -8192] * 2500, dtype='<i2').tobytes())
+def test_streaming_pcm16_is_decoded_without_loading_a_gpu_model(monkeypatch):
+    pcm = np.array([8192, -8192] * 2500, dtype='<i2').tobytes()
     calls = []
+    class Response:
+        status_code = 200
+        headers = {
+            'X-Omnix-Audio-Format': 'pcm_s16le',
+            'X-Omnix-Sample-Rate': '24000',
+            'X-Omnix-Channels': '1',
+        }
+        closed = False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_content(self, chunk_size):
+            assert chunk_size == 4800
+            return iter((pcm[:1], pcm[1:3001], pcm[3001:]))
+
+        def close(self):
+            self.closed = True
+
+    response = Response()
     def post(url, **kwargs):
         calls.append((url, kwargs))
-        return SimpleNamespace(content=data.getvalue(), headers={'content-type': 'audio/wav'}, raise_for_status=lambda: None)
+        return response
     monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', post)
     chunks = list(QwenHttpGatewayProvider('http://127.0.0.1:5101/').generate_audio_stream('hello', speaker='Alex', max_new_tokens=32, parity_mode=False))
     assert sum(len(audio) for audio, _, _ in chunks) == 5000
@@ -33,14 +46,36 @@ def test_pcm16_wav_is_decoded_without_loading_a_gpu_model(monkeypatch):
     assert chunks[0][1] == 24000
     assert calls[0][1]['json'] == {'text': 'hello', 'speaker': 'Alex', 'language': 'en', 'max_new_tokens': 32}
     assert calls[0][1]['headers']['X-Omnix-Client'] == 'gateway'
+    assert calls[0][0].endswith('/api/tts/live-call/stream')
+    assert calls[0][1]['stream'] is True
+    assert response.closed
 
 
 def test_remote_synthesis_failure_has_no_synthetic_fallback(monkeypatch):
-    response = SimpleNamespace(headers={'content-type': 'application/json'}, raise_for_status=lambda: None,
-                               json=lambda: {'success': True, 'is_fallback': True, 'audio': ''})
+    import requests
+
+    response = SimpleNamespace(
+        status_code=503,
+        headers={},
+        raise_for_status=lambda: (_ for _ in ()).throw(requests.HTTPError('service unavailable')),
+        close=lambda: None,
+    )
     monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', lambda *args, **kwargs: response)
-    with pytest.raises(RuntimeError, match='real synthesized audio'):
+    with pytest.raises(requests.HTTPError, match='service unavailable'):
         list(QwenHttpGatewayProvider('http://127.0.0.1:5101').generate_audio_stream('hello'))
+
+
+def test_remote_synthesis_saturation_preserves_retry_after(monkeypatch):
+    response = SimpleNamespace(
+        status_code=429,
+        headers={'Retry-After': '2'},
+        raise_for_status=lambda: None,
+        close=lambda: None,
+    )
+    monkeypatch.setattr('app.providers.qwen_http_gateway.requests.post', lambda *args, **kwargs: response)
+    with pytest.raises(TtsServiceSaturated) as captured:
+        list(QwenHttpGatewayProvider('http://127.0.0.1:5101').generate_audio_stream('hello'))
+    assert captured.value.retry_after == '2'
 
 
 def test_gateway_http_selection_does_not_construct_local_provider(monkeypatch):
@@ -88,5 +123,5 @@ def test_runtime_status_reports_the_remote_gpu_service(monkeypatch):
     provider = QwenHttpGatewayProvider('http://127.0.0.1:5101')
     assert provider.start()['running'] is True
     assert provider.get_runtime_status()['runtime_status']['model_loaded'] is True
-    assert provider.get_runtime_status()['transport'] == 'http_buffered_wav'
+    assert provider.get_runtime_status()['transport'] == 'http_streaming_pcm16'
     assert provider.stop() is True

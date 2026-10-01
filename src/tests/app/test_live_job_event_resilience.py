@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import asyncio
 import threading
 from dataclasses import dataclass
@@ -90,9 +92,9 @@ def test_job_events_route_uses_the_jobs_kernel_stream() -> None:
     store = FakeStore()
     app = create_gateway_app(job_store_factory=lambda: store)
     matching = [
-        route
-        for route in app.router.routes
-        if isinstance(route, APIRoute)
+        route.original_route
+        for route in effective_routes(app)
+        if isinstance(route.original_route, APIRoute)
         and route.path == "/events"
         and "GET" in route.methods
     ]

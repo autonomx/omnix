@@ -180,7 +180,7 @@ def test_exact_workspace_prompt_starts_durable_agent_before_chat_provider(
 
     completed = events[-1]
     assert completed["type"] == "complete"
-    assert completed["content"].startswith("Started coding Agent run ")
+    assert completed["content"].startswith("Queued coding Agent run ")
     assert provider_calls == []
     assert parser.deadlines and parser.deadlines[0] is not None
     assert len(service.runs) == 1
@@ -248,7 +248,7 @@ def test_normalized_codex_provider_and_quick_research_start_exact_workspace_agen
 
     completed = events[-1]
     assert completed["type"] == "complete"
-    assert completed["content"].startswith("Started coding Agent run ")
+    assert completed["content"].startswith("Queued coding Agent run ")
     assert completed["metadata"]["routing_decision"]["production_lane"] == "agent"
     assert completed["metadata"]["request_mode"]["mode"] == "agent"
     assert len(service.runs) == 1
@@ -302,7 +302,7 @@ def test_lmstudio_optimized_stream_cannot_bypass_agent_boundary(monkeypatch, tmp
         )
     )
 
-    assert events[-1]["content"].startswith("Started coding Agent run ")
+    assert events[-1]["content"].startswith("Queued coding Agent run ")
     assert provider_calls == []
     assert parser.deadlines and parser.deadlines[0] is not None
     assert len(service.runs) == 1

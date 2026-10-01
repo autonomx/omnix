@@ -86,6 +86,7 @@ def test_durable_resume_rehydrates_missing_runtime_before_consumption(monkeypatc
     service = object.__new__(core_module.AgentRunService)
     service.database = object()
     service.context = object()
+    service.worker_id = "agent-worker:test"
     service.runtime = runtime
 
     service.unit_of_work = lambda _database: _Work()
@@ -156,7 +157,7 @@ def test_stall_supervisor_recovers_stranded_resume_requested(monkeypatch) -> Non
     service.worker_id = "worker-1"
     service.runtime = runtime
     import threading
-    service._lock = threading.RLock()
+    service._run_lock = lambda _run_id: threading.RLock()
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")

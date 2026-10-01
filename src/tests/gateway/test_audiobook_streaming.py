@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import math
 import wave
 from io import BytesIO
@@ -71,7 +73,7 @@ def test_story_audio_keeps_abbreviations_and_quoted_dialogue_together() -> None:
 
 
 def test_gateway_keeps_current_audiobook_and_story_streaming_routes() -> None:
-    paths = {str(getattr(route, "path", "")) for route in create_gateway_app().routes}
+    paths = {str(getattr(route, "path", "")) for route in effective_routes(create_gateway_app())}
     assert "/api/audiobook/projects" in paths
     assert "/ws/audiobook" in paths
     assert "/api/audiobook/upload" not in paths

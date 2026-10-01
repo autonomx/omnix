@@ -1,6 +1,6 @@
 """Explicit production repository factories; no imported classes are replaced."""
 
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 
 
 def _register_feature_repositories(feature_id: str) -> None:
@@ -34,14 +34,14 @@ def production_job_store(
     )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def _default_production_job_store():
     from app.chat.persistence.job_store import PostgresJobStoreAdapter
 
     return PostgresJobStoreAdapter()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_asset_store():
     from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
     return PostgresSharedAssetStoreAdapter()
@@ -74,13 +74,13 @@ def production_chat_store(*, job_service=None, live_agent_planner=None):
     )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_model_residency_store():
     from app.persistence.model_residency import PostgresModelResidencyStore
     return PostgresModelResidencyStore()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_provider_refresh_store():
     from app.providers.persistence.model_refresh import PostgresProviderModelRefreshStore
     return PostgresProviderModelRefreshStore()
@@ -110,28 +110,28 @@ def production_owner_memory_repository():
     return PostgresOwnerAwareMemoryRepository()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_memory_settings_store():
     from app.assistant_memory.persistence.settings_store import SettingsServiceAssistantMemorySettingsStore
     from app.settings.access import current_settings_service
     return SettingsServiceAssistantMemorySettingsStore(current_settings_service())
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_conversation_profile_store():
     _register_feature_repositories("characters")
     from app.characters.persistence.live_profile_store import PostgresLiveConversationProfileStore
     return PostgresLiveConversationProfileStore()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_evaluation_store():
     _register_feature_repositories("chat")
     from app.chat.persistence.evaluation_store import PostgresLiveChatEvaluationStore
     return PostgresLiveChatEvaluationStore()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_research_source_store():
     _register_feature_repositories("research")
     from app.research.persistence.source_store import PostgresResearchSourceStore

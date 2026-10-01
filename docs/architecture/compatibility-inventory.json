@@ -60,6 +60,7 @@
         "src/tests/app/test_chat_compat.py",
         "src/tests/persistence/test_active_feature_factories_integration.py",
         "src/tests/persistence/test_chat_atomic_scaling_integration.py",
+        "src/tests/persistence/test_runtime_multiprocess.py",
         "src/tests/persistence/test_runtime_retirement_integration.py"
       ],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
@@ -70,8 +71,7 @@
       "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
       "production_call_sites": [
         "src/app/runtime_composition.py",
-        "src/app/chat/history_search.py",
-        "src/app/chat/live_chat_postgres_fast_path.py"
+        "src/app/chat/history_search.py"
       ],
       "tests": [
         "src/tests/app/test_chat_generation.py",
@@ -86,17 +86,10 @@
       "purpose": "Adapts supported Diffusers/Flux pipeline versions and fallback call signatures",
       "production_call_sites": [
         "src/app/image/runtime_status.py",
-        "src/app/image/providers/flux_klein_provider.py",
-        "src/app/rpg/visual/flux_pipeline_compat.py"
+        "src/app/image/providers/flux_klein_provider.py"
       ],
       "tests": [
-        "src/tests/unit/image/test_flux_klein_memory_safety.py",
-        "src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py",
-        "src/tests/unit/rpg/test_phase1212_flux_pipeline_compat_fallback.py",
-        "src/tests/unit/rpg/test_phase1216_flux_scene_runtime_preflight.py",
-        "src/tests/unit/rpg/test_phase1221_flux_klein_repo_runtime_compat.py",
-        "src/tests/unit/rpg/test_phase1221_flux_runtime_stack.py",
-        "src/tests/unit/rpg/test_phase_img1_flux_provider_local_only.py"
+        "src/tests/unit/image/test_flux_klein_memory_safety.py"
       ],
       "replacement_or_deletion_prerequisite": "Keep while supported compute stacks differ; rename only when both image and RPG visual imports migrate together."
     },
@@ -168,8 +161,10 @@
         "src/app/chat/persistence/job_store.py"
       ],
       "tests": [
+        "src/tests/persistence/test_execution_integration.py",
         "src/tests/persistence/test_runtime_retirement_integration.py",
-        "src/tests/unit/test_inline_execution_compat.py"
+        "src/tests/unit/test_inline_execution_compat.py",
+        "src/tests/unit/test_job_observers.py"
       ],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
@@ -211,19 +206,7 @@
         "src/app/rpg/api/compat_router.py",
         "src/app/rpg/api/compat/rpg_session_genesis_compat.py"
       ],
-      "tests": [
-        "src/tests/rpg/test_loadout_actions.py",
-        "src/tests/rpg/test_new_game_sessions.py",
-        "src/tests/rpg/test_rpg_session_compat_ability_detail.py",
-        "src/tests/rpg/test_rpg_session_compat_item_action.py",
-        "src/tests/rpg/test_rpg_session_compat_item_action_hooks.py",
-        "src/tests/rpg/test_rpg_session_compat_item_command.py",
-        "src/tests/rpg/test_rpg_session_compat_item_detail.py",
-        "src/tests/rpg/test_rpg_session_compat_item_diagnostics.py",
-        "src/tests/rpg/test_rpg_session_compat_item_planning.py",
-        "src/tests/rpg/test_rpg_session_compat_item_resolve.py",
-        "src/tests/rpg/test_rpg_session_compat_loadout_hooks.py"
-      ],
+      "tests": [],
       "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
     },
     {
@@ -244,9 +227,7 @@
         "src/app/runtime_document_services.py"
       ],
       "tests": [
-        "src/tests/persistence/test_runtime_retirement_integration.py",
-        "src/tests/rpg/response_generation/test_rne_phase33_atomic_turn_persistence.py",
-        "src/tests/unit/test_rpg_persistence_session_summaries.py"
+        "src/tests/persistence/test_runtime_retirement_integration.py"
       ],
       "replacement_or_deletion_prerequisite": "Move callers to an explicit session repository; preserve payload normalization and atomic writes."
     },
@@ -260,25 +241,6 @@
       ],
       "tests": [],
       "replacement_or_deletion_prerequisite": "Use typed NPC/narrative repositories and migrate default factories before deleting wrappers."
-    },
-    {
-      "path": "src/app/rpg/visual/flux_pipeline_compat.py",
-      "category": "A",
-      "purpose": "Adapts supported Diffusers/Flux pipeline versions and fallback call signatures",
-      "production_call_sites": [
-        "src/app/image/runtime_status.py",
-        "src/app/image/providers/flux_klein_provider.py"
-      ],
-      "tests": [
-        "src/tests/unit/image/test_flux_klein_memory_safety.py",
-        "src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py",
-        "src/tests/unit/rpg/test_phase1212_flux_pipeline_compat_fallback.py",
-        "src/tests/unit/rpg/test_phase1216_flux_scene_runtime_preflight.py",
-        "src/tests/unit/rpg/test_phase1221_flux_klein_repo_runtime_compat.py",
-        "src/tests/unit/rpg/test_phase1221_flux_runtime_stack.py",
-        "src/tests/unit/rpg/test_phase_img1_flux_provider_local_only.py"
-      ],
-      "replacement_or_deletion_prerequisite": "Keep while supported compute stacks differ; rename only when both image and RPG visual imports migrate together."
     }
   ]
 }

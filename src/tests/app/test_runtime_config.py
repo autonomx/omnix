@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from app.config.runtime import DevicePermitSettings
 from app.runtime import config as runtime
 from app.runtime.config import GatewayRole, RuntimeConfig, ServiceEndpoint
 from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability as Capability
@@ -118,6 +119,81 @@ def test_scheduler_role_owns_task_scheduling_without_global_background_authority
     ):
         with pytest.raises(RuntimeError, match="lacks runtime capabilities"):
             capabilities.require(capability)
+
+
+def test_job_worker_role_gets_job_execution_without_migration_authority():
+    from app.production import maybe_apply_migrations_on_start
+
+    config = RuntimeConfig.from_environment(
+        {"OMNIX_GATEWAY_BACKGROUND_ROLE": "job-worker"}
+    )
+    capabilities = RuntimeCapabilities.from_config(config)
+    calls = []
+
+    assert config.runs_job_workers and not config.owns_background_runtime
+    assert config.allow_local_tts and not config.runs_schedulers
+    assert capabilities.allows(Capability.RUN_JOB_WORKERS)
+    assert not capabilities.allows(Capability.OWN_BACKGROUND_RUNTIME)
+    assert not capabilities.allows(Capability.RUN_RECOVERY)
+    assert maybe_apply_migrations_on_start(
+        config,
+        env={
+            "OMNIX_MIGRATE_ON_START": "true",
+            "OMNIX_AUTH_MODE": "local",
+            "OMNIX_ENV": "development",
+        },
+        apply_migrations_fn=lambda: calls.append("apply"),
+    ) is False
+    assert calls == []
+
+
+def test_device_permit_settings_are_typed_bounded_and_role_aware():
+    settings = DevicePermitSettings.from_environment(
+        {
+            "OMNIX_DEVICE_ID": "host-a:gpu0",
+            "OMNIX_DEVICE_TTS_CAPACITY": "3",
+            "OMNIX_DEVICE_TTS_REALTIME_RESERVED": "1",
+            "OMNIX_DEVICE_PERMIT_LEASE_SECONDS": "90",
+            "OMNIX_TTS_MODEL_OWNER": "tts-server",
+        }
+    )
+    assert settings.device_id == "host-a:gpu0"
+    assert settings.lease_seconds == 90
+    assert settings.tts_model_owner == "tts-server"
+    assert settings.capacities[0] == ("tts", 3, 1)
+    assert settings.live_max_calls == 3
+
+    remote_tts = RuntimeConfig.from_environment(
+        {
+            "OMNIX_GATEWAY_BACKGROUND_ROLE": "worker",
+            "OMNIX_TTS_MODEL_OWNER": "tts-server",
+            "OMNIX_TTS_URL": "http://localhost:5101",
+            "OMNIX_LIVE_MAX_CALLS": "5",
+        }
+    )
+    assert remote_tts.use_remote_tts and not remote_tts.allow_local_tts
+    assert remote_tts.live_max_calls == 5
+
+    job_worker = RuntimeConfig.from_environment(
+        {
+            "OMNIX_GATEWAY_BACKGROUND_ROLE": "job-worker",
+            "OMNIX_TTS_MODEL_OWNER": "gateway",
+            "OMNIX_TTS_URL": "http://localhost:5101",
+        }
+    )
+    assert job_worker.use_remote_tts and not job_worker.allow_local_tts
+
+    with pytest.raises(ValueError, match="realtime reservation"):
+        DevicePermitSettings.from_environment(
+            {
+                "OMNIX_DEVICE_TTS_CAPACITY": "1",
+                "OMNIX_DEVICE_TTS_REALTIME_RESERVED": "2",
+            }
+        )
+    with pytest.raises(ValueError, match="tts-server requires OMNIX_TTS_URL"):
+        RuntimeConfig.from_environment({"OMNIX_TTS_MODEL_OWNER": "tts-server"})
+    with pytest.raises(ValueError, match="OMNIX_LIVE_MAX_CALLS"):
+        RuntimeConfig.from_environment({"OMNIX_LIVE_MAX_CALLS": "0"})
 
 
 def test_url_errors_do_not_echo_credentials():

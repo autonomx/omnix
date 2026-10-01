@@ -10,6 +10,10 @@ from app.assistant_tools.config_store import (
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.kasa_adapter import KasaDeviceRecord, run_kasa_tool_request
 from app.assistant_tools.models import AssistantToolRequest
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 class FakeKasaAdapter:

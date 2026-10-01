@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from app.assistant_memory import companion_context
 from app.assistant_memory.companion_context import (
     build_companion_context_packet,
     invalidate_companion_context,
@@ -145,6 +146,28 @@ def test_packet_cache_is_content_safe_and_fast() -> None:
     assert "content" not in repr(diagnostics).lower()
     assert diagnostics["selected_count"] == second.selected_count
     assert diagnostics["cache_dimension_version"] == 2
+
+
+def test_packet_baseline_cache_expires_and_can_be_invalidated(monkeypatch) -> None:
+    invalidate_companion_context()
+    now_value = [10.0]
+    monkeypatch.setattr(companion_context, "_baseline_cache_now", lambda: now_value[0])
+    memories = [_item(71, "fact", "The user takes Route X.")]
+    message = SimpleNamespace(content="hello")
+    fixed_now = datetime(2026, 7, 20, 7, 5, tzinfo=ZoneInfo("America/Vancouver"))
+    options = {"token_budget": 500, "now": fixed_now, "timezone_name": "America/Vancouver"}
+
+    first = build_companion_context_packet(_session(), message, memories, **options)
+    assert first.cache_hit is False
+    repeated = build_companion_context_packet(_session(), message, memories, **options)
+    assert repeated.cache_hit is True
+
+    now_value[0] += companion_context._BASELINE_CACHE_TTL_SECONDS + 1
+    expired = build_companion_context_packet(_session(), message, memories, **options)
+    assert expired.cache_hit is False
+
+    invalidate_companion_context()
+    assert not companion_context._baseline_cache
 
 
 def test_packet_cache_key_covers_scope_privacy_locale_timezone_and_time_bucket() -> None:

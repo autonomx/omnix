@@ -53,6 +53,13 @@ def pytest_ignore_collect(collection_path: Path, config) -> bool | None:
     return None
 
 @pytest.fixture(autouse=True)
+def isolated_operator_data_files(monkeypatch, tmp_path):
+    # Legacy-test persistence writes JSON stores under resources/data by default;
+    # keep every test (and every xdist worker) off the operator's files.
+    monkeypatch.setenv("OMNIX_ASSISTANT_TURN_STORE_PATH", str(tmp_path / "assistant_turns.json"))
+
+
+@pytest.fixture(autouse=True)
 def isolated_runtime_configuration(monkeypatch):
     # Each test models a fresh process; production policy is immutable once bound.
     from copy import deepcopy
@@ -162,14 +169,11 @@ BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://127.0.0.1:8001")
 SCREENSHOTS_DIR = Path(__file__).parent / "reports" / "screenshots"
 RUN_RETIRED_LEGACY_UI_TESTS = os.environ.get("OMNIX_RUN_RETIRED_LEGACY_UI_TESTS") == "1"
 LEGACY_UI_STATIC_TEST_FILES = {
-    Path("src/tests/api/rpg/test_rpg_player_focus_assets.py"),
     Path("src/tests/e2e/test_js_variables.py"),
     Path("src/tests/functional/test_phase846_inspector_shell_smoke.py"),
     Path("src/tests/functional/test_phase847_inspector_polish_smoke.py"),
     Path("src/tests/regression/test_phase846_inspector_regression.py"),
     Path("src/tests/regression/test_phase847_inspector_polish_regression.py"),
-    Path("src/tests/unit/rpg/test_phase846_frontend_inspector_files.py"),
-    Path("src/tests/unit/rpg/test_phase847_frontend_inspector_polish_files.py"),
     Path("src/tests/unit/test_js_variables.py"),
     Path("src/tests/unit/test_no_new_audio_per_chunk.py"),
 }

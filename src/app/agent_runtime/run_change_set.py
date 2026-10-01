@@ -1,6 +1,8 @@
 """Canonical run-owned change-set identity and artifact hydration."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import hashlib
 import json
 import re
@@ -61,5 +63,6 @@ def run_change_set_from_artifact(artifact: AgentArtifact | None) -> RunChangeSet
         return None
     try:
         return RunChangeSet.model_validate(payload)
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("run change set artifact parsing", exc, level="DEBUG")
         return None

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import MappingProxyType
 from threading import RLock
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,16 +18,22 @@ class RuntimeHookSpec:
 
 
 _LOCK = RLock()
-_HOOKS: dict[str, Callable[..., Any]] = {}
+_HOOKS: Mapping[str, Callable[..., Any]] = MappingProxyType({})
+MAX_RUNTIME_HOOKS = 256
 
 
 def install_runtime_hooks(specs: tuple[RuntimeHookSpec, ...]) -> None:
+    global _HOOKS
     with _LOCK:
+        hooks = dict(_HOOKS)
         for spec in specs:
-            existing = _HOOKS.get(spec.name)
+            existing = hooks.get(spec.name)
             if existing is not None and existing is not spec.handler:
                 raise ValueError(f"duplicate runtime hook: {spec.name}")
-            _HOOKS[spec.name] = spec.handler
+            hooks[spec.name] = spec.handler
+        if len(hooks) > MAX_RUNTIME_HOOKS:
+            raise ValueError("runtime hook capacity exceeded")
+        _HOOKS = MappingProxyType(hooks)
 
 
 def invoke_runtime_hook(name: str, *args: Any, default: Any = None, **kwargs: Any) -> Any:
@@ -38,5 +45,6 @@ def invoke_runtime_hook(name: str, *args: Any, default: Any = None, **kwargs: An
 
 
 def reset_runtime_hooks_for_tests() -> None:
+    global _HOOKS
     with _LOCK:
-        _HOOKS.clear()
+        _HOOKS = MappingProxyType({})

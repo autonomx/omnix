@@ -687,6 +687,7 @@ async function ensureSharedAudioSession(
   }, 'controller');
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
     sessionScoped: true,
+    affinityKey: sessionId,
   });
   const state: SharedLiveAudioSession = {
     sessionId,

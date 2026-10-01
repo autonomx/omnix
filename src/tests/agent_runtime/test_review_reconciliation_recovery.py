@@ -15,7 +15,10 @@ from app.agent_runtime.contracts import (
     TaskRevision,
     WorkspaceState,
 )
-from app.agent_runtime.quality_recovery import _promote_protocol_complete_reviewers
+from app.agent_runtime.quality_recovery import (
+    _promote_protocol_complete_reviewers,
+    _queue_acceptance_recovery,
+)
 from app.agent_runtime.review_orchestration import reconcile_review_progress_in_repository
 
 
@@ -276,9 +279,21 @@ def test_approved_reviewer_result_advances_parent_through_acceptance() -> None:
 
     action = reconcile_review_progress_in_repository(service, Repository(), "parent-1")
 
-    assert action is None
-    assert finalized == ["parent-1"]
+    assert action == ("promote_acceptance", parent_state["snapshot"].revision)
+    assert finalized == []
     assert stage["stage"] == "acceptance"
-    assert parent_state["snapshot"].status == "completed"
+    assert parent_state["snapshot"].status == "running"
     service._request_quality_repair.assert_not_called()
     service._quality_fail.assert_not_called()
+
+
+def test_quality_acceptance_recovery_uses_durable_promote_job() -> None:
+    enqueue = MagicMock(return_value=True)
+    service = SimpleNamespace(_enqueue_promote_job=enqueue)
+
+    _queue_acceptance_recovery(service, "parent-1", 17)
+
+    enqueue.assert_called_once_with(
+        "parent-1",
+        trigger_id="quality-recovery:17",
+    )

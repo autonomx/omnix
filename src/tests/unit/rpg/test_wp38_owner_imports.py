@@ -11,9 +11,3 @@ def test_npc_planner_uses_its_importable_owner_module():
     assert "app.rpg.ai.planner_module" not in sys.modules
 
 
-def test_game_session_uses_its_importable_owner_module():
-    from app.rpg.legacy_models import GameSession as OwnedGameSession
-    from app.rpg.models import GameSession
-
-    assert GameSession is OwnedGameSession
-    assert "app.rpg.models_file" not in sys.modules

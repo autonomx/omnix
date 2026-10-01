@@ -14,6 +14,10 @@ from app.chat.prompt_assembly import (
 )
 from app.chat.repository import InMemoryChatRepository
 from app.chat.routing_context import build_chat_routing_context
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_routing_context_reuses_prompt_assembly_sections_without_external_authority() -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import io
 from pathlib import Path
 import runpy
@@ -27,6 +29,30 @@ def test_api_children_have_explicit_narrow_role(monkeypatch):
     assert child['OMNIX_TTS_STARTUP_WARMUP'] == '0'
     assert child['OMNIX_DATABASE_URL'] == 'inherited-test-value'
     assert cluster['child_environment']('worker')['OMNIX_GATEWAY_BACKGROUND_ROLE'] == 'worker'
+
+
+def test_local_launcher_starts_one_job_worker_by_default_only_in_local_mode(monkeypatch):
+    assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'development'})
+    assert cluster['should_start_local_job_worker']({'OMNIX_ENV': 'local'})
+    assert not cluster['should_start_local_job_worker']({'OMNIX_ENV': 'production'})
+    assert not cluster['should_start_local_job_worker']({
+        'OMNIX_ENV': 'development', 'OMNIX_LOCAL_JOB_WORKER': '0'
+    })
+    assert cluster['should_start_local_job_worker']({
+        'OMNIX_ENV': 'production', 'OMNIX_LOCAL_JOB_WORKER': '1'
+    })
+
+
+def test_job_worker_child_has_its_own_role_and_does_not_inherit_gateway_tts_policy(monkeypatch):
+    monkeypatch.setenv('OMNIX_GATEWAY_BACKGROUND_ROLE', 'api')
+    monkeypatch.setenv('OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME', 'false')
+    monkeypatch.setenv('OMNIX_GATEWAY_ALLOW_LOCAL_TTS', 'false')
+
+    child = cluster['child_environment']('job-worker')
+
+    assert child['OMNIX_GATEWAY_BACKGROUND_ROLE'] == 'job-worker'
+    assert 'OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME' not in child
+    assert 'OMNIX_GATEWAY_ALLOW_LOCAL_TTS' not in child
 
 
 def test_stop_requests_all_children_before_waiting():
@@ -63,7 +89,7 @@ def test_native_composition_uses_process_owned_job_store(monkeypatch):
     app = create_gateway_app(job_store_factory=lambda: store)
     monkeypatch.setattr(runtime_app, 'create_production_app', lambda: app)
     assert runtime_app.create_runtime_app() is app
-    matching = [route for route in app.routes if getattr(route, 'path', None) == '/events']
+    matching = [route for route in effective_routes(app) if route.path == '/events']
     assert len(matching) == 1
     assert matching[0].endpoint.__module__ == 'app.gateway.kernel_routes.core_jobs_routes'
 

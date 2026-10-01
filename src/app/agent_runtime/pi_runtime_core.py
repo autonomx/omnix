@@ -1,5 +1,7 @@
 """Pi RPC implementation of the generalized AgentRuntime contract."""
 from __future__ import annotations
+
+from .exception_logging import log_recovered_exception
 from app.config.env import environment_copy as _process_environment
 
 from collections import deque
@@ -748,7 +750,8 @@ class PiRpcSession:
             except Exception:
                 try:
                     self.process.kill()
-                except Exception:
+                except Exception as exc:
+                    log_recovered_exception("Pi process kill fallback", exc)
                     pass
         if self._temporary_cwd is not None:
             shutil.rmtree(self._temporary_cwd, ignore_errors=True)

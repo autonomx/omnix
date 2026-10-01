@@ -63,6 +63,7 @@ CASES = [
     ("mypy_ignored_modules", {"pyproject.toml": '[[tool.mypy.overrides]]\nmodule = ["app.old.*", "app.other.*"]\nignore_errors = true\n', APP + "old/a.py": "", APP + "old/b.py": "", APP + "other/a.py": ""}, 2),
     ("compat_modules", {APP + "chat/old_compat.py": ""}, 1),
     ("process_local_state_unapproved", {APP + "chat/a.py": "cache = {}"}, 1),
+    ("unbounded_module_caches", {APP + "chat/a.py": "from functools import lru_cache\n@lru_cache(maxsize=None)\ndef parse(value):\n    return value"}, 1),
     ("unreachable_rpg_modules", {APP + "production.py": "import app.rpg.live", APP + "rpg/live.py": "", APP + "rpg/dead.py": ""}, 1),
     ("web_fetch_assignment_files", {WEB + "app/a.ts": "window.fetch = one; window.fetch = two;"}, 1),
     ("web_omnix_window_flags", {WEB + "app/a.ts": "window.__omnixFlag = true; window.__omnixFlag;"}, 1),
@@ -198,6 +199,110 @@ def test_all_export_list_is_not_counted_as_process_local_state():
         "symbol": "cache",
         "approved": False,
     }]
+
+
+def test_process_state_inventory_requires_reviewed_cache_policy():
+    source = {
+        APP + "chat/a.py": (
+            "_MAX_CACHE_ENTRIES = 8\n_CACHE_TTL_SECONDS = 30.0\ncache = {}\n"
+            "def put(key, value, now):\n"
+            "    if len(cache) >= _MAX_CACHE_ENTRIES:\n"
+            "        cache.pop(next(iter(cache)))\n"
+            "    cache[key] = (now + _CACHE_TTL_SECONDS, value)\n"
+            "def invalidate_cache():\n    cache.clear()\n"
+        ),
+        "resources/architecture/process-local-state.json": json.dumps({"entries": [{
+            "path": APP + "chat/a.py",
+            "symbol": "cache",
+            "category": "cache",
+            "reason": "Small derived response cache.",
+            "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+            "ttl_symbol": "_CACHE_TTL_SECONDS",
+            "invalidation": "invalidate_cache",
+        }]}),
+    }
+    report = observed(source)
+    assert report["metrics"]["process_local_state_unapproved"]["value"] == 0
+    assert report["metrics"]["unbounded_module_caches"]["value"] == 0
+
+    source["resources/architecture/process-local-state.json"] = json.dumps({"entries": [{
+        "path": APP + "chat/a.py",
+        "symbol": "cache",
+        "category": "cache",
+        "reason": "Small derived response cache.",
+        "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+        "invalidation": "invalidate_cache",
+    }]})
+    report = observed(source)
+    assert report["metrics"]["unbounded_module_caches"]["value"] == 1
+
+
+def test_process_state_cache_policy_reads_arithmetic_ttl_constants():
+    source = {
+        APP + "chat/a.py": (
+            "_MAX_CACHE_ENTRIES = 8\n_CACHE_TTL_SECONDS = 5 * 60\ncache = {}\n"
+            "def put(key, value, now):\n"
+            "    if len(cache) >= _MAX_CACHE_ENTRIES:\n"
+            "        cache.pop(next(iter(cache)))\n"
+            "    cache[key] = (now + _CACHE_TTL_SECONDS, value)\n"
+            "def invalidate_cache():\n    cache.clear()\n"
+        ),
+        "resources/architecture/process-local-state.json": json.dumps({"entries": [{
+            "path": APP + "chat/a.py",
+            "symbol": "cache",
+            "category": "cache",
+            "reason": "The parsed value is reconstructible.",
+            "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+            "ttl_symbol": "_CACHE_TTL_SECONDS",
+            "invalidation": "invalidate_cache",
+        }]}),
+    }
+    report = observed(source)
+    assert report["metrics"]["unbounded_module_caches"]["value"] == 0
+    assert report["evidence"]["process_local_state"][0]["ttl_seconds"] == 300
+
+
+def test_bounded_lru_cache_without_ttl_and_invalidation_is_unbounded():
+    report = observed({
+        APP + "chat/a.py": (
+            "from functools import lru_cache\n"
+            "@lru_cache(maxsize=32)\n"
+            "def lookup(value):\n    return value\n"
+        ),
+    })
+    assert report["metrics"]["process_local_state_unapproved"]["value"] == 1
+    assert report["metrics"]["unbounded_module_caches"]["value"] == 1
+    assert report["evidence"]["process_local_state"][0]["kind"] == "function_cache"
+
+
+def test_expiring_function_cache_requires_matching_invalidation_and_inventory():
+    source = {
+        APP + "chat/a.py": (
+            "from app.caching.bounded_cache import bounded_lru_cache\n"
+            "@bounded_lru_cache(max_entries=8, ttl_seconds=30.0)\n"
+            "def parse(value):\n    return value\n"
+        ),
+        "resources/architecture/process-local-state.json": json.dumps({"entries": [{
+            "path": APP + "chat/a.py",
+            "symbol": "parse.__cache__",
+            "category": "cache",
+            "reason": "Pure parse result is process-local and disposable.",
+            "max_entries": 8,
+            "ttl_seconds": 30.0,
+            "invalidation": "parse.cache_clear",
+        }]}),
+    }
+    report = observed(source)
+    assert report["metrics"]["process_local_state_unapproved"]["value"] == 0
+    assert report["metrics"]["unbounded_module_caches"]["value"] == 0
+    assert report["evidence"]["process_local_state"][0]["max_entries"] == 8
+
+
+def test_process_state_scan_ignores_immutable_data_tables():
+    source = APP + "chat/a.py"
+    report = observed({source: "CATALOG = {'one': 1, 'two': 2}\n"})
+    assert report["metrics"]["process_local_state_unapproved"]["value"] == 0
+    assert report["evidence"]["process_local_state"] == []
 
 
 @pytest.mark.parametrize("source,foreign,patchers", [
@@ -356,20 +461,22 @@ def test_web_glob_reachability_resolves_parent_segments():
     assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 1
 
 
-def test_process_state_inventory_approval_requires_exact_subject_and_reason():
-    sources = {APP + "chat/a.py": "cache = {}; other = {}",
+def test_process_state_inventory_approval_requires_category_and_reason():
+    sources = {APP + "chat/a.py": "import threading\nlock = threading.Lock()\nother = threading.Lock()",
                "resources/architecture/process-local-state.json": json.dumps({"entries": [
-                   {"path": APP + "chat/a.py", "symbol": "cache", "approved": True, "reason": "bounded temporary cache"},
-                   {"path": APP + "chat/a.py", "symbol": "other", "approved": True},
+                   {"path": APP + "chat/a.py", "symbol": "lock", "category": "coordination",
+                    "reason": "serializes the local writer"},
+                   {"path": APP + "chat/a.py", "symbol": "other", "category": "coordination"},
                ]})}
     assert observed(sources)["metrics"]["process_local_state_unapproved"]["value"] == 1
 
 
-def test_explicit_state_inventory_entries_are_counted_even_when_not_mutable_literals():
+def test_stale_process_state_inventory_entries_fail_closed():
     sources = {APP + "chat/a.py": "provider = None", "resources/architecture/process-local-state.json": json.dumps({"entries": [
-        {"path": APP + "chat/a.py", "symbol": "provider", "approved": False},
+        {"path": APP + "chat/a.py", "symbol": "provider", "category": "coordination", "reason": "gone"},
     ]})}
-    assert observed(sources)["metrics"]["process_local_state_unapproved"]["value"] == 1
+    with pytest.raises(metrics.AnalysisError, match="stale process-state inventory entries"):
+        observed(sources)
 
 
 def test_mypy_reports_override_pattern_count_and_effective_matching_modules():

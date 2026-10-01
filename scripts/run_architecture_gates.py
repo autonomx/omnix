@@ -24,7 +24,7 @@ GATES = {
         'src/tests/app/test_runtime_package_boundaries.py',
         'src/tests/app/test_settings_fail_closed.py',
         'src/tests/app/scc_settings_adapter_test.py',
-        'src/tests/rpg/test_rpg_direct_turn_routes.py',
+        'src/tests/unit/rpg/test_turn_routes.py',
         'src/tests/scripts/test_legacy_import_does_not_migrate.py',
         'src/tests/app/test_gateway_route_policy.py',
         'src/tests/app/test_gateway_scaling_lifecycle.py',

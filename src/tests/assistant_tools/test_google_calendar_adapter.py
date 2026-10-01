@@ -1,17 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
 
 from app.assistant_tools.calendar_adapter import GoogleCalendarRuntimeAdapter, run_calendar_tool_request
-from app.assistant_tools.connections import google_access_token_for_tool
-from app.assistant_tools.credentials import (
-    AssistantToolCredentialRecord,
-    AssistantToolOAuthClientRecord,
-    credential_for_tool,
-    upsert_oauth_client,
-    upsert_tool_credential,
-)
 from app.assistant_tools.models import AssistantToolRequest
 
 
@@ -71,32 +62,3 @@ def test_google_calendar_adapter_creates_real_api_payload(monkeypatch) -> None:
     assert captured["body"]["reminders"]["overrides"] == [{"method": "popup", "minutes": 10}]
 
 
-def test_google_access_token_refreshes_expired_credential(monkeypatch, tmp_path) -> None:
-    credentials_path = tmp_path / "credentials.json"
-    oauth_path = tmp_path / "oauth.json"
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH", str(credentials_path))
-    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH", str(oauth_path))
-    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GOOGLE_OAUTH_CLIENT_SECRET", raising=False)
-    upsert_oauth_client(AssistantToolOAuthClientRecord(provider="google", client_id="client", client_secret="secret", updated_at="now"), oauth_path)
-    upsert_tool_credential(
-        AssistantToolCredentialRecord(
-            tool_id="calendar",
-            provider="Google",
-            access_token="expired",
-            refresh_token="refresh",
-            expires_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
-            updated_at="then",
-        ),
-        credentials_path,
-    )
-
-    def fake_post(url, values, headers=None):
-        assert values["grant_type"] == "refresh_token"
-        assert values["refresh_token"] == "refresh"
-        return {"access_token": "fresh", "expires_in": 3600, "token_type": "Bearer"}
-
-    monkeypatch.setattr("app.assistant_tools.connections._post_form_json", fake_post)
-
-    assert google_access_token_for_tool("calendar") == "fresh"
-    assert credential_for_tool("calendar", credentials_path).access_token == "fresh"

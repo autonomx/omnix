@@ -19,6 +19,18 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+
+try:  # FastAPI >= 0.141 includes routers lazily.
+    from fastapi.routing import iter_route_contexts
+except ImportError:  # Older FastAPI copies included routes eagerly.
+    def iter_route_contexts(routes):  # type: ignore[no-redef]
+        for route in routes:
+            yield _EagerRouteContext(route)
+
+    class _EagerRouteContext:
+        def __init__(self, route: Any) -> None:
+            self.original_route = route
+            self.path = getattr(route, "path", None)
 from starlette.concurrency import run_in_threadpool
 
 from app.observability.tts_stream_diagnostics import stream_log
@@ -97,11 +109,14 @@ def _offloaded_call(
 def offload_blocking_gateway_routes(gateway: FastAPI) -> list[str]:
     """Move measured synchronous handlers to the worker pool."""
     patched: list[str] = []
-    for route in gateway.routes:
+    # Included routers are lazy in FastAPI >= 0.141; resolve effective paths.
+    for context in iter_route_contexts(gateway.routes):
+        route = context.original_route
         if not isinstance(route, APIRoute):
             continue
+        path = context.path or route.path
         methods = tuple(sorted(route.methods or ()))
-        allowed_methods = BLOCKING_ROUTE_METHODS.get(route.path)
+        allowed_methods = BLOCKING_ROUTE_METHODS.get(path)
         if allowed_methods is None or not allowed_methods.intersection(methods):
             continue
         endpoint = route.dependant.call
@@ -112,7 +127,7 @@ def offload_blocking_gateway_routes(gateway: FastAPI) -> list[str]:
 
         replacement = _offloaded_call(
             endpoint,
-            route_path=route.path,
+            route_path=path,
             route_name=route.name,
             methods=methods,
         )
@@ -121,7 +136,7 @@ def offload_blocking_gateway_routes(gateway: FastAPI) -> list[str]:
         # earlier. Updating endpoint keeps route introspection consistent.
         route.dependant.call = replacement
         route.endpoint = replacement
-        patched.append(route.path)
+        patched.append(path)
 
     stream_log(
         "gateway-blocking-route-offload",

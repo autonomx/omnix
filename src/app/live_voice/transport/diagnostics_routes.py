@@ -19,6 +19,7 @@ from app.live_voice.diagnostics import (
     live_voice_log,
     normalize_trace_id,
 )
+from app.live_voice.capacity import live_call_capacity_snapshot
 
 _ROUTE_SENTINEL = "_omnix_live_voice_diagnostics_registered"
 LIVE_VOICE_DIAGNOSTICS_PATH = "/api/tts/live-call/diagnostics"
@@ -76,7 +77,11 @@ def register_live_voice_diagnostics_routes(router: APIRouter, state: Any) -> Non
 
     @router.get(f"{LIVE_VOICE_DIAGNOSTICS_PATH}/status")
     async def live_voice_diagnostics_status() -> dict[str, Any]:
-        return {"ready": True, "log_path": diagnostics_log_path()}
+        return {
+            "ready": True,
+            "log_path": diagnostics_log_path(),
+            "capacity": live_call_capacity_snapshot(),
+        }
 
     @router.get(
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate",

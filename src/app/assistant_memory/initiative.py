@@ -4,6 +4,7 @@ from app.config.env import env_str as _env_str
 
 import re
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
@@ -39,7 +40,9 @@ _GREETING_TERMS = {
 }
 _TOOL_ENV = "OMNIX_COMPANION_TRUSTED_CAPABILITIES"
 _SURFACE_LOCK = threading.RLock()
-_LAST_SURFACED: dict[tuple[str, str, str], datetime] = {}
+_LAST_SURFACED_TTL_SECONDS = 30 * 24 * 60 * 60
+_MAX_LAST_SURFACED_ENTRIES = 4096
+_LAST_SURFACED: dict[tuple[str, str, str], tuple[datetime, float]] = {}
 
 
 class TrustedCapabilityManifest(BaseModel):
@@ -142,7 +145,22 @@ def record_initiative_surface(
     if at.tzinfo is None:
         at = at.replace(tzinfo=timezone.utc)
     with _SURFACE_LOCK:
-        _LAST_SURFACED[_surface_key(context, memory_id)] = at.astimezone(timezone.utc)
+        now = time.monotonic()
+        _prune_surface_history_locked(now)
+        key = _surface_key(context, memory_id)
+        if key not in _LAST_SURFACED and len(_LAST_SURFACED) >= _MAX_LAST_SURFACED_ENTRIES:
+            oldest_key = min(_LAST_SURFACED, key=lambda item: _LAST_SURFACED[item][1])
+            _LAST_SURFACED.pop(oldest_key, None)
+        _LAST_SURFACED[key] = (
+            at.astimezone(timezone.utc),
+            now + _LAST_SURFACED_TTL_SECONDS,
+        )
+
+
+def _prune_surface_history_locked(now: float) -> None:
+    for key, (_surfaced_at, expires_at) in list(_LAST_SURFACED.items()):
+        if expires_at <= now:
+            _LAST_SURFACED.pop(key, None)
 
 
 def _last_surfaced(context: MemoryScopeContext, record: MemoryRecord) -> datetime | None:
@@ -156,7 +174,9 @@ def _last_surfaced(context: MemoryScopeContext, record: MemoryRecord) -> datetim
         except ValueError:
             payload_time = None
     with _SURFACE_LOCK:
-        runtime_time = _LAST_SURFACED.get(_surface_key(context, record.id))
+        _prune_surface_history_locked(time.monotonic())
+        runtime_entry = _LAST_SURFACED.get(_surface_key(context, record.id))
+        runtime_time = runtime_entry[0] if runtime_entry is not None else None
     values = [value.astimezone(timezone.utc) for value in (payload_time, runtime_time) if value]
     return max(values) if values else None
 

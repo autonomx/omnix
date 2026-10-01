@@ -21,6 +21,9 @@ from app.chat import memory_prompt
 from app.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
 from app.chat.prompt_rendering import _memory_section
 
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
+
 NOW = datetime(2026, 9, 14, 3, 0, tzinfo=timezone.utc)
 
 

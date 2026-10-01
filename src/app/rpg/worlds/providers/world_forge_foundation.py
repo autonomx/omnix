@@ -3,7 +3,6 @@
 from app.config.env import environment as _environment
 import logging
 from dataclasses import dataclass
-from threading import BoundedSemaphore
 from typing import Any, Literal, Mapping
 from pydantic import BaseModel, ConfigDict, Field
 from app.providers.base import BaseProvider
@@ -22,7 +21,6 @@ _COLLECTIONS = (
     "knowledge_rules",
     "story_threads",
 )
-_LMSTUDIO_WORLD_FORGE_CALLS = BoundedSemaphore(4)
 _ENTITY_ID_PREFIXES = {
     "areas": "area",
     "classes": "class",

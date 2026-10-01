@@ -81,6 +81,7 @@ class KernelServices(Protocol):
     assets: AssetService | None
     chat: ChatService | None
     model_residency: ModelResidencyService | None
+    agent_runs: Any | None
     database: Any | None
     tenant: Any | None
     settings: Any | None

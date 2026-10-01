@@ -49,7 +49,6 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app import production
     from app.persistence import startup, database as database_module, identity_service
     from app.gateway import main
-    from app.worker_runtime import durable_feature_worker
     from app import runtime_composition
     from app.live_voice import hardware_policy as live_voice_hardware_policy
     from app import assets, jobs
@@ -102,11 +101,6 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         "install_settings_service",
         lambda _service: calls.append("settings"),
     )
-    monkeypatch.setattr(
-        durable_feature_worker,
-        "register_durable_feature_job_worker",
-        lambda gateway, store: calls.append(("durable-worker", store is stores[0])),
-    )
     def bootstrap():
         calls.append("bootstrap")
         tenant = identity_service.ensure_local_identity(fake_database)
@@ -139,8 +133,17 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
             )
         )
 
+    from app.persistence import device_permits
+
+    permit_databases = []
+    monkeypatch.setattr(
+        device_permits,
+        "configure_default_device_permit_service",
+        lambda database, **_kwargs: permit_databases.append(database),
+    )
     monkeypatch.setattr(main, "create_gateway_app", compose)
     gateway = production.create_production_app(config)
+    assert permit_databases == [fake_database]
     assert calls[:4] == [
         "bootstrap",
         ("tenant", "test-workspace"),
@@ -148,7 +151,7 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         "policy",
     ]
     assert "compose" in calls
-    assert ("durable-worker", True) in calls
+    assert not hasattr(gateway.state, "durable_feature_job_worker")
     assert gateway.state.persistence_startup["backend"] == "postgresql"
     assert gateway.state.runtime_config is config
 

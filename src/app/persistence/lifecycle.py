@@ -6,6 +6,7 @@ from typing import Any
 from .audit import PostgresAuditRepository
 from .job_repository import PostgresJobRepository
 from .outbox_repository import PostgresOutboxRepository
+from .rpg_narration_event_repository import PostgresRpgNarrationEventRepository
 
 
 class PostgresLifecycleRepository:
@@ -14,6 +15,7 @@ class PostgresLifecycleRepository:
         self.jobs = PostgresJobRepository(connection)
         self.audit = PostgresAuditRepository(connection)
         self.outbox = PostgresOutboxRepository(connection)
+        self.rpg_narration_events = PostgresRpgNarrationEventRepository(connection)
 
     def capacity_report(self) -> dict[str, Any]:
         outbox_counts = self.outbox.retention_counts()
@@ -40,6 +42,7 @@ class PostgresLifecycleRepository:
                 "job_events": self.jobs.count_job_events(),
                 "audit_events": self.audit.count_events(),
                 "rpg_turns": int(row[1]),
+                "rpg_narration_events": self.rpg_narration_events.count_events(),
             },
             "max_outbox_payload_bytes_observed": outbox_counts["max_outbox_payload_bytes"],
             "policy": {
@@ -87,6 +90,10 @@ class PostgresLifecycleRepository:
             )
             deleted["runtime_failure_evidence"] = self._delete_with_policy(
                 record_type="runtime_failure_evidence",
+                batch_size=resolved_batch,
+            )
+            deleted["rpg_narration_events"] = self._delete_with_policy(
+                record_type="rpg_narration_events",
                 batch_size=resolved_batch,
             )
             after = self.capacity_report()
@@ -140,4 +147,9 @@ class PostgresLifecycleRepository:
                 (int(policy[0]), batch_size),
             )
             return int(cursor.rowcount)
+        if record_type == "rpg_narration_events":
+            return self.rpg_narration_events.delete_retained(
+                retention_days=int(policy[0]),
+                batch_size=batch_size,
+            )
         raise ValueError(f"unsupported lifecycle retention type: {record_type}")

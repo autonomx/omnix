@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import hashlib
 from copy import deepcopy
-from functools import lru_cache
 from typing import Any
 
 from app.persistence.database import default_database
@@ -233,7 +232,6 @@ def _detail_payload(item_name: str, item: dict[str, Any] | None, *, summary: str
     }
 
 
-@lru_cache(maxsize=1)
 def _description_database_context() -> tuple[Any, Any]:
     database = default_database()
     context = current_tenant()

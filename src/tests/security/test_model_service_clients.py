@@ -48,9 +48,21 @@ def sidecar(monkeypatch):
                 self.end_headers()
                 return
             binary = self.path.endswith("/generate_stream_audio")
-            data = output.getvalue() if binary else json.dumps({"success": True, "speakers": ["one"], "ok": True}).encode()
+            live_pcm = self.path.endswith("/api/tts/live-call/stream")
+            if live_pcm:
+                data = bytes(480)
+            elif binary:
+                data = output.getvalue()
+            else:
+                data = json.dumps({"success": True, "speakers": ["one"], "ok": True}).encode()
             self.send_response(200)
-            self.send_header("Content-Type", "audio/wav" if binary else "application/json")
+            if live_pcm:
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("X-Omnix-Audio-Format", "pcm_s16le")
+                self.send_header("X-Omnix-Channels", "1")
+                self.send_header("X-Omnix-Sample-Rate", "24000")
+            else:
+                self.send_header("Content-Type", "audio/wav" if binary else "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

@@ -18,6 +18,7 @@ import os
 import re
 import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,9 @@ VOICE_DEBUG_LOG_BACKUP_COUNT = 3
 _CHANNEL_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
 _SEQUENCE = itertools.count(1)
 _LOGGER_LOCK = threading.Lock()
-_LOGGERS: dict[str, logging.Logger] = {}
+MAX_VOICE_DEBUG_LOGGERS = 64
+VOICE_DEBUG_LOGGER_TTL_SECONDS = 60 * 60.0
+_LOGGERS: OrderedDict[str, tuple[logging.Logger, float]] = OrderedDict()
 
 
 def _json_default(value: Any) -> Any:
@@ -57,12 +60,50 @@ def voice_debug_log_path(channel: str) -> str:
     return str((_log_dir() / f"voice-debug-{_safe_channel(channel)}.log").resolve())
 
 
+def _close_logger(logger: logging.Logger) -> None:
+    for handler in tuple(logger.handlers):
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def _prune_loggers_locked(now: float) -> None:
+    expired = [
+        channel
+        for channel, (_logger_value, expires_at) in _LOGGERS.items()
+        if expires_at <= now
+    ]
+    for channel in expired:
+        entry = _LOGGERS.pop(channel, None)
+        if entry is not None:
+            _close_logger(entry[0])
+
+
+def clear_voice_debug_loggers() -> None:
+    """Close cached per-channel handlers for tests and controlled resets."""
+
+    with _LOGGER_LOCK:
+        loggers = [logger for logger, _expires_at in _LOGGERS.values()]
+        _LOGGERS.clear()
+    for logger in loggers:
+        _close_logger(logger)
+
+
 def _logger(channel: str) -> logging.Logger:
     safe_channel = _safe_channel(channel)
     with _LOGGER_LOCK:
+        now = time.monotonic()
+        _prune_loggers_locked(now)
         existing = _LOGGERS.get(safe_channel)
         if existing is not None:
-            return existing
+            _LOGGERS[safe_channel] = (
+                existing[0],
+                now + VOICE_DEBUG_LOGGER_TTL_SECONDS,
+            )
+            _LOGGERS.move_to_end(safe_channel)
+            return existing[0]
+        if len(_LOGGERS) >= MAX_VOICE_DEBUG_LOGGERS:
+            _old_channel, (old_logger, _expires_at) = _LOGGERS.popitem(last=False)
+            _close_logger(old_logger)
         path = Path(voice_debug_log_path(safe_channel))
         path.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.handlers.RotatingFileHandler(
@@ -73,12 +114,11 @@ def _logger(channel: str) -> logging.Logger:
             delay=False,
         )
         handler.setFormatter(logging.Formatter("%(message)s"))
-        logger = logging.getLogger(f"omnix.voice_debug.{safe_channel}.{os.getpid()}")
-        logger.handlers.clear()
+        logger = logging.Logger(f"omnix.voice_debug.{safe_channel}.{os.getpid()}")
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
         logger.propagate = False
-        _LOGGERS[safe_channel] = logger
+        _LOGGERS[safe_channel] = (logger, now + VOICE_DEBUG_LOGGER_TTL_SECONDS)
         return logger
 
 

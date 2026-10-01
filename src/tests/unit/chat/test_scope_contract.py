@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from app.assistant_memory import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
 from app.chat import ChatSessionStore, CreateChatSessionRequest
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_chat_session_scope_is_server_owned_and_legacy_safe(tmp_path):

@@ -27,12 +27,18 @@ from app.observability.tts_stream_diagnostics import stream_log
 
 _PREWARM_TTL_SECONDS = 300.0
 _PREWARM_WAIT_SECONDS = 8.0
+_MAX_PREWARM_ENTRIES = 256
+_PREWARM_INFLIGHT_TTL_SECONDS = 300.0
 _PREWARM_LOCK = threading.RLock()
 _PREWARMED_AT: dict[str, float] = {}
-_PREWARM_INFLIGHT: dict[str, threading.Event] = {}
+_PREWARM_INFLIGHT: dict[str, tuple[threading.Event, float]] = {}
 _PROVIDER_AFFINITY: dict[str, tuple[str | None, str | None, float]] = {}
 _WARM_USER_CONTENT = "Reply with one short acknowledgement."
 _WARM_TTS_TEXT = "Ready to answer."
+
+
+def _prewarm_now() -> float:
+    return time.monotonic()
 
 
 class LiveCallPrewarmRequest(BaseModel):
@@ -74,7 +80,9 @@ def remember_live_call_provider_affinity(
     provider = str(provider_id or "").strip() or None
     model = str(model_id or "").strip() or None
     with _PREWARM_LOCK:
-        _PROVIDER_AFFINITY[normalized_session_id] = (provider, model, time.time())
+        _prune_prewarm_locked()
+        _PROVIDER_AFFINITY[normalized_session_id] = (provider, model, _prewarm_now())
+        _trim_oldest(_PROVIDER_AFFINITY, _MAX_PREWARM_ENTRIES, lambda value: value[2])
 
 
 def live_call_provider_affinity(
@@ -90,7 +98,7 @@ def live_call_provider_affinity(
         if entry is None:
             return None
         provider_id, model_id, recorded_at = entry
-        if time.time() - recorded_at > _PREWARM_TTL_SECONDS:
+        if _prewarm_now() - recorded_at > _PREWARM_TTL_SECONDS:
             _PROVIDER_AFFINITY.pop(normalized_session_id, None)
             return None
         return provider_id, model_id
@@ -100,7 +108,7 @@ def clear_live_call_prewarm_state() -> None:
     """Clear warm-up deduplication state for focused tests."""
 
     with _PREWARM_LOCK:
-        waiting = list(_PREWARM_INFLIGHT.values())
+        waiting = [event for event, _created_at in _PREWARM_INFLIGHT.values()]
         _PREWARM_INFLIGHT.clear()
         _PREWARMED_AT.clear()
         _PROVIDER_AFFINITY.clear()
@@ -162,6 +170,14 @@ def register_live_call_prewarm_routes(router: APIRouter,
             language=request.language,
         )
         owner, cached, wait_event = _claim_prewarm(key)
+        if not owner and not cached and wait_event is None:
+            return {
+                "ok": False,
+                "fully_warmed": False,
+                "status": "capacity_limited",
+                "cached": False,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000.0, 3),
+            }
         if cached:
             return {
                 "ok": True,
@@ -225,7 +241,8 @@ def register_live_call_prewarm_routes(router: APIRouter,
             )
             if fully_warmed:
                 with _PREWARM_LOCK:
-                    _PREWARMED_AT[key] = time.time()
+                    _PREWARMED_AT[key] = _prewarm_now()
+                    _trim_oldest(_PREWARMED_AT, _MAX_PREWARM_ENTRIES, lambda value: value)
             status = _combined_status(results, fully_warmed=fully_warmed)
             payload = {
                 "ok": no_failures,
@@ -273,32 +290,46 @@ def _claim_prewarm(key: str) -> tuple[bool, bool, threading.Event | None]:
             return False, True, None
         existing = _PREWARM_INFLIGHT.get(key)
         if existing is not None:
-            return False, False, existing
+            return False, False, existing[0]
+        if len(_PREWARM_INFLIGHT) >= _MAX_PREWARM_ENTRIES:
+            return False, False, None
         event = threading.Event()
-        _PREWARM_INFLIGHT[key] = event
+        _PREWARM_INFLIGHT[key] = (event, _prewarm_now())
         return True, False, event
 
 
 def _release_prewarm(key: str) -> None:
     with _PREWARM_LOCK:
-        event = _PREWARM_INFLIGHT.pop(key, None)
-    if event is not None:
-        event.set()
+        entry = _PREWARM_INFLIGHT.pop(key, None)
+    if entry is not None:
+        entry[0].set()
 
 
 def _recently_warmed_locked(key: str) -> bool:
     warmed_at = _PREWARMED_AT.get(key)
-    return warmed_at is not None and time.time() - warmed_at <= _PREWARM_TTL_SECONDS
+    return warmed_at is not None and _prewarm_now() - warmed_at <= _PREWARM_TTL_SECONDS
 
 
 def _prune_prewarm_locked() -> None:
-    cutoff = time.time() - _PREWARM_TTL_SECONDS
+    now = _prewarm_now()
+    cutoff = now - _PREWARM_TTL_SECONDS
     for key, warmed_at in list(_PREWARMED_AT.items()):
         if warmed_at < cutoff:
             _PREWARMED_AT.pop(key, None)
     for session_id, (_, _, recorded_at) in list(_PROVIDER_AFFINITY.items()):
         if recorded_at < cutoff:
             _PROVIDER_AFFINITY.pop(session_id, None)
+    inflight_cutoff = now - _PREWARM_INFLIGHT_TTL_SECONDS
+    for key, (event, created_at) in list(_PREWARM_INFLIGHT.items()):
+        if created_at < inflight_cutoff:
+            _PREWARM_INFLIGHT.pop(key, None)
+            event.set()
+
+
+def _trim_oldest(mapping: dict, capacity: int, timestamp) -> None:
+    while len(mapping) > capacity:
+        oldest_key = min(mapping, key=lambda key: timestamp(mapping[key]))
+        mapping.pop(oldest_key, None)
 
 
 def _prewarm_key(

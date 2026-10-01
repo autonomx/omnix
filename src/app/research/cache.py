@@ -7,13 +7,17 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import OrderedDict
 from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 
-_CACHE_STATES: dict[str, dict[str, dict[str, Any]]] = {}
+_MAX_CACHE_STORES = 16
+_MAX_CACHE_ENTRIES_PER_TABLE = 512
+_MAX_CACHE_TTL_SECONDS = 86_400
+_CACHE_STATES: OrderedDict[str, dict[str, OrderedDict[str, dict[str, Any]]]] = OrderedDict()
 _CACHE_LOCK = threading.RLock()
 
 
@@ -31,10 +35,7 @@ class ResearchCacheStore:
         self.path = Path(path) if path is not None else default_research_cache_path()
         self.clock = clock
         with _CACHE_LOCK:
-            _CACHE_STATES.setdefault(
-                str(self.path),
-                {"research_search_cache": {}, "research_extraction_cache": {}},
-            )
+            _state_for(str(self.path))
 
     def get_search(
         self,
@@ -102,7 +103,7 @@ class ResearchCacheStore:
         now = self.clock()
         counts: dict[str, int] = {}
         with _CACHE_LOCK:
-            state = _CACHE_STATES[str(self.path)]
+            state = _state_for(str(self.path))
             for name, values in state.items():
                 expired = [key for key, item in values.items() if float(item["expires_at"]) <= now]
                 for key in expired:
@@ -112,29 +113,57 @@ class ResearchCacheStore:
 
     def clear(self) -> None:
         with _CACHE_LOCK:
-            state = _CACHE_STATES[str(self.path)]
+            state = _state_for(str(self.path))
             state["research_search_cache"].clear()
             state["research_extraction_cache"].clear()
 
     def _get(self, table: str, key: str) -> Any | None:
         now = self.clock()
         with _CACHE_LOCK:
-            item = _CACHE_STATES[str(self.path)][table].get(key)
+            state = _state_for(str(self.path))
+            values = state[table]
+            item = values.get(key)
             if item is None:
                 return None
             if float(item["expires_at"]) <= now:
-                _CACHE_STATES[str(self.path)][table].pop(key, None)
+                values.pop(key, None)
                 return None
+            values.move_to_end(key)
             return deepcopy(item["payload"])
 
     def _put(self, table: str, key: str, payload: Any, ttl_seconds: int) -> None:
         now = self.clock()
         with _CACHE_LOCK:
-            _CACHE_STATES[str(self.path)][table][key] = {
+            values = _state_for(str(self.path))[table]
+            values[key] = {
                 "payload": deepcopy(payload),
                 "created_at": now,
-                "expires_at": now + max(1, int(ttl_seconds)),
+                "expires_at": now + min(_MAX_CACHE_TTL_SECONDS, max(1, int(ttl_seconds))),
             }
+            values.move_to_end(key)
+            while len(values) > _MAX_CACHE_ENTRIES_PER_TABLE:
+                values.popitem(last=False)
+
+
+def _state_for(key: str) -> dict[str, OrderedDict[str, dict[str, Any]]]:
+    state = _CACHE_STATES.get(key)
+    if state is None:
+        state = {
+            "research_search_cache": OrderedDict(),
+            "research_extraction_cache": OrderedDict(),
+        }
+        _CACHE_STATES[key] = state
+    _CACHE_STATES.move_to_end(key)
+    while len(_CACHE_STATES) > _MAX_CACHE_STORES:
+        _CACHE_STATES.popitem(last=False)
+    return state
+
+
+def clear_research_cache_states() -> None:
+    """Invalidate the bounded process-local web research cache registry."""
+
+    with _CACHE_LOCK:
+        _CACHE_STATES.clear()
 
 
 def search_cache_key(

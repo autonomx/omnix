@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import asyncio
 import threading
 
@@ -110,9 +112,9 @@ def test_live_chat_route_explicitly_eagerly_executes_sync_provider(monkeypatch) 
         )
 
     route = next(
-        route
-        for route in gateway.routes
-        if isinstance(route, APIRoute) and route.path == _LIVE_CHAT_STREAM_PATH
+        route.original_route
+        for route in effective_routes(gateway)
+        if isinstance(route.original_route, APIRoute) and route.path == _LIVE_CHAT_STREAM_PATH
     )
 
     async def scenario() -> tuple[StreamingResponse, list[bytes]]:

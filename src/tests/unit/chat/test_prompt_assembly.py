@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+from app.chat import CreateChatSessionRequest
+
 from types import SimpleNamespace
 
 from app.providers import service as provider_service
@@ -85,6 +89,7 @@ def test_approved_memory_and_external_context_keep_distinct_trust_sections():
     assert "Use the rpg branch." not in user_message.content
 
 
+@pytest.mark.postgres
 def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch, tmp_path):
     class RecordingProvider:
         def __init__(self):
@@ -102,7 +107,7 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
     context = [{"source_id": "desktop", "title": "Desktop", "content": "A window is open."}]
 
     regular = ChatSessionStore(tmp_path / "regular.json")
-    regular_session = regular.create_session(SimpleNamespace(
+    regular_session = regular.create_session(CreateChatSessionRequest(
         title="New chat",
         provider_id="llm:lmstudio",
         model_id="llm:lmstudio:test-model",
@@ -118,7 +123,7 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
     )
 
     streaming = ChatSessionStore(tmp_path / "streaming.json")
-    streaming_session = streaming.create_session(SimpleNamespace(
+    streaming_session = streaming.create_session(CreateChatSessionRequest(
         title="New chat",
         provider_id="llm:lmstudio",
         model_id="llm:lmstudio:test-model",

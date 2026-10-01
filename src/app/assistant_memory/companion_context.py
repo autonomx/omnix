@@ -131,11 +131,23 @@ class CompanionContextPacket(BaseModel):
 class _CachedBaseline:
     items: tuple[CompanionContextItem, ...]
     candidate_count: int
+    expires_at: float
 
 
 _cache_lock = threading.RLock()
 _baseline_cache: dict[str, _CachedBaseline] = {}
 _MAX_CACHE_ENTRIES = 512
+_BASELINE_CACHE_TTL_SECONDS = 300.0
+
+
+def _baseline_cache_now() -> float:
+    return time.monotonic()
+
+
+def _prune_baseline_cache_locked(now: float) -> None:
+    for key, baseline in list(_baseline_cache.items()):
+        if baseline.expires_at <= now:
+            _baseline_cache.pop(key, None)
 
 
 def invalidate_companion_context(session_id: str | None = None) -> None:
@@ -345,6 +357,7 @@ def _baseline(
         category_score_overrides=category_score_overrides,
     )
     with _cache_lock:
+        _prune_baseline_cache_locked(_baseline_cache_now())
         cached = _baseline_cache.get(key)
         if cached is not None:
             return cached, True
@@ -365,8 +378,13 @@ def _baseline(
             ),
         )
     )
-    baseline = _CachedBaseline(items=values, candidate_count=len(approved_memory))
+    baseline = _CachedBaseline(
+        items=values,
+        candidate_count=len(approved_memory),
+        expires_at=_baseline_cache_now() + _BASELINE_CACHE_TTL_SECONDS,
+    )
     with _cache_lock:
+        _prune_baseline_cache_locked(_baseline_cache_now())
         if len(_baseline_cache) >= _MAX_CACHE_ENTRIES:
             _baseline_cache.pop(next(iter(_baseline_cache)))
         _baseline_cache[key] = baseline

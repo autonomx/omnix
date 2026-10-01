@@ -52,9 +52,9 @@ def test_postgres_chat_adapter_lists_summaries_without_loading_messages(monkeypa
     }
 
     class FakeChats:
-        def list_sessions(self, context, *, limit: int):
+        def list_sessions(self, context, *, limit: int, **_cursor):
             assert context is adapter.context
-            assert limit == 200
+            assert limit == 101  # one page of 100 plus a has-more probe
             return [record]
 
         def list_messages(self, *_args, **_kwargs):
@@ -73,8 +73,9 @@ def test_postgres_chat_adapter_lists_summaries_without_loading_messages(monkeypa
 
     monkeypatch.setattr(chat_compat, "unit_of_work", fake_unit_of_work)
 
-    summaries = adapter.list_session_summaries()
+    summaries, next_cursor = adapter.list_session_summaries()
 
+    assert next_cursor is None
     assert len(summaries) == 1
     assert summaries[0].id == "chat:test"
     assert summaries[0].message_count == 37

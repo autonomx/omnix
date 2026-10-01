@@ -29,3 +29,15 @@ def test_api_route_allowlist_leaves_control_and_unclassified_writes_on_worker():
         assert not chat.fullmatch(path) and not reads.fullmatch(path)
     assert POLICY['read_methods'] == ['GET', 'HEAD']
     assert POLICY['default_target'] == 'worker'
+    assert POLICY['live_call_websocket_path'] in POLICY['speech_paths']
+    assert POLICY['call_id_header'] == 'x-omnix-call-id'
+    assert POLICY['call_affinity_cookie'] == 'omnix_call_affinity'
+
+
+def test_live_call_ingress_uses_consistent_replica_affinity():
+    rendered = (ROOT / 'deploy/nginx/omnix.conf').read_text(encoding='utf-8')
+    assert 'hash $omnix_call_affinity_key consistent;' in rendered
+    assert '~^1:.+:/api/tts/live\\-call/websocket$ omnix_live_api;' in rendered
+    assert '~^1:.+:POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_live_api;' in rendered
+    assert '~^1::POST:/api/chat/sessions/[^/]+/messages/stream$ omnix_worker;' in rendered
+    assert '$omnix_call_affinity_key:$request_method:$uri' in rendered

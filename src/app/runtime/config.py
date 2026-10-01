@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.config.runtime import GatewayRole, RuntimeConfig, ServiceEndpoint
+from app.config.runtime import DevicePermitSettings, GatewayRole, RuntimeConfig, ServiceEndpoint
 
 _process_config: RuntimeConfig | None = None
 
@@ -26,6 +26,7 @@ def get_runtime_config() -> RuntimeConfig:
 
 __all__ = [
     "GatewayRole",
+    "DevicePermitSettings",
     "RuntimeConfig",
     "ServiceEndpoint",
     "get_runtime_config",

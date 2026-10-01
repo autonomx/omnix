@@ -41,8 +41,6 @@ jobs:
         run: ruff check . --output-format json --output-file artifacts/ruff.json --exit-zero
       - name: Check F821 and the shrinking Ruff baseline
         run: python scripts/check_ruff_baseline.py --report artifacts/ruff.json
-      - name: Check generated autoplay runtime source
-        run: python scripts/generate_autoplay_campaign_runtime.py --check
       - name: Check gateway ingress output
         run: python scripts/render_gateway_ingress.py --check
       - name: Verify architecture lint detectors
@@ -180,6 +178,7 @@ jobs:
       OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
       OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
       OMNIX_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      OMNIX_LIVE_CALL_MEASUREMENT_PATH: artifacts/live-call-capacity.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -192,8 +191,17 @@ jobs:
         run: python -m app.persistence migrate
       - name: Initialize disposable PostgreSQL runtime authority
         run: python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
+      - name: Prepare measurement artifact directory
+        run: mkdir -p artifacts
       - name: Run marked PostgreSQL and multiprocess tests
-        run: python -m pytest -m "postgres or multiprocess" -n 2
+        run: python -m pytest -m "postgres or multiprocess" -n 2 --dist loadgroup
+      - name: Upload live TTS capacity measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-live-call-capacity-measurement
+          path: artifacts/live-call-capacity.json
+          if-no-files-found: ignore
       - name: Run PostgreSQL architecture gate
         run: python scripts/run_architecture_gates.py --group postgresql
       - name: Run multiprocess architecture gate

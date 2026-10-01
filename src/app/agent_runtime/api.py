@@ -93,7 +93,12 @@ class LocalWorkspacePickResponse(BaseModel):
     cancelled: bool = False
 
 
-def _service() -> AgentRunService:
+def _service(request: Request | None = None) -> AgentRunService:
+    if request is not None:
+        services = getattr(request.app.state, "runtime_services", None)
+        service = getattr(services, "agent_runs", None) if services is not None else None
+        if service is not None:
+            return service
     return default_agent_run_service()
 
 
@@ -118,8 +123,8 @@ def pick_agent_workspace(request: Request) -> LocalWorkspacePickResponse:
     )
 
 
-@router.post("", response_model=AgentRunSnapshot)
-def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
+@router.post("", response_model=AgentRunSnapshot, status_code=202)
+def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> AgentRunSnapshot:
     try:
         profile = get_agent_profile(request.profile)
         # Validate both paths: an allowed workspace cannot hide an arbitrary
@@ -187,15 +192,31 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         ),
     )
     try:
-        return _service().start(spec)
+        services = getattr(http_request.app.state, "runtime_services", None)
+        job_store = getattr(services, "jobs", None) if services is not None else None
+        if job_store is None:
+            raise RuntimeError("durable agent job service is not composed")
+        return _service(http_request).submit_start(spec, job_store=job_store)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"agent_start_failed:{type(exc).__name__}:{exc}") from exc
 
 
-@router.post("/{run_id}/children", response_model=AgentRunSnapshot)
-def start_child_agent_run(run_id: str, request: ChildRunRequest) -> AgentRunSnapshot:
+@router.post("/{run_id}/children", response_model=AgentRunSnapshot, status_code=202)
+def start_child_agent_run(
+    run_id: str,
+    request: ChildRunRequest,
+    http_request: Request,
+) -> AgentRunSnapshot:
     try:
-        return _service().start_child(run_id, request)
+        services = getattr(http_request.app.state, "runtime_services", None)
+        job_store = getattr(services, "jobs", None) if services is not None else None
+        if job_store is None:
+            raise RuntimeError("durable agent job service is not composed")
+        return _service(http_request).submit_child_start(
+            run_id,
+            request,
+            job_store=job_store,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
     except ValueError as exc:
@@ -211,9 +232,13 @@ def get_agent_run(run_id: str) -> AgentRunSnapshot:
 
 
 @router.post("/{run_id}/commands", response_model=AgentRunSnapshot)
-def command_agent_run(run_id: str, request: AgentCommandRequest) -> AgentRunSnapshot:
+def command_agent_run(
+    run_id: str,
+    request: AgentCommandRequest,
+    http_request: Request,
+) -> AgentRunSnapshot:
     try:
-        return _service().command(
+        return _service(http_request).command(
             AgentRunCommand(
                 run_id=run_id,
                 command_type=request.command_type,

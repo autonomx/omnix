@@ -10,17 +10,16 @@ from app.providers import ProviderConfig
 def test_invalidate_provider_cache_closes_cached_process_provider():
     closed: list[bool] = []
     provider = SimpleNamespace(close=lambda: closed.append(True))
-    previous = dict(provider_service._PROVIDER_CACHE)
+    previous = provider_service._PROVIDER_CACHE
     try:
-        provider_service._PROVIDER_CACHE["key"] = "chatgpt_codex|cached"
-        provider_service._PROVIDER_CACHE["instance"] = provider
+        provider_service._PROVIDER_CACHE = ("chatgpt_codex|cached", provider, 99.0)
 
         provider_service.invalidate_provider_cache()
 
         assert closed == [True]
-        assert provider_service._PROVIDER_CACHE == {"key": None, "instance": None}
+        assert provider_service._PROVIDER_CACHE == (None, None, 0.0)
     finally:
-        provider_service._PROVIDER_CACHE.update(previous)
+        provider_service._PROVIDER_CACHE = previous
 
 
 def test_provider_cache_key_tracks_codex_transport_options():
@@ -81,8 +80,8 @@ def test_shared_factory_builds_codex_from_typed_profile(monkeypatch):
     )
     monkeypatch.setattr(provider_service, "load_secrets", lambda: {"api_keys": {}})
     monkeypatch.setattr(provider_service, "get_registry", lambda: Registry())
-    previous = dict(provider_service._PROVIDER_CACHE)
-    provider_service._PROVIDER_CACHE.update({"key": None, "instance": None})
+    previous = provider_service._PROVIDER_CACHE
+    provider_service._PROVIDER_CACHE = (None, None, 0.0)
     try:
         assert provider_service.get_provider("chatgpt_codex") is provider
         config = captured["config"]
@@ -98,4 +97,4 @@ def test_shared_factory_builds_codex_from_typed_profile(monkeypatch):
         }
     finally:
         provider_service.invalidate_provider_cache()
-        provider_service._PROVIDER_CACHE.update(previous)
+        provider_service._PROVIDER_CACHE = previous

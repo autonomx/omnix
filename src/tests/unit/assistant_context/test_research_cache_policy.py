@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.conversation.contracts import AssistantContextItem
+from app.research import cache as research_cache
 from app.research.cache import ResearchCacheStore
 from app.research.extraction import ExtractedPage, ReadablePageExtractor
 from app.research.outbound_web import OutboundWebResponse
@@ -94,6 +95,44 @@ def test_extraction_cache_is_keyed_by_url_and_extractor_version(tmp_path) -> Non
     assert first.content_hash == second.content_hash
     assert second.elapsed_ms == 0
     assert "Evidence." in second.text
+
+
+def test_research_cache_store_registry_and_entries_are_bounded(monkeypatch, tmp_path) -> None:
+    research_cache.clear_research_cache_states()
+    monkeypatch.setattr(research_cache, "_MAX_CACHE_STORES", 2)
+    monkeypatch.setattr(research_cache, "_MAX_CACHE_ENTRIES_PER_TABLE", 2)
+    stores = [ResearchCacheStore(tmp_path / f"cache-{index}.json") for index in range(3)]
+    for index, store in enumerate(stores):
+        store._put("research_search_cache", f"key-{index}", index, ttl_seconds=60)
+
+    assert len(research_cache._CACHE_STATES) == 2
+    assert set(research_cache._CACHE_STATES) == {
+        str(stores[1].path),
+        str(stores[2].path),
+    }
+
+    store = stores[2]
+    assert store._get("research_search_cache", "key-2") == 2
+    store._put("research_search_cache", "next-1", 1, ttl_seconds=60)
+    store._put("research_search_cache", "next-2", 2, ttl_seconds=60)
+    store._put("research_search_cache", "next-3", 3, ttl_seconds=60)
+    assert store._get("research_search_cache", "key-2") is None
+    assert store._get("research_search_cache", "next-3") == 3
+    research_cache.clear_research_cache_states()
+
+
+def test_research_cache_ttl_is_capped_and_states_are_invalidatable(monkeypatch, tmp_path) -> None:
+    research_cache.clear_research_cache_states()
+    monkeypatch.setattr(research_cache, "_MAX_CACHE_TTL_SECONDS", 5)
+    now = {"value": 10.0}
+    store = ResearchCacheStore(tmp_path / "cache.json", clock=lambda: now["value"])
+    store._put("research_extraction_cache", "page", {"text": "cached"}, ttl_seconds=500)
+
+    now["value"] = 16.0
+    assert store._get("research_extraction_cache", "page") is None
+    store._put("research_extraction_cache", "page", {"text": "cached"}, ttl_seconds=500)
+    research_cache.clear_research_cache_states()
+    assert store._get("research_extraction_cache", "page") is None
 
 
 def test_retention_expires_raw_text_but_keeps_referenced_provenance(tmp_path) -> None:

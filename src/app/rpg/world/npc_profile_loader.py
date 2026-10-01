@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -78,7 +78,7 @@ def _validate_npc_profile(profile: Dict[str, Any], *, source_path: Path | None =
     return normalized
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def load_all_file_npc_profiles() -> Dict[str, Dict[str, Any]]:
     profiles: Dict[str, Dict[str, Any]] = {}
     if not NPC_PROFILE_DIR.exists():

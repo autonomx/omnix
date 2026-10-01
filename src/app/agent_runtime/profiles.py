@@ -1,6 +1,8 @@
 """Built-in profiles compiled into immutable RunSpec authority."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import re
 
 from pydantic import BaseModel, ConfigDict
@@ -113,8 +115,9 @@ def profile_external_ceiling(profile: AgentProfile) -> set[str]:
             from app.capabilities.mcp_policy import configured_mcp_capability_ids
 
             ceiling.update(configured_mcp_capability_ids())
-        except Exception:
+        except Exception as exc:
             # Invalid/unreadable MCP policy fails closed.
+            log_recovered_exception("MCP capability policy load", exc)
             pass
     return ceiling
 

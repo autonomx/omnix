@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import json
 import sys
 from pathlib import Path
@@ -100,10 +102,13 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
     )
     model_less_routes: set[tuple[str, str]] = set()
 
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not route.include_in_schema:
+    checked = 0
+    for effective in effective_routes(app):
+        route = effective.original_route
+        if not isinstance(route, APIRoute) or not effective.include_in_schema:
             continue
-        route_path = route.path.replace(":path}", "}")
+        checked += 1
+        route_path = effective.path.replace(":path}", "}")
         methods = route.methods or {"GET"}
         for method in methods:
             operation = schema["paths"].get(route_path, {}).get(method.lower())
@@ -122,4 +127,5 @@ def test_browser_routes_have_typed_contracts_or_documented_transport_responses()
                 assert key in _DOCUMENTED_NON_JSON_RESPONSES
                 assert route_path in transport_inventory
 
+    assert checked > 100, "route walk must see the composed feature routes"
     assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES

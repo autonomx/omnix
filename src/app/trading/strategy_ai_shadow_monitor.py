@@ -14,6 +14,8 @@ from app.config.env import env_str as _env_str
 import asyncio
 import hashlib
 import threading
+import time as _clock
+from collections import OrderedDict
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
@@ -116,7 +118,42 @@ _EXECUTION_FIELDS = (
 )
 _GAP_HEARTBEAT = timedelta(minutes=15)
 _GAP_LOCK = threading.RLock()
-_GAP_LAST_EMITTED: dict[tuple[str, str, str, str, str], datetime] = {}
+MAX_DATA_GAP_HEARTBEATS = 4096
+DATA_GAP_HEARTBEAT_TTL_SECONDS = 24 * 60 * 60.0
+_GAP_LAST_EMITTED: OrderedDict[
+    tuple[str, str, str, str, str], tuple[datetime, float]
+] = OrderedDict()
+
+
+def clear_data_gap_heartbeat_cache() -> None:
+    """Clear duplicate-gap suppression entries for tests and controlled resets."""
+
+    with _GAP_LOCK:
+        _GAP_LAST_EMITTED.clear()
+
+
+def _allow_data_gap_heartbeat(
+    key: tuple[str, str, str, str, str],
+    current: datetime,
+) -> bool:
+    now = _clock.monotonic()
+    with _GAP_LOCK:
+        stale = [
+            stale_key
+            for stale_key, (_observed_at, touched_at) in _GAP_LAST_EMITTED.items()
+            if now - touched_at > DATA_GAP_HEARTBEAT_TTL_SECONDS
+        ]
+        for stale_key in stale:
+            _GAP_LAST_EMITTED.pop(stale_key, None)
+        previous = _GAP_LAST_EMITTED.get(key)
+        if previous is not None and timedelta(0) <= current - previous[0] < _GAP_HEARTBEAT:
+            _GAP_LAST_EMITTED.move_to_end(key)
+            return False
+        _GAP_LAST_EMITTED[key] = (current, now)
+        _GAP_LAST_EMITTED.move_to_end(key)
+        while len(_GAP_LAST_EMITTED) > MAX_DATA_GAP_HEARTBEATS:
+            _GAP_LAST_EMITTED.popitem(last=False)
+        return True
 
 
 def _events_with_data_gap_aliases(events: list[StrategyEvent]) -> list[StrategyEvent]:
@@ -584,11 +621,8 @@ class TradingAIShadowMonitor:
             policy = str(payload.get("policy") or "")
             key = (config.strategy_id, instrument_id, event_type, reason_code, policy)
             current = observed_at.astimezone(timezone.utc)
-            with _GAP_LOCK:
-                previous = _GAP_LAST_EMITTED.get(key)
-                if previous is not None and timedelta(0) <= current - previous < _GAP_HEARTBEAT:
-                    return False
-                _GAP_LAST_EMITTED[key] = current
+            if not _allow_data_gap_heartbeat(key, current):
+                return False
             payload = dict(payload)
             payload["duplicate_gap_heartbeat_seconds"] = int(
                 _GAP_HEARTBEAT.total_seconds()

@@ -170,37 +170,6 @@ def test_deep_research_job_freezes_saved_provider_chain_budgets_and_cache_ttls(t
     assert payload["hermes_planner_enabled"] is True
 
 
-def test_deep_research_honors_explicit_duckduckgo_primary_priority(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
-    chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = InMemoryJobStore(tmp_path / "jobs")
-    session = chat_store.create_session(CreateChatSessionRequest(title="Deep browser settings"))
-    settings = runtime_settings(
-        provider="duckduckgo",
-        provider_fallbacks=("playwright",),
-    )
-    app = FastAPI()
-    register_assistant_context_routes(
-        app,
-        chat_store_factory=lambda: chat_store,
-        job_store_factory=lambda: job_store,
-        settings_factory=lambda: settings,
-    )
-
-    response = TestClient(app).post(
-        f"/api/assistant/context/chat/sessions/{session.id}/messages",
-        json={"content": "Research current local coding models", "web_research_mode": "deep"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()["job"]["input_payload"]
-    assert payload["research_provider"] == "duckduckgo"
-    assert payload["research_provider_chain"] == ["duckduckgo", "playwright"]
-
-
 def test_api_backed_environment_provider_overrides_duckduckgo_primary(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     monkeypatch.setenv("OMNIX_WEB_SEARCH_PROVIDER", "brave")

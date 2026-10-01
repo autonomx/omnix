@@ -21,10 +21,10 @@ from app.research.source_store import ResearchSourceStore
 
 class FixedPlanner:
     def __init__(self, plan: ResearchPlan) -> None:
-        self.plan = plan
+        self._plan = plan
 
     def plan(self, request):
-        return ResearchPlannerDecision(plan=self.plan, backend="local")
+        return ResearchPlannerDecision(plan=self._plan, backend="local")
 
 
 class FakeQuickSearch:

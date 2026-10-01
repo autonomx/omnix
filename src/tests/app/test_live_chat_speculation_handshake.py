@@ -213,6 +213,33 @@ def test_json_handshake_starts_generation_before_stream_attachment(monkeypatch) 
     assert store.complete_calls == 1
 
 
+def test_handshake_registry_is_capacity_and_ttl_bounded(monkeypatch) -> None:
+    handshake.clear_live_speculation_handshake_state()
+    speculation._SPECULATIONS.clear()
+    monkeypatch.setattr(handshake, "_MAX_HANDSHAKE_GENERATIONS", 2)
+    monkeypatch.setattr(handshake, "_HANDSHAKE_TTL_SECONDS", 5.0)
+    now = {"value": 100.0}
+    monkeypatch.setattr(handshake.time, "time", lambda: now["value"])
+
+    for generation_id, created_at in (("oldest", 97.0), ("middle", 98.0), ("newest", 99.0)):
+        generation = handshake._HandshakeGeneration(
+            store=_FakeStore(),
+            session=object(),
+            created_at=created_at,
+        )
+        handshake._HANDSHAKE_GENERATIONS[generation_id] = generation
+        speculation._SPECULATIONS[generation_id] = object()
+
+    handshake._prune_handshake_state_locked()
+    assert set(handshake._HANDSHAKE_GENERATIONS) == {"middle", "newest"}
+    assert handshake._HANDSHAKE_GENERATIONS.get("oldest") is None
+
+    now["value"] = 110.0
+    handshake._prune_handshake_state_locked()
+    assert handshake._HANDSHAKE_GENERATIONS == {}
+    speculation._SPECULATIONS.clear()
+
+
 def test_generation_stream_is_single_consumer(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     handshake.clear_live_speculation_handshake_state()

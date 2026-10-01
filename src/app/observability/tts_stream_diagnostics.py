@@ -24,6 +24,8 @@ from app.observability.resilient_rotating_file_handler import ResilientRotatingF
 TTS_STREAM_LOG_PATH = Path(LOGS_DIR) / "tts-streaming.log"
 TTS_STREAM_LOG_MAX_BYTES = 25_000_000
 TTS_STREAM_LOG_BACKUP_COUNT = 4
+_MAX_ACTIVE_STREAMS = 4096
+_ACTIVE_STREAM_TTL_SECONDS = 4 * 60 * 60
 _STREAM_ID_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
 _SEQUENCE = itertools.count(1)
 _ACTIVE_LOCK = threading.Lock()
@@ -117,10 +119,15 @@ def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
         )
 
 
+def _stream_now() -> float:
+    return time.perf_counter()
+
+
 def active_streams_snapshot() -> dict[str, float]:
     """Return current stream IDs and ages without exposing request text."""
-    now = time.perf_counter()
+    now = _stream_now()
     with _ACTIVE_LOCK:
+        _prune_active_streams_locked(now)
         return {
             active_id: round((now - started_at) * 1000, 3)
             for active_id, started_at in sorted(_ACTIVE_STREAMS.items())
@@ -129,15 +136,21 @@ def active_streams_snapshot() -> dict[str, float]:
 
 def runtime_stream_snapshot() -> dict[str, Any]:
     """Bounded process counters, without stream IDs or speech content."""
+    now = _stream_now()
     with _ACTIVE_LOCK:
+        _prune_active_streams_locked(now)
         return {'active_streams': len(_ACTIVE_STREAMS), 'completed_pcm_streams': _COMPLETED_PCM_STREAMS,
                 'last_successful_pcm_request_age_seconds': time.perf_counter() - _LAST_PCM_SUCCESS_AT if _LAST_PCM_SUCCESS_AT is not None else None}
 
 
 def begin_stream(stream_id: str, **details: Any) -> int:
     """Register a live stream and log overlap information."""
-    now = time.perf_counter()
+    now = _stream_now()
     with _ACTIVE_LOCK:
+        _prune_active_streams_locked(now)
+        if stream_id not in _ACTIVE_STREAMS and len(_ACTIVE_STREAMS) >= _MAX_ACTIVE_STREAMS:
+            oldest_id = min(_ACTIVE_STREAMS, key=_ACTIVE_STREAMS.__getitem__)
+            _ACTIVE_STREAMS.pop(oldest_id, None)
         previous = {
             active_id: round((now - started_at) * 1000, 3)
             for active_id, started_at in _ACTIVE_STREAMS.items()
@@ -155,9 +168,25 @@ def begin_stream(stream_id: str, **details: Any) -> int:
     return active_count
 
 
+def clear_active_streams() -> None:
+    """Clear live stream diagnostics during shutdown and tests."""
+    with _ACTIVE_LOCK:
+        _ACTIVE_STREAMS.clear()
+
+
+def _prune_active_streams_locked(now: float) -> None:
+    expired = [
+        stream_id
+        for stream_id, started_at in _ACTIVE_STREAMS.items()
+        if now - started_at > _ACTIVE_STREAM_TTL_SECONDS
+    ]
+    for stream_id in expired:
+        _ACTIVE_STREAMS.pop(stream_id, None)
+
+
 def end_stream(stream_id: str, **details: Any) -> int:
     """Unregister a stream and record its lifetime and remaining overlap."""
-    now = time.perf_counter()
+    now = _stream_now()
     with _ACTIVE_LOCK:
         started_at = _ACTIVE_STREAMS.pop(stream_id, None)
         remaining = {

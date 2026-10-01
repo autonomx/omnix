@@ -51,7 +51,7 @@ class GatewayBackgroundRuntime:
         self.config = config or (RuntimeConfig(gateway_role=GatewayRole(role)) if role is not None else get_runtime_config())
         if poll_seconds <= 0:
             raise ValueError(
-                "background role must be api or worker, with a positive supervision interval"
+                "background role must be valid, with a positive supervision interval"
             )
         self.database = database
         self.role = self.config.gateway_role.value
@@ -95,6 +95,8 @@ class GatewayBackgroundRuntime:
             raise
 
     def require_live(self):
+        if self.config.runs_job_workers:
+            return
         if self.role != "worker" or not self.healthy or self.connection is None:
             raise BackgroundOwnershipUnavailable(
                 "This gateway does not own background execution"
@@ -122,6 +124,15 @@ class GatewayBackgroundRuntime:
                 "started_workers": [worker[0] for worker in self._started]}
 
     def register(self, name, monitor, startup, shutdown):
+        self._register(
+            name,
+            monitor,
+            startup,
+            shutdown,
+            frozenset({RuntimeCapability.OWN_BACKGROUND_RUNTIME}),
+        )
+
+    def _register(self, name, monitor, startup, shutdown, requires):
         if any(worker[0] == name for worker in self._workers):
             raise ValueError(f"Background worker already registered: {name}")
         # Protect manual control endpoints as well as startup hooks.
@@ -142,7 +153,7 @@ class GatewayBackgroundRuntime:
                     return result
 
             monitor.start = start
-        self._workers.append((name, startup, shutdown))
+        self._workers.append((name, startup, shutdown, monitor, requires))
 
     async def _call(self, callback):
         result = callback()
@@ -150,15 +161,23 @@ class GatewayBackgroundRuntime:
             await result
 
     async def startup(self):
-        if not self.config.owns_background_runtime:
+        if not self.config.owns_background_runtime and not self.config.runs_job_workers:
             return
-        self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
+        required_role = (
+            RuntimeCapability.RUN_JOB_WORKERS
+            if self.config.runs_job_workers
+            else RuntimeCapability.OWN_BACKGROUND_RUNTIME
+        )
+        self.capabilities.require(required_role)
         if self._started:
             raise RuntimeError("Background workers already started")
-        self.require_live()
+        if self.config.owns_background_runtime:
+            self.require_live()
         for worker in self._workers:
+            if required_role not in worker[4]:
+                continue
             started = time.monotonic()
-            self._started.append(worker)
+            self._started.append((worker[0], worker[1], worker[2]))
             with self._execution_scope(self):
                 for callback in worker[1]:
                     await self._call(callback)
@@ -238,12 +257,27 @@ class GatewayBackgroundRuntime:
 
 
     def register_worker(self, worker: BackgroundWorker) -> None:
-        required = RuntimeCapability.OWN_BACKGROUND_RUNTIME
-        if required not in worker.requires:
-            raise ValueError("Background workers must declare background ownership")
-        if self.role == "worker":
+        supported = {
+            RuntimeCapability.OWN_BACKGROUND_RUNTIME,
+            RuntimeCapability.RUN_JOB_WORKERS,
+        }
+        if len(worker.requires) != 1 or not worker.requires <= supported:
+            raise ValueError("Background workers must declare one supported runtime role")
+        if (
+            self.role == "worker"
+            and RuntimeCapability.OWN_BACKGROUND_RUNTIME in worker.requires
+        ) or (
+            self.role == "job-worker"
+            and RuntimeCapability.RUN_JOB_WORKERS in worker.requires
+        ):
             self.capabilities.require(*worker.requires)
-        self.register(worker.name, worker.monitor, worker.startup, worker.shutdown)
+        self._register(
+            worker.name,
+            worker.monitor,
+            worker.startup,
+            worker.shutdown,
+            worker.requires,
+        )
 
 
 class BackgroundRegistry:

@@ -414,7 +414,7 @@ def test_late_runtime_event_cannot_reopen_superseded_run(monkeypatch) -> None:
     service.database = object()
     service.context = object()
     service.worker_id = "worker"
-    service._lock = threading.RLock()
+    service._run_lock = lambda _run_id: threading.RLock()
     service.unit_of_work = lambda _database: Work()
     service.repository_factory = Repo
 

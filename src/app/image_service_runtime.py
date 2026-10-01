@@ -5,6 +5,8 @@ from app.config.env import environment
 
 import os
 import threading
+from collections import OrderedDict
+from time import monotonic
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Request
@@ -51,9 +53,12 @@ app = FastAPI(title="Omnix Image Service")
 app.add_middleware(ModelServiceMiddleware)
 
 _MODEL_OPERATION_LOCK = threading.Lock()
-_MODEL_OPERATION: Dict[str, str] = {"kind": "idle", "provider": ""}
+_MODEL_OPERATION_TTL_SECONDS = 3600.0
+_MODEL_OPERATION: tuple[str, str, float] = ("idle", "", monotonic())
 _GENERATION_PROGRESS_LOCK = threading.Lock()
-_GENERATION_PROGRESS: Dict[str, Dict[str, Any]] = {}
+_GENERATION_PROGRESS_MAX_ENTRIES = 256
+_GENERATION_PROGRESS_TTL_SECONDS = 86_400.0
+_GENERATION_PROGRESS: OrderedDict[str, tuple[Dict[str, Any], float]] = OrderedDict()
 
 
 def _truthy(value: str) -> bool:
@@ -65,14 +70,25 @@ def _provider_name(value: Any) -> str:
 
 
 def _set_model_operation(kind: str, provider: str = "") -> None:
+    global _MODEL_OPERATION
     with _MODEL_OPERATION_LOCK:
-        _MODEL_OPERATION["kind"] = str(kind or "idle")
-        _MODEL_OPERATION["provider"] = _provider_name(provider) if provider else ""
+        _MODEL_OPERATION = (
+            str(kind or "idle"),
+            _provider_name(provider) if provider else "",
+            monotonic(),
+        )
 
 
 def _get_model_operation() -> Dict[str, str]:
     with _MODEL_OPERATION_LOCK:
-        return dict(_MODEL_OPERATION)
+        now = monotonic()
+        kind, provider, updated_at = _MODEL_OPERATION
+        if now - updated_at > _MODEL_OPERATION_TTL_SECONDS:
+            kind, provider = "idle", ""
+        return {
+            "kind": kind,
+            "provider": provider,
+        }
 
 
 def _model_definition(provider: str) -> Dict[str, Any]:
@@ -189,8 +205,10 @@ def _set_generation_progress(
         return
     total = max(1, int(total or 1))
     current = max(0, min(total, int(current or 0)))
+    now = monotonic()
     with _GENERATION_PROGRESS_LOCK:
-        _GENERATION_PROGRESS[request_id] = {
+        _prune_generation_progress_locked(now)
+        _GENERATION_PROGRESS[request_id] = ({
             "ok": True,
             "request_id": request_id,
             "current": current,
@@ -198,13 +216,25 @@ def _set_generation_progress(
             "percent": round((current / total) * 100),
             "message": message,
             "status": status,
-        }
+        }, now)
+        _GENERATION_PROGRESS.move_to_end(request_id)
+        while len(_GENERATION_PROGRESS) > _GENERATION_PROGRESS_MAX_ENTRIES:
+            _GENERATION_PROGRESS.popitem(last=False)
 
 
 def _get_generation_progress(request_id: str) -> Dict[str, Any]:
     request_id = request_id.strip()
     with _GENERATION_PROGRESS_LOCK:
-        progress = dict(_GENERATION_PROGRESS.get(request_id) or {})
+        now = monotonic()
+        _prune_generation_progress_locked(now)
+        entry = _GENERATION_PROGRESS.get(request_id)
+        if entry is None:
+            progress: Dict[str, Any] = {}
+        else:
+            progress, _ = entry
+            _GENERATION_PROGRESS[request_id] = (progress, now)
+            _GENERATION_PROGRESS.move_to_end(request_id)
+            progress = dict(progress)
     if progress:
         return progress
     return {
@@ -216,6 +246,24 @@ def _get_generation_progress(request_id: str) -> Dict[str, Any]:
         "message": "No generation progress is available.",
         "status": "missing",
     }
+
+
+def _prune_generation_progress_locked(now: float) -> None:
+    while _GENERATION_PROGRESS:
+        request_id, (_progress, touched) = next(iter(_GENERATION_PROGRESS.items()))
+        if now - touched <= _GENERATION_PROGRESS_TTL_SECONDS:
+            return
+        _GENERATION_PROGRESS.pop(request_id, None)
+
+
+def _clear_generation_progress(request_id: str | None = None) -> None:
+    """Invalidate cached progress for a request or every request."""
+
+    with _GENERATION_PROGRESS_LOCK:
+        if request_id is None:
+            _GENERATION_PROGRESS.clear()
+        else:
+            _GENERATION_PROGRESS.pop(request_id, None)
 
 
 @app.on_event("startup")

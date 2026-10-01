@@ -2,6 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+# Needs the GPU model stack; skipped where torch is not installed.
+pytest.importorskip("torch")
+pytestmark = pytest.mark.gpu
+
+
+import pytest
+
 from app.image import flux_pipeline_compat
 from app.image.providers import flux_klein_provider as flux_module
 from app.image.providers.flux_klein_provider import FluxKleinImageProvider

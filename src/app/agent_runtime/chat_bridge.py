@@ -7,6 +7,8 @@ explicit /agent and per-turn Quick/Deep research commands take precedence.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from app.config.env import env_str
 
 from app.providers.service import get_provider
@@ -85,7 +87,7 @@ from .task_graph_revision import (
     task_graph_preserves_execution_contract,
 )
 from .task_graph_runtime import default_task_graph_runtime
-from .service import default_agent_run_service
+from .service import AgentRunService, default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
 
@@ -100,6 +102,7 @@ class _PendingAgentRetry:
     task: str
     profile: str
     failed_message_id: str | None = None
+    reference_message_id: str | None = None
     reference_images: tuple[dict[str, str], ...] = ()
 
 
@@ -248,6 +251,11 @@ def _pending_failed_agent_retry(
         task=task,
         profile=profile,
         failed_message_id=str(getattr(failed_message, "id", "") or "") or None,
+        reference_message_id=(
+            str(getattr(messages[failed_index - 1], "id", "") or "") or None
+            if failed_index > 0 and getattr(messages[failed_index - 1], "role", None) == "user"
+            else None
+        ),
         reference_images=reference_images,
     )
 
@@ -320,9 +328,10 @@ def _resolve_agent_model_route(
                 getattr(getattr(configured_provider, "config", None), "model", "")
                 or ""
             ).strip()
-        except Exception:
+        except Exception as exc:
             # Preserve the existing clear configuration failure below when the
             # selected provider itself cannot be constructed.
+            log_recovered_exception("chat provider model lookup", exc, level="DEBUG")
             pass
     return provider, model
 
@@ -344,7 +353,8 @@ def _agent_reasoning_effort(provider_id: str | None = None) -> str:
                     value = str(extra.get("reasoning_effort") or "").strip()
             if value:
                 return value
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("chat reasoning effort lookup", exc, level="DEBUG")
             pass
     return _DEFAULT_AGENT_REASONING_EFFORT
 
@@ -378,7 +388,8 @@ def _resolve_routing_context(
     if factory is not None:
         try:
             return _routing_context_text(factory())
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("chat routing context factory", exc, level="DEBUG")
             pass
 
     try:
@@ -394,7 +405,8 @@ def _resolve_routing_context(
             retrieved_history=[],
         )
         return build_chat_routing_context(assembly).reference_context
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("chat routing context assembly", exc, level="DEBUG")
         return ""
 
 
@@ -1099,7 +1111,8 @@ def route_typed_chat_turn(
             graph_snapshot = default_task_graph_runtime().get_status(
                 active_objective.run_id
             )
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("active task graph lookup", exc, level="DEBUG")
             graph_snapshot = None
         if graph_snapshot is not None:
             graph_status = str(graph_snapshot.status).casefold()
@@ -1167,7 +1180,8 @@ def route_typed_chat_turn(
         try:
             waiting_service = default_agent_run_service()
             waiting_snapshot = waiting_service.get(waiting_run_id)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("waiting agent run lookup", exc)
             waiting_service = None
             waiting_snapshot = None
     if (
@@ -1804,7 +1818,8 @@ def route_typed_chat_turn(
 def _workflow_lookup(candidate: str) -> str | None:
     try:
         return default_workflow_runtime().lookup(candidate)
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("workflow lookup", exc, level="DEBUG")
         return None
 
 
@@ -2418,10 +2433,8 @@ def _agent_result(
         )
 
     authority_task = _agent_task(content)
-    # Execution constraints are authoritative success criteria, never Chat
-    # reference data. Pi's reference-context boundary explicitly forbids
-    # treating embedded instructions as authority.
-    pi_reference_context = str(semantic_context or "").strip()
+    # The start job reloads prompt context and images from durable Chat message
+    # references; it never stores copied conversation or image bodies.
     if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
@@ -2567,16 +2580,37 @@ def _agent_result(
                     old_graph_run_id,
                     reason="superseded_by_agent_objective",
                 )
-        contextual_start = getattr(service, "start_with_context", None)
-        snapshot = (
-            contextual_start(
+        job_store = getattr(service, "job_store", None)
+        submit_start = getattr(service, "submit_start", None)
+        if isinstance(service, AgentRunService):
+            if job_store is None or not callable(submit_start):
+                raise RuntimeError("durable agent job service is not composed")
+            reference_message_ids = [
+                retry_source.reference_message_id
+                if retry_source is not None and retry_source.reference_message_id
+                else ""
+            ]
+            reference_message_ids = [
+                message_id for message_id in reference_message_ids if message_id
+            ]
+            snapshot = submit_start(
                 spec,
-                reference_context=pi_reference_context,
-                **({"reference_images": reference_images} if reference_images else {}),
+                job_store=job_store,
+                reference_session_id=str(getattr(session, "id", "") or "") or None,
+                reference_message_id=str(getattr(user_message, "id", "") or "") or None,
+                reference_message_ids=reference_message_ids or None,
             )
-            if callable(contextual_start)
-            else service.start(spec)
-        )
+        else:
+            # In-memory AgentRunService ports keep routing tests and simulations
+            # independent of the durable worker composition.
+            contextual_start = getattr(service, "start_with_context", None)
+            if callable(contextual_start):
+                start_kwargs: dict[str, Any] = {"reference_context": semantic_context}
+                if reference_images:
+                    start_kwargs["reference_images"] = reference_images
+                snapshot = contextual_start(spec, **start_kwargs)
+            else:
+                snapshot = service.start(spec)
     except Exception as exc:
         return _agent_start_failure(
             decision,
@@ -2587,7 +2621,7 @@ def _agent_result(
             service=service,
         )
     result_metadata = {
-        "generation_status": "completed",
+        "generation_status": "queued" if snapshot.status == "queued" else "completed",
         "agent_mode": True,
         "omnix_route": decision.model_dump(mode="json"),
         "agent_run": _agent_metadata(snapshot),
@@ -2641,7 +2675,7 @@ def _agent_result(
         }
     return GeneralizedChatResult(
         content=(
-            f"Started {profile_id} Agent run {snapshot.run_id}. "
+            f"Queued {profile_id} Agent run {snapshot.run_id}. "
             "I'll keep the run durable; send another Agent-mode message to steer it."
         ),
         metadata=result_metadata,
@@ -2840,7 +2874,8 @@ def _latest_agent_run(service: Any, session: Any):
             continue
         try:
             snapshot = service.get(run_id)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("agent run lookup during chat reconciliation", exc)
             continue
         if snapshot is not None:
             return snapshot

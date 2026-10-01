@@ -7,6 +7,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,11 +22,19 @@ from app.chat.contracts import resolve_system_session_identity
 from app.observability.tts_stream_diagnostics import stream_log
 
 _MAX_CACHE_ENTRIES = 256
+_CACHE_TTL_SECONDS = 300.0
+
+
+@dataclass(frozen=True, slots=True)
+class _CacheEntry:
+    expires_at: float
+    value: Any
+
 
 _CACHE_LOCK = threading.RLock()
-_CHARACTER_SNAPSHOTS: OrderedDict[tuple[str, int], Any] = OrderedDict()
-_IDENTITY_CONTEXTS: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
-_PROFILE_ENVELOPES: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+_CHARACTER_SNAPSHOTS: OrderedDict[tuple[str, int], "_CacheEntry"] = OrderedDict()
+_IDENTITY_CONTEXTS: OrderedDict[tuple[Any, ...], _CacheEntry] = OrderedDict()
+_PROFILE_ENVELOPES: OrderedDict[tuple[Any, ...], _CacheEntry] = OrderedDict()
 _PROMPT_STAGE_TIMINGS: ContextVar[dict[str, Any] | None] = ContextVar(
     "omnix_live_prompt_stage_timings",
     default=None,
@@ -41,10 +50,38 @@ def _clone(value: Any) -> Any:
 
 
 def _bounded_put(cache: OrderedDict[Any, Any], key: Any, value: Any) -> None:
-    cache[key] = _clone(value)
-    cache.move_to_end(key)
-    while len(cache) > _MAX_CACHE_ENTRIES:
-        cache.popitem(last=False)
+    now = _cache_now()
+    with _CACHE_LOCK:
+        _prune_expired_locked(now)
+        cache[key] = _CacheEntry(now + _CACHE_TTL_SECONDS, _clone(value))
+        cache.move_to_end(key)
+        while len(cache) > _MAX_CACHE_ENTRIES:
+            cache.popitem(last=False)
+
+
+def _cache_now() -> float:
+    return time.monotonic()
+
+
+def _prune_expired_locked(now: float) -> None:
+    for cache in (_CHARACTER_SNAPSHOTS, _IDENTITY_CONTEXTS, _PROFILE_ENVELOPES):
+        for key, entry in list(cache.items()):
+            if entry.expires_at <= now:
+                cache.pop(key, None)
+
+
+def _cache_get(cache: OrderedDict[Any, _CacheEntry], key: Any) -> Any | None:
+    with _CACHE_LOCK:
+        now = _cache_now()
+        _prune_expired_locked(now)
+        entry = cache.get(key)
+        if entry is None:
+            return None
+        if entry.expires_at <= now:
+            cache.pop(key, None)
+            return None
+        cache.move_to_end(key)
+        return _clone(entry.value)
 
 
 def _character_snapshot_version(snapshot: Any) -> int:
@@ -125,10 +162,9 @@ def resolve_system_session_identity_cached(session: Any) -> Any:
     started = time.perf_counter()
     key = _identity_key(session)
     with _CACHE_LOCK:
-        cached = _IDENTITY_CONTEXTS.get(key)
+        cached = _cache_get(_IDENTITY_CONTEXTS, key)
         if cached is not None:
-            _IDENTITY_CONTEXTS.move_to_end(key)
-            result = _clone(cached)
+            result = cached
             _record_flag("identity_cache_hit", True)
             _record_stage("identity_ms", (time.perf_counter() - started) * 1000.0)
             return result
@@ -141,10 +177,7 @@ def resolve_system_session_identity_cached(session: Any) -> Any:
         snapshot = None
         if character_id and isinstance(expected_version, int) and expected_version > 0:
             with _CACHE_LOCK:
-                snapshot = _CHARACTER_SNAPSHOTS.get((character_id, expected_version))
-                if snapshot is not None:
-                    _CHARACTER_SNAPSHOTS.move_to_end((character_id, expected_version))
-                    snapshot = _clone(snapshot)
+                snapshot = _cache_get(_CHARACTER_SNAPSHOTS, (character_id, expected_version))
         if snapshot is None:
             snapshot = default_character_service().resolve_snapshot(character_id)
             cache_character_snapshot(snapshot)
@@ -189,12 +222,11 @@ def get_live_conversation_profile_cached(
     key = (id(store), signature, session_id)
     if signature is not None:
         with _CACHE_LOCK:
-            cached = _PROFILE_ENVELOPES.get(key)
+            cached = _cache_get(_PROFILE_ENVELOPES, key)
             if cached is not None:
-                _PROFILE_ENVELOPES.move_to_end(key)
                 _record_flag("profile_cache_hit", True)
                 _record_stage("profile_store_ms", (time.perf_counter() - started) * 1000.0)
-                return _clone(cached)
+                return cached
     result = store.get(session_id)
     if signature is not None:
         refreshed_key = (id(store), _profile_signature(store), session_id)
@@ -249,11 +281,16 @@ def end_prompt_stage_timings(
     )
 
 
-def _reset_live_prompt_cache_for_tests() -> None:
+def clear_live_prompt_caches() -> None:
+    """Clear cached prompt dependencies after owner changes or process policy updates."""
     with _CACHE_LOCK:
         _CHARACTER_SNAPSHOTS.clear()
         _IDENTITY_CONTEXTS.clear()
         _PROFILE_ENVELOPES.clear()
+
+
+def _reset_live_prompt_cache_for_tests() -> None:
+    clear_live_prompt_caches()
 
 
 __all__ = [
@@ -266,4 +303,5 @@ __all__ = [
     "resolve_system_session_identity_cached",
     "time_prompt_dependency",
     "begin_prompt_stage_timings",
+    "clear_live_prompt_caches",
 ]

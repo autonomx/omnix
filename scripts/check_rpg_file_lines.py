@@ -2,7 +2,7 @@
 
 Default target areas:
   - src/app/rpg
-  - src/tests/rpg
+  - src/tests/unit/rpg
 
 The script prints files whose line count is greater than the configured limit and
 exits with status 1 when any oversized files are found. This makes it suitable
@@ -22,7 +22,7 @@ from typing import Iterable, Sequence
 DEFAULT_LIMIT = 1200
 DEFAULT_PATHS = (
     Path("src/app/rpg"),
-    Path("src/tests/rpg"),
+    Path("src/tests/unit/rpg"),
 )
 DEFAULT_EXTENSIONS = (
     ".py",
@@ -46,8 +46,6 @@ IGNORED_DIR_NAMES = {
 # Existing RPG files above the shared budget may only shrink; new files receive
 # no exception. The repository-wide architecture metrics track this debt too.
 LINE_DEBT_LIMITS = {
-    "src/app/rpg/tests/test_narration_queue_service_dialogue.py": 1543,
-    "src/app/rpg/api/rpg_session_routes.py": 1257,
     "src/app/rpg/ai/grounding_validator.py": 1017,
     "src/app/rpg/presentation/dialogue_quality.py": 1251,
     "src/app/rpg/response_generation/production_pipeline.py": 1182,
@@ -189,7 +187,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         nargs="*",
         type=Path,
         default=list(DEFAULT_PATHS),
-        help="Paths to scan. Defaults to src/app/rpg and src/tests/rpg.",
+        help="Paths to scan. Defaults to src/app/rpg and src/tests/unit/rpg.",
     )
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Maximum allowed line count. Defaults to 1200.")
     parser.add_argument(

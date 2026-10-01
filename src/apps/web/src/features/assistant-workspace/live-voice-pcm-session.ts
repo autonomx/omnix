@@ -31,6 +31,7 @@ export type LiveOutputOwnership = {
 
 export type LiveVoicePcmSessionOptions = {
   sessionScoped?: boolean;
+  affinityKey?: string;
   onWorkletEvent?: (event: Record<string, unknown>) => void;
 };
 
@@ -51,6 +52,8 @@ type ControlEvent = {
   output_id?: string;
   generation_epoch?: number;
   output_order?: number;
+  retry_after?: string | number;
+  capacity_saturated?: boolean;
   segment_id?: string;
   last_frame_index?: number;
   generated_through_frame?: number;
@@ -207,6 +210,7 @@ export async function createLiveVoicePcmSession(
   }
 
   let closed = false;
+  const affinityCookieValue = setCallAffinityCookie(options.affinityKey);
   let inputFinished = false;
   let generationQueue: Promise<void> = Promise.resolve();
   let activePhrase: ActivePhrase | null = null;
@@ -495,6 +499,12 @@ export async function createLiveVoicePcmSession(
       return;
     }
     if (message.type === 'error') {
+      if (message.capacity_saturated) {
+        reporter.record('phrase_capacity_saturated', {
+          phrase_index: message.phrase_index,
+          retry_after: message.retry_after,
+        }, 'pcm_session');
+      }
       failActivePhrase(new Error(message.message || 'Live voice phrase generation failed.'));
       return;
     }
@@ -934,6 +944,7 @@ export async function createLiveVoicePcmSession(
     } else {
       try { socket.close(); } catch { /* ignore close failures */ }
     }
+    clearCallAffinityCookie(options.affinityKey, affinityCookieValue);
     await audioContext.close().catch((error: unknown) => {
       reporter.record('audio_context_close_failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -996,6 +1007,24 @@ export async function createLiveVoicePcmSession(
 function ttsWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}${TTS_LIVE_CALL_WEBSOCKET_PATH}`;
+}
+
+function setCallAffinityCookie(affinityKey: string | undefined): string | null {
+  if (!affinityKey) return null;
+  const value = encodeURIComponent(affinityKey);
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `omnix_call_affinity=${value}; Path=/; SameSite=Lax${secure}`;
+  return value;
+}
+
+function clearCallAffinityCookie(affinityKey: string | undefined, value: string | null): void {
+  if (!affinityKey || !value) return;
+  const stored = document.cookie.split(';').map((part) => part.trim())
+    .find((part) => part.startsWith('omnix_call_affinity='))
+    ?.slice('omnix_call_affinity='.length);
+  if (stored !== value) return;
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `omnix_call_affinity=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }
 
 function createWorkletModuleUrl(): { url: string; revoke: () => void } {

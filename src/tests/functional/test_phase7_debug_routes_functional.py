@@ -7,6 +7,8 @@ the retired Flask-only state mutation endpoints from returning to production.
 
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import pytest
 
 from app.gateway.main import create_gateway_app
@@ -38,8 +40,8 @@ def gateway_route_registry() -> frozenset[tuple[str, str]]:
     gateway = create_gateway_app()
     return frozenset(
         (route.path, method)
-        for route in gateway.routes
-        if hasattr(route, "path")
+        for route in effective_routes(gateway)
+        if route.path
         for method in getattr(route, "methods", ())
     )
 

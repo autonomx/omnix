@@ -312,7 +312,11 @@ def test_semantic_failure_is_regenerated_when_contract_allows_it() -> None:
     )
 
     assert result.count == 5
-    assert "StructuredSemanticError" in provider.calls[1]["messages"][-1].content
+    retry_messages = provider.calls[1]["messages"]
+    # The correction is control-plane system text placed before the final user turn.
+    corrections = [m for m in retry_messages if "StructuredSemanticError" in str(m.content)]
+    assert [m.role for m in corrections] == ["system"]
+    assert retry_messages[-1].role == "user"
 
 
 def test_correction_attempt_remaining_invalid_returns_typed_failure() -> None:

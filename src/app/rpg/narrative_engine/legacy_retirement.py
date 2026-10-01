@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -129,7 +129,7 @@ def audit_legacy_publisher_retirement(
     )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_legacy_retirement_audit() -> LegacyPublisherRetirementAudit:
     return audit_legacy_publisher_retirement(Path(__file__).resolve().parents[4])
 

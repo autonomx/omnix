@@ -95,7 +95,7 @@ def test_clarification_event_pauses_run_for_user_input(monkeypatch) -> None:
     service.database = object()
     service.context = object()
     service.worker_id = "worker-1"
-    service._lock = _Lock()
+    service._run_lock = lambda _run_id: _Lock()
     service.unit_of_work = lambda _database: _Work()
     service.repository_factory = Repository
 

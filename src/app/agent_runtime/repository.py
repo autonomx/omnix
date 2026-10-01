@@ -51,9 +51,16 @@ class AgentLeaseConflict(RuntimeError):
 
 
 class PostgresAgentRunRepository:
-    def __init__(self, connection: Any, context: TenantContext) -> None:
+    def __init__(
+        self,
+        connection: Any,
+        context: TenantContext,
+        *,
+        lease_token_provider=None,
+    ) -> None:
         self.connection = connection
         self.context = context
+        self.lease_token_provider = lease_token_provider
         self.outbox = PostgresOutboxRepository(connection)
 
     def create_run(self, spec: AgentRunSpec) -> AgentRunSnapshot:
@@ -152,6 +159,39 @@ class PostgresAgentRunRepository:
             created_at=row[14],
             updated_at=row[15],
         )
+
+    def update_spec(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int,
+        spec: AgentRunSpec,
+    ) -> AgentRunSnapshot:
+        """Persist a worker-prepared specification with optimistic fencing."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_runs
+               SET spec = %s::jsonb, revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND revision = %s
+               AND status = 'queued'
+            RETURNING revision
+            """,
+            (_json(spec), self.context.workspace_id, run_id, expected_revision),
+        ).fetchone()
+        if row is None:
+            raise AgentRunConcurrencyError("agent run spec revision mismatch")
+        snapshot = self.get_run(run_id)
+        if snapshot is None:
+            raise KeyError(run_id)
+        self.append_event(
+            AgentEvent(
+                run_id=run_id,
+                event_type="run.status",
+                payload={"status": snapshot.status, "workspace_prepared": True},
+            )
+        )
+        return snapshot
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
         self.connection.execute(
@@ -403,8 +443,13 @@ class PostgresAgentRunRepository:
         status: str | None = None,
         desired_state: str | None = None,
         worker_id: str | None = None,
+        lease_token: str | None = None,
         last_error: str | None = None,
     ) -> AgentRunSnapshot:
+        if worker_id is not None and lease_token is None and callable(self.lease_token_provider):
+            lease_token = self.lease_token_provider(run_id)
+        if bool(worker_id) != bool(lease_token):
+            raise AgentLeaseConflict("worker state updates require matching lease credentials")
         current = self.get_run(run_id)
         if current is None:
             raise KeyError(run_id)
@@ -424,6 +469,18 @@ class PostgresAgentRunRepository:
                    last_error = %s, started_at = %s, completed_at = %s,
                    revision = revision + 1, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s AND revision = %s
+               AND (
+                    %s
+                    OR EXISTS (
+                        SELECT 1
+                          FROM omnix_agent_worker_leases AS lease
+                         WHERE lease.workspace_id = omnix_agent_runs.workspace_id
+                           AND lease.run_id = omnix_agent_runs.run_id
+                           AND lease.worker_id = %s
+                           AND lease.lease_token = %s
+                           AND lease.lease_expires_at > CURRENT_TIMESTAMP
+                    )
+               )
             RETURNING revision
             """,
             (
@@ -436,9 +493,20 @@ class PostgresAgentRunRepository:
                 self.context.workspace_id,
                 run_id,
                 expected_revision,
+                worker_id is None,
+                worker_id,
+                lease_token,
             ),
         ).fetchone()
         if row is None:
+            # A concurrent writer that won the revision race is not a lease
+            # failure; only report the lease when the revision still matched.
+            latest = self.connection.execute(
+                "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s",
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if worker_id is not None and latest is not None and latest[0] == expected_revision:
+                raise AgentLeaseConflict("agent run lease token is stale or expired")
             raise AgentRunConcurrencyError("agent run revision mismatch")
         updated = self.get_run(run_id)
         assert updated is not None
@@ -1399,6 +1467,27 @@ class PostgresAgentRunRepository:
         ).fetchone()
         if row is None:
             raise AgentLeaseConflict(f"run {run_id} is leased by another worker")
+        return WorkerLease(
+            run_id=run_id,
+            worker_id=str(row[0]),
+            lease_token=str(row[1]),
+            lease_expires_at=row[2],
+            heartbeat_at=row[3],
+            revision=int(row[4]),
+        )
+
+    def get_active_lease(self, run_id: str) -> WorkerLease | None:
+        row = self.connection.execute(
+            """
+            SELECT worker_id, lease_token, lease_expires_at, heartbeat_at, revision
+              FROM omnix_agent_worker_leases
+             WHERE workspace_id = %s AND run_id = %s
+               AND lease_expires_at > CURRENT_TIMESTAMP
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            return None
         return WorkerLease(
             run_id=run_id,
             worker_id=str(row[0]),

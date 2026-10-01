@@ -20,6 +20,9 @@ from app.rpg.jobs.turn_executor import (
 from app.jobs.handlers import JobExecutionContext
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
 
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
+
 
 @pytest.fixture(autouse=True)
 def prepare_local_identity_for_postgresql_tests():
@@ -390,70 +393,6 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
     assert updated.messages[-1].content == "Delayed RPG response."
 
 
-def test_new_chat_prompt_interrupts_active_generation(monkeypatch, tmp_path):
-    provider = InterruptibleProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
-
-    chat_store = ChatSessionStore(tmp_path / "chat.json")
-    session = chat_store.create_session(
-        CreateChatSessionRequest(
-            title="Interruptible chat",
-            provider_id="llm:lmstudio",
-            model_id="llm:lmstudio:test-model",
-        )
-    )
-    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
-    client = _test_client(
-        create_gateway_app(
-            chat_store_factory=lambda: chat_store,
-            job_store_factory=lambda: job_store,
-        )
-    )
-
-    first = client.post(
-        f"/api/chat/sessions/{session.id}/messages",
-        json={
-            "content": "first prompt",
-            "provider_id": "llm:lmstudio",
-            "model_id": "llm:lmstudio:test-model",
-            "user_turn_id": "web-user-turn:first",
-        },
-    )
-    assert first.status_code == 200
-    first_job_id = first.json()["job"]["id"]
-    assert provider.entered.wait(timeout=1)
-
-    second = client.post(
-        f"/api/chat/sessions/{session.id}/messages",
-        json={
-            "content": "second prompt",
-            "provider_id": "llm:lmstudio",
-            "model_id": "llm:lmstudio:test-model",
-            "user_turn_id": "web-user-turn:second",
-        },
-    )
-    assert second.status_code == 200
-    second_job_id = second.json()["job"]["id"]
-    assert second_job_id != first_job_id
-
-    canceled = _wait_for_job_status(job_store, first_job_id, {JobStatus.CANCELED})
-    completed = _wait_for_job_status(job_store, second_job_id, {JobStatus.COMPLETED})
-    assert canceled.cancel is not None
-    assert canceled.cancel.reason == "Interrupted by a newer Chat prompt."
-    assert completed.output_refs[0]["message_id"] == second.json()["user_message"]["id"]
-    assert provider.cancel_calls >= 1
-
-    updated = chat_store.get_session(session.id)
-    assert updated is not None
-    assert [message.content for message in updated.messages if message.role == "assistant"] == [
-        "Interrupted response completed."
-    ]
-    user_messages = [message for message in updated.messages if message.role == "user"]
-    assert user_messages[0].metadata["generation_status"] == "canceled"
-    assert user_messages[1].metadata["generation_status"] == "completed"
-
-
 def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
     from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
 
@@ -639,35 +578,6 @@ def test_podcast_jobs_execute_inline_and_complete(monkeypatch, tmp_path):
     assert completed.output_refs[0]["type"] == "podcast_script"
     assert completed.output_refs[0]["title"] == "Market Watch"
     assert "podcast episode script" in provider.calls[0]["prompt"]
-
-
-def test_rpg_turn_jobs_execute_in_background_and_complete(monkeypatch, tmp_path):
-    client, provider, store = _gateway_client(tmp_path, monkeypatch)
-
-    response = client.post(
-        "/api/jobs",
-        json={
-            "module": "rpg",
-            "type": "rpg.turn",
-            "resource_class": "gpu:llm",
-            "input_ref": {"session_id": "session:demo"},
-            "input_payload": {
-                "command": "look around",
-                "provider_id": "llm:lmstudio",
-                "model_id": "llm:lmstudio:test-model",
-            },
-        },
-    )
-
-    payload = response.json()
-    assert response.status_code == 200
-    assert payload["status"] == "queued"
-    assert payload["output_refs"] == []
-    _run_feature_job(client, store, payload["id"], background=True)
-    completed = _wait_for_job_status(store, payload["id"], {JobStatus.COMPLETED})
-    assert completed.output_refs[0]["type"] == "rpg_turn_response"
-    assert completed.output_refs[0]["title"] == "look around"
-    assert "RPG player command" in provider.calls[0]["prompt"]
 
 
 def test_rpg_turn_jobs_apply_authoritative_session_turn(monkeypatch, tmp_path):

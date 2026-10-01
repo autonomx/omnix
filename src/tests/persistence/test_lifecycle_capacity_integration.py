@@ -134,3 +134,37 @@ def test_outbox_payload_capacity_is_database_enforced() -> None:
                 )
     finally:
         database.close()
+
+
+def test_lifecycle_cleanup_expires_rpg_narration_events() -> None:
+    database = _database()
+    event_id = None
+    try:
+        apply_migrations(database)
+        with database.transaction() as connection:
+            event_id = connection.execute(
+                """
+                INSERT INTO omnix_rpg_narration_events (session_id, payload, created_at)
+                VALUES ('lifecycle-narration-test', '{}'::jsonb,
+                        CURRENT_TIMESTAMP - INTERVAL '2 days')
+                RETURNING event_id
+                """
+            ).fetchone()[0]
+            result = PostgresLifecycleRepository(connection).cleanup(batch_size=100)
+            assert result["ok"] is True
+            assert result["deleted"]["rpg_narration_events"] == 1
+            remaining = connection.execute(
+                "SELECT event_id FROM omnix_rpg_narration_events WHERE event_id = %s",
+                (event_id,),
+            ).fetchone()
+            assert remaining is None
+    finally:
+        try:
+            if event_id is not None:
+                with database.transaction() as connection:
+                    connection.execute(
+                        "DELETE FROM omnix_rpg_narration_events WHERE event_id = %s",
+                        (event_id,),
+                    )
+        finally:
+            database.close()

@@ -880,6 +880,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self, text: str, speaker: Optional[str] = None,
         language: Optional[str] = None, **kwargs,
     ) -> Iterator[tuple[np.ndarray, int, dict]]:
+        permit_already_held = bool(kwargs.pop("_device_permit_held", False))
+        if permit_already_held:
+            yield from self._generate_audio_stream_impl(
+                text, speaker=speaker, language=language, **kwargs,
+            )
+            return
         with generation_slot():
             yield from self._generate_audio_stream_impl(
                 text, speaker=speaker, language=language, **kwargs,

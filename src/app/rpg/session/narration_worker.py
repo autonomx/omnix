@@ -12,33 +12,32 @@ source of truth for narration jobs is the session runtime state
 Jobs are processed by ``process_next_narration_job(session_id)`` in
 runtime.py.
 
-Note: Module-level state is designed for single-process use.
-In a multi-process deployment, replace the subscriber dict with an
-external message broker.
+Pending worker signals are a bounded process-local wakeup cache; job state
+remains authoritative in session storage. Narration event delivery uses the
+PostgreSQL event feed so an SSE connection can read events from any replica.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 import time
+from collections import OrderedDict
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-_MAX_SUBSCRIBER_QUEUE_SIZE = 64
-_MAX_SUBSCRIBERS_PER_SESSION = 16
+MAX_PENDING_SESSION_SIGNALS = 4096
+PENDING_SESSION_SIGNAL_TTL_SECONDS = 60 * 60.0
 
 # ── In-process state ──────────────────────────────────────────────────────
 
 _worker_running = False
 _worker_thread: Optional[threading.Thread] = None
 _worker_lock = threading.Lock()
-_pending_sessions: set[str] = set()
+_pending_sessions: OrderedDict[str, float] = OrderedDict()
 _pending_lock = threading.Lock()
-_subscribers: dict[str, list[asyncio.Queue]] = {}
 _stop_requested = False
 
 _WORKER_IDLE_SLEEP_SECONDS = 0.50
@@ -89,7 +88,13 @@ def signal_narration_work(session_id: Any) -> bool:
         return False
     logger.info("Signaling narration work for session", extra={"session_id": session_id})
     with _pending_lock:
-        _pending_sessions.add(session_id)
+        now = time.monotonic()
+        _prune_pending_sessions_locked(now)
+        if session_id not in _pending_sessions and len(_pending_sessions) >= MAX_PENDING_SESSION_SIGNALS:
+            logger.warning("Narration wakeup capacity reached", extra={"session_id": session_id})
+            return False
+        _pending_sessions[session_id] = now + PENDING_SESSION_SIGNAL_TTL_SECONDS
+        _pending_sessions.move_to_end(session_id)
     return True
 
 
@@ -99,9 +104,28 @@ def drain_pending_sessions() -> list[str]:
     Used by the worker loop to decide which sessions to process.
     """
     with _pending_lock:
-        sessions = sorted(_pending_sessions)
-        _pending_sessions.clear()
+        _prune_pending_sessions_locked(time.monotonic())
+        sessions = list(_pending_sessions)[:_MAX_SESSIONS_PER_WAKE]
+        for session_id in sessions:
+            _pending_sessions.pop(session_id, None)
     return sessions
+
+
+def clear_pending_session_signals() -> None:
+    """Invalidate transient worker wakeups; queued narration remains in session storage."""
+
+    with _pending_lock:
+        _pending_sessions.clear()
+
+
+def _prune_pending_sessions_locked(now: float) -> None:
+    expired = [
+        session_id
+        for session_id, expires_at in _pending_sessions.items()
+        if expires_at <= now
+    ]
+    for session_id in expired:
+        _pending_sessions.pop(session_id, None)
 
 
 # ── Internal worker loop ──────────────────────────────────────────────────
@@ -165,47 +189,48 @@ def _worker_loop() -> None:
 # ── Event publishing (SSE) ────────────────────────────────────────────────
 
 def publish_narration_event(session_id: str, event: dict[str, Any]) -> int:
-    """Publish a narration event to all subscribers for a session.
-
-    Returns the number of subscribers that received the event.
-    """
+    """Append an event to PostgreSQL for delivery to SSE connections on any replica."""
     session_id = str(session_id or "")
     if not session_id:
         return 0
+    from app.persistence.database import default_database
+    from app.persistence.rpg_narration_event_repository import (
+        PostgresRpgNarrationEventRepository,
+    )
 
-    subscribers = _subscribers.get(session_id, [])
-    delivered = 0
-    for q in subscribers:
-        try:
-            q.put_nowait(dict(event))
-            delivered += 1
-        except (asyncio.QueueFull, Exception):
-            pass
-    return delivered
-
-
-def subscribe_narration_events(session_id: str) -> asyncio.Queue:
-    """Create a new subscriber queue for narration events.
-
-    Returns an asyncio.Queue that will receive events.
-    """
-    session_id = str(session_id or "")
-    if session_id not in _subscribers:
-        _subscribers[session_id] = []
-
-    # Trim old subscribers to prevent unbounded growth
-    if len(_subscribers[session_id]) >= _MAX_SUBSCRIBERS_PER_SESSION:
-        _subscribers[session_id] = _subscribers[session_id][-(_MAX_SUBSCRIBERS_PER_SESSION - 1):]
-
-    subscriber_q: asyncio.Queue = asyncio.Queue(maxsize=_MAX_SUBSCRIBER_QUEUE_SIZE)
-    _subscribers[session_id].append(subscriber_q)
-    return subscriber_q
+    try:
+        with default_database().transaction() as connection:
+            PostgresRpgNarrationEventRepository(connection).append(session_id, event)
+    except Exception:
+        logger.exception("Failed to persist RPG narration event")
+        return 0
+    return 1
 
 
-def unsubscribe_narration_events(session_id: str, subscriber_q: asyncio.Queue) -> None:
-    """Remove a subscriber queue from the session's subscriber list."""
-    session_id = str(session_id or "")
-    subs = _subscribers.get(session_id, [])
-    _subscribers[session_id] = [q for q in subs if q is not subscriber_q]
-    if not _subscribers[session_id]:
-        _subscribers.pop(session_id, None)
+def latest_narration_event_id(session_id: str) -> int:
+    from app.persistence.database import default_database
+    from app.persistence.rpg_narration_event_repository import (
+        PostgresRpgNarrationEventRepository,
+    )
+
+    with default_database().transaction() as connection:
+        return PostgresRpgNarrationEventRepository(connection).latest_event_id(session_id)
+
+
+def list_narration_events_after(
+    session_id: str,
+    after_event_id: int,
+    *,
+    limit: int = 32,
+) -> list[tuple[int, dict[str, Any]]]:
+    from app.persistence.database import default_database
+    from app.persistence.rpg_narration_event_repository import (
+        PostgresRpgNarrationEventRepository,
+    )
+
+    with default_database().transaction() as connection:
+        return PostgresRpgNarrationEventRepository(connection).list_after(
+            session_id,
+            after_event_id,
+            limit=limit,
+        )

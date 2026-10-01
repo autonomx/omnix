@@ -1,17 +1,38 @@
 from __future__ import annotations
 
-from app.image.jobs import IMAGE_GENERATION_CONCURRENCY, _IMAGE_GENERATION_SLOTS
+from contextlib import contextmanager
+
+import pytest
+
+from app.image import service
+from app.image import jobs
 
 
-def test_image_generation_has_two_provider_slots() -> None:
-    acquired = 0
-    try:
-        for _ in range(IMAGE_GENERATION_CONCURRENCY):
-            assert _IMAGE_GENERATION_SLOTS.acquire(blocking=False)
-            acquired += 1
+@pytest.mark.parametrize("priority", ["interactive", "batch"])
+def test_local_image_provider_uses_shared_device_admission(monkeypatch, priority):
+    calls = []
 
-        assert IMAGE_GENERATION_CONCURRENCY == 2
-        assert not _IMAGE_GENERATION_SLOTS.acquire(blocking=False)
-    finally:
-        for _ in range(acquired):
-            _IMAGE_GENERATION_SLOTS.release()
+    @contextmanager
+    def device_slot(model_class, *, priority, timeout_seconds):
+        calls.append(("admit", model_class, priority, timeout_seconds))
+        yield None
+
+    class Provider:
+        def generate(self, payload):
+            calls.append(("generate", payload))
+            return "result"
+
+    monkeypatch.setattr(service, "device_permit_slot", device_slot)
+
+    result = service._generate_with_device_permit(
+        Provider(),
+        {"prompt": "a test image"},
+        priority=priority,
+    )
+
+    assert result == "result"
+    assert calls == [
+        ("admit", "image", priority, 30.0),
+        ("generate", {"prompt": "a test image"}),
+    ]
+    assert not hasattr(jobs, "_IMAGE_GENERATION_SLOTS")

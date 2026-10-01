@@ -107,8 +107,16 @@ class ModelServiceMiddleware:
         async def error_response(status: int) -> None:
             nonlocal started, closed
             code = _ERROR_CODES.get(status, "model_service_error")
+            headers = {"Cache-Control": "no-store", "X-Request-ID": request_id}
+            if status == 429 and response_start is not None:
+                retry_after = [
+                    value for key, value in response_start.get("headers", [])
+                    if key.lower() == b"retry-after"
+                ]
+                if len(retry_after) == 1 and retry_after[0].isascii() and retry_after[0].isdigit():
+                    headers["Retry-After"] = retry_after[0].decode("ascii")
             response = JSONResponse({"error": code, "request_id": request_id}, status_code=status,
-                                    headers={"Cache-Control": "no-store", "X-Request-ID": request_id})
+                                    headers=headers)
             started = True
             await response(scope, receive, send)
             closed = True

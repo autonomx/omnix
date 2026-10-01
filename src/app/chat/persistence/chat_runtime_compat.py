@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any
 
 from app.chat.assistant_turns import default_assistant_turn_coordinator
@@ -848,13 +848,13 @@ class PostgresCharacterChatSessionStore(_CharacterSessionMixin, PostgresChatSess
         return session
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_history_search_service() -> PostgresHistorySearchService:
     """Reuse readiness-checked history search state across chat turns."""
     return PostgresHistorySearchService()
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_chat_store(
     *,
     store_class: type[PostgresCharacterChatSessionStore] | None = None,

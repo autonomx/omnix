@@ -8,15 +8,36 @@ Executor = Callable[[Any, str], Any]
 
 
 def _default_loader(session_id: str) -> Any:
-    from app.rpg.pipeline import load_game
+    from app.rpg.session.service import load_session
 
-    return load_game(session_id)
+    return load_session(session_id)
 
 
 def _default_executor(session: Any, command_text: str) -> Any:
-    from app.rpg.pipeline import execute_turn
+    session_data = _to_dict(session)
+    manifest = _to_dict(session_data.get("manifest"))
+    session_id = str(
+        manifest.get("session_id")
+        or manifest.get("id")
+        or session_data.get("session_id")
+        or session_data.get("id")
+        or ""
+    ).strip()
+    if not session_id:
+        return {"ok": False, "error": "missing_session_id"}
 
-    return execute_turn(session, command_text)
+    from app.rpg.session.interactive_first_call_runtime import apply_turn
+
+    return apply_turn(
+        session_id,
+        command_text,
+        performance_override={
+            "enable_live_narration_llm": True,
+            "narration_mode": "blocking",
+            "fast_visible_dialogue": True,
+        },
+        session_override=session_data,
+    )
 
 
 def _to_dict(value: Any) -> dict[str, Any]:
@@ -37,6 +58,8 @@ def _events_to_dicts(events: Any) -> list[dict[str, Any]]:
 def _result_error(result: Any) -> str | None:
     if isinstance(result, dict):
         error = result.get("error")
+        if error is None and result.get("ok") is False:
+            error = result.get("reason") or "turn_failed"
     else:
         error = getattr(result, "error", None)
     return str(error) if error else None
@@ -86,10 +109,24 @@ def hermes_rpg_canonical_submitter(
     result = execute(session, command_text)
     error = _result_error(result)
     ok = error is None
-    player = _to_dict(getattr(session, "player", None))
-    choices = getattr(result, "choices", None) if not isinstance(result, dict) else result.get("choices")
-    dice_roll = getattr(result, "dice_roll", None) if not isinstance(result, dict) else result.get("dice_roll")
-    fail_state = getattr(result, "fail_state", None) if not isinstance(result, dict) else result.get("fail_state")
+    result_data = _to_dict(result)
+    nested_result = _to_dict(result_data.get("result"))
+    session_data = _to_dict(session)
+    simulation_state = _to_dict(session_data.get("simulation_state"))
+    player = _to_dict(
+        simulation_state.get("player_state")
+        or session_data.get("player")
+        or getattr(session, "player", None)
+    )
+    choices = result_data.get("choices") or nested_result.get("choices") or getattr(result, "choices", None)
+    dice_roll = result_data.get("dice_roll") or nested_result.get("dice_roll") or getattr(result, "dice_roll", None)
+    fail_state = result_data.get("fail_state") or nested_result.get("fail_state") or getattr(result, "fail_state", None)
+    narration = result_data.get("narration") or nested_result.get("narration") or getattr(result, "narration", "")
+    events = result_data.get("events") or nested_result.get("events") or getattr(result, "events", [])
+    turn = result_data.get("turn") or result_data.get("turn_id") or nested_result.get("turn") or getattr(session, "turn_count", None)
+    state_changed = result_data.get("state_changed")
+    if not isinstance(state_changed, bool):
+        state_changed = ok
 
     response: dict[str, Any] = {
         "ok": ok,
@@ -97,12 +134,12 @@ def hermes_rpg_canonical_submitter(
         "source": "hermes_rpg_canonical_submitter",
         "session_id": session_id,
         "command_text": command_text,
-        "turn": getattr(session, "turn_count", None),
-        "narration": getattr(result, "narration", "") if not isinstance(result, dict) else result.get("narration", ""),
-        "state_changes": getattr(result, "state_changes", {}) if not isinstance(result, dict) else result.get("state_changes", {}),
-        "events": _events_to_dicts(getattr(result, "events", []) if not isinstance(result, dict) else result.get("events", [])),
+        "turn": turn,
+        "narration": narration,
+        "state_changes": result_data.get("state_changes") or nested_result.get("state_changes") or {},
+        "events": _events_to_dicts(events),
         "player": player,
-        "state_changed": ok,
+        "state_changed": state_changed,
     }
     if choices:
         response["choices"] = choices

@@ -5,6 +5,8 @@ chat turns so terse follow-ups can be interpreted semantically without replaying
 an unlimited transcript or relying on regexes to choose an execution lane.
 """
 from __future__ import annotations
+
+from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
 import hashlib
@@ -324,7 +326,8 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
     if isinstance(explicit, dict):
         try:
             explicit_objective = ActiveObjective.model_validate(explicit)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("active objective snapshot lookup", exc, level="DEBUG")
             explicit_objective = None
 
     # A terminal run snapshot is newer and more authoritative state than a

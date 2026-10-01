@@ -15,6 +15,10 @@ from app.chat.models import (
     project_message_content,
 )
 from app.chat.prompt_assembly import build_prompt_assembly
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 class StreamingProvider:

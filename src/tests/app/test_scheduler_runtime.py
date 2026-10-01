@@ -138,7 +138,10 @@ def test_scheduler_owns_task_runs_serially_and_records_metrics():
     )
     async def scenario():
         await scheduler.startup()
-        await asyncio.sleep(0.04)
+        # Wait on the condition, not a fixed window, so CPU load cannot starve it.
+        deadline = time.monotonic() + 5
+        while len(calls) < 2 and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
         assert scheduler.diagnostics()["owned_tasks"] == ["test.serial"]
         await scheduler.shutdown()
 

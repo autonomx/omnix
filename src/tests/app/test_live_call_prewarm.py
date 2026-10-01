@@ -114,6 +114,34 @@ def _fake_provider_settings() -> dict[str, object]:
     }
 
 
+def test_live_call_prewarm_inflight_registry_is_bounded_expiring_and_clearable(
+    monkeypatch,
+) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    now = 100.0
+    monkeypatch.setattr(prewarm, "_MAX_PREWARM_ENTRIES", 1)
+    monkeypatch.setattr(prewarm, "_prewarm_now", lambda: now)
+
+    owner, cached, first_event = prewarm._claim_prewarm("first")
+    assert owner is True
+    assert cached is False
+    assert first_event is not None
+    assert prewarm._claim_prewarm("second") == (False, False, None)
+    assert len(prewarm._PREWARM_INFLIGHT) == 1
+
+    now += prewarm._PREWARM_INFLIGHT_TTL_SECONDS + 1
+    owner, cached, second_event = prewarm._claim_prewarm("second")
+    assert owner is True
+    assert cached is False
+    assert second_event is not None
+    assert first_event.is_set()
+    assert set(prewarm._PREWARM_INFLIGHT) == {"second"}
+
+    prewarm.clear_live_call_prewarm_state()
+    assert second_event.is_set()
+    assert not prewarm._PREWARM_INFLIGHT
+
+
 def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()

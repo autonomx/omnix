@@ -6,9 +6,11 @@ Pi owns ordinary planning, validation, and self-review inside its coding loop;
 Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
+
+from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 import hashlib
 import json
 import os
@@ -74,7 +76,6 @@ from .service_core import (
     _acceptance_failures_retryable,
     _acceptance_retry_count as _acceptance_retry_count,
 )
-from .subagents import derive_child_spec
 from .task_revision_quality import (
     hydrate_task_revision,
     hydrate_task_revisions,
@@ -590,74 +591,33 @@ class AgentRunService(_CoreAgentRunService):
         reconcile_orphaned_quality_reviews(self)
         super()._supervise_once()
 
-    def start_with_context(
-        self,
-        spec: AgentRunSpec,
-        *,
-        reference_context: str = "",
-        reference_images: list[dict[str, str]] | None = None,
-    ) -> AgentRunSnapshot:
+    def _prepare_start_spec(self, spec: AgentRunSpec) -> AgentRunSpec:
         # Resolve provider/model/reasoning before the durable RunSpec is written,
         # so observability and recovery see the exact configuration Pi receives.
-        resolved = resolve_run_model_fidelity(_quality_sized_run_spec(spec))
-        return super().start_with_context(
-            resolved,
-            reference_context=reference_context,
-            reference_images=reference_images,
+        return resolve_run_model_fidelity(_quality_sized_run_spec(spec))
+
+    def _reserve_child_start(self, repository, parent, child_spec: AgentRunSpec) -> None:
+        parent_usage = repository.get_usage(parent.run_id)
+        grants = PostgresResourceGrantRepository(repository.connection, self.context)
+        protected_fraction = (
+            parent.spec.quality_reserve_fraction
+            if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
+            else 0.0
+        )
+        grants.assert_can_grant(
+            parent,
+            child_spec.limits,
+            parent_usage=parent_usage,
+            protected_fraction=protected_fraction,
         )
 
-    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
-        """Start a narrowed child under a durable parent resource grant."""
-
-        self._ensure_supervisor()
-        initial_parent = self.get(parent_run_id)
-        if initial_parent is None:
-            raise KeyError(parent_run_id)
-        with self.unit_of_work(self.database) as work:
-            repository = self.repository_factory(work.connection, self.context)
-            locked = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                 FOR UPDATE
-                """,
-                (self.context.workspace_id, parent_run_id),
-            ).fetchone()
-            if locked is None:
-                raise KeyError(parent_run_id)
-            parent = repository.get_run(parent_run_id)
-            if parent is None:
-                raise KeyError(parent_run_id)
-            if parent.status in _TERMINAL:
-                raise ValueError("cannot start child from terminal parent")
-            child_spec = derive_child_spec(parent, request)
-            self._validate_run_spec_authority(child_spec)
-            self._validate_evidence_authority(child_spec)
-            parent_usage = repository.get_usage(parent_run_id)
-            grants = PostgresResourceGrantRepository(work.connection, self.context)
-            protected_fraction = (
-                parent.spec.quality_reserve_fraction
-                if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
-                else 0.0
-            )
-            grants.assert_can_grant(
-                parent,
-                child_spec.limits,
-                parent_usage=parent_usage,
-                protected_fraction=protected_fraction,
-            )
-            issued = self._prepare_workspace(
-                self._bind_github_repository_authority(child_spec)
-            )
-            snapshot = self._persist_starting_run(repository, issued)
-            grants.add_grant(
-                parent_run_id=parent_run_id,
-                child_run_id=issued.run_id,
-                limits=issued.limits,
-            )
-            work.commit()
-        return self._launch_runtime(issued, snapshot)
+    def _record_child_grant(self, repository, parent, child_spec: AgentRunSpec) -> None:
+        grants = PostgresResourceGrantRepository(repository.connection, self.context)
+        grants.add_grant(
+            parent_run_id=parent.run_id,
+            child_run_id=child_spec.run_id,
+            limits=child_spec.limits,
+        )
 
     def _persist_starting_run(
         self,
@@ -897,9 +857,10 @@ class AgentRunService(_CoreAgentRunService):
                         idempotency_key=f"quality-stale-reviewer:{command.run_id}:{child_id}",
                     )
                 )
-            except Exception:
+            except Exception as exc:
                 # Stale review evidence is revision-bound and cannot pass even
                 # if best-effort cancellation loses a race with completion.
+                log_recovered_exception("stale reviewer cancellation", exc)
                 pass
         current_result = self.get(result.run_id) or result
         self._dispatch_pending_quality_commands(command.run_id, include_parent=True)
@@ -1264,8 +1225,8 @@ class AgentRunService(_CoreAgentRunService):
             self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
             return
 
-        post_action: tuple | None = None
-        with self._lock:
+        promote = False
+        with self._run_lock(event.run_id):
             with self.unit_of_work(self.database) as work:
                 repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(event.run_id)
@@ -1284,14 +1245,42 @@ class AgentRunService(_CoreAgentRunService):
                     if current.status in _TERMINAL:
                         self._close_terminal_runtime(event.run_id)
                     return
-                post_action = self._advance_quality_on_settle(repository, current)
-                latest = repository.get_run(event.run_id)
-                terminal_runtime = latest is not None and latest.status in _TERMINAL
+                repository.update_state(
+                    event.run_id,
+                    expected_revision=current.revision,
+                    status="waiting_for_children",
+                    worker_id=self.worker_id,
+                )
+                promote = True
                 work.commit()
-                if terminal_runtime:
-                    self._close_terminal_runtime(event.run_id)
-        self._execute_quality_action(post_action)
-        self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
+        if promote:
+            try:
+                queued = self._enqueue_promote_job(
+                    event.run_id,
+                    trigger_id=event.event_id,
+                )
+                if not queued:
+                    with self.unit_of_work(self.database) as work:
+                        repository = self.repository_factory(work.connection, self.context)
+                        current = repository.get_run(event.run_id)
+                        post_action = (
+                            self._advance_quality_on_settle(repository, current)
+                            if current is not None and current.status not in _TERMINAL
+                            else None
+                        )
+                        work.commit()
+                    self._execute_quality_action(post_action)
+                    self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
+            except Exception as exc:
+                log_agent_activity(
+                    "service.quality_settle.enqueue_failed",
+                    category="quality",
+                    level="error",
+                    run_id=event.run_id,
+                    fields={"trigger_id": event.event_id},
+                    error=exc,
+                    include_traceback=True,
+                )
 
     def _queue_quality_resume(
         self,
@@ -2071,7 +2060,8 @@ class AgentRunService(_CoreAgentRunService):
             _, command = action
             try:
                 self.command(command)
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("quality command dispatch", exc)
                 pass
             return
         if action[0] == "launch_reviews":
@@ -2098,7 +2088,8 @@ class AgentRunService(_CoreAgentRunService):
                         ):
                             pending.append(command)
                 work.rollback()
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("pending quality command lookup", exc)
             return
 
         seen: set[str] = set()
@@ -2611,6 +2602,12 @@ class AgentRunService(_CoreAgentRunService):
         )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_agent_run_service() -> AgentRunService:
-    return AgentRunService()
+    from app.jobs.store import default_job_store
+
+    try:
+        jobs = default_job_store()
+    except RuntimeError:
+        jobs = None
+    return AgentRunService(job_store=jobs)

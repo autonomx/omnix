@@ -10,6 +10,7 @@ from typing import Any, Callable, Mapping
 
 from app.providers.base import BaseProvider, ChatMessage
 from app.providers.structured import StructuredOutputGateway, StructuredRetryBudget
+from app.persistence.device_permits import device_permit_slot
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic
 from app.rpg.worlds.providers.world_forge_foundation import (
@@ -19,7 +20,6 @@ from app.rpg.worlds.providers.world_forge_foundation import (
     WorldForgeTopicResponse,
     _ConfiguredProviderView,
     _ENTITY_ID_PREFIXES,
-    _LMSTUDIO_WORLD_FORGE_CALLS,
     _LOGGER,
     _entity_registry_contract,
     _entity_registry_payload,
@@ -235,7 +235,7 @@ class ProviderWorldForgeTopicGenerator:
         gateway = StructuredOutputGateway(self.provider)
         provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
         call_limiter = (
-            _LMSTUDIO_WORLD_FORGE_CALLS
+            device_permit_slot("llm-local", priority="batch")
             if provider_key == "lmstudio"
             else nullcontext()
         )
@@ -489,7 +489,7 @@ class ProviderWorldForgeTopicGenerator:
         gateway = StructuredOutputGateway(self.provider)
         provider_key = self.config.provider.strip().casefold().removeprefix("llm:")
         call_limiter = (
-            _LMSTUDIO_WORLD_FORGE_CALLS
+            device_permit_slot("llm-local", priority="batch")
             if provider_key == "lmstudio"
             else nullcontext()
         )

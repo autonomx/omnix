@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import RLock
-from typing import Any, Callable, Hashable
+from types import MappingProxyType
+from typing import Any, Callable, Hashable, Mapping
 
 RepositoryFactory = Callable[[Any], Any]
 
@@ -16,22 +17,30 @@ class RepositorySpec:
 
 
 _LOCK = RLock()
-_SPECS_BY_TYPE: dict[Hashable, RepositorySpec] = {}
-_SPECS_BY_ALIAS: dict[str, RepositorySpec] = {}
+_SPECS_BY_TYPE: Mapping[Hashable, RepositorySpec] = MappingProxyType({})
+_SPECS_BY_ALIAS: Mapping[str, RepositorySpec] = MappingProxyType({})
+MAX_REPOSITORY_SPECS = 512
 
 
 def install_repository_specs(specs: tuple[RepositorySpec, ...]) -> None:
+    global _SPECS_BY_TYPE, _SPECS_BY_ALIAS
     with _LOCK:
+        by_type = dict(_SPECS_BY_TYPE)
+        by_alias = dict(_SPECS_BY_ALIAS)
         for spec in specs:
-            existing = _SPECS_BY_TYPE.get(spec.type)
+            existing = by_type.get(spec.type)
             if existing is not None and existing != spec:
                 raise ValueError(f"duplicate repository type: {spec.type!r}")
             if spec.alias:
-                alias_existing = _SPECS_BY_ALIAS.get(spec.alias)
+                alias_existing = by_alias.get(spec.alias)
                 if alias_existing is not None and alias_existing != spec:
                     raise ValueError(f"duplicate repository alias: {spec.alias}")
-                _SPECS_BY_ALIAS[spec.alias] = spec
-            _SPECS_BY_TYPE[spec.type] = spec
+                by_alias[spec.alias] = spec
+            by_type[spec.type] = spec
+        if len(by_type) > MAX_REPOSITORY_SPECS:
+            raise ValueError("repository spec capacity exceeded")
+        _SPECS_BY_TYPE = MappingProxyType(by_type)
+        _SPECS_BY_ALIAS = MappingProxyType(by_alias)
 
 
 def register_repository_specs(specs: tuple[RepositorySpec, ...]) -> None:
@@ -50,9 +59,10 @@ def repository_spec_by_alias(alias: str) -> RepositorySpec | None:
 
 
 def reset_repository_specs() -> None:
+    global _SPECS_BY_TYPE, _SPECS_BY_ALIAS
     with _LOCK:
-        _SPECS_BY_TYPE.clear()
-        _SPECS_BY_ALIAS.clear()
+        _SPECS_BY_TYPE = MappingProxyType({})
+        _SPECS_BY_ALIAS = MappingProxyType({})
 
 
 def registered_repository_aliases() -> tuple[str, ...]:

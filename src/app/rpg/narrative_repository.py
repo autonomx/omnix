@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.config.env import env_str, environment
 
 import os
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from threading import RLock
 from typing import Any, Callable
 
@@ -118,7 +118,7 @@ def _repository_mode(environ: dict[str, str] | None = None) -> str:
     return "in_memory"
 
 
-@lru_cache(maxsize=4)
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _cached_repository(mode: str) -> NarrativeResponseRepository:
     if mode in {"postgres", "postgresql", "production_authoritative"}:
         return PostgresNarrativeResponseRepositoryAdapter()

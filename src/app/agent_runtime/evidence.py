@@ -4,6 +4,8 @@ Pi owns execution strategy. Omnix owns the evidence contract, authority issued t
 the run, provenance receipts, and completion acceptance.
 """
 from __future__ import annotations
+
+from .exception_logging import log_recovered_exception
 from app.config.env import env_str as _env_str
 
 from dataclasses import dataclass
@@ -202,9 +204,10 @@ def _semantic_evidence_adviser(task: str, profile_id: str) -> EvidenceDecision |
             timeout=float(_env_str("OMNIX_AGENT_EVIDENCE_HERMES_TIMEOUT", "15")),
         )
         payload = client.classify_agent_evidence(task, profile_id)
-    except Exception:
+    except Exception as exc:
         # Advisory failures never weaken the policy. The caller falls back to
         # conservative Omnix classification.
+        log_recovered_exception("advisory evidence classification", exc)
         return None
 
     requirement = str(payload.get("requirement") or "none").casefold()
@@ -360,7 +363,8 @@ def _security_subject(ticker: str) -> SubjectRef:
         if len(candidates) == 1:
             canonical_id = candidates[0].instrument_id
             qualifiers["instrument_id"] = candidates[0].instrument_id
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("security instrument resolution", exc, level="DEBUG")
         pass
     return SubjectRef(
         type="security",

@@ -19,6 +19,7 @@ from pydantic import (
 )
 
 from app.providers.base import ChatMessage
+from app.persistence.device_permits import device_permit_slot
 from app.providers.structured import (
     StructuredContract,
     StructuredOutputGateway,
@@ -31,7 +32,6 @@ from app.rpg.worlds.providers.world_forge import (
     WorldForgeDossier,
     WorldForgeEntityRegistryResponse,
     WorldForgeTopicResponse,
-    _LMSTUDIO_WORLD_FORGE_CALLS,
     _entity_registry_contract,
     _entity_registry_payload,
     _entity_registry_system_prompt,
@@ -251,7 +251,7 @@ class SinglePassProviderWorldForgeTopicGenerator(ProviderWorldForgeTopicGenerato
 
     def _limiter(self):
         provider = self.config.provider.strip().casefold().removeprefix("llm:")
-        return _LMSTUDIO_WORLD_FORGE_CALLS if provider == "lmstudio" else nullcontext()
+        return device_permit_slot("llm-local", priority="batch") if provider == "lmstudio" else nullcontext()
 
     def _generate_response(
         self,

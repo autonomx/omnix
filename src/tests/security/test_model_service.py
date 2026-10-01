@@ -7,6 +7,7 @@ import importlib
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -48,6 +49,14 @@ def protected(monkeypatch):
     @app.get("/unhandled")
     def unhandled():
         raise RuntimeError("Traceback: private provider path and credential")
+
+    @app.get("/throttled")
+    def throttled():
+        return JSONResponse(
+            {"error": "tts_capacity_saturated", "private": "provider details"},
+            status_code=429,
+            headers={"Retry-After": "1", "X-Provider-Debug": "private"},
+        )
 
     @app.websocket("/ws")
     async def websocket(socket: WebSocket):
@@ -94,6 +103,16 @@ def test_error_envelope_replaces_provider_and_guard_errors(protected):
     assert_error(client.get("/health", headers={"Host": "evil.test"}), 421, "disallowed_host")
     assert_error(client.post("/action", headers={"X-Omnix-Service-Token": headers["X-Omnix-Service-Token"]}), 403, "forbidden")
     assert_error(client.get("/unknown", headers=headers), 404, "not_found")
+
+
+def test_rate_limit_error_preserves_only_a_valid_retry_after(protected):
+    _, client, headers = protected
+
+    response = client.get("/throttled", headers=headers)
+
+    assert_error(response, 429, "rate_limited")
+    assert response.headers["retry-after"] == "1"
+    assert "x-provider-debug" not in response.headers
 
 
 def test_authentication_precedes_content_length_limit(protected):

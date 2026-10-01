@@ -1,6 +1,8 @@
 """Resolve the model/reasoning configuration that Pi actually receives."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from app.config.env import env_str, environment
 
 import os
@@ -25,7 +27,8 @@ def _provider_reasoning_effort(provider_id: str) -> str | None:
                 return value
         value = str(getattr(provider, "reasoning_effort", "") or "").strip()
         return value or None
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("provider reasoning capability lookup", exc, level="DEBUG")
         return None
 
 

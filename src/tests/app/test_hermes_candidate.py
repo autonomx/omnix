@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+
 from fastapi.testclient import TestClient
 
-from app.assist_core.hermes_api import router
 from app.assist_core.hermes_candidate import HermesCandidate, hermes_candidate_payload, hermes_demo_candidate
 from app.gateway.main import create_gateway_app
 
@@ -52,8 +52,3 @@ def test_hermes_candidate_demo_route_returns_preview_only_payload() -> None:
     assert "execute" not in payload
     assert "mutation" not in payload
 
-
-def test_hermes_api_router_keeps_candidate_route_hidden_from_schema() -> None:
-    route = next(route for route in router.routes if route.path == "/candidate/demo")
-
-    assert route.include_in_schema is False

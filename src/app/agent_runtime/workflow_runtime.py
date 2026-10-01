@@ -1,9 +1,11 @@
 """PostgreSQL-backed deterministic WorkflowRuntime."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 import json
 import os
 import threading
@@ -1149,7 +1151,8 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         while not self._supervisor_stop.is_set():
             try:
                 self._supervise_once()
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("workflow supervisor iteration", exc)
                 pass
             self._supervisor_stop.wait(30.0)
 
@@ -1262,9 +1265,10 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         for run_id in resumable:
             try:
                 self._advance(run_id)
-            except Exception:
+            except Exception as exc:
                 # The run remains durable; the next supervisor pass retries only
                 # safe boundary states. In-flight side effects are never replayed.
+                log_recovered_exception("workflow recovery", exc)
                 continue
 
     def _enqueue_due_schedule_fires(self) -> None:
@@ -1378,10 +1382,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             )
             try:
                 run_id = self._start_definition(definition, payload)
-            except Exception:
+            except Exception as exc:
                 # Keep the fire pending. A later supervisor pass retries the
                 # durable dispatch; deterministic run idempotency prevents
                 # duplicate workflow execution if the first attempt committed.
+                log_recovered_exception("scheduled workflow dispatch", exc)
                 continue
             with unit_of_work(self.database) as work:
                 work.connection.execute(
@@ -1424,6 +1429,6 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         return WorkflowDefinition.model_validate(row[0]) if row else None
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_workflow_runtime() -> PostgresWorkflowRuntime:
     return PostgresWorkflowRuntime()

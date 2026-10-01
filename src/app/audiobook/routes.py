@@ -24,6 +24,7 @@ from app.runtime.paths import resources_data_root
 from app.runtime.background import (
     BackgroundOwnershipUnavailable, BackgroundWorker,
 )
+from app.runtime.capabilities import RuntimeCapability
 from app.persistence.background_authority import require_background_owner
 from app.runtime.config import get_runtime_config
 from app.runtime.logging import runtime_transition
@@ -900,4 +901,5 @@ def create_audiobook_background_worker() -> BackgroundWorker:
 
     return BackgroundWorker(
         name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+        requires=frozenset({RuntimeCapability.RUN_JOB_WORKERS}),
     )

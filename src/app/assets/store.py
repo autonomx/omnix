@@ -31,8 +31,7 @@ _AUDIO_MIME_TYPES = {
 }
 _MANIFEST_LOCK_TIMEOUT_SECONDS = 30.0
 _MANIFEST_LOCK_POLL_SECONDS = 0.01
-_PROCESS_LOCKS: dict[str, threading.RLock] = {}
-_PROCESS_LOCKS_GUARD = threading.Lock()
+_PROCESS_LOCK = threading.RLock()
 
 
 def _utcnow() -> str:
@@ -100,15 +99,6 @@ def _legacy_audio_module(root: Path) -> str:
     return "audio"
 
 
-def _process_lock_for(path: Path) -> threading.RLock:
-    try:
-        key = str(path.resolve())
-    except OSError:
-        key = str(path.absolute())
-    with _PROCESS_LOCKS_GUARD:
-        return _PROCESS_LOCKS.setdefault(key, threading.RLock())
-
-
 def _acquire_os_file_lock(handle: BinaryIO, lock_path: Path) -> None:
     deadline = time.monotonic() + _MANIFEST_LOCK_TIMEOUT_SECONDS
     if os.name == "nt":
@@ -159,7 +149,9 @@ def _release_os_file_lock(handle: BinaryIO) -> None:
 def _exclusive_manifest_lock(manifest_path: Path) -> Iterator[None]:
     lock_path = manifest_path.with_name(f"{manifest_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with _process_lock_for(lock_path):
+    # One process mutex bounds local lock bookkeeping; the OS lock remains the
+    # cross-process authority for each manifest path.
+    with _PROCESS_LOCK:
         with lock_path.open("a+b") as handle:
             _acquire_os_file_lock(handle, lock_path)
             try:

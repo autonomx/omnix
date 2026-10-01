@@ -6,6 +6,8 @@ execution/recovery semantics shared without creating a service import cycle.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import hashlib
 import json
 import re
@@ -187,7 +189,7 @@ def launch_reviewer_children(
     required = max(1, int(count))
     while True:
         launch: tuple[AgentRunSpec, AgentRunSnapshot] | None = None
-        with service._lock:
+        with service._run_lock(parent_run_id):
             with service.unit_of_work(service.database) as work:
                 repository = service.repository_factory(work.connection, service.context)
                 locked = work.connection.execute(
@@ -342,7 +344,8 @@ def launch_reviewer_children(
                     if existing.status not in _TERMINAL and service.runtime.get_status(existing.run_id) is None:
                         try:
                             service.runtime.start(existing.spec)
-                        except Exception:
+                        except Exception as exc:
+                            log_recovered_exception("reviewer runtime rehydration", exc)
                             pass
                     continue
 
@@ -599,10 +602,10 @@ def reconcile_review_progress_in_repository(
     service: Any,
     repository: PostgresAgentRunRepository,
     parent_run_id: str,
-) -> tuple[str, str, int] | None:
+) -> tuple[str, str, int] | tuple[str, int] | None:
     """Consume terminal attempts and advance one review-stage parent.
 
-    Returns a launch action when retry/missing reviewer slots need execution.
+    Returns an action when a reviewer retry or acceptance job needs execution.
     Runtime/protocol failure never invokes implementation repair.
     """
 
@@ -741,8 +744,7 @@ def reconcile_review_progress_in_repository(
                 status="running",
                 worker_id=service.worker_id,
             )
-        service._finalize_acceptance(repository, latest)
-        return None
+        return ("promote_acceptance", latest.revision)
 
     # Only a *valid structured substantive verdict* reaches this repair path.
     # Reviewer runtime/protocol failures have already been handled above.

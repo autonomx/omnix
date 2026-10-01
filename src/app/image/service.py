@@ -30,8 +30,14 @@ from app.image.reference_assets import (
 from app.image.reference_transport import REFERENCE_IMAGES_PAYLOAD_KEY, decode_reference_payloads
 from app.image.style import apply_image_style
 from app.image_http_client import generate_image_via_service, is_image_service_enabled
+from app.persistence.device_permits import device_permit_slot
 
 _GIB = float(1024**3)
+
+
+def _generate_with_device_permit(provider: Any, payload: dict[str, Any], *, priority: str) -> Any:
+    with device_permit_slot("image", priority=priority, timeout_seconds=30.0):
+        return provider.generate(payload)
 
 
 def _safe_str(value: Any) -> str:
@@ -312,7 +318,19 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
             if reference_images:
                 provider_payload["image"] = reference_images[0] if len(reference_images) == 1 else reference_images
 
-            result = provider.generate(provider_payload)
+            if definition.get("supports_local_model"):
+                priority = (
+                    "batch"
+                    if payload.get("_device_permit_priority") == "batch"
+                    else "interactive"
+                )
+                result = _generate_with_device_permit(
+                    provider,
+                    provider_payload,
+                    priority=priority,
+                )
+            else:
+                result = provider.generate(provider_payload)
             if use_cache and result.ok:
                 cached = store_image_cache(cache_key, result)
                 if cached:

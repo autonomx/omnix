@@ -152,7 +152,8 @@ def test_api_role_never_starts_liquidation_streams_and_collector_shutdown_is_bou
 def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
-    monkeypatch.setattr(jobs, "_provider_slots", threading.BoundedSemaphore(2))
+    permit_slots = threading.BoundedSemaphore(2)
+    monkeypatch.setattr(jobs, "device_permit_slot", lambda *_args, **_kwargs: permit_slots)
     entered = []
     both_entered, release = threading.Event(), threading.Event()
     state = SimpleNamespace(status=jobs.JobStatus.RUNNING)
@@ -174,7 +175,7 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
                 job_store=store,
                 session=None,
                 user_message=None,
-                request=None,
+                request=SimpleNamespace(provider_id="lmstudio"),
                 context_items=[],
                 job=SimpleNamespace(id=str(index)),
             )
@@ -187,7 +188,7 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
             for future in futures:
                 future.result(timeout=2)
         assert len(entered) == 2
-        assert jobs._provider_slots._value == 0
+        assert permit_slots._value == 0
     finally:
         release.set()
 

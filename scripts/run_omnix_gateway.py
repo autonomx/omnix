@@ -41,7 +41,13 @@ def main() -> int:
 
     initialize_service_token()
 
-    from gateway_cluster import replica_ports, serve_cluster, watch_parent_stdin
+    from gateway_cluster import (
+        replica_ports,
+        serve_cluster,
+        start_local_job_worker,
+        stop_children,
+        watch_parent_stdin,
+    )
 
     count = args.api_replicas
     if count is None:
@@ -53,21 +59,26 @@ def main() -> int:
     replica_ports(args.port, count)
     if count:
         return serve_cluster(args, count)
-    if args.managed_stdin:
-        if args.reload:
-            raise ValueError("Managed gateway shutdown requires reload disabled")
-        server = uvicorn.Server(uvicorn.Config(args.app, host=args.host, port=args.port))
-        watch_parent_stdin(server)
-        server.run()
-        return 0
+    job_worker = start_local_job_worker(Path(__file__).resolve().parents[1], os.environ)
+    try:
+        if args.managed_stdin:
+            if args.reload:
+                raise ValueError("Managed gateway shutdown requires reload disabled")
+            server = uvicorn.Server(uvicorn.Config(args.app, host=args.host, port=args.port))
+            watch_parent_stdin(server)
+            server.run()
+            return 0
 
-    uvicorn.run(
-        args.app,
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
-    return 0
+        uvicorn.run(
+            args.app,
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
+        )
+        return 0
+    finally:
+        if job_worker is not None:
+            stop_children([job_worker])
 
 
 if __name__ == "__main__":

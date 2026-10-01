@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from app.voice import tts_runtime_actions, tts_runtime_routes, tts_runtime_state
-from tests.support.routers import include_router_registrar
+from tests.support.routers import include_router_registrar, effective_routes
 
 
 class FakeProvider:
@@ -137,7 +137,7 @@ def test_runtime_routes_register_once() -> None:
     include_router_registrar(app, tts_runtime_routes.register_tts_runtime_routes)
     include_router_registrar(app, tts_runtime_routes.register_tts_runtime_routes)
 
-    paths = [route.path for route in app.routes]
+    paths = [route.path for route in effective_routes(app)]
     assert paths.count("/api/tts/runtime/status") == 1
     assert paths.count("/api/tts/runtime/warmup") == 1
     assert paths.count("/api/tts/runtime/unload") == 1

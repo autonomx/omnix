@@ -244,25 +244,6 @@ snapshot = refresh_store.record_snapshot(
 )
 assert refresh_store.latest_snapshot().id == snapshot.id
 
-from app.rpg.narrative import narrative_persistence
-from app.rpg.narrative.narrative_event import NarrativeEvent
-assert narrative_persistence.NarrativeEventStore.__name__ == "InMemoryNarrativeEventStore"
-narrative = narrative_persistence.default_narrative_event_store(session_id="campaign:factory")
-narrative.save_events([
-    NarrativeEvent(
-        id="narrative:1",
-        type="dialogue",
-        description="Bran greets the player.",
-        actors=["npc:bran"],
-        location="The Rusty Flagon",
-        importance=0.5,
-        emotional_weight=0.1,
-        tags=["greeting"],
-        raw_event={"safe": True},
-    )
-])
-assert narrative.get_session_events("campaign:factory")[0].id == "narrative:1"
-
 from app.rpg.npc_evolution import profile_store
 runtime_state = {
     "npc_evolution": {

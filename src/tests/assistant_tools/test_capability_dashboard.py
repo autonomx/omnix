@@ -5,6 +5,10 @@ from app.assistant_tools.config_store import AssistantToolConfigRecord, Assistan
 from app.assistant_tools.ledger import AssistantToolLedgerEntry, AssistantToolLedgerPayload
 from app.assistant_tools.registry import default_assistant_tools
 from app.gateway.main import create_gateway_app
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def _config_with_enabled(tool_id: str) -> AssistantToolsConfigPayload:

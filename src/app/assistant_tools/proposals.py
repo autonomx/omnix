@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from functools import lru_cache
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -144,7 +143,6 @@ class AssistantToolProposalService:
         )
 
 
-@lru_cache(maxsize=1)
 def default_tool_proposal_service() -> AssistantToolProposalService:
     database = default_database()
     return AssistantToolProposalService(database, current_tenant())

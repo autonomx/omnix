@@ -14,6 +14,7 @@ from weakref import WeakValueDictionary
 
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
+from app.persistence.device_permits import device_permit_slot
 
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
@@ -37,7 +38,6 @@ _job_commit_locks = WeakValueDictionary()
 _job_cancel_events: dict[str, threading.Event] = {}
 _active_chat_providers: dict[str, Any] = {}
 _execution_registry_lock = threading.Lock()
-_provider_slots = threading.BoundedSemaphore(_CHAT_WORKER_COUNT)
 
 
 class _ChatGenerationInterrupted(Exception):
@@ -534,17 +534,7 @@ def _resolve_chat_provider(
     request: SendChatMessageRequest,
     user_message: ChatMessage | None = None,
 ) -> Any | None:
-    metadata = getattr(user_message, "metadata", None)
-    route = metadata.get("omnix_provider_route") if isinstance(metadata, dict) else None
-    routed_provider = route.get("provider_id") if isinstance(route, dict) else None
-    provider_id = str(
-        routed_provider
-        or request.provider_id
-        or getattr(session, "provider_id", None)
-        or ""
-    ).strip()
-    if provider_id.startswith("llm:"):
-        provider_id = provider_id.split(":", 1)[1]
+    provider_id = _chat_provider_id(session, request, user_message)
     if not provider_id:
         return None
     try:
@@ -554,6 +544,32 @@ def _resolve_chat_provider(
     except Exception:
         logger.warning("Could not resolve Chat provider for active cancellation", exc_info=True)
         return None
+
+
+def _chat_provider_id(
+    session: ChatSession,
+    request: SendChatMessageRequest,
+    user_message: ChatMessage | None,
+) -> str:
+    metadata = getattr(user_message, "metadata", None)
+    route = metadata.get("omnix_provider_route") if isinstance(metadata, dict) else None
+    routed_provider = route.get("provider_id") if isinstance(route, dict) else None
+    return str(
+        routed_provider
+        or request.provider_id
+        or getattr(session, "provider_id", None)
+        or ""
+    ).strip().casefold().removeprefix("llm:")
+
+
+def _chat_provider_slot(provider_id: str):
+    if provider_id.casefold() in {"lmstudio", "ollama", "local", "vllm"}:
+        return device_permit_slot(
+            "llm-local",
+            priority="interactive",
+            timeout_seconds=5.0,
+        )
+    return nullcontext()
 
 
 def _generate_reply_with_interrupt(
@@ -570,27 +586,23 @@ def _generate_reply_with_interrupt(
 
     result: dict[str, Any] = {}
     completed = threading.Event()
-    provider_slots = _provider_slots
-    while not provider_slots.acquire(timeout=.1):
-        if _cancel_requested(job_store, job.id):
-            raise _ChatGenerationInterrupted()
     if _cancel_requested(job_store, job.id):
-        provider_slots.release()
         raise _ChatGenerationInterrupted()
+    provider_id = _chat_provider_id(session, request, user_message)
 
     def invoke() -> None:
         try:
-            result["value"] = _generate_reply(
-                chat_store,
-                session,
-                user_message,
-                request=request,
-                context_items=context_items,
-            )
+            with _chat_provider_slot(provider_id):
+                result["value"] = _generate_reply(
+                    chat_store,
+                    session,
+                    user_message,
+                    request=request,
+                    context_items=context_items,
+                )
         except Exception as exc:
             result["error"] = exc
         finally:
-            provider_slots.release()
             completed.set()
 
     threading.Thread(

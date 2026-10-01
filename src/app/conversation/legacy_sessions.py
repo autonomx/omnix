@@ -1,8 +1,7 @@
 """Neutral legacy-session compatibility bridge.
 
 No feature or persistence implementation is imported here. Feature composition
-may install an authority callback set; otherwise the bridge remains process-local
-for legacy/test callers.
+must install durable authority callbacks before legacy session access.
 """
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ _lock = RLock()
 _load: Callable[[], dict[str, Any]] | None = None
 _save: Callable[[dict[str, Any]], None] | None = None
 _update: Callable[[Callable[[dict[str, Any]], Any]], tuple[dict[str, Any], Any]] | None = None
-_sessions: dict[str, Any] = {}
 
 
 def install_legacy_session_callbacks(
@@ -31,43 +29,33 @@ def install_legacy_session_callbacks(
 
 
 def clear_legacy_session_callbacks() -> None:
-    global _load, _save, _update, _sessions
+    global _load, _save, _update
     with _lock:
         _load = None
         _save = None
         _update = None
-        _sessions = {}
 
 
 def load_sessions() -> dict[str, Any]:
     with _lock:
         loader = _load
         if loader is None:
-            return dict(_sessions)
+            raise RuntimeError("durable legacy session authority is not installed")
     return dict(loader() or {})
 
 
 def write_legacy_session_state(sessions: dict[str, Any]) -> None:
-    global _sessions
     payload = dict(sessions or {})
     with _lock:
         saver = _save
         if saver is None:
-            _sessions = payload
-            return
+            raise RuntimeError("durable legacy session authority is not installed")
     saver(payload)
 
 
 def update_sessions(mutator: Callable[[dict[str, Any]], _T]) -> _T:
-    global _sessions
     with _lock:
         updater = _update
-        if updater is not None:
-            current, result = updater(mutator)
-            _sessions = dict(current or {})
-            return result
-        current = load_sessions()
-        result = mutator(current)
-        write_legacy_session_state(current)
-        _sessions = dict(current)
-        return result
+        if updater is None:
+            raise RuntimeError("durable legacy session authority is not installed")
+        return updater(mutator)[1]

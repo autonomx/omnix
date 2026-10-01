@@ -7,6 +7,8 @@ preserve capability/completion authority.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -98,7 +100,34 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
 # successful settle and later consume stalled-run recovery attempts. Keep the
 # core implementation stable, but install a narrow public-runtime normalization
 # hook that turns terminal provider failures into explicit run failures.
-_LAST_PROVIDER_FAILURE: dict[str, str] = {}
+_MAX_PROVIDER_FAILURES = 4096
+_PROVIDER_FAILURE_TTL_SECONDS = 3600.0
+_LAST_PROVIDER_FAILURE: dict[str, tuple[str, float]] = {}
+_LAST_PROVIDER_FAILURE_LOCK = threading.RLock()
+
+
+def _provider_failure_now() -> float:
+    return time.monotonic()
+
+
+def _prune_provider_failures_locked(now: float) -> None:
+    for run_id, (_signature, expires_at) in list(_LAST_PROVIDER_FAILURE.items()):
+        if expires_at <= now:
+            _LAST_PROVIDER_FAILURE.pop(run_id, None)
+
+
+def _has_provider_failure(run_id: str) -> bool:
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        _prune_provider_failures_locked(_provider_failure_now())
+        return run_id in _LAST_PROVIDER_FAILURE
+
+
+def clear_provider_failures(run_id: str | None = None) -> None:
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        if run_id is None:
+            _LAST_PROVIDER_FAILURE.clear()
+        else:
+            _LAST_PROVIDER_FAILURE.pop(run_id, None)
 
 
 def _provider_failure_event(
@@ -162,9 +191,16 @@ def _provider_failure_event(
     # turn_end. Emit one durable run failure per unique provider failure so the
     # service does not process two terminal transitions for the same turn.
     signature = f"{provider_error_code}:{error_message}"
-    if _LAST_PROVIDER_FAILURE.get(run_id) == signature:
-        return None
-    _LAST_PROVIDER_FAILURE[run_id] = signature
+    now = _provider_failure_now()
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        _prune_provider_failures_locked(now)
+        previous = _LAST_PROVIDER_FAILURE.get(run_id)
+        if previous is not None and previous[0] == signature:
+            return None
+        if run_id not in _LAST_PROVIDER_FAILURE and len(_LAST_PROVIDER_FAILURE) >= _MAX_PROVIDER_FAILURES:
+            oldest = min(_LAST_PROVIDER_FAILURE, key=lambda key: _LAST_PROVIDER_FAILURE[key][1])
+            _LAST_PROVIDER_FAILURE.pop(oldest, None)
+        _LAST_PROVIDER_FAILURE[run_id] = (signature, now + _PROVIDER_FAILURE_TTL_SECONDS)
     return AgentEvent(
         run_id=run_id,
         event_type="run.failed",
@@ -195,14 +231,14 @@ def normalize_pi_event(
         return provider_failure
     if (
         str(payload.get("type") or "") in {"message_end", "turn_end"}
-        and run_id in _LAST_PROVIDER_FAILURE
+        and _has_provider_failure(run_id)
     ):
         return None
     # Once a provider terminal failure has been emitted, Pi may still publish
     # the mechanical agent_settled event for that failed turn. Suppress it so a
     # failed provider request cannot re-enter the quality state machine as an
     # apparent successful settle.
-    if str(payload.get("type") or "") == "agent_settled" and run_id in _LAST_PROVIDER_FAILURE:
+    if str(payload.get("type") or "") == "agent_settled" and _has_provider_failure(run_id):
         return None
     return _core_normalize_pi_event(
         run_id,

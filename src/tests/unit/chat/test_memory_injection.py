@@ -15,6 +15,10 @@ from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessage
 from app.chat.memory_prompt import resolve_prompt_memory
 from app.assistant_memory.session import RefreshSessionMemoryRequest, refresh_session_memory
 from app.chat.store import ChatSessionStore as LegacyChatSessionStore
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 class RecordingProvider:

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from app.jobs.errors import JobClaimConflict
 from app.jobs.models import (
     CancelJobRequest,
     CancelState,
@@ -185,13 +186,16 @@ class InMemoryJobStore:
             active = [job for job in self._state.jobs.values() if job.status in _ACTIVE]
             active_gpu = any(job.resource_class.value.startswith("gpu:") for job in active)
             active_cpu = sum(1 for job in active if job.resource_class == ResourceClass.CPU)
+            # Break created_at ties by insertion order (FIFO); coarse clocks on
+            # Windows give back-to-back jobs equal timestamps.
+            insertion = {job_id: index for index, job_id in enumerate(self._state.jobs)}
             candidates = sorted(
                 (
                     job
                     for job in self._state.jobs.values()
                     if job.status in _RUNNABLE and not _awaiting_plan_approval(job)
                 ),
-                key=lambda item: (-item.priority, item.created_at, item.id),
+                key=lambda item: (-item.priority, item.created_at, insertion[item.id]),
             )
             for job in candidates:
                 if allowed and job.resource_class.value not in allowed:
@@ -231,11 +235,24 @@ class InMemoryJobStore:
                 return ClaimJobResponse(ok=True, job=deepcopy(claimed))
         return ClaimJobResponse(ok=False, reason="no_runnable_job")
 
-    def mark_running(self, job_id: str) -> JobRecord | None:
+    def mark_running(
+        self,
+        job_id: str,
+        *,
+        worker_id: str | None = None,
+        lease_token: str | None = None,
+    ) -> JobRecord | None:
+        if bool(worker_id) != bool(lease_token):
+            raise JobClaimConflict("mark_running requires both lease credentials")
         with self._state.lock:
             job = self._state.jobs.get(job_id)
             if job is None:
                 return None
+            # Mirror the PostgreSQL fence: the caller's claim must own the lease.
+            if worker_id and job.lease is not None and (
+                job.lease.worker_id != worker_id or job.lease.token != lease_token
+            ):
+                raise JobClaimConflict(f"stale lease for job {job_id}")
             if job.status not in _RUNNABLE | {JobStatus.LEASED}:
                 return deepcopy(job)
             now = _utcnow()

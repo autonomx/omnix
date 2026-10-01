@@ -1,0 +1,1393 @@
+{
+  "entries": [
+    {
+      "path": "src/app/agent_runtime/budget.py",
+      "symbol": "default_agent_budget_manager.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_agent_budget_manager.cache_clear"
+    },
+    {
+      "path": "src/app/agent_runtime/pi_runtime.py",
+      "symbol": "_LAST_PROVIDER_FAILURE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PROVIDER_FAILURES",
+      "ttl_symbol": "_PROVIDER_FAILURE_TTL_SECONDS",
+      "invalidation": "clear_provider_failures"
+    },
+    {
+      "path": "src/app/agent_runtime/pi_runtime.py",
+      "symbol": "_LAST_PROVIDER_FAILURE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/agent_runtime/semantic_task_parser.py",
+      "symbol": "_CACHE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_MAX_CACHE_TTL_SECONDS",
+      "invalidation": "clear_semantic_task_cache"
+    },
+    {
+      "path": "src/app/agent_runtime/semantic_task_parser.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/agent_runtime/service.py",
+      "symbol": "default_agent_run_service.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_agent_run_service.cache_clear"
+    },
+    {
+      "path": "src/app/agent_runtime/service_core.py",
+      "symbol": "default_agent_run_service.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_agent_run_service.cache_clear"
+    },
+    {
+      "path": "src/app/agent_runtime/task_graph_runtime.py",
+      "symbol": "default_task_graph_runtime.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_task_graph_runtime.cache_clear"
+    },
+    {
+      "path": "src/app/agent_runtime/workflow_runtime.py",
+      "symbol": "default_workflow_runtime.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_workflow_runtime.cache_clear"
+    },
+    {
+      "path": "src/app/assets/store.py",
+      "symbol": "_PROCESS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assist_core/hermes_rpg_execution_ledger.py",
+      "symbol": "_LEDGER",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_LEDGER_ITEMS",
+      "ttl_symbol": "_LEDGER_TTL_SECONDS",
+      "invalidation": "hermes_rpg_execution_ledger_reset"
+    },
+    {
+      "path": "src/app/assistant_memory/companion_context.py",
+      "symbol": "_baseline_cache",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_BASELINE_CACHE_TTL_SECONDS",
+      "invalidation": "invalidate_companion_context"
+    },
+    {
+      "path": "src/app/assistant_memory/companion_context.py",
+      "symbol": "_cache_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/initiative.py",
+      "symbol": "_LAST_SURFACED",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_LAST_SURFACED_ENTRIES",
+      "ttl_symbol": "_LAST_SURFACED_TTL_SECONDS",
+      "invalidation": "reset_initiative_surface_history"
+    },
+    {
+      "path": "src/app/assistant_memory/initiative.py",
+      "symbol": "_SURFACE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_COUNTERS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_METRIC_KEYS",
+      "ttl_symbol": "_METRIC_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_LATEST_USAGE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_USAGE_SESSIONS",
+      "ttl_symbol": "_USAGE_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_MAXIMA",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_METRIC_KEYS",
+      "ttl_symbol": "_METRIC_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_METRIC_TOUCHED",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_METRIC_KEYS",
+      "ttl_symbol": "_METRIC_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_TOTALS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_METRIC_KEYS",
+      "ttl_symbol": "_METRIC_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/observability.py",
+      "symbol": "_USAGE_TOUCHED",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_USAGE_SESSIONS",
+      "ttl_symbol": "_USAGE_TTL_SECONDS",
+      "invalidation": "reset_companion_metrics"
+    },
+    {
+      "path": "src/app/assistant_memory/owner_defaults.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/paralinguistic_state.py",
+      "symbol": "_STORE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_SESSIONS",
+      "ttl_symbol": "_TTL_SECONDS",
+      "invalidation": "clear_ephemeral_call_state"
+    },
+    {
+      "path": "src/app/assistant_memory/paralinguistic_state.py",
+      "symbol": "_STORE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/repository.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the provider-free in-memory adapter; production memory composition uses the PostgreSQL repository for records, candidates, snapshots, and events."
+    },
+    {
+      "path": "src/app/assistant_memory/repository.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/assistant_memory/session.py",
+      "symbol": "_SESSION_MEMORY_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_memory/structured_provider.py",
+      "symbol": "_PROVIDER_EXECUTOR",
+      "category": "cache",
+      "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores."
+    },
+    {
+      "path": "src/app/assistant_memory/temporal_retrieval.py",
+      "symbol": "_PRELOAD_CACHE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "invalidate_temporal_retrieval"
+    },
+    {
+      "path": "src/app/assistant_memory/temporal_retrieval.py",
+      "symbol": "_PRELOAD_EXECUTOR",
+      "category": "cache",
+      "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores."
+    },
+    {
+      "path": "src/app/assistant_memory/temporal_retrieval.py",
+      "symbol": "_PRELOAD_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_BROWSER_SESSION_GENERATIONS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_BROWSER_SESSION_GENERATIONS",
+      "ttl_symbol": "_BROWSER_SESSION_GENERATION_TTL_SECONDS",
+      "invalidation": "_clear_browser_session_generation"
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_BROWSER_SESSION_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_PLAYWRIGHT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_PLAYWRIGHT_SESSIONS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PLAYWRIGHT_SESSIONS",
+      "ttl_symbol": "_PLAYWRIGHT_SESSION_TTL_SECONDS",
+      "invalidation": "_stop_all_playwright_sessions"
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_PREVIEWS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PREVIEW_ENTRIES",
+      "ttl_symbol": "_MAX_PREVIEW_TTL_SECONDS",
+      "invalidation": "_stop_all_workspace_previews"
+    },
+    {
+      "path": "src/app/assistant_tools/browser_adapter.py",
+      "symbol": "_PREVIEW_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_tools/connections.py",
+      "symbol": "_PENDING_OAUTH_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/assistant_tools/connections.py",
+      "symbol": "_PENDING_OAUTH_STATES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PENDING_OAUTH_STATES",
+      "ttl_symbol": "_OAUTH_STATE_TTL_SECONDS",
+      "invalidation": "clear_pending_oauth_states"
+    },
+    {
+      "path": "src/app/audiobook/classification_logging.py",
+      "symbol": "_LOGGER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/audiobook/model_identity.py",
+      "symbol": "_fingerprint.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_fingerprint.cache_clear"
+    },
+    {
+      "path": "src/app/audiobook/routes.py",
+      "symbol": "_SERVICE_CONTEXT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/characters/avatar_generation_logging.py",
+      "symbol": "_HANDLER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/characters/avatar_generation_repository.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the in-memory avatar-batch test adapter; PostgreSQL runtime composition selects the durable avatar-generation repository."
+    },
+    {
+      "path": "src/app/characters/avatar_generation_repository.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/characters/avatar_repository.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the provider-free character-avatar adapter; production character services select the PostgreSQL repository."
+    },
+    {
+      "path": "src/app/characters/avatar_repository.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/characters/avatar_viseme_generation.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the in-memory viseme-generation adapter; PostgreSQL runtime composition selects the durable viseme repository."
+    },
+    {
+      "path": "src/app/characters/avatar_viseme_generation.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/characters/repository.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the provider-free character repository; production character services use the PostgreSQL repository."
+    },
+    {
+      "path": "src/app/characters/repository.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/characters/service.py",
+      "symbol": "_SNAPSHOT_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/chat/assistant_turns.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/chat/compaction.py",
+      "symbol": "_SUMMARIES",
+      "category": "coordination",
+      "reason": "This is the provider-free summary repository; production compaction uses PostgresConversationSummaryRepository."
+    },
+    {
+      "path": "src/app/chat/compaction.py",
+      "symbol": "_SUMMARY_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/chat/generation_jobs.py",
+      "symbol": "_active_chat_providers",
+      "category": "coordination",
+      "reason": "This holds references only for currently executing jobs; the durable job store owns job status, leases, and cancellation authority, and terminal execution removes each reference."
+    },
+    {
+      "path": "src/app/chat/generation_jobs.py",
+      "symbol": "_execution_registry_lock",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/chat/generation_jobs.py",
+      "symbol": "_job_cancel_events",
+      "category": "coordination",
+      "reason": "These are local wakeup handles for active workers; cancellation status is persisted in the durable job store and the handles are removed when execution ends."
+    },
+    {
+      "path": "src/app/chat/generation_jobs.py",
+      "symbol": "_registry_guard",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/chat/live_call_prewarm.py",
+      "symbol": "_PREWARMED_AT",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PREWARM_ENTRIES",
+      "ttl_symbol": "_PREWARM_TTL_SECONDS",
+      "invalidation": "clear_live_call_prewarm_state"
+    },
+    {
+      "path": "src/app/chat/live_call_prewarm.py",
+      "symbol": "_PREWARM_INFLIGHT",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PREWARM_ENTRIES",
+      "ttl_symbol": "_PREWARM_INFLIGHT_TTL_SECONDS",
+      "invalidation": "clear_live_call_prewarm_state"
+    },
+    {
+      "path": "src/app/chat/live_call_prewarm.py",
+      "symbol": "_PREWARM_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/chat/live_call_prewarm.py",
+      "symbol": "_PROVIDER_AFFINITY",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PREWARM_ENTRIES",
+      "ttl_symbol": "_PREWARM_TTL_SECONDS",
+      "invalidation": "clear_live_call_prewarm_state"
+    },
+    {
+      "path": "src/app/chat/live_chat_speculation.py",
+      "symbol": "_PRIMED_SESSIONS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PRIMED_SESSIONS",
+      "ttl_symbol": "_SESSION_CACHE_TTL_SECONDS",
+      "invalidation": "clear_live_speculation_cache"
+    },
+    {
+      "path": "src/app/chat/live_chat_speculation.py",
+      "symbol": "_SESSION_LOADS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_SESSION_LOADS",
+      "ttl_symbol": "_SESSION_LOAD_TTL_SECONDS",
+      "invalidation": "clear_live_speculation_cache"
+    },
+    {
+      "path": "src/app/chat/live_chat_speculation.py",
+      "symbol": "_SPECULATIONS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_SPECULATIONS",
+      "ttl_symbol": "_SPECULATION_TTL_SECONDS",
+      "invalidation": "clear_live_speculation_cache"
+    },
+    {
+      "path": "src/app/chat/live_chat_speculation.py",
+      "symbol": "_SPECULATION_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/chat/live_chat_speculation_handshake.py",
+      "symbol": "_HANDSHAKE_GENERATIONS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_HANDSHAKE_GENERATIONS",
+      "ttl_symbol": "_HANDSHAKE_TTL_SECONDS",
+      "invalidation": "clear_live_speculation_handshake_state"
+    },
+    {
+      "path": "src/app/chat/persistence/chat_runtime_compat.py",
+      "symbol": "default_chat_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_chat_store.cache_clear"
+    },
+    {
+      "path": "src/app/chat/persistence/chat_runtime_compat.py",
+      "symbol": "default_history_search_service.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_history_search_service.cache_clear"
+    },
+    {
+      "path": "src/app/chat/repository.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the provider-free chat repository; production composition selects the PostgreSQL chat-session store."
+    },
+    {
+      "path": "src/app/chat/repository.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/companion_activity/initiative.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/config/env.py",
+      "symbol": "_READ_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/config/env.py",
+      "symbol": "_READ_NAMES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_READ_NAMES",
+      "ttl_symbol": "_READ_NAME_TTL_SECONDS",
+      "invalidation": "clear_read_names"
+    },
+    {
+      "path": "src/app/config/runtime.py",
+      "symbol": "configured_job_priority_aging_seconds.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "configured_job_priority_aging_seconds.cache_clear"
+    },
+    {
+      "path": "src/app/config/runtime_settings.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/conversation/concurrency.py",
+      "symbol": "CHAT_MUTATION_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/conversation/legacy_sessions.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/desktop_companion/activity_bridge.py",
+      "symbol": "_default_activity_bridge_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/desktop_companion/context.py",
+      "symbol": "_default_context_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/desktop_companion/runtime.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/lifecycle.py",
+      "symbol": "_LIFECYCLE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/lifecycle.py",
+      "symbol": "_PROVIDER_CACHE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_CACHED_IMAGE_PROVIDERS",
+      "ttl_symbol": "IMAGE_PROVIDER_CACHE_TTL_SECONDS",
+      "invalidation": "_pop_cached_providers"
+    },
+    {
+      "path": "src/app/image/lifecycle.py",
+      "symbol": "_PROVIDER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/providers/diffusers_turbo_provider.py",
+      "symbol": "_GENERATE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/providers/diffusers_turbo_provider.py",
+      "symbol": "_PIPELINE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/providers/flux_klein_provider.py",
+      "symbol": "_GENERATE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/providers/flux_klein_provider.py",
+      "symbol": "_PIPELINE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image/routes/models.py",
+      "symbol": "_DOWNLOAD_TOKENS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PROVIDER_DOWNLOAD_ENTRIES",
+      "ttl_symbol": "_DOWNLOAD_TOKEN_TTL_SECONDS",
+      "invalidation": "clear_image_download_metadata"
+    },
+    {
+      "path": "src/app/image/routes/models.py",
+      "symbol": "_DOWNLOAD_TOTALS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_PROVIDER_DOWNLOAD_ENTRIES",
+      "ttl_symbol": "_DOWNLOAD_TOTAL_TTL_SECONDS",
+      "invalidation": "clear_image_download_metadata"
+    },
+    {
+      "path": "src/app/image/routes/models.py",
+      "symbol": "_DOWNLOAD_TOTALS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image_service_runtime.py",
+      "symbol": "_GENERATION_PROGRESS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_GENERATION_PROGRESS_MAX_ENTRIES",
+      "ttl_symbol": "_GENERATION_PROGRESS_TTL_SECONDS",
+      "invalidation": "_clear_generation_progress"
+    },
+    {
+      "path": "src/app/image_service_runtime.py",
+      "symbol": "_GENERATION_PROGRESS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/image_service_runtime.py",
+      "symbol": "_MODEL_OPERATION_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/jobs/residency.py",
+      "symbol": "_RESIDENCY",
+      "category": "coordination",
+      "reason": "This is the deterministic in-memory residency adapter; production composition uses PostgresModelResidencyStore for cross-worker model ownership."
+    },
+    {
+      "path": "src/app/jobs/residency.py",
+      "symbol": "_RESIDENCY_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/jobs/store.py",
+      "symbol": "_FACTORY_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/capacity.py",
+      "symbol": "_CAPACITY_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/llm/lmstudio_model_resolution.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/llm/lmstudio_responses.py",
+      "symbol": "_RESPONSE_STATES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_STATES",
+      "ttl_symbol": "_DEFAULT_STATE_TTL_SECONDS",
+      "invalidation": "_clear_response_states_for_tests"
+    },
+    {
+      "path": "src/app/live_voice/llm/lmstudio_responses.py",
+      "symbol": "_STATE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/prompt/cache.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/prompt/cache.py",
+      "symbol": "_CHARACTER_SNAPSHOTS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_live_prompt_caches"
+    },
+    {
+      "path": "src/app/live_voice/prompt/cache.py",
+      "symbol": "_IDENTITY_CONTEXTS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_live_prompt_caches"
+    },
+    {
+      "path": "src/app/live_voice/prompt/cache.py",
+      "symbol": "_PROFILE_ENVELOPES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_live_prompt_caches"
+    },
+    {
+      "path": "src/app/live_voice/prompt/dependency_stages.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/prompt/dependency_stages.py",
+      "symbol": "_MEMORY_SETTINGS_CACHE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_SETTINGS_CACHE_ENTRIES",
+      "ttl_symbol": "_MEMORY_SETTINGS_CACHE_TTL_SECONDS",
+      "invalidation": "_invalidate_memory_settings_cache"
+    },
+    {
+      "path": "src/app/live_voice/speech/chat_speculative_tts.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/speech/chat_speculative_tts.py",
+      "symbol": "_ENTRIES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_speculative_tts_cache"
+    },
+    {
+      "path": "src/app/live_voice/speech/chat_speculative_tts.py",
+      "symbol": "_PROVIDER_GENERATION_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/live_voice/speech/speculative_tts.py",
+      "symbol": "_ENTRIES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_ENTRIES",
+      "ttl_symbol": "_CACHE_TTL_SECONDS",
+      "invalidation": "clear_speculative_tts_cache"
+    },
+    {
+      "path": "src/app/live_voice/speech/tts_lane.py",
+      "symbol": "_DEDICATED_TTS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/observability/agent_logging.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/observability/tts_stream_diagnostics.py",
+      "symbol": "_ACTIVE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/observability/tts_stream_diagnostics.py",
+      "symbol": "_ACTIVE_STREAMS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_ACTIVE_STREAMS",
+      "ttl_symbol": "_ACTIVE_STREAM_TTL_SECONDS",
+      "invalidation": "clear_active_streams"
+    },
+    {
+      "path": "src/app/persistence/config.py",
+      "symbol": "database_settings.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "database_settings.cache_clear"
+    },
+    {
+      "path": "src/app/persistence/config.py",
+      "symbol": "migration_database_settings.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "migration_database_settings.cache_clear"
+    },
+    {
+      "path": "src/app/persistence/database.py",
+      "symbol": "default_database.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_database.cache_clear"
+    },
+    {
+      "path": "src/app/persistence/device_permits.py",
+      "symbol": "_DEFAULT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/persistence/repository_registry.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/persistence/runtime.py",
+      "symbol": "persistence_mode.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "persistence_mode.cache_clear"
+    },
+    {
+      "path": "src/app/providers/cache_status.py",
+      "symbol": "_REFRESH_HISTORY",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_REFRESH_HISTORY_KEYS",
+      "ttl_symbol": "PROVIDER_REFRESH_HISTORY_TTL_SECONDS",
+      "invalidation": "clear_provider_refresh_history"
+    },
+    {
+      "path": "src/app/providers/cache_status.py",
+      "symbol": "_REFRESH_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/nemotron_eou_live_websocket.py",
+      "symbol": "_SESSION_STATES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_SESSION_STATES",
+      "ttl_symbol": "SESSION_TTL_SECONDS",
+      "invalidation": "clear_nemotron_session_states"
+    },
+    {
+      "path": "src/app/providers/service.py",
+      "symbol": "_GLOBAL_PROMPT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/service.py",
+      "symbol": "_PROVIDER_SETTINGS_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/stt_live_runtime_support.py",
+      "symbol": "_TRANSCRIBE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/stt_live_websocket.py",
+      "symbol": "_PROVIDER_SCHEDULERS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_PROVIDER_SCHEDULERS",
+      "ttl_symbol": "PROVIDER_SCHEDULER_TTL_SECONDS",
+      "invalidation": "clear_provider_schedulers"
+    },
+    {
+      "path": "src/app/providers/stt_live_websocket.py",
+      "symbol": "_SESSION_STATES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_SESSION_STATES",
+      "ttl_symbol": "SESSION_TTL_SECONDS",
+      "invalidation": "clear_stt_session_states"
+    },
+    {
+      "path": "src/app/providers/tts_abstraction.py",
+      "symbol": "_TTS_PROVIDER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/providers/tts_abstraction.py",
+      "symbol": "_tts_providers",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_TTS_PROVIDER_REGISTRATIONS",
+      "ttl_symbol": "TTS_PROVIDER_REGISTRATION_TTL_SECONDS",
+      "invalidation": "clear_tts_provider_registrations"
+    },
+    {
+      "path": "src/app/research/cache.py",
+      "symbol": "_CACHE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/research/cache.py",
+      "symbol": "_CACHE_STATES",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_CACHE_STORES",
+      "ttl_symbol": "_MAX_CACHE_TTL_SECONDS",
+      "invalidation": "clear_research_cache_states"
+    },
+    {
+      "path": "src/app/research/compatibility.py",
+      "symbol": "_counts",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_MAX_COMPATIBILITY_KEYS",
+      "ttl_symbol": "_COMPATIBILITY_TTL_SECONDS",
+      "invalidation": "reset_research_compatibility_telemetry"
+    },
+    {
+      "path": "src/app/research/compatibility.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/research/deep_research_diagnostics.py",
+      "symbol": "_LOG_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/research/jobs.py",
+      "symbol": "_RESEARCH_THREADS_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/research/jobs.py",
+      "symbol": "_RESEARCH_THREAD_JOB_IDS",
+      "category": "coordination",
+      "reason": "This set deduplicates local research threads only; durable job status and ownership remain in the job store, entries are capped at 32, and each thread removes its ID in finally."
+    },
+    {
+      "path": "src/app/rpg/debug_logging.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/jobs/foreground_submission_store.py",
+      "symbol": "_STATES",
+      "category": "coordination",
+      "reason": "This is the provider-free foreground-submission store; production RPG composition selects PostgresRpgForegroundSubmissionStore."
+    },
+    {
+      "path": "src/app/rpg/jobs/foreground_submission_store.py",
+      "symbol": "_STATES_LOCK",
+      "category": "coordination",
+      "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases."
+    },
+    {
+      "path": "src/app/rpg/map_repository.py",
+      "symbol": "default_map_repository.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "default_map_repository.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/narrative_delivery.py",
+      "symbol": "_cached_delivery_repository.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_cached_delivery_repository.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/narrative_engine/legacy_retirement.py",
+      "symbol": "production_legacy_retirement_audit.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_legacy_retirement_audit.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/narrative_repository.py",
+      "symbol": "_cached_repository.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_cached_repository.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/narrative_retirement.py",
+      "symbol": "_cached_repository.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 4,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_cached_repository.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/session/genesis/async_coordinator.py",
+      "symbol": "_worker_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/session/genesis/async_coordinator.py",
+      "symbol": "_worker_stop",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/session/narration_worker.py",
+      "symbol": "_pending_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/session/narration_worker.py",
+      "symbol": "_pending_sessions",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_PENDING_SESSION_SIGNALS",
+      "ttl_symbol": "PENDING_SESSION_SIGNAL_TTL_SECONDS",
+      "invalidation": "clear_pending_session_signals"
+    },
+    {
+      "path": "src/app/rpg/session/narration_worker.py",
+      "symbol": "_worker_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/visual/providers/__init__.py",
+      "symbol": "_IMAGE_PROVIDER_CACHE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_CACHED_IMAGE_PROVIDERS",
+      "ttl_symbol": "IMAGE_PROVIDER_CACHE_TTL_SECONDS",
+      "invalidation": "unload_image_provider_cache"
+    },
+    {
+      "path": "src/app/rpg/world/npc_profile_loader.py",
+      "symbol": "load_all_file_npc_profiles.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "load_all_file_npc_profiles.cache_clear"
+    },
+    {
+      "path": "src/app/rpg/worlds/generation_coordinator.py",
+      "symbol": "_reconcile_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/worlds/generation_diagnostics.py",
+      "symbol": "_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/worlds/generation_worker.py",
+      "symbol": "_worker_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/rpg/worlds/progressive_materialization_worker.py",
+      "symbol": "_worker_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/runtime/hooks.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/runtime/worker_health.py",
+      "symbol": "_health_probes",
+      "category": "cache",
+      "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores."
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "_default_production_job_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "_default_production_job_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_asset_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_asset_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_conversation_profile_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_conversation_profile_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_evaluation_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_evaluation_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_memory_settings_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_memory_settings_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_model_residency_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_model_residency_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_provider_refresh_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_provider_refresh_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_composition.py",
+      "symbol": "production_research_source_store.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_research_source_store.cache_clear"
+    },
+    {
+      "path": "src/app/runtime_document_services.py",
+      "symbol": "production_document_services.__cache__",
+      "category": "cache",
+      "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
+      "max_entries": 1,
+      "ttl_seconds": 3600.0,
+      "invalidation": "production_document_services.cache_clear"
+    },
+    {
+      "path": "src/app/settings/access.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/catalog.py",
+      "symbol": "_catalog_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/catalog.py",
+      "symbol": "_dynamic_bindings",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_DYNAMIC_CATALOG_ENTRIES",
+      "ttl_symbol": "DYNAMIC_CATALOG_TTL_SECONDS",
+      "invalidation": "clear_dynamic_catalog_cache"
+    },
+    {
+      "path": "src/app/trading/catalog.py",
+      "symbol": "_dynamic_instruments",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_DYNAMIC_CATALOG_ENTRIES",
+      "ttl_symbol": "DYNAMIC_CATALOG_TTL_SECONDS",
+      "invalidation": "clear_dynamic_catalog_cache"
+    },
+    {
+      "path": "src/app/trading/execution_observation_plane.py",
+      "symbol": "_DEFAULT_PLANE",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "_DEFAULT_MAX_INSTRUMENTS",
+      "ttl_symbol": "_DEFAULT_RETENTION_SECONDS",
+      "invalidation": "clear_default_execution_observation_plane"
+    },
+    {
+      "path": "src/app/trading/fundamental_metric_data.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/ibkr_evidence.py",
+      "symbol": "_DEFAULT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/instrument_catalog_service.py",
+      "symbol": "_default_catalog_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/metric_data.py",
+      "symbol": "_default_metric_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/providers/ibkr_runtime.py",
+      "symbol": "_DEFAULT_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/scanner_manager.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/service.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/strategy_ai_shadow_monitor.py",
+      "symbol": "_GAP_LAST_EMITTED",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_DATA_GAP_HEARTBEATS",
+      "ttl_symbol": "DATA_GAP_HEARTBEAT_TTL_SECONDS",
+      "invalidation": "clear_data_gap_heartbeat_cache"
+    },
+    {
+      "path": "src/app/trading/strategy_ai_shadow_monitor.py",
+      "symbol": "_GAP_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/strategy_ai_shadow_provider.py",
+      "symbol": "_PROVIDER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/strategy_discovery_acquisition.py",
+      "symbol": "_SOURCE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/trade_logging.py",
+      "symbol": "_HANDLER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/trading/yahoo_evidence.py",
+      "symbol": "_default_lock",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/voice/tts_runtime_state.py",
+      "symbol": "STATE_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    },
+    {
+      "path": "src/app/voice_debug.py",
+      "symbol": "_LOGGERS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
+      "max_entries_symbol": "MAX_VOICE_DEBUG_LOGGERS",
+      "ttl_symbol": "VOICE_DEBUG_LOGGER_TTL_SECONDS",
+      "invalidation": "clear_voice_debug_loggers"
+    },
+    {
+      "path": "src/app/voice_debug.py",
+      "symbol": "_LOGGER_LOCK",
+      "category": "cache",
+      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
+    }
+  ]
+}

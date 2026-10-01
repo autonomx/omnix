@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import hashlib
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from pathlib import Path
 
 from app.settings.access import load_settings
@@ -33,7 +33,7 @@ def _configured_model_dir() -> Path:
     return directory
 
 
-@lru_cache(maxsize=4)
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _fingerprint(filenames: tuple[tuple[str, int, int], ...], directory: str) -> str:
     digest = hashlib.sha256()
     root = Path(directory)

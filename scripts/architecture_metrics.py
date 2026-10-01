@@ -48,6 +48,7 @@ LOWER_TARGETS: dict[str, int | str] = {
     "largest_class_lines": 800, "quarantined_tests": 0, "collection_errors": 0,
     "fixed_sleeps_in_tests": 5, "mypy_ignored_modules": "0 kernel; <=10% total",
     "compat_modules": 0, "process_local_state_unapproved": 0,
+    "unbounded_module_caches": 0,
     "unreachable_rpg_modules": 0, "web_fetch_assignment_files": 0,
     "web_omnix_window_flags": 0, "web_raw_fetch_outside_api": 0,
     "web_handwritten_api_types": 0, "web_important": 50, "web_hardcoded_colors": 300,
@@ -76,6 +77,13 @@ AL_METRICS = {
 PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json", "/favicon.ico"}
 VERBS = {"get", "post", "put", "patch", "delete", "head", "options", "request"}
 TRANSPORT_EXCEPTIONS_DOC = "docs/architecture/api-transport-exceptions.md"
+PROCESS_STATE_INVENTORY = "resources/architecture/process-local-state.json"
+PROCESS_STATE_DOC = "docs/architecture/PROCESS_LOCAL_STATE.md"
+_PROCESS_STATE_CONSTRUCTORS = {
+    "dict", "list", "set", "defaultdict", "OrderedDict", "deque",
+    "Counter", "Lock", "RLock", "Semaphore", "BoundedSemaphore", "Condition",
+    "Event", "Barrier", "Queue", "SimpleQueue", "ThreadPoolExecutor",
+}
 
 
 def finite_number(value: Any) -> bool:
@@ -161,6 +169,354 @@ def _documented_transport_exceptions(sources: dict[str, str]) -> set[tuple[str, 
     return result
 
 
+def _process_state_inventory(sources: dict[str, str]) -> dict[tuple[str, str], dict[str, Any]]:
+    inventory = _read_json(sources, PROCESS_STATE_INVENTORY, {"entries": []})
+    if not isinstance(inventory, dict) or not isinstance(inventory.get("entries"), list):
+        raise AnalysisError("process-state inventory requires an entries list")
+    entries: dict[tuple[str, str], dict[str, Any]] = {}
+    for entry in inventory["entries"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str) or not isinstance(entry.get("symbol"), str):
+            raise AnalysisError("process-state inventory requires an exact path and symbol")
+        identity = (entry["path"], entry["symbol"])
+        if identity in entries:
+            raise AnalysisError(f"duplicate process-state inventory entry: {identity[0]}:{identity[1]}")
+        entries[identity] = entry
+    return entries
+
+
+def scan_process_local_state(sources: dict[str, str]) -> list[dict[str, Any]]:
+    """Find module-owned mutable containers, locks and unbounded function caches."""
+    findings: dict[tuple[str, str], dict[str, Any]] = {}
+    for path, source in sorted(sources.items()):
+        if not path.startswith("src/app/") or not path.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        aliases = import_aliases(tree, path)
+        mutated_names: set[str] = set()
+        for mutation in ast.walk(tree):
+            if isinstance(mutation, ast.Global):
+                mutated_names.update(mutation.names)
+            if isinstance(mutation, ast.Call) and isinstance(mutation.func, ast.Attribute):
+                receiver = mutation.func.value
+                if isinstance(receiver, ast.Name) and mutation.func.attr in {
+                    "add", "append", "clear", "discard", "extend", "insert", "move_to_end",
+                    "pop", "popitem", "remove", "setdefault", "update",
+                }:
+                    mutated_names.add(receiver.id)
+            elif isinstance(mutation, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Delete)):
+                targets = mutation.targets if isinstance(mutation, ast.Assign) else [mutation.target] if hasattr(mutation, "target") else mutation.targets
+                for target in targets:
+                    nested_target = isinstance(target, (ast.Subscript, ast.Attribute))
+                    while isinstance(target, (ast.Subscript, ast.Attribute)):
+                        target = target.value
+                    if nested_target and isinstance(target, ast.Name):
+                        mutated_names.add(target.id)
+        for node, scope in scoped_nodes(tree):
+            if scope:
+                continue
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = node.value
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if not isinstance(target, ast.Name) or target.id == "__all__":
+                        continue
+                    name = target.id
+                    call_name = qualified_name(value.func, aliases).split(".")[-1] if isinstance(value, ast.Call) else ""
+                    mutable_literal = isinstance(value, (ast.Dict, ast.List, ast.Set))
+                    if isinstance(value, ast.Dict):
+                        empty_literal = not value.keys
+                    elif isinstance(value, (ast.List, ast.Set)):
+                        empty_literal = not value.elts
+                    else:
+                        empty_literal = False
+                    known_constructor = call_name in _PROCESS_STATE_CONSTRUCTORS and (
+                        call_name not in {"dict", "list", "set"}
+                        or isinstance(value, ast.Call) and not value.args and not value.keywords
+                    )
+                    default_plane = name.upper().endswith("PLANE") and isinstance(value, ast.Call)
+                    if not (known_constructor or empty_literal or mutable_literal and name in mutated_names or default_plane):
+                        continue
+                    kind = "container"
+                    if call_name in {"Lock", "RLock", "Semaphore", "BoundedSemaphore", "Condition", "Event", "Barrier"}:
+                        kind = "lock"
+                    elif call_name == "ThreadPoolExecutor":
+                        kind = "executor"
+                    elif call_name in {"Queue", "SimpleQueue"}:
+                        kind = "queue"
+                    elif default_plane:
+                        kind = "runtime_resource"
+                    findings[(path, name)] = {
+                        "path": path,
+                        "symbol": name,
+                        "line": node.lineno,
+                        "kind": kind,
+                    }
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for decorator in node.decorator_list:
+                    decorator_func = decorator.func if isinstance(decorator, ast.Call) else decorator
+                    decorator_name = qualified_name(decorator_func, aliases).split(".")[-1]
+                    if decorator_name not in {"lru_cache", "cache", "bounded_lru_cache"}:
+                        continue
+                    maxsize = (
+                        keyword(decorator, "max_entries")
+                        if decorator_name == "bounded_lru_cache" and isinstance(decorator, ast.Call)
+                        else keyword(decorator, "maxsize") if isinstance(decorator, ast.Call)
+                        else None
+                    )
+                    symbol = f"{node.name}.__cache__"
+                    findings[(path, symbol)] = {
+                        "path": path,
+                        "symbol": symbol,
+                        "line": node.lineno,
+                        "kind": "function_cache",
+                        "cache_decorator": qualified_name(decorator_func, aliases),
+                        "maxsize": (
+                            maxsize.value if isinstance(maxsize, ast.Constant)
+                            else ast.unparse(maxsize) if maxsize is not None
+                            else 128 if decorator_name == "lru_cache" else None
+                        ),
+                    }
+    return [findings[key] for key in sorted(findings)]
+
+
+def process_local_state_report(sources: dict[str, str]) -> tuple[list[dict[str, Any]], int, int]:
+    """Attach reviewed categories and measure unapproved/unbounded state."""
+    scanned = scan_process_local_state(sources)
+    inventory = _process_state_inventory(sources)
+    findings = []
+    unapproved = 0
+    unbounded = 0
+    scanned_ids = set()
+    for candidate in scanned:
+        identity = (candidate["path"], candidate["symbol"])
+        scanned_ids.add(identity)
+        entry = inventory.get(identity)
+        approved = bool(
+            entry
+            and entry.get("category") in {"cache", "coordination", "per-connection"}
+            and isinstance(entry.get("reason"), str)
+            and entry["reason"].strip()
+        )
+        finding = {
+            **candidate,
+            "category": entry.get("category") if entry else None,
+            "reason": entry.get("reason") if entry else None,
+            "approved": approved,
+        }
+        if not approved and candidate["kind"] == "container":
+            # An unreviewed mutable map may be an unbounded cache. Fail closed
+            # until the inventory assigns its ownership category.
+            unbounded += 1
+        if approved and entry["category"] == "cache" and candidate["kind"] in {"container", "runtime_resource"}:
+            max_symbol = entry.get("max_entries_symbol")
+            ttl_symbol = entry.get("ttl_symbol")
+            invalidation = entry.get("invalidation")
+            max_entries, ttl_seconds = _verified_cache_policy(
+                sources.get(candidate["path"], ""),
+                candidate["symbol"],
+                max_symbol,
+                ttl_symbol,
+                invalidation,
+            )
+            if max_entries is not None and ttl_seconds is not None:
+                finding.update({
+                    "max_entries": max_entries,
+                    "ttl_seconds": ttl_seconds,
+                    "invalidation": invalidation,
+                })
+            else:
+                unbounded += 1
+        if candidate["kind"] == "function_cache":
+            policy = _verified_function_cache_policy(
+                sources.get(candidate["path"], ""),
+                candidate,
+                entry,
+            ) if approved and entry and entry.get("category") == "cache" else None
+            if policy is not None:
+                finding.update({
+                    "max_entries": policy[0],
+                    "ttl_seconds": policy[1],
+                    "invalidation": entry.get("invalidation"),
+                })
+            else:
+                # functools caches have a size bound but no expiry. They remain
+                # unbounded for this policy until replaced with an expiring,
+                # explicitly invalidatable cache implementation.
+                unbounded += 1
+        if not approved:
+            unapproved += 1
+        findings.append(finding)
+    stale = sorted(set(inventory) - scanned_ids)
+    if stale:
+        raise AnalysisError(
+            "stale process-state inventory entries: "
+            + ", ".join(f"{path}:{symbol}" for path, symbol in stale)
+        )
+    return findings, unapproved, unbounded
+
+
+def _verified_cache_policy(
+    source: str,
+    cache_symbol: str,
+    max_symbol: Any,
+    ttl_symbol: Any,
+    invalidation: Any,
+) -> tuple[int | None, float | None]:
+    """Verify cache bounds and invalidation references against source AST."""
+    if not all(isinstance(item, str) and item for item in (max_symbol, ttl_symbol, invalidation)):
+        return None, None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None, None
+    constants = _numeric_module_constants(tree)
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions[node.name] = node
+    max_entries = constants.get(max_symbol)
+    ttl_seconds = constants.get(ttl_symbol)
+    if not (isinstance(max_entries, int) and not isinstance(max_entries, bool) and max_entries > 0):
+        return None, None
+    if not (isinstance(ttl_seconds, (int, float)) and not isinstance(ttl_seconds, bool) and ttl_seconds > 0):
+        return None, None
+    reads = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+    if max_symbol not in reads or ttl_symbol not in reads:
+        return None, None
+    invalidator = functions.get(invalidation)
+    if invalidator is None:
+        return None, None
+    clears_cache = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == cache_symbol
+        and node.func.attr in {"clear", "pop", "popitem"}
+        for node in ast.walk(invalidator)
+    )
+    if not clears_cache:
+        return None, None
+    return max_entries, float(ttl_seconds)
+
+
+def _verified_function_cache_policy(
+    source: str,
+    candidate: dict[str, Any],
+    inventory_entry: dict[str, Any] | None,
+) -> tuple[int, float] | None:
+    """Verify the project TTL cache decorator and its explicit clear API."""
+    if inventory_entry is None:
+        return None
+    if candidate.get("cache_decorator") != "app.caching.bounded_cache.bounded_lru_cache":
+        return None
+    function_name = candidate["symbol"].removesuffix(".__cache__")
+    if inventory_entry.get("invalidation") != f"{function_name}.cache_clear":
+        return None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    constants = _numeric_module_constants(tree)
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions[node.name] = node
+    function = functions.get(function_name)
+    if function is None:
+        return None
+    for decorator in function.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        if qualified_name(decorator.func).split(".")[-1] != "bounded_lru_cache":
+            continue
+        raw_max = keyword(decorator, "max_entries")
+        raw_ttl = keyword(decorator, "ttl_seconds")
+        max_entries = raw_max.value if isinstance(raw_max, ast.Constant) else constants.get(raw_max.id) if isinstance(raw_max, ast.Name) else None
+        ttl_seconds = raw_ttl.value if isinstance(raw_ttl, ast.Constant) else constants.get(raw_ttl.id) if isinstance(raw_ttl, ast.Name) else None
+        if not (
+            isinstance(max_entries, int)
+            and not isinstance(max_entries, bool)
+            and max_entries > 0
+            and isinstance(ttl_seconds, (int, float))
+            and not isinstance(ttl_seconds, bool)
+            and ttl_seconds > 0
+        ):
+            return None
+        declared_max = inventory_entry.get("max_entries")
+        declared_ttl = inventory_entry.get("ttl_seconds")
+        if declared_max != max_entries or declared_ttl != ttl_seconds:
+            return None
+        return max_entries, float(ttl_seconds)
+    return None
+
+
+def _numeric_module_constants(tree: ast.Module) -> dict[str, int | float]:
+    def evaluate(node: ast.AST) -> int | float | None:
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+            return node.value
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = evaluate(node.operand)
+            if value is not None:
+                return value if isinstance(node.op, ast.UAdd) else -value
+        if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv)):
+            left = evaluate(node.left)
+            right = evaluate(node.right)
+            if left is not None and right is not None:
+                try:
+                    value = {
+                        ast.Add: lambda: left + right,
+                        ast.Sub: lambda: left - right,
+                        ast.Mult: lambda: left * right,
+                        ast.Div: lambda: left / right,
+                        ast.FloorDiv: lambda: left // right,
+                    }[type(node.op)]()
+                except (ArithmeticError, OverflowError):
+                    return None
+                return value if math.isfinite(float(value)) else None
+        return None
+
+    constants: dict[str, int | float] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = evaluate(node.value)
+        if value is None:
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if isinstance(target, ast.Name):
+                constants[target.id] = value
+    return constants
+
+
+def process_local_state_markdown(findings: list[dict[str, Any]]) -> str:
+    rows = [
+        "# Process-local state inventory",
+        "",
+        "Generated by `python scripts/architecture_metrics.py --write-process-local-state-doc` from the module-scope scan of `src/app`.",
+        "The scan includes mutable module containers, synchronization/resource objects, and cached functions.",
+        "Each entry is assigned one of the roadmap categories: cache, coordination, or per-connection.",
+        "",
+        "| Source | Kind | Category | Bound | TTL (seconds) | Invalidation / authority | Review reason |",
+        "|---|---|---|---:|---:|---|---|",
+    ]
+    for item in findings:
+        source = f"`{item['path']}:{item['line']}` `{item['symbol']}`"
+        bound = str(item.get("max_entries", "—"))
+        ttl = str(item.get("ttl_seconds", "—"))
+        invalidation = str(item.get("invalidation", "—")).replace("|", "\\|")
+        reason = str(item.get("reason", "UNREVIEWED")).replace("|", "\\|")
+        details = f"{item['kind']} ({item.get('cache_decorator')} maxsize={item.get('maxsize')})" if item["kind"] == "function_cache" else item["kind"]
+        rows.append(
+            f"| {source} | {details} | {item.get('category') or 'UNREVIEWED'} | {bound} | {ttl} | {invalidation} | {reason} |"
+        )
+    rows.extend(["", f"Scanned entries: {len(findings)}; unapproved entries: {sum(not item['approved'] for item in findings)}; unbounded caches: {sum(item['kind'] == 'function_cache' or item['category'] == 'cache' and item['kind'] in {'container', 'runtime_resource'} and 'max_entries' not in item for item in findings)}.", ""])
+    return "\n".join(rows)
+
+
 def _permission(value: ast.AST | None) -> bool:
     if value is None:
         return False
@@ -194,7 +550,6 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
     evidence["package_cycles"] = analysis.package_cycles()
     values["package_cycles"] = len(evidence["package_cycles"])
     blob_owners = {"src/" + path for path in analysis.config.get("owners", {}).get("blob_store_construction", [])}
-    local_state: set[tuple[str, str]] = set()
     evidence["other_fixed_sleeps_in_tests"] = []
     values["files_over_1200_lines"] = sum(
         path.endswith((".py", ".ts", ".tsx")) and len(source.splitlines()) > 1200
@@ -326,12 +681,6 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                 })
             if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)) and node.attr == "__init__":
                 fastapi_patch |= _fastapi_class(bindings, node.value)
-            if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                if not scope and (isinstance(node.value, (ast.Dict, ast.List, ast.Set)) or isinstance(node.value, ast.Call) and qualified_name(node.value.func, aliases).split(".")[-1] in {"dict", "list", "set", "defaultdict", "WeakValueDictionary", "Lock", "RLock"}):
-                    for target in targets:
-                        if isinstance(target, ast.Name) and target.id != "__all__":
-                            local_state.add((path, target.id))
             string = literal_string(node)
             parent_string = literal_string(parents[node]) if node in parents else None
             if string is not None and parent_string is None:
@@ -351,17 +700,15 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                         values["inline_prompt_strings"] += 1
         values["fastapi_init_patchers"] += fastapi_patch
         values["absolute_storage_path_reads"] += storage_read
-    inventory = _read_json(analysis.sources, "resources/architecture/process-local-state.json", {"entries": []})
-    for entry in inventory["entries"]:
-        if not isinstance(entry.get("path"), str) or not isinstance(entry.get("symbol"), str):
-            raise AnalysisError("process-state inventory requires an exact path and symbol")
-        local_state.add((entry["path"], entry["symbol"]))
-    approved = {(entry["path"], entry["symbol"]) for entry in inventory["entries"]
-                if entry.get("approved") is True and isinstance(entry.get("reason"), str) and entry["reason"].strip()}
-    values["process_local_state_unapproved"] = len(local_state - approved)
-    evidence["process_local_state_candidates"] = [{"path": path, "symbol": symbol, "approved": (path, symbol) in approved}
-                                                for path, symbol in sorted(local_state)]
-    evidence["process_local_state_inventory_kind"] = "syntactic_candidates_plus_explicit_entries"
+    process_state, unapproved_state, unbounded_caches = process_local_state_report(analysis.sources)
+    values["process_local_state_unapproved"] = unapproved_state
+    values["unbounded_module_caches"] = unbounded_caches
+    evidence["process_local_state_candidates"] = [
+        {"path": item["path"], "symbol": item["symbol"], "approved": item["approved"]}
+        for item in process_state
+    ]
+    evidence["process_local_state_inventory_kind"] = "module_scope_scan_plus_reviewed_entries"
+    evidence["process_local_state"] = process_state
     values["quarantined_tests"] = _quarantines(analysis.sources)
     patterns, strict_patterns = _mypy_override_patterns(analysis.sources)
     values["mypy_ignored_modules"] = len(patterns)
@@ -670,6 +1017,8 @@ def main(argv: list[str] | None = None) -> int:
     operation = parser.add_mutually_exclusive_group()
     operation.add_argument("--check", action="store_true")
     operation.add_argument("--update-baseline", action="store_true")
+    operation.add_argument("--scan-process-local-state", action="store_true")
+    operation.add_argument("--write-process-local-state-doc", action="store_true")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     try:
@@ -679,6 +1028,24 @@ def main(argv: list[str] | None = None) -> int:
             raise AnalysisError("--output must differ from --baseline; use --update-baseline to update the ratchet")
         previous = json.loads(baseline_path.read_text(encoding="utf-8")) if (args.check or args.update_baseline) and baseline_path.exists() else None
         sources = tracked_sources(root, revision=args.revision)
+        if args.scan_process_local_state:
+            findings, unapproved, unbounded = process_local_state_report(sources)
+            sys.stdout.write(json.dumps({
+                "entries": findings,
+                "unapproved": unapproved,
+                "unbounded_module_caches": unbounded,
+            }, indent=2, sort_keys=True) + "\n")
+            return 0
+        if args.write_process_local_state_doc:
+            findings, unapproved, unbounded = process_local_state_report(sources)
+            _atomic_write(root / PROCESS_STATE_DOC, process_local_state_markdown(findings))
+            if unapproved or unbounded:
+                print(
+                    f"architecture metrics: process-state doc generated with {unapproved} unapproved entries and {unbounded} unbounded caches",
+                    file=sys.stderr,
+                )
+                return 1
+            return 0
         config = load_layers(root / "resources/architecture/layers.toml")
         schema_path = root / "src/apps/web/src/api/generated/openapi.json"
         if args.revision:

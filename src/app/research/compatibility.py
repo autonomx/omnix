@@ -5,6 +5,7 @@ from app.config.env import env_str, environment
 
 import os
 import threading
+import time
 from collections import Counter
 
 from pydantic import BaseModel, Field
@@ -23,6 +24,9 @@ LEGACY_RESEARCH_MODES = (
 
 _lock = threading.Lock()
 _counts: Counter[str] = Counter()
+_MAX_COMPATIBILITY_KEYS = 8
+_COMPATIBILITY_TTL_SECONDS = 30 * 24 * 60 * 60
+_COUNTS_UPDATED_AT = 0.0
 
 
 class ResearchCompatibilityStatus(BaseModel):
@@ -44,12 +48,20 @@ def legacy_research_alias_sunset() -> str | None:
 
 
 def record_legacy_research_aliases(aliases: list[str]) -> None:
-    unique = list(dict.fromkeys(alias for alias in aliases if alias))
+    allowed = {*LEGACY_RESEARCH_FIELDS, *(f"mode:{mode}" for mode in LEGACY_RESEARCH_MODES)}
+    unique = list(dict.fromkeys(alias for alias in aliases if alias in allowed))
     if not unique:
         return
+    global _COUNTS_UPDATED_AT
+    now = time.monotonic()
     with _lock:
-        _counts["__requests__"] += 1
-        _counts.update(unique)
+        _clear_expired_counts_locked(now)
+        if "__requests__" in _counts or len(_counts) < _MAX_COMPATIBILITY_KEYS:
+            _counts["__requests__"] += 1
+        for alias in unique:
+            if alias in _counts or len(_counts) < _MAX_COMPATIBILITY_KEYS:
+                _counts[alias] += 1
+        _COUNTS_UPDATED_AT = now
 
 
 def legacy_research_warnings(aliases: list[str]) -> list[str]:
@@ -57,7 +69,9 @@ def legacy_research_warnings(aliases: list[str]) -> list[str]:
 
 
 def research_compatibility_status() -> ResearchCompatibilityStatus:
+    now = time.monotonic()
     with _lock:
+        _clear_expired_counts_locked(now)
         snapshot = dict(_counts)
     total = int(snapshot.pop("__requests__", 0))
     keys = [*LEGACY_RESEARCH_FIELDS, *(f"mode:{mode}" for mode in LEGACY_RESEARCH_MODES)]
@@ -70,5 +84,12 @@ def research_compatibility_status() -> ResearchCompatibilityStatus:
 
 
 def reset_research_compatibility_telemetry() -> None:
+    global _COUNTS_UPDATED_AT
     with _lock:
+        _counts.clear()
+        _COUNTS_UPDATED_AT = time.monotonic()
+
+
+def _clear_expired_counts_locked(now: float) -> None:
+    if _COUNTS_UPDATED_AT and now - _COUNTS_UPDATED_AT > _COMPATIBILITY_TTL_SECONDS:
         _counts.clear()

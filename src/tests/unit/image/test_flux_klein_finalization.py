@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
+# Needs the GPU model stack; skipped where torch is not installed.
+pytest.importorskip("torch")
+pytestmark = pytest.mark.gpu
+
+
 import threading
 from pathlib import Path
 from types import SimpleNamespace

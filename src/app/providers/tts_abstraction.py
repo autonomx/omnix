@@ -6,7 +6,10 @@ Built on top of the existing BaseTTSProvider/AudioProviderRegistry system.
 """
 
 import logging
+import threading
+import time
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from typing import Any, Dict, Iterator, List, Optional
 
 import requests
@@ -123,27 +126,60 @@ class OpenAITTSProvider(TTSProvider):
 # Registry for simplified providers
 # ---------------------------------------------------------------------------
 
-_tts_providers: Dict[str, TTSProvider] = {}
+MAX_TTS_PROVIDER_REGISTRATIONS = 64
+TTS_PROVIDER_REGISTRATION_TTL_SECONDS = 24 * 60 * 60.0
+_tts_providers: OrderedDict[str, tuple[TTSProvider, float]] = OrderedDict()
+_TTS_PROVIDER_LOCK = threading.RLock()
+
+
+def _prune_tts_providers_locked(now: float) -> None:
+    for name, (_provider, expires_at) in list(_tts_providers.items()):
+        if expires_at <= now:
+            _tts_providers.pop(name, None)
+
+
+def clear_tts_provider_registrations() -> None:
+    """Invalidate registered provider instances for tests and controlled resets."""
+
+    with _TTS_PROVIDER_LOCK:
+        _tts_providers.clear()
 
 
 def register_provider(name: str, provider: TTSProvider) -> None:
     """Register a TTS provider by name."""
-    _tts_providers[name] = provider
+    normalized = str(name or "").strip()
+    if not normalized:
+        raise ValueError("TTS provider registration requires a name")
+    with _TTS_PROVIDER_LOCK:
+        now = time.monotonic()
+        _prune_tts_providers_locked(now)
+        if normalized not in _tts_providers and len(_tts_providers) >= MAX_TTS_PROVIDER_REGISTRATIONS:
+            raise ValueError("TTS provider registration capacity exceeded")
+        _tts_providers[normalized] = (provider, now + TTS_PROVIDER_REGISTRATION_TTL_SECONDS)
+        _tts_providers.move_to_end(normalized)
 
 
 def get_provider(name: str) -> Optional[TTSProvider]:
     """Get a registered TTS provider by name."""
-    return _tts_providers.get(name)
+    with _TTS_PROVIDER_LOCK:
+        now = time.monotonic()
+        _prune_tts_providers_locked(now)
+        entry = _tts_providers.get(name)
+        if entry is None:
+            return None
+        _tts_providers[name] = (entry[0], now + TTS_PROVIDER_REGISTRATION_TTL_SECONDS)
+        _tts_providers.move_to_end(name)
+        return entry[0]
 
 
 def list_providers() -> List[str]:
     """List all registered provider names."""
-    return list(_tts_providers.keys())
+    with _TTS_PROVIDER_LOCK:
+        _prune_tts_providers_locked(time.monotonic())
+        return list(_tts_providers.keys())
 
 
 def unregister_provider(name: str) -> bool:
     """Remove a provider from registry."""
-    if name in _tts_providers:
-        del _tts_providers[name]
-        return True
-    return False
+    with _TTS_PROVIDER_LOCK:
+        return _tts_providers.pop(name, None) is not None

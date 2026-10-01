@@ -45,6 +45,10 @@ def test_normalize_provider_chain_preserves_order_and_removes_duplicates() -> No
 
 def test_release_availability_uses_any_usable_provider_in_chain(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_WEB_SEARCH_API_KEY", raising=False)
+    # Credentials come from the provider secret store; never read the operator's.
+    monkeypatch.setattr(
+        "app.security.provider_secret_store.load_research_provider_secrets", lambda: {}
+    )
     with_fallbacks = ResearchRuntimeSettings(
         provider="brave",
         provider_fallbacks=("playwright", "duckduckgo"),
@@ -63,6 +67,10 @@ def test_release_availability_uses_any_usable_provider_in_chain(monkeypatch) -> 
 
 def test_missing_brave_credential_skips_to_playwright(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_WEB_SEARCH_API_KEY", raising=False)
+    # Credentials come from the provider secret store; never read the operator's.
+    monkeypatch.setattr(
+        "app.security.provider_secret_store.load_research_provider_secrets", lambda: {}
+    )
     outcomes = {
         "playwright": [result("playwright")],
         "duckduckgo": [result("duckduckgo")],

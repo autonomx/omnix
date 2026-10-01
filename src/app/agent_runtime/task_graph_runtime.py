@@ -1,11 +1,13 @@
 """Durable TaskGraph scheduling, parallel launch, aggregation, and recovery."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import json
 import logging
 import threading
 import uuid
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any, Callable
 
 from app.assistant_tools.models import AssistantToolRequest
@@ -455,7 +457,8 @@ class PostgresTaskGraphRuntime:
 
         try:
             events = self.agent_service.events(child_run_id, after_sequence=0)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("TaskGraph child result lookup", exc)
             return None
         for event in reversed(list(events)):
             if event.event_type != "model.message":
@@ -738,16 +741,25 @@ class PostgresTaskGraphRuntime:
             selected_model=selected_model,
         )
         try:
-            contextual_start = getattr(
-                self.agent_service,
-                "start_with_context",
-                None,
-            )
-            child = (
-                contextual_start(spec, reference_context=reference_context)
-                if callable(contextual_start)
-                else self.agent_service.start(spec)
-            )
+            service = self.agent_service
+            job_store = getattr(service, "job_store", None)
+            submit_start = getattr(service, "submit_start", None)
+            if callable(submit_start):
+                if job_store is None:
+                    raise RuntimeError("durable agent job service is not composed")
+                child = submit_start(
+                    spec,
+                    job_store=job_store,
+                    task_graph_run_id=run_id,
+                    task_graph_node_ids=[nodes[0].id],
+                )
+            else:
+                contextual_start = getattr(service, "start_with_context", None)
+                child = (
+                    contextual_start(spec, reference_context=reference_context)
+                    if callable(contextual_start)
+                    else service.start(spec)
+                )
         except Exception as exc:
             for node, claim in zip(nodes, claims):
                 self._store_node(
@@ -1005,12 +1017,25 @@ class PostgresTaskGraphRuntime:
             if value
         )
         try:
-            contextual_start = getattr(self.agent_service, "start_with_context", None)
-            child = (
-                contextual_start(spec, reference_context=reference_context)
-                if callable(contextual_start)
-                else self.agent_service.start(spec)
-            )
+            service = self.agent_service
+            job_store = getattr(service, "job_store", None)
+            submit_start = getattr(service, "submit_start", None)
+            if callable(submit_start):
+                if job_store is None:
+                    raise RuntimeError("durable agent job service is not composed")
+                child = submit_start(
+                    spec,
+                    job_store=job_store,
+                    task_graph_run_id=run_id,
+                    task_graph_node_ids=[node.id],
+                )
+            else:
+                contextual_start = getattr(service, "start_with_context", None)
+                child = (
+                    contextual_start(spec, reference_context=reference_context)
+                    if callable(contextual_start)
+                    else service.start(spec)
+                )
         except Exception as exc:
             self._store_node(
                 run_id,
@@ -1384,7 +1409,8 @@ class PostgresTaskGraphRuntime:
                     payload={"reason": "task_graph_cancelled"},
                 )
             )
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("TaskGraph child cancellation", exc)
             pass
 
     def cancel(
@@ -1629,6 +1655,6 @@ class PostgresTaskGraphRuntime:
         return self.advance(run_id)
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_task_graph_runtime() -> PostgresTaskGraphRuntime:
     return PostgresTaskGraphRuntime()

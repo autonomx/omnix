@@ -10,7 +10,7 @@ from app.runtime.features import FeatureContext
 from app.runtime.scheduler import ScheduledTaskSpec, TaskContext
 
 
-def create_trading_router(_context: FeatureContext) -> APIRouter:
+def create_trading_router(context: FeatureContext) -> APIRouter:
     """Compose the Trading HTTP surface without patching the gateway class."""
     from app.trading.alerts_api import create_trading_alert_router
     from app.trading.api import create_trading_router as create_trading_base_router
@@ -54,7 +54,12 @@ def create_trading_router(_context: FeatureContext) -> APIRouter:
         create_trading_model_router,
         create_trading_market_data_router,
     ):
-        router.include_router(factory())
+        if factory is create_trading_strategy_router:
+            router.include_router(
+                factory(job_store_factory=lambda: context.services.jobs)
+            )
+        else:
+            router.include_router(factory())
     return router
 
 
@@ -191,10 +196,20 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
             if active_interval is not None:
                 interval_seconds = min(interval_seconds, active_interval)
 
-            async def run(_task_context: TaskContext) -> None:
-                result = run_once()
-                if inspect.isawaitable(result):
-                    await result
+            if inspect.iscoroutinefunction(run_once):
+                async def run(_task_context: TaskContext) -> None:
+                    await run_once()
+
+                executor = "async"
+            else:
+                def run(_task_context: TaskContext) -> None:
+                    result = run_once()
+                    if inspect.isawaitable(result):
+                        raise TypeError(
+                            f"Synchronous trading monitor {worker.name} returned an awaitable"
+                        )
+
+                executor = "thread"
 
             startup = getattr(monitor, "prepare_for_scheduled_execution", None)
             if startup is None and worker.name.endswith("metric_monitor"):
@@ -214,6 +229,7 @@ def trading_scheduled_task_factories() -> tuple[Callable[[FeatureContext], Sched
                 interval_seconds=max(0.25, float(interval_seconds)),
                 jitter_seconds=min(1.0, max(0.0, float(interval_seconds) * 0.05)),
                 timeout_seconds=max(60.0, float(interval_seconds)),
+                executor=executor,
                 enabled=enabled,
                 on_startup=tuple(startup_callbacks),
                 on_shutdown=worker.shutdown,

@@ -5,6 +5,8 @@ from app.config.env import env_str as _env_str
 import inspect
 import os
 import threading
+import time
+from collections import OrderedDict
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -25,8 +27,61 @@ from app.image_http_client import (
 router = APIRouter()
 
 _DOWNLOAD_TOTALS_LOCK = threading.Lock()
-_DOWNLOAD_TOTALS: dict[str, int] = {}
-_DOWNLOAD_TOKENS: dict[str, str] = {}
+_MAX_PROVIDER_DOWNLOAD_ENTRIES = 32
+_DOWNLOAD_TOTAL_TTL_SECONDS = 3600.0
+_DOWNLOAD_TOKEN_TTL_SECONDS = 7200.0
+_DOWNLOAD_TOTALS: OrderedDict[str, tuple[int, float]] = OrderedDict()
+_DOWNLOAD_TOKENS: OrderedDict[str, tuple[str, float]] = OrderedDict()
+
+
+def _download_metadata_now() -> float:
+    return time.monotonic()
+
+
+def _prune_download_metadata_locked(now: float) -> None:
+    expired_totals = [
+        provider
+        for provider, (_total, stored_at) in _DOWNLOAD_TOTALS.items()
+        if now - stored_at > _DOWNLOAD_TOTAL_TTL_SECONDS
+    ]
+    expired_tokens = [
+        provider
+        for provider, (_token, stored_at) in _DOWNLOAD_TOKENS.items()
+        if now - stored_at > _DOWNLOAD_TOKEN_TTL_SECONDS
+    ]
+    for provider in expired_totals:
+        _DOWNLOAD_TOTALS.pop(provider, None)
+    for provider in expired_tokens:
+        _DOWNLOAD_TOKENS.pop(provider, None)
+    while len(_DOWNLOAD_TOTALS) > _MAX_PROVIDER_DOWNLOAD_ENTRIES:
+        _DOWNLOAD_TOTALS.popitem(last=False)
+    while len(_DOWNLOAD_TOKENS) > _MAX_PROVIDER_DOWNLOAD_ENTRIES:
+        _DOWNLOAD_TOKENS.popitem(last=False)
+
+
+def _remember_download_total(provider: str, total: int) -> None:
+    now = _download_metadata_now()
+    with _DOWNLOAD_TOTALS_LOCK:
+        _prune_download_metadata_locked(now)
+        _DOWNLOAD_TOTALS[provider] = (total, now)
+        _DOWNLOAD_TOTALS.move_to_end(provider)
+        _prune_download_metadata_locked(now)
+
+
+def _remember_download_token(provider: str, token: str) -> None:
+    now = _download_metadata_now()
+    with _DOWNLOAD_TOTALS_LOCK:
+        _prune_download_metadata_locked(now)
+        _DOWNLOAD_TOKENS[provider] = (token, now)
+        _DOWNLOAD_TOKENS.move_to_end(provider)
+        _prune_download_metadata_locked(now)
+
+
+def clear_image_download_metadata() -> None:
+    """Clear cached provider sizes and transient download credentials."""
+    with _DOWNLOAD_TOTALS_LOCK:
+        _DOWNLOAD_TOTALS.clear()
+        _DOWNLOAD_TOKENS.clear()
 
 
 class ImageModelActionRequest(BaseModel):
@@ -109,9 +164,15 @@ def _read_service_status(provider: str) -> dict[str, Any]:
 
 
 def _repository_total_bytes(provider: str) -> int:
+    now = _download_metadata_now()
     with _DOWNLOAD_TOTALS_LOCK:
-        cached = _DOWNLOAD_TOTALS.get(provider)
-        transient_token = _DOWNLOAD_TOKENS.get(provider, "")
+        _prune_download_metadata_locked(now)
+        cached_entry = _DOWNLOAD_TOTALS.get(provider)
+        if cached_entry is not None:
+            _DOWNLOAD_TOTALS.move_to_end(provider)
+        token_entry = _DOWNLOAD_TOKENS.get(provider)
+        transient_token = token_entry[0] if token_entry is not None else ""
+    cached = cached_entry[0] if cached_entry is not None else None
     if cached is not None:
         return cached
 
@@ -135,8 +196,7 @@ def _repository_total_bytes(provider: str) -> int:
         total = 0
 
     if total > 0:
-        with _DOWNLOAD_TOTALS_LOCK:
-            _DOWNLOAD_TOTALS[provider] = total
+        _remember_download_total(provider, total)
     return total
 
 
@@ -299,11 +359,11 @@ async def download_image_model(request: ImageModelDownloadRequest) -> ImageModel
     provider_name = _provider(request.provider)
     token = request.hf_token.get_secret_value().strip() if request.hf_token else ""
     with _DOWNLOAD_TOTALS_LOCK:
+        _prune_download_metadata_locked(_download_metadata_now())
         _DOWNLOAD_TOTALS.pop(provider_name, None)
-        if token:
-            _DOWNLOAD_TOKENS[provider_name] = token
-        else:
-            _DOWNLOAD_TOKENS.pop(provider_name, None)
+        _DOWNLOAD_TOKENS.pop(provider_name, None)
+    if token:
+        _remember_download_token(provider_name, token)
     try:
         result = await _call_service(
             download_image_model_via_service,

@@ -6,6 +6,7 @@ from app.config.env import env_str, environment
 import os
 import json
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,6 +53,8 @@ class AssistantToolOAuthClientPayload(BaseModel):
 
 GOOGLE_TOOL_IDS = {"gmail", "calendar", "contacts"}
 _OAUTH_STATE_TTL_SECONDS = 600.0
+_MAX_PENDING_OAUTH_STATES = 2048
+_PENDING_OAUTH_LOCK = threading.RLock()
 _PENDING_OAUTH_STATES: dict[str, tuple[str, str, float]] = {}
 
 
@@ -410,22 +413,38 @@ def _provider_for_tool(tool_id: str) -> str:
 
 def _issue_oauth_state(provider: str, tool_id: str) -> str:
     now = time.monotonic()
-    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
-        if expires_at <= now:
-            _PENDING_OAUTH_STATES.pop(token, None)
-    token = secrets.token_urlsafe(32)
-    _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
-    return token
+    with _PENDING_OAUTH_LOCK:
+        _prune_pending_oauth_locked(now)
+        while len(_PENDING_OAUTH_STATES) >= _MAX_PENDING_OAUTH_STATES:
+            oldest = min(_PENDING_OAUTH_STATES, key=lambda key: _PENDING_OAUTH_STATES[key][2])
+            _PENDING_OAUTH_STATES.pop(oldest, None)
+        token = secrets.token_urlsafe(32)
+        _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
+        return token
+
+
+def clear_pending_oauth_states() -> None:
+    """Invalidate pending OAuth handshakes for tests and controlled resets."""
+
+    with _PENDING_OAUTH_LOCK:
+        _PENDING_OAUTH_STATES.clear()
 
 
 def _consume_oauth_state(provider: str, token: str) -> str | None:
-    value = _PENDING_OAUTH_STATES.pop(token, None)
+    with _PENDING_OAUTH_LOCK:
+        value = _PENDING_OAUTH_STATES.pop(token, None)
     if value is None:
         return None
     stored_provider, tool_id, expires_at = value
     if stored_provider != provider or expires_at <= time.monotonic():
         return None
     return tool_id
+
+
+def _prune_pending_oauth_locked(now: float) -> None:
+    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
+        if expires_at <= now:
+            _PENDING_OAUTH_STATES.pop(token, None)
 
 
 def _load_local_env() -> None:

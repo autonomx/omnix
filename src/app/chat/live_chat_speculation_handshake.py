@@ -26,6 +26,8 @@ from app.observability.tts_stream_diagnostics import stream_log
 
 _MAX_BUFFERED_EVENTS = 256
 _MAX_BUFFERED_BYTES = 256 * 1024
+_MAX_HANDSHAKE_GENERATIONS = 64
+_HANDSHAKE_TTL_SECONDS = 90.0
 
 
 class _SpeculationBufferLimitExceeded(RuntimeError):
@@ -50,7 +52,6 @@ class _HandshakeGeneration:
 
 
 _HANDSHAKE_GENERATIONS: dict[str, _HandshakeGeneration] = {}
-_STREAM_STARTED: set[str] = set()
 
 
 def clear_live_speculation_handshake_state() -> None:
@@ -59,7 +60,6 @@ def clear_live_speculation_handshake_state() -> None:
     with speculation_runtime._SPECULATION_LOCK:
         generations = list(_HANDSHAKE_GENERATIONS.values())
         _HANDSHAKE_GENERATIONS.clear()
-        _STREAM_STARTED.clear()
     for generation in generations:
         generation.cancel_event.set()
         with generation.condition:
@@ -122,6 +122,7 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
             _prune_handshake_state_locked()
             speculation_runtime._SPECULATIONS[generation_id] = pending
             _HANDSHAKE_GENERATIONS[generation_id] = generation
+            _prune_handshake_state_locked()
         worker.start()
 
         total_ms = (time.perf_counter() - started) * 1000.0
@@ -165,7 +166,7 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
             generation = _HANDSHAKE_GENERATIONS.get(generation_id)
             if pending is None or pending.session_id != session_id:
                 raise HTTPException(status_code=404, detail="speculation_not_found")
-            if generation_id in _STREAM_STARTED:
+            if generation is not None and generation.stream_started:
                 raise HTTPException(
                     status_code=409,
                     detail="speculation_stream_already_started",
@@ -176,7 +177,6 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
                     detail="speculation_handshake_expired",
                 )
             generation.stream_started = True
-            _STREAM_STARTED.add(generation_id)
 
         stream_log(
             "gateway-live-chat-speculation",
@@ -193,7 +193,7 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
             ),
         )
         return StreamingResponse(
-            _subscribe_generation(generation_id, pending, generation),
+            _subscribe_generation(pending, generation),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-store, no-transform",
@@ -367,7 +367,6 @@ def _finish_with_error(
 
 
 def _subscribe_generation(
-    generation_id: str,
     pending: Any,
     generation: _HandshakeGeneration,
 ) -> Iterator[str]:
@@ -396,29 +395,33 @@ def _subscribe_generation(
                 code="speculation_stream_detached",
                 message="Speculative generation stream detached.",
             )
-        with speculation_runtime._SPECULATION_LOCK:
-            current = _HANDSHAKE_GENERATIONS.get(generation_id)
-            if current is generation:
-                _HANDSHAKE_GENERATIONS.pop(generation_id, None)
-
 
 def _prune_handshake_state_locked() -> None:
     active_ids = set(speculation_runtime._SPECULATIONS)
-    for generation_id in list(_STREAM_STARTED):
-        if generation_id not in active_ids:
-            _STREAM_STARTED.discard(generation_id)
+    now = time.time()
     expired = [
         (generation_id, generation)
         for generation_id, generation in _HANDSHAKE_GENERATIONS.items()
         if generation_id not in active_ids
+        or now - generation.created_at > _HANDSHAKE_TTL_SECONDS
     ]
     for generation_id, generation in expired:
         _HANDSHAKE_GENERATIONS.pop(generation_id, None)
-        _STREAM_STARTED.discard(generation_id)
         generation.cancel_event.set()
         with generation.condition:
             generation.completed = True
             generation.condition.notify_all()
+    if len(_HANDSHAKE_GENERATIONS) > _MAX_HANDSHAKE_GENERATIONS:
+        oldest = sorted(
+            _HANDSHAKE_GENERATIONS.items(),
+            key=lambda item: item[1].created_at,
+        )
+        for generation_id, generation in oldest[: len(_HANDSHAKE_GENERATIONS) - _MAX_HANDSHAKE_GENERATIONS]:
+            _HANDSHAKE_GENERATIONS.pop(generation_id, None)
+            generation.cancel_event.set()
+            with generation.condition:
+                generation.completed = True
+                generation.condition.notify_all()
 
 
 __all__ = [

@@ -116,4 +116,7 @@ def test_live_voice_diagnostics_status_returns_log_path(monkeypatch) -> None:
     response = client.get("/api/tts/live-call/diagnostics/status")
 
     assert response.status_code == 200
-    assert response.json() == {"ready": True, "log_path": "/tmp/live-call-streaming.log"}
+    payload = response.json()
+    assert payload["ready"] is True
+    assert payload["log_path"] == "/tmp/live-call-streaming.log"
+    assert set(payload["capacity"]) == {"active", "available", "maximum", "saturated"}

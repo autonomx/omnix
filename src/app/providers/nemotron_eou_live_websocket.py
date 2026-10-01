@@ -9,6 +9,7 @@ import math
 import struct
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +37,7 @@ MAX_SEGMENT_AUDIO_MS = 15_000
 MAX_SEGMENT_BYTES = int(SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
 MAX_REPLAY_RESULTS = 64
 SESSION_TTL_SECONDS = 600.0
+MAX_SESSION_STATES = 64
 
 HYBRID_NEGOTIATION = LiveSttNegotiation(
     provider=PROVIDER_NAME,
@@ -195,20 +197,43 @@ class HybridSessionState:
         self.last_seen = time.monotonic()
 
 
-_SESSION_STATES: dict[str, HybridSessionState] = {}
+_SESSION_STATES: OrderedDict[str, HybridSessionState] = OrderedDict()
 
 
 def _session_state(session_id: str) -> HybridSessionState:
     now = time.monotonic()
-    stale = [key for key, value in _SESSION_STATES.items() if now - value.last_seen > SESSION_TTL_SECONDS]
-    for key in stale:
-        _SESSION_STATES.pop(key, None)
+    _prune_session_states(now)
     state = _SESSION_STATES.get(session_id)
     if state is None:
+        if len(_SESSION_STATES) >= MAX_SESSION_STATES:
+            idle = next(
+                (key for key, value in _SESSION_STATES.items() if not value.segments),
+                None,
+            )
+            if idle is None:
+                raise RuntimeError("nemotron_live_session_capacity")
+            _SESSION_STATES.pop(idle, None)
         state = HybridSessionState(session_id=session_id)
         _SESSION_STATES[session_id] = state
+    _SESSION_STATES.move_to_end(session_id)
     state.last_seen = now
     return state
+
+
+def clear_nemotron_session_states() -> None:
+    """Invalidate transient segmented-audio replay and assembly state."""
+
+    _SESSION_STATES.clear()
+
+
+def _prune_session_states(now: float) -> None:
+    stale = [
+        key
+        for key, value in _SESSION_STATES.items()
+        if now - value.last_seen > SESSION_TTL_SECONDS and not value.segments
+    ]
+    for key in stale:
+        _SESSION_STATES.pop(key, None)
 
 
 async def _safe_send(websocket: WebSocket, lock: asyncio.Lock, payload: dict[str, Any]) -> bool:

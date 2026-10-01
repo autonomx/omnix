@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import RLock
-from typing import Protocol
+from types import MappingProxyType
+from typing import Mapping, Protocol
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -152,20 +153,29 @@ class PersistedCatalystIntelligenceSource:
 
 
 _SOURCE_LOCK = RLock()
-_REGISTERED_SOURCES: dict[str, DiscoveryAcquisitionSource] = {}
+_REGISTERED_SOURCES: Mapping[str, DiscoveryAcquisitionSource] = MappingProxyType({})
+MAX_REGISTERED_DISCOVERY_SOURCES = 64
 
 
 def register_discovery_acquisition_source(source: DiscoveryAcquisitionSource) -> None:
+    global _REGISTERED_SOURCES
     name = str(getattr(source, "name", "")).strip()
     if not name:
         raise ValueError("discovery_source_requires_name")
     with _SOURCE_LOCK:
-        _REGISTERED_SOURCES[name] = source
+        sources = dict(_REGISTERED_SOURCES)
+        sources[name] = source
+        if len(sources) > MAX_REGISTERED_DISCOVERY_SOURCES:
+            raise ValueError("discovery source capacity exceeded")
+        _REGISTERED_SOURCES = MappingProxyType(sources)
 
 
 def unregister_discovery_acquisition_source(name: str) -> None:
+    global _REGISTERED_SOURCES
     with _SOURCE_LOCK:
-        _REGISTERED_SOURCES.pop(str(name), None)
+        sources = dict(_REGISTERED_SOURCES)
+        sources.pop(str(name), None)
+        _REGISTERED_SOURCES = MappingProxyType(sources)
 
 
 def registered_discovery_sources() -> tuple[DiscoveryAcquisitionSource, ...]:
@@ -174,11 +184,16 @@ def registered_discovery_sources() -> tuple[DiscoveryAcquisitionSource, ...]:
 
 
 def install_default_discovery_sources() -> None:
+    global _REGISTERED_SOURCES
     with _SOURCE_LOCK:
+        sources = dict(_REGISTERED_SOURCES)
         defaults = (FinvizLiveLeaderSource(), PersistedCatalystIntelligenceSource())
         for source in defaults:
-            if source.name not in _REGISTERED_SOURCES:
-                _REGISTERED_SOURCES[source.name] = source
+            if source.name not in sources:
+                sources[source.name] = source
+        if len(sources) > MAX_REGISTERED_DISCOVERY_SOURCES:
+            raise ValueError("discovery source capacity exceeded")
+        _REGISTERED_SOURCES = MappingProxyType(sources)
 
 
 def capture_discovery_observations(*, observed_at: datetime) -> tuple[CausalMarketObservation, ...]:

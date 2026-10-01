@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app.assistant_memory import initiative
 from app.assistant_memory.initiative import (
     TrustedCapabilityManifest,
     initiative_prompt_directive,
@@ -195,3 +196,25 @@ def test_repetition_cooldown_prevents_repeated_morning_prompt() -> None:
 
     assert too_soon.reason == "repetition_cooldown"
     assert later.proactive is True
+
+
+def test_initiative_surface_registry_is_bounded_expiring_and_clearable(monkeypatch) -> None:
+    now = [20.0]
+    monkeypatch.setattr(initiative.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(initiative, "_LAST_SURFACED_TTL_SECONDS", 5)
+    monkeypatch.setattr(initiative, "_MAX_LAST_SURFACED_ENTRIES", 2)
+    reset_initiative_surface_history()
+
+    record_initiative_surface(_context(), "memory:one")
+    record_initiative_surface(_context(), "memory:two")
+    record_initiative_surface(_context(), "memory:three")
+    assert len(initiative._LAST_SURFACED) == 2
+
+    now[0] += 6
+    with initiative._SURFACE_LOCK:
+        initiative._prune_surface_history_locked(now[0])
+    assert not initiative._LAST_SURFACED
+
+    record_initiative_surface(_context(), "memory:four")
+    reset_initiative_surface_history()
+    assert not initiative._LAST_SURFACED

@@ -11496,6 +11496,14 @@
       },
       "DiagnosticsPayload": {
         "properties": {
+          "device_permits": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Device Permits",
+            "type": "array"
+          },
           "event_stream": {
             "additionalProperties": {
               "type": "string"
@@ -47021,7 +47029,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
@@ -47357,7 +47365,7 @@
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {

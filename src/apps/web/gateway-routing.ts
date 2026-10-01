@@ -8,8 +8,12 @@ import routingPolicy from '../../../deploy/gateway-route-policy.json';
 // Development proxy only. Production uses deploy/nginx/omnix.conf.
 const PREFIX = '/__omnix_gateway_replica_';
 const CHAT = new RegExp(routingPolicy.chat_pattern, 'u');
+const LIVE_CHAT = new RegExp(routingPolicy.live_chat_pattern, 'u');
 const SPEECH = new Set(routingPolicy.speech_paths);
+const LIVE_CALL_WEBSOCKET = routingPolicy.live_call_websocket_path;
 const READS = new RegExp(routingPolicy.read_pattern, 'u');
+const CALL_ID_HEADER = routingPolicy.call_id_header;
+const CALL_AFFINITY_COOKIE = routingPolicy.call_affinity_cookie;
 
 function origin(value: string): string {
   const url = new URL(value);
@@ -54,8 +58,43 @@ export function canUseApi(
 ): boolean {
   if (req.headers['x-omnix-gateway-affinity'] === 'worker') return false;
   const path = (req.url ?? '').split('?')[0];
+  const callAffinity = callAffinityKey(req.headers);
+  if ((req.method ?? 'GET') === 'POST' && LIVE_CHAT.test(path)) return speechOnApi && Boolean(callAffinity);
+  if (path === LIVE_CALL_WEBSOCKET) return speechOnApi && Boolean(callAffinity);
   return CHAT.test(path) || (speechOnApi && SPEECH.has(path))
     || (routingPolicy.read_methods.includes(req.method ?? 'GET') && READS.test(path));
+}
+
+function callAffinityKey(headers: Record<string, string | string[] | undefined>): string | null {
+  const rawHeader = headers[CALL_ID_HEADER];
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+  if (headerValue?.trim()) return headerValue.trim();
+  const cookieHeader = headers.cookie;
+  const cookie = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
+  if (!cookie) return null;
+  const value = cookie.split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${CALL_AFFINITY_COOKIE}=`))
+    ?.slice(CALL_AFFINITY_COOKIE.length + 1);
+  return value || null;
+}
+
+function affinityIndex(key: string, replicas: number): number {
+  let selectedIndex = 0;
+  let selectedScore = -1;
+  for (let index = 0; index < replicas; index += 1) {
+    let score = 2_166_136_261;
+    const value = `${key}:${index}`;
+    for (let offset = 0; offset < value.length; offset += 1) {
+      score ^= value.charCodeAt(offset);
+      score = Math.imul(score, 16_777_619);
+    }
+    const unsignedScore = score >>> 0;
+    if (unsignedScore > selectedScore) {
+      selectedScore = unsignedScore;
+      selectedIndex = index;
+    }
+  }
+  return selectedIndex;
 }
 
 export function gatewayRouting(
@@ -96,7 +135,8 @@ export function gatewayRouting(
   const install = (server: Pick<ViteDevServer, 'middlewares' | 'httpServer' | 'config'>) => {
     const route = (req: IncomingMessage) => {
       if (replicas.length && canUseApi(req, speechOnApi)) {
-        const index = cursor++ % replicas.length;
+        const key = callAffinityKey(req.headers);
+        const index = key ? affinityIndex(key, replicas.length) : cursor++ % replicas.length;
         req.url = `${PREFIX}${index}${req.url}`;
         return index;
       }

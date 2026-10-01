@@ -245,6 +245,8 @@ A job can carry:
 
 Common resource classes include CPU plus GPU classes for LLM, TTS, STT, and image work. Feature workspaces can show filtered job subsets, while `/jobs` exposes the shared operational view.
 
+Standalone job-worker processes claim registered job types through independently bounded resource pools. PostgreSQL `SKIP LOCKED` claims and per-attempt lease tokens let workers run on any host without gateway singleton ownership. Each pool reports readiness and Prometheus metrics separately.
+
 Representative staged workflows:
 
 ```text
@@ -488,6 +490,7 @@ Before adding a new feature, verify that the change preserves these rules:
 - Add typed API contracts instead of feature-specific transport hacks.
 - Use the shared provider/model registry.
 - Use the shared job system for long-running work.
+- Run durable job execution in standalone resource pools; keep the gateway worker role responsible for singleton schedulers and recovery.
 - Store outputs through the shared asset/artifact model.
 - Use the shared event transport.
 - Register settings in the settings infrastructure with an explicit persistence owner.

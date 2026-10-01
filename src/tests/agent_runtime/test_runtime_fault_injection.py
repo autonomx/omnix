@@ -181,7 +181,6 @@ def test_initial_runtime_start_failure_is_persisted_as_failed(monkeypatch) -> No
     try:
         run_id = f"start-fault-{uuid.uuid4().hex}"
         service = AgentRunService(database, worker_id="fault-worker")
-        monkeypatch.setattr(service, "_ensure_supervisor", lambda: None)
         monkeypatch.setattr(
             service.runtime,
             "start",

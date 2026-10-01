@@ -8,6 +8,8 @@ or hidden reasoning and never receives tools.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from app.config.env import env_str, environment
 
 import hashlib
@@ -637,7 +639,8 @@ def default_plan_semantic_reviewer(
             reasoning_effort=override_effort or spec.model.reasoning_effort,
             timeout_seconds=plan_semantic_review_timeout_seconds(),
         )
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("plan semantic review provider", exc)
         return None
 
 

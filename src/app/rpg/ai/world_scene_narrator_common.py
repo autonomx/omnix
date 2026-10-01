@@ -48,7 +48,8 @@ from app.rpg.player import build_encounter_view
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE_NARRATIONS = set()
+# Compatibility export for the retired single-process narration guard.
+_ACTIVE_NARRATIONS = frozenset()
 
 NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
 

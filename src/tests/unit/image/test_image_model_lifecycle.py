@@ -38,3 +38,26 @@ def test_image_provider_residency_tracks_real_loaded_state(monkeypatch):
     assert unloaded["unloaded"] is True
     assert provider.unload_calls == 1
     assert lifecycle.is_image_provider_loaded("flux_klein") is False
+
+
+def test_image_provider_cache_expires_and_respects_capacity(monkeypatch):
+    first = _FakeProvider()
+    second = _FakeProvider()
+    now = {"value": 10.0}
+    monkeypatch.setattr(lifecycle.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(lifecycle, "IMAGE_PROVIDER_CACHE_TTL_SECONDS", 5.0)
+    monkeypatch.setattr(lifecycle, "MAX_CACHED_IMAGE_PROVIDERS", 1)
+    lifecycle.unload_all_image_providers()
+    monkeypatch.setattr(
+        lifecycle,
+        "_build_provider",
+        lambda name: first if name == "first" else second,
+    )
+
+    assert lifecycle.get_or_create_image_provider("first") is first
+    assert lifecycle.get_or_create_image_provider("second") is second
+    assert first.unload_calls == 1
+
+    now["value"] = 16.0
+    assert lifecycle.get_cached_provider("second") is None
+    assert second.unload_calls == 1

@@ -205,9 +205,13 @@ def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
     from app.rpg.session.genesis import async_coordinator as genesis
     from app.persistence.background_authority import require_background_owner
+    from app.runtime import config as runtime_config
+    # Campaign genesis runs on job-worker processes (WP-6.1).
+    job_worker = RuntimeConfig(gateway_role=GatewayRole.JOB_WORKER)
+    monkeypatch.setattr(runtime_config, "get_runtime_config", lambda: job_worker)
     checks = []
     class Owner:
-        capabilities = RuntimeCapabilities.from_config(RuntimeConfig())
+        capabilities = RuntimeCapabilities.from_config(job_worker)
         def require_live(self):
             checks.append('checked')
             if len(checks) > 4:

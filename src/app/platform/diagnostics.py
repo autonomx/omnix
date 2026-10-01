@@ -1,12 +1,15 @@
 """Gateway diagnostics summary for platform contracts."""
 from __future__ import annotations
 
+from dataclasses import asdict
 from pydantic import BaseModel, Field
 import re
+from typing import Any
 
 from app.runtime.worker_health import WorkerHealthPayload, get_worker_health_payload
 from app.jobs import ModelResidencyDiagnostics, ModelResidencyRecord, get_model_residency_diagnostics
 from app.providers.cache_status import ProviderModelCachePayload, get_provider_model_cache_status
+from app.persistence.device_permits import default_device_permit_service
 from .runtime_diagnostics import RuntimeDiagnostics
 
 
@@ -16,6 +19,7 @@ class DiagnosticsPayload(BaseModel):
     workers: WorkerHealthPayload
     event_stream: dict[str, str] = Field(default_factory=dict)
     model_residency: ModelResidencyDiagnostics = Field(default_factory=get_model_residency_diagnostics)
+    device_permits: list[dict[str, Any]] = Field(default_factory=list)
     provider_model_cache: ProviderModelCachePayload = Field(default_factory=get_provider_model_cache_status)
     logs: list[dict[str, str]] = Field(default_factory=list)
     runtime: RuntimeDiagnostics | None = None
@@ -23,6 +27,13 @@ class DiagnosticsPayload(BaseModel):
 
 def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] | None = None) -> DiagnosticsPayload:
     workers = get_worker_health_payload()
+    device_permits: list[dict[str, Any]] = []
+    permit_service = default_device_permit_service()
+    if permit_service is not None:
+        try:
+            device_permits = [asdict(item) for item in permit_service.diagnostics()]
+        except Exception as exc:
+            device_permits = [{"status": "unavailable", "error_class": type(exc).__name__}]
     try:
         provider_model_cache = get_provider_model_cache_status()
     except Exception as exc:
@@ -45,6 +56,7 @@ def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] 
             "status": "available",
         },
         model_residency=get_model_residency_diagnostics(model_residency_records),
+        device_permits=device_permits,
         provider_model_cache=provider_model_cache,
         logs=[],
     )
