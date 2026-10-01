@@ -4,6 +4,7 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-4.1 | Keep sign-in off by default for now (owner decision). | The owner will enable it at a later date. Later Phase 4 work must not assume sign-in is enforced on unset installs. |
 | 2026-10-01 | WP-6.5 | Orphan recovery honours a cancel queued for a dead owner instead of restarting the run. | With command delivery fenced to the lease owner, a parent's cancel for an orphaned child is only queued. Recovery used to restart the child's Pi runtime to deliver it, so the child ended `failed` wherever the restart could not run (CI). Recovery now takes the lease, applies the queued cancel and cascades it, without starting a runtime. |
 | 2026-10-01 | WP-4.1 | Ship authentication with `OMNIX_AUTH_MODE` unset meaning "not enforced"; any explicit mode enforces. The default flip is the constant `AUTH_ENFORCED_WHEN_UNSET`. | The roadmap makes the no-auth → `local` default change a human gate. Existing installs keep working; operators can opt in now; approval flips one constant (pinned by a test). |
 | 2026-10-01 | WP-4.1 | Mount auth endpoints under `/api/auth/*` instead of `/auth/*`. | The Vite development proxy and the production ingress forward only `/api`, `/events`, `/health` and `/ready`. Using `/api/auth` needs no ingress change and keeps the single-origin cookie model. The launcher callback is `/api/auth/local/callback`. |

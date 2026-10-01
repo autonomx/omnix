@@ -121,7 +121,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 
 ## Human actions requested
 
-- WP-4.1 default flip: approve making `OMNIX_AUTH_MODE=local` the default for installs that leave it unset (set `AUTH_ENFORCED_WHEN_UNSET = True` in `src/app/security/auth/settings.py`). Until then, sign-in is enforced only where an operator sets the mode explicitly. See [OPERATIONS.md](../OPERATIONS.md#sign-in-and-sessions).
+- WP-4.1 default flip: deferred by the owner on 2026-10-01; sign-in stays off by default and will be enabled later. When ready, set `AUTH_ENFORCED_WHEN_UNSET = True` in `src/app/security/auth/settings.py`. Until then, sign-in is enforced only where an operator sets `OMNIX_AUTH_MODE` explicitly. See [OPERATIONS.md](../OPERATIONS.md#sign-in-and-sessions).
 
 - Rotate/revoke the Cerebras credential formerly in src/app/data/settings.json (cerebras.api_key). Earliest known commit: 637220e19; review baseline: 7bd17af08. Do not paste the credential into logs or messages.
 - After rotation, prepare and approve a coordinated history purge of that file using git filter-repo, including clone replacement and protected-branch handling. Rewriting history and force-pushing require explicit authorization under roadmap section 1.5.
