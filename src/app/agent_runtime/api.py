@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.capabilities.approvals import require_approver
+from app.security import audit
 from app.security.permissions import ensure_permission
 
 import asyncio
@@ -199,7 +200,10 @@ def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> Age
         job_store = getattr(services, "jobs", None) if services is not None else None
         if job_store is None:
             raise RuntimeError("durable agent job service is not composed")
-        return _service(http_request).submit_start(spec, job_store=job_store)
+        started = _service(http_request).submit_start(spec, job_store=job_store)
+        audit.record("agent.run.start", target_type="agent_run", target_id=started.run_id,
+                     details={"profile": spec.profile, "provider_id": spec.model.provider_id})
+        return started
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"agent_start_failed:{type(exc).__name__}:{exc}") from exc
 
@@ -248,7 +252,7 @@ def command_agent_run(
     elif request.command_type == "steer":
         ensure_permission("agent:steer")
     try:
-        return _service(http_request).command(
+        snapshot = _service(http_request).command(
             AgentRunCommand(
                 run_id=run_id,
                 command_type=request.command_type,
@@ -258,6 +262,12 @@ def command_agent_run(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+    if request.command_type in {"approve", "reject"}:
+        audit.record("approval.decide", target_type="agent_approval", target_id=str(payload.get("approval_id") or ""),
+                     details={"run_id": run_id, "decision": request.command_type})
+    elif request.command_type == "cancel":
+        audit.record("agent.run.stop", target_type="agent_run", target_id=run_id)
+    return snapshot
 
 
 @router.get("/{run_id}/events", response_model=list[AgentEvent])

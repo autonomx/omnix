@@ -28,6 +28,7 @@ SYSTEM_OPERATIONS: dict[str, str] = {
     "auth.sessions": "Looks up a session or login code before the caller's workspace is known.",
     "migrations": "Data migrations and migration metadata span every workspace.",
     "operator.cli": "Operator commands (cutover, coordinated recovery) act on the whole database.",
+    "audit.write": "Audit events record actions before a tenant is bound (sign-in) and for system work.",
 }
 
 _SYSTEM_OPERATION: ContextVar[str | None] = ContextVar("omnix_system_operation", default=None)

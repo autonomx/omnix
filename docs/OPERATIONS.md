@@ -614,6 +614,25 @@ with sign-in on.
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.
 
+## Audit trail
+
+Sensitive actions are recorded in `omnix_audit_events` with the acting user,
+the workspace and the outcome (`success`, `failure` or `denied`). Recorded actions:
+
+- sign-in, sign-out and failed sign-ins;
+- settings changes and tool connection secrets;
+- approval decisions (tool proposals, agent runs, task graphs, workflows,
+  chat confirmations);
+- every capability execution;
+- agent run start, stop and promotion;
+- trading control changes and paper orders;
+- feature toggles and workspace administration.
+
+Details never contain prompts, messages or secrets. The table is append-only:
+rows cannot be updated or deleted, even by the database owner. Deleting a
+workspace keeps its audit rows (the workspace reference becomes empty).
+Retention runs through the maintenance path (planned).
+
 ## Agent run tokens
 
 An agent's Pi process talks to the broker and the model gateway with a token

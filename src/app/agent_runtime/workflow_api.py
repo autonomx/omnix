@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.capabilities.approvals import require_approver
+from app.security import audit
 
 from typing import Literal, Any
 
@@ -68,6 +69,8 @@ def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[s
                 runtime.approve(run_id, request.step_id, approved_by=approver)
             else:
                 runtime.reject(run_id, request.step_id)
+            audit.record("approval.decide", target_type="workflow_step", target_id=f"{run_id}/{request.step_id}",
+                         details={"decision": request.command})
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="workflow_run_not_found") from exc
     except WorkflowRuntimeError as exc:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.capabilities.approvals import require_approver
+from app.security import audit
 
 import asyncio
 import json
@@ -77,6 +78,8 @@ def command_task_graph_run(
             approver = require_approver("agent:approve")
             if not request.node_id:
                 raise HTTPException(status_code=422, detail="node_id_required")
+            audit.record("approval.decide", target_type="task_graph_node", target_id=f"{run_id}/{request.node_id}",
+                         details={"decision": request.command, "approval_id": request.approval_id})
             if request.command == "approve":
                 return runtime.approve(
                     run_id,

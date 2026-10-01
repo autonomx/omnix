@@ -587,6 +587,19 @@ npm run web:build</code></pre></div>
 <p>Each workspace membership has roles: <code>owner</code>, <code>admin</code>, <code>member</code>, <code>approver</code> (adds approvals) and <code>viewer</code> (read-only). Every route requires a permission from the catalog; a missing one gets 403 <code>permission_denied</code> naming the permission. The full table is <code>docs/security/PERMISSIONS.md</code>. With sign-in off the local user is <code>owner</code>, so nothing changes for local installs.</p>
 <p>Approvals are made by people. Approving or denying a tool proposal needs <code>tools:approve</code>; approving an agent run, task graph or workflow step needs <code>agent:approve</code>. Service tokens, workers and agent runs can never approve, and every approval records who made it. Approving your own tool proposal is limited by <code>OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK</code> (<code>none</code>, <code>low</code>, <code>medium</code> or <code>high</code>): the default is <code>high</code> with sign-in off (one local user) and <code>low</code> with sign-in on.</p>
 <p>The launcher control app (port 5055) does not ask you to sign in. It is an operator surface and refuses every non-loopback client.</p>
+<h2 id="audit-trail">Audit trail</h2>
+<p>Sensitive actions are recorded in <code>omnix_audit_events</code> with the acting user, the workspace and the outcome (<code>success</code>, <code>failure</code> or <code>denied</code>). Recorded actions:</p>
+<ul>
+<li>sign-in, sign-out and failed sign-ins;</li>
+<li>settings changes and tool connection secrets;</li>
+<li>approval decisions (tool proposals, agent runs, task graphs, workflows,</li>
+<p>chat confirmations);</p>
+<li>every capability execution;</li>
+<li>agent run start, stop and promotion;</li>
+<li>trading control changes and paper orders;</li>
+<li>feature toggles and workspace administration.</li>
+</ul>
+<p>Details never contain prompts, messages or secrets. The table is append-only: rows cannot be updated or deleted, even by the database owner. Deleting a workspace keeps its audit rows (the workspace reference becomes empty). Retention runs through the maintenance path (planned).</p>
 <h2 id="agent-run-tokens">Agent run tokens</h2>
 <p>An agent&#x27;s Pi process talks to the broker and the model gateway with a token that belongs to its run (<code>Authorization: OmnixRun &lt;token&gt;</code>). The token names the run, its workspace and the process that owns it, lasts 15 minutes and is renewed while the run is active. It stops working when the run finishes, its capabilities change or another process takes the run over. A run id alone, or a signed-in browser session, is refused on these routes. Pi&#x27;s extensions remove the token from their environment before any tool runs, so shell commands never see it.</p>
 <p>Every Omnix process of an installation must share the signing key. The launcher&#x27;s service token provides it; otherwise set <code>OMNIX_RUN_TOKEN_KEY</code> (at least 32 characters) on every gateway and worker. <code>scripts/gateway_cluster.py</code> generates one shared key for its replicas when neither is set.</p>

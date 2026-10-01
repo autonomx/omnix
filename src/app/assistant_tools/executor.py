@@ -12,6 +12,7 @@ from types import MappingProxyType
 
 from app.capabilities.executor import EXECUTE_HOOK, CapabilityGrant
 from app.runtime.hooks import RuntimeHookSpec
+from app.security import audit
 
 from .browser_adapter import run_browser_tool_request
 from .calendar_adapter import run_calendar_tool_request
@@ -50,8 +51,23 @@ ADAPTERS: MappingProxyType[str, CapabilityAdapter] = MappingProxyType({
 })
 
 
-def run_capability_adapter(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> AssistantToolResult:
+def run_capability_adapter(
+    request: AssistantToolRequest, risk_level: ToolRiskLevel, *, source: str = "tool_proposal",
+) -> AssistantToolResult:
     """Dispatch an already reviewed request. An unknown tool is an error."""
+    result = _dispatch(request, risk_level)
+    audit.record(
+        "capability.execute",
+        target_type="capability",
+        target_id=request.action_id,
+        outcome="failure" if result.error else "success",
+        details={"source": source, "risk_level": risk_level, "state_changed": result.state_changed,
+                 "error": result.error, "session_id": request.session_id},
+    )
+    return result
+
+
+def _dispatch(request: AssistantToolRequest, risk_level: ToolRiskLevel) -> AssistantToolResult:
     adapter = ADAPTERS.get(request.tool_id)
     if adapter is None:
         return AssistantToolResult(
@@ -97,7 +113,7 @@ def execute_with_grant(
             state_changed=False,
         )
     if decision.executable:
-        result = run_capability_adapter(request, decision.risk_level)
+        result = run_capability_adapter(request, decision.risk_level, source=grant.source)
     else:
         result = AssistantToolResult(
             tool_id=request.tool_id,

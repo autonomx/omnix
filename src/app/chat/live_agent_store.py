@@ -19,6 +19,7 @@ from app.assist_core.live_agent_router import (
 from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
 from app.capabilities.approvals import ApproverNotAllowed, current_approver
 from app.capabilities.executor import CapabilityGrant, execute_capability
+from app.security import audit
 from app.assistant_tools.kasa_plan import first_pending_kasa_write
 from app.assistant_tools.live_agent_proposals import (
     live_agent_planner_context,
@@ -83,6 +84,8 @@ def _confirmation_grant(session_id: str) -> CapabilityGrant:
         approver: str | None = current_approver("tools:approve")
     except ApproverNotAllowed:
         approver = None
+    audit.record("approval.decide", target_type="chat_proposal", target_id=session_id,
+                 outcome="success" if approver else "denied", details={"decision": "approve"})
     return CapabilityGrant("live_agent", session_id, approved_by=approver)
 
 

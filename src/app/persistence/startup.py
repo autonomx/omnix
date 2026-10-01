@@ -31,6 +31,10 @@ def bootstrap_postgresql_runtime(
 
     tenant = ensure_local_identity(db)
     install_process_tenant(tenant)
+    from app.security.audit import install_audit_sink
+    from .audit import PostgresAuditSink
+
+    install_audit_sink(PostgresAuditSink(db))
     return status
 
 

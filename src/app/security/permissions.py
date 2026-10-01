@@ -13,11 +13,13 @@ local tenant holds ``owner``, so local installs keep full access.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable
+import functools
 import json
 import logging
 from typing import Any, Literal
 
+import anyio
 from fastapi import HTTPException, WebSocketException
 from starlette.requests import HTTPConnection
 
@@ -301,18 +303,58 @@ def _enforce(connection: HTTPConnection, permission: str | None) -> None:
         _deny(connection, permission)
 
 
-def feature_permission_guard(feature_id: str) -> Callable[[HTTPConnection], None]:
+async def _authorized_and_audited(connection: HTTPConnection, permission: str | None) -> AsyncIterator[None]:
+    """Enforce ``permission``; audit writes that need an audited one (WP-4.8)."""
+    from app.security.audit import PERMISSION_AUDIT_ACTIONS
+
+    action = None
+    if permission is not None and connection.scope["type"] == "http" and not _is_read(connection):
+        action = PERMISSION_AUDIT_ACTIONS.get(permission)
+    if action is None:
+        _enforce(connection, permission)
+        yield
+        return
+    route = connection.scope.get("route")
+    target = str(getattr(route, "path", None) or connection.scope.get("path") or "")
+    details = {"method": str(connection.scope.get("method", "")), "permission": permission}
+    try:
+        _enforce(connection, permission)
+    except HTTPException:
+        await _record(action, target, "denied", {**details, "status": 403})
+        raise
+    try:
+        yield
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        await _record(action, target, "denied" if status in {401, 403} else "failure", {**details, "status": status})
+        raise
+    await _record(action, target, "success", details)
+
+
+async def _record(
+    action: str, target: str, outcome: Literal["success", "failure", "denied"], details: dict
+) -> None:
+    from app.security.audit import record
+
+    await anyio.to_thread.run_sync(
+        functools.partial(record, action, target_type="route", target_id=target, outcome=outcome, details=details)
+    )
+
+
+def feature_permission_guard(feature_id: str) -> Callable[[HTTPConnection], AsyncIterator[None]]:
     normalized = feature_id.replace("-", "_")
     if normalized not in FEATURE_DEFAULTS:
         raise RuntimeError(f"feature {feature_id!r} has no default permissions (app.security.permissions)")
     read, write = FEATURE_DEFAULTS[normalized]
 
-    def guard(connection: HTTPConnection) -> None:
+    async def guard(connection: HTTPConnection) -> AsyncIterator[None]:
         route = connection.scope.get("route")
         declared = declared_permission(route, connection.scope.get("method"))
         if declared is None and connection.scope["type"] == "websocket":
             declared = WEBSOCKET_PERMISSIONS.get(str(getattr(route, "path", "")))
-        _enforce(connection, declared or (read if _is_read(connection) else write))
+        permission = declared or (read if _is_read(connection) else write)
+        async for _ in _authorized_and_audited(connection, permission):
+            yield
 
     guard.__name__ = "permission_guard_" + normalized
     return guard
@@ -331,11 +373,10 @@ def internal_permission_guard(connection: HTTPConnection) -> None:
     _enforce(connection, "internal:service")
 
 
-def kernel_permission_guard(connection: HTTPConnection) -> None:
+def _kernel_permission(connection: HTTPConnection) -> str | None:
     declared = declared_permission(connection.scope.get("route"), connection.scope.get("method"))
     if declared is not None:
-        _enforce(connection, declared)
-        return
+        return declared
     route = connection.scope.get("route")
     path = str(getattr(route, "path", None) or connection.scope.get("path") or "")
     pair = kernel_defaults_for(path)
@@ -343,10 +384,15 @@ def kernel_permission_guard(connection: HTTPConnection) -> None:
         # Fail closed: a kernel route nobody classified is not reachable.
         logger.error("kernel route without a permission mapping: %s", path)
         _deny(connection, "unmapped")
-        return
-    if pair is None:
-        return
-    _enforce(connection, pair[0] if _is_read(connection) else pair[1])
+    if not pair:
+        return None
+    return pair[0] if _is_read(connection) else pair[1]
+
+
+async def kernel_permission_guard(connection: HTTPConnection) -> AsyncIterator[None]:
+    permission = _kernel_permission(connection)
+    async for _ in _authorized_and_audited(connection, permission):
+        yield
 
 
 __all__ = [

@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.capabilities.approvals import ApproverNotAllowed, current_approver, require_self_approval_allowed
+from app.security import audit
 from app.persistence.capability_approval_repository import (
     CapabilityApprovalConflict, CapabilityProposal, PostgresCapabilityApprovalRepository,
 )
@@ -80,9 +81,12 @@ class AssistantToolProposalService:
     def decide(self, identifier: str, *, approve: bool, reason: str | None = None) -> AssistantToolProposalPayload:
         # Only a principal with tools:approve decides; never a service or
         # system identity, and self-approval only up to the configured risk.
+        decision = "approve" if approve else "deny"
         try:
             approver = current_approver("tools:approve")
         except ApproverNotAllowed as exc:
+            audit.record("approval.decide", target_type="tool_proposal", target_id=identifier, outcome="denied",
+                         details={"decision": decision, "reason": str(exc)})
             raise ToolProposalNotAllowed(str(exc)) from exc
         with unit_of_work(self.database) as work:
             repository = PostgresCapabilityApprovalRepository(work.connection)
@@ -96,9 +100,13 @@ class AssistantToolProposalService:
                         requested_by=stored.requested_by, approver=approver, risk_level=risk_level,
                     )
                 except ApproverNotAllowed as exc:
+                    audit.record("approval.decide", target_type="tool_proposal", target_id=identifier,
+                                 outcome="denied", details={"decision": decision, "reason": str(exc)})
                     raise ToolProposalNotAllowed(str(exc)) from exc
             proposal = repository.decide(self.context, identifier, approve=approve, reason=reason)
             work.commit()
+        audit.record("approval.decide", target_type="tool_proposal", target_id=identifier,
+                     details={"decision": decision, "capability_id": proposal.capability_id})
         return _response(proposal)
 
     def execute(
