@@ -251,6 +251,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS` | string | `3` | trading | Controls trading execution observation interval seconds for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR` | boolean | `1` | trading | Controls trading execution observation monitor for trading. |
 | `OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR_IN_TESTS` | boolean | `0` | trading | Controls trading execution observation monitor in tests for trading. |
+| `OMNIX_TRADING_EXECUTION_OBSERVATION_WORKERS` | string | `8` | trading | Controls trading execution observation workers for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID` | string | — | trading | Controls trading finviz shadow account id for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION` | boolean | `1` | trading | Controls trading finviz shadow autoprovision for trading. |
 | `OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION_IN_TESTS` | boolean | `0` | trading | Controls trading finviz shadow autoprovision in tests for trading. |

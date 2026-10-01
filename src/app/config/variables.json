@@ -1729,6 +1729,13 @@
     "type": "boolean"
   },
   {
+    "default": "8",
+    "description": "Controls trading execution observation workers for trading.",
+    "feature": "trading",
+    "name": "OMNIX_TRADING_EXECUTION_OBSERVATION_WORKERS",
+    "type": "string"
+  },
+  {
     "default": "",
     "description": "Controls trading finviz shadow account id for trading.",
     "feature": "trading",
