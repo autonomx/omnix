@@ -1,12 +1,21 @@
 """Gateway facade for the separately managed Qwen GPU service."""
 from __future__ import annotations
 
+import base64
 import time
 
 import numpy as np
 
 from app.runtime.http_client import shared_http_client
 from app.security.service_token import service_headers
+
+
+def _number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(number) if number.is_integer() else number
 
 
 class TtsServiceSaturated(RuntimeError):
@@ -52,10 +61,20 @@ class QwenHttpGatewayProvider:
         return response.json().get('speakers', [])
 
     def generate_audio(self, text, speaker=None, language=None, **kwargs):
+        # The service sends the WAV bytes (WP-7.3); the provider contract's
+        # base64 form is built here, in process, not on the wire.
         response = self.http.post(self.base_url + '/api/tts/generate_audio',
             json={'text': text, 'speaker': speaker or 'default', 'language': language or 'en'}, timeout=120,
-            headers=service_headers())
+            headers={**service_headers(), 'Accept': 'audio/wav, application/json;q=0.5'})
         response.raise_for_status()
+        if response.headers.get('content-type', '').startswith('audio/wav'):
+            return {
+                'success': True,
+                'audio': base64.b64encode(response.content).decode('ascii'),
+                'sample_rate': _number(response.headers.get('X-Omnix-Sample-Rate')),
+                'duration': _number(response.headers.get('X-Omnix-Duration')),
+                'provider': self.provider_name,
+            }
         result = response.json()
         if not result.get('success') or result.get('is_fallback'):
             raise RuntimeError('Qwen service did not return real synthesized audio')

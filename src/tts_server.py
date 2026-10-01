@@ -13,9 +13,9 @@ import traceback
 import uuid
 import wave
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -61,6 +61,9 @@ class TtsGenerateStreamRequest(BaseModel):
     append_silence: bool = False
     max_new_tokens: int = 180
     trace_id: str = ""
+
+
+_MAX_VOICE_CLONE_BYTES = 25 * 1024 * 1024
 
 
 class TtsVoiceCloneRequest(BaseModel):
@@ -508,11 +511,26 @@ def _speakers() -> dict[str, Any]:
 
 
 @app.post("/api/tts/generate_audio")
-async def generate_audio(request: TtsGenerateRequest):
-    return await _synthesis().run(_generate_audio, request)
+async def generate_audio(
+    request: TtsGenerateRequest,
+    accept: Annotated[str | None, Header()] = None,
+):
+    """Synthesise one utterance. ``Accept: audio/wav`` returns the WAV bytes
+    (WP-7.3); otherwise the JSON result carries them base64-encoded."""
+    wants_wav = "audio/wav" in (accept or "").lower()
+    return await _synthesis().run(_generate_audio, request, wants_wav)
 
 
-def _generate_audio(request: TtsGenerateRequest):
+def _wav_result_response(result: dict[str, Any], trace_id: str) -> Response:
+    encoded = result.get("audio_base64") or result.get("audio") or ""
+    headers = {"X-Omnix-Voice-Trace": trace_id}
+    for header, key in (("X-Omnix-Sample-Rate", "sample_rate"), ("X-Omnix-Duration", "duration")):
+        if result.get(key) is not None:
+            headers[header] = str(result[key])
+    return Response(content=base64.b64decode(encoded), media_type="audio/wav", headers=headers)
+
+
+def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
     trace_id = _request_trace_id(request.trace_id, "tts-audio")
     started_at = time.perf_counter()
     snapshot = _voice_reference_snapshot(request.speaker)
@@ -587,6 +605,8 @@ def _generate_audio(request: TtsGenerateRequest):
                 headers={"X-Omnix-Voice-Trace": trace_id},
             )
 
+        if isinstance(result, dict) and wants_wav:
+            return _wav_result_response(result, trace_id)
         if isinstance(result, dict):
             result = {**result, "trace_id": trace_id}
         return result
@@ -818,11 +838,28 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
 
 
 @app.post("/api/tts/voice_clone")
-async def voice_clone(request: TtsVoiceCloneRequest):
-    return await _synthesis().run(_voice_clone, request)
+async def voice_clone(
+    voice_id: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+    gender: Annotated[str, Form()] = "neutral",
+    language: Annotated[str, Form()] = "en",
+    ref_text: Annotated[str, Form()] = "",
+):
+    """Multipart upload: the reference audio plus its fields (WP-7.3).
+
+    The gateway client always sent multipart; the endpoint used to expect a
+    JSON body without the audio, so cloning over HTTP could not succeed.
+    """
+    audio = await file.read(_MAX_VOICE_CLONE_BYTES + 1)
+    if len(audio) > _MAX_VOICE_CLONE_BYTES:
+        raise HTTPException(status_code=413, detail="reference_audio_too_large")
+    if not audio:
+        raise HTTPException(status_code=422, detail="reference_audio_required")
+    request = TtsVoiceCloneRequest(voice_id=voice_id, gender=gender, language=language, ref_text=ref_text)
+    return await _synthesis().run(_voice_clone, request, audio)
 
 
-def _voice_clone(request: TtsVoiceCloneRequest):
+def _voice_clone(request: TtsVoiceCloneRequest, audio_data: bytes):
     trace_id = _request_trace_id("", "tts-clone")
     voice_debug_log(
         "tts",
@@ -844,9 +881,8 @@ def _voice_clone(request: TtsVoiceCloneRequest):
 
         result = provider.voice_clone(
             voice_id=request.voice_id,
-            gender=request.gender,
-            language=request.language,
-            ref_text=request.ref_text,
+            audio_data=audio_data,
+            ref_text=request.ref_text or None,
         )
         voice_debug_log(
             "tts",
@@ -858,7 +894,10 @@ def _voice_clone(request: TtsVoiceCloneRequest):
             **_voice_reference_snapshot(request.voice_id),
         )
         if isinstance(result, dict) and not result.get("success", False):
-            return JSONResponse({}, status_code=503)
+            return JSONResponse(
+                {"success": False, "error": str(result.get("error") or "voice_clone_failed"), "trace_id": trace_id},
+                status_code=503,
+            )
         return result
     except Exception as exc:
         voice_debug_log(

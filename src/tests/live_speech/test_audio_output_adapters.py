@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
 from app.live_speech.tts import DeterministicSpeechSynthesizer
-from app.live_speech.tts_adapters import QwenServiceSpeechSynthesizer, create_synthesizer_from_env
+from app.live_speech.tts_adapters import (
+    QwenServiceSpeechSynthesizer,
+    SpeechServiceUnavailable,
+    create_synthesizer_from_env,
+)
 
 
-def test_service_adapter_returns_audio_when_endpoint_is_unavailable() -> None:
+def test_service_adapter_reports_an_unavailable_endpoint_instead_of_fake_audio() -> None:
     adapter = QwenServiceSpeechSynthesizer(base_url="http://127.0.0.1:1", timeout_seconds=0.01)
 
-    chunks = adapter.synthesize("hello", voice="default")
-
-    assert chunks
-    assert chunks[0].pcm
-    assert chunks[0].sample_rate == 24000
+    with pytest.raises(SpeechServiceUnavailable):
+        adapter.synthesize("hello", voice="default")
 
 
 def test_factory_defaults_to_deterministic_provider(monkeypatch) -> None:

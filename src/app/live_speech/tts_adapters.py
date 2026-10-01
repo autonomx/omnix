@@ -16,6 +16,10 @@ from app.security.service_token import service_headers
 from .tts import AudioDelta, DeterministicSpeechSynthesizer, StreamingSpeechSynthesizer
 
 
+class SpeechServiceUnavailable(RuntimeError):
+    """The TTS service did not return audio."""
+
+
 @dataclass
 class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
     """Adapter for a Qwen-compatible TTS HTTP service.
@@ -41,16 +45,9 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
             )
             response.raise_for_status()
             pcm = self._decode_response(response)
-        except Exception:
-            # Preserve this adapter's monotonic sequence when the service is
-            # unavailable; callers use it to order audio across fallback frames.
-            fallback = DeterministicSpeechSynthesizer(frame_samples=1200).synthesize(
-                clean, voice=voice, generation=generation
-            )
-            for delta in fallback:
-                delta.sequence = self._sequence
-            self._sequence += len(fallback)
-            return fallback
+        except Exception as exc:
+            # No synthetic stand-in audio (WP-7.3): the caller reports the error.
+            raise SpeechServiceUnavailable(f"TTS service request failed: {exc}") from exc
         if not pcm:
             return []
         delta = AudioDelta(pcm=pcm, sample_rate=self.sample_rate, sequence=self._sequence)

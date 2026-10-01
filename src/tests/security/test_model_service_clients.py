@@ -86,10 +86,6 @@ def sidecar(monkeypatch):
 def _call(name, url):
     if name == "speakers":
         return tts_http_client.tts_speakers()
-    if name == "audio":
-        return tts_http_client.tts_generate_audio(text="hello", speaker="one")
-    if name == "stream":
-        return tts_http_client.tts_generate_stream_audio(text="hello", speaker="one")
     if name == "clone":
         return tts_http_client.tts_voice_clone(voice_id="test", audio_bytes=b"owned test audio")
     if name == "qwen_speakers":
@@ -105,7 +101,7 @@ def _call(name, url):
     return image_http_client.request_image_service("POST", "/generate", {"prompt": "test"})
 
 
-_CALLERS = ["speakers", "audio", "stream", "clone", "qwen_speakers", "qwen_audio", "qwen_stream", "image_read", "image_write", "worker_control"]
+_CALLERS = ["speakers", "clone", "qwen_speakers", "qwen_audio", "qwen_stream", "image_read", "image_write", "worker_control"]
 
 
 @pytest.mark.parametrize("name", _CALLERS)

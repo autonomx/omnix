@@ -3796,40 +3796,6 @@ export interface paths {
         patch: operations["update_live_conversation_defaults_api_live_chat_profile_defaults_patch"];
         trace?: never;
     };
-    "/api/live-speech/protocol": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Protocol */
-        get: operations["protocol_api_live_speech_protocol_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/live-speech/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Status */
-        get: operations["status_api_live_speech_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/live/speculation/sessions/{session_id}/start": {
         parameters: {
             query?: never;
@@ -17668,70 +17634,6 @@ export interface components {
             segment_id: string;
             /** Source Sequence */
             source_sequence: number;
-        };
-        /** LiveSpeechCompatibleEvents */
-        LiveSpeechCompatibleEvents: {
-            /** Client To Server */
-            client_to_server: string[];
-            /** Server To Client */
-            server_to_client: string[];
-        };
-        /** LiveSpeechProtocolResponse */
-        LiveSpeechProtocolResponse: {
-            /**
-             * Compatibility Target
-             * @constant
-             */
-            compatibility_target: "openai_hf_realtime_subset";
-            /**
-             * Contract
-             * @constant
-             */
-            contract: "omnix_live_speech_realtime_v1";
-            events: components["schemas"]["LiveSpeechCompatibleEvents"];
-            /** Notes */
-            notes: string[];
-            /**
-             * Ok
-             * @default true
-             */
-            ok: boolean;
-            /** Preferred Socket Path */
-            preferred_socket_path: string;
-        };
-        /** LiveSpeechProviderStatus */
-        LiveSpeechProviderStatus: {
-            /** Llm */
-            llm: string;
-            /** Stt */
-            stt: string;
-            /** Tts */
-            tts: string;
-            /** Vad */
-            vad: string;
-        };
-        /** LiveSpeechSampleRates */
-        LiveSpeechSampleRates: {
-            /** Input Hz */
-            input_hz: number;
-            /** Output Hz */
-            output_hz: number;
-        };
-        /** LiveSpeechStatusResponse */
-        LiveSpeechStatusResponse: {
-            /**
-             * Contract
-             * @constant
-             */
-            contract: "omnix_live_speech_realtime_v1";
-            /** Enabled */
-            enabled: boolean;
-            /** Ok */
-            ok: boolean;
-            providers: components["schemas"]["LiveSpeechProviderStatus"];
-            sample_rates: components["schemas"]["LiveSpeechSampleRates"];
-            /** Socket Path */
-            socket_path: string;
         };
         /** LiveTaskContractAcknowledgement */
         LiveTaskContractAcknowledgement: {
@@ -36636,46 +36538,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    protocol_api_live_speech_protocol_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LiveSpeechProtocolResponse"];
-                };
-            };
-        };
-    };
-    status_api_live_speech_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LiveSpeechStatusResponse"];
                 };
             };
         };

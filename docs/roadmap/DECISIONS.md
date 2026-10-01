@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-7.3 | `live-speech` becomes an opt-in feature: `OMNIX_ENABLED_FEATURES=all` leaves it out; naming it enables it. | Its `/v1/realtime` endpoint runs offline echo engines; the web client that would use it is not wired into any page. |
+| 2026-10-01 | WP-7.3 | Whole-utterance synthesis keeps the JSON endpoint and adds `Accept: audio/wav`; the provider contract's base64 audio is built in the gateway process. | Older clients keep working, and only the wire format changes; changing the in-process provider contract would touch every TTS consumer. |
 | 2026-10-01 | WP-7.2 | `get_provider()` stays for short calls; only streaming paths (chat replies, live voice, speculation) hold `provider_lease()`. A retired instance with no lease closes immediately, as before. | A lease must cover the stream's whole lifetime; converting all 42 call sites at once is a larger change with no new failure mode for short calls. |
 | 2026-10-01 | WP-7.2 | `provider_lease()` falls back to an un-leased lookup when `get_provider` has been replaced (test doubles). | Tests replace `provider_service.get_provider` to inject providers; those instances are not cached by the service, so there is nothing to lease. |
 | 2026-10-01 | WP-7.2 | Every call retries 429 and 503 (honouring Retry-After up to 30 s); only GET, HEAD and OPTIONS retry transport errors and other 5xx. `retry=False` turns retries off, used by health probes and the realtime TTS stream, whose caller handles saturation itself. | 429 and 503 mean the server did not process the request; repeating a POST after a timeout or a 500 could run a generation twice. |

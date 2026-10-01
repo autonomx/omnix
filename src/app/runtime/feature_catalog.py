@@ -30,6 +30,12 @@ FEATURE_CATALOG: Mapping[str, str] = MappingProxyType({
 })
 
 
+# Not part of "all": enabled only when named. live-speech serves the
+# /v1/realtime protocol stub with offline echo engines (WP-7.3); it stays out of
+# production until it has real STT/TTS behind it.
+OPT_IN_FEATURES = frozenset({"live-speech"})
+
+
 def load_feature(feature_id: str) -> FeatureModule:
     target = FEATURE_CATALOG[feature_id]
     module_name, attribute = target.split(":", 1)
@@ -47,7 +53,10 @@ def enabled_feature_ids(config: RuntimeConfig) -> tuple[str, ...]:
     unknown = (requested - {"all"} - set(FEATURE_CATALOG)) | (disabled - set(FEATURE_CATALOG))
     if unknown:
         raise ValueError(f"Unknown feature ids: {sorted(unknown)}")
-    selected = set(FEATURE_CATALOG) if "all" in requested else requested
+    if "all" in requested:
+        selected = (set(FEATURE_CATALOG) - OPT_IN_FEATURES) | (requested & OPT_IN_FEATURES)
+    else:
+        selected = set(requested)
     selected -= disabled
     for feature_id in tuple(selected):
         feature = load_feature(feature_id)

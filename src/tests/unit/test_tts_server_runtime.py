@@ -381,3 +381,88 @@ def test_synthesis_runs_on_the_dedicated_pool_and_health_stays_responsive():
         release.set()
 
     assert synthesis_threads and synthesis_threads[0].startswith("omnix-tts-synthesis")
+
+
+def test_the_gateway_voice_clone_client_and_the_tts_server_agree(monkeypatch):
+    """The client uploads multipart; the server must accept exactly that (WP-7.3)."""
+    import httpx
+    import tts_server
+
+    from app import tts_http_client
+    from app.runtime.http_client import HttpPolicy, PooledHttpClient
+
+    received: dict[str, Any] = {}
+
+    class CloningProvider:
+        def voice_clone(self, voice_id, audio_data, ref_text=None):
+            received.update(voice_id=voice_id, audio_data=audio_data, ref_text=ref_text)
+            return {"success": True, "voice_id": voice_id}
+
+    old_provider = tts_server._TTS_PROVIDER
+    old_error = tts_server._TTS_PROVIDER_ERROR
+    server = TestClient(tts_server.app, base_url="http://127.0.0.1")
+
+    def forward(request):  # the real client's request, served by the real server app
+        served = server.request(request.method, str(request.url), headers=request.headers, content=request.content)
+        return httpx.Response(served.status_code, headers=served.headers, content=served.content)
+
+    client = PooledHttpClient("tts-test", HttpPolicy(max_retries=0), transport=httpx.MockTransport(forward))
+    monkeypatch.setattr(tts_http_client, "_http", lambda: client)
+    monkeypatch.setattr(tts_http_client, "_tts_base_url", lambda: "http://127.0.0.1")
+    try:
+        tts_server._TTS_PROVIDER = CloningProvider()
+        tts_server._TTS_PROVIDER_ERROR = ""
+        result = tts_http_client.tts_voice_clone(
+            voice_id="narrator_2",
+            ref_text="Hello there.",
+            audio_bytes=b"RIFF-owned-test-audio",
+        )
+    finally:
+        tts_server._TTS_PROVIDER = old_provider
+        tts_server._TTS_PROVIDER_ERROR = old_error
+
+    assert result == {"success": True, "voice_id": "narrator_2"}
+    assert received == {"voice_id": "narrator_2", "audio_data": b"RIFF-owned-test-audio", "ref_text": "Hello there."}
+
+
+def test_gateway_synthesis_receives_wav_bytes_not_base64_json():
+    """Accept: audio/wav keeps base64 off the wire (WP-7.3)."""
+    import base64
+
+    import httpx
+    import tts_server
+
+    from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+    from app.runtime.http_client import HttpPolicy, PooledHttpClient
+
+    wav = b"RIFF\x24\x00\x00\x00WAVEfmt-test-bytes"
+    wire: list[httpx.Response] = []
+
+    class SynthesisProvider:
+        def generate_audio(self, **_kwargs: Any):
+            return {"success": True, "audio": base64.b64encode(wav).decode(), "sample_rate": 24000, "duration": 1.5}
+
+    server = TestClient(tts_server.app, base_url="http://127.0.0.1")
+
+    def forward(request):
+        served = server.request(request.method, str(request.url), headers=request.headers, content=request.content)
+        wire.append(served)
+        return httpx.Response(served.status_code, headers=served.headers, content=served.content)
+
+    gateway = QwenHttpGatewayProvider("http://127.0.0.1")
+    gateway.http = PooledHttpClient("tts-test", HttpPolicy(max_retries=0), transport=httpx.MockTransport(forward))
+    old_provider = tts_server._TTS_PROVIDER
+    old_error = tts_server._TTS_PROVIDER_ERROR
+    try:
+        tts_server._TTS_PROVIDER = SynthesisProvider()
+        tts_server._TTS_PROVIDER_ERROR = ""
+        result = gateway.generate_audio("hello", speaker="Alex")
+    finally:
+        tts_server._TTS_PROVIDER = old_provider
+        tts_server._TTS_PROVIDER_ERROR = old_error
+
+    assert wire[0].headers["content-type"] == "audio/wav"
+    assert wire[0].content == wav
+    assert base64.b64decode(result["audio"]) == wav
+    assert result["sample_rate"] == 24000
+    assert result["duration"] == 1.5
