@@ -146,11 +146,9 @@ def _register_feature_modules(gateway) -> None:
 
 
 def _install_kernel_extensions(gateway) -> None:
-    from .blocking_route_offload import register_blocking_route_offload
     from .event_loop_lag_monitor import register_event_loop_lag_monitor
 
     register_event_loop_lag_monitor(gateway)
-    register_blocking_route_offload(gateway)
 
 
 def compose_features(gateway):
