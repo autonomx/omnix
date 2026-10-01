@@ -25,7 +25,7 @@ import traceback
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from architecture_analysis import AnalysisError, SourceAnalysis, included_path, is_test, load_layers, qualified_name, source_digest, tracked_sources
+from architecture_analysis import AnalysisError, SourceAnalysis, included_path, is_test, load_layers, source_digest, tracked_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_ONLY_BOOT_PACKAGES = (
@@ -223,24 +223,51 @@ def database_metrics(connection) -> tuple[dict, dict]:
         "enabled_retention_policies": policies, "retention_policies_executed": sorted(set(policies) & executed)}
 
 
-def outbox_initial_coverage(sources: dict[str, str], config: dict) -> tuple[int, dict]:
-    """Verify the current absence of consumers instead of assuming it forever.
+def outbox_written_aggregate_types(sources: dict[str, str], config: dict) -> list[str]:
+    """Aggregate types production code appends to the outbox.
 
-WP-5.3 introduces OutboxConsumerSpec and its runtime registry. The first such
-registration must replace this initial probe with a registry-backed coverage
-measurement; it cannot keep reporting the pre-relay zero without evidence.
+Every writer must go through ``PostgresOutboxRepository.append`` with a
+literal ``aggregate_type`` so that coverage stays measurable.
 """
     analysis = SourceAnalysis(sources, config)
-    candidates = []
+    written: set[str] = set()
     for path, tree in analysis.trees.items():
-        if not path.startswith("src/app/") or is_test(path) or path.startswith("src/app/persistence/"):
+        if not path.startswith("src/app/") or is_test(path):
             continue
+        if "INSERT INTO omnix_outbox_events" in sources[path] and path != "src/app/persistence/outbox_repository.py":
+            raise ValueError(f"{path} writes omnix_outbox_events directly; use PostgresOutboxRepository.append")
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and qualified_name(node.func).split(".")[-1] in {"OutboxConsumerSpec", "claim_batch", "register_consumer"}:
-                candidates.append(path)
-    if candidates:
-        raise ValueError("outbox consumers require a runtime registry coverage probe")
-    return 0, {"consumer_registration_callers": [], "reason": "no relay consumer registration or outbox claimant in production source"}
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "append"):
+                continue
+            if "outbox" not in ast.unparse(node.func.value).lower():
+                continue
+            kind = next((keyword.value for keyword in node.keywords if keyword.arg == "aggregate_type"), None)
+            if kind is None:  # a list append, not an outbox write
+                continue
+            if not (isinstance(kind, ast.Constant) and isinstance(kind.value, str)):
+                raise ValueError(f"{path}:{node.lineno} appends to the outbox without a literal aggregate_type")
+            written.add(kind.value)
+    return sorted(written)
+
+
+def outbox_consumer_coverage(written: list[str], boot_evidence: dict) -> tuple[float, dict]:
+    """Share of written aggregate types with a registered consumer (WP-5.3).
+
+The consumers come from the registry of the production app the boot probe
+composed, not from source text.
+"""
+    consumers = boot_evidence.get("outbox_consumers") if isinstance(boot_evidence, dict) else None
+    if not isinstance(consumers, list):
+        raise ValueError("boot measurement is missing the outbox consumer registry")
+    consumed = {kind for consumer in consumers for kind in consumer.get("aggregate_types", [])}
+    covered = sorted(set(written) & consumed)
+    value = round(100 * len(covered) / len(written), 6) if written else 100.0
+    return value, {
+        "written_aggregate_types": written,
+        "covered_aggregate_types": covered,
+        "uncovered_aggregate_types": sorted(set(written) - consumed),
+        "consumers": consumers,
+    }
 
 
 def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
@@ -278,6 +305,7 @@ def child_probe(mode: str, manifest_path: Path, output: Path) -> int:
                     assert application.state.runtime_services is not None
                     imported = sorted(set(sys.modules) - before)
                     result = {"metrics": {"boot_imported_modules": len(imported)}, "evidence": {"boot_module_names": imported, "lifespan_started": False}}
+                    result["evidence"]["outbox_consumers"] = application.state.outbox_consumers.describe()
                     result["evidence"]["measurement_profile"] = measurement_profile()
                 finally:
                     close_default_database()
@@ -374,8 +402,9 @@ def main(argv: list[str] | None = None) -> int:
         sources = tracked_sources(root)
         digest = source_digest(sources)
         config = load_layers(root / "resources/architecture/layers.toml")
-        outbox, outbox_evidence = outbox_initial_coverage(sources, config)
-        values, evidence = {"outbox_consumer_coverage_pct": outbox}, {"outbox": outbox_evidence}
+        written_outbox_types = outbox_written_aggregate_types(sources, config)
+        values: dict = {}
+        evidence: dict = {}
         if args.reuse_boot_report:
             boot_report = json.loads(args.reuse_boot_report.read_text(encoding="utf-8"))
             boot_metrics, boot_evidence = validate_boot_measurement(boot_report, digest)
@@ -421,6 +450,9 @@ def main(argv: list[str] | None = None) -> int:
                         "metrics": observed["metrics"],
                         "evidence": {"boot": observed["evidence"]},
                     }, digest)
+        values["outbox_consumer_coverage_pct"], evidence["outbox"] = outbox_consumer_coverage(
+            written_outbox_types, evidence.get("boot", {})
+        )
         report = {"schema_version": 1, "environment": "disposable", "source_digest": digest,
                   "measured_at": datetime.now(timezone.utc).isoformat(), "metrics": values, "evidence": evidence}
         args.output.parent.mkdir(parents=True, exist_ok=True)

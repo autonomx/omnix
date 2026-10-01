@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import textwrap
 
 import pytest
 
@@ -179,11 +180,42 @@ def test_collection_probe_applies_file_quarantine_to_explicit_paths(tmp_path):
     assert report["evidence"]["measurement_profile"]["dependencies"]["aiohttp"]
 
 
-def test_initial_outbox_probe_requires_registry_measurement_once_consumers_exist():
+def test_outbox_coverage_compares_written_types_with_the_consumer_registry():
     config = runtime.load_layers(SCRIPTS.parent / "resources/architecture/layers.toml")
-    assert runtime.outbox_initial_coverage({}, config)[0] == 0
-    with pytest.raises(ValueError, match="runtime registry"):
-        runtime.outbox_initial_coverage({"src/app/worker.py": "registry.register_consumer(spec)"}, config)
+    source = textwrap.dedent(
+        """
+        def write(work, context):
+            work.outbox.append(context, aggregate_type="agent_run", aggregate_id="a", event_type="x", payload={})
+            PostgresOutboxRepository(work.connection).append(context, aggregate_type="settings", aggregate_id="s", event_type="y", payload={})
+            pending_outbox = []
+            pending_outbox.append(1)
+        """
+    )
+    written = runtime.outbox_written_aggregate_types({"src/app/runs.py": source}, config)
+    assert written == ["agent_run", "settings"]
+    value, evidence = runtime.outbox_consumer_coverage(
+        written, {"outbox_consumers": [{"consumer": "run-streams", "aggregate_types": ["agent_run"]}]}
+    )
+    assert value == 50
+    assert evidence["uncovered_aggregate_types"] == ["settings"]
+    with pytest.raises(ValueError, match="consumer registry"):
+        runtime.outbox_consumer_coverage(written, {})
+
+
+def test_outbox_writers_must_be_measurable():
+    config = runtime.load_layers(SCRIPTS.parent / "resources/architecture/layers.toml")
+    dynamic = textwrap.dedent(
+        """
+        def write(work, kind):
+            work.outbox.append(None, aggregate_type=kind)
+        """
+    )
+    with pytest.raises(ValueError, match="literal aggregate_type"):
+        runtime.outbox_written_aggregate_types({"src/app/runs.py": dynamic}, config)
+    with pytest.raises(ValueError, match="directly"):
+        runtime.outbox_written_aggregate_types(
+            {"src/app/runs.py": "SQL = 'INSERT INTO omnix_outbox_events (id) VALUES (1)'"}, config
+        )
 
 
 def test_database_coverage_uses_enabled_policies_and_tenant_tables():

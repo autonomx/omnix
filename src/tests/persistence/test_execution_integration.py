@@ -891,6 +891,7 @@ def test_expired_cancel_requested_job_becomes_terminal_canceled() -> None:
 
 
 
+@pytest.mark.xdist_group("outbox")  # the outbox relay tests claim every pending event
 def test_outbox_is_transactional_claimable_and_retryable() -> None:
     database = _database()
     try:

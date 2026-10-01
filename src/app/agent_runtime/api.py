@@ -354,23 +354,26 @@ async def stream_agent_events(run_id: str, after_sequence: int = 0) -> Streaming
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
 
+    from app.events.run_streams import run_event_wakeups, wakeup_key
+    from app.runtime.tenant_context import current_tenant
+
+    key = wakeup_key(current_tenant().workspace_id, "agent_run", run_id)
+
     async def generate():
         sequence = max(0, after_sequence)
-        idle = 0
-        while True:
-            rows = await asyncio.to_thread(_service().events, run_id, after_sequence=sequence)
-            if rows:
-                idle = 0
-                for event in rows:
-                    sequence = max(sequence, int(event.sequence or 0))
-                    yield f"id: {sequence}\nevent: {event.event_type}\ndata: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
-                snapshot = await asyncio.to_thread(_service().get, run_id)
-                if snapshot and snapshot.status in {"completed", "failed", "cancelled"}:
-                    return
-            else:
-                idle += 1
-                if idle % 15 == 0:
+        # Woken by the outbox relay when the run has new events (WP-5.3);
+        # without a notification the stream reads every few seconds.
+        with run_event_wakeups().subscribe(key) as wakeups:
+            while True:
+                rows = await asyncio.to_thread(_service().events, run_id, after_sequence=sequence)
+                if rows:
+                    for event in rows:
+                        sequence = max(sequence, int(event.sequence or 0))
+                        yield f"id: {sequence}\nevent: {event.event_type}\ndata: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
+                    snapshot = await asyncio.to_thread(_service().get, run_id)
+                    if snapshot and snapshot.status in {"completed", "failed", "cancelled"}:
+                        return
+                elif not await wakeups.wait():
                     yield ": heartbeat\n\n"
-            await asyncio.sleep(1)
 
     return StreamingResponse(generate(), media_type="text/event-stream")

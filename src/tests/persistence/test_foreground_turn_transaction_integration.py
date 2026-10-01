@@ -218,7 +218,7 @@ def test_foreground_turn_commits_every_authoritative_record_together() -> None:
             ).fetchone()
         assert int(row[0]) == 1
         assert tuple(int(value) for value in counts[:3]) == (1, 1, 1)
-        assert int(counts[3]) >= 2
+        assert int(counts[3]) == 0  # RPG events have no outbox consumer (WP-5.3)
         assert str(job[0]) == "completed"
         assert str(submission[0]) == "completed"
         assert str(submission[1]) == f"interaction:{campaign_id}:1"

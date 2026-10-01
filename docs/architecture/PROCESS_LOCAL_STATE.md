@@ -90,6 +90,7 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/desktop_companion/activity_bridge.py:498` `_default_activity_bridge_lock` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/desktop_companion/context.py:74` `_default_context_lock` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/desktop_companion/runtime.py:260` `_default_lock` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
+| `src/app/events/run_streams.py:137` `_WAKEUPS_LOCK` | lock | cache | — | — | — | Guards creation of the process's single LISTEN connection that wakes this process's open run streams; it holds no events, and streams read every event from PostgreSQL and keep a fallback poll. |
 | `src/app/image/lifecycle.py:19` `_LIFECYCLE_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/image/lifecycle.py:17` `_PROVIDER_CACHE` | container | cache | 4 | 86400.0 | _pop_cached_providers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/image/lifecycle.py:18` `_PROVIDER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
@@ -204,4 +205,4 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/voice_debug.py:35` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/voice_debug.py:32` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 
-Scanned entries: 197; unapproved entries: 0; unbounded caches: 28.
+Scanned entries: 198; unapproved entries: 0; unbounded caches: 28.

@@ -78,6 +78,23 @@ class PostgresOutboxRepository:
         cursor = self.connection.execute(statement, (int(retention_days), batch))
         return int(cursor.rowcount)
 
+    def lag(self, context: TenantContext) -> dict[str, Any]:
+        """Relay lag of one workspace: undelivered events and the oldest age."""
+        row = self.connection.execute(
+            """SELECT count(*) FILTER (WHERE status <> 'dead_letter'),
+                      COALESCE(EXTRACT(EPOCH FROM CURRENT_TIMESTAMP - min(created_at)
+                               FILTER (WHERE status <> 'dead_letter')), 0),
+                      count(*) FILTER (WHERE status = 'dead_letter')
+                 FROM omnix_outbox_events
+                WHERE workspace_id = %s AND status <> 'published'""",
+            (context.workspace_id,),
+        ).fetchone()
+        return {
+            "unpublished": int(row[0]),
+            "oldest_unpublished_age_seconds": round(float(row[1]), 3),
+            "dead_letters": int(row[2]),
+        }
+
     def _next_sequence(self, workspace_id: str, ordering_key: str) -> int:
         row = self.connection.execute(
             """

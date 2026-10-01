@@ -12,10 +12,14 @@ from app.persistence.outbox_repository import OutboxDeliveryConflict
 from app.persistence.unit_of_work import unit_of_work
 
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
-    reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
-)
+pytestmark = [
+    # The outbox relay tests claim every pending event.
+    pytest.mark.xdist_group("outbox"),
+    pytest.mark.skipif(
+        not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+        reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
+    ),
+]
 
 
 def _database() -> PostgresDatabase:

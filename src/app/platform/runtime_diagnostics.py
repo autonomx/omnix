@@ -75,11 +75,14 @@ def _durable_snapshot(services):
         events = snapshot["events"]
         session_owners = snapshot["session_owners"]
         dead_letters = snapshot["dead_letter_count"]
+        outbox = work.outbox.lag(jobs.context)
         work.rollback()
     return {
         "connectivity": True, "authority_state": policy.authority_state,
         "statement_timeout_ms": database.settings.statement_timeout_ms,
         "pool": database.pool_statistics(),
+        # Events the outbox relay has not delivered yet (WP-5.3).
+        "outbox": outbox,
     }, {
         "available": True,
         "by_resource_class": [{"resource_class": resource, "status": status, "count": count} for resource, status, count, _, _ in groups],

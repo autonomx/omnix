@@ -136,6 +136,9 @@ def _register_feature_modules(gateway) -> None:
     gateway.state.feature_modules = tuple(registered)
     gateway.state.loaded_feature_modules = tuple(loaded_features)
     gateway.state.job_handler_registry = job_handlers
+    from app.events.outbox_relay import outbox_consumer_registry
+
+    gateway.state.outbox_consumers = outbox_consumer_registry(loaded_features)
     jobs = getattr(services, "jobs", None)
     configure_handlers = getattr(jobs, "configure_handler_registry", None)
     if callable(configure_handlers):

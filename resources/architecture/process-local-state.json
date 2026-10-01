@@ -865,6 +865,12 @@
       "reason": "Guards one-time generation of the per-process run-token key used only when neither OMNIX_RUN_TOKEN_KEY nor the launcher service token is configured (a single hand-started process); multi-process installations derive one shared key from configuration."
     },
     {
+      "path": "src/app/events/run_streams.py",
+      "symbol": "_WAKEUPS_LOCK",
+      "category": "cache",
+      "reason": "Guards creation of the process's single LISTEN connection that wakes this process's open run streams; it holds no events, and streams read every event from PostgreSQL and keep a fallback poll."
+    },
+    {
       "path": "src/app/security/audit.py",
       "symbol": "_LOCK",
       "category": "cache",

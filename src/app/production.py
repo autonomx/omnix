@@ -269,6 +269,22 @@ def create_production_app(config: RuntimeConfig | None = None):
                 executor="thread",
             )
         )
+
+        def relay_outbox(_task_context) -> None:
+            from app.events.outbox_relay import OutboxRelayWorker
+
+            # The registry is composed with the features, below.
+            OutboxRelayWorker(services.jobs.database, gateway.state.outbox_consumers).run_once()
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="platform.outbox-relay",
+                run=relay_outbox,
+                interval_seconds=1,
+                timeout_seconds=120,
+                executor="thread",
+            )
+        )
         scheduler.register_task(
             ScheduledTaskSpec(
                 task_id="platform.job-lease-recovery",

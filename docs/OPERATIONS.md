@@ -374,6 +374,21 @@ Find one with:
     SELECT pid, state, xact_start, query FROM pg_stat_activity
      WHERE backend_xid IS NOT NULL ORDER BY xact_start LIMIT 5;
 
+### Outbox
+
+Agent, task-graph and workflow run events are also written to
+`omnix_outbox_events` in the same transaction. A scheduled task delivers them
+every second to their consumers; today the only consumer wakes the open run
+event streams. `/api/diagnostics` shows `runtime.postgresql.outbox`: the
+number of undelivered events, the age of the oldest one, and dead letters.
+An age that keeps growing means no process is running schedulers. A consumer
+that fails five times moves the event to `omnix_outbox_dead_letters` with the
+error; after fixing the cause, set the event back to `pending` to retry it:
+
+    UPDATE omnix_outbox_events SET status = 'pending', available_at = now()
+     WHERE event_key = '<key>';
+    DELETE FROM omnix_outbox_consumer_inbox WHERE event_key = '<key>' AND status = 'dead_letter';
+
 ### Database roles and row-level security
 
 Every table with a `workspace_id` has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in `src/app/persistence/tenant_scope.py`.

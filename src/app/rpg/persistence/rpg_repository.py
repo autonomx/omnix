@@ -133,12 +133,6 @@ class PostgresRpgRepository:
             """,
             (campaign_id, context.user_id),
         )
-        self._outbox(
-            context,
-            aggregate_id=campaign_id,
-            event_type="rpg.campaign_created",
-            payload={"campaign_id": campaign_id, "revision": 0, "state_hash": digest},
-        )
         return _campaign(row)
 
     def get_campaign(
@@ -343,21 +337,6 @@ class PostgresRpgRepository:
                 engine_version=engine_version,
                 schema_version=schema_version,
             )
-
-        self._outbox(
-            context,
-            aggregate_id=campaign_id,
-            event_type="rpg.turn_committed",
-            payload={
-                "campaign_id": campaign_id,
-                "turn_id": turn_id,
-                "submission_id": submission_id,
-                "interaction_id": interaction_id,
-                "sequence": sequence,
-                "resulting_revision": resulting_revision,
-                "state_hash": after_hash,
-            },
-        )
         return {
             "idempotent_replay": False,
             "campaign": updated_campaign,
@@ -411,21 +390,3 @@ class PostgresRpgRepository:
             "created_at": row[7].isoformat(),
         }
 
-    def _outbox(
-        self,
-        context: TenantContext,
-        *,
-        aggregate_id: str,
-        event_type: str,
-        payload: dict[str, Any],
-    ) -> int:
-        from app.persistence.outbox_repository import PostgresOutboxRepository
-
-        return PostgresOutboxRepository(self.connection).append(
-            context,
-            aggregate_type="rpg_campaign",
-            aggregate_id=aggregate_id,
-            event_type=event_type,
-            payload=payload,
-            ordering_key=aggregate_id,
-        )

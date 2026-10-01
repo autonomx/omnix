@@ -118,17 +118,22 @@ async def stream_task_graph_events(
     if runtime.get_status(run_id) is None:
         raise HTTPException(status_code=404, detail="task_graph_run_not_found")
 
+    from app.events.run_streams import run_event_wakeups, wakeup_key
+    from app.runtime.tenant_context import current_tenant
+
+    key = wakeup_key(current_tenant().workspace_id, "task_graph_run", run_id)
+
     async def generate():
         sequence = max(0, after_sequence)
-        idle = 0
-        while True:
-            rows = await asyncio.to_thread(
-                runtime.stream_events,
-                run_id,
-                after_sequence=sequence,
-            )
-            if rows:
-                idle = 0
+        # Woken by the outbox relay when the run has new events (WP-5.3);
+        # without a notification the stream reads every few seconds.
+        with run_event_wakeups().subscribe(key) as wakeups:
+            while True:
+                rows = await asyncio.to_thread(
+                    runtime.stream_events,
+                    run_id,
+                    after_sequence=sequence,
+                )
                 for event in rows:
                     sequence = max(sequence, int(event.sequence or 0))
                     yield (
@@ -136,18 +141,15 @@ async def stream_task_graph_events(
                         f"event: {event.event_type}\n"
                         f"data: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
                     )
-            else:
-                idle += 1
-                if idle % 15 == 0:
-                    yield ": heartbeat\n\n"
 
-            snapshot = await asyncio.to_thread(runtime.get_status, run_id)
-            if snapshot is None or snapshot.status in {
-                "completed",
-                "failed",
-                "cancelled",
-            }:
-                return
-            await asyncio.sleep(1)
+                snapshot = await asyncio.to_thread(runtime.get_status, run_id)
+                if snapshot is None or snapshot.status in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    return
+                if not rows and not await wakeups.wait():
+                    yield ": heartbeat\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
