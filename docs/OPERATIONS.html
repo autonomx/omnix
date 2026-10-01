@@ -438,6 +438,63 @@ npm run web:build</code></pre></div>
 <h2 id="listener-policy">Listener policy</h2>
 <p>Omnix-managed services default to loopback. Non-loopback binding requires both <code>OMNIX_BIND_HOST=&lt;address&gt;</code> and <code>OMNIX_ALLOW_LAN=true</code> and emits a startup warning. Use <code>OMNIX_BIND_HOST</code> instead of legacy per-service listener host variables. <code>OMNIX_ALLOWED_ORIGINS</code> is a comma-separated list of exact HTTP(S) origins; wildcards are rejected for credential-bearing CORS. The standalone compatibility API defaults to port <code>8101</code>, avoiding the API replica port <code>8001</code>.</p>
 <p>The request guard rejects untrusted Hosts with 421, and untrusted browser Origins or missing <code>X-Omnix-Client</code> on state-changing HTTP requests with 403. WebSockets with untrusted Origins close with policy code 1008. Add legitimate public hostnames to <code>OMNIX_ALLOWED_HOSTS</code> and browser origins to <code>OMNIX_ALLOWED_ORIGINS</code>. Command-line mutation requests must send <code>X-Omnix-Client: cli</code>. This header is a request guard, not authentication.</p>
+<h2 id="sign-in-and-sessions">Sign-in and sessions</h2>
+<p><code>OMNIX_AUTH_MODE</code> selects how the gateway authenticates requests:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Value</th>
+<th>Behaviour</th>
+</tr></thead><tbody>
+<tr>
+<td>unset</td>
+<td>No sign-in, as before. The gateway logs <code>authentication_not_enforced</code> at startup.</td>
+</tr>
+<tr>
+<td><code>local</code></td>
+<td>Sign-in required. One local owner account (<code>user:local</code>) signs in with the install credential or a launcher link.</td>
+</tr>
+<tr>
+<td><code>oidc</code></td>
+<td>Sign-in through your identity provider (Authorization Code + PKCE). API clients may send <code>Authorization: Bearer &lt;access token&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>disabled</code></td>
+<td>No sign-in. Startup fails unless <code>OMNIX_ENV=test</code>, or <code>OMNIX_ENV=development</code> with a loopback <code>OMNIX_BIND_HOST</code>.</td>
+</tr>
+</tbody></table></div>
+<p>Leaving the variable unset keeps existing installations working unchanged. Making <code>local</code> the default is a separate, approved change (roadmap WP-4.1).</p>
+<p>When sign-in is required, every route needs a session except <code>/health</code>, <code>/ready</code>, <code>/api/health</code> and <code>/api/auth/*</code>. Unauthenticated requests get 401; WebSockets close with code 1008. Internal <code>/internal/*</code> routes accept the service token instead. Until run-scoped tokens land (WP-4.6), the Pi agent extensions reach their broker and model-gateway routes from loopback without a session.</p>
+<p>Sessions use the <code>omnix_session</code> cookie (HttpOnly, <code>SameSite=Strict</code>). They end after 12 idle hours (<code>OMNIX_AUTH_SESSION_IDLE_HOURS</code>) or 7 days (<code>OMNIX_AUTH_SESSION_MAX_DAYS</code>), whichever comes first. Set <code>OMNIX_AUTH_COOKIE_SECURE=true</code> when Omnix is served over HTTPS. Browser requests that change state must echo the <code>omnix_csrf</code> cookie in <code>X-Omnix-CSRF</code>; the web app does this automatically. Missing or wrong values get 403 <code>csrf_failed</code>.</p>
+<h3 id="local-mode">Local mode</h3>
+<p>On first start the gateway creates a random install credential. The plaintext is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX); the database keeps only a scrypt hash.</p>
+<ul>
+<li><strong>Launcher:</strong> <strong>Open app</strong> signs the browser in through a single-use link</li>
+<p>that expires after 60 seconds.</p>
+<li><strong>By hand:</strong> open <code>/login</code> and paste the credential that</li>
+<p><code>python -m app.security show-install-credential</code> prints. The command works only from an interactive console.</p>
+<li><strong>Other single-use codes:</strong> <code>python -m app.security login-code</code> prints one.</li>
+<p>Open <code>/api/auth/local/callback?code=&lt;code&gt;</code> within 60 seconds.</p>
+<li><strong>Rotate:</strong> <code>python -m app.security rotate-install-credential</code> replaces the</li>
+<p>credential and signs out every local session. If the protected copy is deleted, the next gateway start replaces it the same way.</p>
+</ul>
+<h3 id="oidc-mode">OIDC mode</h3>
+<p>Required settings:</p>
+<ul>
+<li><code>OMNIX_OIDC_ISSUER</code>: HTTPS, except on loopback.</li>
+<li><code>OMNIX_OIDC_CLIENT_ID</code>.</li>
+<li><code>OMNIX_OIDC_REDIRECT_URI</code>: <code>&lt;public origin&gt;/api/auth/oidc/callback</code>.</li>
+</ul>
+<p>Optional settings:</p>
+<ul>
+<li><code>OMNIX_OIDC_CLIENT_SECRET</code>, for confidential clients.</li>
+<li><code>OMNIX_OIDC_SCOPES</code>.</li>
+<li><code>OMNIX_OIDC_API_AUDIENCE</code>, to accept bearer access tokens.</li>
+<li><code>OMNIX_OIDC_ALLOWED_DOMAINS</code>, which requires a verified email in one of the</li>
+<p>listed domains.</p>
+<li><code>OMNIX_OIDC_REQUIRED_GROUP</code> and <code>OMNIX_OIDC_GROUPS_CLAIM</code>.</li>
+</ul>
+<p>New users are added to <code>OMNIX_OIDC_WORKSPACE_ID</code> with <code>OMNIX_OIDC_DEFAULT_ROLE</code>, which is <code>member</code> or <code>viewer</code>. Grant higher roles explicitly. Accounts are matched by issuer and subject, never by email.</p>
+<p>Every successful sign-in, failed attempt, sign-out and credential rotation is written to <code>omnix_audit_events</code>.</p>
+<p>The launcher control app (port 5055) does not ask you to sign in. It is an operator surface and refuses every non-loopback client.</p>
 <h2 id="agent-request-ceilings">Agent request ceilings</h2>
 <p>Public agent-run requests may tighten the selected profile&#x27;s approval policy; <code>allow_automatic</code> is rejected when the profile default is <code>ask_sensitive</code>. Allowed file patterns must remain within the profile ceiling, and isolation cannot be lowered. Reviewer requests use immutable review snapshots.</p>
 <p>Both <code>repository</code> and <code>workspace_root</code> must resolve under operator-approved roots. <code>OMNIX_AGENT_WORKSPACE_ROOTS</code> is a path list separated by <code>;</code> on Windows or <code>:</code> on POSIX. The default roots are the repository and <code>resources/agent_workspaces</code>. Empty configuration denies every root. Relative configured roots are anchored to the repository; request roots must be absolute. Resolved symlinks and parent traversal are checked before a run starts.</p>

@@ -89,7 +89,10 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_ASSISTANT_TURN_STORE_PATH` | string | — | chat | Controls assistant turn store path for chat. |
 | `OMNIX_AUDIOBOOK_CLASSIFICATION_LOG_PATH` | string | — | audiobook | Controls audiobook classification log path for audiobook. |
 | `OMNIX_AUDIOBOOK_LOG_DIR` | string | — | audiobook | Controls audiobook log dir for audiobook. |
-| `OMNIX_AUTH_MODE` | string | `local` | production.py | Controls auth mode for production.py. |
+| `OMNIX_AUTH_COOKIE_SECURE` | boolean | `false` | security | Controls auth cookie secure for security. |
+| `OMNIX_AUTH_MODE` | string | — | production.py, security | Controls auth mode for production.py, security. |
+| `OMNIX_AUTH_SESSION_IDLE_HOURS` | integer | `12` | security | Controls auth session idle hours for security. |
+| `OMNIX_AUTH_SESSION_MAX_DAYS` | integer | `7` | security | Controls auth session max days for security. |
 | `OMNIX_AVATAR_GENERATION_LOG_PATH` | string | — | characters | Controls avatar generation log path for characters. |
 | `OMNIX_BINANCE_FUTURES_WS_PROXY` | string | — | trading | Controls binance futures ws proxy for trading. |
 | `OMNIX_BINANCE_WS_PROXY` | string | — | trading | Controls binance ws proxy for trading. |
@@ -110,7 +113,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
-| `OMNIX_ENV` | string | `development` | kernel, production.py | Controls env for kernel, production.py. |
+| `OMNIX_ENV` | string | `development` | kernel, production.py, security | Controls env for kernel, production.py, security. |
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
@@ -175,6 +178,17 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_NEMOTRON_FINAL_RIGHT_CONTEXT` | integer | `13` | providers | Controls nemotron final right context for providers. |
 | `OMNIX_NEMOTRON_MODEL` | string | `nvidia/nemotron-speech-streaming-en-0.6b` | providers | Controls nemotron model for providers. |
 | `OMNIX_NEMOTRON_RIGHT_CONTEXT` | integer | `1` | providers | Controls nemotron right context for providers. |
+| `OMNIX_OIDC_ALLOWED_DOMAINS` | list | — | security | Controls oidc allowed domains for security. |
+| `OMNIX_OIDC_API_AUDIENCE` | string | — | security | Controls oidc api audience for security. |
+| `OMNIX_OIDC_CLIENT_ID` | string | — | security | Controls oidc client id for security. |
+| `OMNIX_OIDC_CLIENT_SECRET` | string | — | security | Controls oidc client secret for security. |
+| `OMNIX_OIDC_DEFAULT_ROLE` | string | `member` | security | Controls oidc default role for security. |
+| `OMNIX_OIDC_GROUPS_CLAIM` | string | `groups` | security | Controls oidc groups claim for security. |
+| `OMNIX_OIDC_ISSUER` | string | — | security | Controls oidc issuer for security. |
+| `OMNIX_OIDC_REDIRECT_URI` | string | — | security | Controls oidc redirect uri for security. |
+| `OMNIX_OIDC_REQUIRED_GROUP` | string | — | security | Controls oidc required group for security. |
+| `OMNIX_OIDC_SCOPES` | list | — | security | Controls oidc scopes for security. |
+| `OMNIX_OIDC_WORKSPACE_ID` | string | `workspace:local` | security | Controls oidc workspace id for security. |
 | `OMNIX_OPENAI_API_PORT` | integer | `8101` | tooling | Controls openai api port for tooling. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |

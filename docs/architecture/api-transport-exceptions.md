@@ -38,6 +38,10 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/audiobook/routes.py` | GET | `/api/audiobook/projects/{project_id}/exports/{export_id}/download` | Audio file bytes; format-specific media type |
 | `src/app/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/google/callback` | 303 OAuth result redirect |
 | `src/app/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/github/callback` | 303 OAuth result redirect |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/local/callback` | 303 launcher sign-in redirect that sets the session cookies |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/login` | 302 redirect to the identity provider |
+| `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/callback` | 303 sign-in result redirect that sets the session cookies |
+| `src/app/security/auth/routes.py` | POST | `/api/auth/logout` | 204 empty response that clears the session cookies |
 | `src/app/agent_runtime/preview_api.py` | GET | `/api/agent-runs/{run_id}/workspace-preview/{asset_path}` | Allowlisted preview file bytes or HTML source text |
 | `src/app/characters/live2d_avatar.py` | GET | `/api/character-live2d/runtime/{filename}` | Runtime script or binary bytes |
 | `src/app/characters/live2d_avatar.py` | GET | `/api/character-live2d/assets/{asset_id}/{asset_path}` | Live2D model asset bytes |

@@ -134,11 +134,24 @@ def test_service_composition_protects_routes(monkeypatch, module):
     app = importlib.import_module(module).app
     token = secrets.token_urlsafe(32)
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
-    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Service-Token": token})
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Service-Token": token},
+        client=("127.0.0.1", 50000),
+    )
     # An unknown route proves the guard runs before routing or model execution.
     assert client.post("/__guard_test__", headers={"Host": "evil.test"}).status_code == 421
     assert client.post("/__guard_test__").status_code == 403
     assert client.post("/__guard_test__", headers={"X-Omnix-Client": "test"}).status_code == 404
+
+
+def test_launcher_control_app_refuses_non_loopback_peers():
+    from app.launcher.control_app import app
+
+    remote = TestClient(app, base_url="http://127.0.0.1", client=("192.0.2.10", 50000))
+    assert remote.get("/api/services").status_code == 403
+    assert remote.get("/api/services").json() == {"detail": "loopback_only"}
 
 
 def test_gateway_composition_protects_routes(monkeypatch):

@@ -92,6 +92,8 @@ export function apiPath(input: RequestInfo | URL): string {
 
 export function isApiAllowedForView(pathname: string, moduleId: OmnixModuleId): boolean {
   if (!pathname.startsWith('/api/')) return true;
+  // Sign-in and session state belong to the shell, not to any workspace.
+  if (AUTH_API_PATTERN.test(pathname)) return true;
   return MODULE_API_PREFIXES[moduleId].some((prefix) => pathMatchesPrefix(pathname, prefix));
 }
 
@@ -110,17 +112,59 @@ function blockedApiResponse(pathname: string, moduleId: OmnixModuleId): Response
   });
 }
 
+// Prefix match for the sign-in API family (/api/auth and below).
+const AUTH_API_PATTERN = /^\/api\/auth(?:\/|$)/u;
+const CSRF_COOKIE = 'omnix_csrf';
+export const LOGIN_PATH = '/login';
+let loginRedirectPending = false;
+
+export function readCookie(name: string, source: string = typeof document === 'undefined' ? '' : document.cookie): string | null {
+  const matches = source
+    .split(';')
+    .map((part) => part.trim())
+    .filter((part) => part.startsWith(`${name}=`))
+    .map((part) => decodeURIComponent(part.slice(name.length + 1)));
+  return matches.length === 1 && matches[0] ? matches[0] : null;
+}
+
+function isGatewayPath(pathname: string): boolean {
+  return ['/api', '/events', '/ready', '/health'].some((prefix) => pathMatchesPrefix(pathname, prefix));
+}
+
+function requestUrl(input: RequestInfo | URL): URL {
+  const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  return new URL(rawUrl, window.location.href);
+}
+
+export function loginLocation(current: Pick<Location, 'pathname' | 'search' | 'hash'> = window.location): string {
+  const next = `${current.pathname}${current.search}${current.hash}`;
+  return next && next !== '/' ? `${LOGIN_PATH}?next=${encodeURIComponent(next)}` : LOGIN_PATH;
+}
+
+// A 401 from the gateway means the browser session ended or was never
+// established; send the user to sign in and come back afterwards.
+function redirectWhenUnauthenticated(input: RequestInfo | URL, response: Response): Response {
+  if (response.status !== 401 || typeof window === 'undefined') return response;
+  const url = requestUrl(input);
+  if (url.origin !== window.location.origin || !isGatewayPath(url.pathname)) return response;
+  if (AUTH_API_PATTERN.test(url.pathname)) return response;
+  if (pathMatchesPrefix(window.location.pathname, LOGIN_PATH) || loginRedirectPending) return response;
+  loginRedirectPending = true;
+  window.location.assign(loginLocation());
+  return response;
+}
+
 function withClientHeader(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
   const request = typeof Request !== 'undefined' && input instanceof Request ? input : undefined;
   const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return init;
-  const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-  const url = new URL(rawUrl, window.location.href);
-  if (url.origin !== window.location.origin || !['/api', '/events', '/ready', '/health'].some(
-    (prefix) => pathMatchesPrefix(url.pathname, prefix),
-  )) return init;
+  const url = requestUrl(input);
+  if (url.origin !== window.location.origin || !isGatewayPath(url.pathname)) return init;
   const headers = new Headers(init?.headers ?? request?.headers);
   headers.set('X-Omnix-Client', 'web');
+  // Double-submit CSRF token for cookie-authenticated sessions (WP-4.1).
+  const csrf = readCookie(CSRF_COOKIE);
+  if (csrf) headers.set('X-Omnix-CSRF', csrf);
   return { ...init, headers };
 }
 
@@ -139,8 +183,10 @@ export function installViewApiFirewall(options: { outermost?: boolean } = {}): v
     const moduleId = activeViewModule();
     if (!isApiAllowedForView(pathname, moduleId)) return blockedApiResponse(pathname, moduleId);
     const guardedInit = withClientHeader(input, init);
-    if (options.outermost && moduleId === 'trading' && rootFetch) return rootFetch(input, guardedInit);
-    return delegate(input, guardedInit);
+    const response = options.outermost && moduleId === 'trading' && rootFetch
+      ? await rootFetch(input, guardedInit)
+      : await delegate(input, guardedInit);
+    return redirectWhenUnauthenticated(input, response);
   };
 
   if (!options.outermost) {
@@ -186,6 +232,7 @@ export function resetViewApiFirewallForTests(): void {
   previousWebSocket = null;
   previousEventSource = null;
   rootFetch = null;
+  loginRedirectPending = false;
   if (typeof window !== 'undefined') {
     delete (window as typeof window & Record<string, unknown>)[VIEW_API_FIREWALL_KEY];
     delete (window as typeof window & Record<string, unknown>)[OUTER_VIEW_API_FIREWALL_KEY];

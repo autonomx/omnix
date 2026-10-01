@@ -106,7 +106,9 @@ export function gatewayRouting(
 } {
   let cursor = 0;
   const proxyOptions = (target: string, label: string, prefix?: string): ProxyOptions => ({
-    target, changeOrigin: true, ws: true,
+    // xfwd marks proxied requests so the gateway never treats them as
+    // same-host callers (agent routes are loopback-only until WP-4.6).
+    target, changeOrigin: true, ws: true, xfwd: true,
     ...(prefix ? { rewrite: (url: string) => url.slice(prefix.length) } : {}),
     configure(proxy) {
       proxy.on('proxyRes', (upstream) => {

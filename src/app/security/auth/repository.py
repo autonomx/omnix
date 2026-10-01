@@ -1,0 +1,299 @@
+"""PostgreSQL persistence for authentication state (WP-4.1).
+
+Secrets never reach the database in plaintext: session ids, login codes and
+OIDC states are stored as SHA-256 digests, the install credential as scrypt.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRecord:
+    id: str
+    user_id: str
+    workspace_id: str
+    auth_method: str
+    csrf_secret: str
+    expires_at: datetime
+    absolute_expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class InstallCredentialRecord:
+    user_id: str
+    workspace_id: str
+    salt: bytes
+    credential_hash: bytes
+    n: int
+    r: int
+    p: int
+
+
+@dataclass(frozen=True, slots=True)
+class OidcLoginState:
+    nonce: str
+    code_verifier: str
+    redirect_after: str
+
+
+_SESSION_COLUMNS = (
+    "id, user_id, workspace_id, auth_method, csrf_secret, expires_at, absolute_expires_at"
+)
+# Sliding expiry is refreshed at most once a minute per session, so ordinary
+# request traffic does not rewrite the session row on every call.
+_TOUCH_INTERVAL_SECONDS = 60
+
+
+def _session(row: Any) -> SessionRecord:
+    return SessionRecord(
+        id=str(row[0]),
+        user_id=str(row[1]),
+        workspace_id=str(row[2]),
+        auth_method=str(row[3]),
+        csrf_secret=str(row[4]),
+        expires_at=row[5],
+        absolute_expires_at=row[6],
+    )
+
+
+class PostgresAuthRepository:
+    def __init__(self, connection: Any) -> None:
+        self.connection = connection
+
+    # Sessions -------------------------------------------------------------
+
+    def create_session(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        workspace_id: str,
+        auth_method: str,
+        csrf_secret: str,
+        user_agent_hash: str | None,
+        sliding_seconds: int,
+        absolute_seconds: int,
+    ) -> SessionRecord:
+        row = self.connection.execute(
+            f"""
+            INSERT INTO omnix_auth_sessions
+                (id, user_id, workspace_id, auth_method, csrf_secret, user_agent_hash,
+                 expires_at, absolute_expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s,
+                    CURRENT_TIMESTAMP + make_interval(secs => %s),
+                    CURRENT_TIMESTAMP + make_interval(secs => %s))
+            RETURNING {_SESSION_COLUMNS}
+            """,
+            (
+                session_id,
+                user_id,
+                workspace_id,
+                auth_method,
+                csrf_secret,
+                user_agent_hash,
+                min(sliding_seconds, absolute_seconds),
+                absolute_seconds,
+            ),
+        ).fetchone()
+        return _session(row)
+
+    def active_session(self, session_id: str, *, sliding_seconds: int) -> SessionRecord | None:
+        row = self.connection.execute(
+            f"""
+            SELECT {_SESSION_COLUMNS},
+                   last_seen_at < CURRENT_TIMESTAMP - make_interval(secs => %s)
+              FROM omnix_auth_sessions
+             WHERE id = %s
+               AND revoked_at IS NULL
+               AND expires_at > CURRENT_TIMESTAMP
+               AND absolute_expires_at > CURRENT_TIMESTAMP
+            """,
+            (_TOUCH_INTERVAL_SECONDS, session_id),
+        ).fetchone()
+        if row is None:
+            return None
+        if not bool(row[7]):
+            return _session(row)
+        touched = self.connection.execute(
+            f"""
+            UPDATE omnix_auth_sessions
+               SET last_seen_at = CURRENT_TIMESTAMP,
+                   expires_at = LEAST(
+                       absolute_expires_at,
+                       CURRENT_TIMESTAMP + make_interval(secs => %s)
+                   )
+             WHERE id = %s AND revoked_at IS NULL
+            RETURNING {_SESSION_COLUMNS}
+            """,
+            (sliding_seconds, session_id),
+        ).fetchone()
+        return _session(touched) if touched is not None else None
+
+    def revoke_session(self, session_id: str) -> bool:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_sessions
+               SET revoked_at = CURRENT_TIMESTAMP
+             WHERE id = %s AND revoked_at IS NULL
+            RETURNING id
+            """,
+            (session_id,),
+        ).fetchone()
+        return row is not None
+
+    def revoke_user_sessions(self, user_id: str) -> int:
+        rows = self.connection.execute(
+            """
+            UPDATE omnix_auth_sessions
+               SET revoked_at = CURRENT_TIMESTAMP
+             WHERE user_id = %s AND revoked_at IS NULL
+            RETURNING id
+            """,
+            (user_id,),
+        ).fetchall()
+        return len(rows)
+
+    # Install credential ---------------------------------------------------
+
+    def install_credential(self) -> InstallCredentialRecord | None:
+        row = self.connection.execute(
+            """
+            SELECT user_id, workspace_id, salt, credential_hash, scrypt_n, scrypt_r, scrypt_p
+              FROM omnix_install_credentials
+             WHERE id = 'install'
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        return InstallCredentialRecord(
+            user_id=str(row[0]),
+            workspace_id=str(row[1]),
+            salt=bytes(row[2]),
+            credential_hash=bytes(row[3]),
+            n=int(row[4]),
+            r=int(row[5]),
+            p=int(row[6]),
+        )
+
+    def store_install_credential(
+        self,
+        *,
+        user_id: str,
+        workspace_id: str,
+        salt: bytes,
+        credential_hash: bytes,
+        n: int,
+        r: int,
+        p: int,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_install_credentials
+                (id, user_id, workspace_id, salt, credential_hash, scrypt_n, scrypt_r, scrypt_p)
+            VALUES ('install', %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE
+               SET user_id = EXCLUDED.user_id,
+                   workspace_id = EXCLUDED.workspace_id,
+                   salt = EXCLUDED.salt,
+                   credential_hash = EXCLUDED.credential_hash,
+                   scrypt_n = EXCLUDED.scrypt_n,
+                   scrypt_r = EXCLUDED.scrypt_r,
+                   scrypt_p = EXCLUDED.scrypt_p,
+                   rotated_at = CURRENT_TIMESTAMP
+            """,
+            (user_id, workspace_id, salt, credential_hash, n, r, p),
+        )
+
+    # Launcher login codes -------------------------------------------------
+
+    def insert_login_code(
+        self, *, code_hash: str, user_id: str, workspace_id: str, ttl_seconds: int
+    ) -> None:
+        self.connection.execute(
+            "DELETE FROM omnix_auth_login_codes WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 hour'"
+        )
+        self.connection.execute(
+            """
+            INSERT INTO omnix_auth_login_codes (code_hash, user_id, workspace_id, expires_at)
+            VALUES (%s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s))
+            """,
+            (code_hash, user_id, workspace_id, ttl_seconds),
+        )
+
+    def consume_login_code(self, code_hash: str) -> tuple[str, str] | None:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_auth_login_codes
+               SET consumed_at = CURRENT_TIMESTAMP
+             WHERE code_hash = %s
+               AND consumed_at IS NULL
+               AND expires_at > CURRENT_TIMESTAMP
+            RETURNING user_id, workspace_id
+            """,
+            (code_hash,),
+        ).fetchone()
+        return (str(row[0]), str(row[1])) if row is not None else None
+
+    # OIDC -----------------------------------------------------------------
+
+    def insert_oidc_state(
+        self,
+        *,
+        state_hash: str,
+        browser_binding_hash: str,
+        nonce: str,
+        code_verifier: str,
+        redirect_after: str,
+        ttl_seconds: int,
+    ) -> None:
+        self.connection.execute(
+            "DELETE FROM omnix_oidc_login_states WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '1 hour'"
+        )
+        self.connection.execute(
+            """
+            INSERT INTO omnix_oidc_login_states
+                (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, expires_at)
+            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP + make_interval(secs => %s))
+            """,
+            (state_hash, browser_binding_hash, nonce, code_verifier, redirect_after, ttl_seconds),
+        )
+
+    def consume_oidc_state(self, *, state_hash: str, browser_binding_hash: str) -> OidcLoginState | None:
+        row = self.connection.execute(
+            """
+            UPDATE omnix_oidc_login_states
+               SET consumed_at = CURRENT_TIMESTAMP
+             WHERE state_hash = %s
+               AND browser_binding_hash = %s
+               AND consumed_at IS NULL
+               AND expires_at > CURRENT_TIMESTAMP
+            RETURNING nonce, code_verifier, redirect_after
+            """,
+            (state_hash, browser_binding_hash),
+        ).fetchone()
+        if row is None:
+            return None
+        return OidcLoginState(nonce=str(row[0]), code_verifier=str(row[1]), redirect_after=str(row[2]))
+
+    def external_identity_user(self, *, issuer: str, subject: str) -> str | None:
+        row = self.connection.execute(
+            "SELECT user_id FROM omnix_external_identities WHERE issuer = %s AND subject = %s",
+            (issuer, subject),
+        ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def link_external_identity(
+        self, *, issuer: str, subject: str, user_id: str, email: str | None
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO omnix_external_identities (issuer, subject, user_id, email)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (issuer, subject) DO UPDATE
+               SET email = EXCLUDED.email, last_login_at = CURRENT_TIMESTAMP
+            """,
+            (issuer, subject, user_id, email),
+        )

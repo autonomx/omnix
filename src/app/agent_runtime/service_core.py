@@ -2355,6 +2355,32 @@ class AgentRunService:
                     self._remember_lease(lease)
                     repository.reset_processing_commands(run_id)
                     current = repository.get_run(run_id)
+                    queued_cancel = next(
+                        (
+                            item
+                            for item in repository.list_pending_commands(run_id)
+                            if item.command_type == "cancel"
+                        ),
+                        None,
+                    )
+                    if current is not None and queued_cancel is not None:
+                        # The dead owner never delivered this cancel. Honour it
+                        # instead of restarting a runtime only to stop it.
+                        if repository.claim_command(run_id, queued_cancel.command_id):
+                            current = repository.update_state(
+                                run_id,
+                                expected_revision=current.revision,
+                                status="cancelled",
+                                desired_state="cancelled",
+                                worker_id=self.worker_id,
+                                lease_token=lease.lease_token,
+                            )
+                            repository.complete_command(run_id, queued_cancel.command_id)
+                            self._maybe_finalize_parent_in_repository(repository, run_id)
+                        work.commit()
+                        self._cancel_descendants(run_id)
+                        recovered.append(run_id)
+                        continue
                     if current is not None:
                         repository.update_state(
                             run_id,

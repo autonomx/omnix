@@ -151,6 +151,11 @@ def create_production_app(config: RuntimeConfig | None = None):
     )
     from app.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
+    from app.runtime.net import bind_host
+    from app.security.auth import AuthService, bootstrap_authentication, resolve_auth_settings
+
+    auth_service = AuthService(resolve_auth_settings(), database=database)
+    bootstrap_authentication(auth_service, bind_host=bind_host(None))
     from app.chat.generation_jobs import (
         _ChatGenerationDispatcher,
         recover_abandoned_chat_generation_jobs,
@@ -309,6 +314,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         scheduler_runtime=scheduler,
         runtime_config=config,
         runtime_services=services,
+        auth_service=auth_service,
     )
     gateway.state.persistence_startup = status
     gateway.state.runtime_services = services

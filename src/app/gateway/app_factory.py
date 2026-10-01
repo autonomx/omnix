@@ -64,6 +64,7 @@ def create_gateway_app(
     scheduler_runtime=None,
     runtime_config=None,
     runtime_services=None,
+    auth_service=None,
 ) -> FastAPI:
     from app.runtime.config import get_runtime_config
     from app.runtime.capabilities import RuntimeCapabilities
@@ -154,6 +155,16 @@ def create_gateway_app(
     from app.security.request_guard import RequestGuardMiddleware
     from fastapi.middleware.cors import CORSMiddleware
 
+    from app.security.auth import AuthService, AuthenticationMiddleware, resolve_auth_settings
+
+    # Deny by default once OMNIX_AUTH_MODE is explicit (WP-4.1). Without an
+    # injected service, every composition resolves the same configuration.
+    # Added before CORS so preflights and CORS headers wrap auth rejections.
+    gateway.state.auth_service = auth_service or AuthService(resolve_auth_settings())
+    gateway.add_middleware(
+        AuthenticationMiddleware,
+        authenticator_factory=lambda: gateway.state.auth_service,
+    )
     gateway.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins(),
@@ -164,6 +175,10 @@ def create_gateway_app(
     )
     gateway.add_middleware(RequestGuardMiddleware)
     compose_features(gateway)
+
+    from app.security.auth import create_auth_router
+
+    gateway.include_router(create_auth_router(lambda: gateway.state.auth_service))
 
     from .kernel_routes import create_kernel_router
 

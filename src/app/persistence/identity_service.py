@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from typing import Any
 
 from .authority import AuthorityOperation
@@ -73,6 +74,42 @@ class PostgresIdentityRepository:
             membership_id=str(row[0]), user_id=str(row[1]), workspace_id=str(row[2]),
             roles=frozenset(str(role) for role in row[3]),
         )
+
+    def provision_member(
+        self,
+        *,
+        user_id: str,
+        display_name: str,
+        email: str | None,
+        workspace_id: str,
+        roles: tuple[str, ...],
+    ) -> TenantContext:
+        """Create an externally authenticated user and membership when absent.
+
+        Existing users, memberships and roles are never widened here; an
+        operator changes roles explicitly.
+        """
+        if not roles:
+            raise ValueError("at least one role is required")
+        # Accounts are never merged by email (that would allow takeover via a
+        # second identity provider subject); a taken email is left unset.
+        self.connection.execute(
+            """INSERT INTO omnix_users (id, display_name, email, metadata)
+                SELECT %s, %s,
+                       CASE WHEN EXISTS (
+                           SELECT 1 FROM omnix_users WHERE lower(email) = lower(%s)
+                       ) THEN NULL ELSE %s END,
+                       %s::jsonb
+                ON CONFLICT (id) DO NOTHING""",
+            (user_id, display_name, email, email, json.dumps({"provisioned_by": "oidc"})),
+        )
+        self.connection.execute(
+            """INSERT INTO omnix_workspace_memberships (id, workspace_id, user_id, roles)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (workspace_id, user_id) DO NOTHING""",
+            (f"membership:{uuid.uuid4().hex}", workspace_id, user_id, list(roles)),
+        )
+        return self.load_context(user_id=user_id, workspace_id=workspace_id)
 
     def get_workspace(self, context: TenantContext, workspace_id: str) -> dict[str, Any] | None:
         context.require_workspace(workspace_id)

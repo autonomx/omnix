@@ -397,6 +397,79 @@ public hostnames to `OMNIX_ALLOWED_HOSTS` and browser origins to
 `OMNIX_ALLOWED_ORIGINS`. Command-line mutation requests must send
 `X-Omnix-Client: cli`. This header is a request guard, not authentication.
 
+## Sign-in and sessions
+
+`OMNIX_AUTH_MODE` selects how the gateway authenticates requests:
+
+| Value | Behaviour |
+|---|---|
+| unset | No sign-in, as before. The gateway logs `authentication_not_enforced` at startup. |
+| `local` | Sign-in required. One local owner account (`user:local`) signs in with the install credential or a launcher link. |
+| `oidc` | Sign-in through your identity provider (Authorization Code + PKCE). API clients may send `Authorization: Bearer <access token>`. |
+| `disabled` | No sign-in. Startup fails unless `OMNIX_ENV=test`, or `OMNIX_ENV=development` with a loopback `OMNIX_BIND_HOST`. |
+
+Leaving the variable unset keeps existing installations working unchanged.
+Making `local` the default is a separate, approved change (roadmap WP-4.1).
+
+When sign-in is required, every route needs a session except `/health`,
+`/ready`, `/api/health` and `/api/auth/*`. Unauthenticated requests get 401;
+WebSockets close with code 1008. Internal `/internal/*` routes accept the
+service token instead. Until run-scoped tokens land (WP-4.6), the Pi agent
+extensions reach their broker and model-gateway routes from loopback without a
+session.
+
+Sessions use the `omnix_session` cookie (HttpOnly, `SameSite=Strict`). They end
+after 12 idle hours (`OMNIX_AUTH_SESSION_IDLE_HOURS`) or 7 days
+(`OMNIX_AUTH_SESSION_MAX_DAYS`), whichever comes first. Set
+`OMNIX_AUTH_COOKIE_SECURE=true` when Omnix is served over HTTPS. Browser
+requests that change state must echo the `omnix_csrf` cookie in
+`X-Omnix-CSRF`; the web app does this automatically. Missing or wrong values
+get 403 `csrf_failed`.
+
+### Local mode
+
+On first start the gateway creates a random install credential. The plaintext
+is kept in the protected secret store (DPAPI on Windows, a 0600 file on POSIX);
+the database keeps only a scrypt hash.
+
+- **Launcher:** **Open app** signs the browser in through a single-use link
+  that expires after 60 seconds.
+- **By hand:** open `/login` and paste the credential that
+  `python -m app.security show-install-credential` prints. The command works
+  only from an interactive console.
+- **Other single-use codes:** `python -m app.security login-code` prints one.
+  Open `/api/auth/local/callback?code=<code>` within 60 seconds.
+- **Rotate:** `python -m app.security rotate-install-credential` replaces the
+  credential and signs out every local session. If the protected copy is
+  deleted, the next gateway start replaces it the same way.
+
+### OIDC mode
+
+Required settings:
+
+- `OMNIX_OIDC_ISSUER`: HTTPS, except on loopback.
+- `OMNIX_OIDC_CLIENT_ID`.
+- `OMNIX_OIDC_REDIRECT_URI`: `<public origin>/api/auth/oidc/callback`.
+
+Optional settings:
+
+- `OMNIX_OIDC_CLIENT_SECRET`, for confidential clients.
+- `OMNIX_OIDC_SCOPES`.
+- `OMNIX_OIDC_API_AUDIENCE`, to accept bearer access tokens.
+- `OMNIX_OIDC_ALLOWED_DOMAINS`, which requires a verified email in one of the
+  listed domains.
+- `OMNIX_OIDC_REQUIRED_GROUP` and `OMNIX_OIDC_GROUPS_CLAIM`.
+
+New users are added to `OMNIX_OIDC_WORKSPACE_ID` with
+`OMNIX_OIDC_DEFAULT_ROLE`, which is `member` or `viewer`. Grant higher roles
+explicitly. Accounts are matched by issuer and subject, never by email.
+
+Every successful sign-in, failed attempt, sign-out and credential rotation is
+written to `omnix_audit_events`.
+
+The launcher control app (port 5055) does not ask you to sign in. It is an
+operator surface and refuses every non-loopback client.
+
 ## Agent request ceilings
 
 Public agent-run requests may tighten the selected profile's approval policy;

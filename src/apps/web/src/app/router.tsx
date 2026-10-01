@@ -26,7 +26,9 @@ import {
 } from '../features/settings/appearanceEffects';
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
-import { setActiveViewModule } from './viewApiScope';
+import { LoginPage } from './LoginPage';
+import { SignOutButton } from './SignOutButton';
+import { LOGIN_PATH, setActiveViewModule } from './viewApiScope';
 import { initializeViewRuntime } from './viewRuntime';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
@@ -148,6 +150,7 @@ function OmnixShell() {
               {module.label === 'Chatbot' ? 'Chat' : module.label}
             </button>
           ))}
+          <SignOutButton />
         </OmnixTopBar>
       }
     >
@@ -156,7 +159,19 @@ function OmnixShell() {
   );
 }
 
-const rootRoute = createRootRoute({ component: OmnixShell });
+// The sign-in page renders without the workstation shell, which would
+// otherwise start workspace API traffic before a session exists.
+function OmnixRoot() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  return pathname === LOGIN_PATH ? <Outlet /> : <OmnixShell />;
+}
+
+const rootRoute = createRootRoute({ component: OmnixRoot });
+const loginRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'login',
+  component: LoginPage,
+});
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -194,6 +209,7 @@ export const moduleRoutePaths = omnixModules.map((module) => module.route);
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  loginRoute,
   rpgRoute,
   chatbotRoute,
   storytellerRoute,

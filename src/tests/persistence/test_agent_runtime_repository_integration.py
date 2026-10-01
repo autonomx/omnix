@@ -190,7 +190,7 @@ def test_terminal_agent_run_ignores_late_commands_and_runtime_events() -> None:
         database.close()
 
 
-def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
+def test_terminal_parent_propagates_cancellation_to_running_child(monkeypatch) -> None:
     database = _database()
     try:
         context = ensure_local_identity(database)
@@ -238,6 +238,13 @@ def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
 
         service = AgentRunService(database, worker_id="parent-propagation-worker")
         service._supervisor_started = True
+
+        def _no_restart(_spec):
+            raise AssertionError("a cancelled orphan must not be restarted")
+
+        # The cancel is queued for the dead owner; recovery must honour it
+        # rather than restart the child (which fails where Pi is absent).
+        monkeypatch.setattr(service.runtime, "start", _no_restart)
         service._supervise_once()
 
         with unit_of_work(database) as work:

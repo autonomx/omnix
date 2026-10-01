@@ -62,9 +62,23 @@ def _read(path: Path) -> str:
         os.close(descriptor)
 
 
+def install_credential_path() -> Path:
+    """Protected plaintext of the local-auth install credential (WP-4.1)."""
+    return service_credential_path().with_name(
+        "install-credential.dpapi" if _windows() else "install-credential"
+    )
+
+
 def load_or_create_service_token(path: Path | None = None) -> str:
+    return load_or_create_protected_token(path or service_credential_path())
+
+
+def read_protected_token(path: Path) -> str:
+    return _read(path)
+
+
+def load_or_create_protected_token(target: Path) -> str:
     """Publish an entire protected credential atomically, without overwriting it."""
-    target = path or service_credential_path()
     try:
         return _read(target)
     except FileNotFoundError:
@@ -74,7 +88,7 @@ def load_or_create_service_token(path: Path | None = None) -> str:
     value = token.encode("ascii")
     if _windows():
         value = _WINDOWS_PREFIX + provider_secret_store._protect(value)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=".service-token-", dir=target.parent)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".protected-token-", dir=target.parent)
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "wb") as stream:
@@ -86,6 +100,26 @@ def load_or_create_service_token(path: Path | None = None) -> str:
             os.link(temporary, target)
         except FileExistsError:
             return _read(target)
+        return token
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def replace_protected_token(target: Path) -> str:
+    """Atomically replace a protected credential, for explicit operator rotation."""
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    token = secrets.token_urlsafe(32)
+    value = token.encode("ascii")
+    if _windows():
+        value = _WINDOWS_PREFIX + provider_secret_store._protect(value)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".protected-token-", dir=target.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
         return token
     finally:
         temporary.unlink(missing_ok=True)

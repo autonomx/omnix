@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import html
+import ipaddress
+import logging
 import os
 import shutil
 import socket
 import subprocess
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse, urlunparse
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
@@ -18,13 +20,41 @@ from app.launcher.service_manager import LAUNCHER_MANAGER_VERSION, get_default_m
 from app.runtime.net import allowed_origins
 from app.security.request_guard import RequestGuardMiddleware
 
+class LoopbackClientMiddleware:
+    """The control app is an operator surface: refuse every non-loopback peer."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] in {"http", "websocket"}:
+            client = scope.get("client")
+            try:
+                loopback = bool(client) and ipaddress.ip_address(str(client[0])).is_loopback
+            except ValueError:
+                loopback = False
+            if not loopback:
+                if scope["type"] == "websocket":
+                    await send({"type": "websocket.close", "code": 1008, "reason": "loopback_only"})
+                else:
+                    await JSONResponse({"detail": "loopback_only"}, status_code=403)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 app = FastAPI(title="Omnix Launcher Control", version=LAUNCHER_MANAGER_VERSION)
 app.add_middleware(
     RequestGuardMiddleware,
     allowed_origins=[*allowed_origins(), "http://localhost:5055", "http://127.0.0.1:5055"],
 )
+app.add_middleware(LoopbackClientMiddleware)
 
 _DEFAULT_APP_OPEN_URL = "http://localhost:5173/"
+_LOGGER = logging.getLogger(__name__)
+_LOGGER.info(
+    "launcher_control_auth: loopback peers only, plus the Host/Origin/client-header "
+    "guard; browser sign-in is not required for this operator surface"
+)
 
 
 def _launcher_auto_start_enabled() -> bool:
@@ -125,6 +155,25 @@ def _candidate_browser_paths() -> list[str]:
     return unique
 
 
+def _signed_in_open_url(url: str) -> str:
+    """With local auth enforced, open the app through a single-use login link."""
+    from app.security.auth import AuthMode, AuthService, resolve_auth_settings
+
+    settings = resolve_auth_settings()
+    if not settings.enforced or settings.mode is not AuthMode.LOCAL:
+        return url
+    try:
+        code = AuthService(settings).issue_login_code()
+    except Exception:
+        # The browser then lands on the sign-in page instead.
+        _LOGGER.warning("launcher_login_code_unavailable", exc_info=True)
+        return url
+    parsed = urlparse(url)
+    target = (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else "")
+    query = urlencode({"code": code, "next": target})
+    return urlunparse((parsed.scheme, parsed.netloc, "/api/auth/local/callback", "", query, ""))
+
+
 def _private_browser_command(browser_path: str, url: str) -> list[str]:
     name = Path(browser_path).name.casefold()
     if "firefox" in name:
@@ -137,8 +186,12 @@ def _private_browser_command(browser_path: str, url: str) -> list[str]:
 def _open_app_private_browser() -> dict[str, Any]:
     url = _app_open_url()
     errors: list[str] = []
-    for browser_path in _candidate_browser_paths():
-        command = _private_browser_command(browser_path, url)
+    candidates = _candidate_browser_paths()
+    # The single-use login link goes only to the browser, never into the
+    # control-app response below.
+    launch_url = _signed_in_open_url(url) if candidates else url
+    for browser_path in candidates:
+        command = _private_browser_command(browser_path, launch_url)
         try:
             creationflags = 0
             if os.name == "nt":

@@ -42,6 +42,17 @@ def feature_guard(feature_id: str):
     return guard
 
 
+def _router_paths(router) -> list[str]:
+    try:
+        from fastapi.routing import iter_route_contexts
+    except ImportError:  # FastAPI without lazy router inclusion
+        return [str(route.path) for route in router.routes if getattr(route, "path", None)]
+    return [
+        str(context.path or context.original_route.path)
+        for context in iter_route_contexts(router.routes)
+    ]
+
+
 def _register_feature_modules(gateway) -> None:
     config = gateway.state.runtime_config
     capabilities = gateway.state.runtime_capabilities
@@ -50,6 +61,8 @@ def _register_feature_modules(gateway) -> None:
     scheduler_registry = getattr(gateway.state, "scheduler_registry", None)
     registered: list[str] = []
     loaded_features = []
+    internal_paths: list[str] = []
+    public_paths: list[str] = []
     job_handlers = JobHandlerRegistry()
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
@@ -85,11 +98,14 @@ def _register_feature_modules(gateway) -> None:
                 dependencies=[Depends(feature_guard(feature.id))],
             )
         for router_factory in feature.internal_routers:
+            internal_router = router_factory(context)
+            internal_paths.extend(_router_paths(internal_router))
             gateway.include_router(
-                router_factory(context),
+                internal_router,
                 dependencies=[Depends(feature_guard(feature.id))],
                 include_in_schema=False,
             )
+        public_paths.extend(sorted(feature.public_paths))
         for worker_factory in feature.background_workers:
             worker = worker_factory(context)
             if worker is not None:
@@ -106,6 +122,10 @@ def _register_feature_modules(gateway) -> None:
             register_feature_lifecycle(gateway, feature.lifecycle)
         registered.append(feature.id)
 
+    # The authentication middleware accepts the service token only on these
+    # paths and lets declared public paths through without a principal.
+    gateway.state.internal_route_paths = tuple(dict.fromkeys(internal_paths))
+    gateway.state.public_route_paths = tuple(dict.fromkeys(public_paths))
     gateway.state.feature_modules = tuple(registered)
     gateway.state.loaded_feature_modules = tuple(loaded_features)
     gateway.state.job_handler_registry = job_handlers

@@ -31,7 +31,7 @@ _MIGRATION_HEADER = re.compile(
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0104_rpg_narration_events"
+SCHEMA_KNOWN = "0105_auth_sessions"
 APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
 APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 

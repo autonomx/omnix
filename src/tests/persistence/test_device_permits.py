@@ -499,7 +499,9 @@ def test_live_fake_tts_load_scales_with_device_capacity_and_returns_429(monkeypa
                             f"expected {request_count - capacity} queued calls at capacity {capacity}"
                         )
                     time.sleep(0.05)
-                time.sleep(1.2)
+                # Queued calls wait at most 1.0 s (tts_server); leave a wide
+                # margin so a busy CI runner cannot admit a late waiter.
+                time.sleep(2.0)
                 fake_tts.release.set()
                 outcomes = [future.result(timeout=10) for future in futures]
 

@@ -75,6 +75,8 @@ AL_METRICS = {
     "AL013": "rpg_nondeterminism",
 }
 PUBLIC_PATHS = {"/health", "/ready", "/docs", "/redoc", "/openapi.json", "/favicon.ico"}
+# Sign-in endpoints authenticate their own input (app.security.auth.middleware).
+PUBLIC_PREFIXES = ("/api/auth/",)
 VERBS = {"get", "post", "put", "patch", "delete", "head", "options", "request"}
 TRANSPORT_EXCEPTIONS_DOC = "docs/architecture/api-transport-exceptions.md"
 PROCESS_STATE_INVENTORY = "resources/architecture/process-local-state.json"
@@ -626,7 +628,7 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                     ):
                         values["schema_excluded_routes"] += 1
                     full_path = router_prefixes.get(qualified_name(route.func.value), "") + route_path
-                    if full_path not in PUBLIC_PATHS and not internal:
+                    if full_path not in PUBLIC_PATHS and not full_path.startswith(PUBLIC_PREFIXES) and not internal:
                         permitted = qualified_name(route.func.value) in router_permissions or _permission(keyword(route, "dependencies")) or any(_permission(default) for default in node.args.defaults + node.args.kw_defaults)
                         values["routes_without_permission"] += not permitted
             if isinstance(node, ast.Call):

@@ -595,11 +595,32 @@
     "type": "string"
   },
   {
-    "default": "local",
-    "description": "Controls auth mode for production.py.",
-    "feature": "production.py",
+    "default": "false",
+    "description": "Controls auth cookie secure for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_COOKIE_SECURE",
+    "type": "boolean"
+  },
+  {
+    "default": null,
+    "description": "Controls auth mode for production.py, security.",
+    "feature": "production.py, security",
     "name": "OMNIX_AUTH_MODE",
     "type": "string"
+  },
+  {
+    "default": "12",
+    "description": "Controls auth session idle hours for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_SESSION_IDLE_HOURS",
+    "type": "integer"
+  },
+  {
+    "default": "7",
+    "description": "Controls auth session max days for security.",
+    "feature": "security",
+    "name": "OMNIX_AUTH_SESSION_MAX_DAYS",
+    "type": "integer"
   },
   {
     "default": "",
@@ -743,8 +764,8 @@
   },
   {
     "default": "development",
-    "description": "Controls env for kernel, production.py.",
-    "feature": "kernel, production.py",
+    "description": "Controls env for kernel, production.py, security.",
+    "feature": "kernel, production.py, security",
     "name": "OMNIX_ENV",
     "type": "string"
   },
@@ -1195,6 +1216,83 @@
     "feature": "providers",
     "name": "OMNIX_NEMOTRON_RIGHT_CONTEXT",
     "type": "integer"
+  },
+  {
+    "default": null,
+    "description": "Controls oidc allowed domains for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_ALLOWED_DOMAINS",
+    "type": "list"
+  },
+  {
+    "default": null,
+    "description": "Controls oidc api audience for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_API_AUDIENCE",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls oidc client id for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_CLIENT_ID",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls oidc client secret for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_CLIENT_SECRET",
+    "type": "string"
+  },
+  {
+    "default": "member",
+    "description": "Controls oidc default role for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_DEFAULT_ROLE",
+    "type": "string"
+  },
+  {
+    "default": "groups",
+    "description": "Controls oidc groups claim for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_GROUPS_CLAIM",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls oidc issuer for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_ISSUER",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls oidc redirect uri for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_REDIRECT_URI",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls oidc required group for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_REQUIRED_GROUP",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls oidc scopes for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_SCOPES",
+    "type": "list"
+  },
+  {
+    "default": "workspace:local",
+    "description": "Controls oidc workspace id for security.",
+    "feature": "security",
+    "name": "OMNIX_OIDC_WORKSPACE_ID",
+    "type": "string"
   },
   {
     "default": "8101",

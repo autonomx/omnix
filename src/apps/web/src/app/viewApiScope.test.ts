@@ -4,7 +4,9 @@ import {
   activeViewModule,
   installViewApiFirewall,
   isApiAllowedForView,
+  loginLocation,
   moduleIdFromPathname,
+  readCookie,
   resetViewApiFirewallForTests,
 } from './viewApiScope';
 
@@ -123,5 +125,70 @@ describe('view API scope', () => {
     installViewApiFirewall({ outermost: true });
     await window.fetch('/api/trading/paper/accounts', { method: 'POST' });
     expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-Client')).toBe('web');
+  });
+});
+
+describe('view API scope sign-in integration', () => {
+  afterEach(() => {
+    resetViewApiFirewallForTests();
+    document.cookie = 'omnix_csrf=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/chatbot');
+  });
+
+  it('lets every workspace reach the sign-in API', () => {
+    expect(isApiAllowedForView('/api/auth/session', 'trading')).toBe(true);
+    expect(isApiAllowedForView('/api/auth/logout', 'audiobook')).toBe(true);
+    expect(isApiAllowedForView('/api/authx', 'trading')).toBe(false);
+  });
+
+  it('echoes the CSRF cookie on same-origin mutations only', async () => {
+    document.cookie = 'omnix_csrf=csrf-123; path=/';
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    await window.fetch('/api/chat/sessions', { method: 'POST' });
+    await window.fetch('https://external.example/api/chat/sessions', { method: 'POST' });
+    await window.fetch('/api/chat/sessions');
+    expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-CSRF')).toBe('csrf-123');
+    expect(new Headers(delegate.mock.calls[1][1]?.headers).has('X-Omnix-CSRF')).toBe(false);
+    expect(delegate.mock.calls[2][1]).toBeUndefined();
+  });
+
+  it('refuses ambiguous duplicate CSRF cookies', () => {
+    expect(readCookie('omnix_csrf', 'omnix_csrf=a; other=1')).toBe('a');
+    expect(readCookie('omnix_csrf', 'omnix_csrf=a; omnix_csrf=b')).toBeNull();
+    expect(readCookie('omnix_csrf', 'x_omnix_csrf=a')).toBeNull();
+  });
+
+  it('sends unauthenticated gateway responses to the sign-in page once', async () => {
+    const assign = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      assign,
+      pathname: '/chatbot',
+      search: '?session=1',
+      hash: '',
+    });
+    window.fetch = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
+    installViewApiFirewall();
+    expect((await window.fetch('/api/chat/sessions')).status).toBe(401);
+    await window.fetch('/api/chat/sessions');
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/login?next=%2Fchatbot%3Fsession%3D1');
+  });
+
+  it('does not redirect for sign-in API responses', async () => {
+    const assign = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, assign, pathname: '/chatbot' });
+    window.fetch = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}', { status: 401 }));
+    installViewApiFirewall();
+    await window.fetch('/api/auth/local/login', { method: 'POST' });
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it('builds the sign-in location with the return path', () => {
+    expect(loginLocation({ pathname: '/', search: '', hash: '' })).toBe('/login');
+    expect(loginLocation({ pathname: '/trading', search: '?a=1', hash: '#x' })).toBe('/login?next=%2Ftrading%3Fa%3D1%23x');
   });
 });
