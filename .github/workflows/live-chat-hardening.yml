@@ -89,7 +89,6 @@ jobs:
             src/app/desktop_companion/context.py \
             src/app/desktop_companion/memory_bridge.py \
             src/app/desktop_companion/routes.py \
-            src/app/gateway/blocking_route_offload.py \
             src/app/observability/content_free_diagnostics.py \
             src/app/gateway/event_loop_lag_monitor.py \
             src/app/live_voice/prompt/companion_context.py \
