@@ -124,6 +124,42 @@ Check the gateway before debugging a feature:
 
 Use the /diagnostics workspace, /jobs, /providers, and /models to correlate runtime state with the failing feature.
 
+## Rolling restarts and draining
+
+`/ready` reports the running revision in `build_revision`, which comes from
+`OMNIX_SOFTWARE_REVISION`.
+
+On SIGTERM, or the launcher's stop, a gateway drains before it exits:
+
+1. `/ready` returns 503 with reason `draining` at once.
+2. New requests get 503 `draining` with `Retry-After: 1` and `Connection: close`.
+   New WebSockets close with code 1012. Clients and the ingress retry on
+   another replica.
+3. Requests and streams already in progress get up to `OMNIX_DRAIN_SECONDS`
+   (default 30) to finish.
+4. The process then shuts down normally, which releases its runtime lease,
+   scheduler locks and job leases.
+
+`OMNIX_DRAIN_MIN_SECONDS` (default 0) keeps a draining replica visibly
+not-ready for at least that long, even when it is idle. In multi-replica
+deployments, set it to at least the ingress readiness-probe interval. A second
+Ctrl+C forces an immediate exit.
+
+Job workers stop claiming on shutdown. They let running jobs finish within
+`OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS` and release the leases of any that
+are still running, so another worker retries them.
+
+To upgrade replicas one at a time:
+
+1. Apply expand migrations first (`python -m app.persistence migrate`).
+2. Stop one replica and wait for it to exit.
+3. Start it on the new revision and wait for `/ready` to report the new
+   `build_revision`.
+4. Repeat for each replica, then each job worker.
+
+The nightly `rolling-upgrade` job runs this sequence under load
+(`scripts/rolling_upgrade_test.py`).
+
 ## Triage decision tree
 
 ### 1. The page does not open

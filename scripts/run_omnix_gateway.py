@@ -61,20 +61,19 @@ def main() -> int:
         return serve_cluster(args, count)
     job_worker = start_local_job_worker(Path(__file__).resolve().parents[1], os.environ)
     try:
-        if args.managed_stdin:
-            if args.reload:
-                raise ValueError("Managed gateway shutdown requires reload disabled")
-            server = uvicorn.Server(uvicorn.Config(args.app, host=args.host, port=args.port))
-            watch_parent_stdin(server)
-            server.run()
+        if args.reload:
+            uvicorn.run(args.app, host=args.host, port=args.port, reload=True)
             return 0
+        from app.runtime.drain import create_draining_server
 
-        uvicorn.run(
-            args.app,
-            host=args.host,
-            port=args.port,
-            reload=args.reload,
+        # SIGTERM drains first (WP-6.7); the short graceful timeout only covers
+        # what is still open after the drain window.
+        server = create_draining_server(
+            uvicorn.Config(args.app, host=args.host, port=args.port, timeout_graceful_shutdown=5)
         )
+        if args.managed_stdin:
+            watch_parent_stdin(server)
+        server.run()
         return 0
     finally:
         if job_worker is not None:

@@ -50,6 +50,39 @@ def _gateway_lifespan(app, *, get_chat_store, get_job_store):
     )
 
 
+
+def _install_request_middleware(gateway: FastAPI, auth_service) -> None:
+    """Install request middleware; each one added wraps the ones before it."""
+    from app.runtime.net import allowed_origins
+    from app.security.request_guard import RequestGuardMiddleware
+    from fastapi.middleware.cors import CORSMiddleware
+
+    from app.security.auth import AuthService, AuthenticationMiddleware, resolve_auth_settings
+
+    # Deny by default once OMNIX_AUTH_MODE is explicit (WP-4.1). Without an
+    # injected service, every composition resolves the same configuration.
+    # Added before CORS so preflights and CORS headers wrap auth rejections.
+    gateway.state.auth_service = auth_service or AuthService(resolve_auth_settings())
+    gateway.add_middleware(
+        AuthenticationMiddleware,
+        authenticator_factory=lambda: gateway.state.auth_service,
+    )
+    gateway.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins(),
+        allow_credentials=False,
+        allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=86_400,
+    )
+    gateway.add_middleware(RequestGuardMiddleware)
+    from app.runtime.drain import DrainMiddleware
+
+    # Outermost: while draining (WP-6.7) new requests are refused before any
+    # other work, and in-flight requests are counted until they finish.
+    gateway.add_middleware(DrainMiddleware)
+
+
 def create_gateway_app(
     job_store_factory: Callable[[], Any] | None = None,
     provider_facade_factory: Callable[[], ProviderFacade] | None = None,
@@ -151,29 +184,8 @@ def create_gateway_app(
     gateway.state.tts_stream_snapshot = runtime_stream_snapshot
     gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)
     from .feature_registry import compose_features
-    from app.runtime.net import allowed_origins
-    from app.security.request_guard import RequestGuardMiddleware
-    from fastapi.middleware.cors import CORSMiddleware
 
-    from app.security.auth import AuthService, AuthenticationMiddleware, resolve_auth_settings
-
-    # Deny by default once OMNIX_AUTH_MODE is explicit (WP-4.1). Without an
-    # injected service, every composition resolves the same configuration.
-    # Added before CORS so preflights and CORS headers wrap auth rejections.
-    gateway.state.auth_service = auth_service or AuthService(resolve_auth_settings())
-    gateway.add_middleware(
-        AuthenticationMiddleware,
-        authenticator_factory=lambda: gateway.state.auth_service,
-    )
-    gateway.add_middleware(
-        CORSMiddleware,
-        allow_origins=allowed_origins(),
-        allow_credentials=False,
-        allow_methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
-        max_age=86_400,
-    )
-    gateway.add_middleware(RequestGuardMiddleware)
+    _install_request_middleware(gateway, auth_service)
     compose_features(gateway)
 
     from app.security.auth import create_auth_router

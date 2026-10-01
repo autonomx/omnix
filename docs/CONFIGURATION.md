@@ -113,6 +113,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
+| `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |
+| `OMNIX_DRAIN_SECONDS` | integer | `30` | kernel | Controls drain seconds for kernel. |
 | `OMNIX_ENV` | string | `development` | kernel, production.py, security | Controls env for kernel, production.py, security. |
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |

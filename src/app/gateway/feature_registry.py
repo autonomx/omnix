@@ -8,6 +8,7 @@ from fastapi import Depends
 from app.config.env import environment
 from app.config.load import load_feature_config
 from app.jobs.handlers import JobHandlerRegistry
+from app.jobs.probe import PLATFORM_PROBE_JOB
 from app.persistence.repository_registry import install_repository_specs, reset_repository_specs
 from app.persistence.shared_repository_specs import shared_repository_specs
 from app.runtime.background import register_background_worker
@@ -64,6 +65,8 @@ def _register_feature_modules(gateway) -> None:
     internal_paths: list[str] = []
     public_paths: list[str] = []
     job_handlers = JobHandlerRegistry()
+    # Kernel-owned synthetic job used by canaries and deployment tests.
+    job_handlers.register(PLATFORM_PROBE_JOB)
     reset_repository_specs()
     install_repository_specs(shared_repository_specs())
 

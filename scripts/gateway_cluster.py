@@ -72,7 +72,15 @@ def child_environment(role: str) -> dict[str, str]:
     return env
 
 
-def stop_children(children, timeout: float = 20) -> None:
+def _drain_timeout() -> float:
+    from app.runtime.drain import drain_seconds
+
+    # Children drain for up to OMNIX_DRAIN_SECONDS, then shut down.
+    return float(drain_seconds() + 20)
+
+
+def stop_children(children, timeout: float | None = None) -> None:
+    timeout = _drain_timeout() if timeout is None else timeout
     # EOF also requests shutdown if the supervisor exits unexpectedly. No public
     # administrative HTTP endpoint or persisted credential is needed.
     for child in children:
@@ -145,6 +153,7 @@ def serve_cluster(args, count: int) -> int:
 def watch_parent_stdin(server) -> None:
     def watch():
         wait_for_parent_control()
-        server.should_exit = True
+        # Same path as SIGTERM: drain, then exit.
+        server.handle_exit(signal.SIGTERM, None)
 
     threading.Thread(target=watch, name="gateway-parent-control", daemon=True).start()

@@ -16751,6 +16751,17 @@
             ],
             "title": "Background Role"
           },
+          "build_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Revision"
+          },
           "execution_owner_ready": {
             "anyOf": [
               {

@@ -42,6 +42,7 @@ class GatewayReadinessPayload(BaseModel):
     execution_owner_ready: bool | None = None
     background_role: str | None = None
     background_ready: bool | None = None
+    build_revision: str | None = None
     reason: str | None = None
 
 

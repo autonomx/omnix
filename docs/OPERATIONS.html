@@ -221,6 +221,29 @@
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>http://127.0.0.1:8000/health
 http://127.0.0.1:8000/api/health</code></pre></div>
 <p>Use the /diagnostics workspace, /jobs, /providers, and /models to correlate runtime state with the failing feature.</p>
+<h2 id="rolling-restarts-and-draining">Rolling restarts and draining</h2>
+<p><code>/ready</code> reports the running revision in <code>build_revision</code>, which comes from <code>OMNIX_SOFTWARE_REVISION</code>.</p>
+<p>On SIGTERM, or the launcher&#x27;s stop, a gateway drains before it exits:</p>
+<ol>
+<li><code>/ready</code> returns 503 with reason <code>draining</code> at once.</li>
+<li>New requests get 503 <code>draining</code> with <code>Retry-After: 1</code> and <code>Connection: close</code>.</li>
+<p>New WebSockets close with code 1012. Clients and the ingress retry on another replica.</p>
+<li>Requests and streams already in progress get up to <code>OMNIX_DRAIN_SECONDS</code></li>
+<p>(default 30) to finish.</p>
+<li>The process then shuts down normally, which releases its runtime lease,</li>
+<p>scheduler locks and job leases.</p>
+</ol>
+<p><code>OMNIX_DRAIN_MIN_SECONDS</code> (default 0) keeps a draining replica visibly not-ready for at least that long, even when it is idle. In multi-replica deployments, set it to at least the ingress readiness-probe interval. A second Ctrl+C forces an immediate exit.</p>
+<p>Job workers stop claiming on shutdown. They let running jobs finish within <code>OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS</code> and release the leases of any that are still running, so another worker retries them.</p>
+<p>To upgrade replicas one at a time:</p>
+<ol>
+<li>Apply expand migrations first (<code>python -m app.persistence migrate</code>).</li>
+<li>Stop one replica and wait for it to exit.</li>
+<li>Start it on the new revision and wait for <code>/ready</code> to report the new</li>
+<p><code>build_revision</code>.</p>
+<li>Repeat for each replica, then each job worker.</li>
+</ol>
+<p>The nightly <code>rolling-upgrade</code> job runs this sequence under load (<code>scripts/rolling_upgrade_test.py</code>).</p>
 <h2 id="triage-decision-tree">Triage decision tree</h2>
 <h3 id="1-the-page-does-not-open">1. The page does not open</h3>
 <ul>

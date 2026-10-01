@@ -291,6 +291,7 @@ def create_production_app(config: RuntimeConfig | None = None):
 
         payload = production_readiness(config)
         payload["live_voice_capacity"] = live_call_capacity_snapshot()
+        payload["build_revision"] = config.build_revision
         payload["execution_owner_ready"] = owner.ready()
         payload['background_role'] = background.role
         payload['background_ready'] = background.ready()

@@ -103,6 +103,7 @@ def test_private_shutdown_reader_does_not_block_numpy_initialization():
     source = (
         "import runpy,sys,time; from types import SimpleNamespace; "
         "cluster=runpy.run_path(sys.argv[1]); server=SimpleNamespace(should_exit=False); "
+        "server.handle_exit=lambda sig, frame: setattr(server, 'should_exit', True); "
         "cluster['watch_parent_stdin'](server); import numpy; print('ready',flush=True); "
         "exec('while not server.should_exit: time.sleep(.05)')"
     )

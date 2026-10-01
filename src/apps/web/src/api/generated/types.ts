@@ -16131,6 +16131,8 @@ export interface components {
             background_ready?: boolean | null;
             /** Background Role */
             background_role?: string | null;
+            /** Build Revision */
+            build_revision?: string | null;
             /** Execution Owner Ready */
             execution_owner_ready?: boolean | null;
             /** Migrations Pending */

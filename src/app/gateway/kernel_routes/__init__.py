@@ -100,6 +100,18 @@ def create_kernel_router(
 
     @router.get("/ready", response_model=GatewayReadinessPayload, tags=["gateway"])
     def readiness() -> JSONResponse:
+        from app.runtime.drain import process_drain
+
+        if process_drain().draining:
+            runtime_config = getattr(state, "runtime_config", None)
+            return JSONResponse(
+                {
+                    "ready": False,
+                    "reason": "draining",
+                    "build_revision": getattr(runtime_config, "build_revision", None),
+                },
+                status_code=503,
+            )
         if not state.runtime_started or readiness_check is None:
             return JSONResponse(
                 {"ready": False, "reason": "runtime_not_started"}, status_code=503

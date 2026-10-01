@@ -763,6 +763,20 @@
     "type": "integer"
   },
   {
+    "default": "0",
+    "description": "Controls drain min seconds for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DRAIN_MIN_SECONDS",
+    "type": "integer"
+  },
+  {
+    "default": "30",
+    "description": "Controls drain seconds for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DRAIN_SECONDS",
+    "type": "integer"
+  },
+  {
     "default": "development",
     "description": "Controls env for kernel, production.py, security.",
     "feature": "kernel, production.py, security",
