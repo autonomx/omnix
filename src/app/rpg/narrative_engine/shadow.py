@@ -31,11 +31,13 @@ def _first_text(*values: Any) -> str:
 
 
 def _sample_rate() -> float:
-    raw = _env_str("OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE", "1").strip()
+    # Off by default (WP-7.1): a shadow report re-runs narrative work on every
+    # sampled turn. Set OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE to enable it.
+    raw = _env_str("OMNIX_RPG_NARRATIVE_SHADOW_SAMPLE_RATE", "0").strip()
     try:
         return max(0.0, min(float(raw), 1.0))
     except ValueError:
-        return 1.0
+        return 0.0
 
 
 def shadow_selected(turn_id: str, sample_rate: float | None = None) -> bool:

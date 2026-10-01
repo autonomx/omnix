@@ -45,7 +45,7 @@ async def warm_hybrid_stt() -> None:
 
 
 @app.get("/health")
-async def health() -> dict[str, object]:
+def health() -> dict[str, object]:
     details = model_manager.health_details()
     return {
         "ok": model_manager.loaded,
@@ -56,7 +56,7 @@ async def health() -> dict[str, object]:
 
 
 @app.get("/authorityz")
-async def authorityz(language: str = "en", mode: str = "auto") -> dict[str, object]:
+def authorityz(language: str = "en", mode: str = "auto") -> dict[str, object]:
     normalized_language = language.strip().lower()
     english = normalized_language in {"en", "en-us", "en_us", "english"}
     ready = model_manager.loaded

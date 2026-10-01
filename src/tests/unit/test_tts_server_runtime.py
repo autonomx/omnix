@@ -332,3 +332,52 @@ async def test_live_tts_background_closes_stream_and_releases_unstarted_permit(m
 
     assert stream_closed.is_set()
     assert released.is_set()
+
+
+def test_synthesis_runs_on_the_dedicated_pool_and_health_stays_responsive():
+    import httpx
+    import tts_server
+
+    entered, release = threading.Event(), threading.Event()
+    synthesis_threads: list[str] = []
+
+    class SlowProvider:
+        provider_name = "fake"
+
+        def generate_audio(self, **_: Any):
+            synthesis_threads.append(threading.current_thread().name)
+            entered.set()
+            release.wait(5)
+            return {"success": True, "audio": ""}
+
+    old_provider = tts_server._TTS_PROVIDER
+    old_error = tts_server._TTS_PROVIDER_ERROR
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=tts_server.app),
+            base_url="http://127.0.0.1",
+            headers=service_headers(),
+        ) as client:
+            synthesis = asyncio.create_task(
+                client.post("/api/tts/generate_audio", json={"text": "hi", "speaker": "default", "language": "en"})
+            )
+            try:
+                assert await asyncio.to_thread(entered.wait, 2)
+                health = await asyncio.wait_for(client.get("/health"), timeout=1)
+                assert health.status_code == 200
+                assert not release.is_set()
+            finally:
+                release.set()
+            assert (await synthesis).status_code == 200
+
+    try:
+        tts_server._TTS_PROVIDER = SlowProvider()
+        tts_server._TTS_PROVIDER_ERROR = ""
+        asyncio.run(exercise())
+    finally:
+        tts_server._TTS_PROVIDER = old_provider
+        tts_server._TTS_PROVIDER_ERROR = old_error
+        release.set()
+
+    assert synthesis_threads and synthesis_threads[0].startswith("omnix-tts-synthesis")

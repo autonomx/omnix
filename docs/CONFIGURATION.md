@@ -297,6 +297,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_TTS_MODEL_DIR` | string | — | launcher | Controls tts model dir for launcher. |
 | `OMNIX_TTS_PORT` | integer | `5101` | tooling | Controls tts port for tooling. |
 | `OMNIX_TTS_STARTUP_WARMUP` | string | — | voice | Controls tts startup warmup for voice. |
+| `OMNIX_TTS_SYNTHESIS_WORKERS` | integer | `8` | tooling | Controls tts synthesis workers for tooling. |
 | `OMNIX_TTS_URL` | string | `http://127.0.0.1:5101` | launcher | Controls tts url for launcher. |
 | `OMNIX_TTS_WARMUP_SPEAKER` | string | — | voice | Controls tts warmup speaker for voice. |
 | `OMNIX_VISION_API_KEY` | string | — | assistant-context | Controls vision api key for assistant-context. |

@@ -174,7 +174,7 @@ def load_voices():
 AVAILABLE_VOICES = load_voices()
 
 @app.get("/v1/models")
-async def list_models():
+def list_models():
     """List available models"""
     return {
         "object": "list",
@@ -190,14 +190,14 @@ async def list_models():
     }
 
 @app.get("/v1/audio/voices")
-async def list_voices():
+def list_voices():
     """List available voices"""
     return {
         "voices": [voice.dict() for voice in AVAILABLE_VOICES]
     }
 
 @app.get("/v1/audio/voices/{voice_id}")
-async def get_voice(voice_id: str):
+def get_voice(voice_id: str):
     """Get voice details"""
     voice = next((v for v in AVAILABLE_VOICES if v.voice_id == voice_id), None)
     if not voice:
@@ -205,14 +205,14 @@ async def get_voice(voice_id: str):
     return voice.dict()
 
 @app.get("/v1/audio/voices/{voice_id}/preview")
-async def get_voice_preview(voice_id: str):
+def get_voice_preview(voice_id: str):
     """Get voice preview audio"""
     # For custom voices, we could generate a preview
     # For now, return a placeholder
     return {"message": f"Preview for voice {voice_id}"}
 
 @app.post("/v1/audio/speech")
-async def create_speech(request: SpeechRequest, background_tasks: BackgroundTasks):
+def create_speech(request: SpeechRequest, background_tasks: BackgroundTasks):
     """Generate speech from text"""
     try:
         # Use the TTS provider system
@@ -249,7 +249,7 @@ async def create_speech(request: SpeechRequest, background_tasks: BackgroundTask
         raise HTTPException(status_code=500, detail="model_service_error") from e
 
 @app.post("/v1/audio/transcriptions")
-async def create_transcription(request: TranscriptionRequest):
+def create_transcription(request: TranscriptionRequest):
     """Transcribe audio to text"""
     try:
         # For now, we'll use a simple approach
@@ -261,7 +261,7 @@ async def create_transcription(request: TranscriptionRequest):
         raise HTTPException(status_code=500, detail="model_service_error") from e
 
 @app.post("/v1/chat/completions")
-async def create_chat_completion(request: ChatRequest, http_request: Request):
+def create_chat_completion(request: ChatRequest, http_request: Request):
     """Create chat completion"""
     try:
         # Generate unique ID
@@ -331,7 +331,7 @@ async def generate_chat_stream(request: ChatRequest, completion_id: str, created
         yield f"data: {json.dumps({'error': 'model_service_error', 'request_id': request_id})}\n\n"
 
 @app.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",

@@ -2051,6 +2051,13 @@
     "type": "string"
   },
   {
+    "default": "8",
+    "description": "Controls tts synthesis workers for tooling.",
+    "feature": "tooling",
+    "name": "OMNIX_TTS_SYNTHESIS_WORKERS",
+    "type": "integer"
+  },
+  {
     "default": "http://127.0.0.1:5101",
     "description": "Controls tts url for launcher.",
     "feature": "launcher",

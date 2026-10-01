@@ -29,6 +29,7 @@ from app.persistence.device_permits import (
     configure_default_device_permit_service,
     device_permit_slot,
 )
+from app.runtime.model_executor import ModelExecutor
 from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
@@ -361,6 +362,20 @@ def _trace_response(response: Response, trace_id: str) -> Response:
     return response
 
 
+_SYNTHESIS: ModelExecutor | None = None
+
+
+def _synthesis() -> ModelExecutor:
+    """Model calls run on their own pool (WP-7.1); device permits still gate the GPU."""
+    global _SYNTHESIS
+    if _SYNTHESIS is None:
+        _SYNTHESIS = ModelExecutor(
+            "tts-synthesis",
+            env_int("OMNIX_TTS_SYNTHESIS_WORKERS", 8, minimum=1, maximum=64),
+        )
+    return _SYNTHESIS
+
+
 async def _enter_device_permit(permit: Any) -> None:
     """Acquire without leaking a late grant if the request is cancelled."""
     acquire_task = asyncio.create_task(asyncio.to_thread(permit.__enter__))
@@ -423,7 +438,10 @@ async def on_startup() -> None:
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
-    global _TTS_PROVIDER, _TTS_MODEL_OWNER_GUARD
+    global _TTS_PROVIDER, _TTS_MODEL_OWNER_GUARD, _SYNTHESIS
+    synthesis, _SYNTHESIS = _SYNTHESIS, None
+    if synthesis is not None:
+        synthesis.shutdown()
     provider, _TTS_PROVIDER = _TTS_PROVIDER, None
     stop = getattr(provider, "stop", None)
     if callable(stop):
@@ -434,7 +452,7 @@ async def on_shutdown() -> None:
 
 
 @app.get("/health")
-async def health() -> Dict[str, Any]:
+def health() -> Dict[str, Any]:
     status = get_tts_service_status()
     return {
         "ok": status["ok"],
@@ -449,6 +467,10 @@ async def health() -> Dict[str, Any]:
 
 @app.get("/api/tts/speakers")
 async def speakers() -> Dict[str, Any]:
+    return await _synthesis().run(_speakers)
+
+
+def _speakers() -> dict[str, Any]:
     trace_id = _request_trace_id("", "tts-speakers")
     try:
         provider = _require_provider()
@@ -487,6 +509,10 @@ async def speakers() -> Dict[str, Any]:
 
 @app.post("/api/tts/generate_audio")
 async def generate_audio(request: TtsGenerateRequest):
+    return await _synthesis().run(_generate_audio, request)
+
+
+def _generate_audio(request: TtsGenerateRequest):
     trace_id = _request_trace_id(request.trace_id, "tts-audio")
     started_at = time.perf_counter()
     snapshot = _voice_reference_snapshot(request.speaker)
@@ -588,6 +614,10 @@ async def generate_audio(request: TtsGenerateRequest):
 
 @app.post("/api/tts/generate_stream_audio")
 async def generate_stream_audio(request: TtsGenerateStreamRequest):
+    return await _synthesis().run(_generate_stream_audio, request)
+
+
+def _generate_stream_audio(request: TtsGenerateStreamRequest):
     trace_id = _request_trace_id(request.trace_id, "tts-stream")
     started_at = time.perf_counter()
     snapshot = _voice_reference_snapshot(request.speaker)
@@ -789,6 +819,10 @@ async def generate_live_call_stream(request: TtsGenerateStreamRequest):
 
 @app.post("/api/tts/voice_clone")
 async def voice_clone(request: TtsVoiceCloneRequest):
+    return await _synthesis().run(_voice_clone, request)
+
+
+def _voice_clone(request: TtsVoiceCloneRequest):
     trace_id = _request_trace_id("", "tts-clone")
     voice_debug_log(
         "tts",

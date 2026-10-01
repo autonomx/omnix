@@ -634,168 +634,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:generate_progress",
-      "lines": [
-        431
-      ],
-      "path": "src/app/image_service_runtime.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:health",
-      "lines": [
-        337
-      ],
-      "path": "src/app/image_service_runtime.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:provider_status",
-      "lines": [
-        351
-      ],
-      "path": "src/app/image_service_runtime.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:authorityz",
-      "lines": [
-        59
-      ],
-      "path": "src/nemotron_eou_stt_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:health",
-      "lines": [
-        48
-      ],
-      "path": "src/nemotron_eou_stt_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:create_chat_completion",
-      "lines": [
-        264
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:create_speech",
-      "lines": [
-        215
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:create_transcription",
-      "lines": [
-        252
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_voice",
-      "lines": [
-        200
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:get_voice_preview",
-      "lines": [
-        208
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:health_check",
-      "lines": [
-        334
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:list_models",
-      "lines": [
-        177
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:list_voices",
-      "lines": [
-        193
-      ],
-      "path": "src/openai_api.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:generate_audio",
-      "lines": [
-        489
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:generate_stream_audio",
-      "lines": [
-        590
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:health",
-      "lines": [
-        437
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:speakers",
-      "lines": [
-        451
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:voice_clone",
-      "lines": [
-        791
-      ],
-      "path": "src/tts_server.py",
-      "rule": "AL005"
-    },
-    {
-      "count": 1,
       "fingerprint": "main:print",
       "lines": [
         122
@@ -2635,7 +2473,7 @@
       "count": 1,
       "fingerprint": "_kill_windows_port_owners:except",
       "lines": [
-        163
+        164
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -2644,7 +2482,7 @@
       "count": 1,
       "fingerprint": "get_tts_service_status:except",
       "lines": [
-        291
+        292
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -2653,7 +2491,7 @@
       "count": 1,
       "fingerprint": "initialize_tts_provider:except",
       "lines": [
-        236
+        237
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"

@@ -334,7 +334,7 @@ async def startup_load_provider():
 
 
 @app.get("/health")
-async def health():
+def health():
     model = image_model_status()
     return {
         "ok": True,
@@ -348,7 +348,7 @@ async def health():
 
 
 @app.get("/provider/status")
-async def provider_status(provider: str = ""):
+def provider_status(provider: str = ""):
     return image_model_status(provider or None)
 
 
@@ -428,7 +428,7 @@ async def generate(request: Request, request_body: GenerateRequestBody):
 
 
 @app.get("/generate/progress/{request_id}")
-async def generate_progress(request_id: str):
+def generate_progress(request_id: str):
     return _get_generation_progress(request_id)
 
 
