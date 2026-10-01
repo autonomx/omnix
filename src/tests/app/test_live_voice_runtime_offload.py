@@ -188,3 +188,41 @@ def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
     finally:
         release.set()
         resolver.stop(timeout=1.0)
+
+
+def test_cold_phrase_provider_lookup_runs_off_the_event_loop() -> None:
+    from app.live_voice.transport.websocket import _resolve_phrase_tts_provider
+
+    provider = object()
+    resolve_threads: list[int] = []
+
+    def resolve() -> object:
+        resolve_threads.append(threading.get_ident())
+        return provider
+
+    resolver = CachedTtsProviderResolver(resolve, log=lambda *_args, **_kwargs: None)
+
+    async def lookup() -> tuple[object, int]:
+        return await _resolve_phrase_tts_provider(resolver), threading.get_ident()
+
+    resolved, loop_thread = asyncio.run(lookup())
+
+    assert getattr(resolved, "_provider", resolved) is provider
+    assert resolve_threads and resolve_threads[0] != loop_thread
+
+
+def test_warm_phrase_provider_lookup_stays_on_the_event_loop(monkeypatch) -> None:
+    from app.live_voice.transport.websocket import _resolve_phrase_tts_provider
+
+    provider = object()
+    resolver = CachedTtsProviderResolver(lambda: provider, log=lambda *_args, **_kwargs: None)
+    assert resolver.refresh() is provider
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("a warm lookup needs no worker thread")
+
+    monkeypatch.setattr(asyncio, "to_thread", forbidden)
+
+    resolved = asyncio.run(_resolve_phrase_tts_provider(resolver))
+
+    assert getattr(resolved, "_provider", resolved) is provider

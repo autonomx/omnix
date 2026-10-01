@@ -28,6 +28,7 @@ from app.live_voice.speech.startup_frame_policy import (
 )
 
 from app.live_voice.speech.speculative_tts import resolve_live_call_tts_provider
+from app.live_voice.speech.tts_lane import live_voice_tts_lane_is_warm
 from app.observability.tts_stream_diagnostics import (
     begin_stream,
     diagnostics_log_path,
@@ -267,6 +268,20 @@ async def _receive_messages(websocket: WebSocket, state: ConnectionState) -> Non
         _stop_connection(state, f"receiver-failed:{type(exc).__name__}")
 
 
+async def _resolve_phrase_tts_provider(provider_resolver: TTSProviderResolver) -> Any:
+    """Warm lookups stay on the loop; a cold one runs on a worker thread (WP-7.1).
+
+    A cold lookup starts a provider or loads settings, which can take seconds
+    and would stall every other call's audio frames.
+    """
+    is_warm = getattr(provider_resolver, "is_warm", None)
+    if callable(is_warm) and is_warm() and live_voice_tts_lane_is_warm():
+        return resolve_live_call_tts_provider(provider_resolver.get())
+    return await asyncio.to_thread(
+        lambda: resolve_live_call_tts_provider(provider_resolver.get())
+    )
+
+
 async def _stream_phrase(
     websocket: WebSocket,
     payload: dict[str, Any],
@@ -376,7 +391,7 @@ async def _stream_phrase(
             )
             return
 
-        provider = resolve_live_call_tts_provider(provider_resolver.get())
+        provider = await _resolve_phrase_tts_provider(provider_resolver)
         if provider is None or not hasattr(provider, "generate_audio_stream"):
             message = "tts_provider_unavailable" if provider is None else "tts_provider_streaming_unavailable"
             stream_log(stream_id, "server", "request_rejected", reason=message)

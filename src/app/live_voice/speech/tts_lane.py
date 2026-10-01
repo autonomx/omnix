@@ -308,6 +308,18 @@ def live_voice_tts_scheduler() -> PriorityTtsScheduler:
     return _TTS_SCHEDULER
 
 
+def live_voice_tts_lane_is_warm() -> bool:
+    """True when resolving the live lane needs no settings load or provider start."""
+    config = _live_voice_execution_lane_config()
+    if not config.dedicated_tts or not config.tts_provider_name:
+        return True
+    with _DEDICATED_TTS_LOCK:
+        return (
+            _DEDICATED_TTS_PROVIDER is not None
+            and _DEDICATED_TTS_PROVIDER_NAME == config.tts_provider_name
+        )
+
+
 def resolve_live_voice_tts_provider(default_provider: TTSProvider) -> tuple[TTSProvider, str]:
     """Return an optional separately instantiated provider for the live lane."""
     global _DEDICATED_TTS_KEY, _DEDICATED_TTS_PROVIDER, _DEDICATED_TTS_PROVIDER_NAME
@@ -415,6 +427,7 @@ def reset_live_voice_execution_lane_for_tests() -> None:
 __all__ = [
     "PriorityTtsScheduler",
     "TtsLanePriority",
+    "live_voice_tts_lane_is_warm",
     "live_voice_tts_scheduler",
     "reset_live_voice_execution_lane_for_tests",
     "resolve_live_voice_tts_provider",

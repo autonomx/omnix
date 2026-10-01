@@ -248,6 +248,11 @@ class CachedTtsProviderResolver:
             self.refresh_in_background()
         return provider
 
+    def is_warm(self) -> bool:
+        """True when ``get()`` returns the cached provider without blocking."""
+        with self._lock:
+            return self._provider is not None
+
     def refresh(self) -> Any:
         if not self._begin_refresh():
             with self._lock:
