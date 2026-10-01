@@ -168,7 +168,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -366,7 +366,7 @@ test('voice module queues a shared TTS job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -426,7 +426,7 @@ test('stt module queues a shared transcription job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -529,7 +529,7 @@ test('image generation module queues a shared image job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -591,7 +591,7 @@ test('storyteller module queues a shared story job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -689,7 +689,7 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),
@@ -751,7 +751,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -819,7 +819,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
     });
   });
 
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
