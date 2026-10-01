@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import HTTPConnection
 
 from app.assets import SharedAssetStore, default_asset_store
 from app.chat import ChatSessionStore, default_chat_store
@@ -88,6 +89,50 @@ def _install_request_middleware(gateway: FastAPI, auth_service, membership_resol
     # Outermost: while draining (WP-6.7) new requests are refused before any
     # other work, and in-flight requests are counted until they finish.
     gateway.add_middleware(DrainMiddleware)
+    from app.security.headers import SecurityHeadersMiddleware
+
+    # Outermost of all: every response, including drain and auth refusals,
+    # carries the security headers (WP-4.10).
+    gateway.add_middleware(SecurityHeadersMiddleware)
+
+
+def _docs_permission(connection: HTTPConnection) -> None:
+    """API docs need admin:docs outside development (WP-4.10)."""
+    from app.config.env import env_str
+    from app.security.permissions import ensure_permission
+
+    environment = (env_str("OMNIX_ENV", "development") or "development").strip().lower()
+    if environment not in {"development", "local"}:
+        ensure_permission("admin:docs")
+
+
+def _install_api_docs(gateway: FastAPI) -> None:
+    from fastapi import APIRouter, Depends
+    from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html, get_swagger_ui_oauth2_redirect_html
+    from fastapi.responses import HTMLResponse, JSONResponse
+
+    router = APIRouter(include_in_schema=False, dependencies=[Depends(_docs_permission)])
+
+    @router.get("/openapi.json")
+    def openapi() -> JSONResponse:
+        return JSONResponse(gateway.openapi())
+
+    @router.get("/docs")
+    def swagger() -> HTMLResponse:
+        return get_swagger_ui_html(
+            openapi_url="/openapi.json", title=f"{gateway.title} - Swagger UI",
+            oauth2_redirect_url="/docs/oauth2-redirect",
+        )
+
+    @router.get("/docs/oauth2-redirect")
+    def swagger_redirect() -> HTMLResponse:
+        return get_swagger_ui_oauth2_redirect_html()
+
+    @router.get("/redoc")
+    def redoc() -> HTMLResponse:
+        return get_redoc_html(openapi_url="/openapi.json", title=f"{gateway.title} - ReDoc")
+
+    gateway.include_router(router)
 
 
 def create_gateway_app(
@@ -152,6 +197,10 @@ def create_gateway_app(
         version="0.1.0",
         summary="Thin local-first gateway foundation for the Omnix web app redesign.",
         lifespan=gateway_lifespan,
+        # Served by _install_api_docs behind a permission (WP-4.10).
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
     _install_local_browser_cors(gateway)
     from app.rpg.api.feature_routes import add_rpg_debug_middleware
@@ -223,5 +272,6 @@ def create_gateway_app(
         ),
         dependencies=[Depends(kernel_permission_guard)],
     )
+    _install_api_docs(gateway)
 
     return gateway

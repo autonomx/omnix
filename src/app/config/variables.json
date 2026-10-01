@@ -455,6 +455,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls allowed private networks for security.",
+    "feature": "security",
+    "name": "OMNIX_ALLOWED_PRIVATE_NETWORKS",
+    "type": "string"
+  },
+  {
     "default": "false",
     "description": "Controls allow legacy import for kernel.",
     "feature": "kernel",
@@ -799,8 +806,8 @@
   },
   {
     "default": "development",
-    "description": "Controls env for kernel, production.py, security.",
-    "feature": "kernel, production.py, security",
+    "description": "Controls env for gateway, kernel, production.py, security.",
+    "feature": "gateway, kernel, production.py, security",
     "name": "OMNIX_ENV",
     "type": "string"
   },

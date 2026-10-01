@@ -294,7 +294,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.kasa_plan",
       "lines": [
-        22
+        23
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -303,7 +303,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.live_agent_proposals",
       "lines": [
-        23
+        24
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -312,7 +312,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        27
+        28
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -321,7 +321,7 @@
       "count": 1,
       "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
       "lines": [
-        156
+        159
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -636,7 +636,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_agent_events",
       "lines": [
-        342
+        353
       ],
       "path": "src/app/agent_runtime/api.py",
       "rule": "AL005"
@@ -645,7 +645,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_task_graph_events",
       "lines": [
-        110
+        113
       ],
       "path": "src/app/agent_runtime/task_graph_api.py",
       "rule": "AL005"
@@ -906,7 +906,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_connection_start_endpoint",
       "lines": [
-        102
+        104
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -915,7 +915,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_dashboard_endpoint",
       "lines": [
-        94
+        96
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -924,7 +924,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_github_callback_endpoint",
       "lines": [
-        128
+        130
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -933,7 +933,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_google_callback_endpoint",
       "lines": [
-        117
+        119
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -942,7 +942,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_intent_endpoint",
       "lines": [
-        90
+        92
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -951,7 +951,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_ledger_endpoint",
       "lines": [
-        98
+        100
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -960,7 +960,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tool_oauth_client_endpoint",
       "lines": [
-        106
+        108
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -969,7 +969,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:assistant_tools_config",
       "lines": [
-        47
+        49
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -978,7 +978,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:hermes_assistant_tool_review_endpoint",
       "lines": [
-        132
+        134
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -987,7 +987,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:review_assistant_tool_endpoint",
       "lines": [
-        55
+        57
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -996,7 +996,7 @@
       "count": 1,
       "fingerprint": "create_assistant_tool_router:save_assistant_tools_config_endpoint",
       "lines": [
-        51
+        53
       ],
       "path": "src/app/assistant_tools/routes.py",
       "rule": "AL005"
@@ -2933,18 +2933,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "LlamaCppProvider._start_server:except",
-      "lines": [
-        100
-      ],
-      "path": "src/app/providers/llamacpp_provider.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "LMStudioProvider._start_stream_cancel_watcher.watch:except",
       "lines": [
-        201
+        207
       ],
       "path": "src/app/providers/lmstudio_provider.py",
       "rule": "AL009"
@@ -2953,7 +2944,7 @@
       "count": 1,
       "fingerprint": "OpenAICompatibleProvider.get_models:except",
       "lines": [
-        258
+        264
       ],
       "path": "src/app/providers/openai_compatible_provider.py",
       "rule": "AL009"

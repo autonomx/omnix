@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from app.capabilities.approvals import require_approver
 from app.security import audit
+from app.security.rate_limit import rate_limited
 from app.security.permissions import ensure_permission
 
 import asyncio
 import json
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -238,7 +239,7 @@ def get_agent_run(run_id: str) -> AgentRunSnapshot:
     return snapshot
 
 
-@router.post("/{run_id}/commands", response_model=AgentRunSnapshot)
+@router.post("/{run_id}/commands", response_model=AgentRunSnapshot, dependencies=[Depends(rate_limited("approvals"))])
 def command_agent_run(
     run_id: str,
     request: AgentCommandRequest,

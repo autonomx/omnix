@@ -1,9 +1,10 @@
 """Llama.cpp provider plugin with local server lifecycle management."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
-import platform
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -25,6 +26,14 @@ from .structured.transport import (
     pop_structured_transport_options,
     raise_if_structured_mode_rejected,
 )
+
+
+def _probe_host(host: str) -> str:
+    """Where to check for an existing listener: a wildcard bind means loopback."""
+    try:
+        return "127.0.0.1" if ipaddress.ip_address(host).is_unspecified else host
+    except ValueError:
+        return host
 
 
 class LlamaCppProvider(BaseProvider):
@@ -67,38 +76,26 @@ class LlamaCppProvider(BaseProvider):
         except Exception:
             return False
 
+    def _port(self) -> int:
+        try:
+            return int(self.config.base_url.split(":")[-1])
+        except (TypeError, ValueError):
+            return 8080
+
     def _start_server(self, model_path: str) -> Optional[int]:
         host = bind_host()
         binary = self._find_server_binary()
         if not binary:
             raise ConnectionError("Llama.cpp server binary not found")
-        try:
-            port = int(self.config.base_url.split(":")[-1])
-        except (TypeError, ValueError):
-            port = 8080
-        try:
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    f"netstat -ano | findstr :{port}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
+        port = self._port()
+        # Never stop a process Omnix did not start (WP-4.10): a busy port is
+        # an error for the operator to resolve.
+        with socket.socket() as probe:
+            probe.settimeout(0.5)
+            if probe.connect_ex((_probe_host(host), port)) == 0:
+                raise ConnectionError(
+                    f"Port {port} is in use by another process; stop it or configure another llama.cpp port"
                 )
-                for line in result.stdout.strip().splitlines():
-                    parts = line.split()
-                    if len(parts) >= 5 and "LISTENING" in line:
-                        subprocess.run(
-                            f"taskkill /F /PID {parts[-1]} 2>nul",
-                            shell=True,
-                        )
-            else:
-                subprocess.run(
-                    f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                    shell=True,
-                )
-            time.sleep(1)
-        except Exception:
-            pass
         try:
             proc = subprocess.Popen(
                 [
@@ -119,43 +116,42 @@ class LlamaCppProvider(BaseProvider):
                 stderr=subprocess.STDOUT,
                 bufsize=1,
             )
-            return proc.pid
         except Exception as exc:
             raise ConnectionError(f"Failed to start server: {exc}") from exc
+        self._server_process = proc
+        return proc.pid
 
     def _stop_server(self) -> bool:
+        """Stop the server this provider started, and nothing else."""
+        proc = getattr(self, "_server_process", None)
+        if proc is None:
+            return False
         try:
-            port = int(self.config.base_url.split(":")[-1])
-            if platform.system() == "Windows":
-                result = subprocess.run(
-                    f"netstat -ano | findstr :{port}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                )
-                for line in result.stdout.strip().splitlines():
-                    parts = line.split()
-                    if len(parts) >= 5 and "LISTENING" in line:
-                        subprocess.run(
-                            f"taskkill /F /PID {parts[-1]} 2>nul",
-                            shell=True,
-                        )
-            else:
-                subprocess.run(
-                    f"lsof -ti:{port} | xargs kill -9 2>/dev/null",
-                    shell=True,
-                )
-            return True
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
         except Exception:
             return False
+        finally:
+            self._server_process = None
+        return True
 
     def _resolve_model_path(self, model_name: str) -> Path:
         model_dir = Path(self.config.extra_params.get("model_dir", ""))
         possible_paths: list[Path] = []
         if os.path.isabs(model_name):
-            possible_paths.append(Path(model_name))
+            # Model files come from the models directory only (WP-4.10).
+            candidate = Path(model_name).resolve()
+            if not candidate.is_relative_to(model_dir.resolve()):
+                raise ModelNotFoundError(f"Model must be inside the models directory: {model_name}")
+            possible_paths.append(candidate)
         else:
-            direct_path = model_dir / model_name
+            direct_path = (model_dir / model_name).resolve()
+            if not direct_path.is_relative_to(model_dir.resolve()):
+                raise ModelNotFoundError(f"Model must be inside the models directory: {model_name}")
             if direct_path.exists():
                 possible_paths.append(direct_path)
             for file_path in model_dir.rglob("*.gguf"):

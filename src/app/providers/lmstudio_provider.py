@@ -12,6 +12,8 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import HTTPError as RequestsHTTPError
 from requests.exceptions import Timeout as RequestsTimeout
 
+from app.security.url_policy import UrlPolicyError, check_outbound_url
+
 from .base import (
     AuthenticationError,
     BaseProvider,
@@ -104,6 +106,10 @@ class LMStudioProvider(BaseProvider):
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.config.base_url}{endpoint}"
+        try:
+            check_outbound_url(url, resolve=True)
+        except UrlPolicyError as exc:
+            raise ConnectionError(f"Blocked by the outbound URL policy: {exc}") from exc
         timeout = kwargs.pop("timeout", self.config.timeout)
         headers = dict(kwargs.pop("headers", {}) or {})
         api_token = self._api_token()

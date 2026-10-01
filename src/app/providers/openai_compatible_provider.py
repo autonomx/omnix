@@ -6,6 +6,8 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 import requests
 
+from app.security.url_policy import UrlPolicyError, check_outbound_url
+
 from .base import (
     AuthenticationError,
     BaseProvider,
@@ -46,6 +48,10 @@ class OpenAICompatibleProvider(BaseProvider):
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.config.base_url}{endpoint}"
+        try:
+            check_outbound_url(url, resolve=True)
+        except UrlPolicyError as exc:
+            raise ConnectionError(f"Blocked by the outbound URL policy: {exc}") from exc
         headers = kwargs.pop("headers", {})
         if "Authorization" not in headers:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

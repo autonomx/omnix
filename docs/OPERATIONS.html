@@ -587,6 +587,19 @@ npm run web:build</code></pre></div>
 <p>Each workspace membership has roles: <code>owner</code>, <code>admin</code>, <code>member</code>, <code>approver</code> (adds approvals) and <code>viewer</code> (read-only). Every route requires a permission from the catalog; a missing one gets 403 <code>permission_denied</code> naming the permission. The full table is <code>docs/security/PERMISSIONS.md</code>. With sign-in off the local user is <code>owner</code>, so nothing changes for local installs.</p>
 <p>Approvals are made by people. Approving or denying a tool proposal needs <code>tools:approve</code>; approving an agent run, task graph or workflow step needs <code>agent:approve</code>. Service tokens, workers and agent runs can never approve, and every approval records who made it. Approving your own tool proposal is limited by <code>OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK</code> (<code>none</code>, <code>low</code>, <code>medium</code> or <code>high</code>): the default is <code>high</code> with sign-in off (one local user) and <code>low</code> with sign-in on.</p>
 <p>The launcher control app (port 5055) does not ask you to sign in. It is an operator surface and refuses every non-loopback client.</p>
+<h2 id="gateway-hardening">Gateway hardening</h2>
+<ul>
+<li>Every gateway response carries security headers: <code>nosniff</code>, no referrer,</li>
+<p>no framing, a Permissions-Policy that allows only the microphone and screen capture, and a Content-Security-Policy. Behind HTTPS (or <code>X-Forwarded-Proto: https</code>) the gateway also sends HSTS.</p>
+<li>Sign-in attempts are limited to 5 per minute per client address</li>
+<p>(<code>OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE</code>). Approve, deny and execute calls are limited to 60 per minute per user (<code>OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE</code>). Limits apply per gateway process.</p>
+<li><code>/docs</code>, <code>/redoc</code> and <code>/openapi.json</code> require the <code>admin:docs</code> permission</li>
+<p>unless <code>OMNIX_ENV</code> is <code>development</code> or <code>local</code>.</p>
+<li>Model server URLs (LM Studio, llama.cpp, Parakeet) are checked when saved</li>
+<p>and before each request. Link-local and cloud metadata addresses are always refused. Private network addresses are allowed while sign-in is off. With sign-in on, list them in <code>OMNIX_ALLOWED_PRIVATE_NETWORKS</code> (CIDRs, comma-separated).</p>
+<li>llama.cpp: Omnix stops only the server it started. If the configured port</li>
+<p>is already in use, it reports the conflict instead of killing the other process. Model files must be inside the models directory.</p>
+</ul>
 <h2 id="audit-trail">Audit trail</h2>
 <p>Sensitive actions are recorded in <code>omnix_audit_events</code> with the acting user, the workspace and the outcome (<code>success</code>, <code>failure</code> or <code>denied</code>). Recorded actions:</p>
 <ul>

@@ -10,9 +10,11 @@ from collections.abc import Callable
 import hmac
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+
+from app.security.rate_limit import rate_limited
 
 from .oidc import safe_redirect_path
 from .service import (
@@ -76,6 +78,8 @@ def _user_agent(request: Request) -> str | None:
 
 def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRouter:
     router = APIRouter(prefix="/api/auth", tags=["auth"])
+    # Sign-in attempts are limited per client address (WP-4.10).
+    login_rate_limit = rate_limited("login")
 
     def service_for(mode: AuthMode | None = None) -> AuthService:
         service = get_service()
@@ -112,7 +116,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             auth_method=principal.auth_method,
         )
 
-    @router.post("/local/login", response_model=AuthSessionResponse)
+    @router.post("/local/login", response_model=AuthSessionResponse, dependencies=[Depends(login_rate_limit)])
     def local_login(body: LocalLoginRequest, request: Request, response: Response) -> AuthSessionResponse:
         service = service_for(AuthMode.LOCAL)
         issued = service.login_with_install_credential(body.credential, user_agent=_user_agent(request))
@@ -131,7 +135,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
             auth_method=issued.principal.auth_method,
         )
 
-    @router.get("/local/callback", response_class=RedirectResponse, status_code=303)
+    @router.get("/local/callback", response_class=RedirectResponse, status_code=303, dependencies=[Depends(login_rate_limit)])
     def local_callback(request: Request, code: str = "", next: str = "/") -> RedirectResponse:
         service = service_for(AuthMode.LOCAL)
         issued = service.exchange_login_code(code, user_agent=_user_agent(request))
@@ -178,7 +182,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         )
         return redirect
 
-    @router.get("/oidc/callback", response_class=RedirectResponse, status_code=303)
+    @router.get("/oidc/callback", response_class=RedirectResponse, status_code=303, dependencies=[Depends(login_rate_limit)])
     def oidc_callback(request: Request, code: str = "", state: str = "") -> RedirectResponse:
         service = service_for(AuthMode.OIDC)
         binding = request.cookies.get(OIDC_TX_COOKIE) or ""

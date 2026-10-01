@@ -865,6 +865,12 @@
       "reason": "Guards one-time generation of the per-process run-token key used only when neither OMNIX_RUN_TOKEN_KEY nor the launcher service token is configured (a single hand-started process); multi-process installations derive one shared key from configuration."
     },
     {
+      "path": "src/app/security/audit.py",
+      "symbol": "_LOCK",
+      "category": "cache",
+      "reason": "Guards the reference to the process's installed audit sink (set once at persistence startup); audit events themselves are written to PostgreSQL, never held in this process."
+    },
+    {
       "path": "src/app/persistence/config.py",
       "symbol": "database_settings.__cache__",
       "category": "cache",

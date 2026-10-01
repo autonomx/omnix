@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from app.persistence.capability_approval_repository import CapabilityApprovalConflict
+from app.security.rate_limit import rate_limited
 from app.security.service_token import require_service_token
 
 from .capability_dashboard import AssistantCapabilityDashboard, build_assistant_capability_dashboard
@@ -42,6 +43,7 @@ class AssistantToolIntentRequest(BaseModel):
 
 def create_assistant_tool_router() -> APIRouter:
     router = APIRouter()
+    approval_rate_limit = rate_limited("approvals")
 
     @router.get("/api/assistant/tools/config", response_model=AssistantToolsConfigPayload, tags=["assistant-tools"])
     async def assistant_tools_config() -> AssistantToolsConfigPayload:
@@ -62,7 +64,7 @@ def create_assistant_tool_router() -> APIRouter:
     ) -> AssistantToolProposalPayload:
         return _proposal_operation(lambda: service.propose(request))
 
-    @router.post("/api/assistant/tools/proposals/{proposal_id}/approve", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
+    @router.post("/api/assistant/tools/proposals/{proposal_id}/approve", response_model=AssistantToolProposalPayload, tags=["assistant-tools"], dependencies=[Depends(approval_rate_limit)])
     def approve_assistant_tool_endpoint(
         proposal_id: str,
         request: AssistantToolProposalDecisionRequest,
@@ -70,7 +72,7 @@ def create_assistant_tool_router() -> APIRouter:
     ) -> AssistantToolProposalPayload:
         return _proposal_operation(lambda: service.decide(proposal_id, approve=True, reason=request.reason))
 
-    @router.post("/api/assistant/tools/proposals/{proposal_id}/deny", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
+    @router.post("/api/assistant/tools/proposals/{proposal_id}/deny", response_model=AssistantToolProposalPayload, tags=["assistant-tools"], dependencies=[Depends(approval_rate_limit)])
     def deny_assistant_tool_endpoint(
         proposal_id: str,
         request: AssistantToolProposalDecisionRequest,
@@ -78,7 +80,7 @@ def create_assistant_tool_router() -> APIRouter:
     ) -> AssistantToolProposalPayload:
         return _proposal_operation(lambda: service.decide(proposal_id, approve=False, reason=request.reason))
 
-    @router.post("/api/assistant/tools/proposals/{proposal_id}/execute", response_model=HermesAssistantToolExecutePayload, tags=["assistant-tools"])
+    @router.post("/api/assistant/tools/proposals/{proposal_id}/execute", response_model=HermesAssistantToolExecutePayload, tags=["assistant-tools"], dependencies=[Depends(approval_rate_limit)])
     def execute_assistant_tool_proposal_endpoint(
         proposal_id: str,
         service: Annotated[AssistantToolProposalService, Depends(default_tool_proposal_service)],

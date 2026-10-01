@@ -69,6 +69,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODEL` | string | — | agent-runtime | Controls agent semantic task parser model for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER` | string | — | agent-runtime | Controls agent semantic task parser provider for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS` | string | — | agent-runtime | Controls agent semantic task parser timeout seconds for agent-runtime. |
+| `OMNIX_ALLOWED_PRIVATE_NETWORKS` | string | — | security | Controls allowed private networks for security. |
 | `OMNIX_ALLOW_LEGACY_IMPORT` | boolean | `false` | kernel | Controls allow legacy import for kernel. |
 | `OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE` | boolean | `false` | kernel | Controls allow legacy test persistence for kernel. |
 | `OMNIX_ALPACA_API_KEY_ID` | string | — | trading | Controls alpaca api key id for trading. |
@@ -118,7 +119,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
 | `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |
 | `OMNIX_DRAIN_SECONDS` | integer | `30` | kernel | Controls drain seconds for kernel. |
-| `OMNIX_ENV` | string | `development` | kernel, production.py, security | Controls env for kernel, production.py, security. |
+| `OMNIX_ENV` | string | `development` | gateway, kernel, production.py, security | Controls env for gateway, kernel, production.py, security. |
 | `OMNIX_EOU_MODEL` | string | `nvidia/parakeet_realtime_eou_120m-v1` | providers | Controls eou model for providers. |
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |

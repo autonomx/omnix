@@ -614,6 +614,27 @@ with sign-in on.
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.
 
+## Gateway hardening
+
+- Every gateway response carries security headers: `nosniff`, no referrer,
+  no framing, a Permissions-Policy that allows only the microphone and screen
+  capture, and a Content-Security-Policy. Behind HTTPS (or
+  `X-Forwarded-Proto: https`) the gateway also sends HSTS.
+- Sign-in attempts are limited to 5 per minute per client address
+  (`OMNIX_LOGIN_RATE_LIMIT_PER_MINUTE`). Approve, deny and execute calls are
+  limited to 60 per minute per user (`OMNIX_APPROVAL_RATE_LIMIT_PER_MINUTE`).
+  Limits apply per gateway process.
+- `/docs`, `/redoc` and `/openapi.json` require the `admin:docs` permission
+  unless `OMNIX_ENV` is `development` or `local`.
+- Model server URLs (LM Studio, llama.cpp, Parakeet) are checked when saved
+  and before each request. Link-local and cloud metadata addresses are
+  always refused. Private network addresses are allowed while sign-in is off.
+  With sign-in on, list them in `OMNIX_ALLOWED_PRIVATE_NETWORKS` (CIDRs,
+  comma-separated).
+- llama.cpp: Omnix stops only the server it started. If the configured port
+  is already in use, it reports the conflict instead of killing the other
+  process. Model files must be inside the models directory.
+
 ## Audit trail
 
 Sensitive actions are recorded in `omnix_audit_events` with the acting user,
