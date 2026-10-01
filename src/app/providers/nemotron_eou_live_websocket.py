@@ -3,7 +3,6 @@ from __future__ import annotations
 from app.config.env import env_str as _env_str
 
 import asyncio
-import base64
 import json
 import math
 import struct
@@ -19,10 +18,13 @@ from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
     CAP_AUTHORITATIVE_FINAL,
     CAP_AUTHORITATIVE_PREVIEW,
+    CAP_BINARY_AUDIO_FRAMES,
     CAP_PARTIAL_TRANSCRIPTS,
     CAP_RESULT_REPLAY,
     CAP_SEGMENTED_AUDIO,
     LiveSttNegotiation,
+    audio_message_pcm,
+    receive_client_message,
 )
 from app.providers.nemotron_eou_streaming import (
     SAMPLE_RATE,
@@ -52,6 +54,7 @@ HYBRID_NEGOTIATION = LiveSttNegotiation(
             CAP_PARTIAL_TRANSCRIPTS,
             CAP_AUTHORITATIVE_EOU,
             CAP_AUTHORITATIVE_PREVIEW,
+            CAP_BINARY_AUDIO_FRAMES,
         }
     ),
 )
@@ -395,7 +398,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
         )
         try:
             while True:
-                data = await websocket.receive_json()
+                data = await receive_client_message(websocket)
                 message_type = str(data.get("type", ""))
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", active_session_id))[:120]
@@ -448,7 +451,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         state.segments[segment_id] = segment
                         owned_segments[segment_id] = state
                     try:
-                        payload = base64.b64decode(str(data.get("data", "")), validate=True)
+                        payload = audio_message_pcm(data, validate=True)
                         accepted = segment.append(sample_start, payload)
                     except Exception:  # noqa: BLE001 - malformed frames become protocol errors
                         manager.release(segment_id)

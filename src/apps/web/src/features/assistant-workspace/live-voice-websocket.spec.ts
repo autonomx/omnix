@@ -5,6 +5,7 @@ import {
   calculateRms,
   deduplicateSegmentBoundary,
   downsampleFloat32To16Khz,
+  encodePcm16,
   encodePcm16Base64,
   getDefaultStreamingSttWebSocketUrl,
   resampleFloat32,
@@ -82,6 +83,42 @@ describe('live voice websocket helpers', () => {
     expect(onError).toHaveBeenCalledWith('Live voice WebSocket failed.');
     expect(statuses).toEqual(['connecting', 'error']);
     expect(sockets[0].close).toHaveBeenCalledOnce();
+  });
+
+  it('sends audio as binary frames when the server advertises them', async () => {
+    const sockets: TestStreamingSocket[] = [];
+    class TestWebSocket extends TestStreamingSocket {
+      static readonly OPEN = 1;
+
+      constructor(url: string) {
+        super(url);
+        sockets.push(this);
+      }
+    }
+    const client = new StreamingSttWebSocketClient({
+      url: 'ws://127.0.0.1:5202/ws/transcribe',
+      webSocketCtor: TestWebSocket,
+      overlapMs: 0,
+    });
+    await openSegmentedClient(client, sockets, {
+      ...segmentedReady(),
+      capabilities: ['client_audio_replay', 'binary_audio_frames'],
+    });
+
+    const input = new Float32Array([0, 0.25, 0.5, 0.75, 1, 0.75]);
+    client.sendAudio(input, 48_000);
+    const binaryFrames = () => sockets[0].send.mock.calls.map(([data]) => data).filter((data) => data instanceof ArrayBuffer);
+    await vi.waitFor(() => expect(binaryFrames()).toHaveLength(1));
+
+    const frame = new Uint8Array(binaryFrames()[0] as ArrayBuffer);
+    const headerLength = new DataView(frame.buffer).getUint32(0, true);
+    const header = JSON.parse(new TextDecoder().decode(frame.slice(4, 4 + headerLength))) as Record<string, unknown>;
+    expect(header.segmentId).toBeTruthy();
+    expect(header.sampleRate).toBe(24_000);
+    expect(header).not.toHaveProperty('data');
+    expect(Array.from(frame.slice(4 + headerLength))).toEqual(
+      Array.from(encodePcm16(resampleFloat32(input, 48_000, 24_000))),
+    );
   });
 
   it('uses the negotiated sample rate after the server restores the session', async () => {

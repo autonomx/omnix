@@ -1,6 +1,8 @@
 """Provider-neutral contracts for persistent low-latency speech recognition."""
 from __future__ import annotations
 
+import base64
+import json
 import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -22,6 +24,54 @@ CAP_DELAYED_FLUSH = "delayed_flush"
 CAP_PARTIAL_TRANSCRIPTS = "partial_transcripts"
 CAP_AUTHORITATIVE_EOU = "authoritative_eou"
 CAP_AUTHORITATIVE_PREVIEW = "authoritative_preview"
+# The server accepts audio as binary frames (WP-7.3): a little-endian uint32
+# header length, a UTF-8 JSON header (the audio message's fields), then PCM16
+# bytes. Control messages stay JSON; clients without it send base64 JSON.
+CAP_BINARY_AUDIO_FRAMES = "binary_audio_frames"
+MAX_BINARY_FRAME_HEADER_BYTES = 4096
+
+
+def decode_binary_audio_frame(frame: bytes) -> dict[str, Any]:
+    """Decode a binary audio frame into the shape of a JSON audio message plus ``pcm``."""
+    if len(frame) < 4:
+        raise ValueError("binary audio frame is too short")
+    header_length = int.from_bytes(frame[:4], "little")
+    if header_length > MAX_BINARY_FRAME_HEADER_BYTES or 4 + header_length > len(frame):
+        raise ValueError("binary audio frame header is malformed")
+    header = json.loads(frame[4 : 4 + header_length].decode("utf-8"))
+    if not isinstance(header, dict):
+        raise ValueError("binary audio frame header must be an object")
+    header["type"] = "audio"
+    header["pcm"] = bytes(frame[4 + header_length :])
+    return header
+
+
+async def receive_client_message(websocket: Any) -> dict[str, Any]:
+    """The next client message: JSON text, or a binary audio frame."""
+    message = await websocket.receive()
+    if message.get("type") == "websocket.disconnect":
+        from fastapi import WebSocketDisconnect
+
+        raise WebSocketDisconnect(message.get("code", 1000))
+    frame = message.get("bytes")
+    if frame is not None:
+        return decode_binary_audio_frame(frame)
+    data = json.loads(message.get("text") or "")
+    if not isinstance(data, dict):
+        raise ValueError("client message must be a JSON object")
+    return data
+
+
+def audio_message_pcm(data: Mapping[str, Any], *, validate: bool = False) -> bytes:
+    """PCM bytes from a binary frame, or decoded from a JSON message's base64 ``data``."""
+    pcm = data.get("pcm")
+    if isinstance(pcm, (bytes, bytearray)):
+        return bytes(pcm)
+    return base64.b64decode(str(data.get("data", "")), validate=validate)
+
+
+def audio_message_has_audio(data: Mapping[str, Any]) -> bool:
+    return bool(data.get("pcm")) or bool(data.get("data"))
 
 
 @dataclass(frozen=True)
