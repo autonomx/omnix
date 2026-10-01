@@ -167,7 +167,7 @@ def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> Job
     through = messages[-DEFAULT_RECENT_MESSAGE_LIMIT - 1]
     key = compaction_idempotency_key(session.id, through.id)
     store = job_store or default_job_store()
-    for job in store.list_jobs():
+    for job in store.iter_jobs(job_types=(HISTORY_COMPACT_JOB_TYPE,)):
         if job.type == HISTORY_COMPACT_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
     return store.create_job(

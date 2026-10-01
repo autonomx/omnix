@@ -98,7 +98,7 @@ def enqueue_memory_suggestion_job(
             create_memory_suggestion_job_request(session_id, user_message_id),
             idempotency_key=key,
         )
-    for job in store.list_jobs():
+    for job in store.iter_jobs(job_types=(MEMORY_SUGGEST_JOB_TYPE,)):
         if job.type == MEMORY_SUGGEST_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
     return store.create_job(create_memory_suggestion_job_request(session_id, user_message_id))

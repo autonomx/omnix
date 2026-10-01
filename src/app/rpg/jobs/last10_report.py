@@ -150,7 +150,7 @@ def _collect_turn_jobs(job_store: Any | None, *, session_id: str | None, limit: 
     if job_store is None or not hasattr(job_store, "list_jobs"):
         return []
     try:
-        jobs = list(job_store.list_jobs())
+        jobs = list(job_store.iter_jobs(job_types=("rpg.turn",), status="completed"))
     except Exception:
         return []
     candidates: list[JobRecord] = []

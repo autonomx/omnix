@@ -33,8 +33,4 @@ def register_voice_job_summary_routes(router: APIRouter, state: Any) -> None:
 
 def _recent_voice_jobs(store: Any, limit: int) -> list[Any]:
     """Read a bounded projection through the active job-store contract."""
-    return [
-        job
-        for job in store.list_jobs(limit=max(limit, DEFAULT_VOICE_JOB_LIMIT))
-        if job.module in VOICE_JOB_MODULES
-    ][:limit]
+    return store.list_jobs(limit=limit, modules=VOICE_JOB_MODULES)

@@ -3619,7 +3619,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Jobs */
+        /**
+         * List Jobs
+         * @description One page of jobs, newest first; follow ``next_cursor`` (WP-5.5).
+         */
         get: operations["list_jobs_api_jobs_get"];
         put?: never;
         /** Create Job */
@@ -16707,10 +16710,20 @@ export interface components {
             /** Worker Id */
             worker_id: string;
         };
-        /** JobListResponse */
+        /**
+         * JobListResponse
+         * @description A page of jobs, newest first (WP-5.5).
+         */
         JobListResponse: {
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
             /** Jobs */
             jobs: components["schemas"]["JobRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
         };
         /** JobProgress */
         JobProgress: {
@@ -36251,6 +36264,10 @@ export interface operations {
             query?: {
                 limit?: number;
                 full?: boolean;
+                status?: string | null;
+                type?: string | null;
+                module?: string | null;
+                cursor?: string | null;
             };
             header?: never;
             path?: never;

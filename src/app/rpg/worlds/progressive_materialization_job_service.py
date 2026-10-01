@@ -148,12 +148,12 @@ def materialization_job_telemetry(
     db = _database(database)
     context = current_tenant()
     with unit_of_work(db) as work:
-        rows = work.jobs.list_jobs(context, limit=max(1, min(int(limit), 500)))
+        rows = list(work.jobs.iter_jobs(context, job_types=(MATERIALIZATION_JOB_TYPE,)))
         work.rollback()
     jobs = []
     for row in rows:
-        if row["job_type"] != MATERIALIZATION_JOB_TYPE:
-            continue
+        if len(jobs) >= max(1, int(limit)):
+            break
         payload = dict(row.get("input_payload") or {})
         if str(payload.get("world_id") or "") != world_id:
             continue

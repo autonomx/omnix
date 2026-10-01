@@ -114,8 +114,8 @@ def test_two_users_in_two_workspaces_cannot_see_each_others_jobs(database) -> No
     alice_job = _submit_probe(alice_client, tokens["alice"][1])
     bob_job = _submit_probe(bob_client, tokens["bob"][1])
 
-    alice_ids = {job["id"] for job in alice_client.get("/api/jobs", params={"limit": 500}).json()["jobs"]}
-    bob_ids = {job["id"] for job in bob_client.get("/api/jobs", params={"limit": 500}).json()["jobs"]}
+    alice_ids = {job["id"] for job in alice_client.get("/api/jobs", params={"limit": 200}).json()["jobs"]}
+    bob_ids = {job["id"] for job in bob_client.get("/api/jobs", params={"limit": 200}).json()["jobs"]}
     assert alice_job in alice_ids and bob_job not in alice_ids
     assert bob_job in bob_ids and alice_job not in bob_ids
     assert bob_client.get(f"/api/jobs/{alice_job}").status_code == 404

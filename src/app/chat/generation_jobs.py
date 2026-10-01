@@ -291,7 +291,7 @@ def find_chat_generation_job(
             session_id=session_id,
             submission_id=submission_id,
         )
-    for job in job_store.list_jobs(limit=500):
+    for job in job_store.iter_jobs(job_types=("chat.generate",)):
         if (
             job.type == "chat.generate"
             and isinstance(job.input_ref, dict)
@@ -383,7 +383,7 @@ def active_chat_generation_jobs(
     if callable(lookup):
         return lookup(session_id)
     active = []
-    for job in job_store.list_jobs(limit=500):
+    for job in job_store.iter_jobs(job_types=("chat.generate",)):
         if job.type != "chat.generate" or job.status not in _ACTIVE_JOB_STATUSES:
             continue
         payload = job.input_payload or {}

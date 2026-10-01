@@ -394,9 +394,8 @@ def _record_reused_results(
 def _job_list(work: Any, context: Any, run_id: str) -> list[Mapping[str, Any]]:
     return [
         job
-        for job in work.jobs.list_jobs(context, limit=1000)
-        if job["job_type"] == WORLD_TOPIC_JOB_TYPE
-        and str(job["metadata"].get("run_id") or "") == run_id
+        for job in work.jobs.iter_jobs(context, job_types=(WORLD_TOPIC_JOB_TYPE,))
+        if str(job["metadata"].get("run_id") or "") == run_id
     ]
 
 

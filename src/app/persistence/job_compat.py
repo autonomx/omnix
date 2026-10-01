@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import hashlib
+from collections.abc import Iterator
 from typing import Any, TypeVar
 
 from app.jobs.models import (
@@ -15,6 +16,7 @@ from app.jobs.models import (
     JobError,
     JobEventRecord,
     JobLease,
+    JobListResponse,
     JobProgress,
     JobRecord,
     ReleaseJobRequest,
@@ -24,6 +26,7 @@ from app.jobs.models import (
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
+from app.runtime.pagination import MAX_PAGE_SIZE, decode_cursor, encode_cursor, page_limit
 from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import unit_of_work
 
@@ -163,19 +166,70 @@ class PostgresJobStoreAdapter:
             self._notify_job_observers("created", created_record)
         return created_record
 
-    def list_jobs(self, limit: int | None = None) -> list[JobRecord]:
+    def list_job_page(
+        self,
+        *,
+        limit: int | None = None,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+        cursor: str | None = None,
+    ) -> JobListResponse:
+        """One page of jobs, newest first, filtered in SQL (WP-5.5)."""
+        size = page_limit(limit, default=100)
+        before = decode_cursor(cursor, arity=2)
         with unit_of_work(self.database) as work:
             records = work.jobs.list_jobs(
                 self.context,
-                limit=500 if limit is None else limit,
+                limit=size + 1,
+                status=status,
+                job_types=job_types,
+                modules=modules,
+                before_created_at=before[0] if before else None,
+                before_id=before[1] if before else None,
             )
+            page = records[:size]
             logs_by_job = work.jobs.list_job_logs_for_jobs(
-                self.context, job_ids=[str(record["id"]) for record in records]
+                self.context, job_ids=[str(record["id"]) for record in page]
             )
-            for record in records:
+            for record in page:
                 record["logs"] = logs_by_job.get(str(record["id"]), [])
             work.rollback()
-        return [self._record(record) for record in records]
+        has_more = len(records) > size
+        return JobListResponse(
+            jobs=[self._record(record) for record in page],
+            next_cursor=encode_cursor(page[-1]["created_at"], page[-1]["id"]) if has_more else None,
+            has_more=has_more,
+        )
+
+    def list_jobs(
+        self,
+        limit: int | None = None,
+        *,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+    ) -> list[JobRecord]:
+        """The newest ``limit`` matching jobs (at most one page)."""
+        return self.list_job_page(limit=limit, status=status, job_types=job_types, modules=modules).jobs
+
+    def iter_jobs(
+        self,
+        *,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+    ) -> Iterator[JobRecord]:
+        """Every matching job, newest first, one page at a time."""
+        cursor: str | None = None
+        while True:
+            page = self.list_job_page(
+                limit=MAX_PAGE_SIZE, status=status, job_types=job_types, modules=modules, cursor=cursor
+            )
+            yield from page.jobs
+            if not page.has_more or not page.next_cursor:
+                return
+            cursor = page.next_cursor
 
     def get_job(self, job_id: str) -> JobRecord | None:
         with unit_of_work(self.database) as work:

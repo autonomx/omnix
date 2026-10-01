@@ -4,9 +4,11 @@ import json
 import math
 import random
 import uuid
+from collections.abc import Iterator
 from typing import Any
 
 from app.jobs.errors import JobClaimConflict
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
 
 from .errors import EntityNotFound
 from .tenant import TenantContext
@@ -153,13 +155,32 @@ class PostgresJobRepository:
         *,
         limit: int = 100,
         status: str | None = None,
+        statuses: tuple[str, ...] | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+        before_created_at: str | None = None,
+        before_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Newest first, filtered in SQL and keyset-paged by ``(created_at, id)`` (WP-5.5)."""
         clauses = ["workspace_id = %s"]
         params: list[Any] = [context.workspace_id]
         if status is not None:
             clauses.append("status = %s")
             params.append(status)
-        params.append(max(1, min(int(limit), 500)))
+        if statuses:
+            clauses.append("status = ANY(%s)")
+            params.append(list(statuses))
+        if job_types:
+            clauses.append("job_type = ANY(%s)")
+            params.append(list(job_types))
+        if modules:
+            clauses.append("module = ANY(%s)")
+            params.append(list(modules))
+        if before_created_at is not None and before_id is not None:
+            clauses.append("(created_at, id) < (%s::timestamptz, %s)")
+            params.extend([before_created_at, before_id])
+        # One more than a page, so callers can tell whether another follows.
+        params.append(page_limit(limit, maximum=MAX_PAGE_SIZE + 1))
         rows = self.connection.execute(
             f"SELECT {_JOB_COLUMNS} FROM omnix_jobs WHERE "
             + " AND ".join(clauses)
@@ -167,6 +188,22 @@ class PostgresJobRepository:
             tuple(params),
         ).fetchall()
         return [_job(row) for row in rows]
+
+    def iter_jobs(self, context: TenantContext, **filters: Any) -> Iterator[dict[str, Any]]:
+        """Every matching job, newest first, one page at a time."""
+        before: tuple[str, str] | None = None
+        while True:
+            page = self.list_jobs(
+                context,
+                limit=MAX_PAGE_SIZE,
+                before_created_at=before[0] if before else None,
+                before_id=before[1] if before else None,
+                **filters,
+            )[:MAX_PAGE_SIZE]
+            yield from page
+            if len(page) < MAX_PAGE_SIZE:
+                return
+            before = (page[-1]["created_at"], page[-1]["id"])
 
     def release_expired_leases(
         self, context: TenantContext, *, job_id: str | None = None,

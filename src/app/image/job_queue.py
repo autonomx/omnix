@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from app.runtime.pagination import MAX_PAGE_SIZE
+
 
 def enqueue_image_job(
     payload: dict[str, Any],
@@ -121,8 +123,7 @@ def list_image_jobs() -> list[dict[str, Any]]:
 
     return [
         _legacy_job_view(job)
-        for job in default_job_store().list_jobs()
-        if job.type == "image.generate" or job.module in {"image", "image-generation"}
+        for job in default_job_store().list_jobs(limit=MAX_PAGE_SIZE, modules=("image", "image-generation"))
     ]
 
 

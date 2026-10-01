@@ -11,8 +11,9 @@ class FakeVoiceJobStore:
     def __init__(self, jobs: list[JobRecord]) -> None:
         self.jobs = jobs
 
-    def list_jobs(self, *, limit: int | None = None, **_filters) -> list[JobRecord]:
-        return self.jobs if limit is None else self.jobs[:limit]
+    def list_jobs(self, *, limit: int | None = None, modules=None, **_filters) -> list[JobRecord]:
+        jobs = [job for job in self.jobs if not modules or job.module in modules]
+        return jobs if limit is None else jobs[:limit]
 
 
 def make_job(job_id: str, module: str, audio_payload: str) -> JobRecord:

@@ -5,7 +5,7 @@ the process-owned services exposed to routes, rather than transaction objects.
 """
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, Generic, Protocol, TypeVar
 
 _ServiceT = TypeVar("_ServiceT")
@@ -51,7 +51,30 @@ class JobService(Protocol):
     def configure_handler_registry(self, registry: Any) -> None: ...
     def create_job(self, request: Any) -> Any: ...
     def get_job(self, job_id: str) -> Any | None: ...
-    def list_jobs(self, *, limit: int = 100) -> list[Any]: ...
+    def list_jobs(
+        self,
+        limit: int | None = None,
+        *,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+    ) -> list[Any]: ...
+    def list_job_page(
+        self,
+        *,
+        limit: int | None = None,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+        cursor: str | None = None,
+    ) -> Any: ...
+    def iter_jobs(
+        self,
+        *,
+        status: str | None = None,
+        job_types: tuple[str, ...] | None = None,
+        modules: tuple[str, ...] | None = None,
+    ) -> Iterator[Any]: ...
     def delete_job(self, job_id: str) -> bool: ...
 
 

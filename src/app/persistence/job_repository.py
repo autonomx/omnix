@@ -3,6 +3,8 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal
 
+from app.runtime.pagination import MAX_PAGE_SIZE, page_limit
+
 from .execution_repositories import JobClaimConflict
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
 from .execution_repositories import (
@@ -1015,7 +1017,7 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND (%s::timestamptz IS NULL OR (jobs.created_at, jobs.id) > (%s::timestamptz, %s))
                  ORDER BY jobs.created_at, jobs.id LIMIT %s""",
             (context.workspace_id, after_created_at, after_created_at, after_id,
-             max(1, min(int(limit), 500))),
+             page_limit(limit, maximum=MAX_PAGE_SIZE)),
         ).fetchall()
         return [_job(row) for row in rows]
 

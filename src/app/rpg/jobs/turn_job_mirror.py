@@ -248,7 +248,7 @@ def _find_submission_record(store: Any, session_id: str, submission_id: str) -> 
         except Exception:
             return None
     try:
-        jobs = store.list_jobs()
+        jobs = store.iter_jobs(job_types=(RPG_FOREGROUND_RECORD_TYPE,))
     except Exception:
         return None
     for job in jobs:

@@ -4,6 +4,7 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.5 | `/api/jobs` rejects `limit` above 200 (was 500). | The roadmap sets a 200 maximum per page; every in-repository client asks for 100 or fewer, and larger sets are read with `next_cursor`. |
 | 2026-10-01 | WP-5.5 | Reads that must see every row (backup capture and verification) page by keyset in batches of 1,000; reads of naturally small sets (applied migrations, required constraints, runtime nodes, import counts) get explicit limits far above their size. | A cap on a backup manifest would silently drop assets; a keyset loop keeps each query bounded without losing rows. |
 | 2026-10-01 | WP-5.5 | Per-job events and per-session segments return the newest 1,000, oldest first. | These reads are diagnostic views; the newest entries are the ones a caller acts on, and the full event stream stays available through `/events`. |
 | 2026-10-01 | WP-5.5 | The pagination helpers live in `app.runtime.pagination`, not `app.persistence`. | `app.persistence` already imports `app.assets`; asset paging importing persistence would create a package cycle (AL002). Both already depend on `app.runtime`, which holds the store contracts. |

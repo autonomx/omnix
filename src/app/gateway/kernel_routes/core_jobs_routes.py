@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 
 import asyncio
+from typing import Annotated
+
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -17,6 +19,7 @@ from app.jobs.models import (
     JobRecord,
 )
 from app.jobs.projections import summarize_job
+from app.runtime.pagination import MAX_PAGE_SIZE, InvalidCursor
 from app.gateway.kernel_routes.live_event_stream import (
     _sse_event,
     committed_event_stream,
@@ -55,12 +58,27 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
 
     @router.get("/api/jobs", response_model=JobListResponse, tags=["jobs"])
     def list_jobs(
-        limit: int = Query(default=100, ge=1, le=500), full: bool = False
+        limit: int = Query(default=100, ge=1, le=MAX_PAGE_SIZE),
+        full: bool = False,
+        status: str | None = Query(default=None, max_length=40),
+        job_type: Annotated[str | None, Query(alias="type", max_length=200)] = None,
+        module: str | None = Query(default=None, max_length=100),
+        cursor: str | None = Query(default=None, max_length=512),
     ) -> JobListResponse:
-        jobs = get_job_store().list_jobs(limit=limit)
+        """One page of jobs, newest first; follow ``next_cursor`` (WP-5.5)."""
+        try:
+            page = get_job_store().list_job_page(
+                limit=limit,
+                status=status,
+                job_types=(job_type,) if job_type else None,
+                modules=(module,) if module else None,
+                cursor=cursor,
+            )
+        except InvalidCursor as error:
+            raise HTTPException(status_code=400, detail="invalid_cursor") from error
         if full:
-            return JobListResponse(jobs=jobs)
-        return JobListResponse(jobs=[summarize_job(job) for job in jobs])
+            return page
+        return page.model_copy(update={"jobs": [summarize_job(job) for job in page.jobs]})
 
     @router.get("/events", include_in_schema=False)
     async def events(

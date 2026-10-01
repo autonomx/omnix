@@ -201,11 +201,12 @@ def _active_world_topic_progresses(
         with unit_of_work(database) as work:
             progresses = [
                 _record(job.get("progress"))
-                for job in work.jobs.list_jobs(context, limit=500)
-                if _text(job.get("job_type")) == WORLD_TOPIC_JOB_TYPE
-                and _text(_record(job.get("metadata")).get("run_id")) == run_id
-                and _text(job.get("status"))
-                in {"leased", "running", "cancel_requested"}
+                for job in work.jobs.iter_jobs(
+                    context,
+                    job_types=(WORLD_TOPIC_JOB_TYPE,),
+                    statuses=("leased", "running", "cancel_requested"),
+                )
+                if _text(_record(job.get("metadata")).get("run_id")) == run_id
             ]
             work.rollback()
         return progresses

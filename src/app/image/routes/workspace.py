@@ -182,7 +182,7 @@ def _has_rpg_world_target_metadata(metadata: Any) -> bool:
 
 def _rpg_world_image_asset_ids(job_store: Any) -> set[str]:
     try:
-        jobs = job_store.list_jobs()
+        jobs = list(job_store.iter_jobs(modules=IMAGE_GALLERY_MODULES))
     except Exception:
         _LOGGER.exception("Unable to classify RPG world image jobs")
         return set()
@@ -206,7 +206,7 @@ def _delete_jobs_for_image_asset(asset: AssetRecord, store: JobService) -> None:
         asset_ids.add(legacy_asset_id)
 
     try:
-        for job in store.list_jobs():
+        for job in store.iter_jobs(modules=IMAGE_GALLERY_MODULES):
             if not _is_image_job(job):
                 continue
             if _job_references_image_asset(job, asset_ids):
@@ -296,4 +296,4 @@ def _is_image_job(job: JobRecord) -> bool:
 
 
 def _recent_image_jobs(store: Any, limit: int) -> list[Any]:
-    return [job for job in store.list_jobs(limit=max(limit, DEFAULT_IMAGE_JOB_LIMIT)) if _is_image_job(job)][:limit]
+    return store.list_jobs(limit=limit, modules=IMAGE_GALLERY_MODULES)

@@ -25,7 +25,7 @@ export function installVoiceJobListGuard(): void {
       return await response.json() as JobListResponse;
     } catch (error) {
       console.error('[Voice Studio] Bounded job list unavailable; suppressing unbounded history load.', error);
-      return { jobs: [] };
+      return { jobs: [], has_more: false };
     }
   };
 }

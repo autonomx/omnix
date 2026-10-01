@@ -190,7 +190,11 @@ class JobRecord(BaseModel):
 
 
 class JobListResponse(BaseModel):
+    """A page of jobs, newest first (WP-5.5)."""
+
     jobs: list[JobRecord]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class JobEventRecord(BaseModel):

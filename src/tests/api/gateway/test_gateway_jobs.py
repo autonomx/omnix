@@ -477,3 +477,27 @@ async def test_local_executor_completes_registered_handler(tmp_path: Path) -> No
     assert result.status == "completed"
     assert result.output_refs == [{"kind": "diagnostic", "id": "echo"}]
     assert result.logs == [{"level": "info", "message": "ok"}]
+
+
+def test_gateway_job_list_pages_with_cursor_and_filters(tmp_path: Path) -> None:
+    client = _client(tmp_path / "jobs.sqlite")
+    voice = [
+        _create_job(client, module="voice", job_type="tts.synthesize", resource_class="gpu:tts")["id"]
+        for _ in range(3)
+    ]
+    other = _create_job(client, module="diagnostics", job_type="diagnostics.echo", resource_class="cpu")["id"]
+
+    seen: list[str] = []
+    cursor = None
+    while True:
+        params = {"limit": 2, "module": "voice", **({"cursor": cursor} if cursor else {})}
+        page = client.get("/api/jobs", params=params).json()
+        seen.extend(job["id"] for job in page["jobs"])
+        if not page["has_more"]:
+            break
+        cursor = page["next_cursor"]
+
+    assert sorted(seen) == sorted(voice) and len(seen) == len(set(seen))
+    assert [job["id"] for job in client.get("/api/jobs", params={"type": "diagnostics.echo"}).json()["jobs"]] == [other]
+    assert client.get("/api/jobs", params={"limit": 201}).status_code == 422
+    assert client.get("/api/jobs", params={"cursor": "bad"}).status_code == 400

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.jobs.errors import JobClaimConflict
+from app.runtime.pagination import decode_cursor, encode_cursor, page_limit
 from app.jobs.models import (
     CancelJobRequest,
     CancelState,
@@ -24,6 +25,7 @@ from app.jobs.models import (
     JobEventRecord,
     JobLease,
     JobProgress,
+    JobListResponse,
     JobRecord,
     ReleaseJobRequest,
     JobStage,
@@ -123,16 +125,46 @@ class InMemoryJobStore:
             self._event(job.id, "job.created", job.model_dump(mode="json"))
         return deepcopy(job)
 
-    def list_jobs(self, limit: int | None = None) -> list[JobRecord]:
+    def _matching(self, status=None, job_types=None, modules=None) -> list[JobRecord]:
+        jobs = sorted(
+            self._state.jobs.values(),
+            key=lambda item: (item.created_at, item.id),
+            reverse=True,
+        )
+        return [
+            job
+            for job in jobs
+            if (status is None or str(getattr(job.status, "value", job.status)) == status)
+            and (not job_types or job.type in job_types)
+            and (not modules or job.module in modules)
+        ]
+
+    def list_jobs(self, limit: int | None = None, *, status=None, job_types=None, modules=None) -> list[JobRecord]:
         with self._state.lock:
-            jobs = sorted(
-                self._state.jobs.values(),
-                key=lambda item: (item.created_at, item.id),
-                reverse=True,
-            )
+            jobs = self._matching(status, job_types, modules)
             if limit is not None:
                 jobs = jobs[: max(0, int(limit))]
             return deepcopy(jobs)
+
+    def list_job_page(self, *, limit=None, status=None, job_types=None, modules=None, cursor=None) -> JobListResponse:
+        size = page_limit(limit, default=100)
+        before = decode_cursor(cursor, arity=2)
+        with self._state.lock:
+            jobs = self._matching(status, job_types, modules)
+            if before is not None:
+                jobs = [job for job in jobs if (str(job.created_at), job.id) < (before[0], before[1])]
+            page = deepcopy(jobs[:size])
+        has_more = len(jobs) > size
+        return JobListResponse(
+            jobs=page,
+            next_cursor=encode_cursor(str(page[-1].created_at), page[-1].id) if has_more else None,
+            has_more=has_more,
+        )
+
+    def iter_jobs(self, *, status=None, job_types=None, modules=None):
+        with self._state.lock:
+            jobs = deepcopy(self._matching(status, job_types, modules))
+        yield from jobs
 
     def get_job(self, job_id: str) -> JobRecord | None:
         with self._state.lock:
