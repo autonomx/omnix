@@ -70,6 +70,9 @@ def test_image_model_operation_diagnostic_expires(monkeypatch):
     now = {"value": 1.0}
     monkeypatch.setattr(image_service_app, "monotonic", lambda: now["value"])
     monkeypatch.setattr(image_service_app, "_MODEL_OPERATION_TTL_SECONDS", 5.0)
+    # Restore the module state afterwards: a fake clock value would otherwise
+    # leave "downloading" live for later tests on a recently booted host.
+    monkeypatch.setattr(image_service_app, "_MODEL_OPERATION", ("idle", "", 0.0))
 
     image_service_app._set_model_operation("downloading", "flux_klein")
     assert image_service_app._get_model_operation() == {

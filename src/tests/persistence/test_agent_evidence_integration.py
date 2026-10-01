@@ -398,7 +398,6 @@ def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
         worker_id="superseding-test",
         semantic_task_parser=lambda **_kwargs: _SteeringV2TestParser(),
     )
-    monkeypatch.setattr(service, "_ensure_supervisor", lambda: None)
     monkeypatch.setattr(service.runtime, "close_run", lambda _run_id: None)
     monkeypatch.setattr(
         service,

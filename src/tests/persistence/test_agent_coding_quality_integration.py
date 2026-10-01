@@ -307,11 +307,13 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
             )
+            parent_lease = repository.acquire_lease(run_id, worker_id="dead-quality-worker")
             repository.update_state(
                 run_id,
                 expected_revision=parent.revision,
                 status="waiting_for_children",
                 worker_id="dead-quality-worker",
+                lease_token=parent_lease.lease_token,
             )
             child = repository.create_run(
                 AgentRunSpec(
@@ -350,11 +352,13 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                     },
                 )
             )
+            child_lease = repository.acquire_lease(child_id, worker_id="dead-quality-worker")
             repository.update_state(
                 child_id,
                 expected_revision=child.revision,
                 status="completed",
                 worker_id="dead-quality-worker",
+                lease_token=child_lease.lease_token,
             )
             work.commit()
 
@@ -460,7 +464,6 @@ def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_re
                     expected_revision=latest.revision,
                     status="running",
                     desired_state="running",
-                    worker_id=self.worker_id,
                     last_error=None,
                 )
                 return None

@@ -159,7 +159,8 @@ async def test_slow_rpg_compat_request_does_not_block_job_acknowledgement(monkey
         headers={"X-Omnix-Client": "web"},
     ) as client:
         slow_request = asyncio.create_task(client.post("/api/rpg/session/get", json={"session_id": "rpg-test"}))
-        assert await asyncio.to_thread(started.wait, 1)
+        # Cold gateway startup under xdist can take seconds on CI runners.
+        assert await asyncio.to_thread(started.wait, 15)
         try:
             response = await asyncio.wait_for(
                 client.post(

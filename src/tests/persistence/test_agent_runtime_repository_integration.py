@@ -79,12 +79,13 @@ def test_recovery_start_failure_fails_run_instead_of_renewing_zombie_lease(monke
         with unit_of_work(database) as work:
             repository = PostgresAgentRunRepository(work.connection, context)
             created = repository.create_run(spec)
-            repository.acquire_lease(run_id, worker_id="dead-worker", ttl_seconds=90)
+            lease = repository.acquire_lease(run_id, worker_id="dead-worker", ttl_seconds=90)
             repository.update_state(
                 run_id,
                 expected_revision=created.revision,
                 status="running",
                 worker_id="dead-worker",
+                lease_token=lease.lease_token,
             )
             work.connection.execute(
                 """
@@ -217,11 +218,21 @@ def test_terminal_parent_propagates_cancellation_to_running_child() -> None:
                 last_error="parent_failed",
             )
             child = repository.create_run(child_spec)
+            child_lease = repository.acquire_lease(child_id, worker_id="dead-child-worker")
             repository.update_state(
                 child_id,
                 expected_revision=child.revision,
                 status="running",
                 worker_id="dead-child-worker",
+                lease_token=child_lease.lease_token,
+            )
+            work.connection.execute(
+                """
+                UPDATE omnix_agent_worker_leases
+                   SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (context.workspace_id, child_id),
             )
             work.commit()
 
@@ -375,6 +386,8 @@ def test_supervisor_stops_local_runtime_when_lease_authority_is_lost(monkeypatch
     try:
         context = ensure_local_identity(database)
         run_id = f"agent-lease-loss-{uuid.uuid4().hex}"
+        worker_a = f"worker-a-{uuid.uuid4().hex}"
+        worker_b = f"worker-b-{uuid.uuid4().hex}"
         spec = AgentRunSpec(
             run_id=run_id,
             task="Lose ownership",
@@ -383,16 +396,27 @@ def test_supervisor_stops_local_runtime_when_lease_authority_is_lost(monkeypatch
         with unit_of_work(database) as work:
             repository = PostgresAgentRunRepository(work.connection, context)
             created = repository.create_run(spec)
-            repository.acquire_lease(run_id, worker_id="worker-b", ttl_seconds=90)
+            lease = repository.acquire_lease(run_id, worker_id=worker_a, ttl_seconds=90)
             repository.update_state(
                 run_id,
                 expected_revision=created.revision,
                 status="running",
-                worker_id="worker-a",
+                worker_id=worker_a,
+                lease_token=lease.lease_token,
             )
+            # worker-a's lease lapses and worker-b takes the run over.
+            work.connection.execute(
+                """
+                UPDATE omnix_agent_worker_leases
+                   SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (context.workspace_id, run_id),
+            )
+            repository.acquire_lease(run_id, worker_id=worker_b, ttl_seconds=90)
             work.commit()
 
-        service = CoreAgentRunService(database, worker_id="worker-a")
+        service = CoreAgentRunService(database, worker_id=worker_a)
         service._supervisor_started = True
         closed: list[str] = []
         stalled: list[str] = []
@@ -424,12 +448,13 @@ def test_transient_heartbeat_failure_does_not_skip_progress_supervision(monkeypa
         with unit_of_work(database) as work:
             repository = PostgresAgentRunRepository(work.connection, context)
             created = repository.create_run(spec)
-            repository.acquire_lease(run_id, worker_id=worker_id, ttl_seconds=90)
+            lease = repository.acquire_lease(run_id, worker_id=worker_id, ttl_seconds=90)
             repository.update_state(
                 run_id,
                 expected_revision=created.revision,
                 status="running",
                 worker_id=worker_id,
+                lease_token=lease.lease_token,
             )
             work.commit()
 

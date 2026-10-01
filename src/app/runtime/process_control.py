@@ -1,14 +1,14 @@
 """Private parent-pipe shutdown control shared by local process launchers."""
 from __future__ import annotations
 
-import os
 import sys
 import time
 
 
 def wait_for_parent_control() -> None:
     """Return after a line arrives or the private stdin pipe closes."""
-    if os.name != "nt":
+    # sys.platform (not os.name) lets type checkers skip the Windows branch.
+    if sys.platform != "win32":
         sys.stdin.readline()
         return
     # Avoid a blocking CRT read while native extensions load on another thread.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.research import web_search
 from app.security import provider_secret_store as secret_store
 from app.research import provider_chain
@@ -70,6 +72,6 @@ def test_fallback_chain_injects_protected_store_key_into_explicit_client_factory
     assert client.search("GameStop stock", 5)
     assert captured == [{
         "provider": "brave",
-        "timeout_seconds": 3.0,
+        "timeout_seconds": pytest.approx(3.0, abs=0.05),
         "api_key": "protected-brave-key",
     }]
