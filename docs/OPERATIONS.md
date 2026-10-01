@@ -603,6 +603,14 @@ from the catalog; a missing one gets 403 `permission_denied` naming the
 permission. The full table is `docs/security/PERMISSIONS.md`. With
 sign-in off the local user is `owner`, so nothing changes for local installs.
 
+Approvals are made by people. Approving or denying a tool proposal needs
+`tools:approve`; approving an agent run, task graph or workflow step needs
+`agent:approve`. Service tokens, workers and agent runs can never approve,
+and every approval records who made it. Approving your own tool proposal is
+limited by `OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK` (`none`, `low`, `medium` or
+`high`): the default is `high` with sign-in off (one local user) and `low`
+with sign-in on.
+
 The launcher control app (port 5055) does not ask you to sign in. It is an
 operator surface and refuses every non-loopback client.
 

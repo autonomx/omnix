@@ -511,6 +511,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls approval self allowed max risk for capabilities.",
+    "feature": "capabilities",
+    "name": "OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls app open url for launcher.",
     "feature": "launcher",

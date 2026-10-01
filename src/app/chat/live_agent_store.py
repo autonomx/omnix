@@ -17,7 +17,8 @@ from app.assist_core.live_agent_router import (
     resolve_live_agent_route,
 )
 from app.assist_core.mode_chat import ModeChatRequest, plan_mode_chat
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from app.capabilities.approvals import ApproverNotAllowed, current_approver
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.assistant_tools.kasa_plan import first_pending_kasa_write
 from app.assistant_tools.live_agent_proposals import (
     live_agent_planner_context,
@@ -72,6 +73,19 @@ class AssistCoreLiveAgentPlanner:
         )
 
 
+def _confirmation_grant(session_id: str) -> CapabilityGrant:
+    """A chat "confirm" approves the proposal as the confirming user (WP-4.5).
+
+    Without the approval permission the grant stays unapproved, so a call
+    that needs approval is refused by the tool policy.
+    """
+    try:
+        approver: str | None = current_approver("tools:approve")
+    except ApproverNotAllowed:
+        approver = None
+    return CapabilityGrant("live_agent", session_id, approved_by=approver)
+
+
 def default_live_agent_planner() -> LiveAgentPlanner:
     return AssistCoreLiveAgentPlanner()
 
@@ -112,10 +126,10 @@ def stream_live_agent_turn(
         governed_choice = _confirmation_choice(user_message.content) if governed_pending else None
         if governed_pending and governed_choice == "approve":
             proposal_message, request = governed_pending
-            payload = hermes_assistant_tool_execute_payload(
-                user_message.content,
+            payload = execute_capability(
+                _confirmation_grant(session.id),
                 request.model_copy(update={"session_id": session.id}),
-                approved=True,
+                user_request=user_message.content,
             )
             status = "executed" if payload.execution_result.error is None else "failed"
             _mark_governed_proposal(
@@ -203,10 +217,10 @@ def stream_live_agent_turn(
         choice = _confirmation_choice(user_message.content) if pending else None
         if pending and choice == "approve":
             proposal_message, request = pending
-            payload = hermes_assistant_tool_execute_payload(
-                user_message.content,
+            payload = execute_capability(
+                _confirmation_grant(session.id),
                 request.model_copy(update={"session_id": session.id}),
-                approved=True,
+                user_request=user_message.content,
             )
             status = "executed" if payload.execution_result.error is None else "failed"
             _mark_kasa_proposal(

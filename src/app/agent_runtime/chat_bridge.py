@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.assistant_tools.gate import review_assistant_tool_request
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.assistant_tools.models import AssistantToolRequest
 
 from .active_objective import (
@@ -934,7 +934,7 @@ def _enforce_chat_evidence(
                 reason=str(review.reason or "chat_evidence_not_executable"),
                 detail=review.result_summary or "The required read capability is unavailable.",
             )
-        payload = hermes_assistant_tool_execute_payload(content, request)
+        payload = execute_capability(CapabilityGrant("chat", run_id), request, user_request=content)
         result = payload.execution_result
         if result.error:
             return _chat_evidence_failure(
@@ -1865,7 +1865,11 @@ def _direct_result(session: Any, user_message: Any, decision: OmnixRouteDecision
             },
         )
 
-    payload = hermes_assistant_tool_execute_payload(str(user_message.content or ""), request)
+    payload = execute_capability(
+        CapabilityGrant("chat", str(getattr(session, "id", "") or "chat")),
+        request,
+        user_request=str(user_message.content or ""),
+    )
     result = payload.execution_result
     content = result.result_summary or ("Direct capability failed." if result.error else "Direct capability completed.")
     if result.error:

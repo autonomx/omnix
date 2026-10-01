@@ -687,8 +687,11 @@ export default function (pi: ExtensionAPI) {
     const progressRejection = await postPlanProgressRejection(event.toolName, input);
     if (progressRejection) return { block: true, reason: progressRejection };
 
-    const budgetError = await authorizeTool(event.toolName);
-    if (budgetError) return { block: true, reason: budgetError };
+    // The broker charges omnix_capability when it executes the call.
+    if (event.toolName !== "omnix_capability") {
+      const budgetError = await authorizeTool(event.toolName);
+      if (budgetError) return { block: true, reason: budgetError };
+    }
     if (pendingSearchContext) searchPathContexts.set(event.toolCallId, pendingSearchContext);
   });
 

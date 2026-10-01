@@ -1,6 +1,7 @@
 """HTTP API for durable generalized agent runs."""
 from __future__ import annotations
 
+from app.capabilities.approvals import require_approver
 from app.security.permissions import ensure_permission
 
 import asyncio
@@ -239,9 +240,11 @@ def command_agent_run(
     request: AgentCommandRequest,
     http_request: Request,
 ) -> AgentRunSnapshot:
-    # The command type decides the permission (WP-4.3).
+    # The command type decides the permission (WP-4.3). Approvals record the
+    # approving principal; a client cannot supply it (WP-4.5).
+    payload = {key: value for key, value in request.payload.items() if key != "issued_by"}
     if request.command_type in {"approve", "reject"}:
-        ensure_permission("agent:approve")
+        payload["issued_by"] = require_approver("agent:approve")
     elif request.command_type == "steer":
         ensure_permission("agent:steer")
     try:
@@ -249,7 +252,7 @@ def command_agent_run(
             AgentRunCommand(
                 run_id=run_id,
                 command_type=request.command_type,
-                payload=request.payload,
+                payload=payload,
                 **({"idempotency_key": request.idempotency_key} if request.idempotency_key else {}),
             )
         )

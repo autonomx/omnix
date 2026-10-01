@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.capabilities import default_capability_registry
 from app.assistant_tools.gate import review_assistant_tool_request
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from app.capabilities.executor import LEGACY_APPROVER, CapabilityGrant, execute_capability
 from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 from app.persistence.unit_of_work import unit_of_work
 
@@ -175,6 +175,13 @@ def _revision_scoped_evidence_execution_key(
         task_revision_id.encode("utf-8")
     ).hexdigest()[:16]
     return f"{execution_key}:evidence-revision:{revision_digest}"
+
+
+def _approver(approval: AgentApproval) -> str | None:
+    """The principal whose recorded decision approved ``approval`` (WP-4.5)."""
+    if approval.state != "approved":
+        return None
+    return str(approval.resolution_payload.get("decided_by") or LEGACY_APPROVER)
 
 
 def _approved_execution_key(
@@ -774,7 +781,7 @@ def execute_agent_capability(
             execution_key,
             task_revision_id,
         )
-    approved = False
+    approved_by: str | None = None
     approval = None
 
     with unit_of_work(service.database) as work:
@@ -799,7 +806,7 @@ def execute_agent_capability(
                 request,
                 approval,
             )
-            approved = approval.state == "approved"
+            approved_by = _approver(approval)
 
         stored = repository.ensure_capability_execution(
             run_id,
@@ -879,7 +886,7 @@ def execute_agent_capability(
                     request,
                     approval,
                 )
-                approved = approval.state == "approved"
+                approved_by = _approver(approval)
 
         tool_request = AssistantToolRequest(
             tool_id=canonical.split(".", 1)[0],
@@ -926,7 +933,7 @@ def execute_agent_capability(
                 execution_key=execution_key,
                 result=result_payload,
             )
-        if decision.approval_required and not approved:
+        if decision.approval_required and approved_by is None:
             repository.mark_capability_waiting_for_approval(run_id, execution_key)
             if approval is None:
                 approval = AgentApproval(
@@ -958,11 +965,41 @@ def execute_agent_capability(
             raise HTTPException(status_code=409, detail="agent_execution_not_claimable")
         work.commit()
 
-    payload = hermes_assistant_tool_execute_payload(
-        f"agent:{run_id}",
+    # The tool budget is charged here, once per claimed execution, so a run
+    # cannot avoid it by skipping the Pi guard (WP-4.5).
+    try:
+        default_agent_budget_manager().authorize_tool_call(run_id, tool_name=canonical)
+    except AgentBudgetError as exc:
+        with unit_of_work(service.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, service.context)
+            repository.finish_capability_execution(
+                run_id,
+                execution_key,
+                result_payload={"error": str(exc)},
+                error=str(exc),
+                state_changed=False,
+            )
+            if task_revision_id and is_evidence_capability(canonical):
+                repository.finish_evidence_query(
+                    run_id,
+                    task_revision_id,
+                    execution_key,
+                    actual_sources=0,
+                    actual_extracts=0,
+                    failed=True,
+                )
+            work.commit()
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
+    payload = execute_capability(
+        CapabilityGrant(
+            "agent_run",
+            run_id,
+            approved_by=approved_by,
+            policy_floor=(snapshot.spec.approval_policy if tool_request.tool_id != "browser" else None),
+        ),
         tool_request,
-        approved=approved,
-        policy_floor=(snapshot.spec.approval_policy if tool_request.tool_id != "browser" else None),
+        user_request=f"agent:{run_id}",
     )
     result: AssistantToolResult = payload.execution_result
     result_payload = result.model_dump(mode="json")

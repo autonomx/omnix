@@ -44,7 +44,7 @@ def client(monkeypatch):
         calls.append(request)
         return AssistantToolResult(tool_id=request.tool_id, action_id=request.action_id, session_id=request.session_id, risk_level=risk, state_changed=True, result_summary="Sent.", output={"sent": True})
 
-    monkeypatch.setattr(proposals, "_run_assistant_tool_request", execute)
+    monkeypatch.setattr(proposals, "run_capability_adapter", execute)
     app = FastAPI()
     app.include_router(create_assistant_tool_router())
     internal_router = create_assistant_tool_internal_router()
@@ -153,7 +153,7 @@ def test_failure_is_redacted_and_consumed_proposal_remains_single_use(client, mo
     def fail(*args):
         raise RuntimeError("Traceback and sensitive provider details")
 
-    monkeypatch.setattr(proposals, "_run_assistant_tool_request", fail)
+    monkeypatch.setattr(proposals, "run_capability_adapter", fail)
     identifier = _propose(client)
     assert client.post(_path(identifier, "approve"), json={}).status_code == 200
     response = client.post(_path(identifier, "execute"))
@@ -185,3 +185,15 @@ def test_internal_route_is_excluded_from_public_schema(client):
     properties = schema["components"]["schemas"]["AssistantToolRequest"]["properties"]
     assert "approved" not in properties
     assert "approval_policy" not in properties
+
+
+def test_self_approval_above_the_configured_risk_is_refused(client, monkeypatch):
+    """The local owner proposed it; above the ceiling they cannot approve it (WP-4.5)."""
+    identifier = _propose(client)
+    monkeypatch.setenv("OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK", "none")
+    refused = client.post(_path(identifier, "approve"), json={})
+    assert refused.status_code == 403
+    assert refused.json()["detail"] == "self_approval_not_allowed"
+    # Denying is never a risk.
+    assert client.post(_path(identifier, "deny"), json={}).status_code == 200
+    assert client.calls == []

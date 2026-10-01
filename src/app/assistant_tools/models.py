@@ -6,7 +6,7 @@ validation layer stays pure and easy to test.
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -71,10 +71,6 @@ class AssistantToolRequest(BaseModel):
     session_id: str | None = None
     proposal_id: str | None = None
     input: dict[str, Any] = Field(default_factory=dict)
-
-
-class AssistantToolExecutor(Protocol):
-    def __call__(self, user_request: str, request: AssistantToolRequest, *, approved: bool = False) -> Any: ...
 
 
 class AssistantToolReviewDecision(BaseModel):

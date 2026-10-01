@@ -15,7 +15,7 @@ from typing import Any
 
 from .tenant import TenantContext
 
-_COLUMNS = "id, capability_id, proposal_digest, proposal_payload, approval_required, decision, expires_at"
+_COLUMNS = "id, capability_id, proposal_digest, proposal_payload, approval_required, decision, expires_at, requested_by"
 
 
 class CapabilityApprovalConflict(ValueError):
@@ -36,6 +36,7 @@ class CapabilityProposal:
     approval_required: bool
     decision: str
     expires_at: datetime
+    requested_by: str | None = None
 
 
 class PostgresCapabilityApprovalRepository:

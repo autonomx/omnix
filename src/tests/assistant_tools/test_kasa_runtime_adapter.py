@@ -7,7 +7,10 @@ from app.assistant_tools.config_store import (
     AssistantToolsConfigPayload,
     default_assistant_tools_config,
 )
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from types import MappingProxyType
+
+from app.assistant_tools import executor
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.assistant_tools.kasa_adapter import KasaDeviceRecord, run_kasa_tool_request
 from app.assistant_tools.models import AssistantToolRequest
 import pytest
@@ -112,26 +115,27 @@ def test_kasa_write_requires_approval_before_bridge_dispatch(monkeypatch) -> Non
         calls.append(request)
         return run_kasa_tool_request(request, FakeKasaAdapter(initial_on=False))
 
-    monkeypatch.setattr("app.assistant_tools.hermes_bridge.run_kasa_tool_request", fake_run)
+    monkeypatch.setattr(executor, "ADAPTERS", MappingProxyType({**executor.ADAPTERS, "kasa": fake_run}))
 
-    blocked = hermes_assistant_tool_execute_payload(
-        "Turn on the desk plug",
+    blocked = execute_capability(
+        CapabilityGrant("chat", "chat:1"),
         AssistantToolRequest(
             tool_id="kasa",
             action_id="kasa.turn_on",
             session_id="chat:1",
             input={"target": "Desk Plug"},
         ),
+        user_request="Turn on the desk plug",
     )
-    approved = hermes_assistant_tool_execute_payload(
-        "Confirm",
+    approved = execute_capability(
+        CapabilityGrant("chat", "chat:1", approved_by="user:local"),
         AssistantToolRequest(
             tool_id="kasa",
             action_id="kasa.turn_on",
             session_id="chat:1",
             input={"target": "Desk Plug"},
         ),
-        approved=True,
+        user_request="Confirm",
     )
 
     assert blocked.approval_decision.approval_required is True

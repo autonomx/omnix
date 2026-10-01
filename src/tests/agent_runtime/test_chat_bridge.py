@@ -843,8 +843,8 @@ def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkey
     )
     monkeypatch.setattr(
         chat_bridge,
-        "hermes_assistant_tool_execute_payload",
-        lambda _content, request: SimpleNamespace(
+        "execute_capability",
+        lambda _grant, request, user_request="": SimpleNamespace(
             execution_result=AssistantToolResult(
                 tool_id=request.tool_id,
                 action_id=request.action_id,

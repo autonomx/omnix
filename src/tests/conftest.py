@@ -60,6 +60,18 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def capability_runtime_installed():
+    # Composition installs the assistant-tools runtime behind
+    # app.capabilities.executor (WP-4.5); tests that call capability paths
+    # without composing a gateway get the same runtime.
+    from app.assistant_tools.executor import CAPABILITY_RUNTIME_HOOK
+    from app.runtime.hooks import install_runtime_hooks
+
+    install_runtime_hooks((CAPABILITY_RUNTIME_HOOK,))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def postgres_local_identity(request):
     # Persistence tests truncate shared tables (cascading to workspaces) and
     # rebuild their own fixtures. Under xdist another PostgreSQL test can run

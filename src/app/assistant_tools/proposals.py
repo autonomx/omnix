@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.capabilities.approvals import ApproverNotAllowed, current_approver, require_self_approval_allowed
 from app.persistence.capability_approval_repository import (
     CapabilityApprovalConflict, CapabilityProposal, PostgresCapabilityApprovalRepository,
 )
@@ -13,7 +14,7 @@ from app.security.tenant_context import TenantContext, current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .gate import review_assistant_tool_request
-from .hermes_bridge import _run_assistant_tool_request
+from .executor import run_capability_adapter
 from .hermes_payloads import HermesAssistantToolExecutePayload
 from .ledger import AssistantToolLedgerEntry, summarize_tool_input
 from .models import AssistantToolRequest, AssistantToolResult
@@ -77,10 +78,26 @@ class AssistantToolProposalService:
         return _response(proposal)
 
     def decide(self, identifier: str, *, approve: bool, reason: str | None = None) -> AssistantToolProposalPayload:
+        # Only a principal with tools:approve decides; never a service or
+        # system identity, and self-approval only up to the configured risk.
+        try:
+            approver = current_approver("tools:approve")
+        except ApproverNotAllowed as exc:
+            raise ToolProposalNotAllowed(str(exc)) from exc
         with unit_of_work(self.database) as work:
-            proposal = PostgresCapabilityApprovalRepository(work.connection).decide(
-                self.context, identifier, approve=approve, reason=reason,
-            )
+            repository = PostgresCapabilityApprovalRepository(work.connection)
+            if approve:
+                stored = repository.get(self.context, identifier, lock=True)
+                if stored is None:
+                    raise CapabilityApprovalConflict("proposal_missing_expired_or_already_decided")
+                risk_level = review_assistant_tool_request(_request(stored)).risk_level
+                try:
+                    require_self_approval_allowed(
+                        requested_by=stored.requested_by, approver=approver, risk_level=risk_level,
+                    )
+                except ApproverNotAllowed as exc:
+                    raise ToolProposalNotAllowed(str(exc)) from exc
+            proposal = repository.decide(self.context, identifier, approve=approve, reason=reason)
             work.commit()
         return _response(proposal)
 
@@ -114,7 +131,7 @@ class AssistantToolProposalService:
         # The reservation is durable before an external action starts. Failure
         # or a process crash must never make this proposal executable again.
         try:
-            result = _run_assistant_tool_request(request, decision.risk_level)
+            result = run_capability_adapter(request, decision.risk_level)
         except Exception:
             result = AssistantToolResult(
                 tool_id=request.tool_id, action_id=request.action_id, session_id=request.session_id,

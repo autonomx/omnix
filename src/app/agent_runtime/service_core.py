@@ -1539,11 +1539,14 @@ class AgentRunService:
                 approval = repository.get_approval(stored.run_id, approval_id)
                 if approval is None:
                     raise KeyError(approval_id)
+                resolution: dict[str, Any] = {"source": "agent_run_command"}
+                if stored.payload.get("issued_by"):
+                    resolution["decided_by"] = str(stored.payload["issued_by"])
                 repository.resolve_approval(
                     stored.run_id,
                     approval_id,
                     approved=stored.command_type == "approve",
-                    resolution_payload={"source": "agent_run_command"},
+                    resolution_payload=resolution,
                 )
                 approval_request = approval.request_payload
                 desired, status = "running", "running"

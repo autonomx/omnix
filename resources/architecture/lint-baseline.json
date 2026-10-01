@@ -31,15 +31,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
-      "lines": [
-        18
-      ],
-      "path": "src/app/agent_runtime/broker_api.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
         19
@@ -52,15 +43,6 @@
       "fingerprint": "<module>:app.assistant_tools.gate",
       "lines": [
         24
-      ],
-      "path": "src/app/agent_runtime/chat_bridge.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
-      "lines": [
-        25
       ],
       "path": "src/app/agent_runtime/chat_bridge.py",
       "rule": "AL001"
@@ -148,27 +130,9 @@
     },
     {
       "count": 1,
-      "fingerprint": "_default_capability_executor:app.assistant_tools.hermes_bridge",
-      "lines": [
-        56
-      ],
-      "path": "src/app/agent_runtime/task_graph_runtime.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
-      "lines": [
-        15
-      ],
-      "path": "src/app/agent_runtime/workflow_runtime.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        16
+        15
       ],
       "path": "src/app/agent_runtime/workflow_runtime.py",
       "rule": "AL001"
@@ -303,7 +267,7 @@
       "count": 1,
       "fingerprint": "CharacterService.__init__:app.runtime_composition",
       "lines": [
-        86
+        85
       ],
       "path": "src/app/characters/service.py",
       "rule": "AL001"
@@ -328,25 +292,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.hermes_bridge",
-      "lines": [
-        20
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.kasa_plan",
-      "lines": [
-        21
-      ],
-      "path": "src/app/chat/live_agent_store.py",
-      "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "<module>:app.assistant_tools.live_agent_proposals",
       "lines": [
         22
       ],
@@ -355,9 +301,18 @@
     },
     {
       "count": 1,
+      "fingerprint": "<module>:app.assistant_tools.live_agent_proposals",
+      "lines": [
+        23
+      ],
+      "path": "src/app/chat/live_agent_store.py",
+      "rule": "AL001"
+    },
+    {
+      "count": 1,
       "fingerprint": "<module>:app.assistant_tools.models",
       "lines": [
-        26
+        27
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -366,7 +321,7 @@
       "count": 1,
       "fingerprint": "stream_live_agent_turn.wrapped:app.agent_runtime.chat_bridge",
       "lines": [
-        142
+        156
       ],
       "path": "src/app/chat/live_agent_store.py",
       "rule": "AL001"
@@ -681,7 +636,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_agent_events",
       "lines": [
-        332
+        342
       ],
       "path": "src/app/agent_runtime/api.py",
       "rule": "AL005"
@@ -690,7 +645,7 @@
       "count": 1,
       "fingerprint": "<module>:stream_task_graph_events",
       "lines": [
-        106
+        110
       ],
       "path": "src/app/agent_runtime/task_graph_api.py",
       "rule": "AL005"
@@ -1374,7 +1329,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:asset_content",
       "lines": [
-        66
+        68
       ],
       "path": "src/app/gateway/kernel_routes/core_assets_routes.py",
       "rule": "AL005"
@@ -1383,7 +1338,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:image_asset_migration_dry_run",
       "lines": [
-        78
+        100
       ],
       "path": "src/app/gateway/kernel_routes/core_assets_routes.py",
       "rule": "AL005"
@@ -1392,7 +1347,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:image_asset_migration_import",
       "lines": [
-        86
+        108
       ],
       "path": "src/app/gateway/kernel_routes/core_assets_routes.py",
       "rule": "AL005"
@@ -1401,7 +1356,7 @@
       "count": 1,
       "fingerprint": "register_core_assets_routes:legacy_non_image_asset_migration_dry_run",
       "lines": [
-        94
+        116
       ],
       "path": "src/app/gateway/kernel_routes/core_assets_routes.py",
       "rule": "AL005"
@@ -1554,7 +1509,7 @@
       "count": 1,
       "fingerprint": "<module>:generate_progress",
       "lines": [
-        407
+        431
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -1563,7 +1518,7 @@
       "count": 1,
       "fingerprint": "<module>:health",
       "lines": [
-        313
+        337
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -1572,7 +1527,7 @@
       "count": 1,
       "fingerprint": "<module>:provider_status",
       "lines": [
-        327
+        351
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL005"
@@ -2230,14 +2185,14 @@
       "count": 8,
       "fingerprint": "startup_load_provider:print",
       "lines": [
-        272,
-        276,
-        281,
-        283,
-        285,
-        291,
+        296,
+        300,
+        305,
         307,
-        309
+        309,
+        315,
+        331,
+        333
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL008"
@@ -2316,7 +2271,7 @@
       "count": 1,
       "fingerprint": "_render:print",
       "lines": [
-        57
+        58
       ],
       "path": "src/app/persistence/cli.py",
       "rule": "AL008"
@@ -3458,7 +3413,7 @@
       "count": 1,
       "fingerprint": "_cleanup_assets:except",
       "lines": [
-        148
+        147
       ],
       "path": "src/app/rpg/worlds/world_bundle_import.py",
       "rule": "AL009"
@@ -4057,9 +4012,9 @@
       "count": 3,
       "fingerprint": "_recovery_command:app.persistence.blob_store.LocalBlobStore",
       "lines": [
-        255,
         256,
-        270
+        257,
+        271
       ],
       "path": "src/app/persistence/cli.py",
       "rule": "AL011"

@@ -1,7 +1,7 @@
 """HTTP surface for deterministic reusable workflows."""
 from __future__ import annotations
 
-from app.security.permissions import ensure_permission
+from app.capabilities.approvals import require_approver
 
 from typing import Literal, Any
 
@@ -61,11 +61,11 @@ def command_workflow_run(run_id: str, request: WorkflowCommandRequest) -> dict[s
         elif request.command == "cancel":
             runtime.cancel(run_id)
         elif request.command in {"approve", "reject"}:
-            ensure_permission("agent:approve")
+            approver = require_approver("agent:approve")
             if not request.step_id:
                 raise HTTPException(status_code=422, detail="step_id_required")
             if request.command == "approve":
-                runtime.approve(run_id, request.step_id)
+                runtime.approve(run_id, request.step_id, approved_by=approver)
             else:
                 runtime.reject(run_id, request.step_id)
     except KeyError as exc:

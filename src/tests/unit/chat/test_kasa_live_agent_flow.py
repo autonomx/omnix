@@ -187,11 +187,11 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(
     session.messages.append(confirm)
     captured: list[tuple[AssistantToolRequest, bool]] = []
 
-    def execute(user_request: str, request: AssistantToolRequest, *, approved: bool = False):
-        captured.append((request, approved))
+    def execute(grant, request: AssistantToolRequest, *, user_request: str = ""):
+        captured.append((request, grant.approved))
         return _execution_payload(request)
 
-    monkeypatch.setattr("app.chat.live_agent_store.hermes_assistant_tool_execute_payload", execute)
+    monkeypatch.setattr("app.chat.live_agent_store.execute_capability", execute)
     execution_events = list(
         store.stream_provider_reply_chunks(
             session,
@@ -245,7 +245,7 @@ def test_kasa_write_proposal_can_be_rejected_without_execution(monkeypatch) -> N
     session.messages = [proposal, reject]
     store = KasaFlowStore(session)
     monkeypatch.setattr(
-        "app.chat.live_agent_store.hermes_assistant_tool_execute_payload",
+        "app.chat.live_agent_store.execute_capability",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not execute")),
     )
 

@@ -11,6 +11,7 @@ from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any, Callable
 
 from app.assistant_tools.models import AssistantToolRequest
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
@@ -45,17 +46,10 @@ class TaskGraphRuntimeError(RuntimeError):
 _AGENT_NODE_KINDS = {"agent", "evidence_read", "synthesis"}
 
 
-def _default_capability_executor(
-    session_id: str,
-    request: AssistantToolRequest,
-    *, approved: bool = False,
-) -> Any:
-    # Keep assistant-tool adapters out of the Agent Runtime import graph. The
-    # eager Hermes import formed a cycle through config_store -> registry ->
-    # app.agent_runtime while persistence startup was importing Chat.
-    from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
-
-    return hermes_assistant_tool_execute_payload(session_id, request, approved=approved)
+def _default_capability_executor(session_id: str, request: AssistantToolRequest) -> Any:
+    # Capability nodes are never pre-approved: the tool policy decides, and a
+    # call that needs approval fails the node (WP-4.5).
+    return execute_capability(CapabilityGrant("task_graph", session_id), request, user_request=session_id)
 
 
 class PostgresTaskGraphRuntime:
@@ -1323,6 +1317,7 @@ class PostgresTaskGraphRuntime:
         run_id: str,
         node_id: str,
         *,
+        approved_by: str,
         approval_id: str | None = None,
     ) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
@@ -1337,7 +1332,7 @@ class PostgresTaskGraphRuntime:
                 run_id,
                 node_id,
                 status="completed",
-                output={**state.output, "approved": True, "result": True},
+                output={**state.output, "approved": True, "approved_by": approved_by, "result": True},
                 expected_state=state,
                 expected_statuses=("waiting_for_approval",),
                 graph_revision=snapshot.graph.revision,
@@ -1354,7 +1349,7 @@ class PostgresTaskGraphRuntime:
             AgentRunCommand(
                 run_id=str(state.child_run_id),
                 command_type="approve",
-                payload={"approval_id": child_approval_id},
+                payload={"approval_id": child_approval_id, "issued_by": approved_by},
             )
         )
         return self.advance(run_id)

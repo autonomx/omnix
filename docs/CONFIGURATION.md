@@ -77,6 +77,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_ALPACA_STATUS_STREAM` | string | `1` | trading | Controls alpaca status stream for trading. |
 | `OMNIX_ALPACA_STREAM_URL` | string | `wss://stream.data.alpaca.markets/v2/iex` | trading | Controls alpaca stream url for trading. |
 | `OMNIX_ALPACA_WS_PROXY` | string | — | trading | Controls alpaca ws proxy for trading. |
+| `OMNIX_APPROVAL_SELF_ALLOWED_MAX_RISK` | string | — | capabilities | Controls approval self allowed max risk for capabilities. |
 | `OMNIX_APP_OPEN_URL` | string | — | launcher | Controls app open url for launcher. |
 | `OMNIX_APP_PRIVATE_URL` | string | — | launcher | Controls app private url for launcher. |
 | `OMNIX_ASSETS_MANIFEST_PATH` | string | — | assets | Controls assets manifest path for assets. |
