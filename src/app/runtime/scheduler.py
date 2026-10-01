@@ -22,6 +22,7 @@ from typing import Any
 
 from .capabilities import RuntimeCapabilities, RuntimeCapability
 from .logging import runtime_transition
+from .statement_class import statement_class
 from .tenant_context import pop_tenant, push_tenant
 
 
@@ -266,7 +267,8 @@ class _SchedulerLockSession:
         self.lock_keys: set[int] = set()
 
     def open(self) -> None:
-        context = self.database.connection()
+        # Held for the process lifetime, so it must not occupy a pool slot (WP-5.10).
+        context = self.database.dedicated_connection()
         connection = context.__enter__()
         try:
             self.authority_check(connection)
@@ -727,7 +729,7 @@ class SchedulerRuntime:
         if spec.executor is TaskExecutor.ASYNC:
             async def invoke_async() -> None:
                 errors: list[Exception] = []
-                with self.execution_scope(owner):
+                with self.execution_scope(owner), statement_class("maintenance"):
                     for run_context, tenant in runs:
                         token = push_tenant(tenant) if tenant is not None else None
                         try:
@@ -771,7 +773,7 @@ class SchedulerRuntime:
             def invoke_thread():
                 errors: list[Exception] = []
                 result = None
-                with self.execution_scope(owner):
+                with self.execution_scope(owner), statement_class("maintenance"):
                     for run_context, tenant in runs:
                         token = push_tenant(tenant) if tenant is not None else None
                         try:

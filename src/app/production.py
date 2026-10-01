@@ -121,6 +121,9 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.settings.registry import core_setting_specs
 
     database = default_database()
+    from app.persistence.connection_budget import check_connection_budget
+
+    connection_budget = check_connection_budget(database)
     permit_config = DevicePermitSettings.from_environment(environment())
     from app.persistence.device_permits import configure_default_device_permit_service
 
@@ -336,6 +339,7 @@ def create_production_app(config: RuntimeConfig | None = None):
         payload['background_role'] = background.role
         payload['background_ready'] = background.ready()
         payload["scheduler_ready"] = scheduler.ready()
+        payload["database_connection_budget"] = connection_budget
         payload["ready"] = (
             payload["ready"]
             and payload["execution_owner_ready"]

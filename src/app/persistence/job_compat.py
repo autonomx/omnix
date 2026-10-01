@@ -28,7 +28,7 @@ from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
 from app.runtime.pagination import MAX_PAGE_SIZE, decode_cursor, encode_cursor, page_limit
 from app.runtime.tenant_context import RequestTenant
-from .unit_of_work import unit_of_work
+from .unit_of_work import run_unit_of_work, unit_of_work
 
 
 T = TypeVar("T")
@@ -263,15 +263,17 @@ class PostgresJobStoreAdapter:
             or getattr(request, "lease_duration_seconds", None)
             or 30
         )
-        with unit_of_work(self.database) as work:
-            record = work.jobs.claim_next(
+        def claim(work: Any) -> Any:
+            claimed = work.jobs.claim_next(
                 self.context,
                 worker_id=worker_id,
                 resource_classes=resource_classes,
                 lease_seconds=lease_seconds,
             )
-            record = self._hydrate_job_logs(work, record)
-            work.commit()
+            return self._hydrate_job_logs(work, claimed)
+
+        # Claims race other workers; a deadlock or serialization failure is retried.
+        record = run_unit_of_work(self.database, claim)
         if record is None:
             return ClaimJobResponse(ok=False, reason="no_runnable_job")
         return ClaimJobResponse(ok=True, job=self._record(record))

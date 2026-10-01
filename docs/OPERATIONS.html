@@ -435,6 +435,9 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 <p>Events are delivered only once every older transaction on the PostgreSQL server has finished, so none is skipped. A transaction left open (for example an idle <code>psql</code> session inside <code>BEGIN</code>) holds back live events until it ends. Find one with:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>SELECT pid, state, xact_start, query FROM pg_stat_activity
  WHERE backend_xid IS NOT NULL ORDER BY xact_start LIMIT 5;</code></pre></div>
+<h3 id="database-connections">Database connections</h3>
+<p>Each process keeps a connection pool sized by its role (API and worker 10, job worker 5, scheduler 3); <code>OMNIX_DATABASE_POOL_MAX</code> sets one size for all. Each process also opens up to three connections outside its pool (its background or scheduler lock and the live-event listeners). Set <code>OMNIX_DEPLOYMENT_PROCESS_COUNTS</code> (for example <code>api=2,worker=1,job-worker=2,scheduler=1</code>) and startup logs <code>database_connection_budget</code> when the total would exceed 80% of PostgreSQL&#x27;s <code>max_connections</code>; <code>/ready</code> reports the computed budget.</p>
+<p>Statement time limits: requests use <code>OMNIX_DATABASE_STATEMENT_TIMEOUT</code> (30 s by default), jobs 30 s and scheduled maintenance 120 s; override with <code>OMNIX_DATABASE_STATEMENT_TIMEOUT_REQUEST</code>, <code>..._JOB</code> and <code>..._MAINTENANCE</code>.</p>
 <h3 id="index-migrations">Index migrations</h3>
 <p>Some migrations build indexes with <code>CREATE INDEX CONCURRENTLY</code> (for example <code>0110_chat_message_search_index</code>), so chat keeps working while they run. If such a migration is interrupted, PostgreSQL leaves an INVALID index; drop it (<code>DROP INDEX CONCURRENTLY &lt;name&gt;</code>) and run <code>python -m app.persistence migrate</code> again.</p>
 <h3 id="outbox">Outbox</h3>

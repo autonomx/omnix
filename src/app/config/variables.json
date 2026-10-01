@@ -742,6 +742,13 @@
     "type": "string"
   },
   {
+    "default": "",
+    "description": "Controls database pool max for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DATABASE_POOL_MAX",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls database url for kernel.",
     "feature": "kernel",
@@ -760,6 +767,13 @@
     "description": "Controls deep research log path for research.",
     "feature": "research",
     "name": "OMNIX_DEEP_RESEARCH_LOG_PATH",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls deployment process counts for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_DEPLOYMENT_PROCESS_COUNTS",
     "type": "string"
   },
   {
@@ -823,6 +837,13 @@
     "description": "Controls ffmpeg for audiobook, tooling.",
     "feature": "audiobook, tooling",
     "name": "OMNIX_FFMPEG",
+    "type": "string"
+  },
+  {
+    "default": "worker",
+    "description": "Controls gateway background role for kernel.",
+    "feature": "kernel",
+    "name": "OMNIX_GATEWAY_BACKGROUND_ROLE",
     "type": "string"
   },
   {

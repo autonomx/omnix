@@ -110,9 +110,11 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_CHAT_WORKSPACE_ID` | string | — | assistant-memory | Controls chat workspace id for assistant-memory. |
 | `OMNIX_COMPANION_ROLLOUT_STAGE` | string | — | assistant-memory | Controls companion rollout stage for assistant-memory. |
 | `OMNIX_DATABASE_APPLICATION_NAME` | string | `omnix` | kernel | Controls database application name for kernel. |
+| `OMNIX_DATABASE_POOL_MAX` | string | — | kernel | Controls database pool max for kernel. |
 | `OMNIX_DATABASE_URL` | string | — | kernel | Controls database url for kernel. |
 | `OMNIX_DEEP_RESEARCH_HERMES_ENABLED` | string | `0` | research | Controls deep research hermes enabled for research. |
 | `OMNIX_DEEP_RESEARCH_LOG_PATH` | string | — | research | Controls deep research log path for research. |
+| `OMNIX_DEPLOYMENT_PROCESS_COUNTS` | string | — | kernel | Controls deployment process counts for kernel. |
 | `OMNIX_DESKTOP_COMPANION_EVALUATION_PATH` | string | — | desktop-companion | Controls desktop companion evaluation path for desktop-companion. |
 | `OMNIX_DEVICE_PERMIT_LEASE_SECONDS` | integer | `120` | kernel | Controls device permit lease seconds for kernel. |
 | `OMNIX_DRAIN_MIN_SECONDS` | integer | `0` | kernel | Controls drain min seconds for kernel. |
@@ -122,6 +124,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
 | `OMNIX_FFMPEG` | string | — | audiobook, tooling | Controls ffmpeg for audiobook, tooling. |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | `worker` | kernel | Controls gateway background role for kernel. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
 | `OMNIX_HERMES_SIDECAR_ENABLED` | string | `false` | hermes | Controls hermes sidecar enabled for hermes. |

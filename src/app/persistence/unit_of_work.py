@@ -27,7 +27,8 @@ from .outbox_repository import (
 from .identity_service import PostgresIdentityRepository
 from .repositories import PostgresIdempotencyRepository
 from .repository_registry import repository_spec, repository_spec_by_alias
-from .transaction_policy import transaction_scope
+from app.runtime.statement_class import apply_statement_class
+from .transaction_policy import TransactionPolicy, default_sleep, is_retryable_transaction_error, transaction_scope
 
 
 class UnitOfWorkClosedError(RuntimeError):
@@ -79,6 +80,7 @@ class PostgresUnitOfWork:
         self.connection = self._connection_context.__enter__()
         try:
             require_authority_operation(self.connection, self.authority_operation)
+            apply_statement_class(self.connection, self.database.settings.statement_timeout_ms)
         except BaseException:
             context, self._connection_context = self._connection_context, None
             self.connection = None
@@ -227,3 +229,36 @@ class _JoinedUnitOfWork:
             del self.parent._after_commit[self.callback_count:]
         connection.execute(f'RELEASE SAVEPOINT {self.name}')
         return False
+
+
+def run_unit_of_work(
+    database: PostgresDatabase | None,
+    operation: Callable[[Any], Any],
+    *,
+    policy: TransactionPolicy | None = None,
+    sleep: Callable[[float], None] = default_sleep,
+) -> Any:
+    """Run ``operation`` in a unit of work, retrying deadlocks and serialization failures (WP-5.10).
+
+    ``operation`` may run more than once; it must only touch the database
+    through ``work``. The unit of work is committed when it returns. Inside
+    a shared transaction it runs once: a deadlock aborts the outer
+    transaction, which only its owner can retry.
+    """
+    from .transaction_binding import shared_work
+
+    resolved = policy or TransactionPolicy()
+    attempts = 1 if shared_work(database or default_database()) is not None else resolved.max_attempts
+    for attempt in range(1, attempts + 1):
+        try:
+            with unit_of_work(database) as work:
+                result = operation(work)
+                work.commit()
+                return result
+        except Exception as exc:
+            if attempt >= attempts or not is_retryable_transaction_error(exc):
+                raise
+            delay = resolved.delay_for_attempt(attempt)
+            if delay:
+                sleep(delay)
+    raise AssertionError("unit of work retry loop exhausted without returning or raising")

@@ -374,6 +374,20 @@ Find one with:
     SELECT pid, state, xact_start, query FROM pg_stat_activity
      WHERE backend_xid IS NOT NULL ORDER BY xact_start LIMIT 5;
 
+### Database connections
+
+Each process keeps a connection pool sized by its role (API and worker 10,
+job worker 5, scheduler 3); `OMNIX_DATABASE_POOL_MAX` sets one size for all.
+Each process also opens up to three connections outside its pool (its
+background or scheduler lock and the live-event listeners). Set
+`OMNIX_DEPLOYMENT_PROCESS_COUNTS` (for example `api=2,worker=1,job-worker=2,scheduler=1`)
+and startup logs `database_connection_budget` when the total would exceed 80%
+of PostgreSQL's `max_connections`; `/ready` reports the computed budget.
+
+Statement time limits: requests use `OMNIX_DATABASE_STATEMENT_TIMEOUT`
+(30 s by default), jobs 30 s and scheduled maintenance 120 s; override with
+`OMNIX_DATABASE_STATEMENT_TIMEOUT_REQUEST`, `..._JOB` and `..._MAINTENANCE`.
+
 ### Index migrations
 
 Some migrations build indexes with `CREATE INDEX CONCURRENTLY` (for example

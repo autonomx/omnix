@@ -70,6 +70,21 @@ class DatabaseSettings:
         return f"postgresql://{user}{host}{port}/{database}"
 
 
+# Default pool size per process role (WP-5.10); OMNIX_DATABASE_POOL_MAX overrides.
+ROLE_POOL_MAX = {"api": 10, "worker": 10, "job-worker": 5, "scheduler": 3}
+# Connections a process opens outside its pool: the background or scheduler
+# lock holder and the LISTEN connections for live events and run streams.
+DEDICATED_CONNECTIONS_PER_PROCESS = 3
+
+
+def process_role() -> str:
+    return (env_str("OMNIX_GATEWAY_BACKGROUND_ROLE", "worker") or "worker").strip().lower()
+
+
+def role_pool_max(role: str) -> int:
+    return ROLE_POOL_MAX.get(role, 10)
+
+
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def database_settings() -> DatabaseSettings:
     database_url = (env_str("OMNIX_DATABASE_URL", "") or "").strip()
@@ -79,7 +94,7 @@ def database_settings() -> DatabaseSettings:
             "credential-aware launcher or provide an explicit PostgreSQL URL"
         )
     pool_min = _integer("OMNIX_DATABASE_POOL_MIN", 1, minimum=0, maximum=100)
-    pool_max = _integer("OMNIX_DATABASE_POOL_MAX", 10, minimum=1, maximum=200)
+    pool_max = _integer("OMNIX_DATABASE_POOL_MAX", role_pool_max(process_role()), minimum=1, maximum=200)
     statement_timeout_ms = _integer(
         "OMNIX_DATABASE_STATEMENT_TIMEOUT", 30_000, minimum=100, maximum=3_600_000
     )

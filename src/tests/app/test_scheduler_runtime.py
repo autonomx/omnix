@@ -69,6 +69,8 @@ class _FakeDatabase:
         finally:
             connection.closed = True
 
+    dedicated_connection = connection
+
 
 def _capabilities(role=GatewayRole.WORKER):
     return RuntimeCapabilities.from_config(RuntimeConfig(gateway_role=role))

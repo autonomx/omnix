@@ -10,6 +10,7 @@ import uuid
 from typing import Any
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
+from app.runtime.statement_class import statement_class
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import list_active_workspace_contexts
@@ -326,7 +327,8 @@ class DurableFeatureJobWorker:
 
     def _run_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         try:
-            self._execute_claimed(job, cancellation)
+            with statement_class("job"):
+                self._execute_claimed(job, cancellation)
         finally:
             with self._active_lock:
                 self._active.pop(job.id, None)

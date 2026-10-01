@@ -136,17 +136,7 @@ class PostgresDatabase:
             ) from exc
 
         def configure(connection: Any) -> None:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT set_config('TimeZone', 'UTC', false)")
-                cursor.execute(
-                    "SELECT set_config('statement_timeout', %s, false)",
-                    (str(self.settings.statement_timeout_ms),),
-                )
-                cursor.execute(
-                    "SELECT set_config('lock_timeout', %s, false)",
-                    (str(self.settings.lock_timeout_ms),),
-                )
-            connection.commit()
+            self._configure_connection(connection)
 
         self._pool = ConnectionPool(
             conninfo=self.settings.url,
@@ -201,17 +191,58 @@ class PostgresDatabase:
                 raise _classified_postgres_error(exc) from exc
             raise
 
+    def _configure_connection(self, connection: Any) -> None:
+        """Session defaults, set once per physical connection (one round trip).
+
+        Transactions then need no preamble: BEGIN carries the isolation level
+        and the timeouts are already the session's (WP-5.10).
+        """
+        import psycopg
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT set_config('TimeZone', 'UTC', false), "
+                "set_config('statement_timeout', %s, false), "
+                "set_config('lock_timeout', %s, false)",
+                (str(self.settings.statement_timeout_ms), str(self.settings.lock_timeout_ms)),
+            )
+        connection.commit()
+        connection.isolation_level = psycopg.IsolationLevel.READ_COMMITTED
+
     @contextmanager
     def transaction(self) -> Iterator[Any]:
+        from app.runtime.statement_class import apply_statement_class
+
         with self.connection() as connection:
             with connection.transaction():
-                connection.execute("SET LOCAL TRANSACTION ISOLATION LEVEL READ COMMITTED")
-                connection.execute(
-                    "SELECT set_config('lock_timeout', %s, true)",
-                    (str(self.settings.lock_timeout_ms),),
-                )
+                apply_statement_class(connection, self.settings.statement_timeout_ms)
                 with transaction_scope():
                     yield connection
+
+    @contextmanager
+    def dedicated_connection(self) -> Iterator[Any]:
+        """A connection outside the pool, for session-long holders such as advisory locks."""
+        import psycopg
+
+        from .tenant_scope import apply_session_scope
+
+        try:
+            connection = psycopg.connect(
+                self.settings.url,
+                autocommit=False,
+                connect_timeout=self.settings.connect_timeout_seconds,
+                application_name=self.settings.application_name,
+            )
+        except Exception as exc:
+            if exc.__class__.__module__.startswith("psycopg"):
+                raise _classified_postgres_error(exc) from exc
+            raise
+        try:
+            self._configure_connection(connection)
+            apply_session_scope(connection)
+            yield connection
+        finally:
+            connection.close()
 
     def health(self) -> dict[str, Any]:
         started = perf_counter()

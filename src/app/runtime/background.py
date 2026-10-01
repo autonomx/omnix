@@ -74,7 +74,8 @@ class GatewayBackgroundRuntime:
         if not self.config.owns_background_runtime:
             return
         self.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
-        self._connection_context = self.database.connection()
+        # Held for the process lifetime, so it must not occupy a pool slot (WP-5.10).
+        self._connection_context = self.database.dedicated_connection()
         connection = self._connection_context.__enter__()
         try:
             self._authority_check(connection)
