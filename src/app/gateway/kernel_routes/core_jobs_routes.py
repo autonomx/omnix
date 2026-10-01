@@ -19,6 +19,8 @@ from app.jobs.models import (
 from app.jobs.projections import summarize_job
 from app.gateway.kernel_routes.live_event_stream import (
     _sse_event,
+    committed_event_stream,
+    legacy_event_id,
     live_event_start_id,
     resilient_live_job_event_stream,
 )
@@ -62,14 +64,30 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
 
     @router.get("/events", include_in_schema=False)
     async def events(
-        after_id: int | None = Query(default=None, ge=0),
+        # An opaque cursor: "<tx_id>:<id>" (WP-5.4) or a legacy integer id.
+        after_id: str | None = Query(default=None, max_length=64),
         last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
         job_store = await asyncio.to_thread(get_job_store)
+        database = getattr(job_store, "database", None)
+        if database is not None:
+            # One reader per process and workspace, woken by NOTIFY (WP-5.4).
+            from app.events.event_reader import EventCursor, EventReaders
+            from app.runtime.tenant_context import current_tenant
+
+            readers = getattr(state, "event_readers", None)
+            if readers is None:
+                readers = state.event_readers = EventReaders(database)
+            start = EventCursor.parse(last_event_id) or EventCursor.parse(after_id)
+            return StreamingResponse(
+                committed_event_stream(readers.for_tenant(current_tenant()), start),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            )
         start_id = await asyncio.to_thread(
             live_event_start_id,
             job_store,
-            after_id=after_id,
+            after_id=legacy_event_id(after_id),
             last_event_id=last_event_id,
         )
         return StreamingResponse(

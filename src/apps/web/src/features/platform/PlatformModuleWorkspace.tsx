@@ -14,9 +14,9 @@ import type {
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { omnixEventClient, type OmnixEventConnectionStatus } from '../../events/eventClient';
+import { omnixEventClient, RESYNC_EVENT, type OmnixEventConnectionStatus } from '../../events/eventClient';
 
-const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
+const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled', RESYNC_EVENT] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
 const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
 const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];

@@ -137,7 +137,13 @@ def test_audit_retention_only_runs_on_the_maintenance_path(database) -> None:
     assert "audit_events" in report.skipped
     with _admin() as admin:
         assert _exists(admin, "omnix_audit_events", "aggregate_id", marker)
-    RetentionWorker(database).run_once(include_maintenance=True)
+    # Maintenance runs from the operator CLI with the owner role; the runtime
+    # role cannot delete audit rows (migration 0107).
+    owner = PostgresDatabase(DatabaseSettings(url=admin_database_url(), pool_min=1, pool_max=2))
+    try:
+        RetentionWorker(owner).run_once(include_maintenance=True)
+    finally:
+        owner.close()
     with _admin() as admin:
         assert not _exists(admin, "omnix_audit_events", "aggregate_id", marker)
         run = admin.execute(

@@ -239,6 +239,23 @@ describe('OmnixEventClient', () => {
     expect(sources[1].endpoint).toBe('/events?after_id=42&stream=jobs');
   });
 
+  it('reconnects at the live tail and notifies subscribers after a resync', () => {
+    vi.useFakeTimers();
+
+    const { client, sources } = createClient();
+    const resync = vi.fn();
+    client.subscribe('job.updated', vi.fn());
+    client.subscribe('resync', resync);
+    sources[0].emitMessage('job.updated', '{}', '7:42');
+    sources[0].emitMessage('resync', '{}', '7:42');
+    sources[0].emitError();
+
+    vi.runOnlyPendingTimers();
+
+    expect(resync).toHaveBeenCalledOnce();
+    expect(sources[1].endpoint).toBe('/events');
+  });
+
   it('clears the resume cursor when explicitly closed', () => {
     const { client, sources } = createClient();
 

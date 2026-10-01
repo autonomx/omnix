@@ -34,6 +34,13 @@ def _parse_event_id(value: str | None, fallback: int = 0) -> int:
         return fallback
 
 
+def legacy_event_id(value: str | None) -> int | None:
+    """The id part of a cursor, for stores without commit-order cursors."""
+    if value is None or value == "":
+        return None
+    return _parse_event_id(value.rsplit(":", 1)[-1])
+
+
 def latest_job_event_id(job_store: Any) -> int:
     """Return the current event tail without replaying the complete event table."""
 
@@ -92,3 +99,56 @@ async def resilient_live_job_event_stream(job_store: Any, after_id: int = 0):
             seconds_until_heartbeat = EVENT_STREAM_HEARTBEAT_SECONDS
         await asyncio.sleep(EVENT_STREAM_POLL_SECONDS)
         seconds_until_heartbeat -= EVENT_STREAM_POLL_SECONDS
+
+
+def _committed_event(event: dict[str, Any]) -> str:
+    from app.events.event_reader import event_cursor
+
+    payload = {key: value for key, value in event.items() if key != "tx_id"}
+    lines = [f"id: {event_cursor(event)}", f"event: {event['event_type']}", f"data: {json.dumps(payload, sort_keys=True)}"]
+    return "\n".join(lines) + "\n\n"
+
+
+async def committed_event_stream(reader: Any, start: Any = None):
+    """SSE from the process's shared reader (WP-5.4).
+
+    Replays from ``start`` (the client's ``Last-Event-ID``) in commit order,
+    then follows the live queue. Replays longer than ``REPLAY_LIMIT`` and
+    subscribers that fall behind get ``event: resync`` and are closed; the
+    client refetches state and reconnects with its cursor.
+    """
+    from app.events.event_reader import REPLAY_LIMIT, event_cursor
+
+    loop = asyncio.get_running_loop()
+    subscription, live_from = await asyncio.to_thread(reader.subscribe, loop)
+    try:
+        yield _sse_comment("omnix-events-open")
+        last = start if start is not None else live_from
+        replayed = 0
+        while True:
+            batch = await asyncio.to_thread(reader.events_after, last)
+            for event in batch:
+                replayed += 1
+                if replayed > REPLAY_LIMIT:
+                    yield "event: resync\ndata: {}\n\n"
+                    return
+                yield _committed_event(event)
+                last = event_cursor(event)
+            if len(batch) < 500:
+                break
+        while True:
+            try:
+                event = await asyncio.wait_for(subscription.queue.get(), timeout=EVENT_STREAM_HEARTBEAT_SECONDS)
+            except asyncio.TimeoutError:
+                yield _sse_comment("heartbeat")
+                continue
+            if subscription.overflowed:
+                yield "event: resync\ndata: {}\n\n"
+                return
+            cursor = event_cursor(event)
+            if cursor <= last:
+                continue
+            yield _committed_event(event)
+            last = cursor
+    finally:
+        reader.unsubscribe(subscription)

@@ -749,12 +749,17 @@ class PostgresJobRepository:
         event_type: str,
         payload: dict[str, Any],
     ) -> int:
+        # The notification is delivered when this transaction commits, which
+        # wakes the process event readers (WP-5.4).
         row = self.connection.execute(
             """
-            INSERT INTO omnix_job_events (workspace_id, job_id, event_type, payload)
-            VALUES (%s, %s, %s, %s::jsonb) RETURNING id
+            WITH inserted AS (
+                INSERT INTO omnix_job_events (workspace_id, job_id, event_type, payload)
+                VALUES (%s, %s, %s, %s::jsonb) RETURNING id
+            )
+            SELECT id, pg_notify('omnix_events', %s) FROM inserted
             """,
-            (context.workspace_id, job_id, event_type, _json(payload)),
+            (context.workspace_id, job_id, event_type, _json(payload), context.workspace_id),
         ).fetchone()
         return int(row[0])
 

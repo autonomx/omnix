@@ -354,6 +354,26 @@ retention runs only through `python -m app.persistence retention`, which
 uses the migration role and runs every enabled policy. Each run is recorded
 in `omnix_lifecycle_cleanup_runs`.
 
+### Live events
+
+Each gateway process runs one event reader per workspace for `/events`. It
+wakes on `NOTIFY omnix_events` (sent when a job event commits) and polls every
+5 seconds as a fallback, so the database load does not grow with the number
+of open browser tabs. Event ids have the form `<transaction>:<id>`; a client
+reconnecting with an older integer id restarts from the oldest event since the
+upgrade. A client that falls more than 1,000 events behind, or asks to replay
+more than 5,000, receives `event: resync` and reloads its data. If the log
+shows `event_reader_listen_unavailable`, events still arrive, up to 5 seconds
+late.
+
+Events are delivered only once every older transaction on the PostgreSQL
+server has finished, so none is skipped. A transaction left open (for example
+an idle `psql` session inside `BEGIN`) holds back live events until it ends.
+Find one with:
+
+    SELECT pid, state, xact_start, query FROM pg_stat_activity
+     WHERE backend_xid IS NOT NULL ORDER BY xact_start LIMIT 5;
+
 ### Database roles and row-level security
 
 Every table with a `workspace_id` has a row-level security policy: a connection sees only the rows of the workspace it serves. Omnix sets that workspace on each pooled connection, so a query that forgets its workspace filter still cannot read another workspace. A short list of system operations (sign-in lookups, listing workspaces, migrations, operator commands) may see every workspace; it lives in `src/app/persistence/tenant_scope.py`.

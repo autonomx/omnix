@@ -4,6 +4,11 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-01 | WP-5.4 | Accept that a long-open transaction anywhere on the server delays live events (the snapshot xmin is server-wide); documented in OPERATIONS with a query to find it. | Delivering past an in-progress transaction is what skipped late-committing events; a delay is recoverable, a skip is not. |
+| 2026-10-01 | WP-5.4 | Stores without a database (in-memory test stores) keep the per-subscriber polling stream; the shared reader serves every PostgreSQL deployment. | The commit-order cursor needs `pg_current_snapshot()`; the in-memory store has no concurrent transactions to order. |
+| 2026-10-01 | WP-5.4 | Only one `/events` implementation existed by this WP (`kernel_routes/core_jobs_routes.py`); `/api/jobs/events` stays a one-shot listing with integer ids. | R1's divergent runtime-app stream was already removed; the listing is a query, not a live stream. |
+| 2026-10-01 | WP-5.4 | On `resync` the web client drops its cursor and reconnects at the live tail; subscribers refetch their queries. | Replaying from an old cursor after a resync could repeat the same over-limit replay; queries are the source of truth for state. |
+| 2026-10-01 | WP-5.4 | The `LISTEN` connection is opened directly with the runtime URL, outside the pool, and failure to listen falls back to polling. | A pooled connection would be returned with an active `LISTEN`; NOTIFY is a wake-up only, so polling keeps delivery correct without it. |
 | 2026-10-01 | WP-5.2 | Retention runs under a `retention` system scope (by age and state), not per workspace. | Eligibility never depends on the tenant, and one pass over the index is cheaper than one per workspace; row-level security still confines every other path. |
 | 2026-10-01 | WP-5.2 | Trading strategy event retention ships disabled (180 days configured). | Strategy qualification reads long event windows; deleting history could change qualification results, so enabling it is an operator decision. |
 | 2026-10-01 | WP-5.2 | RPG snapshot retention ("last 20 per campaign plus every 100th turn") is not implemented. | RPG is being retired; narration events already have a policy. |

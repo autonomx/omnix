@@ -916,6 +916,46 @@ class PostgresJobRepository(_BaseJobRepository):
         ).fetchone()
         return row is not None
 
+    def latest_committed_event_cursor(self, context: TenantContext) -> tuple[int, int]:
+        """``(tx_id, id)`` of the newest event every reader can already see."""
+        row = self.connection.execute(
+            """SELECT tx_id::text::bigint, id FROM omnix_job_events
+                WHERE workspace_id = %s AND tx_id < pg_snapshot_xmin(pg_current_snapshot())
+                ORDER BY tx_id DESC, id DESC LIMIT 1""",
+            (context.workspace_id,),
+        ).fetchone()
+        return (int(row[0]), int(row[1])) if row else (0, 0)
+
+    def list_committed_events(
+        self, context: TenantContext, *, after: tuple[int, int], limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Events after ``after`` in commit order (WP-5.4).
+
+        Only rows whose transaction is older than every transaction in
+        progress are returned, ordered by ``(tx_id, id)``: an event that
+        commits late with a lower id is delivered after, never skipped.
+        """
+        rows = self.connection.execute(
+            """SELECT tx_id::text::bigint, id, job_id, event_type, payload, created_at
+                 FROM omnix_job_events
+                WHERE workspace_id = %s
+                  AND (tx_id, id) > (%s::text::xid8, %s)
+                  AND tx_id < pg_snapshot_xmin(pg_current_snapshot())
+                ORDER BY tx_id, id LIMIT %s""",
+            (context.workspace_id, str(int(after[0])), int(after[1]), max(1, min(int(limit), 5000))),
+        ).fetchall()
+        return [
+            {
+                "tx_id": int(row[0]),
+                "id": int(row[1]),
+                "job_id": str(row[2]),
+                "event_type": str(row[3]),
+                "payload": dict(row[4]),
+                "created_at": row[5].isoformat(),
+            }
+            for row in rows
+        ]
+
     def latest_event_id(self, context: TenantContext) -> int:
         row = self.connection.execute(
             "SELECT COALESCE(MAX(id), 0) FROM omnix_job_events WHERE workspace_id = %s",

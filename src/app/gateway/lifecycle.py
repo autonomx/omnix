@@ -50,6 +50,9 @@ async def gateway_lifespan(app, *, get_chat_store, get_job_store, recover_jobs):
         yield
     finally:
         app.state.runtime_started = False
+        readers = getattr(app.state, "event_readers", None)
+        if readers is not None:
+            readers.stop()
         failures = []
         callbacks = list(reversed(app.router.on_shutdown))
         callbacks.extend(callback for feature in reversed(started_features) for callback in reversed(feature.shutdown))
