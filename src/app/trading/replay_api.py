@@ -146,7 +146,7 @@ def create_trading_replay_router(
         "/execution/detach",
         response_model=PaperAccountSnapshot,
     )
-    async def detach_replay_account(request: ReplayAdvanceRequest):
+    def detach_replay_account(request: ReplayAdvanceRequest):
         """Detach a production snapshot into replay-only state without creating fills."""
         return detached_replay_snapshot(request.snapshot)
 
@@ -154,7 +154,7 @@ def create_trading_replay_router(
         "/execution/advance",
         response_model=PaperAccountSnapshot,
     )
-    async def advance_execution(request: ReplayAdvanceRequest):
+    def advance_execution(request: ReplayAdvanceRequest):
         """Advance detached replay state through paper-execution-v2.
 
         The browser no longer owns fill semantics. Historical bars are normalized
@@ -167,7 +167,7 @@ def create_trading_replay_router(
         "/execution/orders",
         response_model=ReplayOrderResult,
     )
-    async def place_execution_order(request: ReplayOrderRequest):
+    def place_execution_order(request: ReplayOrderRequest):
         return place_replay_order(request.snapshot, request.order, request.bar)
 
     return router

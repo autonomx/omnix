@@ -155,7 +155,7 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
         "/api/live/speculation/sessions/{session_id}/{generation_id}/stream",
         include_in_schema=False,
     )
-    async def stream_started_live_speculation(
+    def stream_started_live_speculation(
         session_id: str,
         generation_id: str,
     ) -> StreamingResponse:
@@ -205,7 +205,7 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
     @router.post(
         "/api/live/speculation/sessions/{session_id}/{generation_id}/cancel",
     )
-    async def cancel_started_live_speculation(
+    def cancel_started_live_speculation(
         session_id: str,
         generation_id: str,
     ) -> dict[str, Any]:

@@ -88,7 +88,7 @@ def register_memory_management_routes(
             response_model=MemoryListResponse,
             name="assistant_memory_list_endpoint",
         )
-        async def assistant_memory_list_endpoint(
+        def assistant_memory_list_endpoint(
             session_id: str,
             scope: MemoryScope | None = None,
             category: MemoryCategory | None = None,
@@ -117,7 +117,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_create_endpoint",
         )
-        async def assistant_memory_create_endpoint(request: CreateManagedMemoryRequest) -> MemoryRecord:
+        def assistant_memory_create_endpoint(request: CreateManagedMemoryRequest) -> MemoryRecord:
             _, _, context = write_context(request.session_id)
             try:
                 return memory_service_factory().create_explicit_memory(
@@ -137,7 +137,7 @@ def register_memory_management_routes(
             response_model=MemoryListResponse,
             name="assistant_memory_archived_endpoint",
         )
-        async def assistant_memory_archived_endpoint(session_id: str) -> MemoryListResponse:
+        def assistant_memory_archived_endpoint(session_id: str) -> MemoryListResponse:
             _, _, context = read_context(session_id)
             service = memory_service_factory()
             records = []
@@ -168,7 +168,7 @@ def register_memory_management_routes(
             response_model=RecentAutomaticMemoryResponse,
             name="assistant_memory_recent_automatic_endpoint",
         )
-        async def assistant_memory_recent_automatic_endpoint(
+        def assistant_memory_recent_automatic_endpoint(
             session_id: str,
             limit: int = Query(default=5, ge=0, le=20),
         ) -> RecentAutomaticMemoryResponse:
@@ -189,7 +189,7 @@ def register_memory_management_routes(
             response_model=MemoryUsageResponse,
             name="assistant_memory_usage_endpoint",
         )
-        async def assistant_memory_usage_endpoint(session_id: str) -> MemoryUsageResponse:
+        def assistant_memory_usage_endpoint(session_id: str) -> MemoryUsageResponse:
             read_context(session_id)
             return memory_usage_snapshot(session_id)
 
@@ -198,7 +198,7 @@ def register_memory_management_routes(
             response_model=MemoryExportResponse,
             name="assistant_memory_export_endpoint",
         )
-        async def assistant_memory_export_endpoint(session_id: str) -> MemoryExportResponse:
+        def assistant_memory_export_endpoint(session_id: str) -> MemoryExportResponse:
             _, _, context = read_context(session_id)
             return export_owner_memory(memory_service_factory(), context)
 
@@ -207,7 +207,7 @@ def register_memory_management_routes(
             response_model=MemoryResetResponse,
             name="assistant_memory_reset_endpoint",
         )
-        async def assistant_memory_reset_endpoint(session_id: str) -> MemoryResetResponse:
+        def assistant_memory_reset_endpoint(session_id: str) -> MemoryResetResponse:
             store, _, context = write_context(session_id)
             try:
                 return reset_owner_memory(store, memory_service_factory(), context)
@@ -219,7 +219,7 @@ def register_memory_management_routes(
             response_model=MemoryCandidateListResponse,
             name="assistant_memory_candidates_endpoint",
         )
-        async def assistant_memory_candidates_endpoint(
+        def assistant_memory_candidates_endpoint(
             session_id: str,
             limit: int = Query(default=100, ge=0, le=MAX_PAGE_SIZE),
         ) -> MemoryCandidateListResponse:
@@ -238,7 +238,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_read_endpoint",
         )
-        async def assistant_memory_read_endpoint(memory_id: str, session_id: str) -> MemoryRecord:
+        def assistant_memory_read_endpoint(memory_id: str, session_id: str) -> MemoryRecord:
             session_found, record = session_record(
                 chat_store_factory(),
                 memory_service_factory(),
@@ -256,7 +256,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_update_endpoint",
         )
-        async def assistant_memory_update_endpoint(
+        def assistant_memory_update_endpoint(
             memory_id: str,
             request: UpdateManagedMemoryRequest,
         ) -> MemoryRecord:
@@ -276,7 +276,7 @@ def register_memory_management_routes(
             response_model=ForgetMemoryResponse,
             name="assistant_memory_forget_endpoint",
         )
-        async def assistant_memory_forget_endpoint(
+        def assistant_memory_forget_endpoint(
             memory_id: str,
             session_id: str,
             expected_revision: int = Query(ge=1),
@@ -297,7 +297,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_pin_endpoint",
         )
-        async def assistant_memory_pin_endpoint(
+        def assistant_memory_pin_endpoint(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
@@ -317,7 +317,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_unpin_endpoint",
         )
-        async def assistant_memory_unpin_endpoint(
+        def assistant_memory_unpin_endpoint(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
@@ -337,7 +337,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_move_endpoint",
         )
-        async def assistant_memory_move_endpoint(
+        def assistant_memory_move_endpoint(
             memory_id: str,
             request: MoveManagedMemoryRequest,
         ) -> MemoryRecord:
@@ -357,7 +357,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_archive_endpoint",
         )
-        async def assistant_memory_archive_endpoint(
+        def assistant_memory_archive_endpoint(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
@@ -378,7 +378,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_restore_endpoint",
         )
-        async def assistant_memory_restore_endpoint(
+        def assistant_memory_restore_endpoint(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> MemoryRecord:
@@ -399,7 +399,7 @@ def register_memory_management_routes(
             response_model=ForgetMemoryResponse,
             name="assistant_memory_undo_endpoint",
         )
-        async def assistant_memory_undo_endpoint(
+        def assistant_memory_undo_endpoint(
             memory_id: str,
             request: RevisionedMemoryRequest,
         ) -> ForgetMemoryResponse:
@@ -422,7 +422,7 @@ def register_memory_management_routes(
             response_model=MemoryRecord,
             name="assistant_memory_candidate_approve_endpoint",
         )
-        async def assistant_memory_candidate_approve_endpoint(
+        def assistant_memory_candidate_approve_endpoint(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryRecord:
@@ -441,7 +441,7 @@ def register_memory_management_routes(
             response_model=MemoryCandidate,
             name="assistant_memory_candidate_reject_endpoint",
         )
-        async def assistant_memory_candidate_reject_endpoint(
+        def assistant_memory_candidate_reject_endpoint(
             candidate_id: str,
             request: CandidateResolutionRequest,
         ) -> MemoryCandidate:
@@ -463,7 +463,7 @@ def register_memory_management_routes(
             response_model=ForgetCandidateResponse,
             name="assistant_memory_candidate_forget_endpoint",
         )
-        async def assistant_memory_candidate_forget_endpoint(
+        def assistant_memory_candidate_forget_endpoint(
             candidate_id: str,
             request: CandidateCleanupRequest,
         ) -> ForgetCandidateResponse:

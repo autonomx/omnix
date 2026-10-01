@@ -45,7 +45,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     @router.get(
         "/api/chat/sessions", response_model=ChatSessionListResponse, tags=["chat"]
     )
-    async def chat_sessions(
+    def chat_sessions(
         limit: int = Query(default=100, ge=1, le=100),
         cursor: str | None = Query(default=None, max_length=512),
     ) -> ChatSessionListResponse:
@@ -61,7 +61,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
     @router.get(
         "/api/chat/sessions/{session_id}", response_model=ChatSession, tags=["chat"]
     )
-    async def chat_session(
+    def chat_session(
         session_id: str,
         include_attachments: bool = Query(default=True),
     ) -> ChatSession:
@@ -86,7 +86,7 @@ def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_stor
         response_model=dict[str, list[str]],
         tags=["chat"],
     )
-    async def chat_session_attachments(session_id: str) -> dict[str, list[str]]:
+    def chat_session_attachments(session_id: str) -> dict[str, list[str]]:
         chat_store = get_chat_store()
         get_session_attachments = getattr(chat_store, "get_session_attachments", None)
         if callable(get_session_attachments):

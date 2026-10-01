@@ -459,7 +459,7 @@ def create_trading_paper_router(
         "/accounts/{account_id}/observations",
         response_model=PaperFillListResponse,
     )
-    async def process_observation(
+    def process_observation(
         account_id: str,
         observation: PaperMarketObservation,
     ):

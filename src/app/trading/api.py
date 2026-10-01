@@ -185,7 +185,7 @@ def create_trading_router(
     router = APIRouter(prefix="/api/trading", tags=["trading"])
 
     @router.get("/providers", response_model=ProviderStatusResponse)
-    async def providers() -> ProviderStatusResponse:
+    def providers() -> ProviderStatusResponse:
         _rehydrate_persisted_bindings(repository_factory)
         descriptors = [
             ProviderDescriptor.model_validate(item)
@@ -194,8 +194,8 @@ def create_trading_router(
         return ProviderStatusResponse(providers=descriptors)
 
     @router.get("/providers/status", response_model=ProviderStatusResponse)
-    async def provider_status() -> ProviderStatusResponse:
-        return await providers()
+    def provider_status() -> ProviderStatusResponse:
+        return providers()
 
     @router.get("/instruments/search", response_model=InstrumentSearchResponse)
     async def instruments(query: str = Query(default="", max_length=96)) -> InstrumentSearchResponse:
@@ -245,7 +245,7 @@ def create_trading_router(
             ) from exc
 
     @router.get("/currency-rates", response_model=CurrencyRateResponse)
-    async def currency_rate(
+    def currency_rate(
         base_currency: str = Query(min_length=3, max_length=16),
         quote_currency: str = Query(min_length=3, max_length=16),
     ) -> CurrencyRateResponse:
@@ -261,7 +261,7 @@ def create_trading_router(
             ) from exc
 
     @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)
-    async def diagnostics() -> TradingDiagnosticsResponse:
+    def diagnostics() -> TradingDiagnosticsResponse:
         return TradingDiagnosticsResponse(
             diagnostics=market_service_factory().diagnostics()
         )
@@ -299,12 +299,12 @@ def create_trading_router(
 
     def register_documents(path: str, record_type: str) -> None:
         @router.get(path, response_model=TradingDocumentListResponse, name=f"list_trading_{record_type}s")
-        async def list_documents(limit: int = Query(default=100, ge=1, le=500)) -> TradingDocumentListResponse:
+        def list_documents(limit: int = Query(default=100, ge=1, le=500)) -> TradingDocumentListResponse:
             records = repository_factory().list(record_type, limit=limit)
             return TradingDocumentListResponse(records=[_document_response(record) for record in records])
 
         @router.post(path, response_model=TradingDocumentResponse, status_code=201, name=f"create_trading_{record_type}")
-        async def create_document(request: TradingDocumentRequest) -> TradingDocumentResponse:
+        def create_document(request: TradingDocumentRequest) -> TradingDocumentResponse:
             try:
                 record = repository_factory().create(record_type, request.record_id, request.payload)
             except RevisionConflict as exc:
@@ -312,14 +312,14 @@ def create_trading_router(
             return _document_response(record)
 
         @router.get(f"{path}/{{record_id}}", response_model=TradingDocumentResponse, name=f"get_trading_{record_type}")
-        async def get_document(record_id: str) -> TradingDocumentResponse:
+        def get_document(record_id: str) -> TradingDocumentResponse:
             record = repository_factory().get(record_type, record_id)
             if record is None:
                 raise HTTPException(status_code=404, detail=f"{record_type}_not_found")
             return _document_response(record)
 
         @router.put(f"{path}/{{record_id}}", response_model=TradingDocumentResponse, name=f"update_trading_{record_type}")
-        async def update_document(
+        def update_document(
             record_id: str,
             request: TradingDocumentRequest,
             if_match: int = Header(alias="If-Match", ge=1),
@@ -346,7 +346,7 @@ def create_trading_router(
             return _document_response(record)
 
         @router.delete(f"{path}/{{record_id}}", response_model=TradingDocumentResponse, name=f"archive_trading_{record_type}")
-        async def archive_document(
+        def archive_document(
             record_id: str,
             if_match: int = Header(alias="If-Match", ge=1),
         ) -> TradingDocumentResponse:

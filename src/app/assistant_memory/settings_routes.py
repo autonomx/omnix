@@ -30,7 +30,7 @@ def register_memory_settings_routes(
         response_model=AssistantMemoryRuntimeStatus,
         name="assistant_memory_settings_status_endpoint",
     )
-    async def assistant_memory_settings_status_endpoint() -> AssistantMemoryRuntimeStatus:
+    def assistant_memory_settings_status_endpoint() -> AssistantMemoryRuntimeStatus:
         return settings_store_factory().load_effective()
 
     @router.post(
@@ -38,7 +38,7 @@ def register_memory_settings_routes(
         response_model=AssistantMemoryRuntimeStatus,
         name="assistant_memory_settings_update_endpoint",
     )
-    async def assistant_memory_settings_update_endpoint(
+    def assistant_memory_settings_update_endpoint(
         request: AssistantMemorySettingsUpdate,
     ) -> AssistantMemoryRuntimeStatus:
         try:
@@ -59,5 +59,5 @@ def register_memory_settings_routes(
         response_model=CompanionMemoryMetrics,
         name="assistant_memory_metrics_endpoint",
     )
-    async def assistant_memory_metrics_endpoint() -> CompanionMemoryMetrics:
+    def assistant_memory_metrics_endpoint() -> CompanionMemoryMetrics:
         return companion_metrics_snapshot()

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -66,8 +65,8 @@ def test_range_backtest_route_submits_and_reads_durable_job_state() -> None:
         end_date=date(2026, 1, 7),
     )
 
-    accepted = asyncio.run(post("strategy-1", request))
-    progress = asyncio.run(get("strategy-1", "range-job-1"))
+    accepted = post("strategy-1", request)
+    progress = get("strategy-1", "range-job-1")
 
     assert accepted.run_id == "range-job-1"
     assert accepted.total_sessions == 3

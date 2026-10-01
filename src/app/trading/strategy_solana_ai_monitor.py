@@ -500,11 +500,11 @@ def create_trading_solana_ai_control_router() -> APIRouter:
         return monitor
 
     @router.get("/strategy", response_model=SolanaAIStrategyRecord)
-    async def solana_ai_strategy(request: Request) -> SolanaAIStrategyRecord:
+    def solana_ai_strategy(request: Request) -> SolanaAIStrategyRecord:
         return monitor_for(request).strategy_record()
 
     @router.get("/decisions", response_model=list[StrategyEvent])
-    async def solana_ai_decisions(
+    def solana_ai_decisions(
         request: Request,
         limit: int = Query(default=50, ge=1, le=200),
     ) -> list[StrategyEvent]:
@@ -527,7 +527,7 @@ def create_trading_solana_ai_control_router() -> APIRouter:
         )
 
     @router.post("/start", status_code=202, response_model=SolanaAIMonitorControlResponse)
-    async def start_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
+    def start_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
         monitor_for(request)
         scheduler = getattr(request.app.state, "scheduler_runtime", None)
         if scheduler is None:

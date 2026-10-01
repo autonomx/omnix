@@ -45,7 +45,7 @@ def register_assistant_memory_routes(
             tags=["chat-memory"],
             name=_GET_ROUTE_NAME,
         )
-        async def assistant_memory_session_state_endpoint(
+        def assistant_memory_session_state_endpoint(
             session_id: str,
         ) -> SessionMemoryState:
             state = get_session_memory_state(
@@ -65,7 +65,7 @@ def register_assistant_memory_routes(
             tags=["chat-memory"],
             name=_REFRESH_ROUTE_NAME,
         )
-        async def assistant_memory_session_refresh_endpoint(
+        def assistant_memory_session_refresh_endpoint(
             session_id: str,
             request: RefreshSessionMemoryRequest,
         ) -> SessionMemoryState:

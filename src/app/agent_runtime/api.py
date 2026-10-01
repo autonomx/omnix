@@ -350,7 +350,7 @@ def get_agent_evidence_set(run_id: str) -> EvidenceSet:
         }
     },
 )
-async def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingResponse:
+def stream_agent_events(run_id: str, after_sequence: int = 0) -> StreamingResponse:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
 

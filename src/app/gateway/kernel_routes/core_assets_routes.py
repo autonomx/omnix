@@ -77,7 +77,7 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
         "/api/assets/{asset_id}/content",
         response_model=AssetContentResponse,
     )
-    async def asset_content(asset_id: str) -> AssetContentResponse:
+    def asset_content(asset_id: str) -> AssetContentResponse:
         asset_store = get_asset_store()
         asset = _asset_by_id(asset_store, asset_id)
         if asset is None:
@@ -109,7 +109,7 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
         response_model=AssetMigrationPreview,
         tags=["assets"],
     )
-    async def image_asset_migration_dry_run() -> AssetMigrationPreview:
+    def image_asset_migration_dry_run() -> AssetMigrationPreview:
         return get_asset_store().import_image_manifest_dry_run()
 
     @router.post(
@@ -117,7 +117,7 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
         response_model=AssetMigrationPreview,
         tags=["assets"],
     )
-    async def image_asset_migration_import() -> AssetMigrationPreview:
+    def image_asset_migration_import() -> AssetMigrationPreview:
         return get_asset_store().import_image_manifest()
 
     @router.post(
@@ -125,5 +125,5 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
         response_model=AssetLegacyImportDryRun,
         tags=["assets"],
     )
-    async def legacy_non_image_asset_migration_dry_run() -> AssetLegacyImportDryRun:
+    def legacy_non_image_asset_migration_dry_run() -> AssetLegacyImportDryRun:
         return get_asset_store().preview_legacy_non_image_import()

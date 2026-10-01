@@ -69,7 +69,7 @@ def register_assistant_context_routes(
             response_model=ResearchRuntimeStatus,
             name=_STATUS_ROUTE_NAME,
         )
-        async def assistant_research_runtime_status_endpoint(
+        def assistant_research_runtime_status_endpoint(
             session_id: str = "status-preview",
         ) -> ResearchRuntimeStatus:
             return research_runtime_status(
@@ -85,7 +85,7 @@ def register_assistant_context_routes(
             response_model=JobRecord,
             name=_PLAN_UPDATE_ROUTE_NAME,
         )
-        async def update_deep_research_plan_endpoint(
+        def update_deep_research_plan_endpoint(
             job_id: str,
             request: DeepResearchPlanUpdateRequest,
         ) -> JobRecord:
@@ -120,7 +120,7 @@ def register_assistant_context_routes(
             response_model=JobRecord,
             name=_PLAN_START_ROUTE_NAME,
         )
-        async def start_deep_research_plan_endpoint(job_id: str) -> JobRecord:
+        def start_deep_research_plan_endpoint(job_id: str) -> JobRecord:
             job_store = job_store_factory()
             job = job_store.get_job(job_id)
             if job is None or job.type != RESEARCH_JOB_TYPE:

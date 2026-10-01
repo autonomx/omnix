@@ -57,5 +57,5 @@ def register_tts_live_capability_routes(router: APIRouter, state: Any) -> None:
     setattr(state, _ROUTE_SENTINEL, True)
 
     @router.get("/api/tts/live-call/capabilities")
-    async def tts_live_call_capabilities() -> dict[str, Any]:
+    def tts_live_call_capabilities() -> dict[str, Any]:
         return live_tts_capabilities_payload()

@@ -37,7 +37,7 @@ def register_rpg_debug_routes(router: APIRouter, state) -> None:
     setattr(state, _ROUTE_SENTINEL, True)
 
     @router.get("/api/rpg/debug/log-status", tags=["rpg-debug"])
-    async def rpg_debug_status() -> dict[str, Any]:
+    def rpg_debug_status() -> dict[str, Any]:
         return {"ok": True, **rpg_debug_log_status()}
 
     @router.post("/api/rpg/debug/event", tags=["rpg-debug"])

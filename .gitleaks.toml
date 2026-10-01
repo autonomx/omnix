@@ -4,12 +4,12 @@ title = "Omnix secret scanning"
 useDefault = true
 
 [[allowlists]]
-description = "Verified SHA-256 checksum of migration 0066, not a credential"
+description = "SHA-256 checksums in the migration registry (file names like 0105_auth_sessions), not credentials"
 targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''(?:^|/)resources/architecture/migration-checksums\.json$''']
 regexTarget = "secret"
-regexes = ['''^b72e5f4add208a48009cbabb2ffa4eb4736c9a3984722a5a2f3d685873549a89$''']
+regexes = ['''^[0-9a-f]{64}$''']
 
 # Exact non-secret examples only. New credentials in these files still fail.
 [[allowlists]]

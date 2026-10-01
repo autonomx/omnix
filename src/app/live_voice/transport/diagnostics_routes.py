@@ -59,7 +59,7 @@ def register_live_voice_diagnostics_routes(router: APIRouter, state: Any) -> Non
     setattr(state, _ROUTE_SENTINEL, True)
 
     @router.post(LIVE_VOICE_DIAGNOSTICS_PATH)
-    async def ingest_live_voice_diagnostics(batch: LiveVoiceDiagnosticBatch) -> dict[str, Any]:
+    def ingest_live_voice_diagnostics(batch: LiveVoiceDiagnosticBatch) -> dict[str, Any]:
         trace_id = normalize_trace_id(batch.trace_id)
         for item in batch.events:
             details = sanitize_content_free_details(item.details)
@@ -76,7 +76,7 @@ def register_live_voice_diagnostics_routes(router: APIRouter, state: Any) -> Non
         }
 
     @router.get(f"{LIVE_VOICE_DIAGNOSTICS_PATH}/status")
-    async def live_voice_diagnostics_status() -> dict[str, Any]:
+    def live_voice_diagnostics_status() -> dict[str, Any]:
         return {
             "ready": True,
             "log_path": diagnostics_log_path(),
@@ -87,7 +87,7 @@ def register_live_voice_diagnostics_routes(router: APIRouter, state: Any) -> Non
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate",
         response_model=LiveVoiceReleaseGateReport,
     )
-    async def live_voice_release_gate(
+    def live_voice_release_gate(
         hours: int = Query(default=24, ge=1, le=24 * 30),
         minimum_latency_samples: int = Query(default=5, ge=1, le=10_000),
         minimum_quality_trials: int = Query(default=10, ge=1, le=10_000),
@@ -106,7 +106,7 @@ def register_live_voice_diagnostics_routes(router: APIRouter, state: Any) -> Non
         f"{LIVE_VOICE_DIAGNOSTICS_PATH}/release-gate/evaluate",
         response_model=LiveVoiceReleaseGateReport,
     )
-    async def evaluate_live_voice_release_gate_payload(
+    def evaluate_live_voice_release_gate_payload(
         request: LiveVoiceReleaseGateEvaluationRequest,
     ) -> LiveVoiceReleaseGateReport:
         return evaluate_live_voice_release_gate(

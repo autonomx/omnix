@@ -23,7 +23,7 @@ def register_character_avatar_viseme_routes(
         status_code=202,
         tags=["characters"],
     )
-    async def create_character_avatar_visemes(character_id: str) -> CharacterVisemeGenerationBatch:
+    def create_character_avatar_visemes(character_id: str) -> CharacterVisemeGenerationBatch:
         try:
             return service_factory().create(character_id)
         except CharacterNotFoundError as exc:
@@ -36,7 +36,7 @@ def register_character_avatar_viseme_routes(
         response_model=CharacterVisemeGenerationBatch,
         tags=["characters"],
     )
-    async def get_character_avatar_visemes(batch_id: str) -> CharacterVisemeGenerationBatch:
+    def get_character_avatar_visemes(batch_id: str) -> CharacterVisemeGenerationBatch:
         try:
             return service_factory().get(batch_id)
         except KeyError as exc:

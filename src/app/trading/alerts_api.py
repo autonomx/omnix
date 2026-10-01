@@ -35,7 +35,7 @@ def create_trading_alert_router(
     router = APIRouter(prefix="/api/trading/alerts", tags=["trading-alerts"])
 
     @router.get("", response_model=TradingAlertListResponse)
-    async def list_alerts(
+    def list_alerts(
         limit: int = Query(default=200, ge=1, le=500),
     ) -> TradingAlertListResponse:
         return TradingAlertListResponse(
@@ -43,14 +43,14 @@ def create_trading_alert_router(
         )
 
     @router.post("", response_model=TradingAlert, status_code=201)
-    async def create_alert(request: TradingAlertCreate) -> TradingAlert:
+    def create_alert(request: TradingAlertCreate) -> TradingAlert:
         try:
             return repository_factory().create(request)
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @router.get("/triggers", response_model=TradingAlertTriggerListResponse)
-    async def list_triggers(
+    def list_triggers(
         limit: int = Query(default=200, ge=1, le=500),
     ) -> TradingAlertTriggerListResponse:
         return TradingAlertTriggerListResponse(
@@ -58,7 +58,7 @@ def create_trading_alert_router(
         )
 
     @router.post("/evaluate", response_model=TradingAlertTriggerListResponse)
-    async def evaluate_alerts(
+    def evaluate_alerts(
         request: TradingAlertEvaluation,
     ) -> TradingAlertTriggerListResponse:
         return TradingAlertTriggerListResponse(
@@ -66,7 +66,7 @@ def create_trading_alert_router(
         )
 
     @router.put("/{alert_id}", response_model=TradingAlert)
-    async def update_alert(
+    def update_alert(
         alert_id: str,
         request: TradingAlertUpdate,
         if_match: int = Header(alias="If-Match", ge=1),
@@ -87,7 +87,7 @@ def create_trading_alert_router(
             ) from exc
 
     @router.delete("/{alert_id}", response_model=TradingAlert)
-    async def archive_alert(
+    def archive_alert(
         alert_id: str,
         if_match: int = Header(alias="If-Match", ge=1),
     ) -> TradingAlert:

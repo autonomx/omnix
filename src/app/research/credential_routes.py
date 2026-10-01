@@ -48,14 +48,14 @@ def create_research_credential_router() -> APIRouter:
         "/api/assistant/research/credentials",
         name=_GET_ROUTE_NAME,
     )
-    async def assistant_research_credentials_status_endpoint() -> dict[str, object]:
+    def assistant_research_credentials_status_endpoint() -> dict[str, object]:
         return research_credentials_status()
 
     @router.post(
         "/api/assistant/research/credentials",
         name=_UPDATE_ROUTE_NAME,
     )
-    async def assistant_research_credentials_update_endpoint(
+    def assistant_research_credentials_update_endpoint(
         request: ResearchCredentialUpdate,
     ) -> dict[str, object]:
         source = secret_store.research_provider_credential_source(request.provider)

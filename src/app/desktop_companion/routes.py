@@ -263,7 +263,7 @@ def register_desktop_companion_routes(
         response_model=DesktopCompanionEvaluationRecord,
         tags=["desktop-companion"],
     )
-    async def upsert_desktop_companion_evaluation(
+    def upsert_desktop_companion_evaluation(
         request: DesktopCompanionEvaluationCreate,
     ) -> DesktopCompanionEvaluationRecord:
         return evaluation_store_factory().upsert(request)
@@ -273,7 +273,7 @@ def register_desktop_companion_routes(
         response_model=list[DesktopCompanionEvaluationRecord],
         tags=["desktop-companion"],
     )
-    async def list_desktop_companion_evaluations(
+    def list_desktop_companion_evaluations(
         limit: int = Query(default=100, ge=1, le=1_000),
         session_id: str | None = Query(default=None, max_length=160),
     ) -> list[DesktopCompanionEvaluationRecord]:
@@ -284,7 +284,7 @@ def register_desktop_companion_routes(
         response_model=DesktopCompanionEvaluationExport,
         tags=["desktop-companion"],
     )
-    async def export_desktop_companion_evaluations() -> DesktopCompanionEvaluationExport:
+    def export_desktop_companion_evaluations() -> DesktopCompanionEvaluationExport:
         return DesktopCompanionEvaluationExport.model_validate(
             evaluation_store_factory().export()
         )
@@ -313,7 +313,7 @@ def register_desktop_companion_routes(
         response_model=DesktopCompanionReleaseGateReport,
         tags=["desktop-companion"],
     )
-    async def desktop_companion_release_gate(
+    def desktop_companion_release_gate(
         stage: RolloutStage = "text",
         exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
         observation_schema_version: int = Query(default=1, ge=1),
@@ -341,7 +341,7 @@ def register_desktop_companion_routes(
         response_model=DesktopCompanionRolloutStatus,
         tags=["desktop-companion"],
     )
-    async def desktop_companion_rollout_status(
+    def desktop_companion_rollout_status(
         requested_stage: RolloutStage = "disabled",
         exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
         observation_schema_version: int = Query(default=1, ge=1),

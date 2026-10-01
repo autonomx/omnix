@@ -49,7 +49,7 @@ def create_trading_metric_router(
     # out of the shared public gateway contract until metric subscriptions are
     # promoted to a versioned external API.
     @router.get("/metrics", response_model=MarketMetricResponse)
-    async def metric_series(
+    def metric_series(
         instrument_id: str = Query(min_length=3, max_length=200),
         metric: str = Query(min_length=3, max_length=120),
         interval: str = Query(default="1h", max_length=16),

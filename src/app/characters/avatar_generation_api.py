@@ -49,7 +49,7 @@ def register_character_avatar_generation_routes(
         status_code=202,
         tags=["characters"],
     )
-    async def create_character_avatar_generation(
+    def create_character_avatar_generation(
         character_id: str,
         request: CreateCharacterAvatarGenerationRequest,
     ) -> CharacterAvatarGenerationBatch:
@@ -106,7 +106,7 @@ def register_character_avatar_generation_routes(
         response_model=CharacterAvatarGenerationListResponse,
         tags=["characters"],
     )
-    async def list_character_avatar_generations(
+    def list_character_avatar_generations(
         character_id: str,
     ) -> CharacterAvatarGenerationListResponse:
         try:
@@ -133,7 +133,7 @@ def register_character_avatar_generation_routes(
         response_model=CharacterAvatarGenerationBatch,
         tags=["characters"],
     )
-    async def get_character_avatar_generation(
+    def get_character_avatar_generation(
         batch_id: str,
     ) -> CharacterAvatarGenerationBatch:
         try:
@@ -162,7 +162,7 @@ def register_character_avatar_generation_routes(
         response_model=BackfillClonedVoiceCharactersResponse,
         tags=["characters"],
     )
-    async def backfill_cloned_voice_characters(
+    def backfill_cloned_voice_characters(
         request: BackfillClonedVoiceCharactersRequest,
     ) -> BackfillClonedVoiceCharactersResponse:
         request_context = avatar_generation_payload(

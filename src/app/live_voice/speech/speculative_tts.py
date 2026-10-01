@@ -686,7 +686,7 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
     setattr(state, _ROUTE_SENTINEL, True)
 
     @router.get("/api/live/voice/execution-lane")
-    async def live_voice_execution_lane_status() -> dict[str, Any]:
+    def live_voice_execution_lane_status() -> dict[str, Any]:
         config = live_voice_execution_lane_config()
         return {
             "ok": True,
@@ -700,7 +700,7 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
         }
 
     @router.post("/api/live/speculation/tts-prefetch")
-    async def prefetch_speculative_tts(
+    def prefetch_speculative_tts(
         payload: SpeculativeTtsPrefetchRequest,
     ) -> dict[str, Any]:
         route_started = time.perf_counter()
@@ -748,7 +748,7 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
     @router.post(
         "/api/live/speculation/tts-prefetch/{generation_id}/accept",
     )
-    async def accept_speculative_tts(generation_id: str) -> dict[str, Any]:
+    def accept_speculative_tts(generation_id: str) -> dict[str, Any]:
         entry = _accept_entry(generation_id)
         with entry.condition:
             buffered = len(entry.chunks)
@@ -764,7 +764,7 @@ def register_live_voice_execution_lane_routes(router: APIRouter, state: Any) -> 
     @router.post(
         "/api/live/speculation/tts-prefetch/{generation_id}/cancel",
     )
-    async def cancel_speculative_tts(generation_id: str) -> dict[str, Any]:
+    def cancel_speculative_tts(generation_id: str) -> dict[str, Any]:
         return {
             "ok": True,
             "generation_id": generation_id,

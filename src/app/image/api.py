@@ -118,13 +118,13 @@ def _safe_dict(value):
 
 
 @router.post("/api/image/models/flux-klein/download")
-async def download_flux_klein_route():
+def download_flux_klein_route():
     result = download_flux_klein_model()
     return result
 
 
 @router.get("/api/image/models/flux-klein/status")
-async def flux_klein_status_route():
+def flux_klein_status_route():
     settings = load_settings()
     image_cfg = _safe_dict(settings.get("image"))
     flux = _safe_dict(image_cfg.get("flux_klein"))
@@ -161,45 +161,45 @@ def image_generate_route(request: Request, request_body: ImageGenerateRouteReque
 
 
 @router.post("/api/image/jobs/enqueue")
-async def enqueue_image(payload: EnqueueImageRequestBody):
+def enqueue_image(payload: EnqueueImageRequestBody):
     payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_image_job(payload)
 
 
 @router.post("/api/image/chat/enqueue")
-async def enqueue_chat(payload: EnqueueChatRequestBody):
+def enqueue_chat(payload: EnqueueChatRequestBody):
     payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_chat_image(payload)
 
 
 @router.post("/api/image/story/enqueue")
-async def enqueue_story(payload: EnqueueStoryRequestBody):
+def enqueue_story(payload: EnqueueStoryRequestBody):
     payload = payload.model_dump(exclude_unset=True, by_alias=True)
     return enqueue_story_image(payload)
 
 
 @router.post("/api/image/jobs/run_one")
-async def run_one():
+def run_one():
     return run_one_image_job()
 
 
 @router.get("/api/image/jobs")
-async def list_jobs():
+def list_jobs():
     return list_image_jobs()
 
 
 @router.get("/api/image/assets/manifest")
-async def asset_manifest():
+def asset_manifest():
     return get_image_asset_manifest()
 
 
 @router.post("/api/image/assets/cleanup")
-async def cleanup_assets():
+def cleanup_assets():
     return cleanup_unused_image_assets()
 
 
 @router.get("/api/image/settings")
-async def image_settings_get_route():
+def image_settings_get_route():
     return get_image_settings_payload()
 
 
@@ -210,12 +210,12 @@ def image_settings_post_route(request: Request, request_body: ImageSettingsPostR
 
 
 @router.get("/api/image/runtime")
-async def image_runtime_route():
+def image_runtime_route():
     return validate_global_image_runtime()
 
 
 @router.get("/api/image/providers")
-async def image_providers_route():
+def image_providers_route():
     return {
         "ok": True,
         "providers": list_image_providers(),
@@ -243,5 +243,5 @@ def image_provider_unload_route(request: Request, request_body: ImageProviderUnl
 
 
 @router.post("/api/image/provider/unload_all")
-async def image_provider_unload_all_route():
+def image_provider_unload_all_route():
     return unload_all_image_providers()

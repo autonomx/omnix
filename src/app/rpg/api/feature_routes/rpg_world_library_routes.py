@@ -501,7 +501,7 @@ def register_rpg_world_library_routes(router: APIRouter, state) -> None:
     @router.post(
         "/api/rpg/worlds/{world_id}/prepare-openings-for-launch",
     )
-    async def rpg_world_prepare_openings_for_launch(world_id: str) -> dict[str, Any]:
+    def rpg_world_prepare_openings_for_launch(world_id: str) -> dict[str, Any]:
         try:
             return prepare_opening_scenarios_for_launch(world_id)
         except Exception as exc:

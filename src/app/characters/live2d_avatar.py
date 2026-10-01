@@ -558,7 +558,7 @@ def register_character_live2d_avatar_routes(
         response_model=Live2DModelCatalogResponse,
         tags=["characters"],
     )
-    async def live2d_model_catalog(character_id: str) -> Live2DModelCatalogResponse:
+    def live2d_model_catalog(character_id: str) -> Live2DModelCatalogResponse:
         try:
             return service_factory().catalog(character_id)
         except CharacterNotFoundError as exc:
@@ -569,7 +569,7 @@ def register_character_live2d_avatar_routes(
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
     )
-    async def activate_live2d_avatar(
+    def activate_live2d_avatar(
         character_id: str,
         request: ActivateLive2DAvatarRequest,
     ) -> Live2DAvatarActionResponse:
@@ -585,7 +585,7 @@ def register_character_live2d_avatar_routes(
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
     )
-    async def disable_live2d_avatar(character_id: str) -> Live2DAvatarActionResponse:
+    def disable_live2d_avatar(character_id: str) -> Live2DAvatarActionResponse:
         try:
             return service_factory().disable(character_id)
         except CharacterNotFoundError as exc:
@@ -606,7 +606,7 @@ def register_character_live2d_avatar_routes(
         },
         tags=["characters"],
     )
-    async def live2d_runtime_file(filename: str) -> FileResponse:
+    def live2d_runtime_file(filename: str) -> FileResponse:
         try:
             path = service_factory().runtime_file(filename)
         except FileNotFoundError as exc:
@@ -631,7 +631,7 @@ def register_character_live2d_avatar_routes(
         },
         tags=["characters"],
     )
-    async def live2d_model_file(asset_id: str, asset_path: str) -> FileResponse:
+    def live2d_model_file(asset_id: str, asset_path: str) -> FileResponse:
         try:
             path = service_factory().model_file(asset_id, asset_path)
         except FileNotFoundError as exc:

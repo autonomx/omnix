@@ -18,14 +18,14 @@ def create_live_speech_router() -> APIRouter:
         "/api/live-speech/protocol",
         response_model=LiveSpeechProtocolResponse,
     )
-    async def protocol() -> LiveSpeechProtocolResponse:
+    def protocol() -> LiveSpeechProtocolResponse:
         return LiveSpeechProtocolResponse(ok=True, **compatibility_payload())
 
     @router.get(
         "/api/live-speech/status",
         response_model=LiveSpeechStatusResponse,
     )
-    async def status() -> LiveSpeechStatusResponse:
+    def status() -> LiveSpeechStatusResponse:
         return LiveSpeechStatusResponse.model_validate(live_speech_status_payload())
 
     async def realtime_endpoint(channel: WebSocket) -> None:

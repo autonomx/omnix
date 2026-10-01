@@ -833,7 +833,7 @@ def create_trading_strategy_router(
         response_model=StrategyRangeBacktestAcceptedResponse,
         status_code=202,
     )
-    async def backtest_strategy_range(
+    def backtest_strategy_range(
         strategy_id: str,
         request: StrategyRangeBacktestRequest,
     ) -> StrategyRangeBacktestAcceptedResponse:
@@ -868,7 +868,7 @@ def create_trading_strategy_router(
         "/{strategy_id}/backtest/range/{run_id}",
         response_model=StrategyRangeBacktestProgressResponse,
     )
-    async def get_backtest_range_progress(
+    def get_backtest_range_progress(
         strategy_id: str,
         run_id: str,
     ) -> StrategyRangeBacktestProgressResponse:

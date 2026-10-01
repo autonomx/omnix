@@ -46,15 +46,15 @@ def create_assistant_tool_router() -> APIRouter:
     approval_rate_limit = rate_limited("approvals")
 
     @router.get("/api/assistant/tools/config", response_model=AssistantToolsConfigPayload, tags=["assistant-tools"])
-    async def assistant_tools_config() -> AssistantToolsConfigPayload:
+    def assistant_tools_config() -> AssistantToolsConfigPayload:
         return load_assistant_tools_config()
 
     @router.post("/api/assistant/tools/config", response_model=AssistantToolsConfigPayload, tags=["assistant-tools"])
-    async def save_assistant_tools_config_endpoint(request: AssistantToolsConfigPayload) -> AssistantToolsConfigPayload:
+    def save_assistant_tools_config_endpoint(request: AssistantToolsConfigPayload) -> AssistantToolsConfigPayload:
         return save_assistant_tools_config(request)
 
     @router.post("/api/assistant/tools/review", response_model=AssistantToolReviewDecision, tags=["assistant-tools"])
-    async def review_assistant_tool_endpoint(request: AssistantToolRequest) -> AssistantToolReviewDecision:
+    def review_assistant_tool_endpoint(request: AssistantToolRequest) -> AssistantToolReviewDecision:
         return review_assistant_tool_request(request)
 
     @router.post("/api/assistant/tools/proposals", response_model=AssistantToolProposalPayload, tags=["assistant-tools"])
@@ -89,23 +89,23 @@ def create_assistant_tool_router() -> APIRouter:
         return _proposal_operation(lambda: service.execute(proposal_id, expected_request=request))
 
     @router.post("/api/assistant/tools/intent", response_model=AssistantToolIntent, tags=["assistant-tools"])
-    async def assistant_tool_intent_endpoint(request: AssistantToolIntentRequest) -> AssistantToolIntent:
+    def assistant_tool_intent_endpoint(request: AssistantToolIntentRequest) -> AssistantToolIntent:
         return detect_assistant_tool_intent(request.message)
 
     @router.get("/api/assistant/tools/dashboard", response_model=AssistantCapabilityDashboard, tags=["assistant-tools"])
-    async def assistant_tool_dashboard_endpoint() -> AssistantCapabilityDashboard:
+    def assistant_tool_dashboard_endpoint() -> AssistantCapabilityDashboard:
         return build_assistant_capability_dashboard()
 
     @router.get("/api/assistant/tools/ledger", response_model=AssistantToolLedgerPayload, tags=["assistant-tools"])
-    async def assistant_tool_ledger_endpoint(limit: int = 100) -> AssistantToolLedgerPayload:
+    def assistant_tool_ledger_endpoint(limit: int = 100) -> AssistantToolLedgerPayload:
         return load_assistant_tool_ledger(limit=limit)
 
     @router.get("/api/assistant/tools/connect/{tool_id}", response_model=AssistantToolConnectionStartPayload, tags=["assistant-tools"])
-    async def assistant_tool_connection_start_endpoint(request: Request, tool_id: str) -> AssistantToolConnectionStartPayload:
+    def assistant_tool_connection_start_endpoint(request: Request, tool_id: str) -> AssistantToolConnectionStartPayload:
         return assistant_tool_connection_start_payload(tool_id, str(request.base_url).rstrip("/"))
 
     @router.post("/api/assistant/tools/connect/{tool_id}/oauth-client", response_model=AssistantToolConnectionStartPayload, tags=["assistant-tools"])
-    async def assistant_tool_oauth_client_endpoint(request: Request, tool_id: str, payload: AssistantToolOAuthClientPayload) -> AssistantToolConnectionStartPayload:
+    def assistant_tool_oauth_client_endpoint(request: Request, tool_id: str, payload: AssistantToolOAuthClientPayload) -> AssistantToolConnectionStartPayload:
         return save_assistant_tool_oauth_client(tool_id, payload, str(request.base_url).rstrip("/"))
 
     @router.get(
@@ -116,7 +116,7 @@ def create_assistant_tool_router() -> APIRouter:
         responses={303: {"description": "OAuth result redirect back to the web client."}},
         tags=["assistant-tools"],
     )
-    async def assistant_tool_google_callback_endpoint(request: Request, code: str = "", state: str = "gmail") -> RedirectResponse:
+    def assistant_tool_google_callback_endpoint(request: Request, code: str = "", state: str = "gmail") -> RedirectResponse:
         return _assistant_tool_connection_redirect(complete_google_connection(code, state, str(request.base_url).rstrip("/")))
 
     @router.get(
@@ -127,11 +127,11 @@ def create_assistant_tool_router() -> APIRouter:
         responses={303: {"description": "OAuth result redirect back to the web client."}},
         tags=["assistant-tools"],
     )
-    async def assistant_tool_github_callback_endpoint(request: Request, code: str = "", state: str = "github") -> RedirectResponse:
+    def assistant_tool_github_callback_endpoint(request: Request, code: str = "", state: str = "github") -> RedirectResponse:
         return _assistant_tool_connection_redirect(complete_github_connection(code, state, str(request.base_url).rstrip("/")))
 
     @router.post("/api/hermes/assistant/tools/review", response_model=HermesAssistantToolReviewPayload, tags=["hermes-assistant-tools"])
-    async def hermes_assistant_tool_review_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolReviewPayload:
+    def hermes_assistant_tool_review_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolReviewPayload:
         return hermes_assistant_tool_review_payload(request.user_request, request.request)
 
     return router

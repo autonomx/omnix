@@ -110,7 +110,7 @@ def command_task_graph_run(
         }
     },
 )
-async def stream_task_graph_events(
+def stream_task_graph_events(
     run_id: str,
     after_sequence: int = 0,
 ) -> StreamingResponse:

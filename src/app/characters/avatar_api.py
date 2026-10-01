@@ -28,7 +28,7 @@ def register_character_avatar_routes(
         response_model=CharacterAvatarPack | None,
         tags=["characters"],
     )
-    async def get_optional_character_avatar_pack(
+    def get_optional_character_avatar_pack(
         character_id: str,
     ) -> CharacterAvatarPack | None:
         try:
@@ -41,7 +41,7 @@ def register_character_avatar_routes(
         response_model=CharacterAvatarPack,
         tags=["characters"],
     )
-    async def get_character_avatar_pack(character_id: str) -> CharacterAvatarPack:
+    def get_character_avatar_pack(character_id: str) -> CharacterAvatarPack:
         try:
             return service_factory().get(character_id)
         except CharacterNotFoundError as exc:
@@ -52,7 +52,7 @@ def register_character_avatar_routes(
         response_model=CharacterAvatarPack,
         tags=["characters"],
     )
-    async def upsert_character_avatar_pack(
+    def upsert_character_avatar_pack(
         character_id: str,
         request: UpsertCharacterAvatarPackRequest,
     ) -> CharacterAvatarPack:
@@ -70,7 +70,7 @@ def register_character_avatar_routes(
         response_model=DeleteCharacterAvatarPackResponse,
         tags=["characters"],
     )
-    async def delete_character_avatar_pack(
+    def delete_character_avatar_pack(
         character_id: str,
     ) -> DeleteCharacterAvatarPackResponse:
         try:
