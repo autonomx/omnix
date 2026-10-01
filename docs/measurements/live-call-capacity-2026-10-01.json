@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "accepted_calls": 1,
+      "capacity_units": 1,
+      "concurrent_requests": 4,
+      "overload_429": 3,
+      "peak_active_calls": 1,
+      "request_durations_ms": [
+        2035.91,
+        1015.17,
+        1015.5,
+        1013.89
+      ]
+    },
+    {
+      "accepted_calls": 2,
+      "capacity_units": 2,
+      "concurrent_requests": 4,
+      "overload_429": 2,
+      "peak_active_calls": 2,
+      "request_durations_ms": [
+        2046.65,
+        2046.32,
+        1154.18,
+        1154.8
+      ]
+    }
+  ],
+  "evidence": {
+    "note": "source_revision is the GitHub pull-request merge commit for the PR head above",
+    "pr_head": "51059f27e20fa4e717f4ae34e93280a562de688f",
+    "test": "src/tests/persistence/test_device_permits.py::test_live_fake_tts_load_scales_with_device_capacity_and_returns_429",
+    "workflow_run": "https://github.com/autonomx/omnix/actions/runs/36839933567"
+  },
+  "measured_at_utc": "2026-10-01T09:03:00.987778+00:00",
+  "measurement": "live-call-fake-tts-capacity",
+  "result": "passed",
+  "source_revision": "b986756945247df3f54dd8afad73a375ab1298ad"
+}
