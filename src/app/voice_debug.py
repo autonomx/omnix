@@ -10,6 +10,8 @@ from __future__ import annotations
 from app.config.env import environment
 
 import hashlib
+import hmac
+import secrets
 import itertools
 import json
 import logging
@@ -122,9 +124,14 @@ def _logger(channel: str) -> logging.Logger:
         return logger
 
 
+# A per-process key: an unsalted hash of a short utterance can be reversed by
+# hashing guesses, while a keyed one still correlates requests within a run.
+_FINGERPRINT_KEY = secrets.token_bytes(32)
+
+
 def text_fingerprint(text: str) -> str:
-    """Return a non-reversible short fingerprint for correlating TTS requests."""
-    return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()[:16]
+    """Return a short keyed fingerprint for correlating TTS requests within this process."""
+    return hmac.new(_FINGERPRINT_KEY, str(text or "").encode("utf-8"), hashlib.sha256).hexdigest()[:16]
 
 
 def voice_debug_log(
