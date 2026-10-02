@@ -221,5 +221,16 @@ class EventReaders:
             for reader in self._readers.values():
                 reader.stop()
 
+    def diagnostics(self) -> dict[str, int]:
+        """Readers, open subscriptions, queries and live NOTIFY listeners in this process."""
+        with self._lock:
+            readers = list(self._readers.values())
+        return {
+            "readers": len(readers),
+            "subscribers": sum(reader.subscriber_count for reader in readers),
+            "queries": sum(reader.queries for reader in readers),
+            "listeners_alive": sum(1 for reader in readers if reader._listener is not None and reader._listener.is_alive()),
+        }
+
 
 __all__ = ["EventCursor", "EventReader", "EventReaders", "REPLAY_LIMIT", "Subscription", "event_cursor"]

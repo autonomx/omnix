@@ -206,4 +206,23 @@ class RetentionWorker:
         logger.info("retention_run status=%s deleted=%s skipped=%s", status, report.deleted, report.skipped)
 
 
-__all__ = ["HANDLERS", "RetentionPolicy", "RetentionReport", "RetentionWorker"]
+def latest_cleanup_run(connection: Any) -> dict[str, Any] | None:
+    """The newest retention run for diagnostics: status, times, counts and the error's class only."""
+    row = connection.execute(
+        """SELECT status, started_at, completed_at, deleted_counts, error
+             FROM omnix_lifecycle_cleanup_runs ORDER BY id DESC LIMIT 1"""
+    ).fetchone()
+    if row is None:
+        return None
+    error = str(row[4] or "")
+    return {
+        "status": str(row[0]),
+        "started_at": row[1].isoformat() if row[1] is not None else None,
+        "completed_at": row[2].isoformat() if row[2] is not None else None,
+        "deleted": {str(key): int(value) for key, value in dict(row[3] or {}).items()},
+        # Stored as "<Type>: <message>"; the message can name tables and values.
+        "error_class": error.split(":", 1)[0].strip() or None if error else None,
+    }
+
+
+__all__ = ["HANDLERS", "RetentionPolicy", "RetentionReport", "RetentionWorker", "latest_cleanup_run"]

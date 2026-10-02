@@ -147,6 +147,7 @@ needs `admin:metrics`). Scrape each gateway process directly. The catalog and
 label rules are in [operations/METRICS.md](operations/METRICS.md).
 
 Objectives and their error budget are in [operations/SLOS.md](operations/SLOS.md).
+The diagnostics document (`/api/diagnostics`) is described in [operations/DIAGNOSTICS.md](operations/DIAGNOSTICS.md).
 Prometheus alert rules: `deploy/observability/alerts.yml`; Grafana dashboard
 (import with a Prometheus data source): `deploy/observability/dashboards/omnix-overview.json`.
 

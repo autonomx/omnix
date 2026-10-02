@@ -180,3 +180,25 @@ def test_published_outbox_growth_is_bounded(database) -> None:
             "SELECT count(*) FROM omnix_outbox_events WHERE aggregate_id = %s", (aggregate,)
         ).fetchone()[0]
     assert remaining == 7  # published within the 7-day policy (days 0-6)
+
+
+def test_diagnostics_report_the_latest_run_without_its_error_text(database) -> None:
+    from app.persistence.retention import latest_cleanup_run
+
+    with _admin() as admin:
+        run_id = admin.execute(
+            """INSERT INTO omnix_lifecycle_cleanup_runs (status, completed_at, deleted_counts, error)
+               VALUES ('failed', now(), '{"jobs": 3}'::jsonb,
+                       'UndefinedTable: relation "omnix_private_table" does not exist')
+               RETURNING id"""
+        ).fetchone()[0]
+    try:
+        with database.transaction() as connection:
+            run = latest_cleanup_run(connection)
+    finally:
+        with _admin() as admin:
+            admin.execute("DELETE FROM omnix_lifecycle_cleanup_runs WHERE id = %s", (run_id,))
+
+    assert run["status"] == "failed" and run["deleted"] == {"jobs": 3}
+    assert run["error_class"] == "UndefinedTable"
+    assert "omnix_private_table" not in str(run)

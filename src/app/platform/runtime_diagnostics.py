@@ -10,6 +10,7 @@ from .diagnostics import RuntimeDiagnostics
 
 def _durable_snapshot(services):
     from app.persistence.authority import AuthorityOperation, require_authority_operation
+    from app.persistence.retention import latest_cleanup_run
     from app.persistence.unit_of_work import unit_of_work
 
     jobs = services.jobs
@@ -22,6 +23,7 @@ def _durable_snapshot(services):
         session_owners = snapshot["session_owners"]
         dead_letters = snapshot["dead_letter_count"]
         outbox = work.outbox.lag(jobs.context)
+        retention = latest_cleanup_run(work.connection)
         work.rollback()
     return {
         "connectivity": True, "authority_state": policy.authority_state,
@@ -29,6 +31,7 @@ def _durable_snapshot(services):
         "pool": database.pool_statistics(),
         # Events the outbox relay has not delivered yet (WP-5.3).
         "outbox": outbox,
+        "retention": retention,
     }, {
         "available": True,
         "by_resource_class": [{"resource_class": resource, "status": status, "count": count} for resource, status, count, _, _ in groups],
@@ -82,7 +85,16 @@ def runtime_diagnostics(state) -> RuntimeDiagnostics:
     stream_snapshot = tts_snapshot() if callable(tts_snapshot) else {}
     resolver = getattr(state, 'live_voice_tts_provider_resolver', None)
     delivery = getattr(state, 'live_voice_delivery_persistence_worker', None)
+    from app.persistence.migrations import SCHEMA_KNOWN
+    from app.runtime.feature_catalog import enabled_feature_ids
+
+    readers = getattr(state, "event_readers", None)
+    retention = postgres.pop("retention", None)
     return RuntimeDiagnostics(
+        version={"build_revision": config.build_revision, "application_schema": SCHEMA_KNOWN},
+        features=sorted(enabled_feature_ids(config)),
+        events=readers.diagnostics() if readers is not None else {},
+        retention=retention,
         process={"process_id": os.getpid(), "runtime_id": getattr(owner, 'node_id', None),
                  "gateway_role": config.gateway_role.value, "uptime_seconds": time.monotonic() - state.started_monotonic,
                  "build_revision": config.build_revision, "capabilities": sorted(value.value for value in capabilities.granted),

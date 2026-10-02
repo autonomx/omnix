@@ -14020,6 +14020,32 @@ export interface components {
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
         };
+        /**
+         * EventReaderDiagnostics
+         * @description Live job events in this process (WP-5.4).
+         */
+        EventReaderDiagnostics: {
+            /**
+             * Listeners Alive
+             * @default 0
+             */
+            listeners_alive: number;
+            /**
+             * Queries
+             * @default 0
+             */
+            queries: number;
+            /**
+             * Readers
+             * @default 0
+             */
+            readers: number;
+            /**
+             * Subscribers
+             * @default 0
+             */
+            subscribers: number;
+        };
         /** EvidenceAcquisitionBatch */
         EvidenceAcquisitionBatch: {
             /** Batch Id */
@@ -22022,6 +22048,24 @@ export interface components {
             /** Resource Type */
             resource_type: string;
         };
+        /**
+         * RetentionRunDiagnostics
+         * @description The newest retention run; the error is reported by class only.
+         */
+        RetentionRunDiagnostics: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Deleted */
+            deleted?: {
+                [key: string]: number;
+            };
+            /** Error Class */
+            error_class?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Status */
+            status: string;
+        };
         /** RetiredWorkerProtocolResponse */
         RetiredWorkerProtocolResponse: {
             /** Detail */
@@ -23491,7 +23535,10 @@ export interface components {
              */
             max_wall_time_seconds: number;
         };
-        /** RuntimeDiagnostics */
+        /**
+         * RuntimeDiagnostics
+         * @description One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.
+         */
         RuntimeDiagnostics: {
             /** Background */
             background?: {
@@ -23501,6 +23548,9 @@ export interface components {
             chat?: {
                 [key: string]: unknown;
             };
+            events?: components["schemas"]["EventReaderDiagnostics"];
+            /** Features */
+            features?: string[];
             /** Jobs */
             jobs?: {
                 [key: string]: unknown;
@@ -23517,19 +23567,21 @@ export interface components {
             replicas?: {
                 [key: string]: unknown;
             };
+            retention?: components["schemas"]["RetentionRunDiagnostics"] | null;
             /** Scheduler */
             scheduler?: {
                 [key: string]: unknown;
             };
             /**
              * Schema Version
-             * @default 1
+             * @default 2
              */
             schema_version: number;
             /** Tts */
             tts?: {
                 [key: string]: unknown;
             };
+            version?: components["schemas"]["VersionDiagnostics"] | null;
         };
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: {
@@ -27858,6 +27910,13 @@ export interface components {
              * @default true
              */
             required: boolean;
+        };
+        /** VersionDiagnostics */
+        VersionDiagnostics: {
+            /** Application Schema */
+            application_schema: string;
+            /** Build Revision */
+            build_revision?: string | null;
         };
         /** VersionedOutcomeLabels */
         VersionedOutcomeLabels: {

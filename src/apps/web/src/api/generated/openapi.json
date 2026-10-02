@@ -11682,6 +11682,33 @@
         "title": "DiagnosticsPayload",
         "type": "object"
       },
+      "EventReaderDiagnostics": {
+        "description": "Live job events in this process (WP-5.4).",
+        "properties": {
+          "listeners_alive": {
+            "default": 0,
+            "title": "Listeners Alive",
+            "type": "integer"
+          },
+          "queries": {
+            "default": 0,
+            "title": "Queries",
+            "type": "integer"
+          },
+          "readers": {
+            "default": 0,
+            "title": "Readers",
+            "type": "integer"
+          },
+          "subscribers": {
+            "default": 0,
+            "title": "Subscribers",
+            "type": "integer"
+          }
+        },
+        "title": "EventReaderDiagnostics",
+        "type": "object"
+      },
       "EvidenceAcquisitionBatch": {
         "additionalProperties": false,
         "properties": {
@@ -32026,6 +32053,60 @@
         "title": "ResourceScope",
         "type": "object"
       },
+      "RetentionRunDiagnostics": {
+        "description": "The newest retention run; the error is reported by class only.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "deleted": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Deleted",
+            "type": "object"
+          },
+          "error_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Class"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "RetentionRunDiagnostics",
+        "type": "object"
+      },
       "RetiredWorkerProtocolResponse": {
         "properties": {
           "detail": {
@@ -34976,6 +35057,7 @@
         "type": "object"
       },
       "RuntimeDiagnostics": {
+        "description": "One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md.",
         "properties": {
           "background": {
             "additionalProperties": true,
@@ -34986,6 +35068,16 @@
             "additionalProperties": true,
             "title": "Chat",
             "type": "object"
+          },
+          "events": {
+            "$ref": "#/components/schemas/EventReaderDiagnostics"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
           },
           "jobs": {
             "additionalProperties": true,
@@ -35007,13 +35099,23 @@
             "title": "Replicas",
             "type": "object"
           },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetentionRunDiagnostics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scheduler": {
             "additionalProperties": true,
             "title": "Scheduler",
             "type": "object"
           },
           "schema_version": {
-            "default": 1,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -35021,6 +35123,16 @@
             "additionalProperties": true,
             "title": "Tts",
             "type": "object"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionDiagnostics"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "RuntimeDiagnostics",
@@ -45430,6 +45542,30 @@
           "description"
         ],
         "title": "ValidationSpec",
+        "type": "object"
+      },
+      "VersionDiagnostics": {
+        "properties": {
+          "application_schema": {
+            "title": "Application Schema",
+            "type": "string"
+          },
+          "build_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Revision"
+          }
+        },
+        "required": [
+          "application_schema"
+        ],
+        "title": "VersionDiagnostics",
         "type": "object"
       },
       "VersionedOutcomeLabels": {

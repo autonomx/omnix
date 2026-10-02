@@ -12,8 +12,38 @@ from app.providers.cache_status import ProviderModelCachePayload, get_provider_m
 from app.persistence.device_permits import default_device_permit_service
 
 
+class EventReaderDiagnostics(BaseModel):
+    """Live job events in this process (WP-5.4)."""
+
+    readers: int = 0
+    subscribers: int = 0
+    queries: int = 0
+    listeners_alive: int = 0
+
+
+class RetentionRunDiagnostics(BaseModel):
+    """The newest retention run; the error is reported by class only."""
+
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    deleted: dict[str, int] = Field(default_factory=dict)
+    error_class: str | None = None
+
+
+class VersionDiagnostics(BaseModel):
+    build_revision: str | None = None
+    application_schema: str
+
+
 class RuntimeDiagnostics(BaseModel):
-    schema_version: int = 1
+    """One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md."""
+
+    schema_version: int = 2
+    version: VersionDiagnostics | None = None
+    features: list[str] = Field(default_factory=list)
+    events: EventReaderDiagnostics = Field(default_factory=EventReaderDiagnostics)
+    retention: RetentionRunDiagnostics | None = None
     process: dict[str, Any] = Field(default_factory=dict)
     postgresql: dict[str, Any] = Field(default_factory=dict)
     background: dict[str, Any] = Field(default_factory=dict)
