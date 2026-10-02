@@ -9,6 +9,8 @@ from app.providers import ChatMessage
 from app.providers.service import get_provider
 from app.settings.access import load_settings
 
+from .structured_call import json_object_call
+
 
 DOCUMENT_STRUCTURE_CLASSIFIER_VERSION = "document-structure-classifier-v1"
 _REQUEST_TIMEOUT_SECONDS = 60.0
@@ -25,7 +27,7 @@ _SYSTEM = (
 
 
 def local_structure_classifier() -> tuple[
-    Callable[[dict[str, Any]], str], dict[str, Any]
+    Callable[[dict[str, Any]], dict[str, Any]], dict[str, Any]
 ] | None:
     """Use the configured provider at low reasoning effort only for uncertain regions."""
     try:
@@ -48,23 +50,22 @@ def local_structure_classifier() -> tuple[
         "reasoning_effort": "low",
     }
 
-    def classify(context: dict[str, Any]) -> str:
-        response = provider.chat_completion(
-            messages=[
+    def classify(context: dict[str, Any]) -> dict[str, Any]:
+        value, served_model = json_object_call(
+            provider,
+            [
                 ChatMessage(role="system", content=_SYSTEM),
                 ChatMessage(
                     role="user",
                     content=json.dumps(context, ensure_ascii=False, sort_keys=True),
                 ),
             ],
-            stream=False,
-            reasoning_effort="low",
+            contract_id="audiobook.document_structure",
             request_timeout_seconds=_REQUEST_TIMEOUT_SECONDS,
+            options={"reasoning_effort": "low"},
         )
-        details["model"] = getattr(response, "model", None) or configured_model
-        content = getattr(response, "content", "")
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("document structure classifier returned an empty response")
-        return content
+        if served_model:
+            details["model"] = served_model
+        return value
 
     return classify, details

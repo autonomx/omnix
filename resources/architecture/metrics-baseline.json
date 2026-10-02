@@ -396,6 +396,7 @@
       "app.audiobook.speech_exclusions",
       "app.audiobook.speech_plan",
       "app.audiobook.streaming",
+      "app.audiobook.structured_call",
       "app.audiobook.style_discovery",
       "app.audiobook.worker",
       "app.character_interactions",
@@ -7486,5 +7487,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "d23d0dce0d10f42617f5b33c41e7dfe5c3eb71dbd45942163618f0949da5dcc6"
+  "source_digest": "9bdf6f0151b82bf11fc7ac5b51496633df7314b5e9d1416805226a7ecff5ae99"
 }
