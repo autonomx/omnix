@@ -29,6 +29,7 @@ _metrics: dict[str, Any] | None = None
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
     "auth_rejections", "rate_limited", "retention_deleted", "job_duration",
+    "sse_subscribers", "sse_delivered", "sse_resyncs",
 )
 
 
@@ -74,6 +75,17 @@ def _build() -> dict[str, Any]:
         "job_duration": Histogram(
             "omnix_job_execution_seconds", "Durable job executions by type and outcome.",
             ("job_type", "outcome"), buckets=_JOB_DURATION_BUCKETS, registry=registry,
+        ),
+        "sse_subscribers": Gauge(
+            "omnix_sse_subscribers", "Open server-sent event streams, by stream.", ("stream",), registry=registry,
+        ),
+        "sse_delivered": Counter(
+            "omnix_sse_events_delivered", "Events written to server-sent event streams, by stream and phase.",
+            ("stream", "phase"), registry=registry,
+        ),
+        "sse_resyncs": Counter(
+            "omnix_sse_resyncs", "Streams closed with a resync, by stream and reason.", ("stream", "reason"),
+            registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -182,6 +194,27 @@ def record_rate_limit_rejection(limit: str) -> None:
 def record_job_execution(job_type: str, outcome: str, seconds: float) -> None:
     """One durable job execution; ``outcome`` is the job's resulting status, ``lease_lost`` or ``error``."""
     _get()["job_duration"].labels(job_type, outcome).observe(seconds)
+
+
+@contextlib.contextmanager
+def sse_subscriber(stream: str) -> Iterator[None]:
+    """Count an open server-sent event stream for the block."""
+    gauge = _get()["sse_subscribers"].labels(stream)
+    gauge.inc()
+    try:
+        yield
+    finally:
+        gauge.dec()
+
+
+def record_sse_delivered(stream: str, phase: str) -> None:
+    """One event written; ``phase`` is ``replay`` (from the client's cursor) or ``live``."""
+    _get()["sse_delivered"].labels(stream, phase).inc()
+
+
+def record_sse_resync(stream: str, reason: str) -> None:
+    """A stream closed with ``event: resync``: ``replay_limit`` or ``overflow`` (the subscriber fell behind)."""
+    _get()["sse_resyncs"].labels(stream, reason).inc()
 
 
 def record_retention_deleted(record_type: str, rows: int) -> None:
@@ -416,6 +449,7 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 __all__ = [
     "CapacityCollector", "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
     "event_loop_lag_monitor", "exposition", "record_job_execution", "record_retention_deleted",
+    "record_sse_delivered", "record_sse_resync", "sse_subscriber",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

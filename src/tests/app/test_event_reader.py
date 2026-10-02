@@ -43,11 +43,22 @@ def test_subscriber_count_does_not_change_the_query_rate() -> None:
     assert asyncio.run(scenario(1)) == asyncio.run(scenario(100))
 
 
+def _sse_sample(name: str, labels: str) -> float:
+    from app.observability.metrics import exposition
+
+    prefix = f"{name}{{{labels}}} "
+    lines = [line for line in exposition()[0].decode().splitlines() if line.startswith(prefix)]
+    return float(lines[0].split()[-1]) if lines else 0.0
+
+
 def test_a_subscriber_that_falls_behind_is_told_to_resync() -> None:
+    resyncs = _sse_sample("omnix_sse_resyncs_total", 'reason="overflow",stream="jobs"')
+
     async def scenario() -> list[str]:
         reader = _Reader([])
         stream = committed_event_stream(reader)
         chunks = [await stream.__anext__()]  # open comment; subscription exists
+        assert _sse_sample("omnix_sse_subscribers", 'stream="jobs"') >= 1
         subscription = next(iter(reader._subscribers))
         reader.store = [_event(index) for index in range(1, SUBSCRIBER_QUEUE_SIZE + 5)]
         reader.poll_once()
@@ -59,6 +70,8 @@ def test_a_subscriber_that_falls_behind_is_told_to_resync() -> None:
 
     chunks = asyncio.run(scenario())
     assert chunks[-1].startswith("event: resync")
+    assert _sse_sample("omnix_sse_resyncs_total", 'reason="overflow",stream="jobs"') - resyncs == 1
+    assert _sse_sample("omnix_sse_subscribers", 'stream="jobs"') == 0
     ids = [chunk.splitlines()[0] for chunk in chunks if chunk.startswith("id:")]
     assert len(ids) == len(set(ids))  # replayed events are not repeated from the queue
 

@@ -70,6 +70,16 @@ is the provider's name (`lmstudio`, `openrouter`, ...) or the service
 | `omnix_provider_response_seconds` | histogram | `client` | Time from sending to the response headers (to the first byte of a stream, not its end). |
 | `omnix_provider_retries_total` | counter | `client` | Attempts sent again after a retryable failure. |
 
+### Event streams
+
+The shared job event stream (`/events`, `/api/jobs/events`; `stream="jobs"`).
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_sse_subscribers` | gauge | `stream` | Open streams in this process. |
+| `omnix_sse_events_delivered_total` | counter | `stream`, `phase` | Events written: `replay` (catching up from the client's `Last-Event-ID`) or `live`. |
+| `omnix_sse_resyncs_total` | counter | `stream`, `reason` | Streams closed with `event: resync`: `replay_limit` (too far behind to replay) or `overflow` (the subscriber's queue filled). |
+
 ### Job queue and outbox
 
 Read from PostgreSQL on each scrape (one indexed query over the workspace's
@@ -135,4 +145,4 @@ process registry: the provider metrics above for calls its jobs make, and
 |---|---|
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
 | Speech | TTS first-audio latency; live calls active; STT latency |
-| Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
+| Events and outbox | outbox publish rate; agent-run and Chat streams |

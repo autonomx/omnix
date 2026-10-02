@@ -2287,7 +2287,7 @@
       },
       {
         "call": "asyncio.sleep",
-        "line": 54,
+        "line": 65,
         "path": "src/tests/app/test_event_reader.py"
       },
       {
@@ -7466,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "6dd40da6fb078d7ee6571c497581471e910f76adf64e73969d2a462d6a050b5f"
+  "source_digest": "5a4e9ccb1345faf3be54a40332409d58a420c3aa1df953f96103c890cf0d31ba"
 }
