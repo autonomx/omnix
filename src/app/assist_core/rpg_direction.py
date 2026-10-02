@@ -2,6 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from app.prompts import prompt_template
+
+
+BUILD_DIRECTION_PROMPT_CONTEXT_TEMPLATE = prompt_template(
+    'assist_core.rpg_direction.build_direction_prompt_context', "1",
+    (
+        'RPG simulation owns inventory, currency, XP, combat, location, quests, party, and '
+        'save/load state.'
+    ),
+)
+
 
 ALLOWED_SUGGESTION_KEYS = {
     "npc_intent",
@@ -69,5 +80,5 @@ def build_direction_prompt_context(payload: dict[str, Any]) -> dict[str, Any]:
         "accepted_keys": review.accepted_keys,
         "rejected_keys": review.rejected_keys,
         "reason": review.reason,
-        "truth_boundary": "RPG simulation owns inventory, currency, XP, combat, location, quests, party, and save/load state.",
+        "truth_boundary": BUILD_DIRECTION_PROMPT_CONTEXT_TEMPLATE.text,
     }

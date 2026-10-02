@@ -27,6 +27,30 @@ from .pi_runtime_core import (
     pi_rpc_argv as _core_pi_rpc_argv,
 )
 from .repository_guidance import compile_repository_guidance
+from app.prompts import prompt_template
+
+
+MANDATORY_BROWSER_VALIDATION_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.pi_runtime.mandatory_browser_validation_prompt', "1",
+    (
+        'MANDATORY UI VALIDATION FOR THIS RUN: Omnix has issued governed browser authority '
+        'because this objective changes a rendered UI. Before settling, open the relevant route '
+        'with browser.open using workspace_preview=true, inspect the exact component named by '
+        'the objective and the final diff, exercise the changed interaction, and finish with '
+        'browser.assert_* against the actual changed element/state. Do not substitute a unit '
+        'test, screenshot, or a similarly named shell control for this proof.'
+    ),
+)
+
+INITIAL_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.pi_runtime.initial_prompt', "1",
+    (
+        'INDEPENDENT REVIEW MODE: remain read-only, inspect the immutable snapshot critically, '
+        'do not propose authority expansion, do not modify files, and return the structured '
+        'verdict requested by the review task. Reviewer process success is not approval.'
+    ),
+)
+
 
 
 _ENGINEERING_WORKFLOW = """PI-OWNED ENGINEERING LOOP FOR MUTATING CODING TASKS
@@ -56,13 +80,7 @@ def _mandatory_browser_validation_prompt(spec: AgentRunSpec) -> str:
     ):
         return ""
     return (
-        "MANDATORY UI VALIDATION FOR THIS RUN: Omnix has issued governed browser "
-        "authority because this objective changes a rendered UI. Before settling, "
-        "open the relevant route with browser.open using workspace_preview=true, "
-        "inspect the exact component named by the objective and the final diff, "
-        "exercise the changed interaction, and finish with browser.assert_* against "
-        "the actual changed element/state. Do not substitute a unit test, screenshot, "
-        "or a similarly named shell control for this proof."
+        MANDATORY_BROWSER_VALIDATION_PROMPT_TEMPLATE.text
     )
 
 
@@ -315,9 +333,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
                 sections.append(browser_prompt)
         else:
             sections.append(
-                "INDEPENDENT REVIEW MODE: remain read-only, inspect the immutable snapshot critically, "
-                "do not propose authority expansion, do not modify files, and return the structured verdict "
-                "requested by the review task. Reviewer process success is not approval."
+                INITIAL_PROMPT_TEMPLATE.text
             )
         return "\n\n".join(sections)
 

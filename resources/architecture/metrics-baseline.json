@@ -724,6 +724,7 @@
       "app.production",
       "app.prompts",
       "app.prompts.models",
+      "app.prompts.registry",
       "app.prompts.renderer",
       "app.providers",
       "app.providers.audio_base",
@@ -2577,7 +2578,7 @@
         "category": "cache",
         "invalidation": "clear_provider_failures",
         "kind": "container",
-        "line": 105,
+        "line": 123,
         "max_entries": 4096,
         "path": "src/app/agent_runtime/pi_runtime.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2588,7 +2589,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 106,
+        "line": 124,
         "path": "src/app/agent_runtime/pi_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LAST_PROVIDER_FAILURE_LOCK"
@@ -2598,7 +2599,7 @@
         "category": "cache",
         "invalidation": "clear_semantic_task_cache",
         "kind": "container",
-        "line": 45,
+        "line": 172,
         "max_entries": 4096,
         "path": "src/app/agent_runtime/semantic_task_parser.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2609,7 +2610,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 44,
+        "line": 171,
         "path": "src/app/agent_runtime/semantic_task_parser.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_CACHE_LOCK"
@@ -2620,7 +2621,7 @@
         "category": "cache",
         "invalidation": "default_agent_run_service.cache_clear",
         "kind": "function_cache",
-        "line": 2600,
+        "line": 2625,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/service.py",
@@ -2634,7 +2635,7 @@
         "category": "cache",
         "invalidation": "default_agent_run_service.cache_clear",
         "kind": "function_cache",
-        "line": 3228,
+        "line": 3239,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/service_core.py",
@@ -2726,7 +2727,7 @@
         "category": "cache",
         "invalidation": "reset_initiative_surface_history",
         "kind": "container",
-        "line": 45,
+        "line": 73,
         "max_entries": 4096,
         "path": "src/app/assistant_memory/initiative.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2737,7 +2738,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 42,
+        "line": 70,
         "path": "src/app/assistant_memory/initiative.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_SURFACE_LOCK"
@@ -2837,7 +2838,7 @@
         "category": "cache",
         "invalidation": "clear_ephemeral_call_state",
         "kind": "container",
-        "line": 27,
+        "line": 75,
         "max_entries": 512,
         "path": "src/app/assistant_memory/paralinguistic_state.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2848,7 +2849,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 26,
+        "line": 74,
         "path": "src/app/assistant_memory/paralinguistic_state.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_STORE_LOCK"
@@ -2884,7 +2885,7 @@
         "approved": true,
         "category": "cache",
         "kind": "executor",
-        "line": 22,
+        "line": 41,
         "path": "src/app/assistant_memory/structured_provider.py",
         "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores.",
         "symbol": "_PROVIDER_EXECUTOR"
@@ -3112,7 +3113,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 81,
+        "line": 107,
         "path": "src/app/characters/avatar_viseme_generation.py",
         "reason": "This is the in-memory viseme-generation adapter; PostgreSQL runtime composition selects the durable viseme repository.",
         "symbol": "_STATES"
@@ -3121,7 +3122,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 82,
+        "line": 108,
         "path": "src/app/characters/avatar_viseme_generation.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_STATES_LOCK"
@@ -7327,7 +7328,7 @@
     "inline_prompt_strings": {
       "direction": "lower",
       "target": 10,
-      "value": 200
+      "value": 97
     },
     "install_hook_functions": {
       "direction": "lower",
@@ -7502,5 +7503,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "347a025a5092f582456ae5c65cb783a2123c614e3af334c9d5d76c9a1f57e7c1"
+  "source_digest": "ed97c84741378e0dc443e63088aa1f7291ffc61f2b4d94ec2c29a9d1edd507ee"
 }

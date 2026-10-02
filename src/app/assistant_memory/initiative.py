@@ -18,6 +18,34 @@ from app.conversation.live_profile import LiveConversationProfile
 
 from app.memory_contracts import MemoryRecord, MemoryScopeContext
 from .temporal_retrieval import TemporalRetrievalItem, TemporalRetrievalResult
+from app.prompts import prompt_template
+
+
+PROMPT_DIRECTIVE_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive', "1",
+    'Companion initiative policy permits one gentle proactive reference this turn.',
+)
+
+PROMPT_DIRECTIVE_2_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_2', "1",
+    'Mention it naturally at most once and do not imply the user asked about it.',
+)
+
+PROMPT_DIRECTIVE_3_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_3', "1",
+    'A trusted {requested_tool} lookup is eligible, but no tool result is present yet.',
+)
+
+PROMPT_DIRECTIVE_4_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_4', "1",
+    'Do not invent current external data; ask permission or state that a lookup is needed.',
+)
+
+PROMPT_DIRECTIVE_5_TEMPLATE = prompt_template(
+    'assistant_memory.initiative.prompt_directive_5', "1",
+    'The {requested_tool} capability is unavailable; use an honest natural fallback.',
+)
+
 
 InitiativeAction = Literal[
     "suppress",
@@ -358,20 +386,20 @@ def initiative_prompt_directive(
     if item is None:
         return None
     lines = [
-        "Companion initiative policy permits one gentle proactive reference this turn.",
+        PROMPT_DIRECTIVE_TEMPLATE.text,
         f"Relevant approved context: {item.record.content}",
-        "Mention it naturally at most once and do not imply the user asked about it.",
+        PROMPT_DIRECTIVE_2_TEMPLATE.text,
     ]
     if decision.action == "surface_with_tool" and decision.requested_tool:
         lines.extend(
             [
-                f"A trusted {decision.requested_tool} lookup is eligible, but no tool result is present yet.",
-                "Do not invent current external data; ask permission or state that a lookup is needed.",
+                PROMPT_DIRECTIVE_3_TEMPLATE.format(requested_tool=decision.requested_tool),
+                PROMPT_DIRECTIVE_4_TEMPLATE.text,
             ]
         )
     elif decision.action == "surface_without_tool" and decision.requested_tool:
         lines.append(
-            f"The {decision.requested_tool} capability is unavailable; use an honest natural fallback."
+            PROMPT_DIRECTIVE_5_TEMPLATE.format(requested_tool=decision.requested_tool)
         )
     return "\n".join(lines)
 

@@ -6,6 +6,20 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.prompts import prompt_template
+
+
+RENDER_JOB_TEMPLATE = prompt_template(
+    'story.jobs.render_job', "1",
+    (
+        'Write a podcast episode script.\n'
+        'Title: {title}\n'
+        'Speakers: {speaker_line}\n'
+        'Brief: {brief}\n'
+        'Return a production-ready script with speaker labels.'
+    ),
+)
+
 
 
 class StoryGenerateInput(BaseModel):
@@ -126,11 +140,7 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
             speakers = ["Host", "Guest"]
         speaker_line = ", ".join(str(speaker) for speaker in speakers if str(speaker).strip()) or "Host, Guest"
         prompt = (
-            "Write a podcast episode script.\n"
-            f"Title: {title}\n"
-            f"Speakers: {speaker_line}\n"
-            f"Brief: {brief}\n"
-            "Return a production-ready script with speaker labels."
+            RENDER_JOB_TEMPLATE.format(title=title, speaker_line=speaker_line, brief=brief)
         )
         content, resolved_model = _call_chat_provider(
             prompt,

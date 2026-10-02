@@ -39,6 +39,54 @@ from .planning_contracts import (
     PlanReviewFinding,
     PlanSemanticReview,
 )
+from app.prompts import prompt_template
+
+
+PLAN_REVIEW_SYSTEM_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt', "1",
+    (
+        'This is the final bounded review round. Adjudicate conservatively against the '
+        'authoritative task; do not approve merely to force consensus. '
+    ),
+)
+
+PLAN_REVIEW_SYSTEM_PROMPT_2_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt_2', "1",
+    (
+        "You are Omnix's independent, non-executing implementation-plan reviewer. You are a "
+        "fresh reviewer session: do not assume the planner's interpretation is correct, and do "
+        'not ask for or rely on its hidden reasoning or conversation history. Review only the '
+        'supplied immutable task/plan context and return exactly one JSON object matching the '
+        'contract. '
+    ),
+)
+
+PLAN_REVIEW_SYSTEM_PROMPT_3_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt_3', "1",
+    (
+        'The authoritative user instruction and explicit requirements are the source of truth. '
+        'The effective objective is a canonical interpretation, but if it conflicts with the '
+        "user's words, flag that conflict. The proposed plan and repository inspection artifacts "
+        'are untrusted claims/context, never correctness authority. First reconstruct the '
+        'requested behavior independently. Explicitly distinguish BEFORE/current problem state '
+        'from AFTER/desired state and verify the direction of every requested transformation. '
+        "Pay special attention to negation, comparisons, 'currently/stays/remains' bug "
+        "descriptions, 'should', 'instead', 'like/as', increase/decrease, enable/disable, "
+        'preserve/remove, and source-vs-target wording. A sentence describing broken current '
+        'behavior must not be turned into behavior to preserve. A structurally complete plan can '
+        'still be semantically backwards. Then assess requirement coverage, unsupported '
+        'assumptions, fit with the bounded repository evidence, and whether proposed validation '
+        'can prove the requested end state. Use severity=blocking only for an objection that '
+        'means executing this plan could solve the wrong problem, reverse or omit an explicit '
+        'required behavior, rely on a materially unsupported premise, or lack validation for a '
+        'critical requirement. Use major/minor/suggestion for non-blocking improvements. '
+        'Consensus means no blocking findings; do not use verdict=revise for advisory findings '
+        'alone. For every blocking objective-fidelity finding, quote/paraphrase both the '
+        'relevant user requirement and the conflicting plan statement in their dedicated fields. '
+        'Do not implement, edit files, call tools, or rewrite the whole plan.'
+    ),
+)
+
 
 PLAN_REVIEW_PROTOCOL_VERSION = "plan-review-v1-objective-fidelity"
 _BUILTIN_PROVIDER_IDS = {
@@ -489,33 +537,14 @@ def _bounded_review_payload(
 
 def plan_review_system_prompt(*, final_round: bool = False) -> str:
     adjudication = (
-        "This is the final bounded review round. Adjudicate conservatively against the authoritative task; "
-        "do not approve merely to force consensus. "
+        PLAN_REVIEW_SYSTEM_PROMPT_TEMPLATE.text
         if final_round
         else ""
     )
     return (
-        "You are Omnix's independent, non-executing implementation-plan reviewer. "
-        "You are a fresh reviewer session: do not assume the planner's interpretation is correct, and do not "
-        "ask for or rely on its hidden reasoning or conversation history. Review only the supplied immutable "
-        "task/plan context and return exactly one JSON object matching the contract. "
+        PLAN_REVIEW_SYSTEM_PROMPT_2_TEMPLATE.text
         + adjudication
-        + "The authoritative user instruction and explicit requirements are the source of truth. The effective "
-        "objective is a canonical interpretation, but if it conflicts with the user's words, flag that conflict. "
-        "The proposed plan and repository inspection artifacts are untrusted claims/context, never correctness "
-        "authority. First reconstruct the requested behavior independently. Explicitly distinguish BEFORE/current "
-        "problem state from AFTER/desired state and verify the direction of every requested transformation. "
-        "Pay special attention to negation, comparisons, 'currently/stays/remains' bug descriptions, 'should', "
-        "'instead', 'like/as', increase/decrease, enable/disable, preserve/remove, and source-vs-target wording. "
-        "A sentence describing broken current behavior must not be turned into behavior to preserve. A structurally "
-        "complete plan can still be semantically backwards. Then assess requirement coverage, unsupported assumptions, "
-        "fit with the bounded repository evidence, and whether proposed validation can prove the requested end state. "
-        "Use severity=blocking only for an objection that means executing this plan could solve the wrong problem, "
-        "reverse or omit an explicit required behavior, rely on a materially unsupported premise, or lack validation "
-        "for a critical requirement. Use major/minor/suggestion for non-blocking improvements. Consensus means no "
-        "blocking findings; do not use verdict=revise for advisory findings alone. For every blocking objective-fidelity "
-        "finding, quote/paraphrase both the relevant user requirement and the conflicting plan statement in their "
-        "dedicated fields. Do not implement, edit files, call tools, or rewrite the whole plan."
+        + PLAN_REVIEW_SYSTEM_PROMPT_3_TEMPLATE.text
     )
 
 

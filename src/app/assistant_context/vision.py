@@ -11,6 +11,35 @@ import httpx
 from app.conversation.contracts import AssistantContextItem
 
 from .models import DesktopCaptureMode
+from app.prompts import prompt_template
+
+
+USER_PROMPT_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt', "1",
+    'Describe what is visible and relevant on this desktop.',
+)
+
+USER_PROMPT_2_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt_2', "1",
+    (
+        '{prompt}\n'
+        '\n'
+        'The first image is a chronological contact sheet of earlier game frames ({timing}). The '
+        'second image is the current high-resolution frame. Distinguish the current state from '
+        'visible changes and do not invent causes.'
+    ),
+)
+
+USER_PROMPT_3_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt_3', "1",
+    (
+        '{prompt}\n'
+        '\n'
+        'This image is a labeled chronological sheet ending at NOW. Distinguish the current '
+        'state from visible changes and do not invent causes.'
+    ),
+)
+
 
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 _DEFAULT_TIMEOUT_SECONDS = 25.0
@@ -308,18 +337,15 @@ class DesktopVisionClient:
         fallback_mode: FallbackMode,
         history_timestamps: list[float],
     ) -> str:
-        prompt = " ".join(question.split()).strip() or "Describe what is visible and relevant on this desktop."
+        prompt = " ".join(question.split()).strip() or USER_PROMPT_TEMPLATE.text
         if fallback_mode == "multi_image":
             timing = ", ".join(f"{value:.2f}s" for value in history_timestamps)
             return (
-                f"{prompt}\n\nThe first image is a chronological contact sheet of earlier game frames "
-                f"({timing or 'oldest to newest'}). The second image is the current high-resolution frame. "
-                "Distinguish the current state from visible changes and do not invent causes."
+                USER_PROMPT_2_TEMPLATE.format(prompt=prompt, timing=timing or 'oldest to newest')
             )
         if fallback_mode == "combined_sheet":
             return (
-                f"{prompt}\n\nThis image is a labeled chronological sheet ending at NOW. "
-                "Distinguish the current state from visible changes and do not invent causes."
+                USER_PROMPT_3_TEMPLATE.format(prompt=prompt)
             )
         return prompt
 

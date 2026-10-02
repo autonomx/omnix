@@ -19,6 +19,20 @@ from ..indicators.engine import (
 )
 from ..models import BarsResponse
 from ..service import TradingMarketDataService, default_market_data_service
+from app.prompts import prompt_template
+
+
+GENERATE_MARKET_RESEARCH_TEMPLATE = prompt_template(
+    'trading.research.market_research.generate_market_research', "1",
+    (
+        'You are the read-only Omnix market research assistant. Analyze only the supplied '
+        'normalized data. Do not invent news, fundamentals, orders, positions, alerts, or future '
+        'prices. Return one JSON object with exactly: summary (string), observations (1-8 '
+        'strings), risks (1-8 strings), confidence (number from 0 to 1). Do not include markdown '
+        'or extra keys.'
+    ),
+)
+
 
 
 MAX_RESEARCH_BARS = 200
@@ -267,10 +281,7 @@ def generate_market_research(
         raise ValueError("research_context_exceeds_bounded_prompt_size")
 
     system_prompt = (
-        "You are the read-only Omnix market research assistant. Analyze only the supplied "
-        "normalized data. Do not invent news, fundamentals, orders, positions, alerts, or future "
-        "prices. Return one JSON object with exactly: summary (string), observations (1-8 strings), "
-        "risks (1-8 strings), confidence (number from 0 to 1). Do not include markdown or extra keys."
+        GENERATE_MARKET_RESEARCH_TEMPLATE.text
     )
     user_prompt = json.dumps(
         {

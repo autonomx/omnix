@@ -81,6 +81,16 @@ CASES = [
 ]
 
 
+def test_docstrings_and_sql_in_prompt_functions_are_not_prompts():
+    source = (
+        "def build_prompt(connection):\n"
+        "    " + repr("Build the canonical prompt once per turn for every chat backend.") + "\n"
+        "    connection.execute(" + repr("SELECT id, content FROM omnix_prompt_templates WHERE id = %s") + ")\n"
+        "    return " + repr("You are a careful assistant. Answer only using the evidence given.") + "\n"
+    )
+    assert observed({APP + "chat/a.py": source})["metrics"]["inline_prompt_strings"]["value"] == 1
+
+
 @pytest.mark.parametrize("key,sources,expected", CASES, ids=[case[0] for case in CASES])
 def test_each_source_metric_detector(key, sources, expected):
     result = observed(sources)

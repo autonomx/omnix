@@ -29,6 +29,55 @@ from .models import CreateCharacterRequest
 from .repository import CharacterConflictError
 from .service import CharacterService, default_character_service
 from .voice_consent import VoiceConsentError, VoiceProfileGovernanceService
+from app.prompts import prompt_template
+
+
+VARIANT_PROMPTS_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompts', "1",
+    (
+        'Change only the clothing to: {strip}. Preserve face, hair, pose, camera, lighting, and '
+        'mouth.'
+    ),
+)
+
+VARIANT_PROMPTS_2_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompts_2', "1",
+    'Create a clean matching background: {strip}. Do not include a person or text.',
+)
+
+BASE_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.base_prompt', "1",
+    (
+        'Create one original fictional character portrait for {display_name}. '
+        '{gender_direction}{custom}Front-facing head-and-shoulders composition, centered, eyes '
+        'open, neutral relaxed expression, mouth fully closed, consistent hair and clothing, '
+        'clean even lighting, no text. This canonical portrait will be reused as a locked '
+        'reference for live-chat animation frames. Do not depict or imitate a real public person.'
+    ),
+)
+
+UPLOADED_BASE_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.uploaded_base_prompt', "1",
+    (
+        'Using the supplied user-provided image as the authoritative identity reference for '
+        '{display_name}, create one faithful front-facing head-and-shoulders live-avatar '
+        "portrait. Preserve the person's recognizable facial identity, skin tone, face "
+        'proportions, hair, and other defining features. Do not replace them with a different '
+        'person. {custom}Center the face, keep both eyes open, use a neutral relaxed expression '
+        'and a fully closed mouth, with clean even lighting and no text. This canonical portrait '
+        'will be reused as a locked reference for mouth, blink, expression, and viseme frames.'
+    ),
+)
+
+VARIANT_PROMPT_TEMPLATE = prompt_template(
+    'characters.avatar_generation_service.variant_prompt', "1",
+    (
+        'Using the supplied canonical portrait of {display_name}, preserve the exact identity, '
+        'crop, head position, hair, clothing, lighting, and background. {change} Keep all '
+        'unrelated visual details unchanged. No text or watermark.'
+    ),
+)
+
 
 _VARIANT_PROMPTS: dict[str, str] = {
     "mouth_small": "Change only the mouth to a small slightly open speaking shape.",
@@ -394,13 +443,11 @@ class CharacterAvatarGenerationService:
         }
         if request.include_outfit and request.outfit_prompt.strip():
             prompts["outfit_alternate"] = (
-                f"Change only the clothing to: {request.outfit_prompt.strip()}. "
-                "Preserve face, hair, pose, camera, lighting, and mouth."
+                VARIANT_PROMPTS_TEMPLATE.format(strip=request.outfit_prompt.strip())
             )
         if request.include_background and request.background_prompt.strip():
             prompts["background_alternate"] = (
-                f"Create a clean matching background: {request.background_prompt.strip()}. "
-                "Do not include a person or text."
+                VARIANT_PROMPTS_2_TEMPLATE.format(strip=request.background_prompt.strip())
             )
         return prompts
 
@@ -502,35 +549,27 @@ def _base_prompt(display_name: str, appearance_prompt: str, gender: str = "") ->
         f"The character's gender presentation is {gender.strip()}. " if gender.strip() else ""
     )
     return (
-        f"Create one original fictional character portrait for {display_name}. "
-        f"{gender_direction}"
-        f"{custom + ' ' if custom else ''}"
-        "Front-facing head-and-shoulders composition, centered, eyes open, neutral relaxed expression, "
-        "mouth fully closed, consistent hair and clothing, clean even lighting, no text. "
-        "This canonical portrait will be reused as a locked reference for live-chat animation frames. "
-        "Do not depict or imitate a real public person."
+        BASE_PROMPT_TEMPLATE.format(
+            display_name=display_name,
+            gender_direction=gender_direction,
+            custom=custom + ' ' if custom else '',
+        )
     )
 
 
 def _uploaded_base_prompt(display_name: str, appearance_prompt: str) -> str:
     custom = appearance_prompt.strip()
     return (
-        f"Using the supplied user-provided image as the authoritative identity reference for {display_name}, "
-        "create one faithful front-facing head-and-shoulders live-avatar portrait. "
-        "Preserve the person's recognizable facial identity, skin tone, face proportions, hair, and other "
-        "defining features. Do not replace them with a different person. "
-        f"{custom + ' ' if custom else ''}"
-        "Center the face, keep both eyes open, use a neutral relaxed expression and a fully closed mouth, "
-        "with clean even lighting and no text. This canonical portrait will be reused as a locked reference "
-        "for mouth, blink, expression, and viseme frames."
+        UPLOADED_BASE_PROMPT_TEMPLATE.format(
+            display_name=display_name,
+            custom=custom + ' ' if custom else '',
+        )
     )
 
 
 def _variant_prompt(display_name: str, change: str) -> str:
     return (
-        f"Using the supplied canonical portrait of {display_name}, preserve the exact identity, crop, "
-        f"head position, hair, clothing, lighting, and background. {change} "
-        "Keep all unrelated visual details unchanged. No text or watermark."
+        VARIANT_PROMPT_TEMPLATE.format(display_name=display_name, change=change)
     )
 
 

@@ -41,6 +41,29 @@ from .review_runtime import (
     results_by_slot,
 )
 from .subagents import ChildRunRequest, default_reviewer_limits, derive_child_spec
+from app.prompts import prompt_template
+
+
+REVIEW_PROMPT_WITH_CONTEXT_TEMPLATE = prompt_template(
+    'agent_runtime.review_orchestration_core.review_prompt_with_context', "1",
+    (
+        '\n'
+        '\n'
+        'REVIEW PROTOCOL V2:\n'
+        'Pass A — blind correctness: call the Omnix Run Change Set tool, inspect that '
+        'authoritative run-owned subject plus changed source, callers/contracts, and raw '
+        'validation evidence first. Form your own correctness judgment before using '
+        'implementation planning claims. Do not infer correctness from an approved plan or from '
+        'prior agent conclusions.\n'
+        'Pass B — coverage reconciliation: after the blind pass, compare your independent '
+        'understanding against the following durable planning/evidence artifacts. Treat them as '
+        'implementation-produced claims that may be incomplete or wrong; use them to find missed '
+        'impact, not to anchor approval.\n'
+        'UNTRUSTED_PLANNING_CONTEXT_JSON={planning_context}\n'
+        'Return the same single structured JSON verdict required above.'
+    ),
+)
+
 
 _REVIEW_MARKER = re.compile(r"REVIEW_SNAPSHOT_ID=([a-f0-9]+)")
 _REVIEW_SLOT_MARKER = re.compile(r"REVIEW_SLOT=(\d+)")
@@ -143,16 +166,7 @@ def _review_prompt_with_context(
     )
     return (
         base
-        + "\n\nREVIEW PROTOCOL V2:\n"
-        "Pass A — blind correctness: call the Omnix Run Change Set tool, inspect that authoritative run-owned "
-        "subject plus changed source, callers/contracts, and raw "
-        "validation evidence first. Form your own correctness judgment before using implementation planning "
-        "claims. Do not infer correctness from an approved plan or from prior agent conclusions.\n"
-        "Pass B — coverage reconciliation: after the blind pass, compare your independent understanding against "
-        "the following durable planning/evidence artifacts. Treat them as implementation-produced claims that may "
-        "be incomplete or wrong; use them to find missed impact, not to anchor approval.\n"
-        f"UNTRUSTED_PLANNING_CONTEXT_JSON={planning_context}\n"
-        "Return the same single structured JSON verdict required above."
+        + REVIEW_PROMPT_WITH_CONTEXT_TEMPLATE.format(planning_context=planning_context)
     )
 
 

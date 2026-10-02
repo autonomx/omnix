@@ -37,6 +37,103 @@ from .contracts import (
     WorkspaceState,
 )
 from .workspace import WorkspaceAuthority, WorkspacePolicyError
+from app.prompts import prompt_template
+
+
+REVIEW_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.coding_quality.review_prompt', "1",
+    (
+        'You are the independent Omnix coding reviewer. You are reviewing an immutable snapshot, '
+        'not helping the implementer. Be adversarial about correctness, completeness, missed '
+        'call sites, API compatibility, edge cases, regressions and missing tests. Do not modify '
+        "files. Do not infer correctness from the implementer's claims. The exact workspace is "
+        'CONTEXT; the authoritative review SUBJECT is the RunChangeSet. Call the Omnix Run '
+        'Change Set tool first and review that complete run-owned subject. Baseline-only dirty '
+        'paths may be read as context but are not attributable to this run unless you identify a '
+        'run-owned subject path that causes a dependency problem.\n'
+        '\n'
+        'Task revision: {revision_id}\n'
+        'Objective: {effective_objective}\n'
+        'Workspace state: {workspace_state_id}\n'
+        'Run change set: {run_change_set_id}\n'
+        'Authoritative subject paths JSON: {subject_paths}\n'
+        'Baseline context paths JSON: {context_paths}\n'
+        'Requirements JSON: {requirements}\n'
+        'Constraints JSON: {constraints}\n'
+        'Validation results JSON: {validation_rows}\n'
+        '\n'
+        'Return ONLY one JSON object with this schema:\n'
+        '{{"verdict":"approve|changes_required|blocked","requirements":[{{"requirement_id":"R","s'
+        'tatus":"satisfied|partial|missing|not_applicable","evidence":"..."}}],"findings":[{{"sev'
+        'erity":"blocker|high|medium|low","category":"correctness","file":null,"location":null,"p'
+        'roblem":"...","recommended_fix":null,"subject_paths":["run/owned/path"],"context_paths":'
+        '["baseline/context/path"]}}],"missing_tests":["..."],"residual_risks":["..."]}}.\n'
+        'Approve only when every required task requirement is satisfied and there is no '
+        'blocker/high correctness finding or material missing regression coverage.'
+    ),
+)
+
+REPAIR_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.coding_quality.repair_prompt', "1",
+    (
+        'Omnix coding quality attempt {attempt} has substantive findings to address. Re-read the '
+        'authoritative task and continue the normal Pi inspect/reason/edit/test loop. Objective: '
+        '{effective_objective}\n'
+        'Prior quality findings JSON: {findings}\n'
+        'Reported missing tests JSON: {missing_tests}\n'
+        'Missing/stale final-state validation JSON: {missing}\n'
+        'Treat these as evidence, not as an Omnix-authored implementation sequence. Inspect the '
+        'relevant source and callers, repair the actual cause, revise your working plan freely, '
+        'inspect the final diff, and rerun required validation after the last mutation. Ordinary '
+        'in-scope repair edits do not require a PlanDelta. If Omnix explicitly blocks a '
+        'consequential operation because hard planning authority is required, then use '
+        'omnix_plan to record/amend that narrow operation before retrying it. Do not ask the '
+        'user to restate the already-authoritative objective.'
+    ),
+)
+
+SELF_REVIEW_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.coding_quality.self_review_prompt', "1",
+    (
+        'Mandatory engineering self-review for quality attempt {attempt}. Do not declare '
+        'completion yet.\n'
+        'Authoritative implementation objective: {effective_objective}\n'
+        'Authoritative requirements JSON: {requirements}\n'
+        'Required requirement IDs JSON: {required_requirement_ids}\n'
+        'Recorded required-validation evidence JSON: {validation_rows}\n'
+        'The implementation turn has ended. This is a read-only verdict turn: do not call tools, '
+        'edit files, rerun commands, or send a progress update. Review the complete diff, '
+        'callers, interfaces, edge cases, regression coverage, and recorded validation evidence '
+        'already present in the conversation. If more work is needed, return changes_required '
+        'and describe it; Omnix will open a separate repair turn. This internal quality turn '
+        'must never ask the user a question or request a missing implementation brief. The '
+        'requirements array must contain one result for every required requirement ID listed '
+        'above. In the first response, return the verdict even if the result is blocked.\n'
+        'Return ONLY one JSON object matching this schema: {schema}'
+    ),
+)
+
+VALIDATION_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.coding_quality.validation_prompt', "1",
+    (
+        'Final-state validation is incomplete or stale. Do not declare completion. Required '
+        'validation JSON: {rows}\n'
+        'Inspect the complete current diff and run the smallest task-relevant commands that '
+        'satisfy these validation requirements against the CURRENT code. If a command fails, '
+        'diagnose the implementation, fix it, and rerun. Do not substitute an unrelated passing '
+        'test. Run UI Playwright validation as exactly one test selected by relative spec path '
+        'and source line (for example `tests/e2e/app-shell.spec.ts:40`); whole specs, suites, '
+        'and grep filters are rejected. For browser validation, interact with the governed '
+        'browser as needed, inspect the exact rendered surface named by the objective and '
+        'complete the interaction on that surface, then finish with a deterministic '
+        'browser.assert_* capability that proves the exact requested final state; a screenshot '
+        'or snapshot alone is not completion evidence and a similarly named control elsewhere in '
+        'the shell is not a valid substitute. For remove/hide/absence requests, use '
+        'browser.assert_text_not_contains against the stable containing UI surface so a generic '
+        'passing test cannot substitute for proof that the control is actually gone.'
+    ),
+)
+
 
 
 _TEST = re.compile(r"\b(?:pytest|vitest)\b|\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?(?:run\s+)?test\b", re.I)
@@ -790,29 +887,17 @@ def review_prompt(
         and item.task_revision_id == revision.revision_id
     ]
     return (
-        "You are the independent Omnix coding reviewer. You are reviewing an immutable snapshot, not helping the "
-        "implementer. Be adversarial about correctness, completeness, missed call sites, API compatibility, edge "
-        "cases, regressions and missing tests. Do not modify files. Do not infer correctness from the implementer's "
-        "claims. The exact workspace is CONTEXT; the authoritative review SUBJECT is the RunChangeSet. Call the "
-        "Omnix Run Change Set tool first and review that complete run-owned subject. Baseline-only dirty paths may be "
-        "read as context but are not attributable to this run unless you identify a run-owned subject path that causes "
-        "a dependency problem.\n\n"
-        f"Task revision: {revision.revision_id}\n"
-        f"Objective: {revision.effective_objective}\n"
-        f"Workspace state: {snapshot.workspace_state_id}\n"
-        f"Run change set: {snapshot.run_change_set_id}\n"
-        f"Authoritative subject paths JSON: {json.dumps(snapshot.subject_paths, ensure_ascii=False)}\n"
-        f"Baseline context paths JSON: {json.dumps(snapshot.context_paths, ensure_ascii=False)}\n"
-        f"Requirements JSON: {json.dumps(requirements, ensure_ascii=False)}\n"
-        f"Constraints JSON: {json.dumps(constraints, ensure_ascii=False)}\n"
-        f"Validation results JSON: {json.dumps(validation_rows, ensure_ascii=False, default=str)}\n\n"
-        "Return ONLY one JSON object with this schema:\n"
-        "{\"verdict\":\"approve|changes_required|blocked\","
-        "\"requirements\":[{\"requirement_id\":\"R\",\"status\":\"satisfied|partial|missing|not_applicable\",\"evidence\":\"...\"}],"
-        "\"findings\":[{\"severity\":\"blocker|high|medium|low\",\"category\":\"correctness\",\"file\":null,\"location\":null,\"problem\":\"...\",\"recommended_fix\":null,\"subject_paths\":[\"run/owned/path\"],\"context_paths\":[\"baseline/context/path\"]}],"
-        "\"missing_tests\":[\"...\"],\"residual_risks\":[\"...\"]}.\n"
-        "Approve only when every required task requirement is satisfied and there is no blocker/high correctness "
-        "finding or material missing regression coverage."
+        REVIEW_PROMPT_TEMPLATE.format(
+            revision_id=revision.revision_id,
+            effective_objective=revision.effective_objective,
+            workspace_state_id=snapshot.workspace_state_id,
+            run_change_set_id=snapshot.run_change_set_id,
+            subject_paths=json.dumps(snapshot.subject_paths, ensure_ascii=False),
+            context_paths=json.dumps(snapshot.context_paths, ensure_ascii=False),
+            requirements=json.dumps(requirements, ensure_ascii=False),
+            constraints=json.dumps(constraints, ensure_ascii=False),
+            validation_rows=json.dumps(validation_rows, ensure_ascii=False, default=str),
+        )
     )
 
 
@@ -987,17 +1072,13 @@ def repair_prompt(
     missing_tests = [] if review is None else list(review.missing_tests)
     missing = [item.model_dump(mode="json") for item in missing_validation]
     return (
-        f"Omnix coding quality attempt {attempt} has substantive findings to address. Re-read the authoritative "
-        f"task and continue the normal Pi inspect/reason/edit/test loop. Objective: {revision.effective_objective}\n"
-        f"Prior quality findings JSON: {json.dumps(findings, ensure_ascii=False)}\n"
-        f"Reported missing tests JSON: {json.dumps(missing_tests, ensure_ascii=False)}\n"
-        f"Missing/stale final-state validation JSON: {json.dumps(missing, ensure_ascii=False)}\n"
-        "Treat these as evidence, not as an Omnix-authored implementation sequence. Inspect the relevant source and "
-        "callers, repair the actual cause, revise your working plan freely, inspect the final diff, and rerun required "
-        "validation after the last mutation. Ordinary in-scope repair edits do not require a PlanDelta. If Omnix "
-        "explicitly blocks a consequential operation because hard planning authority is required, then use omnix_plan "
-        "to record/amend that narrow operation before retrying it. Do not ask the user to restate the already-"
-        "authoritative objective."
+        REPAIR_PROMPT_TEMPLATE.format(
+            attempt=attempt,
+            effective_objective=revision.effective_objective,
+            findings=json.dumps(findings, ensure_ascii=False),
+            missing_tests=json.dumps(missing_tests, ensure_ascii=False),
+            missing=json.dumps(missing, ensure_ascii=False),
+        )
     )
 
 def self_review_prompt(
@@ -1049,36 +1130,19 @@ def self_review_prompt(
         "residual_risks": [],
     }
     return (
-        f"Mandatory engineering self-review for quality attempt {attempt}. Do not declare completion yet.\n"
-        f"Authoritative implementation objective: {revision.effective_objective}\n"
-        f"Authoritative requirements JSON: {json.dumps(requirements, ensure_ascii=False)}\n"
-        f"Required requirement IDs JSON: {json.dumps(required_requirement_ids, ensure_ascii=False)}\n"
-        f"Recorded required-validation evidence JSON: {json.dumps(validation_rows, ensure_ascii=False)}\n"
-        "The implementation turn has ended. This is a read-only verdict turn: do not call tools, edit files, rerun "
-        "commands, or send a progress update. Review the complete diff, callers, interfaces, edge cases, regression "
-        "coverage, and recorded validation evidence already present in the conversation. If more work is needed, return "
-        "changes_required and describe it; Omnix will open a separate repair turn. This internal quality turn must "
-        "never ask the user a question or request a missing implementation brief. The requirements array must contain "
-        "one result for every required requirement ID listed above. In the first response, return the verdict even if "
-        "the result is blocked.\n"
-        f"Return ONLY one JSON object matching this schema: {json.dumps(schema, ensure_ascii=False)}"
+        SELF_REVIEW_PROMPT_TEMPLATE.format(
+            attempt=attempt,
+            effective_objective=revision.effective_objective,
+            requirements=json.dumps(requirements, ensure_ascii=False),
+            required_requirement_ids=json.dumps(required_requirement_ids, ensure_ascii=False),
+            validation_rows=json.dumps(validation_rows, ensure_ascii=False),
+            schema=json.dumps(schema, ensure_ascii=False),
+        )
     )
 
 
 def validation_prompt(revision: TaskRevision, missing: Iterable[ValidationSpec]) -> str:
     rows = [item.model_dump(mode="json") for item in missing]
     return (
-        "Final-state validation is incomplete or stale. Do not declare completion. "
-        f"Required validation JSON: {json.dumps(rows, ensure_ascii=False)}\n"
-        "Inspect the complete current diff and run the smallest task-relevant commands that satisfy these validation "
-        "requirements against the CURRENT code. If a command fails, diagnose the implementation, fix it, and rerun. "
-        "Do not substitute an unrelated passing test. Run UI Playwright validation as exactly one test selected "
-        "by relative spec path and source line (for example `tests/e2e/app-shell.spec.ts:40`); whole specs, suites, "
-        "and grep filters are rejected. For browser validation, interact with the governed "
-        "browser as needed, inspect the exact rendered surface named by the objective and complete the interaction "
-        "on that surface, then finish with a deterministic browser.assert_* capability that proves the exact "
-        "requested final state; a screenshot or snapshot alone is not completion evidence and a similarly named "
-        "control elsewhere in the shell is not a valid substitute. For remove/hide/absence "
-        "requests, use browser.assert_text_not_contains against the stable containing UI surface so a generic "
-        "passing test cannot substitute for proof that the control is actually gone."
+        VALIDATION_PROMPT_TEMPLATE.format(rows=json.dumps(rows, ensure_ascii=False))
     )

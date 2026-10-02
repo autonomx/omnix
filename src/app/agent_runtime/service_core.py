@@ -67,6 +67,27 @@ from .workspace import WorkspaceAuthority
 from .run_change_set import baseline_identity, patch_structure, run_change_set_from_artifact
 from .workspace_promotion import WorkspacePromotionError, promote_change_set
 from .workspace_dependencies import prepare_project_dependencies
+from app.prompts import prompt_template
+
+
+ACCEPTANCE_RETRY_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.service_core.acceptance_retry_prompt', "1",
+    (
+        'Omnix acceptance did not pass ({joined}). Continue the same task; do not stop yet. '
+        'Re-read the original user objective before making any repair: acceptance repair is not '
+        'permission to change scope. Inspect the most recent failed or missing validation, '
+        'correct the requested implementation or the relevant validation command as needed, and '
+        'rerun the smallest task-relevant test/lint/typecheck until it exits successfully. For '
+        'web UI work, the workspace command starts at the repository root, so use `npm --prefix '
+        'src/apps/web run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do '
+        'not use Set-Location or shell directory changes. UI Playwright validation must select '
+        'exactly one test by relative spec path and source line; do not run a whole spec, suite, '
+        'or grep filter. Do not substitute an unrelated passing test, unrelated diff, or '
+        'pre-existing workspace change for completion. This is automatic acceptance repair '
+        'attempt {attempt}.'
+    ),
+)
+
 
 
 _RETRYABLE_ACCEPTANCE_FAILURES = {
@@ -196,17 +217,7 @@ def _acceptance_retry_count(
 def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
     joined = ", ".join(failures)
     return (
-        f"Omnix acceptance did not pass ({joined}). Continue the same task; do not stop yet. "
-        "Re-read the original user objective before making any repair: acceptance repair is not "
-        "permission to change scope. Inspect the most recent failed or missing validation, correct "
-        "the requested implementation or the relevant validation command as needed, and rerun the "
-        "smallest task-relevant test/lint/typecheck until it exits successfully. For web UI work, "
-        "the workspace command starts at the repository root, so use `npm --prefix src/apps/web "
-        "run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do not use "
-        "Set-Location or shell directory changes. UI Playwright validation must select exactly one test by "
-        "relative spec path and source line; do not run a whole spec, suite, or grep filter. Do not substitute "
-        "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
-        f"This is automatic acceptance repair attempt {attempt}."
+        ACCEPTANCE_RETRY_PROMPT_TEMPLATE.format(joined=joined, attempt=attempt)
     )
 
 

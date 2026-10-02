@@ -82,6 +82,35 @@ from .task_revision_quality import (
     hydrate_task_revisions,
     persist_task_revision_contract,
 )
+from app.prompts import prompt_template
+
+
+REQUEST_IMPLEMENTATION_CONTINUATION_TEMPLATE = prompt_template(
+    'agent_runtime.service.request_implementation_continuation', "1",
+    (
+        'Omnix does not yet have a reviewable implementation candidate for quality attempt '
+        '{attempt}. Authoritative objective: {effective_objective}\n'
+        'Candidate gate failures: {failures}\n'
+        'Do not self-review or declare completion. Re-read the authoritative objective, inspect '
+        'the actual target surface and current diff, and carry out the requested implementation '
+        'now. Make only task-scoped changes. If this is a user-visible UI task, locate the exact '
+        'control/surface and verify the requested visible outcome with governed browser '
+        'evidence. Then inspect the complete diff and run the required final-state validation '
+        'before settling.'
+    ),
+)
+
+REQUEST_VALIDATION_REPAIR_TEMPLATE = prompt_template(
+    'agent_runtime.service.request_validation_repair', "1",
+    (
+        'The exact candidate failed required validation. Treat this as implementation evidence, '
+        'not a reason to rerun the same candidate indefinitely. Diagnose and repair the cause. '
+        'The repair must produce a new WorkspaceState before Omnix will authorize fresh '
+        'validation.\n'
+        'Validation failures JSON: {failure_rows}'
+    ),
+)
+
 
 
 _TERMINAL = {"completed", "failed", "cancelled"}
@@ -1369,14 +1398,11 @@ class AgentRunService(_CoreAgentRunService):
             reason=f"implementation_candidate_not_ready_{continuation}",
         )
         prompt = (
-            f"Omnix does not yet have a reviewable implementation candidate for quality attempt {attempt}. "
-            f"Authoritative objective: {revision.effective_objective}\n"
-            f"Candidate gate failures: {', '.join(failures)}\n"
-            "Do not self-review or declare completion. Re-read the authoritative objective, inspect the actual "
-            "target surface and current diff, and carry out the requested implementation now. Make only task-scoped "
-            "changes. If this is a user-visible UI task, locate the exact control/surface and verify the requested "
-            "visible outcome with governed browser evidence. Then inspect the complete diff and run the required "
-            "final-state validation before settling."
+            REQUEST_IMPLEMENTATION_CONTINUATION_TEMPLATE.format(
+                attempt=attempt,
+                effective_objective=revision.effective_objective,
+                failures=', '.join(failures),
+            )
         )
         return self._queue_quality_resume(
             repository,
@@ -1698,10 +1724,9 @@ class AgentRunService(_CoreAgentRunService):
             for item in failures
         ]
         prompt = (
-            "The exact candidate failed required validation. Treat this as implementation evidence, not a reason to "
-            "rerun the same candidate indefinitely. Diagnose and repair the cause. The repair must produce a new "
-            "WorkspaceState before Omnix will authorize fresh validation.\n"
-            f"Validation failures JSON: {json.dumps(failure_rows, ensure_ascii=False)}"
+            REQUEST_VALIDATION_REPAIR_TEMPLATE.format(
+                failure_rows=json.dumps(failure_rows, ensure_ascii=False),
+            )
         )
         return self._queue_quality_resume(
             repository,

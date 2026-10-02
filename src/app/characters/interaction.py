@@ -13,12 +13,22 @@ from .models import (
     InteractionSelection,
     ResolvedInteractionContext,
 )
+from app.prompts import prompt_template
+
+
+LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE = prompt_template(
+    'characters.interaction.legacy_maya_system_prompt', "1",
+    (
+        'You are Maya, a warm, friendly, emotionally aware AI. Keep responses short (1-3 '
+        "sentences for voice, 5 for text), match the user's emotional tone, avoid filler and "
+        'tangents. Be clear and concise, admit uncertainty when needed, and maintain a natural, '
+        'human-like presence.'
+    ),
+)
+
 
 LEGACY_MAYA_SYSTEM_PROMPT = (
-    "You are Maya, a warm, friendly, emotionally aware AI. Keep responses short "
-    "(1-3 sentences for voice, 5 for text), match the user's emotional tone, avoid "
-    "filler and tangents. Be clear and concise, admit uncertainty when needed, and "
-    "maintain a natural, human-like presence."
+    LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE.text
 )
 _ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
 

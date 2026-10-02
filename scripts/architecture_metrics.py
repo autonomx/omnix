@@ -716,7 +716,8 @@ def python_metrics(analysis: SourceAnalysis) -> tuple[dict[str, int], dict[str, 
                         "line": node.lineno,
                         "kind": "sql_limit",
                     })
-                if not path.startswith("src/app/prompts/") and len(string) >= 50:
+                if (not path.startswith("src/app/prompts/") and len(string) >= 50
+                        and not _is_docstring(node, parents) and not _SQL_TEXT.match(string)):
                     parent = parents.get(node)
                     names = [qualified_name(target) for target in parent.targets] if isinstance(parent, ast.Assign) else []
                     if isinstance(parent, ast.AnnAssign):
@@ -803,6 +804,20 @@ def _mypy_override_patterns(sources: dict[str, str]) -> tuple[set[str], set[str]
                 if section.startswith("mypy-") and parser.getboolean(section, "ignore_errors", fallback=False):
                     ignored_patterns.update(pattern.strip() for pattern in section.removeprefix("mypy-").split(","))
     return ignored_patterns, strict_patterns
+
+
+# Neither documentation nor SQL is a prompt, even inside a prompt-named function.
+_SQL_TEXT = re.compile(r"\s*(SELECT|INSERT|UPDATE|DELETE|WITH)\b")
+
+
+def _is_docstring(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    statement = parents.get(node)
+    owner = parents.get(statement)
+    return (
+        isinstance(statement, ast.Expr)
+        and isinstance(owner, FUNCTIONS + (ast.ClassDef, ast.Module))
+        and bool(owner.body) and owner.body[0] is statement
+    )
 
 
 def _unreachable_python(analysis: SourceAnalysis) -> list[str]:

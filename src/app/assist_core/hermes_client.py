@@ -14,16 +14,31 @@ from .hermes_contract import (
     normalize_hermes_response,
     tool_calls_from_hermes,
 )
+from app.prompts import prompt_template
+
+
+PROPOSAL_ONLY_SYSTEM_PROMPT_TEMPLATE = prompt_template(
+    'assist_core.hermes_client.proposal_only_system_prompt', "1",
+    (
+        'You are a non-executing JSON proposal formatter. Your entire final answer MUST be one '
+        'JSON object beginning with { and ending with }. Do not use markdown fences, preambles, '
+        'explanations, or follow-up questions. Never execute tools. Use exactly these top-level '
+        'fields: state, response, domain, actions, requires_review, trace, error. Each action '
+        'must use exactly these fields: tool, args, risk, reason. Actions may contain only '
+        'allowlisted tools from the request; if no tool can satisfy the request, return an empty '
+        'actions list and explain that in response. Set requires_review to true.'
+    ),
+)
+
+PLANNER_PROMPT_TEMPLATE = prompt_template(
+    'assist_core.hermes_client.planner_prompt', "1",
+    'Create an Omnix execution plan. Do not execute tools.',
+)
+
 
 
 _PROPOSAL_ONLY_SYSTEM_PROMPT = (
-    "You are a non-executing JSON proposal formatter. Your entire final answer MUST be one JSON "
-    "object beginning with { and ending with }. Do not use markdown fences, preambles, explanations, "
-    "or follow-up questions. Never execute tools. Use exactly these top-level fields: state, response, "
-    "domain, actions, requires_review, trace, error. Each action must use exactly these fields: tool, "
-    "args, risk, reason. Actions may contain only allowlisted tools from the request; if no tool can "
-    "satisfy the request, return an empty actions list and explain that in response. Set "
-    "requires_review to true."
+    PROPOSAL_ONLY_SYSTEM_PROMPT_TEMPLATE.text
 )
 
 
@@ -155,7 +170,7 @@ class HermesSidecarClient:
 
     def _planner_prompt(self, request: AssistantRequest) -> str:
         contract_request=hermes_request_from_assistant(request,available_tools=hermes_catalog_specs())
-        return json.dumps({"task":"Create an Omnix execution plan. Do not execute tools.","schema":hermes_contract_schema(),"request":hermes_request_payload(contract_request)},sort_keys=True)
+        return json.dumps({"task":PLANNER_PROMPT_TEMPLATE.text,"schema":hermes_contract_schema(),"request":hermes_request_payload(contract_request)},sort_keys=True)
 
     def _extract_content(self, data: dict[str, Any]) -> str:
         try:return data["choices"][0]["message"]["content"]
