@@ -9,14 +9,13 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .models import MarketBar
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 FULL_SESSION_1M_LIMIT = 500
 
 TREND_CONTINUATION_SETUP_ID = "trend_continuation_v1"

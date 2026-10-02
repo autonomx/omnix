@@ -10,7 +10,6 @@ from app.config.env import environment
 
 import asyncio
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -18,9 +17,9 @@ from app.runtime.features import FeatureContext
 
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
 from .us_equity_calendar import early_close_time, regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_prospective_gap_monitor"
 _PREMARKET_HANDOFF_INGEST_START = time(9, 24)
 _PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)

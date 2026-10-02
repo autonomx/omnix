@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -11,9 +10,7 @@ from .execution import ExecutionObservation
 from .paper import PaperAccountSnapshot, PaperOrderRequest
 from .paper_protection import PaperPositionProtection, PaperProtectionUpsert
 from .strategy_risk import paper_account_equity, paper_daily_realized_pnl
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 class PaperRiskPolicy(BaseModel):

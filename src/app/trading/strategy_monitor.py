@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -90,9 +89,9 @@ from .strategy_v2_management import (
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
 from . import strategy_session_evidence as _session_evidence
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_monitor"
 _REGULAR_OPEN = time(9, 30)
 _DIAGNOSTIC_LOG_INTERVAL = timedelta(minutes=5)

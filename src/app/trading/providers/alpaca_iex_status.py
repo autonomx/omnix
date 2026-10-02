@@ -11,12 +11,11 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import certifi
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
-
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"
@@ -24,7 +23,6 @@ _STATE_KEY = "_omnix_alpaca_iex_status_monitor"
 _HALT_CODES = {"2", "H", "P"}
 _RESUME_CODES = {"3", "Q", "T"}
 _HISTORY_LIMIT_PER_SYMBOL = 256
-_ET = ZoneInfo("America/New_York")
 _EXTENDED_SESSION_OPEN = time(4, 0)
 
 

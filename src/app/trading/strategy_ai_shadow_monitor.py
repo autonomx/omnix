@@ -21,7 +21,6 @@ from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -76,9 +75,9 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
 )
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
 _EVENT_TYPES = (
     "state",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate
 from .historical_gapper_reconstruction import _alpaca_bars
@@ -12,9 +11,7 @@ from .providers.errors import ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategy_replay_reliability import historical_replay_http_runtime
 from .us_equity_calendar import early_close_time
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 def _parse_timestamp(value: object) -> datetime | None:

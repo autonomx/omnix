@@ -21,7 +21,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -126,9 +125,9 @@ from .prospective_prediction_v4 import (
 )
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.models import GapPullbackConfig
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 RUNTIME_VERSION = "prospective-gap-runtime-v1"
 PORTFOLIO_E_POLICY_VERSION = "prospective-gap-portfolio-e-v1"
 

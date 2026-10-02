@@ -18,16 +18,14 @@ import math
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Iterable, Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .strategy_deep_recovery import DEEP_RECOVERY_RULE_VERSION, DEEP_RECOVERY_SETUP_ID
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from .strategy_v2_qualification import v2_profile_fingerprint
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 PROSPECTIVE_ECONOMIC_VERSION = "prospective-economic-shadow-v1"
 PROSPECTIVE_ECONOMIC_START = date(2026, 8, 24)

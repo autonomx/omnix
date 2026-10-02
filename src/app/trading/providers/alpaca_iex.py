@@ -7,7 +7,6 @@ from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -24,11 +23,11 @@ from app.trading.us_equity_calendar import us_equity_session
 from .alpaca_iex_status import default_alpaca_iex_status_cache
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
 ALPACA_IEX_PARTIAL_MARKET = True
-_ET = ZoneInfo("America/New_York")
 _EXTENDED_SESSION_OPEN = time(4, 0)
 _INDICATOR_BAR_LIMIT = 1000
 

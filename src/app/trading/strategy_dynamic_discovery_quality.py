@@ -8,13 +8,12 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from typing import Mapping, Sequence
-from zoneinfo import ZoneInfo
 
 from . import strategy_dynamic_discovery as dd
 from . import strategy_dynamic_discovery_runtime as runtime
 from .strategy_repository import TradingStrategyRepository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _BASE_COMPLETE_RUN = runtime._run_dynamic_discovery_once_complete
 _BASE_APPLY_SCAN = runtime.apply_discovery_scan
 _BASE_UNION = runtime._union_complete

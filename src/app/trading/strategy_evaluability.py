@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .market_evidence import (
@@ -16,9 +15,9 @@ from .market_evidence import (
     TradeAuthorizationAssessment,
     premarket_evidence_feature_compatible,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 _MAX_LATEST_BAR_LATENCY_SECONDS = Decimal("90")

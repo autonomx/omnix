@@ -11,7 +11,6 @@ import hashlib
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from app.trading.binding_authority import MarketDataAuthorityDecision
 from app.trading.catalog import POLICIES, bindings_for_instrument, instrument_by_id
@@ -41,9 +40,9 @@ from .ibkr_runtime import (
     default_ibkr_runtime,
     official_ibapi_available,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _EXTENDED_OPEN = time(4, 0)
 _MAX_HISTORICAL_CHUNK = timedelta(days=1)
 

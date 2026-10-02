@@ -13,7 +13,6 @@ from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -44,9 +43,9 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_session_reconciliation_monitor"
 _SESSION_CLOSE = time(16, 0)
 _DEFAULT_CREATE_AFTER = time(16, 5)

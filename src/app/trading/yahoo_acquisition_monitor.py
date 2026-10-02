@@ -14,7 +14,6 @@ import os
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -24,9 +23,9 @@ from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
 from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_yahoo_acquisition_monitor"
 _SESSION_OPEN = time(4, 0)
 _SESSION_CLOSE = time(16, 5)

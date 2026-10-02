@@ -17,7 +17,6 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -41,9 +40,9 @@ from .strategy_repository import (
 )
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_prospective_economic_monitor"
 _SOURCE_STATE_EVENT_TYPE = "deep_recovery_state"
 _SOURCE_EVENT_TYPE = "deep_recovery_shadow"

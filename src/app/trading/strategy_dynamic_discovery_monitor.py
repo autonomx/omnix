@@ -5,7 +5,6 @@ from app.config.env import env_str as _env_str
 import asyncio
 from contextlib import suppress
 from datetime import datetime, time, timezone
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -21,8 +20,8 @@ from .strategy_dynamic_discovery import (
 )
 from .strategy_repository import TradingStrategyRepository
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_interday_dynamic_discovery_monitor"
 
 

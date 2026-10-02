@@ -7,12 +7,12 @@ from decimal import Decimal
 from threading import RLock
 from types import MappingProxyType
 from typing import Mapping, Protocol
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from .finviz_gapper_discovery import discover_finviz_gappers
 from .strategy_dynamic_discovery import MarketAnomalyFeatures
+from app.trading.us_equity_calendar import EASTERN
 
 
 class CausalMarketObservation(BaseModel):
@@ -90,7 +90,7 @@ class PersistedCatalystIntelligenceSource:
     """Replay causal AI-shadow Catalyst Intelligence into discovery observations."""
 
     name = "persisted_catalyst_intelligence_v2"
-    _exchange_timezone = ZoneInfo("America/New_York")
+    _exchange_timezone = EASTERN
 
     def capture(self, *, observed_at: datetime) -> tuple[CausalMarketObservation, ...]:
         from .strategy_ai_shadow_v2 import CatalystIntelligenceSnapshot

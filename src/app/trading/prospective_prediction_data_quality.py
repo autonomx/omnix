@@ -10,14 +10,13 @@ selected analysis prices.
 from datetime import datetime, time, timezone
 from decimal import Decimal
 from typing import Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import AnalysisSessionPrices
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 DATA_QUALITY_POLICY_VERSION = "prospective-price-crosscheck-v1"
 
 

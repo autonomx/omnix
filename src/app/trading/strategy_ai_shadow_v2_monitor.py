@@ -7,7 +7,6 @@ from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -46,8 +45,8 @@ from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_v2_monitor"
 _ARMS: tuple[AIShadowV2Arm, ...] = (
     "morning_control", "morning_catalyst",

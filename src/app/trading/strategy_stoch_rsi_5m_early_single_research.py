@@ -12,7 +12,6 @@ from datetime import time
 from decimal import Decimal
 from types import MappingProxyType
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from .indicators.engine import average_true_range, exponential_moving_average
 from .models import MarketBar
@@ -22,9 +21,9 @@ from .strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
 from .strategy_stoch_rsi_5m_early_single_loss_controls import (
     evaluate_stoch_rsi_5m_early_single_loss_control,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _ATR_PERIOD_1M = 14
 _ATR_MULTIPLE_1M = Decimal("2")
 _PATTERN_BOUNCE_PCT = Decimal("2")

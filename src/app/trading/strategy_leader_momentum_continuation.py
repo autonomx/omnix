@@ -19,7 +19,6 @@ breakout, volume, and bounded-risk checks remain causal and deterministic.
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -27,9 +26,8 @@ from .indicators.engine import average_true_range, exponential_moving_average
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 POLICY_VERSION = "leader-momentum-continuation-v1.2"
 MIN_PRICE = Decimal("0.75")

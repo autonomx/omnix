@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import datetime, time, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
@@ -19,11 +18,11 @@ from .strategy_stoch_rsi_5m import (
     StochRsi5mState,
     evaluate_stoch_rsi_5m,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 LATE_STAGE_ENTRY_START_ET = time(13, 0)
 LATE_STAGE_MINIMUM_OPEN_GAIN_PCT = Decimal("50")
-_ET = ZoneInfo("America/New_York")
 
 
 def _current_regular_bars(

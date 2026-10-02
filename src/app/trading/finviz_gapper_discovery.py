@@ -20,7 +20,6 @@ from decimal import Decimal, InvalidOperation
 from html import unescape
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
-from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
@@ -45,6 +44,7 @@ from .strategy_data_integrity import (
     FINVIZ_ATOMIC_FIRST_PAGE_MAX,
     finviz_atomic_source_locator,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 FINVIZ_TOP_GAINERS_URL = "https://finviz.com/screener"
@@ -54,7 +54,6 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION = YAHOO_HARDENED_EVIDENCE_POLICY_VERSION
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)

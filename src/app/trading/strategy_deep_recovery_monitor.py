@@ -14,7 +14,6 @@ import hashlib
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -41,9 +40,9 @@ from .strategy_session_evidence import (
     _FullSessionMarketServiceProxy,
     _PartialCurrentSessionMarketDataProxy,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_deep_recovery_shadow_monitor"
 _STATE_EVENT_TYPE = "deep_recovery_state"
 _SIGNAL_EVENT_TYPE = "deep_recovery_shadow"

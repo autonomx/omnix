@@ -6,7 +6,6 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .historical_gapper_reconstruction import _alpaca_bars
 from .market_evidence import (
@@ -16,9 +15,9 @@ from .market_evidence import (
 )
 from .providers.alpaca_iex import alpaca_iex_auth_headers
 from .providers.http_runtime import ProviderHttpRuntime
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 _BASELINE_LOOKBACK_DAYS = 21

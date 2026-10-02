@@ -6,15 +6,14 @@ import copy
 from datetime import time
 from types import SimpleNamespace
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .market_data_recovery import (
     StrategyDataRequirement,
     assess_data_requirement,
     latest_clean_bars,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 
 

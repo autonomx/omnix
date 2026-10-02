@@ -25,14 +25,13 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import AdjustmentMode, MarketBar
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 def _default_root() -> Path:

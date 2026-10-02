@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from .strategy_dynamic_discovery import (
     DynamicCandidate,
@@ -13,8 +12,8 @@ from .strategy_dynamic_discovery import (
 )
 from .strategy_dynamic_discovery_learning import DiscoveryDailyReport
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 EVENT_OUTCOME = "interday_discovery_outcome"
 
 

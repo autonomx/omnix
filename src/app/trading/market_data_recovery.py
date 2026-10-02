@@ -19,15 +19,14 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from collections.abc import Callable
 from typing import Any, Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 

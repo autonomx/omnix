@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,9 +12,9 @@ from .paper_protection import PaperPositionProtection
 from .paper_risk import PaperRiskPolicy
 from .strategy_repository import StrategyProtection, TradingStrategyConfigDocument
 from .strategy_risk import paper_account_equity
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 HealthState = Literal["healthy", "degraded", "blocked", "unknown"]
 
 

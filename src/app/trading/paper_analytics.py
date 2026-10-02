@@ -5,7 +5,6 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,8 +18,8 @@ from .strategy_v2_qualification import (
     V2ProspectiveQualification,
     evaluate_v2_prospective_qualification,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 
 

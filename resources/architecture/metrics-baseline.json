@@ -4557,7 +4557,7 @@
         "category": "cache",
         "invalidation": "clear_data_gap_heartbeat_cache",
         "kind": "container",
-        "line": 123,
+        "line": 122,
         "max_entries": 4096,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -4568,7 +4568,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 120,
+        "line": 119,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_GAP_LOCK"
@@ -4604,7 +4604,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 872,
+        "line": 871,
         "path": "src/app/trading/yahoo_evidence.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -7487,5 +7487,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "fe19489550add4debbca6f91a8e1f64d9033c219685e880ec49a1de27dad820b"
+  "source_digest": "0039c7e41d2cdd5e2e855d300f32dd4012ed379554e10c18c0dd28b399363927"
 }

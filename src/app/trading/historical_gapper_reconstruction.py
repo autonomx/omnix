@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
@@ -17,9 +16,9 @@ from .providers.errors import ProviderContractError, ProviderDataUnavailableErro
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategies.models import GapPullbackConfig
 from .us_equity_calendar import regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 _DEFAULT_TRADING_URL = "https://paper-api.alpaca.markets"

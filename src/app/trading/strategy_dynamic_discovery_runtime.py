@@ -14,12 +14,11 @@ from datetime import date, datetime, time, timedelta, timezone
 from statistics import mean, stdev
 from types import SimpleNamespace
 from typing import Iterable, Mapping, Sequence
-from zoneinfo import ZoneInfo
 
 from . import strategy_dynamic_discovery as dd
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 EVENT_OBSERVATION = "interday_discovery_observation"
 EVENT_CAUSALITY_VIOLATION = "interday_discovery_causality_violation"
 EVENT_COHORT = "interday_discovery_cohort"
@@ -1341,7 +1340,6 @@ async def _run_dynamic_discovery_once_complete(
     )
 
 
-
 def _complete_evaluate_shadow_qualification(metrics: Mapping[str, object]):
     sessions = int(metrics.get("independent_sessions", 0) or 0)
     opportunities = int(metrics.get("labeled_opportunities", 0) or 0)
@@ -1899,7 +1897,6 @@ def _observations_for_session(
             continue
         result.append((row.payload.get("scan_watermark"), observation))
     return tuple(result)
-
 
 
 def _persist_parent_exposure(

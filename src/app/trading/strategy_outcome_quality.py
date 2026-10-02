@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, time
 from typing import Any
-from zoneinfo import ZoneInfo
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 

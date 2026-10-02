@@ -15,7 +15,6 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -38,10 +37,10 @@ from .strategy_shadow_universe import (
 from .streaming.manager import StreamingQuoteUpdate
 from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 _STATE_KEY = "_omnix_trading_ibkr_market_data_monitor"
-_ET = ZoneInfo("America/New_York")
 
 
 def _flag(name: str, default: str = "1") -> bool:

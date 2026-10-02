@@ -14,7 +14,6 @@ from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
 from app.runtime.background import BackgroundWorker
 from app.runtime.features import FeatureContext
@@ -60,9 +59,9 @@ from .trigger_plan import (
     evaluate_armed_trigger,
     transition_trigger_plan,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_v3_monitor"
 _EVENT_TYPES = (
     "ai_v3_decision",

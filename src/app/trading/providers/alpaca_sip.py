@@ -11,7 +11,6 @@ from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -23,10 +22,10 @@ from app.trading.us_equity_calendar import us_equity_session
 from .alpaca_iex import alpaca_iex_auth_headers
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
-_ET = ZoneInfo("America/New_York")
 _REGULAR_SALE_CODES = {"@"}
 _ODD_LOT_CODES = {"I"}
 _AUCTION_CODES = {"O", "6", "M", "Q"}

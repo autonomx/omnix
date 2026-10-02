@@ -12,14 +12,13 @@ import hashlib
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 PROSPECTIVE_GAP_STRATEGY_ID = "prospective-gap-experiment"
 PROSPECTIVE_GAP_LEDGER_VERSION = "prospective-gap-ledger-v1"
 

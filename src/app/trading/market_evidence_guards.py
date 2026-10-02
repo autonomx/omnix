@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate
 from .market_evidence import (
@@ -22,9 +21,7 @@ from .strategy_evaluability import (
     resolve_causal_equity_bars,
     source_member_valid,
 )
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 def _morning_evidence(candidate, config):

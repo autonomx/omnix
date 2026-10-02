@@ -20,15 +20,12 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Mapping, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import MarketBar
 from . import strategy_leader_momentum_continuation as leader
-
-
-_ET = ZoneInfo("America/New_York")
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 class EvolvingTopGainersConfig(BaseModel):
