@@ -32,6 +32,31 @@ class GmailDraftRecord:
     body: str
 
 
+@dataclass(frozen=True)
+class GmailSentRecord:
+    id: str
+    to: str
+    subject: str
+    thread_id: str | None = None
+
+
+MAX_RECIPIENTS = 20
+
+
+def _validated_recipients(to: str) -> str:
+    """Comma-separated addresses, each with a local part and a domain; at most 20."""
+    from email.utils import getaddresses
+
+    addresses = [address for _name, address in getaddresses([to]) if address]
+    if not addresses or len(addresses) > MAX_RECIPIENTS:
+        raise ValueError("gmail_send_invalid_recipients")
+    for address in addresses:
+        local, _, domain = address.rpartition("@")
+        if not local or "." not in domain or any(char.isspace() for char in address):
+            raise ValueError("gmail_send_invalid_recipients")
+    return ", ".join(addresses)
+
+
 class GmailRuntimeAdapter(Protocol):
     def search_messages(self, query: str, limit: int = 10) -> list[GmailMessageRecord]: ...
 
@@ -39,11 +64,22 @@ class GmailRuntimeAdapter(Protocol):
 
     def update_draft(self, *, draft_id: str, to: str | None = None, subject: str | None = None, body: str | None = None) -> GmailDraftRecord: ...
 
+    def send_message(self, *, to: str, subject: str, body: str, draft_id: str | None = None) -> GmailSentRecord: ...
+
 
 @dataclass
 class FakeGmailRuntimeAdapter:
     messages: list[GmailMessageRecord] = field(default_factory=list)
     drafts: dict[str, GmailDraftRecord] = field(default_factory=dict)
+    sent: list[GmailSentRecord] = field(default_factory=list)
+
+    def send_message(self, *, to: str, subject: str, body: str, draft_id: str | None = None) -> GmailSentRecord:
+        if draft_id is not None:
+            draft = self.drafts.pop(draft_id)
+            to, subject = draft.to, draft.subject
+        record = GmailSentRecord(id=f"msg-{uuid.uuid4().hex[:12]}", to=to, subject=subject)
+        self.sent.append(record)
+        return record
 
     def search_messages(self, query: str, limit: int = 10) -> list[GmailMessageRecord]:
         needle = query.lower().strip()
@@ -113,6 +149,25 @@ class GoogleGmailRuntimeAdapter:
 
     def update_draft(self, *, draft_id: str, to: str | None = None, subject: str | None = None, body: str | None = None) -> GmailDraftRecord:
         raise NotImplementedError("gmail_update_draft_not_available")
+
+    def send_message(self, *, to: str, subject: str, body: str, draft_id: str | None = None) -> GmailSentRecord:
+        """Send a new message, or an existing draft by id (``drafts.send``)."""
+        token = self._access_token()
+        if draft_id:
+            payload = _gmail_json(
+                "POST", "https://gmail.googleapis.com/gmail/v1/users/me/drafts/send", token, body={"id": draft_id},
+            )
+        else:
+            payload = _gmail_json(
+                "POST",
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                token,
+                body={"raw": _base64url_message(to=to, subject=subject, body=body)},
+            )
+        return GmailSentRecord(
+            id=str(payload.get("id") or ""), to=to, subject=subject,
+            thread_id=str(payload.get("threadId") or "") or None,
+        )
 
     def _access_token(self) -> str:
         if not is_expired(self.credential.expires_at):
@@ -189,6 +244,27 @@ def run_gmail_tool_request(request: AssistantToolRequest, adapter: GmailRuntimeA
                 state_changed=True,
                 result_summary=f"Created Gmail draft {draft.id} to {draft.to}.",
                 output={"draft": draft.__dict__},
+            )
+        if request.action_id == "gmail.send_email":
+            # Reached only through an approved proposal: the capability is
+            # high risk and requires confirmation (capabilities.registry).
+            draft_id = str(request.input.get("draft_id") or "").strip() or None
+            to = "" if draft_id else _validated_recipients(str(request.input.get("to") or ""))
+            sent = runtime.send_message(
+                to=to,
+                subject=str(request.input.get("subject") or ""),
+                body=str(request.input.get("body") or ""),
+                draft_id=draft_id,
+            )
+            target = f"draft {draft_id}" if draft_id else sent.to
+            return AssistantToolResult(
+                tool_id=request.tool_id,
+                action_id=request.action_id,
+                session_id=request.session_id,
+                risk_level="high",
+                state_changed=True,
+                result_summary=f"Sent Gmail message {sent.id} ({target}).",
+                output={"sent": sent.__dict__},
             )
     except Exception as error:
         return AssistantToolResult(

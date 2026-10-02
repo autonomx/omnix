@@ -111,3 +111,79 @@ def test_sample_gmail_data_needs_the_explicit_flag(monkeypatch):
 
     assert result.error is None
     assert result.output["messages"]
+
+
+def _send(adapter, **values):
+    return run_gmail_tool_request(
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.send_email", input=values), adapter,
+    )
+
+
+def test_an_approved_send_request_sends_through_the_adapter():
+    adapter = FakeGmailRuntimeAdapter()
+
+    result = _send(adapter, to="Ada <ada@example.com>, grace@example.org", subject="Notes", body="Attached.")
+
+    assert result.error is None and result.state_changed is True and result.risk_level == "high"
+    assert [sent.to for sent in adapter.sent] == ["ada@example.com, grace@example.org"]
+    assert result.output["sent"]["id"] == adapter.sent[0].id
+
+
+def test_a_draft_can_be_sent_by_id():
+    adapter = FakeGmailRuntimeAdapter()
+    draft = adapter.create_draft(to="ada@example.com", subject="Follow-up", body="Thanks")
+
+    result = _send(adapter, draft_id=draft.id)
+
+    assert result.error is None
+    assert adapter.sent[0].subject == "Follow-up" and draft.id not in adapter.drafts
+
+
+def test_invalid_recipients_are_refused_before_anything_is_sent():
+    adapter = FakeGmailRuntimeAdapter()
+
+    for to in ("", "example", "ada@localhost", ", ".join(f"user{index}@example.com" for index in range(21))):
+        result = _send(adapter, to=to, subject="s", body="b")
+        assert result.error == "gmail_send_invalid_recipients" and result.state_changed is False
+
+    assert adapter.sent == []
+
+
+def test_header_injection_in_the_subject_is_refused():
+    adapter = GoogleGmailRuntimeAdapter(
+        AssistantToolCredentialRecord(
+            tool_id="gmail", provider="Google", access_token="access-token",
+            account_email="ada@example.com", updated_at="2026-07-03T00:00:00+00:00",
+        )
+    )
+
+    result = _send(adapter, to="ada@example.com", subject="Hi\r\nBcc: attacker@example.com", body="b")
+
+    assert result.error and result.state_changed is False
+
+
+def test_the_google_adapter_posts_messages_send_and_drafts_send(monkeypatch):
+    import base64
+
+    calls: list[tuple[str, dict]] = []
+
+    def fake_gmail_json(method, url, access_token, body=None):
+        calls.append((url, body))
+        return {"id": "sent-1", "threadId": "thread-9"}
+
+    monkeypatch.setattr("app.assistant_tools.gmail_adapter._gmail_json", fake_gmail_json)
+    adapter = GoogleGmailRuntimeAdapter(
+        AssistantToolCredentialRecord(
+            tool_id="gmail", provider="Google", access_token="access-token",
+            account_email="ada@example.com", updated_at="2026-07-03T00:00:00+00:00",
+        )
+    )
+
+    sent = adapter.send_message(to="ada@example.com", subject="Hello", body="Body text")
+    adapter.send_message(to="", subject="", body="", draft_id="draft-7")
+
+    assert sent.id == "sent-1" and sent.thread_id == "thread-9"
+    assert calls[0][0].endswith("/users/me/messages/send")
+    raw = base64.urlsafe_b64decode(calls[0][1]["raw"] + "==").decode()
+    assert "To: ada@example.com" in raw and "Subject: Hello" in raw
+    assert calls[1] == ("https://gmail.googleapis.com/gmail/v1/users/me/drafts/send", {"id": "draft-7"})
