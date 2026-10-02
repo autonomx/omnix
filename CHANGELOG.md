@@ -29,6 +29,9 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   runbooks (`docs/operations/runbooks/`); one documented diagnostics schema.
 - Problem-details error responses (`application/problem+json`) with a request
   id and a machine code.
+- Optional OpenTelemetry tracing (`OMNIX_OTEL_ENABLED=true`, packages in
+  `requirements/tracing.lock.txt`): request, httpx and psycopg spans plus job,
+  RPG turn, live speech and agent step spans, with the trace id in log lines.
 - `scripts/backup_omnix.py` and `scripts/restore_rehearsal.py`, with a nightly
   restore rehearsal.
 

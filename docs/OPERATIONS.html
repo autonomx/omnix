@@ -171,6 +171,33 @@
 <h2 id="metrics">Metrics</h2>
 <p><code>GET /metrics</code> serves Prometheus metrics for the process that answers (it needs <code>admin:metrics</code>). Scrape each gateway process directly. The catalog and label rules are in <a href="operations/METRICS.html">operations/METRICS.html</a>.</p>
 <p>Objectives and their error budget are in <a href="operations/SLOS.html">operations/SLOS.html</a>. The diagnostics document (<code>/api/diagnostics</code>) is described in <a href="operations/DIAGNOSTICS.html">operations/DIAGNOSTICS.html</a>. Prometheus alert rules: <code>deploy/observability/alerts.yml</code>; Grafana dashboard (import with a Prometheus data source): <code>deploy/observability/dashboards/omnix-overview.json</code>.</p>
+<h2 id="tracing">Tracing</h2>
+<p>Tracing is optional and off by default. To turn it on:</p>
+<ol>
+<li>Install the tracing lock (a superset of the gateway lock):</li>
+<p><code>python -m pip install --require-hashes -r requirements/tracing.lock.txt</code>. For the container image, build with <code>--build-arg OMNIX_LOCK=tracing</code>.</p>
+<li>Set <code>OMNIX_OTEL_ENABLED=true</code> and the standard exporter variables, for</li>
+<p>example <code>OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318</code> (OTLP over HTTP). <code>OTEL_SERVICE_NAME</code> overrides the service name (<code>omnix-gateway</code>, <code>omnix-job-worker</code>).</p>
+</ol>
+<p>If the variable is set but the packages are missing, the process logs a warning and runs without tracing.</p>
+<p>What is traced:</p>
+<ul>
+<li>every gateway request (FastAPI server spans; <code>/health</code>, <code>/health/ready</code> and</li>
+<p><code>/metrics</code> are left out), with the request id as <code>omnix.request_id</code>;</p>
+<li>outbound httpx calls (model services and providers), which carry the</li>
+<p><code>traceparent</code> header, and psycopg statements;</p>
+<li>durable job execution (<code>job.execute</code>, with job type, id, attempt and pool) in</li>
+<p>the job worker and the Chat dispatcher;</p>
+<li>RPG turn stages (<code>rpg.turn.pipeline</code> and its <code>rpg.turn.*</code> stages, with their</li>
+<p>scalar measurements);</p>
+<li>live speech stages (<code>live_speech.utterance</code>, <code>.transcript</code>, <code>.first_audio</code>,</li>
+<p><code>.response</code>), recorded from the turn&#x27;s timestamps;</p>
+<li>agent steps: the model-call and capability request spans name the run</li>
+<p>(<code>omnix.agent_run_id</code>, <code>omnix.agent_step</code>), and capability adapters run in a <code>capability.execute</code> span.</p>
+</ul>
+<p>Spans carry identifiers and measurements, never prompts, transcripts or tool input. While a span is active, log lines carry its <code>trace_id</code>.</p>
+<p>A job runs in its own trace: the worker does not continue the submitting request&#x27;s trace. Use <code>request_id</code> (the job&#x27;s correlation id, also a span attribute) to join them.</p>
+<p>Local viewer: <code>docker compose --profile observability up -d otel-collector jaeger</code> starts a collector (<code>deploy/observability/otel-collector.yaml</code>) and Jaeger (UI on http://127.0.0.1:16686). Processes on the host send to <code>http://127.0.0.1:4318</code>; services in the Compose network send to <code>http://otel-collector:4318</code>. This profile is documentation for operators and is not exercised in CI.</p>
 <h2 id="health-and-readiness-checks">Health and readiness checks</h2>
 <p>Health means different things at different layers.</p>
 <div class="table-wrap"><table><thead><tr>

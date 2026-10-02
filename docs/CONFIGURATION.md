@@ -198,6 +198,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_OIDC_REQUIRED_GROUP` | string | — | security | Controls oidc required group for security. |
 | `OMNIX_OIDC_SCOPES` | list | — | security | Controls oidc scopes for security. |
 | `OMNIX_OIDC_WORKSPACE_ID` | string | `workspace:local` | security | Controls oidc workspace id for security. |
+| `OMNIX_OTEL_ENABLED` | boolean | `false` | observability | Controls otel enabled for observability. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |
@@ -315,6 +316,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_WEB_SEARCH_API_KEY` | string | — | research, security | Controls web search api key for research, security. |
 | `OMNIX_WEB_SEARCH_PROVIDER` | string | — | research, security | Controls web search provider for research, security. |
 | `OMNIX_WEB_SEARCH_TIMEOUT_SECONDS` | string | `8.0` | research | Controls web search timeout seconds for research. |
+| `OTEL_SERVICE_NAME` | string | — | observability | Controls otel service name for observability. |
 | `PARAKEET_LIVE_EDGE_PADDING_MS` | integer | `100` | providers | Controls parakeet live edge padding ms for providers. |
 | `PARAKEET_LIVE_MAX_QUEUED_SEGMENTS` | integer | `32` | providers | Controls parakeet live max queued segments for providers. |
 | `PARAKEET_LIVE_MAX_SESSION_SEGMENTS` | integer | `8` | providers | Controls parakeet live max session segments for providers. |

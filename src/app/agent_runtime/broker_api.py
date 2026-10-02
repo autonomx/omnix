@@ -17,6 +17,7 @@ from app.capabilities import default_capability_registry
 from app.assistant_tools.gate import review_assistant_tool_request
 from app.capabilities.executor import LEGACY_APPROVER, CapabilityGrant, execute_capability
 from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
+from app.observability.tracing import set_span_attributes
 from app.persistence.unit_of_work import unit_of_work
 from app.security.run_tokens import RunTokenClaims, issue_run_token, verify_run_token
 
@@ -757,6 +758,8 @@ def execute_agent_capability(
     capability_id: str,
     request: BrokerCapabilityRequest,
 ) -> BrokerCapabilityResponse:
+    # Agent step for traces (WP-10.4); identifiers only, never the capability input.
+    set_span_attributes(agent_run_id=run_id, agent_step="capability", capability_id=capability_id)
     service = default_agent_run_service()
     snapshot = service.get(run_id)
     if snapshot is None:

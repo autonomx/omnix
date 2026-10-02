@@ -11,6 +11,7 @@ from collections.abc import Callable
 from types import MappingProxyType
 
 from app.capabilities.executor import EXECUTE_HOOK, CapabilityGrant
+from app.observability.tracing import annotate, span
 from app.runtime.hooks import RuntimeHookSpec
 from app.security import audit
 
@@ -55,7 +56,9 @@ def run_capability_adapter(
     request: AssistantToolRequest, risk_level: ToolRiskLevel, *, source: str = "tool_proposal",
 ) -> AssistantToolResult:
     """Dispatch an already reviewed request. An unknown tool is an error."""
-    result = _dispatch(request, risk_level)
+    with span("capability.execute", tool_id=request.tool_id, action_id=request.action_id, source=source) as current:
+        result = _dispatch(request, risk_level)
+        annotate(current, {"state_changed": result.state_changed, "error": result.error})
     audit.record(
         "capability.execute",
         target_type="capability",

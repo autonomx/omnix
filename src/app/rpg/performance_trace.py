@@ -16,6 +16,8 @@ from typing import Any, Iterator
 
 from fastapi.responses import Response
 
+from app.observability.tracing import annotate
+from app.observability.tracing import span as tracing_span
 from app.rpg.debug_logging import log_rpg_event, new_rpg_trace_id
 
 logger = logging.getLogger(__name__)
@@ -156,6 +158,25 @@ def rpg_pipeline_trace(
     trace_id: str | None = None,
     fields: dict[str, Any] | None = None,
 ) -> Iterator[RpgPipelineTrace]:
+    """Measure an RPG request; with tracing on, it is also an OpenTelemetry span (WP-10.4)."""
+    name = str(operation or "rpg.pipeline")
+    with tracing_span(f"rpg.{name}", session_id=session_id) as otel_span, _measured_pipeline_trace(
+        name, session_id=session_id, trace_id=trace_id, fields=fields,
+    ) as trace:
+        try:
+            yield trace
+        finally:
+            annotate(otel_span, {"rpg_trace_id": trace.trace_id, **trace.fields})
+
+
+@contextmanager
+def _measured_pipeline_trace(
+    operation: str,
+    *,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[RpgPipelineTrace]:
     trace = RpgPipelineTrace(
         trace_id=trace_id or new_rpg_trace_id("pipeline"),
         operation=str(operation or "rpg.pipeline"),
@@ -208,6 +229,20 @@ def rpg_pipeline_trace(
 
 @contextmanager
 def rpg_pipeline_span(
+    name: str,
+    *,
+    fields: dict[str, Any] | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Measure one stage; with tracing on, it is also a child OpenTelemetry span."""
+    with tracing_span(f"rpg.{name}") as otel_span, _measured_pipeline_span(name, fields=fields) as stage:
+        try:
+            yield stage
+        finally:
+            annotate(otel_span, stage)
+
+
+@contextmanager
+def _measured_pipeline_span(
     name: str,
     *,
     fields: dict[str, Any] | None = None,

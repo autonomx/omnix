@@ -103,6 +103,11 @@ def _install_request_middleware(gateway: FastAPI, auth_service, membership_resol
 
     # Around everything: each request's log lines and response carry its id (WP-10.2).
     gateway.add_middleware(RequestContextMiddleware)
+    from app.observability.tracing import configure_tracing, instrument_app
+
+    # Optional server spans around all of it (WP-10.4); a no-op unless enabled.
+    configure_tracing(service_name="omnix-gateway")
+    instrument_app(gateway)
 
 
 def _docs_permission(connection: HTTPConnection) -> None:

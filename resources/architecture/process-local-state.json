@@ -856,6 +856,12 @@
       "reason": "Serializes the one-time construction of this process's Prometheus registry; metrics are per-process by design (each gateway process is scraped separately) and carry no authority."
     },
     {
+      "path": "src/app/observability/tracing.py",
+      "symbol": "_lock",
+      "category": "coordination",
+      "reason": "Serializes the one-time start and shutdown of this process's OpenTelemetry tracer provider; spans are exported per process and carry no authority."
+    },
+    {
       "path": "src/app/observability/tts_stream_diagnostics.py",
       "symbol": "_ACTIVE_LOCK",
       "category": "cache",

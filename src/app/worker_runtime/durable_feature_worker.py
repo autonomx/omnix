@@ -12,6 +12,7 @@ from typing import Any
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
 from app.observability.logging import log_context
 from app.observability.metrics import record_job_execution
+from app.observability.tracing import span
 from app.runtime.statement_class import statement_class
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
@@ -333,6 +334,9 @@ class DurableFeatureJobWorker:
             with statement_class("job"), log_context(
                 job_id=job.id, attempt=attempt, feature=getattr(job, "module", None),
                 request_id=getattr(job, "correlation_id", None),
+            ), span(
+                "job.execute", job_type=getattr(job, "type", None), job_id=job.id, attempt=attempt,
+                pool=self.pool_name, request_id=getattr(job, "correlation_id", None),
             ):
                 self._execute_claimed(job, cancellation)
         finally:

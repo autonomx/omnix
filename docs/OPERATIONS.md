@@ -151,6 +151,51 @@ The diagnostics document (`/api/diagnostics`) is described in [operations/DIAGNO
 Prometheus alert rules: `deploy/observability/alerts.yml`; Grafana dashboard
 (import with a Prometheus data source): `deploy/observability/dashboards/omnix-overview.json`.
 
+## Tracing
+
+Tracing is optional and off by default. To turn it on:
+
+1. Install the tracing lock (a superset of the gateway lock):
+   `python -m pip install --require-hashes -r requirements/tracing.lock.txt`.
+   For the container image, build with `--build-arg OMNIX_LOCK=tracing`.
+2. Set `OMNIX_OTEL_ENABLED=true` and the standard exporter variables, for
+   example `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` (OTLP over HTTP).
+   `OTEL_SERVICE_NAME` overrides the service name (`omnix-gateway`,
+   `omnix-job-worker`).
+
+If the variable is set but the packages are missing, the process logs a warning
+and runs without tracing.
+
+What is traced:
+
+- every gateway request (FastAPI server spans; `/health`, `/health/ready` and
+  `/metrics` are left out), with the request id as `omnix.request_id`;
+- outbound httpx calls (model services and providers), which carry the
+  `traceparent` header, and psycopg statements;
+- durable job execution (`job.execute`, with job type, id, attempt and pool) in
+  the job worker and the Chat dispatcher;
+- RPG turn stages (`rpg.turn.pipeline` and its `rpg.turn.*` stages, with their
+  scalar measurements);
+- live speech stages (`live_speech.utterance`, `.transcript`, `.first_audio`,
+  `.response`), recorded from the turn's timestamps;
+- agent steps: the model-call and capability request spans name the run
+  (`omnix.agent_run_id`, `omnix.agent_step`), and capability adapters run in a
+  `capability.execute` span.
+
+Spans carry identifiers and measurements, never prompts, transcripts or tool
+input. While a span is active, log lines carry its `trace_id`.
+
+A job runs in its own trace: the worker does not continue the submitting
+request's trace. Use `request_id` (the job's correlation id, also a span
+attribute) to join them.
+
+Local viewer: `docker compose --profile observability up -d otel-collector jaeger`
+starts a collector (`deploy/observability/otel-collector.yaml`) and Jaeger
+(UI on http://127.0.0.1:16686). Processes on the host send to
+`http://127.0.0.1:4318`; services in the Compose network send to
+`http://otel-collector:4318`. This profile is
+documentation for operators and is not exercised in CI.
+
 ## Health and readiness checks
 
 Health means different things at different layers.

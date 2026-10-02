@@ -128,6 +128,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from app.observability.logging import configure_logging
 
     configure_logging()
+    from app.observability.tracing import configure_tracing
+
+    configure_tracing(service_name="omnix-job-worker")
     try:
         parse_pools(args.pools)
         return asyncio.run(_serve(args))

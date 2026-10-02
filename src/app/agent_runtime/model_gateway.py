@@ -16,6 +16,7 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.observability.tracing import set_span_attributes
 from app.providers.base import ChatMessage, ChatResponse
 from app.providers.service import get_provider
 
@@ -374,6 +375,10 @@ async def agent_chat_completion(
         _target_for_run,
         x_omnix_agent_run_id,
         request.model,
+    )
+    # Agent step for traces (WP-10.4): the server span names the run and model.
+    set_span_attributes(
+        agent_run_id=x_omnix_agent_run_id, agent_step="model", provider_id=provider_id, model_id=model_id,
     )
     snapshot = default_agent_run_service().get(x_omnix_agent_run_id)
     if snapshot is None:

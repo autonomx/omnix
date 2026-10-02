@@ -26,8 +26,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.config.env import env_str
+from app.observability.tracing import current_trace_id, set_span_attributes
 
 CONTEXT_FIELDS = ("request_id", "job_id", "attempt", "run_id", "workspace_id", "user_id", "feature")
+# Fields each record carries: the bound ids plus the active trace (WP-10.4).
+RECORD_FIELDS = (*CONTEXT_FIELDS, "trace_id")
 _context: contextvars.ContextVar[Mapping[str, str]] = contextvars.ContextVar("omnix_log_context", default={})
 _REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{8,128}")
 _HANDLER_MARKER = "_omnix_configured_handler"
@@ -66,6 +69,8 @@ class ContextFilter(logging.Filter):
         for name in CONTEXT_FIELDS:
             if not hasattr(record, name):
                 setattr(record, name, context.get(name))
+        if not hasattr(record, "trace_id"):
+            record.trace_id = current_trace_id()
         return True
 
 
@@ -77,7 +82,7 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
-        for name in CONTEXT_FIELDS:
+        for name in RECORD_FIELDS:
             value = getattr(record, name, None)
             if value is not None:
                 payload[name] = value
@@ -93,7 +98,7 @@ class TextFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         line = super().format(record)
         ids = " ".join(
-            f"{name}={getattr(record, name)}" for name in CONTEXT_FIELDS if getattr(record, name, None) is not None
+            f"{name}={getattr(record, name)}" for name in RECORD_FIELDS if getattr(record, name, None) is not None
         )
         return f"{line} [{ids}]" if ids else line
 
@@ -143,6 +148,8 @@ class RequestContextMiddleware:
         )
         request_id = request_id_from_header(inbound)
         scope.setdefault("state", {})["request_id"] = request_id
+        # The server span (when tracing is on) names the request id it serves.
+        set_span_attributes(request_id=request_id)
         header = (b"x-request-id", request_id.encode("ascii"))
 
         async def send_with_id(message: dict[str, Any]) -> None:
@@ -157,6 +164,7 @@ class RequestContextMiddleware:
 
 __all__ = [
     "CONTEXT_FIELDS",
+    "RECORD_FIELDS",
     "ContextFilter",
     "JsonFormatter",
     "RequestContextMiddleware",

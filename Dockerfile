@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements/gateway.lock.txt /tmp/gateway.lock.txt
-RUN python -m pip install --no-cache-dir --require-hashes -r /tmp/gateway.lock.txt
+# OMNIX_LOCK=tracing adds the optional OpenTelemetry packages (a superset of the gateway lock).
+ARG OMNIX_LOCK=gateway
+COPY requirements/${OMNIX_LOCK}.lock.txt /tmp/runtime.lock.txt
+RUN python -m pip install --no-cache-dir --require-hashes -r /tmp/runtime.lock.txt
 
 COPY . .
 RUN mkdir -p /app/data

@@ -1358,6 +1358,13 @@
     "type": "string"
   },
   {
+    "default": "false",
+    "description": "Controls otel enabled for observability.",
+    "feature": "observability",
+    "name": "OMNIX_OTEL_ENABLED",
+    "type": "boolean"
+  },
+  {
     "default": null,
     "description": "Controls persistence mode for kernel, trading.",
     "feature": "kernel, trading",
@@ -2174,6 +2181,13 @@
     "description": "Controls web search timeout seconds for research.",
     "feature": "research",
     "name": "OMNIX_WEB_SEARCH_TIMEOUT_SECONDS",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls otel service name for observability.",
+    "feature": "observability",
+    "name": "OTEL_SERVICE_NAME",
     "type": "string"
   },
   {

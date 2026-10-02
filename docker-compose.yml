@@ -56,6 +56,30 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Tracing (WP-10.4): `docker compose --profile observability up`, build the
+  # image with `--build-arg OMNIX_LOCK=tracing` and set OMNIX_OTEL_ENABLED=true
+  # and OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 on the Omnix services.
+  otel-collector:
+    profiles: [observability]
+    image: otel/opentelemetry-collector:0.139.0
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "127.0.0.1:4318:4318"
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+
+  jaeger:
+    profiles: [observability]
+    image: jaegertracing/all-in-one:1.74.0
+    ports:
+      - "127.0.0.1:16686:16686"
+    expose:
+      - "4317"
+    restart: unless-stopped
+
 volumes:
   omnix-postgres-data:
     name: omnix-postgres-data

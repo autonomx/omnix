@@ -18,6 +18,7 @@ from weakref import WeakValueDictionary
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
 from app.observability.logging import log_context
+from app.observability.tracing import span
 from app.persistence.device_permits import device_permit_slot
 from app.providers.base import provider_turn_owner
 from app.runtime.cancellation import CancellationToken
@@ -221,6 +222,9 @@ class _ChatGenerationDispatcher:
                         continue
                     with log_context(
                         job_id=started.id, feature="chat",
+                        request_id=getattr(started, "correlation_id", None),
+                    ), span(
+                        "job.execute", job_type="chat_generation", job_id=started.id,
                         request_id=getattr(started, "correlation_id", None),
                     ):
                         _run_chat_generation_job(

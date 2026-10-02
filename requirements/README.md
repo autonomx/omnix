@@ -6,6 +6,8 @@ inputs; install them with `--require-hashes` so pip verifies every distribution.
 - `requirements.txt` delegates to the gateway lock.
 - `dev.lock.txt` adds test and repository tooling.
 - `worker.lock.txt` delegates to the gateway lock plus worker-only packages.
+- `tracing.lock.txt` is the gateway lock plus the optional OpenTelemetry
+  packages (WP-10.4); `dev.lock.txt` layers on it so the tracing tests run.
 - `image.lock.txt`, `tts.lock.txt`, and `stt.lock.txt` contain isolated model
   runtimes. GPU locks use the PyTorch CUDA 12.4 index and pin one Torch version.
 
