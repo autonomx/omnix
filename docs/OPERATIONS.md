@@ -130,6 +130,12 @@ share one `request_id`. The model services configure the same handler, so
 The web app sends its own id with every gateway call, and its API error
 messages end with `(request id …)`: search the gateway logs for that id.
 
+## Metrics
+
+`GET /metrics` serves Prometheus metrics for the process that answers (it
+needs `admin:metrics`). Scrape each gateway process directly. The catalog and
+label rules are in [operations/METRICS.md](operations/METRICS.md).
+
 ## Health and readiness checks
 
 Health means different things at different layers.

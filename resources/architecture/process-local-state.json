@@ -841,6 +841,12 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/observability/metrics.py",
+      "symbol": "_lock",
+      "category": "coordination",
+      "reason": "Serializes the one-time construction of this process's Prometheus registry; metrics are per-process by design (each gateway process is scraped separately) and carry no authority."
+    },
+    {
       "path": "src/app/observability/tts_stream_diagnostics.py",
       "symbol": "_ACTIVE_LOCK",
       "category": "cache",

@@ -167,6 +167,7 @@ KERNEL_DEFAULTS: tuple[tuple[str, tuple[str, str] | None], ...] = (
     ("/api/workers", ("admin:diagnostics", "admin:diagnostics")),
     ("/api/runtime", ("admin:diagnostics", "admin:diagnostics")),
     ("/api/diagnostics", ("admin:diagnostics", "admin:diagnostics")),
+    ("/metrics", ("admin:metrics", "admin:metrics")),
     ("/api/compatibility", ("admin:diagnostics", "admin:diagnostics")),
     ("/openapi.json", ("admin:docs", "admin:docs")),
     ("/docs", ("admin:docs", "admin:docs")),

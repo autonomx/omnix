@@ -10,7 +10,18 @@ from app.runtime.worker_health import WorkerHealthPayload, get_worker_health_pay
 from app.jobs import ModelResidencyDiagnostics, ModelResidencyRecord, get_model_residency_diagnostics
 from app.providers.cache_status import ProviderModelCachePayload, get_provider_model_cache_status
 from app.persistence.device_permits import default_device_permit_service
-from .runtime_diagnostics import RuntimeDiagnostics
+
+
+class RuntimeDiagnostics(BaseModel):
+    schema_version: int = 1
+    process: dict[str, Any] = Field(default_factory=dict)
+    postgresql: dict[str, Any] = Field(default_factory=dict)
+    background: dict[str, Any] = Field(default_factory=dict)
+    jobs: dict[str, Any] = Field(default_factory=dict)
+    chat: dict[str, Any] = Field(default_factory=dict)
+    scheduler: dict[str, Any] = Field(default_factory=dict)
+    tts: dict[str, Any] = Field(default_factory=dict)
+    replicas: dict[str, Any] = Field(default_factory=dict)
 
 
 class DiagnosticsPayload(BaseModel):

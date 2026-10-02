@@ -1,0 +1,67 @@
+"""Gateway metrics: catalog, bounded labels and access (WP-10.3)."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.observability.metrics import HttpMetricsMiddleware, exposition, request_snapshot, status_class
+from app.security.permissions import kernel_defaults_for
+
+CATALOG = (
+    "omnix_http_requests_total",
+    "omnix_http_request_duration_seconds_bucket",
+    "omnix_http_requests_in_flight",
+)
+
+
+def _text() -> str:
+    body, content_type = exposition()
+    assert content_type.startswith("text/plain")
+    return body.decode()
+
+
+def test_requests_are_labelled_by_route_template_and_status_class() -> None:
+    app = FastAPI()
+
+    @app.get("/metrics-probe/{item_id}")
+    def item(item_id: str) -> dict:
+        return {"id": item_id}
+
+    app.add_middleware(HttpMetricsMiddleware)
+    client = TestClient(app)
+    before = request_snapshot()["request_count"]
+    for item_id in ("one", "two", "three"):
+        assert client.get(f"/metrics-probe/{item_id}").status_code == 200
+    assert client.get("/metrics-probe-missing/raw-path-123").status_code == 404
+
+    text = _text()
+    assert 'route="/metrics-probe/{item_id}"' in text
+    assert "one" not in text and "raw-path-123" not in text
+    assert 'route="unmatched"' in text and 'status_class="4xx"' in text
+    assert request_snapshot()["request_count"] - before == 4
+
+
+def test_status_classes_are_bounded() -> None:
+    assert [status_class(code) for code in (101, 204, 302, 404, 503, 999, 0)] == [
+        "1xx", "2xx", "3xx", "4xx", "5xx", "5xx", "1xx",
+    ]
+
+
+def test_the_gateway_serves_the_catalog_to_metrics_admins(tmp_path: Path, monkeypatch) -> None:
+    from app.gateway.main import create_gateway_app
+    from app.persistence import runtime
+    from tests.support.in_memory_jobs import InMemoryJobStore
+
+    monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: False)
+    app = create_gateway_app(job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs.sqlite"))
+    client = TestClient(app, base_url="http://127.0.0.1")
+    assert client.get("/api/health").status_code == 200
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert all(name in response.text for name in CATALOG)
+    assert 'route="/api/health"' in response.text
+    assert kernel_defaults_for("/metrics") == ("admin:metrics", "admin:metrics")

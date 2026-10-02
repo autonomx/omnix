@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.assets import AssetType
 from app.assistant_tools import (
@@ -308,6 +308,14 @@ def create_kernel_router(
             state, model_residency_store_factory=get_model_residency_store,
             allow_offline_store=allow_offline_model_residency_store,
         )
+
+    @router.get("/metrics", response_class=Response, tags=["diagnostics"])
+    def metrics() -> Response:
+        """Prometheus metrics (WP-10.3); needs ``admin:metrics``."""
+        from app.observability.metrics import exposition
+
+        body, content_type = exposition()
+        return Response(body, media_type=content_type)
 
     @router.get(
         "/api/model-residency",

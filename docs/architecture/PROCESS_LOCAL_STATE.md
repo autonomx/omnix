@@ -124,6 +124,7 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/live_voice/speech/speculative_tts.py:114` `_ENTRIES` | container | cache | 16 | 45.0 | clear_speculative_tts_cache | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/live_voice/speech/tts_lane.py:286` `_DEDICATED_TTS_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/observability/agent_logging.py:64` `_lock` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
+| `src/app/observability/metrics.py:17` `_lock` | lock | coordination | — | — | — | Serializes the one-time construction of this process's Prometheus registry; metrics are per-process by design (each gateway process is scraped separately) and carry no authority. |
 | `src/app/observability/tts_stream_diagnostics.py:31` `_ACTIVE_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/observability/tts_stream_diagnostics.py:32` `_ACTIVE_STREAMS` | container | cache | 4096 | 14400.0 | clear_active_streams | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/persistence/blob_store.py:284` `_DEFAULT_STORE_LOCK` | lock | cache | — | — | — | Guards one-time construction of the process's BlobStore client (HTTP connection pool for S3); blob content and metadata live in the configured store, never in this process. |
@@ -206,4 +207,4 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/voice_debug.py:37` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/voice_debug.py:34` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 
-Scanned entries: 199; unapproved entries: 0; unbounded caches: 31.
+Scanned entries: 200; unapproved entries: 0; unbounded caches: 31.

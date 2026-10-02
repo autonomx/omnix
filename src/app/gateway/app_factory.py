@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from typing import Any, cast
@@ -241,13 +242,13 @@ def create_gateway_app(
     gateway.state.background_registry = GatewayBackgroundRegistryAdapter(gateway)
     gateway.state.scheduler_registry = GatewaySchedulerRegistryAdapter(gateway)
     gateway.state.feature_lifecycles = []
-    from app.platform.runtime_diagnostics import RequestMetrics, RuntimeRequestMiddleware
+    from app.observability.metrics import HttpMetricsMiddleware
 
-    gateway.state.runtime_metrics = RequestMetrics()
+    gateway.state.started_monotonic = time.monotonic()
     from app.observability.tts_stream_diagnostics import runtime_stream_snapshot
 
     gateway.state.tts_stream_snapshot = runtime_stream_snapshot
-    gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)
+    gateway.add_middleware(HttpMetricsMiddleware)
     from .feature_registry import compose_features
 
     _install_request_middleware(gateway, auth_service, membership_resolver)

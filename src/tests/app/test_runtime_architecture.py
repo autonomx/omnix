@@ -22,7 +22,7 @@ def application(config):
     return SimpleNamespace(state=SimpleNamespace(
         runtime_config=config, runtime_capabilities=RuntimeCapabilities.from_config(config),
         feature_lifecycles=[], runtime_started=False, runtime_services=None,
-        background_registry=None,
+        background_registry=None, started_monotonic=0.0,
     ), router=SimpleNamespace(on_startup=[], on_shutdown=[]))
 
 
@@ -111,9 +111,8 @@ def test_background_connection_loss_stops_workers_and_latches_authority(monkeypa
 
 
 def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
-    from app.platform.runtime_diagnostics import RequestMetrics, runtime_diagnostics
+    from app.platform.runtime_diagnostics import runtime_diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-    app.state.runtime_metrics = RequestMetrics()
     @contextmanager
     def connection():
         raise OSError('postgresql://user:secret@host/database')
@@ -139,9 +138,7 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):
     from app.runtime.worker_health import WorkerHealthPayload
     from app.platform import diagnostics
-    from app.platform.runtime_diagnostics import RequestMetrics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-    app.state.runtime_metrics = RequestMetrics()
     @contextmanager
     def connection():
         raise OSError('postgresql://user:private@host/db')

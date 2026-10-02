@@ -74365,6 +74365,21 @@
         ]
       }
     },
+    "/metrics": {
+      "get": {
+        "description": "Prometheus metrics (WP-10.3); needs ``admin:metrics``.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Metrics",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
     "/ready": {
       "get": {
         "operationId": "readiness_ready_get",
