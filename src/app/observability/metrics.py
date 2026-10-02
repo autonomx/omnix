@@ -19,6 +19,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 _UNMATCHED_ROUTE = "unmatched"
 _LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
+_JOB_DURATION_BUCKETS = (0.1, 0.5, 1.0, 5.0, 15.0, 60.0, 300.0, 900.0, 3600.0)
 _LOOP_LAG_BUCKETS = (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
 LOOP_LAG_INTERVAL_SECONDS = 0.5
 _lock = threading.Lock()
@@ -27,7 +28,7 @@ _metrics: dict[str, Any] | None = None
 
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
-    "auth_rejections", "rate_limited", "retention_deleted",
+    "auth_rejections", "rate_limited", "retention_deleted", "job_duration",
 )
 
 
@@ -69,6 +70,10 @@ def _build() -> dict[str, Any]:
         "retention_deleted": Counter(
             "omnix_retention_rows_deleted", "Rows deleted by retention, by record type.", ("record_type",),
             registry=registry,
+        ),
+        "job_duration": Histogram(
+            "omnix_job_execution_seconds", "Durable job executions by type and outcome.",
+            ("job_type", "outcome"), buckets=_JOB_DURATION_BUCKETS, registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -172,6 +177,11 @@ def record_auth_rejection(reason: str) -> None:
 
 def record_rate_limit_rejection(limit: str) -> None:
     _get()["rate_limited"].labels(limit).inc()
+
+
+def record_job_execution(job_type: str, outcome: str, seconds: float) -> None:
+    """One durable job execution; ``outcome`` is the job's resulting status, ``lease_lost`` or ``error``."""
+    _get()["job_duration"].labels(job_type, outcome).observe(seconds)
 
 
 def record_retention_deleted(record_type: str, rows: int) -> None:
@@ -373,7 +383,7 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 __all__ = [
     "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
-    "event_loop_lag_monitor", "exposition", "record_retention_deleted",
+    "event_loop_lag_monitor", "exposition", "record_job_execution", "record_retention_deleted",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

@@ -46,8 +46,8 @@ request metrics above do not show them by route.
 
 Recorded by the pooled HTTP client every LLM provider and model-service call
 goes through, once per attempt (a retried call counts each attempt). The
-gateway installs the recorder; calls made in the job worker process are not
-recorded there yet. `client`
+gateway installs the recorder (the job worker composes the same app, so its
+calls are recorded and served on the worker's own listener). `client`
 is the provider's name (`lmstudio`, `openrouter`, ...) or the service
 (`tts-service`, `stt-service`, `hermes`, ...), a fixed set.
 
@@ -109,14 +109,18 @@ on its private listener (`--metrics-host`, `--metrics-port`), per resource pool:
 `omnix_job_worker_pool_ready`, `omnix_job_worker_pool_active_jobs`,
 `omnix_job_worker_pool_concurrency_limit`, and the counters
 `omnix_job_worker_pool_claimed_total`, `omnix_job_worker_pool_completed_total`
-and `omnix_job_worker_pool_failures_total`.
+and `omnix_job_worker_pool_failures_total`. The same page then serves the
+process registry: the provider metrics above for calls its jobs make, and
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_job_execution_seconds` | histogram | `job_type`, `outcome` | Durable job executions. `outcome` is the job's resulting status (`completed`, `failed`, `retrying`, `canceled`, ...), `lease_lost` when the lease expired before the result was written, or `error` when the worker caught an unexpected failure. Buckets: 0.1 s to 1 h. A retried job records one execution per attempt. |
 
 ## Planned (WP-10.3)
 
 | Area | Metrics |
 |---|---|
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
-| Jobs | retries and execution duration by job type in the job worker |
 | Speech | TTS first-audio latency; live calls active; STT latency |
 | Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
 | Capacity | device permits held and waiting by class |

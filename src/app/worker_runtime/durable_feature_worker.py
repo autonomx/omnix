@@ -11,6 +11,7 @@ from typing import Any
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
 from app.observability.logging import log_context
+from app.observability.metrics import record_job_execution
 from app.runtime.statement_class import statement_class
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
@@ -380,6 +381,7 @@ class DurableFeatureJobWorker:
             daemon=True,
         )
         renewal.start()
+        started, outcome = time.perf_counter(), "error"
         try:
             lease_store = _LeaseBoundJobStore(self.store, job)
             result = execute_durable_feature_job(
@@ -389,6 +391,7 @@ class DurableFeatureJobWorker:
                 services=self.services,
                 cancellation=cancellation,
             )
+            outcome = str(getattr(result.status, "value", result.status))
             if result.status in {
                 JobStatus.COMPLETED,
                 JobStatus.FAILED,
@@ -399,6 +402,7 @@ class DurableFeatureJobWorker:
             self.last_error = None
         except JobClaimConflict:
             # An expired or explicitly released token cannot publish a late result.
+            outcome = "lease_lost"
             return
         except Exception as exc:
             self.failure_count += 1
@@ -407,6 +411,7 @@ class DurableFeatureJobWorker:
         finally:
             renewal_stop.set()
             renewal.join(timeout=1.0)
+            record_job_execution(job.type, outcome, time.perf_counter() - started)
 
     def _renew_loop(
         self,

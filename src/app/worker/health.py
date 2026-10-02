@@ -53,7 +53,10 @@ def create_worker_health_app(runtime: Any) -> FastAPI:
                     f"omnix_job_worker_pool_failures_total{{{labels}}} {pool['failure_count']}",
                 )
             )
-        return "\n".join(lines) + "\n"
+        from app.observability.metrics import exposition
+
+        # Then the process registry: job execution times and provider calls.
+        return "\n".join(lines) + "\n" + exposition()[0].decode()
 
     return app
 

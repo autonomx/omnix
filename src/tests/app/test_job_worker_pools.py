@@ -155,6 +155,7 @@ def test_job_worker_health_reports_each_pool_and_prometheus_metrics():
     assert readiness.json()["pools"]["cpu"]["active_jobs"] == 2
     assert 'omnix_job_worker_pool_active_jobs{pool="cpu"} 2' in metrics.text
     assert 'omnix_job_worker_pool_ready{pool="image"} 0' in metrics.text
+    assert "omnix_job_execution_seconds" in metrics.text
 
 
 def test_cli_parser_uses_standalone_defaults_and_accepts_example_pools():
