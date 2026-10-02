@@ -246,6 +246,7 @@ http://127.0.0.1:8000/api/health</code></pre></div>
 </ol>
 <p><code>OMNIX_DRAIN_MIN_SECONDS</code> (default 0) keeps a draining replica visibly not-ready for at least that long, even when it is idle. In multi-replica deployments, set it to at least the ingress readiness-probe interval. A second Ctrl+C forces an immediate exit.</p>
 <p>Job workers stop claiming on shutdown. They let running jobs finish within <code>OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS</code> and release the leases of any that are still running, so another worker retries them.</p>
+<p>Releases (versions, checklist, deployment order and rollback): <a href="operations/RELEASE.html">operations/RELEASE.html</a>.</p>
 <p>To upgrade replicas one at a time:</p>
 <ol>
 <li>Apply expand migrations first (<code>python -m app.persistence migrate</code>).</li>

@@ -201,6 +201,8 @@ Job workers stop claiming on shutdown. They let running jobs finish within
 `OMNIX_JOB_WORKER_SHUTDOWN_GRACE_SECONDS` and release the leases of any that
 are still running, so another worker retries them.
 
+Releases (versions, checklist, deployment order and rollback): [operations/RELEASE.md](operations/RELEASE.md).
+
 To upgrade replicas one at a time:
 
 1. Apply expand migrations first (`python -m app.persistence migrate`).

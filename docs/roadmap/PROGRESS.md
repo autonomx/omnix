@@ -111,7 +111,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-11.2 | not started | — | 2026-09-27 | — | Compose profiles |
 | WP-11.3 | not started | — | 2026-09-27 | — | Ingress hardening |
 | WP-11.4 | not started | — | 2026-09-27 | — | Launcher and scripts |
-| WP-11.5 | not started | — | 2026-09-27 | — | Release process |
+| WP-11.5 | in progress | #1547 | 2026-10-02 | Documents exist; the release workflow builds and tags images (waits for WP-11.1) | `CHANGELOG.md` (Keep a Changelog, `[Unreleased]` summarizing phases 0-10); `docs/operations/RELEASE.md`: semantic versioning with `pyproject.toml` as the source, `OMNIX_SOFTWARE_REVISION=<version>+<commit>`, the release checklist (migrations reviewed for expand/contract, OpenAPI diff, security scan, restore rehearsal), deployment order (backup, migrate, workers, scheduler, APIs, web, contract migrations last) and rollback. The root `package.json` was 1.0.0 against 0.1.0 elsewhere; all are 0.1.0 now and `test_release_versions.py` keeps them (and the lock file) in step. Remaining: the image release workflow (WP-11.1). |
 | WP-11.6 | not started | — | 2026-09-27 | — | Repository hygiene |
 | WP-12.1 | not started | — | 2026-09-27 | — | Re-measure, re-audit, re-rate |
 
