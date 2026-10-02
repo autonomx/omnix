@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
 
 import math
@@ -16,6 +18,8 @@ from typing import Any
 from urllib.parse import urlparse
 from app.runtime.net import bind_host
 from app.security.service_credentials import initialize_service_token
+
+logger = logging.getLogger(__name__)
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
@@ -489,6 +493,7 @@ def _kill_processes_for_port(port: int) -> list[int]:
                 timeout=5,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "_kill_processes_for_port", exc_info=True)
             continue
         killed.append(pid)
     return killed

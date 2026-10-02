@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -46,6 +48,8 @@ from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 _STATE_KEY = "_omnix_trading_ai_shadow_v2_monitor"
 _ARMS: tuple[AIShadowV2Arm, ...] = (
@@ -220,6 +224,7 @@ def _latest_snapshot(events: list[StrategyEvent], instrument_id: str) -> Catalys
             max(values, key=lambda e: (e.observed_at, e.event_id)).payload["snapshot"]
         )
     except Exception:
+        logger.debug("suppressed error in %s", "_latest_snapshot", exc_info=True)
         return None
 
 
@@ -484,6 +489,7 @@ class TradingAIShadowV2Monitor:
                 market_service.execution_observation, candidate.instrument_id, candidate.binding_id
             )
         except Exception:
+            logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._microstructure", exc_info=True)
             return None
         bid, ask = getattr(obs, "bid", None), getattr(obs, "ask", None)
         if bid is None or ask is None:
@@ -641,7 +647,7 @@ class TradingAIShadowV2Monitor:
                     if trigger_satisfied(trigger, structure=row["structure"], previous_structure=prior):
                         reasons.append("armed_trigger_satisfied")
                 except Exception:
-                    pass
+                    logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._run_arm_core", exc_info=True)
             if previous is not None and at - previous.observed_at.astimezone(at.tzinfo) >= timedelta(minutes=5):
                 reasons.append("five_minute_heartbeat")
             if not reasons:
@@ -784,6 +790,7 @@ class TradingAIShadowV2Monitor:
                             catalyst_persistence_class=persistence,
                         )
                     except Exception:
+                        logger.debug("suppressed error in %s", "TradingAIShadowV2Monitor._label_episodes_core", exc_info=True)
                         continue
                     if await self._append(
                         repository, config, instrument_id=instrument_id,

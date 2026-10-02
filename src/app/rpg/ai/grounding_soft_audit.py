@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 import json
 import re
 from typing import Any, Dict, Mapping, Optional
 
 from app.rpg.ai.grounding_settings import normalize_grounding_settings
 from app.rpg.ai.grounding_validator import validate_narration_grounding
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -27,7 +31,7 @@ def _extract_json_object(text: Any) -> Dict[str, Any]:
         value = json.loads(text)
         return value if isinstance(value, dict) else {}
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_extract_json_object", exc_info=True)
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:

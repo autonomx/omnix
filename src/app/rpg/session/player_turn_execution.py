@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.rpg.session.public_state_bridge import merge_authoritative_session_state
 
 # RPG session runtime responsibility module.
@@ -106,6 +108,8 @@ from app.rpg.session.visible_response_selection import (
 from typing import (
     Any as Any, Dict as Dict,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def apply_turn(
@@ -580,7 +584,7 @@ def apply_turn(
             from app.rpg.session.service import save_session
             save_session(_safe_dict(final_result.get("session")))
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "apply_turn", exc_info=True)
         return final_result
 
     _stage_started = __import__("time").perf_counter()

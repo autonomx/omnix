@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from app.rpg.session.deferred_narration_guard import suppress_provider_runtime_narration
+
+logger = logging.getLogger(__name__)
 
 
 def get_runtime_llm_provider() -> Any:
@@ -17,5 +21,6 @@ def get_runtime_llm_provider() -> Any:
 
         return get_provider()
     except Exception:
+        logger.debug("suppressed error in %s", "get_runtime_llm_provider", exc_info=True)
         return None
     return None

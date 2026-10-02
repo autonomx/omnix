@@ -1,6 +1,8 @@
 """Reference-image storage and loading for image-to-image generation."""
 from __future__ import annotations
 
+import logging
+
 import io
 import uuid
 from itertools import islice
@@ -11,6 +13,8 @@ from typing import Any, Iterable
 from app.assets.content import AssetContentUnavailable, asset_available, open_asset
 from app.assets import AssetListResponse, AssetRecord, AssetType, SharedAssetStore, default_asset_store, iter_assets
 from app.runtime.paths import resources_data_root
+
+logger = logging.getLogger(__name__)
 
 REFERENCE_ASSET_MODULE = "image-reference"
 SUPPORTED_REFERENCE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -166,7 +170,7 @@ def close_image_references(images: Iterable[Any]) -> None:
         try:
             image.close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "close_image_references", exc_info=True)
 
 
 def _normalize_reference_ids(values: Iterable[str]) -> list[str]:

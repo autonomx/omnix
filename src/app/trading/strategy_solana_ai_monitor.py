@@ -1,6 +1,8 @@
 """Runtime monitor for the AI-only SOL/USDT one-minute shadow strategy."""
 
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -28,6 +30,8 @@ from .strategy_solana_ai import (
     SolanaAIAnalyzer,
 )
 from .trade_logging import trade_log
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_solana_ai_monitor"
@@ -143,7 +147,7 @@ class TradingSolanaAIMonitor:
             except Exception:
                 # Status must remain inspectable during a read-side outage. The
                 # write path still fails closed and leaves the candle retryable.
-                pass
+                logger.debug("suppressed error in %s", "TradingSolanaAIMonitor.strategy_record", exc_info=True)
         return SolanaAIStrategyRecord(
             configured_enabled=solana_ai_monitor_enabled(),
             running=bool(task is not None and not task.done()),
@@ -162,7 +166,7 @@ class TradingSolanaAIMonitor:
             except Exception:
                 # Runtime state remains inspectable during a read-side outage;
                 # new decisions still fail closed on the write path below.
-                pass
+                logger.debug("suppressed error in %s", "TradingSolanaAIMonitor.recent_decisions", exc_info=True)
         return list(reversed(self._decision_events[-normalized_limit:]))
 
     def _decision_event(self, payload: dict[str, object], observed_at: datetime) -> StrategyEvent:

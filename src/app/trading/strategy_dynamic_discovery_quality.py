@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Quality policy for causal discovery, qualification, and replay evidence."""
 
 import hashlib
@@ -473,6 +477,7 @@ def _union_refined(
         try:
             additions.append(GapperCandidate.model_validate(raw))
         except Exception:
+            logger.debug("suppressed error in %s", "_union_refined", exc_info=True)
             continue
     if not additions:
         return result

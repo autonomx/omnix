@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import copy
 from datetime import time
 from types import SimpleNamespace
@@ -13,6 +15,8 @@ from .market_data_recovery import (
     latest_clean_bars,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 _REGULAR_OPEN = time(9, 30)
 
@@ -71,6 +75,7 @@ def _shared_recovery(proxy, instrument_id, interval, limit, binding_id, cancella
             cancellation=cancellation,
         )
     except Exception:
+        logger.debug("suppressed error in %s", "_shared_recovery", exc_info=True)
         return None
 
 

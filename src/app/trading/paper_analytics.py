@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import math
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
@@ -19,6 +21,8 @@ from .strategy_v2_qualification import (
     evaluate_v2_prospective_qualification,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 _ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 
@@ -215,6 +219,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

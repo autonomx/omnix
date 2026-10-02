@@ -4,6 +4,7 @@ Llama.cpp Installation Manager
 Handles automatic installation of precompiled llama.cpp wheels and binaries.
 Provides both Python wheel installation and binary download capabilities.
 """
+import logging
 
 import json
 import os
@@ -17,6 +18,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
@@ -46,7 +49,7 @@ def detect_gpu():
             if result.returncode == 0:
                 gpu_type = "nvidia"
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "detect_gpu", exc_info=True)
 
         if gpu_type == "cpu":
             try:
@@ -54,7 +57,7 @@ def detect_gpu():
                 if result.returncode == 0:
                     gpu_type = "amd"
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "detect_gpu", exc_info=True)
 
     elif os_name == "mac":
         gpu_type = "metal"
@@ -620,6 +623,7 @@ class LlamaCppInstaller:
                     "size_formatted": self._format_size(size)
                 })
             except Exception:
+                logger.debug("suppressed error in %s", "LlamaCppInstaller.get_available_models", exc_info=True)
                 continue
         
         return models

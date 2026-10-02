@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
@@ -16,6 +18,8 @@ from app.rpg.session.llm_narration_projection import (
 
 from .turn_bound_narration import _patch_turn_bound_narration as _PHASE8_PART38_BASE_APPLY_TURN_AUTHORITATIVE
 from . import semantic_response_projection as _part35
+
+logger = logging.getLogger(__name__)
 
 _PHASE8_PART38_SOURCE = "phase8_fast_semantic_direct_dialogue_response"
 _PHASE8_PART38_TEXT_NONE = {"", "[]", "{}", "null", "none", "false", "true"}
@@ -332,7 +336,7 @@ def _phase8_part38_patch_semantic_visible(payload: Any, *, session_id: str = "")
     try:
         _PHASE8_PART38_ORIGINAL_PART35_PERSIST_SEMANTIC_ARTIFACT(session_id, patched, fields)
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_phase8_part38_patch_semantic_visible", exc_info=True)
     return patched
 
 

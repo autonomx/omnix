@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 from .conversation_beats import (
@@ -48,6 +50,8 @@ from .npc_conversations import (
     trim_conversation_state,
     upsert_conversation,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -456,7 +460,7 @@ def run_conversation_tick(simulation_state: dict[str, Any], runtime_state: dict[
                 runtime_state.update(updated_runtime_state)
         except Exception:
             # Ambient narration is presentation-only; never fail the authoritative tick.
-            pass
+            logger.debug("suppressed error in %s", "run_conversation_tick", exc_info=True)
 
     return simulation_state
 

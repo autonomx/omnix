@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import json
 import math
@@ -12,6 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategies.models import GapPullbackConfig
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+
+logger = logging.getLogger(__name__)
 
 
 V2_PROSPECTIVE_START = date(2026, 8, 24)
@@ -197,6 +201,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

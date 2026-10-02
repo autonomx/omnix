@@ -1,6 +1,8 @@
 """OpenAI-compatible provider plugin."""
 from __future__ import annotations
 
+import logging
+
 import json
 from contextlib import ExitStack, contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -23,6 +25,8 @@ from .provider_trace import provider_call_enter, provider_call_exit
 from .structured.transport import (
     pop_structured_transport_options,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAICompatibleProvider(BaseProvider):
@@ -245,7 +249,7 @@ class OpenAICompatibleProvider(BaseProvider):
                     )
                 )
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "OpenAICompatibleProvider.get_models", exc_info=True)
         if self.config.model and not any(model.id == self.config.model for model in models):
             models.append(
                 ModelInfo(

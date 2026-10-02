@@ -1,6 +1,8 @@
 """Materialize missing scene canon before turn-time narrative retrieval."""
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import json
 import re
@@ -16,6 +18,8 @@ from .world_forge_dossiers import (
     project_entity_dossier,
     validate_entity_dossier,
 )
+
+logger = logging.getLogger(__name__)
 
 _VISIBLE = {"public", "player_known", "learned", "partially_known", "disputed"}
 _KIND_PREFIXES = {
@@ -780,7 +784,7 @@ def _generate_bundle(
         ):
             return parsed
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_generate_bundle", exc_info=True)
     return fallback
 
 

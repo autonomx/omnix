@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 # RPG session runtime responsibility module.
@@ -21,6 +23,8 @@ from app.rpg.session.semantic_response_projection import (
 )
 
 from .semantic_response_projection import _patch_semantic_visible_response as _PHASE8_PART37_BASE_APPLY_TURN_AUTHORITATIVE
+
+logger = logging.getLogger(__name__)
 
 _PHASE8_PART37_SOURCE = "phase8_turn_bound_llm_visible_response"
 _PHASE8_PART37_LLM_SOURCES = {
@@ -172,6 +176,7 @@ def _phase8_part37_persist_llm_artifact(session_id: str, payload: dict[str, Any]
     try:
         session = load_runtime_session(session_id)
     except Exception:
+        logger.debug("suppressed error in %s", "_phase8_part37_persist_llm_artifact", exc_info=True)
         return
     if session is None:
         return
@@ -209,6 +214,7 @@ def _phase8_part37_persist_llm_artifact(session_id: str, payload: dict[str, Any]
     try:
         save_runtime_session(session)
     except Exception:
+        logger.debug("suppressed error in %s", "_phase8_part37_persist_llm_artifact", exc_info=True)
         return
 
 

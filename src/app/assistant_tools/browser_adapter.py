@@ -16,6 +16,8 @@ agent-browser daemon cannot establish a CDP channel. That fallback preserves
 run-scoped sessions and Omnix's navigation/resource allowlist.
 """
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str, environment as _environment
 
 import atexit
@@ -40,6 +42,8 @@ from urllib.parse import urlparse
 
 from .models import AssistantToolRequest, AssistantToolResult
 from app.runtime.process_environment import bounded_process_environment
+
+logger = logging.getLogger(__name__)
 
 _BROWSER_ACTIONS = {
     "browser.open",
@@ -424,7 +428,7 @@ def _log_playwright_worker_event(session: _PlaywrightSession, event: str) -> Non
             fields={"backend": "playwright", "session": session.name},
         )
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_log_playwright_worker_event", exc_info=True)
 
 
 def _playwright_action(
@@ -579,7 +583,7 @@ def _playwright_worker(session: _PlaywrightSession) -> None:
             try:
                 playwright.stop()
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         return
 
     session.ready.set()
@@ -617,17 +621,17 @@ def _playwright_worker(session: _PlaywrightSession) -> None:
             if context is not None:
                 context.close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         try:
             if browser is not None:
                 browser.close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         try:
             if playwright is not None:
                 playwright.stop()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         session.stopped.set()
         with _PLAYWRIGHT_LOCK:
             if session.idle_timer is not None:
@@ -815,7 +819,7 @@ def _log_browser_activity(
         )
     except Exception:
         # Browser diagnostics must never change capability behavior.
-        pass
+        logger.debug("suppressed error in %s", "_log_browser_activity", exc_info=True)
 
 
 def _run_browser_command(

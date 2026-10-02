@@ -1,6 +1,8 @@
 """Warm and unload actions for the local chat TTS runtime."""
 from __future__ import annotations
 
+import logging
+
 import time
 from typing import Any
 
@@ -16,6 +18,8 @@ from .tts_runtime_state import (
 )
 from app.observability.tts_stream_diagnostics import stream_log
 
+logger = logging.getLogger(__name__)
+
 
 def _reset_cached_model() -> None:
     from app.providers.vendor.qwen3_tts import reset_tts_model_cache
@@ -30,6 +34,7 @@ def _select_speaker(provider: Any) -> str | None:
     try:
         speakers = provider.get_speakers()
     except Exception:
+        logger.debug("suppressed error in %s", "_select_speaker", exc_info=True)
         return None
     for item in speakers if isinstance(speakers, list) else []:
         value = str(item.get("id") or "").strip() if isinstance(item, dict) else ""
@@ -100,7 +105,7 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "warm_tts_runtime", exc_info=True)
 
         elapsed = round((time.perf_counter() - started) * 1000, 3)
         with STATE_LOCK:
@@ -134,7 +139,7 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
             try:
                 loaded = bool(provider.get_runtime_status().get("model_loaded"))
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "warm_tts_runtime", exc_info=True)
         with STATE_LOCK:
             STATE.update(status="failed", completed_at=utc_now(), duration_ms=elapsed, model_loaded=loaded, error=str(exc))
         stream_log(WARMUP_STREAM_ID, "lifecycle", "warmup_failed", trigger=trigger, elapsed_ms=elapsed, error=repr(exc))
@@ -143,7 +148,7 @@ def warm_tts_runtime(trigger: str = "manual") -> dict[str, Any]:
             try:
                 iterator.close()
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "warm_tts_runtime", exc_info=True)
     return snapshot(provider)
 
 

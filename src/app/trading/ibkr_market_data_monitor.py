@@ -8,6 +8,8 @@ IBKR LIVE_DATA gate is explicitly enabled.
 """
 
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -38,6 +40,8 @@ from .streaming.manager import StreamingQuoteUpdate
 from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ibkr_market_data_monitor"
@@ -341,7 +345,7 @@ class TradingIbkrMarketDataMonitor:
             try:
                 provider.unsubscribe_quote(instrument_id, listener=callback)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_subscription", exc_info=True)
         self.subscription_remove_count += 1
 
     def _run_once_blocking(self) -> int:
@@ -450,7 +454,7 @@ class TradingIbkrMarketDataMonitor:
             for instrument_id in list(self._keys):
                 self._remove_subscription(market_service, provider, instrument_id)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_all_subscriptions", exc_info=True)
 
 
 def create_trading_ibkr_market_data_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:

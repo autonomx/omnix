@@ -1,6 +1,8 @@
 """Validated import of portable RPG world archives into durable authoring state."""
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Iterable, Mapping
 
 from app.assets.content import asset_available, asset_checksum
@@ -22,6 +24,8 @@ from .world_bundle import (
     sha256_hex,
 )
 from .world_bundle_transform import TransformedWorldBundle, transform_world_bundle
+
+logger = logging.getLogger(__name__)
 
 
 class WorldBundleImportConflict(ValueError):
@@ -145,6 +149,7 @@ def _cleanup_assets(store: SharedAssetStore, asset_ids: Iterable[str]) -> None:
         try:
             store.delete_asset(asset_id)
         except Exception:
+            logger.debug("suppressed error in %s", "_cleanup_assets", exc_info=True)
             continue
 
 

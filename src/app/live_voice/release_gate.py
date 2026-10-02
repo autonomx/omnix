@@ -1,6 +1,8 @@
 """Deterministic release-gate evaluation for live conversation diagnostics."""
 from __future__ import annotations
 
+import logging
+
 import json
 import math
 from collections import defaultdict
@@ -9,6 +11,8 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 LatencyMetric = Literal[
     "stt_finalize_ms",
@@ -127,6 +131,7 @@ def evaluate_live_voice_release_gate(
         try:
             event = raw if isinstance(raw, LiveVoiceReleaseEvent) else LiveVoiceReleaseEvent.model_validate(raw)
         except Exception:
+            logger.debug("suppressed error in %s", "evaluate_live_voice_release_gate", exc_info=True)
             continue
         if window_start is not None and event.timestamp_utc:
             parsed = _parse_datetime(event.timestamp_utc)

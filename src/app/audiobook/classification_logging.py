@@ -16,6 +16,8 @@ from typing import Any
 
 from app.runtime.paths import resources_root
 
+logger = logging.getLogger(__name__)
+
 
 AUDIOBOOK_LOG_DIR = resources_root() / "logs" / "audiobook"
 AUDIOBOOK_CLASSIFICATION_LOG_PATH = AUDIOBOOK_LOG_DIR / "classifications.jsonl"
@@ -132,7 +134,7 @@ def _bounded(value: Any, *, depth: int = 0) -> Any:
         try:
             return _bounded(value.model_dump(mode="json"), depth=depth + 1)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_bounded", exc_info=True)
     return str(value)
 
 
@@ -151,6 +153,7 @@ def classification_log(event: str, **details: Any) -> None:
         classification_logger().info(payload)
     except Exception:
         # Diagnostics must never turn a recoverable classification into a failed job.
+        logger.debug("suppressed error in %s", "classification_log", exc_info=True)
         return
 
 

@@ -73,6 +73,7 @@ def _cuda_memory_gib() -> tuple[float, float] | None:
         free_bytes, total_bytes = torch.cuda.mem_get_info()
         return free_bytes / _GIB, total_bytes / _GIB
     except Exception:
+        logger.debug("suppressed error in %s", "_cuda_memory_gib", exc_info=True)
         return None
 
 

@@ -1,5 +1,9 @@
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
+
+logger = logging.getLogger(__name__)
 
 """Process-wide IBKR Gateway transport and runtime.
 
@@ -269,6 +273,7 @@ class OfficialIbapiTransport:
                     try:
                         parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
                     except Exception:
+                        logger.debug("suppressed error in %s", "OfficialIbapiTransport.__init__.Wrapper.tickString", exc_info=True)
                         return
                     owner._quote_values.setdefault(int(reqId), {})["last_trade_at"] = parsed
                     owner._emit_quote(int(reqId))
@@ -386,6 +391,7 @@ class OfficialIbapiTransport:
             listener(snapshot)
         except Exception:
             # A consumer failure must never kill the IBKR network thread.
+            logger.debug("suppressed error in %s", "OfficialIbapiTransport._emit_quote", exc_info=True)
             return
 
     def connect(self, host: str, port: int, client_id: int, timeout_seconds: float = 8.0) -> None:
@@ -523,7 +529,7 @@ class OfficialIbapiTransport:
                 try:
                     self._client.cancelHistoricalData(req_id)
                 except Exception:
-                    pass
+                    logger.debug("suppressed error in %s", "OfficialIbapiTransport.historical_bars", exc_info=True)
                 raise IbkrRuntimeError("ibkr_historical_data_timeout")
             return list(self._historical_rows.get(req_id, []))
         finally:
@@ -880,6 +886,7 @@ class IbkrRuntime:
                 try:
                     callback(snapshot)
                 except Exception:
+                    logger.debug("suppressed error in %s", "IbkrRuntime.subscribe_quote.on_quote", exc_info=True)
                     continue
 
         token = self.transport.subscribe_quote(contract, on_quote)

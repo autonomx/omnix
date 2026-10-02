@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 import json
 from typing import Any, Callable, Dict
 
 from app.rpg.narration.combat_contract import build_combat_narration_contract
 from app.rpg.narration.combat_prompt import build_combat_narration_prompt
 from app.rpg.narration.combat_validator import validate_combat_narration
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_str(value: Any) -> str:
@@ -25,7 +29,7 @@ def _parse_json_object(text: Any) -> Dict[str, Any]:
         parsed = json.loads(text)
         return parsed if isinstance(parsed, dict) else {}
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_parse_json_object", exc_info=True)
 
     start = text.find("{")
     end = text.rfind("}")

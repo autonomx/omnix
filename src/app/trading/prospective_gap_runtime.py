@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
+
+logger = logging.getLogger(__name__)
 
 """End-to-end authority runtime for the prospective Top-10 gap experiment.
 
@@ -1652,6 +1656,7 @@ class ProspectiveGapRuntime:
         try:
             observation = self.market_service.execution_observation(candidate.instrument_id)
         except Exception:
+            logger.debug("suppressed error in %s", "ProspectiveGapRuntime._execution_cost", exc_info=True)
             return None
         if (
             not observation.paper_fill_eligible

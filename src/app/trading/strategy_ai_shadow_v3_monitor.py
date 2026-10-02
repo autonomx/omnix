@@ -5,6 +5,8 @@ monkey patches. It is SHADOW-only and has no paper/order repository dependency.
 """
 
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -61,6 +63,8 @@ from .trigger_plan import (
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
 
+logger = logging.getLogger(__name__)
+
 
 _STATE_KEY = "_omnix_trading_ai_shadow_v3_monitor"
 _EVENT_TYPES = (
@@ -114,6 +118,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -823,7 +828,7 @@ class TradingAIShadowV3Monitor:
             try:
                 provider, model = analyzer.identity()
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "TradingAIShadowV3Monitor._run_config", exc_info=True)
         self.reliability.scheduled(provider, model, len(prepared))
         self.reliability.attempt(provider, model)
         started = monotonic_time.monotonic()

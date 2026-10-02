@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Iterable
 
 # RPG session runtime responsibility module.
@@ -22,6 +24,8 @@ from app.rpg.session.narration_payload_validation import (
 from .visible_response_sync import _mirror_completed_visible_fields as _PHASE8_PART35_BASE_APPLY_TURN_AUTHORITATIVE
 from .narration_queue_runtime import _enqueue_narration_request as _PHASE8_PART35_BASE_ENQUEUE_NARRATION_REQUEST
 from . import semantic_interaction_runtime as _part04
+
+logger = logging.getLogger(__name__)
 
 _PHASE8_PART35_SOURCE = "semantic_classifier_visible_response"
 _PHASE8_PART35_ORIGINAL_COMPILE_SEMANTIC_ACTION_RECORD = _part04._compile_semantic_action_record
@@ -386,6 +390,7 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str,
     try:
         session = load_runtime_session(session_id)
     except Exception:
+        logger.debug("suppressed error in %s", "_phase8_part35_persist_semantic_artifact", exc_info=True)
         return
     if session is None:
         return
@@ -421,6 +426,7 @@ def _phase8_part35_persist_semantic_artifact(session_id: str, payload: dict[str,
     try:
         save_runtime_session(session)
     except Exception:
+        logger.debug("suppressed error in %s", "_phase8_part35_persist_semantic_artifact", exc_info=True)
         return
 
 

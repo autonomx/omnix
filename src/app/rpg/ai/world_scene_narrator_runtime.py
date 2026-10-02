@@ -198,7 +198,7 @@ class SceneNarrator:
                 self._last_llm_success = True
                 return narrative
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "SceneNarrator._generate_narrative", exc_info=True)
 
         # fallback
         self._last_llm_success = False
@@ -275,7 +275,7 @@ class SceneNarrator:
                 self._last_llm_success = True
                 return parsed
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "SceneNarrator._generate_choices", exc_info=True)
 
         self._last_llm_success = False
         return self._simulate_choices(scene, source)

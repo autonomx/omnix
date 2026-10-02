@@ -107,7 +107,7 @@ def _replace_with_retry(tmp_name: str, path: Path, *, attempts: int = 8, base_de
         path.write_text(text, encoding="utf-8")
         return
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_replace_with_retry", exc_info=True)
     raise last_exc
 
 

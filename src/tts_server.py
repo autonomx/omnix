@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import base64
 import asyncio
 import io
@@ -34,6 +36,8 @@ from app.runtime.paths import VOICE_CLONES_DIR
 from app.runtime.net import bind_host
 from app.security.model_service import ModelServiceMiddleware
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Omnix TTS Service", version="1.0")
 app.add_middleware(ModelServiceMiddleware)
@@ -170,6 +174,7 @@ def _kill_windows_port_owners(port: int) -> List[int]:
             )
             killed.append(pid)
         except Exception:
+            logger.debug("suppressed error in %s", "_kill_windows_port_owners", exc_info=True)
             continue
     return killed
 
@@ -243,7 +248,7 @@ def initialize_tts_provider() -> Dict[str, Any]:
             if startup_result:
                 details["startup"] = startup_result
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "initialize_tts_provider", exc_info=True)
         return _provider_payload_ok(details)
     except Exception as exc:
         _TTS_PROVIDER = None
@@ -298,7 +303,7 @@ def get_tts_service_status() -> Dict[str, Any]:
             if hasattr(_TTS_PROVIDER, "get_runtime_status"):
                 details["runtime_status"] = _TTS_PROVIDER.get_runtime_status()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "get_tts_service_status", exc_info=True)
         return _provider_payload_ok(details)
     return _provider_payload_fail(_TTS_PROVIDER_ERROR or "provider_not_initialized")
 

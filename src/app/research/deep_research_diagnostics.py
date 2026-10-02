@@ -1,6 +1,8 @@
 """Durable JSON-line diagnostics for Deep Research jobs."""
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
 
 import json
@@ -12,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from app.runtime.paths import resources_root
+
+logger = logging.getLogger(__name__)
 
 _LOG_LOCK = threading.Lock()
 
@@ -42,7 +46,7 @@ def deep_research_log(job_id: str, event: str, **details: Any) -> None:
             with deep_research_log_path().open("a", encoding="utf-8") as handle:
                 handle.write(line + "\n")
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "deep_research_log", exc_info=True)
 
 
 def _json_default(value: Any) -> Any:

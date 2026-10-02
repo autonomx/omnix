@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Runtime services for causal interday discovery, replay, and evidence.
 
 The public owner modules call these services explicitly. This module does not
@@ -850,6 +854,7 @@ def _session_return(market_service, instrument_id: str, observed_at: datetime) -
         last = float(bars[-1].close)
         return (last / first - 1.0) * 100.0 if first > 0 else None
     except Exception:
+        logger.debug("suppressed error in %s", "_session_return", exc_info=True)
         return None
 
 
@@ -877,6 +882,7 @@ def _relationships_from_snapshot(candidate: dd.DynamicCandidate):
         try:
             rows.append(dd.RelationshipExposure.model_validate(item))
         except Exception:
+            logger.debug("suppressed error in %s", "_relationships_from_snapshot", exc_info=True)
             continue
     return tuple(rows)
 
@@ -1324,7 +1330,7 @@ async def _run_dynamic_discovery_once_complete(
                 row.instrument_id for row in frozen.candidates
             )
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_run_dynamic_discovery_once_complete", exc_info=True)
     await asyncio.to_thread(
         _persist_cohorts,
         repo,
@@ -1639,6 +1645,7 @@ def _attribution_transition(
         try:
             prior.append(dd.AttributionEvent.model_validate(raw.payload))
         except Exception:
+            logger.debug("suppressed error in %s", "_attribution_transition", exc_info=True)
             continue
     if not event.passed:
         return event_repo.persist_attribution(event)
@@ -1765,6 +1772,7 @@ def _dynamic_pairs_from_events(
         try:
             trigger = str(event.payload.get("trigger_type") or "")
         except Exception:
+            logger.debug("suppressed error in %s", "_dynamic_pairs_from_events", exc_info=True)
             continue
         if trigger == dd.DiscoveryTriggerType.FROZEN_BENCHMARK.value:
             continue
@@ -1894,6 +1902,7 @@ def _observations_for_session(
         try:
             observation = CausalMarketObservation.model_validate(raw)
         except Exception:
+            logger.debug("suppressed error in %s", "_observations_for_session", exc_info=True)
             continue
         result.append((row.payload.get("scan_watermark"), observation))
     return tuple(result)
@@ -1919,6 +1928,7 @@ def _persist_parent_exposure(
         try:
             row = dd.AttributionEvent.model_validate(event.payload)
         except Exception:
+            logger.debug("suppressed error in %s", "_persist_parent_exposure", exc_info=True)
             continue
         if (
             not row.passed
@@ -2087,6 +2097,7 @@ def _union_complete(config, repository, frozen, *, session_date, observed_at=Non
                 )
             )
         except Exception:
+            logger.debug("suppressed error in %s", "_union_complete", exc_info=True)
             continue
     if not additions:
         return frozen

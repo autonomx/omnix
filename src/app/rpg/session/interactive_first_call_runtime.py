@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import sys
 from copy import deepcopy
 from time import perf_counter
@@ -20,6 +22,8 @@ from app.rpg.session.companion_turn_runtime import _build_turn_id
 from app.rpg.session.service_runtime import service_action_from_result
 from app.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
 from app.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
+
+logger = logging.getLogger(__name__)
 
 _FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
 _RECURSION_LIMIT_FLOOR = 10000
@@ -176,6 +180,7 @@ def _prepare_stateful_runtime_session(
             loaded["runtime_state"] = loaded_runtime
             save_runtime_session(loaded)
     except Exception:
+        logger.debug("suppressed error in %s", "_prepare_stateful_runtime_session", exc_info=True)
         return
 
 

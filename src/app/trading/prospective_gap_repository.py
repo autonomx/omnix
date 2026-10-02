@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Durable authority ledger for the prospective-gap experiment.
 
 The experiment reuses Omnix's StrategyEvent persistence instead of inventing a
@@ -199,6 +203,7 @@ class ProspectiveGapRepository:
                     )
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "ProspectiveGapRepository.session", exc_info=True)
                 continue
         return ProspectiveGapSessionLedger(
             session_date=session_date,

@@ -1,6 +1,8 @@
 """Authoritative lifecycle coordination for streamed assistant turns."""
 from __future__ import annotations
 
+import logging
+
 import json
 import threading
 import uuid
@@ -13,6 +15,8 @@ from pydantic import BaseModel, Field
 from app.config.env import env_str
 
 from app.runtime.paths import resources_data_root
+
+logger = logging.getLogger(__name__)
 
 AssistantLifecycle = Literal[
     "created",
@@ -311,6 +315,7 @@ class AssistantTurnCoordinator:
             try:
                 record = AssistantTurnRecord.model_validate(item)
             except Exception:
+                logger.debug("suppressed error in %s", "AssistantTurnCoordinator._load", exc_info=True)
                 continue
             records[record.assistant_turn_id] = record
         return records

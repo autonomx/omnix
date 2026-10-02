@@ -1,6 +1,8 @@
 """End-to-end RPG request tracing with bounded structured stage metrics."""
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str
 
 import json
@@ -15,6 +17,8 @@ from typing import Any, Iterator
 from fastapi.responses import Response
 
 from app.rpg.debug_logging import log_rpg_event, new_rpg_trace_id
+
+logger = logging.getLogger(__name__)
 
 _WARNING_THRESHOLD_ENV = "OMNIX_RPG_SLOW_SPAN_MS"
 _DEFAULT_WARNING_THRESHOLD_MS = 500.0
@@ -338,7 +342,7 @@ def _rss_bytes() -> int | None:
         rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         return rss if sys.platform == "darwin" else rss * 1024
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
     if os.name == "nt":
         try:
             import ctypes
@@ -364,6 +368,7 @@ def _rss_bytes() -> int | None:
             if ctypes.windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
                 return int(counters.WorkingSetSize)
         except Exception:
+            logger.debug("suppressed error in %s", "_rss_bytes", exc_info=True)
             return None
     return None
 

@@ -16,6 +16,8 @@ from typing import Any, Iterator
 
 from app.runtime.paths import resources_root
 
+logger = logging.getLogger(__name__)
+
 RPG_DEBUG_ENABLED_ENV = "OMNIX_RPG_DEBUG_LOGS"
 RPG_DEBUG_LOG_DIR_ENV = "OMNIX_RPG_LOG_DIR"
 RPG_DEBUG_RETENTION_DAYS_ENV = "OMNIX_RPG_LOG_RETENTION_DAYS"
@@ -411,7 +413,7 @@ def _sanitize(value: Any, *, key: str = "", depth: int = 0) -> Any:
         try:
             return _sanitize(model_dump(mode="json"), key=key, depth=depth + 1)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_sanitize", exc_info=True)
     return _sanitize(str(value), key=key, depth=depth + 1)
 
 

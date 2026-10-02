@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 # RPG session runtime responsibility module.
 from app.rpg.session.state_normalization import (
     _ensure_simulation_state as _ensure_simulation_state, _safe_dict as _safe_dict, _safe_int as _safe_int, _safe_list as _safe_list, _safe_str as _safe_str,
@@ -55,6 +57,8 @@ from app.rpg.session.semantic_interaction_runtime import (
 from typing import (
     Any as Any, Dict as Dict, List as List,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def derive_action_candidates(simulation_state, player_input, runtime_state=None):
@@ -765,7 +769,7 @@ def _safe_parse_mapping_payload(value: Any) -> dict[str, Any]:
         parsed = json.loads(text)
         return _safe_dict(parsed)
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_safe_parse_mapping_payload", exc_info=True)
 
     try:
         parsed = ast.literal_eval(text)

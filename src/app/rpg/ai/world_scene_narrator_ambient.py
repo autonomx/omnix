@@ -128,6 +128,7 @@ def narrate_ambient_update(
                 raw_llm_narrative = llm_response
                 used_llm = True
         except Exception:
+            logger.debug("suppressed error in %s", "narrate_ambient_update", exc_info=True)
             pass  # Fall through to template
 
     # Template fallback

@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -26,6 +28,8 @@ from .strategy_interday_postclose import (
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 _STATE_KEY = "_omnix_interday_learning_monitor"
 
@@ -173,6 +177,7 @@ async def _run_interday_learning_once_core(
         try:
             attribution.append(AttributionEvent.model_validate(event.payload))
         except Exception:
+            logger.debug("suppressed error in %s", "_run_interday_learning_once_core", exc_info=True)
             continue
     report = build_daily_discovery_report(
         session_date=session_date,

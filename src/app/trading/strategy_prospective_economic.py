@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Frozen prospective economic-SHADOW qualification policy.
 
 The historical V3-V8 recovery studies showed that a descriptive recovery label can
@@ -138,6 +142,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

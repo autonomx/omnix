@@ -1,6 +1,8 @@
 """Bounded local LLM classification over immutable source span IDs."""
 from __future__ import annotations
 
+import logging
+
 import json
 from collections.abc import Callable
 from typing import Any
@@ -10,6 +12,8 @@ from app.providers.service import get_provider
 from app.settings.access import load_settings
 
 from .structured_call import json_object_call
+
+logger = logging.getLogger(__name__)
 
 
 _SYSTEM = (
@@ -113,6 +117,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], dict[str, Any]], dict
     try:
         provider = get_provider()
     except Exception:
+        logger.debug("suppressed error in %s", "local_classifier", exc_info=True)
         return None
     if provider is None:
         return None

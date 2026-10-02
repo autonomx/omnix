@@ -173,6 +173,7 @@ def _rehydrate_persisted_bindings(
         except Exception:
             # Provider status should remain available when persistence is
             # temporarily unavailable; chart requests can still rehydrate on use.
+            logger.debug("suppressed error in %s", "_rehydrate_persisted_bindings", exc_info=True)
             continue
         for record in records:
             instrument_ids.update(_persisted_instrument_ids(record.get("payload")))

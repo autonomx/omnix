@@ -1,6 +1,8 @@
 """Cerebras OpenAI-compatible provider plugin."""
 from __future__ import annotations
 
+import logging
+
 import json
 from contextlib import ExitStack, contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Union
@@ -20,6 +22,8 @@ from .http_calls import raise_for_provider_status, transport_errors
 from .structured.transport import (
     pop_structured_transport_options,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CerebrasProvider(BaseProvider):
@@ -212,7 +216,7 @@ class CerebrasProvider(BaseProvider):
         except AuthenticationError:
             raise
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "CerebrasProvider.test_connection", exc_info=True)
         try:
             test_payload = {
                 "model": self.config.model or "llama-3.3-70b",

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Roadmap-completeness policy for the AI Shadow v2 experiment.
 
 This layer owns experimental validity rather than execution authority. It is
@@ -597,7 +601,7 @@ async def _run_arm_policy(
                 if spread >= 0:
                     observed_spreads[instrument_id] = spread
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "_run_arm_policy", exc_info=True)
 
         frozen = hardening._morning_snapshot(events, instrument_id)
         if arm == "morning_catalyst":
@@ -1191,6 +1195,7 @@ def _delta(left: object, right: object) -> str | None:
     try:
         return str(Decimal(str(left)) - Decimal(str(right)))
     except Exception:
+        logger.debug("suppressed error in %s", "_delta", exc_info=True)
         return None
 
 

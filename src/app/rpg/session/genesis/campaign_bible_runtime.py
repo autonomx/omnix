@@ -1,9 +1,13 @@
 """Load the authoritative Campaign Bible for turn-time narrative grounding."""
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Mapping
 
 from app.rpg.narrative_engine import CampaignBibleSnapshot
+
+logger = logging.getLogger(__name__)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -74,6 +78,7 @@ def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
                 completeness=snapshot.completeness,
             )
     except Exception:
+        logger.debug("suppressed error in %s", "_postgres_snapshot", exc_info=True)
         return None
     return None
 

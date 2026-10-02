@@ -157,7 +157,7 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
             value = json.loads(candidate)
             return value if isinstance(value, dict) else {}
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_extract_json_object_from_text", exc_info=True)
 
     # Fenced code block path
     if "```" in text:
@@ -177,6 +177,7 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
                     value = json.loads(candidate_variant)
                     return value if isinstance(value, dict) else {}
                 except Exception:
+                    logger.debug("suppressed error in %s", "_extract_json_object_from_text", exc_info=True)
                     continue
 
     # Loose substring path: first balanced {...}
@@ -193,7 +194,7 @@ def _extract_json_object_from_text(text: str) -> Dict[str, Any]:
                 value = json.loads(candidate_variant)
                 return value if isinstance(value, dict) else {}
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "_extract_json_object_from_text", exc_info=True)
 
     return {}
 

@@ -34,11 +34,15 @@ Key Features:
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Callable, Dict, List, Optional
 
 from app.rpg.core.determinism import rng_for, rng_seed_from_session_id
 from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
 from app.rpg.core.npc_state import NPCState
+
+logger = logging.getLogger(__name__)
 
 # Default passive event probabilities
 PASSIVE_EVENT_PROBABILITIES: Dict[str, float] = {
@@ -323,7 +327,7 @@ class WorldSimulationLoop:
                         action["source"] = "director"
                         actions.append(action)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "WorldSimulationLoop._step_plan", exc_info=True)
                 
         return actions
         
@@ -397,7 +401,7 @@ class WorldSimulationLoop:
             try:
                 self.director.update(self.session, events)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "WorldSimulationLoop._step_arcs_update", exc_info=True)
         return updates
         
     def _step_memory_store(self, events: List[Dict[str, Any]]) -> None:

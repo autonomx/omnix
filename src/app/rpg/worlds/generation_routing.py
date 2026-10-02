@@ -1,5 +1,7 @@
 """Resolve the concrete provider route stored with a durable World Forge run."""
 from __future__ import annotations
+
+import logging
 from app.config.env import environment as _environment
 
 import json
@@ -20,6 +22,8 @@ from .generation_recovery_evidence import (
     EvidenceBackedRecoveringWorldForgeTopicGenerator,
 )
 from .generation_test_mode import deterministic_world_forge_test_mode
+
+logger = logging.getLogger(__name__)
 
 _CONFIGURED_VALUES = {"", "auto", "configured", "settings"}
 _DETERMINISTIC_VALUES = {"deterministic", "offline", "reference-safe", "test"}
@@ -97,7 +101,7 @@ def _auto_detect_lmstudio_route() -> tuple[str, str]:
             if model:
                 return "lmstudio", model
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_auto_detect_lmstudio_route", exc_info=True)
     return "", ""
 
 

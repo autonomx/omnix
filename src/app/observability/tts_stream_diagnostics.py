@@ -21,6 +21,8 @@ from app.runtime.paths import LOGS_DIR
 from app.observability.content_free_diagnostics import sanitize_content_free_details
 from app.observability.resilient_rotating_file_handler import ResilientRotatingFileHandler
 
+logger = logging.getLogger(__name__)
+
 TTS_STREAM_LOG_PATH = Path(LOGS_DIR) / "tts-streaming.log"
 TTS_STREAM_LOG_MAX_BYTES = 25_000_000
 TTS_STREAM_LOG_BACKUP_COUNT = 4
@@ -39,7 +41,7 @@ def _json_default(value: Any) -> Any:
         try:
             return value.item()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_json_default", exc_info=True)
     if isinstance(value, bytes):
         return {"bytes": len(value)}
     if isinstance(value, Path):

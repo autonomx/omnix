@@ -1,6 +1,8 @@
 """PostgreSQL-backed Campaign Bible access and on-demand location lore."""
 from __future__ import annotations
 
+import logging
+
 import re
 from copy import deepcopy
 from typing import Any, Mapping
@@ -12,6 +14,8 @@ from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.service import save_session
 from app.rpg.worlds.published_canon_projection import project_published_canon
+
+logger = logging.getLogger(__name__)
 
 _PLAYER_VISIBLE_VISIBILITY = {
     "public",
@@ -336,7 +340,7 @@ def _generate_location_text(
             if generated:
                 return generated
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_generate_location_text", exc_info=True)
     return _fallback_location_text(_text(location.get("name")) or "Current Location")
 
 

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Correctness hardening for the AI Shadow v2 research experiment.
 
 The v2 experiment deliberately keeps alpha, risk and execution separate. This
@@ -52,6 +56,7 @@ def _morning_snapshot(
     try:
         return CatalystIntelligenceSnapshot.model_validate(earliest.payload["snapshot"])
     except Exception:
+        logger.debug("suppressed error in %s", "_morning_snapshot", exc_info=True)
         return None
 
 
@@ -153,6 +158,7 @@ def _active_stop_price(
     try:
         return Decimal(str(geometry["invalidation_price"]))
     except Exception:
+        logger.debug("suppressed error in %s", "_active_stop_price", exc_info=True)
         return None
 
 
@@ -247,6 +253,7 @@ def _metric_delta(catalyst: dict[str, object], control: dict[str, object], field
     try:
         return str(Decimal(str(left)) - Decimal(str(right)))
     except Exception:
+        logger.debug("suppressed error in %s", "_metric_delta", exc_info=True)
         return None
 
 
@@ -382,7 +389,7 @@ async def run_arm_with_risk_guards(
                 if spread >= 0:
                     observed_spreads[instrument_id] = spread
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "run_arm_with_risk_guards", exc_info=True)
 
         frozen = _morning_snapshot(events, instrument_id) if arm == "morning_catalyst" else None
         feature = _sanitized_alpha_feature(feature, frozen_catalyst=frozen)
@@ -492,6 +499,7 @@ async def label_opportunity_episodes(
                 try:
                     structure = monitor.MarketStructureSnapshot.model_validate(structure_payload)
                 except Exception:
+                    logger.debug("suppressed error in %s", "label_opportunity_episodes", exc_info=True)
                     continue
                 episode_id = monitor._key(arm, instrument_id, first.observed_at.isoformat(), index)[:28]
                 if episode_id in existing:
@@ -528,6 +536,7 @@ async def label_opportunity_episodes(
                         catalyst_persistence_class=persistence,
                     )
                 except Exception:
+                    logger.debug("suppressed error in %s", "label_opportunity_episodes", exc_info=True)
                     continue
                 if await self._append(
                     repository,

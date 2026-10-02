@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Canonical AI Shadow v3 alpha contracts and deterministic geometry.
 
 The LLM owns setup/thesis classification only. Stops, targets, R math, execution
@@ -384,6 +388,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

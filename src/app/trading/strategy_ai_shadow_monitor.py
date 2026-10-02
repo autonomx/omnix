@@ -9,6 +9,8 @@ their deterministic monitors remain the owners of their own evidence.
 """
 
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -76,6 +78,8 @@ from .strategy_session_evidence import (
 )
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
@@ -193,6 +197,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

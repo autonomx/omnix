@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Causal intraday evidence recovery and deterministic V2 replay.
 
 The strategy monitor persists overlapping finalized one-minute bar windows on
@@ -59,6 +63,7 @@ def recover_causal_1m_bars(
             try:
                 bar = MarketBar.model_validate(raw)
             except Exception:
+                logger.debug("suppressed error in %s", "recover_causal_1m_bars", exc_info=True)
                 continue
             if bar.interval != "1m" or not bar.is_final or bar.session != "regular":
                 continue

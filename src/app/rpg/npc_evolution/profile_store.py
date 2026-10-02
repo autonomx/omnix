@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import json
@@ -7,6 +9,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 PROFILE_VERSION = "npc_evolution_profile_v1"
 
@@ -97,7 +101,7 @@ def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]
             data.setdefault("audit", [])
             return data
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "load_npc_profile", exc_info=True)
     return {
         "format_version": PROFILE_VERSION,
         "npc_id": npc_id,
@@ -248,7 +252,7 @@ def persist_npc_evolution_profiles(
                         legacy_path.unlink()
                         removed_legacy_paths.append(str(legacy_path))
                     except Exception:
-                        pass
+                        logger.debug("suppressed error in %s", "persist_npc_evolution_profiles", exc_info=True)
 
             written.append(
                 {

@@ -1,6 +1,8 @@
 """Cheap import-time classifier for ambiguous document structure regions."""
 from __future__ import annotations
 
+import logging
+
 import json
 from collections.abc import Callable
 from typing import Any
@@ -10,6 +12,8 @@ from app.providers.service import get_provider
 from app.settings.access import load_settings
 
 from .structured_call import json_object_call
+
+logger = logging.getLogger(__name__)
 
 
 DOCUMENT_STRUCTURE_CLASSIFIER_VERSION = "document-structure-classifier-v1"
@@ -33,6 +37,7 @@ def local_structure_classifier() -> tuple[
     try:
         provider = get_provider()
     except Exception:
+        logger.debug("suppressed error in %s", "local_structure_classifier", exc_info=True)
         return None
     if provider is None:
         return None

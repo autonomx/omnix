@@ -63,7 +63,6 @@
     "lint_counts": {
       "AL001": 68,
       "AL008": 46,
-      "AL009": 168,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -2633,7 +2632,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 36,
+        "line": 40,
         "path": "src/app/assets/store.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROCESS_LOCK"
@@ -2834,7 +2833,7 @@
         "approved": true,
         "category": "cache",
         "kind": "executor",
-        "line": 41,
+        "line": 45,
         "path": "src/app/assistant_memory/structured_provider.py",
         "reason": "Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores.",
         "symbol": "_PROVIDER_EXECUTOR"
@@ -2874,7 +2873,7 @@
         "category": "cache",
         "invalidation": "_clear_browser_session_generation",
         "kind": "container",
-        "line": 149,
+        "line": 153,
         "max_entries": 4096,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2885,7 +2884,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 148,
+        "line": 152,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_BROWSER_SESSION_LOCK"
@@ -2894,7 +2893,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 150,
+        "line": 154,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PLAYWRIGHT_LOCK"
@@ -2904,7 +2903,7 @@
         "category": "cache",
         "invalidation": "_stop_all_playwright_sessions",
         "kind": "container",
-        "line": 151,
+        "line": 155,
         "max_entries": 64,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2916,7 +2915,7 @@
         "category": "cache",
         "invalidation": "_stop_all_workspace_previews",
         "kind": "container",
-        "line": 147,
+        "line": 151,
         "max_entries": 64,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -2927,7 +2926,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 146,
+        "line": 150,
         "path": "src/app/assistant_tools/browser_adapter.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PREVIEW_LOCK"
@@ -2957,7 +2956,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 28,
+        "line": 30,
         "path": "src/app/audiobook/classification_logging.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LOGGER_LOCK"
@@ -3107,7 +3106,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 329,
+        "line": 334,
         "path": "src/app/chat/assistant_turns.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -3743,7 +3742,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 31,
+        "line": 33,
         "path": "src/app/observability/tts_stream_diagnostics.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_ACTIVE_LOCK"
@@ -3753,7 +3752,7 @@
         "category": "cache",
         "invalidation": "clear_active_streams",
         "kind": "container",
-        "line": 32,
+        "line": 34,
         "max_entries": 4096,
         "path": "src/app/observability/tts_stream_diagnostics.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3994,7 +3993,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 16,
+        "line": 20,
         "path": "src/app/research/deep_research_diagnostics.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LOG_LOCK"
@@ -4021,7 +4020,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 46,
+        "line": 48,
         "path": "src/app/rpg/debug_logging.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_lock"
@@ -4167,7 +4166,7 @@
         "category": "cache",
         "invalidation": "unload_image_provider_cache",
         "kind": "container",
-        "line": 19,
+        "line": 23,
         "max_entries": 1,
         "path": "src/app/rpg/visual/providers/__init__.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -4503,7 +4502,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 1029,
+        "line": 1036,
         "path": "src/app/trading/providers/ibkr_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
@@ -4531,7 +4530,7 @@
         "category": "cache",
         "invalidation": "clear_data_gap_heartbeat_cache",
         "kind": "container",
-        "line": 122,
+        "line": 126,
         "max_entries": 4096,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -4542,7 +4541,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 119,
+        "line": 123,
         "path": "src/app/trading/strategy_ai_shadow_monitor.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_GAP_LOCK"
@@ -4551,7 +4550,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 202,
+        "line": 208,
         "path": "src/app/trading/strategy_ai_shadow_provider.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROVIDER_LOCK"
@@ -4560,7 +4559,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 155,
+        "line": 161,
         "path": "src/app/trading/strategy_discovery_acquisition.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_SOURCE_LOCK"
@@ -4578,7 +4577,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 871,
+        "line": 878,
         "path": "src/app/trading/yahoo_evidence.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_default_lock"
@@ -7376,7 +7375,7 @@
     "silent_broad_excepts": {
       "direction": "lower",
       "target": 10,
-      "value": 168
+      "value": 0
     },
     "star_imports": {
       "direction": "lower",
@@ -7466,5 +7465,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "c76e5fe3f3dd14579e7301210130c0696debc455f955d529509248915301ec4c"
+  "source_digest": "d63a1e912e364ed4148f2d7fdc9b80031ce1debbcfaaefae3f3687dacfcf25a7"
 }

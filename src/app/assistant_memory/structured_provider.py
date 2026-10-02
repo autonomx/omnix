@@ -1,6 +1,8 @@
 """Bounded provider adapter for post-turn typed memory proposals."""
 from __future__ import annotations
 
+import logging
+
 from app.config.env import environment
 
 import json
@@ -19,6 +21,8 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 from app.prompts import prompt_template
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT_TEMPLATE = prompt_template(
@@ -202,6 +206,7 @@ def default_structured_proposal_provider() -> StructuredProposalProvider | None:
             timeout_seconds=timeout,
         )
     except Exception:
+        logger.debug("suppressed error in %s", "default_structured_proposal_provider", exc_info=True)
         return None
 
 

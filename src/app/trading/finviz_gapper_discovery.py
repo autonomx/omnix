@@ -13,6 +13,8 @@ snapshot for research/backtests.
 
 from __future__ import annotations
 
+import logging
+
 import re
 from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
@@ -45,6 +47,8 @@ from .strategy_data_integrity import (
     finviz_atomic_source_locator,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 FINVIZ_TOP_GAINERS_URL = "https://finviz.com/screener"
@@ -168,6 +172,7 @@ def _yahoo_exact_quote(runtime: ProviderHttpRuntime, symbol: str) -> dict[str, A
         )
         payload = response.json()
     except Exception:
+        logger.debug("suppressed error in %s", "_yahoo_exact_quote", exc_info=True)
         return None
     quotes = payload.get("quotes") if isinstance(payload, dict) else None
     if not isinstance(quotes, list):

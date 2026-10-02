@@ -1,6 +1,8 @@
 """Typed, trust-separated provider prompt assembly."""
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -15,6 +17,8 @@ from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
+
+logger = logging.getLogger(__name__)
 
 PromptRole = Literal["system", "user", "assistant"]
 
@@ -73,6 +77,7 @@ def _active_segment_summary(session: ChatSession) -> str | None:
     try:
         segments = default_character_service().repository.segments(session.id)
     except Exception:
+        logger.debug("suppressed error in %s", "_active_segment_summary", exc_info=True)
         return None
     segment = next((item for item in segments if item.id == session.active_segment_id), None)
     return segment.carryover_summary if segment else None

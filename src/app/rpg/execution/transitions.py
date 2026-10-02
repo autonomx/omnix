@@ -6,9 +6,13 @@ Mainly for traceability and downstream scene execution clarity.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Optional
 
 from .models import SceneTransition
+
+logger = logging.getLogger(__name__)
 
 
 class SceneTransitionBuilder:
@@ -39,7 +43,7 @@ class SceneTransitionBuilder:
             if isinstance(scene, dict):
                 from_location = scene.get("location")
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "SceneTransitionBuilder._build_location_transition", exc_info=True)
 
         return SceneTransition(
             transition_id=f"transition:{from_location or 'unknown'}:{target_id}",

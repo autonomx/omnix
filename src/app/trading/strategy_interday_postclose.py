@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Post-close outcome labeling and evidence-only qualification for interday discovery."""
 
 import hashlib
@@ -101,6 +105,7 @@ def session_outcomes(
         try:
             values.append(TrendDurabilityOutcome.model_validate(row.payload))
         except Exception:
+            logger.debug("suppressed error in %s", "session_outcomes", exc_info=True)
             continue
     return tuple(values)
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 import contextvars
 from contextlib import contextmanager
 from typing import Any, Iterator
+
+logger = logging.getLogger(__name__)
 
 _FAST_DIRECT_SOURCES = {
     "ce211_fast_direct_runtime_budget_v1",
@@ -40,6 +44,7 @@ def _first_present_int(*values: Any) -> int | None:
             try:
                 return int(value.strip())
             except Exception:
+                logger.debug("suppressed error in %s", "_first_present_int", exc_info=True)
                 continue
     return None
 

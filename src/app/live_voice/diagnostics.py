@@ -20,6 +20,8 @@ from app.runtime.paths import LOGS_DIR
 
 from app.observability.resilient_rotating_file_handler import ResilientRotatingFileHandler
 
+logger = logging.getLogger(__name__)
+
 LIVE_VOICE_STREAM_LOG_PATH = Path(LOGS_DIR) / "live-call-streaming.log"
 LIVE_VOICE_STREAM_LOG_MAX_BYTES = 25_000_000
 LIVE_VOICE_STREAM_LOG_BACKUP_COUNT = 4
@@ -34,7 +36,7 @@ def _json_default(value: Any) -> Any:
         try:
             return value.item()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_json_default", exc_info=True)
     if isinstance(value, bytes):
         return {"bytes": len(value)}
     if isinstance(value, Path):
@@ -138,6 +140,7 @@ def persist_delivery_checkpoint(details: dict[str, Any]) -> None:
     try:
         recorder(details)
     except Exception:
+        logger.debug("suppressed error in %s", "persist_delivery_checkpoint", exc_info=True)
         return
 
 

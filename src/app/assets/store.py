@@ -1,6 +1,8 @@
 """Manifest-backed shared asset store with compatibility read-through."""
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
 
 import errno
@@ -19,6 +21,8 @@ from app.runtime.paths import resources_data_root
 from .content import delete_asset_content
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
 from .paging import paginate_assets
+
+logger = logging.getLogger(__name__)
 
 
 _AUDIO_MIME_TYPES = {
@@ -495,6 +499,7 @@ class SharedAssetStore:
             try:
                 assets[str(asset_id)] = AssetRecord(**payload)
             except Exception:
+                logger.debug("suppressed error in %s", "SharedAssetStore._load_manifest", exc_info=True)
                 continue
         return assets
 

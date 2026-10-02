@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Point-in-time premarket liquidity evidence for prospective Finviz cohorts."""
 
 from collections import defaultdict
@@ -29,6 +33,7 @@ def _decimal(value: Any) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

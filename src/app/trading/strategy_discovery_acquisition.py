@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Provider-neutral causal acquisition contracts for dynamic discovery."""
 
 from datetime import date, datetime, timezone
@@ -114,6 +118,7 @@ class PersistedCatalystIntelligenceSource:
             try:
                 events = repo.recent_events(strategy_id, 20_000)
             except Exception:
+                logger.debug("suppressed error in %s", "PersistedCatalystIntelligenceSource.capture", exc_info=True)
                 continue
             for event in events:
                 if (
@@ -137,6 +142,7 @@ class PersistedCatalystIntelligenceSource:
                     event.payload["snapshot"]
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "PersistedCatalystIntelligenceSource.capture", exc_info=True)
                 continue
             rows.append(
                 CausalMarketObservation(

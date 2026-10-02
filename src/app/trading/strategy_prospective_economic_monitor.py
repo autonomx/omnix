@@ -9,6 +9,8 @@ It has no paper repository and can never create or authorize an order.
 """
 
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -41,6 +43,8 @@ from .strategy_repository import (
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_strategy_prospective_economic_monitor"
@@ -79,6 +83,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

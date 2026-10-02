@@ -53,7 +53,7 @@ def _unload_instances(providers: Dict[str, Any]) -> list[str]:
             if hasattr(provider, "unload"):
                 provider.unload()
         except Exception:
-            pass
+            _LOG.debug("suppressed error in %s", "_unload_instances", exc_info=True)
         unloaded.append(provider_name)
     return unloaded
 
@@ -143,12 +143,14 @@ def _validate_load_budget(provider_name: str) -> None:
     try:
         import torch
     except Exception:
+        _LOG.debug("suppressed error in %s", "_validate_load_budget", exc_info=True)
         return
     if not torch.cuda.is_available():
         return
     try:
         free_bytes, total_bytes = torch.cuda.mem_get_info()
     except Exception:
+        _LOG.debug("suppressed error in %s", "_validate_load_budget", exc_info=True)
         return
     free_gib = free_bytes / _GIB
     total_gib = total_bytes / _GIB

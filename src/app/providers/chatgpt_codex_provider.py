@@ -6,6 +6,8 @@ Omnix communicates with ``codex app-server`` over its supported stdio JSONL
 protocol and presents that transport through the normal BaseProvider interface.
 """
 from __future__ import annotations
+
+import logging
 from app.config.env import environment_copy as _process_environment
 
 import atexit
@@ -35,6 +37,8 @@ from .base import (
 )
 from .provider_trace import provider_call_enter, provider_call_exit
 from app.prompts import prompt_template
+
+logger = logging.getLogger(__name__)
 
 
 TURN_PROMPT_TEMPLATE = prompt_template(
@@ -1246,7 +1250,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 try:
                     process.kill()
                 except Exception:
-                    pass
+                    logger.debug("suppressed error in %s", "ChatGPTCodexProvider._reset_process_state", exc_info=True)
         self._stdout_queue = queue.Queue()
         self._event_buffer.clear()
         self._stderr_tail.clear()

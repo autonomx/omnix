@@ -1,8 +1,12 @@
 """Configuration-sensitive invalidation for legacy singleton audio providers."""
 from __future__ import annotations
 
+import logging
+
 import json
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _record(value: Any) -> dict[str, Any]:
@@ -27,7 +31,7 @@ def _stop(instance: Any) -> None:
     try:
         instance.stop()
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_stop", exc_info=True)
 
 
 def invalidate_changed_audio_caches(before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, bool]:

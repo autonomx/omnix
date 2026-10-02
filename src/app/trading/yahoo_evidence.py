@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
+
+logger = logging.getLogger(__name__)
 
 """Durable Yahoo evidence and same-feed relative-volume authority.
 
@@ -478,6 +482,7 @@ class YahooEvidenceStore:
                 close = Decimal(str(values["close"]))
                 volume = Decimal(str(values["volume"] or 0))
             except Exception:
+                logger.debug("suppressed error in %s", "YahooEvidenceStore.persist_chart_result", exc_info=True)
                 continue
             if end > cutoff_utc:
                 continue
@@ -636,6 +641,7 @@ class YahooEvidenceStore:
                         )
                     )
                 except Exception:
+                    logger.debug("suppressed error in %s", "YahooEvidenceStore.load_market_bars", exc_info=True)
                     continue
             current += timedelta(days=1)
         output.sort(key=lambda bar: bar.start_time)
@@ -701,6 +707,7 @@ class YahooEvidenceStore:
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:
+                    logger.debug("suppressed error in %s", "YahooEvidenceStore.premarket_relative_volume.session_totals", exc_info=True)
                     continue
                 if start.timetz().replace(tzinfo=None) > cutoff:
                     continue

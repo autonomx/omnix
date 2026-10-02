@@ -1,5 +1,7 @@
 """Record direct foreground RPG turns without scheduling a second execution."""
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import uuid
@@ -15,6 +17,8 @@ from app.rpg.jobs.turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 from app.rpg.jobs.foreground_context import DIRECT_RPG_SUBMISSION_ID as _DIRECT_RPG_SUBMISSION_ID
 from app.rpg.performance_trace import rpg_pipeline_span
 from app.rpg.presentation.visible_response import visible_response_text
+
+logger = logging.getLogger(__name__)
 
 def execute_turn_with_job_mirror(
     apply_turn: Callable[..., dict[str, Any]],
@@ -246,10 +250,12 @@ def _find_submission_record(store: Any, session_id: str, submission_id: str) -> 
                 submission_id=submission_id,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "_find_submission_record", exc_info=True)
             return None
     try:
         jobs = store.iter_jobs(job_types=(RPG_FOREGROUND_RECORD_TYPE,))
     except Exception:
+        logger.debug("suppressed error in %s", "_find_submission_record", exc_info=True)
         return None
     for job in jobs:
         if getattr(job, "type", "") != RPG_FOREGROUND_RECORD_TYPE:

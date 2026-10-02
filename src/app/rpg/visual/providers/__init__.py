@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import time
 from typing import Any, Dict, Tuple
 
@@ -15,6 +17,8 @@ from .registry import (
     list_visual_provider_options,
     resolve_visual_provider_key,
 )
+
+logger = logging.getLogger(__name__)
 
 _IMAGE_PROVIDER_CACHE: Dict[str, Any] = {}
 MAX_CACHED_IMAGE_PROVIDERS = 1
@@ -109,7 +113,7 @@ def unload_image_provider_cache() -> None:
             if callable(unload):
                 unload()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "unload_image_provider_cache", exc_info=True)
     _IMAGE_PROVIDER_CACHE.clear()
     _IMAGE_PROVIDER_CACHE_TOUCHED_AT = 0.0
 

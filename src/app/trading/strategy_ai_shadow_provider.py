@@ -8,6 +8,8 @@ breaker so a provider outage cannot turn a 15-second monitor into a retry storm.
 
 from __future__ import annotations
 
+import logging
+
 import atexit
 import copy
 import hashlib
@@ -30,6 +32,8 @@ from app.providers.structured.schema_projection import project_provider_schema
 
 from . import strategy_ai_shadow as shadow
 from .strategy_repository import StrategyEvent, default_strategy_repository
+
+logger = logging.getLogger(__name__)
 
 
 AI_SHADOW_TOTAL_CALL_BUDGET_SECONDS = 60.0
@@ -131,6 +135,7 @@ def _persist_circuit_state(*, state: str, failure_count: int, delay_seconds: int
     try:
         default_strategy_repository().append_event(event)
     except Exception:
+        logger.debug("suppressed error in %s", "_persist_circuit_state", exc_info=True)
         return
 
 
@@ -151,6 +156,7 @@ class PersistentCircuitState(_CircuitState):
                 500,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "PersistentCircuitState._hydrate", exc_info=True)
             return
         health = [event for event in events if event.event_type == "ai_shadow_provider_health"]
         if health:
@@ -224,7 +230,7 @@ def _close_provider(provider) -> None:
         try:
             close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_close_provider", exc_info=True)
 
 
 def _retire_trading_research_provider() -> None:

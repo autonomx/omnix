@@ -160,7 +160,7 @@ def _enqueue_narration_request_old(
             ensure_narration_worker_running()
             signal_narration_work(session_id)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_enqueue_narration_request_old", exc_info=True)
 
     return {
         "ok": True,

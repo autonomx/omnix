@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """RPG session runtime responsibility module."""
 
 from copy import deepcopy
@@ -117,6 +121,7 @@ def _iter_sources(payload: dict[str, Any]) -> Iterable[dict[str, Any]]:
                 seen.add(id(source))
                 yield source
     except Exception:
+        logger.debug("suppressed error in %s", "_iter_sources", exc_info=True)
         return
 
 

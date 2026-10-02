@@ -1,6 +1,8 @@
 """Governed TP-Link Kasa runtime adapter for local smart plugs."""
 from __future__ import annotations
 
+import logging
+
 from app.config.env import env_str, environment
 
 import asyncio
@@ -11,6 +13,8 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 from .models import AssistantToolRequest, AssistantToolResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -241,7 +245,7 @@ async def _disconnect_all(devices: list[Any]) -> None:
         try:
             await disconnect()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_disconnect_all", exc_info=True)
 
 
 def _run_async(coro: Any, *, timeout: float) -> Any:
