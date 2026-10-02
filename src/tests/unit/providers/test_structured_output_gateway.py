@@ -503,3 +503,28 @@ def test_provider_call_budget_caps_validation_attempts() -> None:
     assert isinstance(outcome.error, StructuredDecodeError)
     assert outcome.diagnostics.provider_calls == 2
     assert len(provider.calls) == 2
+
+
+def test_the_provider_call_runs_in_the_callers_context() -> None:
+    from app.providers.base import current_turn_owner, provider_turn_owner
+
+    owners: list[str | None] = []
+
+    class OwnerRecordingProvider(FakeProvider):
+        def chat_completion(self, messages, **kwargs):
+            owners.append(current_turn_owner())
+            return super().chat_completion(messages, **kwargs)
+
+    provider = OwnerRecordingProvider([
+        ChatResponse(
+            content=json.dumps({"name": "a", "count": 1, "enabled": True}),
+            model="test-model",
+            finish_reason="stop",
+        ),
+    ])
+    with provider_turn_owner("job-42"):
+        StructuredOutputGateway(provider).generate(
+            [ChatMessage(role="user", content="go")], contract=EXAMPLE_CONTRACT,
+        )
+
+    assert owners == ["job-42"]

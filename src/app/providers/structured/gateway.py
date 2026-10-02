@@ -1,6 +1,7 @@
 """Central provider-independent structured-output gateway."""
 from __future__ import annotations
 
+import contextvars
 import math
 
 import hashlib
@@ -297,8 +298,12 @@ def _provider_call_with_deadline(
         finally:
             completed.set()
 
+    # The call runs in the caller's context (job turn owner, tenant), as a
+    # direct call would; a fresh thread otherwise starts with empty context.
+    context = contextvars.copy_context()
     worker = threading.Thread(
-        target=invoke,
+        target=context.run,
+        args=(invoke,),
         name=f"omnix-structured-{operation_id}",
         daemon=True,
     )
