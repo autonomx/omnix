@@ -386,7 +386,7 @@ Before a schema or runtime change:
 
     python -m app.persistence verify
 
-For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Back up as the migration role (`OMNIX_MIGRATION_DATABASE_URL`, or `OMNIX_DATABASE_URL` when you use one role); `python -m app.persistence backup` does this for you. Example:
+Backups, restore rehearsals and the recovery targets are in [operations/BACKUP_RESTORE.md](operations/BACKUP_RESTORE.md) (`scripts/backup_omnix.py`, `scripts/restore_rehearsal.py`). For a database-only backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Back up as the migration role (`OMNIX_MIGRATION_DATABASE_URL`, or `OMNIX_DATABASE_URL` when you use one role); `python -m app.persistence backup` does this for you. Example:
 
     pg_dump --dbname="$OMNIX_MIGRATION_DATABASE_URL" --format=custom --file=omnix-backup.dump
 

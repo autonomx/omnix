@@ -3,6 +3,10 @@
 Test every restore against an isolated database first; never restore over the
 active database without a fresh backup of it.
 
+Backups come from `scripts/backup_omnix.py`; rehearse one with
+`scripts/restore_rehearsal.py` ([BACKUP_RESTORE.md](../BACKUP_RESTORE.md)),
+which checks the manifest, migrations, row counts and blobs.
+
 ## Restore a database backup
 
 1. Create an empty database, or use `--clean` on a disposable one.
