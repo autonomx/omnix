@@ -7,6 +7,7 @@ import queue
 import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, MutableMapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import time
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
 from app.persistence.device_permits import device_permit_slot
 from app.providers.base import provider_turn_owner
+from app.runtime.cancellation import CancellationToken
 
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
@@ -27,6 +29,12 @@ CompletionHook = Callable[[Any, str, str, list[dict[str, Any]], dict[str, Any]],
 
 _CHAT_WORKER_COUNT = 4
 _CHAT_OUTSTANDING_LIMIT = 128
+# Provider calls run on a fixed pool. It is larger than the worker count so an
+# interrupted call that is still unwinding does not hold back the next turn.
+_CHAT_PROVIDER_CALL_LIMIT = 2 * _CHAT_WORKER_COUNT
+# In-process cancellation wakes a turn at once; a cancel recorded by another
+# gateway process is seen through the job store at this interval.
+_CROSS_PROCESS_CANCEL_POLL_SECONDS = 1.0
 _ACTIVE_JOB_STATUSES = {
     JobStatus.QUEUED,
     JobStatus.LEASED,
@@ -37,7 +45,7 @@ _ACTIVE_JOB_STATUSES = {
 _registry_guard = threading.Lock()
 _submission_locks = WeakValueDictionary()
 _job_commit_locks = WeakValueDictionary()
-_job_cancel_events: dict[str, threading.Event] = {}
+_job_cancel_events: dict[str, CancellationToken] = {}
 _active_chat_providers: dict[str, Any] = {}
 _execution_registry_lock = threading.Lock()
 
@@ -64,11 +72,17 @@ class _ChatGenerationDispatcher:
     """Bound local execution while preserving turn order within each session."""
 
     def __init__(self, worker_count: int = _CHAT_WORKER_COUNT,
-                 outstanding_limit: int = _CHAT_OUTSTANDING_LIMIT) -> None:
+                 outstanding_limit: int = _CHAT_OUTSTANDING_LIMIT,
+                 provider_call_limit: int = _CHAT_PROVIDER_CALL_LIMIT) -> None:
         if worker_count < 1 or outstanding_limit < worker_count:
             raise ValueError("outstanding limit must accommodate all Chat workers")
+        if provider_call_limit < worker_count:
+            raise ValueError("provider call limit must accommodate all Chat workers")
         self._worker_count = worker_count
         self._outstanding_limit = outstanding_limit
+        self._provider_call_limit = provider_call_limit
+        self._provider_pool: ThreadPoolExecutor | None = None
+        self._provider_calls = 0
         self._outstanding = 0
         self._ready_sessions: queue.Queue[str] = queue.Queue()
         self._pending: dict[str, deque[_ChatGenerationWork]] = defaultdict(deque)
@@ -86,7 +100,29 @@ class _ChatGenerationDispatcher:
                     "queued_dispatches": sum(len(items) for items in self._pending.values()),
                     "outstanding_limit": self._outstanding_limit,
                     "admission_rejection_count": self._admission_rejections,
+                    "provider_calls_in_flight": self._provider_calls,
+                    "provider_call_limit": self._provider_call_limit,
                     "closing": self._closing}
+
+    def submit_provider_call(self, call: Callable[[], Any]) -> Future:
+        """Run one provider call on the bounded pool; excess calls wait in its queue."""
+        with self._lock:
+            if self._closing:
+                raise ChatQueueFull("Chat execution is shutting down. Retry on an available gateway.")
+            if self._provider_pool is None:
+                self._provider_pool = ThreadPoolExecutor(
+                    max_workers=self._provider_call_limit,
+                    thread_name_prefix="omnix-chat-provider",
+                )
+            self._provider_calls += 1
+            future = self._provider_pool.submit(call)
+
+        def finished(_future: Future) -> None:
+            with self._lock:
+                self._provider_calls -= 1
+
+        future.add_done_callback(finished)
+        return future
 
     def submit(self, work: _ChatGenerationWork) -> None:
         session_id = str((work.job.input_payload or {}).get("session_id") or "").strip()
@@ -133,6 +169,11 @@ class _ChatGenerationDispatcher:
         deadline = time.monotonic() + timeout
         for thread in self._threads:
             thread.join(max(0, deadline - time.monotonic()))
+        with self._lock:
+            pool, self._provider_pool = self._provider_pool, None
+        if pool is not None:
+            # Queued calls are dropped; running ones were interrupted above.
+            pool.shutdown(wait=False, cancel_futures=True)
         return sum(thread.is_alive() for thread in self._threads)
 
     def _worker(self) -> None:
@@ -215,11 +256,11 @@ def _registry_lock(registry: MutableMapping[Any, threading.RLock], key: Any) -> 
         return registry.setdefault(key, threading.RLock())
 
 
-def _job_cancel_event(job_id: str, *, create: bool = False) -> threading.Event | None:
+def _job_cancel_event(job_id: str, *, create: bool = False) -> CancellationToken | None:
     with _execution_registry_lock:
         event = _job_cancel_events.get(job_id)
         if event is None and create:
-            event = threading.Event()
+            event = CancellationToken()
             _job_cancel_events[job_id] = event
         return event
 
@@ -587,52 +628,45 @@ def _generate_reply_with_interrupt(
     context_items: list[dict[str, Any]],
     job: JobRecord,
 ) -> dict[str, Any] | None:
-    """Run provider work off the session worker so cancellation can release it."""
+    """Run provider work on the bounded pool so cancellation can release the worker.
 
-    result: dict[str, Any] = {}
-    completed = threading.Event()
+    The worker wakes when the call finishes or the job's token is cancelled.
+    A cancel recorded by another process is read from the job store every
+    ``_CROSS_PROCESS_CANCEL_POLL_SECONDS``.
+    """
+
     if _cancel_requested(job_store, job.id):
         raise _ChatGenerationInterrupted()
     provider_id = _chat_provider_id(session, request, user_message)
+    token = _job_cancel_event(job.id, create=True)
 
-    def invoke() -> None:
-        try:
-            with _chat_provider_slot(provider_id), provider_turn_owner(job.id):
-                result["value"] = _generate_reply(
-                    chat_store,
-                    session,
-                    user_message,
-                    request=request,
-                    context_items=context_items,
-                )
-        except Exception as exc:
-            result["error"] = exc
-        finally:
-            completed.set()
+    def invoke() -> dict[str, Any] | None:
+        if token.cancelled:  # cancelled while queued behind other calls
+            return None
+        with _chat_provider_slot(provider_id), provider_turn_owner(job.id):
+            return _generate_reply(
+                chat_store,
+                session,
+                user_message,
+                request=request,
+                context_items=context_items,
+            )
 
-    threading.Thread(
-        target=invoke,
-        name=f"omnix-chat-generation-{job.id}",
-        daemon=True,
-    ).start()
-    cancel_event = _job_cancel_event(job.id, create=True)
-    provider_interrupt_sent = False
-    while not completed.wait(timeout=0.1):
-        canceled = bool(cancel_event and cancel_event.is_set()) or _cancel_requested(
-            job_store,
-            job.id,
-        )
-        if not canceled:
-            continue
-        if not provider_interrupt_sent:
-            _interrupt_active_chat_provider(job.id)
-            provider_interrupt_sent = True
+    future = _dispatcher.submit_provider_call(invoke)
+    wake = threading.Event()
+    future.add_done_callback(lambda _future: wake.set())
+    stop_waking = token.on_cancel(wake.set)
+    try:
+        while not wake.wait(timeout=_CROSS_PROCESS_CANCEL_POLL_SECONDS):
+            if _cancel_requested(job_store, job.id):
+                break
+    finally:
+        stop_waking()
+    if not future.done() or token.cancelled:
+        future.cancel()
+        _interrupt_active_chat_provider(job.id)
         raise _ChatGenerationInterrupted()
-    if "error" in result:
-        error = result["error"]
-        if isinstance(error, Exception):
-            raise error
-    return result.get("value")
+    return future.result()
 
 
 def _run_chat_generation_job(

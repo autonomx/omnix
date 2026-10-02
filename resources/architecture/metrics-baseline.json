@@ -3167,7 +3167,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 41,
+        "line": 49,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This holds references only for currently executing jobs; the durable job store owns job status, leases, and cancellation authority, and terminal execution removes each reference.",
         "symbol": "_active_chat_providers"
@@ -3176,7 +3176,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 42,
+        "line": 50,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_execution_registry_lock"
@@ -3185,7 +3185,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 40,
+        "line": 48,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "These are local wakeup handles for active workers; cancellation status is persisted in the durable job store and the handles are removed when execution ends.",
         "symbol": "_job_cancel_events"
@@ -3194,7 +3194,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 37,
+        "line": 45,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_registry_guard"
@@ -7485,5 +7485,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "d75527963e3dab0a158c25c860bb1d785a8d7cb50e647b6491398477fc5b55b9"
+  "source_digest": "8128897561d2aca488c84cef92960b660cc977b4c93590277077111735bc7ec8"
 }
