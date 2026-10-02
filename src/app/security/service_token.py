@@ -7,6 +7,7 @@ import re
 from fastapi import HTTPException, Request
 
 from app.config.env import env_str
+from app.observability.logging import current_log_context
 
 
 def valid_service_token(supplied: list[str]) -> bool:
@@ -24,7 +25,12 @@ def service_headers() -> dict[str, str]:
     token = env_str("OMNIX_SERVICE_TOKEN", "") or ""
     if not valid_service_token([token]):
         raise RuntimeError("service_credential_unavailable")
-    return {"X-Omnix-Client": "gateway", "X-Omnix-Service-Token": token}
+    headers = {"X-Omnix-Client": "gateway", "X-Omnix-Service-Token": token}
+    # The service logs under the gateway's request id (WP-10.2).
+    request_id = current_log_context().get("request_id")
+    if request_id:
+        headers["X-Request-ID"] = request_id
+    return headers
 
 
 def require_service_token(request: Request) -> None:

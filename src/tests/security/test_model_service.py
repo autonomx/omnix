@@ -256,3 +256,25 @@ async def test_stt_background_feed_failure_reports_private_correlated_error(requ
         assert "private provider details" not in json.dumps(message)
 
     await run()
+
+
+def test_a_forwarded_request_id_is_kept_and_bound_for_the_call(monkeypatch):
+    from app.observability.logging import current_log_context, log_context
+
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
+    monkeypatch.delenv("OMNIX_ALLOWED_HOSTS", raising=False)
+    app = FastAPI()
+    app.add_middleware(ModelServiceMiddleware)
+
+    @app.get("/context")
+    def context():
+        return current_log_context()
+
+    client = TestClient(app, base_url="http://127.0.0.1")
+    assert "X-Request-ID" not in service_headers()
+    with log_context(request_id="gateway-req-0001"):
+        forwarded = client.get("/context", headers=service_headers())
+    generated = client.get("/context", headers={**service_headers(), "X-Request-ID": "bad id"})
+
+    assert forwarded.json()["request_id"] == forwarded.headers["x-request-id"] == "gateway-req-0001"
+    assert generated.json()["request_id"] == generated.headers["x-request-id"] != "bad id"

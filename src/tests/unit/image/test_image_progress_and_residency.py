@@ -171,5 +171,5 @@ def test_only_the_launched_service_process_coordinates_permits():
     ).stdout
     before, after = json.loads(output.strip().splitlines()[-1])
 
-    assert "_coordinate_device_permits" not in before
-    assert after[0] == "_coordinate_device_permits"
+    assert "_prepare_launched_process" not in before
+    assert after[0] == "_prepare_launched_process"

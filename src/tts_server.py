@@ -926,6 +926,9 @@ def _voice_clone(request: TtsVoiceCloneRequest, audio_data: bytes):
 if __name__ == "__main__":
     import uvicorn
 
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     host = bind_host()
     port = env_int("OMNIX_TTS_PORT", 5101, minimum=1, maximum=65535)
     if not _preflight_tts_port(host, port):

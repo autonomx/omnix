@@ -121,6 +121,12 @@ the durable worker log under that `request_id`, so one id follows a submission
 from its request into the job and its provider calls; a job submitted by a
 running job inherits it. Scheduler and CLI submissions have none.
 
+Calls to the TTS, STT and image services forward the id in `X-Request-ID`. The
+services keep a valid forwarded id (otherwise they generate one), return it,
+and log under it, so a gateway line and a model-service line for the same call
+share one `request_id`. The model services configure the same handler, so
+`OMNIX_LOG_FORMAT` and the level settings apply to them too.
+
 ## Health and readiness checks
 
 Health means different things at different layers.

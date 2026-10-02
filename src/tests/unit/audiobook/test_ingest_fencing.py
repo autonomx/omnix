@@ -30,7 +30,7 @@ class Connection:
         return [(
             self.latest, "workspace", None, "audiobook", "audiobook.ingest",
             "queued", "cpu", 0, {}, [], {}, None, 0, 3, now, None, None,
-            None, None, None, None, now, now, {},
+            None, None, None, None, now, now, {}, None,
         )]
 
 

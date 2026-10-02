@@ -189,6 +189,9 @@ async def transcribe(
 
 
 def main() -> None:
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     host = bind_host()
     port = env_int("OMNIX_STT_PORT", 5201, minimum=1, maximum=65535)
     print(f"[STT] Starting {PROVIDER_NAME} on http://{host}:{port}")

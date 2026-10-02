@@ -3,13 +3,13 @@ from __future__ import annotations
 from app.config.env import env_str as _env_str
 
 import logging
-import secrets
 
 from starlette.responses import JSONResponse
 from starlette.formparsers import MultiPartException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from starlette.websockets import WebSocketDisconnect
 
+from app.observability.logging import log_context, request_id_from_header
 from app.security.request_guard import RequestGuardMiddleware
 from app.security.service_token import valid_service_token
 
@@ -77,7 +77,11 @@ class ModelServiceMiddleware:
         if scope["type"] not in {"http", "websocket"}:
             await self.app(scope, receive, send)
             return
-        request_id = secrets.token_urlsafe(18)
+        # A valid inbound id (the gateway forwards its own) is kept, so both
+        # processes log one id for the call (WP-10.2).
+        request_id = request_id_from_header(next(
+            (v.decode("latin-1") for k, v in scope.get("headers", []) if k.lower() == b"x-request-id"), None,
+        ))
         scope.setdefault("state", {})["request_id"] = request_id
         consumed = 0
         oversized = False
@@ -153,7 +157,8 @@ class ModelServiceMiddleware:
             await send(message)
 
         try:
-            await self.guard(scope, bounded_receive, safe_send)
+            with log_context(request_id=request_id):
+                await self.guard(scope, bounded_receive, safe_send)
         except WebSocketDisconnect:
             if scope["type"] != "websocket":
                 raise
