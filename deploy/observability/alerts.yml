@@ -1,0 +1,163 @@
+# Prometheus alert rules for Omnix (WP-10.6). Objectives: docs/operations/SLOS.md.
+# Metric catalog: docs/operations/METRICS.md. Workspace-wide gauges (jobs,
+# outbox, device permits) are reported by every gateway process: aggregate
+# them with max, never sum.
+groups:
+  - name: omnix-availability
+    rules:
+      - alert: OmnixErrorBudgetFastBurn
+        expr: |
+          sum(rate(omnix_http_requests_total{status_class="5xx"}[1h]))
+            / clamp_min(sum(rate(omnix_http_requests_total[1h])), 1e-9) > 0.072
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "5xx ratio is spending the availability budget 14x too fast"
+          description: "Over the last hour more than 7.2% of requests failed (budget 0.5%)."
+      - alert: OmnixErrorBudgetSlowBurn
+        expr: |
+          sum(rate(omnix_http_requests_total{status_class="5xx"}[6h]))
+            / clamp_min(sum(rate(omnix_http_requests_total[6h])), 1e-9) > 0.03
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "5xx ratio is spending the availability budget 6x too fast"
+          description: "Over six hours more than 3% of requests failed."
+      - alert: OmnixChatAdmissionSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(omnix_http_request_duration_seconds_bucket{
+            route="/api/chat/sessions/{session_id}/messages", method="POST"}[5m]))) > 0.05
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Chat admission p95 is above 50 ms"
+      - alert: OmnixEventLoopLagging
+        expr: |
+          histogram_quantile(0.95, sum by (le, instance) (rate(omnix_event_loop_lag_seconds_bucket[5m]))) > 0.25
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "A gateway event loop is blocked for more than 250 ms at p95"
+          description: "Blocking code runs on the event loop of {{ $labels.instance }}."
+
+  - name: omnix-jobs-and-events
+    rules:
+      - alert: OmnixJobSnapshotFailing
+        expr: max(omnix_jobs_snapshot_up) == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "The gateway cannot read the job queue from PostgreSQL"
+      - alert: OmnixInteractiveQueueStalled
+        expr: max(omnix_jobs_oldest_waiting_age_seconds{job_type="chat.generate"}) > 30
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "A Chat turn has waited more than 30 s to start"
+      - alert: OmnixBackgroundQueueStalled
+        expr: max by (job_type) (omnix_jobs_oldest_waiting_age_seconds) > 300
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job_type }} jobs have waited more than 5 minutes"
+      - alert: OmnixExpiredLeasesNotRecovered
+        expr: max by (job_type) (omnix_jobs_expired_leases) > 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job_type }} jobs hold expired leases that recovery has not released"
+      - alert: OmnixDeadLetters
+        expr: max(omnix_job_dead_letters) > 0
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Dead-lettered jobs are waiting for review"
+      - alert: OmnixOutboxLagging
+        expr: max(omnix_outbox_oldest_unpublished_age_seconds) > 30
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Outbox events are not being delivered (oldest older than 30 s)"
+      - alert: OmnixEventStreamResyncs
+        expr: sum(rate(omnix_sse_resyncs_total[15m])) * 900 > 20
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Event stream subscribers keep falling behind and resyncing"
+
+  - name: omnix-dependencies
+    rules:
+      - alert: OmnixDatabasePoolSaturated
+        expr: max by (instance) (omnix_db_pool_in_use / clamp_min(omnix_db_pool_max, 1)) > 0.9
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.instance }} uses more than 90% of its PostgreSQL pool"
+      - alert: OmnixDatabasePoolWaiting
+        expr: max by (instance) (omnix_db_pool_requests_waiting) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Requests on {{ $labels.instance }} wait for a database connection"
+      - alert: OmnixProviderFailing
+        expr: |
+          sum by (client) (rate(omnix_provider_calls_total{outcome=~"5xx|transport_error|circuit_open"}[10m]))
+            / clamp_min(sum by (client) (rate(omnix_provider_calls_total[10m])), 1e-9) > 0.2
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "More than 20% of {{ $labels.client }} calls fail"
+      - alert: OmnixProviderCircuitOpen
+        expr: sum by (client) (increase(omnix_provider_calls_total{outcome="circuit_open"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "The {{ $labels.client }} circuit breaker is refusing calls"
+      - alert: OmnixDevicePermitStarvation
+        expr: max by (device, model_class) (omnix_device_permit_waiting_requests) > 0
+          and max by (device, model_class) (omnix_device_permit_held_units)
+            >= max by (device, model_class) (omnix_device_permit_capacity_units)
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.model_class }} calls on {{ $labels.device }} wait for a full device"
+
+  - name: omnix-maintenance-and-security
+    rules:
+      - alert: OmnixScheduledTaskFailing
+        expr: sum by (task) (increase(omnix_scheduler_task_failures_total[1h])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Scheduled task {{ $labels.task }} failed in the last hour"
+      - alert: OmnixAuthRejectionSpike
+        expr: sum(rate(omnix_auth_rejections_total{reason=~"authentication_required|invalid_credential|csrf_failed"}[10m])) * 600 > 100
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "More than 100 refused sign-ins in 10 minutes"
+      - alert: OmnixAuthUnavailable
+        expr: sum(increase(omnix_auth_rejections_total{reason="authentication_unavailable"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Sign-in cannot reach its session or identity store"

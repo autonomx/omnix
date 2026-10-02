@@ -146,6 +146,10 @@ request id; the stack trace is logged under that request id, never returned.
 needs `admin:metrics`). Scrape each gateway process directly. The catalog and
 label rules are in [operations/METRICS.md](operations/METRICS.md).
 
+Objectives and their error budget are in [operations/SLOS.md](operations/SLOS.md).
+Prometheus alert rules: `deploy/observability/alerts.yml`; Grafana dashboard
+(import with a Prometheus data source): `deploy/observability/dashboards/omnix-overview.json`.
+
 ## Health and readiness checks
 
 Health means different things at different layers.
