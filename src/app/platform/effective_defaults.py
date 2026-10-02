@@ -6,6 +6,7 @@ from typing import Any
 
 from app.settings.access import load_settings
 
+from .settings_profile_experience import AgentRunSettingsProfile
 from .settings_profile_models import SettingsProfile
 from .settings_profile_repository import load_settings_profile
 from app.prompts import prompt_template
@@ -39,6 +40,11 @@ _PERSONALITY_PROMPTS = {
 
 def load_effective_profile() -> SettingsProfile:
     return load_settings_profile(load_settings(allow_defaults_without_service=True))
+
+
+def agent_run_settings() -> AgentRunSettingsProfile:
+    """Default agent run limits and provider prices from the saved settings."""
+    return load_effective_profile().agent_runs
 
 
 def _text(value: Any) -> str:

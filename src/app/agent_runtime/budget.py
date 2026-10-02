@@ -1,6 +1,7 @@
 """Durable fail-closed resource budgets for generalized agent runs."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from app.caching.bounded_cache import bounded_lru_cache
 
@@ -13,7 +14,42 @@ from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
 
+logger = logging.getLogger(__name__)
+
 _ZERO_COST_PROVIDERS = {"lmstudio", "llamacpp", "chatgpt_codex"}
+
+
+def _agent_run_settings():
+    from app.platform.effective_defaults import agent_run_settings
+
+    return agent_run_settings()
+
+
+def provider_price(provider_id: str | None):
+    """The configured price of a provider, or ``None`` when its cost cannot be metered."""
+    provider = normalize_budget_provider_id(provider_id or "")
+    try:
+        return _agent_run_settings().provider_prices.get(provider)
+    except Exception:  # settings unreadable: treat the provider as unpriced
+        logger.warning("agent_budget_settings_unavailable", exc_info=True)
+        return None
+
+
+def apply_default_run_limits(spec):
+    """Fill a run's unset token and cost limits from the settings' defaults."""
+    try:
+        settings = _agent_run_settings()
+    except Exception:
+        logger.warning("agent_budget_settings_unavailable", exc_info=True)
+        return spec
+    updates: dict[str, object] = {}
+    if spec.limits.max_tokens is None and settings.default_max_output_tokens is not None:
+        updates["max_tokens"] = settings.default_max_output_tokens
+    if spec.limits.max_cost is None and settings.default_max_cost_usd is not None:
+        updates["max_cost"] = settings.default_max_cost_usd
+    if not updates:
+        return spec
+    return spec.model_copy(update={"limits": spec.limits.model_copy(update=updates)})
 _TERMINAL = {"completed", "failed", "cancelled"}
 
 
@@ -86,6 +122,7 @@ class AgentBudgetManager:
             if (
                 snapshot.spec.limits.max_cost is not None
                 and provider not in _ZERO_COST_PROVIDERS
+                and provider_price(provider) is None
             ):
                 reason = f"budget_cost_unmeterable_provider:{provider or 'unknown'}"
                 self._fail_locked(repository, snapshot, reason)
@@ -150,6 +187,7 @@ class AgentBudgetManager:
         *,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        provider_id: str | None = None,
     ) -> dict[str, object]:
         if input_tokens is not None and input_tokens < 0:
             raise ValueError("token usage must be non-negative")
@@ -164,20 +202,26 @@ class AgentBudgetManager:
             if snapshot is None:
                 raise KeyError(run_id)
             effective = self._effective_limits(repository, snapshot)
+            price = provider_price(provider_id) if provider_id else None
+            cost = 0.0
+            if price is not None:
+                cost = ((input_tokens or 0) * price.input_usd_per_million
+                        + (output_tokens or 0) * price.output_usd_per_million) / 1_000_000
+            max_tokens = int(effective["max_tokens"]) if effective["max_tokens"] is not None else None
+            before = repository.get_usage(run_id)
             usage = repository.consume_usage(
                 run_id,
                 input_tokens=input_tokens or 0,
                 output_tokens=output_tokens or 0,
                 input_tokens_reported=input_tokens is not None,
                 output_tokens_reported=output_tokens is not None,
-                max_output_tokens=(
-                    int(effective["max_tokens"])
-                    if effective["max_tokens"] is not None
-                    else None
-                ),
+                cost=cost,
+                max_output_tokens=max_tokens,
+                max_cost=float(effective["max_cost"]) if effective["max_cost"] is not None else None,
             )
             if usage is None:
-                reason = "budget_max_output_tokens_exceeded"
+                tokens_over = max_tokens is not None and int(before["output_tokens"]) + (output_tokens or 0) > max_tokens
+                reason = "budget_max_output_tokens_exceeded" if tokens_over else "budget_cost_exhausted"
                 self._fail_locked(repository, snapshot, reason)
                 work.commit()
                 raise AgentBudgetError(reason)

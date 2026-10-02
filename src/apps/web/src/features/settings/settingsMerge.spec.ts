@@ -11,6 +11,18 @@ describe('settings merge helpers', () => {
     expect(migrated.global.providers.llm).toBe(DEFAULT_SETTINGS_DOCUMENT.global.providers.llm);
   });
 
+  it('keeps the entries of free-form maps', () => {
+    const migrated = migrateSettingsDocument({
+      agentRuns: { defaultMaxCostUsd: 2, providerPrices: { openrouter: { inputUsdPerMillion: 1, outputUsdPerMillion: 4 } } },
+      storyteller: { pronunciation: { Nika: 'NEE-kah' } },
+    });
+    expect(migrated.agentRuns.providerPrices.openrouter?.outputUsdPerMillion).toBe(4);
+    expect(migrated.agentRuns.defaultMaxCostUsd).toBe(2);
+    expect(migrated.agentRuns.defaultMaxOutputTokens).toBeNull();
+    expect(migrated.storyteller.pronunciation).toEqual({ Nika: 'NEE-kah' });
+    expect(migrateSettingsDocument({ agentRuns: { providerPrices: 'bad' } }).agentRuns.providerPrices).toEqual({});
+  });
+
   it('falls back safely for malformed input', () => {
     expect(migrateSettingsDocument({ voice: 'bad' }).voice).toEqual(DEFAULT_SETTINGS_DOCUMENT.voice);
   });

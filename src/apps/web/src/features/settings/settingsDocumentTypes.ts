@@ -54,6 +54,15 @@ export type AssistantSettings = {
   desktopCompanionMinimumChangeConfidence: number;
 };
 
+export type AgentProviderPrice = { inputUsdPerMillion: number; outputUsdPerMillion: number };
+
+/** Defaults for agent runs started without their own limits; null means unlimited. */
+export type AgentRunSettings = {
+  defaultMaxOutputTokens: number | null;
+  defaultMaxCostUsd: number | null;
+  providerPrices: Record<string, AgentProviderPrice>;
+};
+
 export type SettingsDocument = {
   schemaVersion: number;
   revision: string;
@@ -61,6 +70,7 @@ export type SettingsDocument = {
   providerConfigs: ProviderConfigs;
   appearance: { mode: 'system' | 'light' | 'dark'; theme: OmnixThemeId; density: 'comfortable' | 'compact'; textScale: number; reduceMotion: boolean; liveCaptions: boolean };
   assistant: AssistantSettings;
+  agentRuns: AgentRunSettings;
   voice: { language: string; stability: number; similarity: number; style: number; speed: number; pitch: number; volume: number; effects: string[]; streaming: boolean; cloningLanguage: string; cloningQuality: string };
   storyteller: { providerId: string; modelId: string; tone: string; writingStyle: string; readSpeed: number; pauseParagraphMs: number; pauseChapterMs: number; readChapterTitles: boolean; readStylePreset: string; pronunciation: Record<string, string> };
   podcast: { providerId: string; modelId: string; format: string; durationMinutes: number; tone: string; language: string; generationStyle: string; autoplay: boolean; playbackRate: number; stability: number; similarity: number; effects: string[] };

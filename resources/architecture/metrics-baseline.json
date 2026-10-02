@@ -2513,7 +2513,7 @@
         "category": "cache",
         "invalidation": "default_agent_budget_manager.cache_clear",
         "kind": "function_cache",
-        "line": 407,
+        "line": 451,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/agent_runtime/budget.py",
@@ -4568,7 +4568,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 20,
+        "line": 21,
         "path": "src/app/trading/trade_logging.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_HANDLER_LOCK"
@@ -7465,5 +7465,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "0c8bb4f59b83ba3088ec5bd7353f9ea4b817c01a4d5e3a23ada97ca21e6be5f5"
+  "source_digest": "c67f9e284f21b7a5bcd301ab38f377ba9b33e548aa279f45f025eb2eb64bd4f2"
 }

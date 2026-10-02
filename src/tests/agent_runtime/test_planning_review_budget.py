@@ -30,6 +30,7 @@ class _Budget:
         *,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        provider_id: str | None = None,
     ):
         self.tokens.append((run_id, input_tokens, output_tokens))
         return {"output_tokens": output_tokens or 0}

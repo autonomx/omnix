@@ -36,7 +36,7 @@ from .evidence import (
     validate_required_evidence_capabilities,
 )
 from .profiles import get_agent_profile, resolve_profile_capabilities
-from .budget import AgentBudgetError, AgentBudgetManager
+from .budget import AgentBudgetError, AgentBudgetManager, apply_default_run_limits
 from .contracts import (
     AgentArtifact,
     AgentEvent,
@@ -405,7 +405,7 @@ class AgentRunService:
         remain owned by the Chat subsystem.
         """
 
-        spec = self._prepare_start_spec(spec)
+        spec = apply_default_run_limits(self._prepare_start_spec(spec))
 
         log_agent_activity(
             "service.start.requested",
@@ -504,7 +504,7 @@ class AgentRunService:
         """Persist a queued run and ask the durable worker to prepare it."""
         from .jobs import create_agent_workspace_prepare_request, enqueue_agent_job
 
-        issued = self._prepare_start_spec(spec)
+        issued = apply_default_run_limits(self._prepare_start_spec(spec))
         self._validate_run_spec_authority(issued)
         self._validate_evidence_authority(issued)
         with self.unit_of_work(self.database) as work:
@@ -1453,7 +1453,7 @@ class AgentRunService:
         """Persist the replacement and hand workspace/runtime work to jobs."""
         from .jobs import create_agent_workspace_prepare_request, enqueue_agent_job
 
-        issued = self._prepare_start_spec(replacement_spec)
+        issued = apply_default_run_limits(self._prepare_start_spec(replacement_spec))
         self._validate_run_spec_authority(issued)
         self._validate_evidence_authority(issued)
         with self.unit_of_work(self.database) as work:

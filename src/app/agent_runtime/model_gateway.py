@@ -450,6 +450,7 @@ async def agent_chat_completion(
                     x_omnix_agent_run_id,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    provider_id=provider_id,
                 )
             except AgentBudgetError as exc:
                 raise _budget_http_exception(str(exc)) from exc
@@ -535,6 +536,7 @@ async def agent_chat_completion(
                         x_omnix_agent_run_id,
                         input_tokens=observed_input_tokens,
                         output_tokens=observed_output_tokens,
+                        provider_id=provider_id,
                     )
                 except AgentBudgetError as exc:
                     payload = _budget_stream_error(str(exc))

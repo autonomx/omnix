@@ -16,6 +16,11 @@ export function mergeKnownSettings<T>(defaults: T, incoming: unknown): T {
   if (!isRecord(defaults)) {
     return (incoming === undefined ? defaults : incoming) as T;
   }
+  if (Object.keys(defaults).length === 0) {
+    // An empty default is a free-form map (pronunciations, provider prices):
+    // keep the saved entries instead of dropping every key.
+    return (isRecord(incoming) ? cloneSettingsValue(incoming) : {}) as T;
+  }
   const source = isRecord(incoming) ? incoming : {};
   const result: Record<string, unknown> = {};
   for (const [key, defaultValue] of Object.entries(defaults)) {

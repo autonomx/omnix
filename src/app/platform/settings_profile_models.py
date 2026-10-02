@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .settings_profile_capture import ImageSettingsProfile, StorageSettingsProfile, SttSettingsProfile
 from .settings_profile_core import SETTINGS_SCHEMA_VERSION, ProviderConfigs
-from .settings_profile_experience import AppearanceSettingsProfile, AssistantSettingsProfile
+from .settings_profile_experience import AgentRunSettingsProfile, AppearanceSettingsProfile, AssistantSettingsProfile
 from .settings_profile_global import GlobalSettingsProfile
 from .settings_profile_podcast import PodcastSettingsProfile
 from .settings_profile_rpg import RpgSettingsProfile
@@ -23,6 +23,7 @@ class SettingsProfile(BaseModel):
     provider_configs: ProviderConfigs = Field(default_factory=ProviderConfigs, alias="providerConfigs")
     appearance: AppearanceSettingsProfile = Field(default_factory=AppearanceSettingsProfile)
     assistant: AssistantSettingsProfile = Field(default_factory=AssistantSettingsProfile)
+    agent_runs: AgentRunSettingsProfile = Field(default_factory=AgentRunSettingsProfile, alias="agentRuns")
     voice: VoiceSettingsProfile = Field(default_factory=VoiceSettingsProfile)
     storyteller: StorytellerSettingsProfile = Field(default_factory=StorytellerSettingsProfile)
     podcast: PodcastSettingsProfile = Field(default_factory=PodcastSettingsProfile)

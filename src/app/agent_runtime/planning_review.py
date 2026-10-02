@@ -324,6 +324,7 @@ class _BudgetedReviewProvider:
                 self._run_id,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                provider_id=self._provider_id,
             )
         return response
 
