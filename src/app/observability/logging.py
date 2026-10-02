@@ -18,8 +18,8 @@ import hashlib
 import json
 import logging
 import re
-import secrets
 import sys
+import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -124,7 +124,7 @@ def request_id_from_header(value: str | None) -> str:
     """A valid inbound request id, or a new one."""
     if value and _REQUEST_ID.fullmatch(value):
         return value
-    return secrets.token_urlsafe(18)
+    return uuid.uuid4().hex
 
 
 class RequestContextMiddleware:

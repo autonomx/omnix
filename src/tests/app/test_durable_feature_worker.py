@@ -288,3 +288,18 @@ def test_durable_feature_worker_runs_independent_jobs_concurrently(monkeypatch):
     finally:
         release.set()
         worker.stop()
+
+
+def test_a_claimed_job_logs_under_its_submitting_request_id(monkeypatch):
+    from app.observability.logging import current_log_context
+
+    worker = DurableFeatureJobWorker(object(), JobHandlerRegistry(()), poll_seconds=0.01)
+    seen = {}
+    monkeypatch.setattr(worker, "_execute_claimed", lambda job, _cancellation: seen.update(current_log_context()))
+
+    worker._run_claimed(
+        SimpleNamespace(id="job:traced", module="feature", correlation_id="req-traced-0001"), threading.Event(),
+    )
+
+    assert seen["request_id"] == "req-traced-0001"
+    assert seen["job_id"] == "job:traced"

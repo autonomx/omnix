@@ -138,9 +138,10 @@
           "inline_execution": true
         },
         "completed_at": "<timestamp>",
+        "correlation_id": "<uuid:7>",
         "created_at": "<timestamp>",
         "error": null,
-        "id": "job:<uuid:7>",
+        "id": "job:<uuid:8>",
         "input_payload": {
           "message_id": "msg:<uuid:1>",
           "model_id": "fixture-model",

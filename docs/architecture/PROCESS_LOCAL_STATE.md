@@ -203,7 +203,7 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/trading/trade_logging.py:20` `_HANDLER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/trading/yahoo_evidence.py:871` `_default_lock` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/voice/tts_runtime_state.py:17` `STATE_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
-| `src/app/voice_debug.py:35` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
-| `src/app/voice_debug.py:32` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
+| `src/app/voice_debug.py:37` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
+| `src/app/voice_debug.py:34` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 
 Scanned entries: 199; unapproved entries: 0; unbounded caches: 31.

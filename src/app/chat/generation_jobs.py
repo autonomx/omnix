@@ -219,7 +219,10 @@ class _ChatGenerationDispatcher:
                     }:
                         _drop_job_cancel_event(work.job.id)
                         continue
-                    with log_context(job_id=started.id, feature="chat"):
+                    with log_context(
+                        job_id=started.id, feature="chat",
+                        request_id=getattr(started, "correlation_id", None),
+                    ):
                         _run_chat_generation_job(
                             chat_store=work.chat_store,
                             job_store=work.job_store,

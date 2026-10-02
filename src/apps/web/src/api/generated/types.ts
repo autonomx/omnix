@@ -16715,6 +16715,8 @@ export interface components {
             };
             /** Completed At */
             completed_at?: string | null;
+            /** Correlation Id */
+            correlation_id?: string | null;
             /** Created At */
             created_at: string;
             error?: components["schemas"]["JobError"] | null;

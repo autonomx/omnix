@@ -18344,6 +18344,17 @@
             ],
             "title": "Completed At"
           },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"

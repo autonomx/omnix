@@ -187,6 +187,8 @@ class JobRecord(BaseModel):
     completed_at: str | None = None
     cancel: CancelState = Field(default_factory=CancelState)
     compat: dict[str, Any] = Field(default_factory=dict)
+    # The submitting request's id (WP-10.2); workers bind it to their log lines.
+    correlation_id: str | None = None
 
 
 class JobListResponse(BaseModel):

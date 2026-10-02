@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.jobs.errors import JobClaimConflict
+from app.observability.logging import current_log_context
 from app.runtime.pagination import decode_cursor, encode_cursor, page_limit
 from app.jobs.models import (
     CancelJobRequest,
@@ -116,6 +117,7 @@ class InMemoryJobStore:
             updated_at=now,
             cancel=CancelState(),
             compat=request.compat,
+            correlation_id=current_log_context().get("request_id"),
         )
         with self._state.lock:
             existing = self._state.jobs.get(job.id)

@@ -115,6 +115,12 @@ job runs carry `job_id` (and `attempt` and `feature` for durable worker jobs),
 including lines from the provider call made for a Chat turn. Quote the
 response's `X-Request-ID` when reporting a failed request.
 
+A job keeps the id of the request that submitted it as `correlation_id` (shown
+on the job API and in the Chat stream's `job` event). The Chat dispatcher and
+the durable worker log under that `request_id`, so one id follows a submission
+from its request into the job and its provider calls; a job submitted by a
+running job inherits it. Scheduler and CLI submissions have none.
+
 ## Health and readiness checks
 
 Health means different things at different layers.

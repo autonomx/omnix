@@ -331,6 +331,7 @@ class DurableFeatureJobWorker:
             attempt = max(1, int(getattr(job, "_attempt_count", 0) or getattr(job, "attempts", 0) or 1))
             with statement_class("job"), log_context(
                 job_id=job.id, attempt=attempt, feature=getattr(job, "module", None),
+                request_id=getattr(job, "correlation_id", None),
             ):
                 self._execute_claimed(job, cancellation)
         finally:

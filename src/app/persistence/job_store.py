@@ -26,6 +26,7 @@ from app.jobs.models import (
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
+from app.observability.logging import current_log_context
 from app.runtime.pagination import MAX_PAGE_SIZE, decode_cursor, encode_cursor, page_limit
 from app.runtime.tenant_context import RequestTenant
 from .unit_of_work import run_unit_of_work, unit_of_work
@@ -145,6 +146,7 @@ class PostgresJobStoreAdapter:
                 "input_payload": request.input_payload or {},
                 "max_attempts": handler.max_attempts if handler is not None else 3,
                 "metadata": metadata,
+                "correlation_id": current_log_context().get("request_id"),
             }
             if job_id is None:
                 record = work.jobs.create_job(self.context, payload)
@@ -781,6 +783,7 @@ class PostgresJobStoreAdapter:
                 "completed_at": value.get("completed_at"),
                 "cancel": cancel,
                 "compat": dict(contract.get("compat") or {}),
+                "correlation_id": value.get("correlation_id"),
             },
         )
         record._attempt_count = max(0, int(value.get("attempt_count") or 0))

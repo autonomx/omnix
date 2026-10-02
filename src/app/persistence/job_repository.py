@@ -38,7 +38,8 @@ jobs.status, jobs.resource_class, jobs.priority, jobs.input_payload,
 jobs.output_refs, jobs.progress, jobs.error, jobs.attempt_count,
 jobs.max_attempts, jobs.available_at, jobs.lease_owner, jobs.lease_token,
 jobs.lease_expires_at, jobs.cancel_requested_at, jobs.started_at,
-jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata
+jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata,
+jobs.correlation_id
 """
 _ACTIVE_CHAT_JOBS = """
 jobs.job_type = 'chat.generate'
@@ -1131,10 +1132,10 @@ class PostgresJobRepository(_BaseJobRepository):
             INSERT INTO omnix_jobs AS jobs (
                 id, workspace_id, owner_user_id, module, job_type,
                 resource_class, priority, input_payload, max_attempts,
-                available_at, metadata
+                available_at, metadata, correlation_id
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s,
-                COALESCE(%s::timestamptz, CURRENT_TIMESTAMP), %s::jsonb
+                COALESCE(%s::timestamptz, CURRENT_TIMESTAMP), %s::jsonb, %s
             )
             ON CONFLICT (id) DO NOTHING
             RETURNING {_QUALIFIED_JOB_COLUMNS}
@@ -1151,6 +1152,7 @@ class PostgresJobRepository(_BaseJobRepository):
                 max(1, int(payload.get("max_attempts", 3))),
                 payload.get("available_at"),
                 _json(payload.get("metadata") or {}),
+                payload.get("correlation_id"),
             ),
         ).fetchone()
         if row is not None:

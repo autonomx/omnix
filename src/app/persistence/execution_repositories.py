@@ -44,6 +44,7 @@ def _job(row: Any) -> dict[str, Any]:
         "created_at": row[21].isoformat(),
         "updated_at": row[22].isoformat(),
         "metadata": dict(row[23]),
+        "correlation_id": str(row[24]) if row[24] is not None else None,
     }
 
 
@@ -72,7 +73,8 @@ _JOB_COLUMNS = """
 id, workspace_id, owner_user_id, module, job_type, status, resource_class,
 priority, input_payload, output_refs, progress, error, attempt_count,
 max_attempts, available_at, lease_owner, lease_token, lease_expires_at,
-cancel_requested_at, started_at, completed_at, created_at, updated_at, metadata
+cancel_requested_at, started_at, completed_at, created_at, updated_at, metadata,
+correlation_id
 """
 _FOREGROUND_OWNER_GUARD = """
 AND lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL
@@ -117,10 +119,10 @@ class PostgresJobRepository:
             INSERT INTO omnix_jobs (
                 id, workspace_id, owner_user_id, module, job_type,
                 resource_class, priority, input_payload, max_attempts,
-                available_at, metadata
+                available_at, metadata, correlation_id
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s,
-                COALESCE(%s::timestamptz, CURRENT_TIMESTAMP), %s::jsonb
+                COALESCE(%s::timestamptz, CURRENT_TIMESTAMP), %s::jsonb, %s
             ) RETURNING {_JOB_COLUMNS}
             """,
             (
@@ -135,6 +137,7 @@ class PostgresJobRepository:
                 max(1, int(payload.get("max_attempts", 3))),
                 payload.get("available_at"),
                 _json(payload.get("metadata") or {}),
+                payload.get("correlation_id"),
             ),
         ).fetchone()
         result = _job(row)
@@ -449,7 +452,7 @@ class PostgresJobRepository:
             "WHERE job_id = %s AND attempt = %s AND lease_token = %s",
             (job_id, result["attempt_count"], lease_token),
         )
-        if str(row[24]) == "leased":
+        if str(row[-1]) == "leased":
             self._event(context, job_id, "job.running", {"worker_id": worker_id})
         return result
 
@@ -519,7 +522,7 @@ class PostgresJobRepository:
         if row is None:
             raise JobClaimConflict(f"record-only job cannot enter running state: {job_id}")
         result = _job(row)
-        if str(row[24]) == "queued":
+        if str(row[-1]) == "queued":
             self._event(context, job_id, "job.running", {"execution": "foreground_record"})
         return result
 
