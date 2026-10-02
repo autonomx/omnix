@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 _UNMATCHED_ROUTE = "unmatched"
 _LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
 _JOB_DURATION_BUCKETS = (0.1, 0.5, 1.0, 5.0, 15.0, 60.0, 300.0, 900.0, 3600.0)
+_SPEECH_BUCKETS = (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0)
 _LOOP_LAG_BUCKETS = (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
 LOOP_LAG_INTERVAL_SECONDS = 0.5
 _lock = threading.Lock()
@@ -29,7 +30,7 @@ _metrics: dict[str, Any] | None = None
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
     "auth_rejections", "rate_limited", "retention_deleted", "job_duration",
-    "sse_subscribers", "sse_delivered", "sse_resyncs",
+    "sse_subscribers", "sse_delivered", "sse_resyncs", "speech_turn",
 )
 
 
@@ -86,6 +87,11 @@ def _build() -> dict[str, Any]:
         "sse_resyncs": Counter(
             "omnix_sse_resyncs", "Streams closed with a resync, by stream and reason.", ("stream", "reason"),
             registry=registry,
+        ),
+        "speech_turn": Histogram(
+            "omnix_speech_turn_seconds",
+            "Live speech turn latency from the end of the user's speech, by stage.",
+            ("stage",), buckets=_SPEECH_BUCKETS, registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -215,6 +221,28 @@ def record_sse_delivered(stream: str, phase: str) -> None:
 def record_sse_resync(stream: str, reason: str) -> None:
     """A stream closed with ``event: resync``: ``replay_limit`` or ``overflow`` (the subscriber fell behind)."""
     _get()["sse_resyncs"].labels(stream, reason).inc()
+
+
+def record_speech_turn(stage: str, seconds: float) -> None:
+    """``stage``: ``transcript`` (final transcript) or ``first_audio`` (first reply audio)."""
+    _get()["speech_turn"].labels(stage).observe(max(0.0, seconds))
+
+
+class TtsStreamCollector:
+    """This process's TTS audio streams, from the stream diagnostics at scrape time."""
+
+    def __init__(self, snapshot: Callable[[], dict[str, Any]]) -> None:
+        self.snapshot = snapshot
+
+    def collect(self) -> Iterator[Any]:
+        from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+
+        data = self.snapshot()
+        active = GaugeMetricFamily("omnix_tts_active_streams", "TTS audio streams being served.")
+        active.add_metric([], data.get("active_streams") or 0)
+        completed = CounterMetricFamily("omnix_tts_completed_pcm_streams", "TTS PCM streams completed.")
+        completed.add_metric([], data.get("completed_pcm_streams") or 0)
+        yield from (active, completed)
 
 
 def record_retention_deleted(record_type: str, rows: int) -> None:
@@ -449,7 +477,7 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 __all__ = [
     "CapacityCollector", "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
     "event_loop_lag_monitor", "exposition", "record_job_execution", "record_retention_deleted",
-    "record_sse_delivered", "record_sse_resync", "sse_subscriber",
+    "record_speech_turn", "record_sse_delivered", "record_sse_resync", "sse_subscriber", "TtsStreamCollector",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

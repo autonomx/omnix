@@ -3734,7 +3734,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 25,
+        "line": 26,
         "path": "src/app/observability/metrics.py",
         "reason": "Serializes the one-time construction of this process's Prometheus registry; metrics are per-process by design (each gateway process is scraped separately) and carry no authority.",
         "symbol": "_lock"
@@ -7466,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "5a4e9ccb1345faf3be54a40332409d58a420c3aa1df953f96103c890cf0d31ba"
+  "source_digest": "7cbea574a58dd77a03bc84a2746ff350463de679f8bd4032a0cdc166716b3cff"
 }

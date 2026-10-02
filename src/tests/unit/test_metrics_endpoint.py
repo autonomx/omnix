@@ -168,3 +168,40 @@ def test_scheduled_task_metrics_come_from_the_scheduler() -> None:
     assert 'omnix_scheduler_task_last_lag_seconds{task="platform.retention"} 0.25' in text
     assert 'omnix_scheduler_task_runs_total{task="platform.idle"} 0.0' in text
     assert 'omnix_scheduler_task_last_duration_seconds{task="platform.idle"}' not in text
+
+
+def test_live_speech_turn_latency_is_measured_from_the_end_of_speech(monkeypatch) -> None:
+    from app.live_speech import metrics as speech
+
+    def histogram(stage: str) -> tuple[float, float]:
+        lines = _text().splitlines()
+        count = next((line for line in lines
+                      if line.startswith(f'omnix_speech_turn_seconds_count{{stage="{stage}"}} ')), "x 0")
+        total = next((line for line in lines
+                      if line.startswith(f'omnix_speech_turn_seconds_sum{{stage="{stage}"}} ')), "x 0")
+        return float(count.split()[-1]), float(total.split()[-1])
+
+    clock = iter([5_000, 5_400, 6_200])
+    monkeypatch.setattr(speech, "now_ms", lambda: next(clock))
+    before = {stage: histogram(stage) for stage in ("transcript", "first_audio")}
+    turn = speech.LiveSpeechMetrics()  # the session start reads the real clock
+
+    turn.mark("speech_stopped")       # 5_000
+    turn.mark("final_transcript")     # 5_400: 0.4 s after the speech ended
+    turn.mark("first_audio_delta")    # 6_200: 1.2 s after
+    turn.mark("first_audio_delta")    # already marked: not recorded twice
+
+    transcript, first_audio = histogram("transcript"), histogram("first_audio")
+    assert transcript[0] - before["transcript"][0] == 1
+    assert abs(transcript[1] - before["transcript"][1] - 0.4) < 1e-9
+    assert first_audio[0] - before["first_audio"][0] == 1
+    assert abs(first_audio[1] - before["first_audio"][1] - 1.2) < 1e-9
+
+
+def test_tts_stream_counters_come_from_the_stream_snapshot() -> None:
+    from app.observability.metrics import TtsStreamCollector
+
+    text = exposition(TtsStreamCollector(lambda: {"active_streams": 2, "completed_pcm_streams": 17}))[0].decode()
+
+    assert "omnix_tts_active_streams 2.0" in text
+    assert "omnix_tts_completed_pcm_streams_total 17.0" in text

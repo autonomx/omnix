@@ -313,13 +313,17 @@ def create_kernel_router(
     def metrics() -> Response:
         """Prometheus metrics (WP-10.3); needs ``admin:metrics``."""
         from app.observability.metrics import (
-            CapacityCollector, DurableStateCollector, PoolCollector, SchedulerCollector, exposition,
+            CapacityCollector, DurableStateCollector, PoolCollector, SchedulerCollector, TtsStreamCollector,
+            exposition,
         )
         from app.persistence.device_permits import default_device_permit_service
 
         services = getattr(state, "runtime_services", None)
         database = getattr(getattr(services, "jobs", None), "database", None)
         collectors: list[object] = []
+        tts_snapshot = getattr(state, "tts_stream_snapshot", None)
+        if callable(tts_snapshot):
+            collectors.append(TtsStreamCollector(tts_snapshot))
         scheduler = getattr(state, "scheduler_runtime", None)
         if scheduler is not None:
             collectors.append(SchedulerCollector(scheduler.diagnostics))

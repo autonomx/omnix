@@ -70,6 +70,17 @@ is the provider's name (`lmstudio`, `openrouter`, ...) or the service
 | `omnix_provider_response_seconds` | histogram | `client` | Time from sending to the response headers (to the first byte of a stream, not its end). |
 | `omnix_provider_retries_total` | counter | `client` | Attempts sent again after a retryable failure. |
 
+### Speech
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_speech_turn_seconds` | histogram | `stage` | Live speech turns (the `/v1/realtime` WebSocket), from the end of the user's speech to the final transcript (`stage="transcript"`, STT latency) and to the first reply audio (`stage="first_audio"`). Buckets: 0.1 s to 10 s. |
+| `omnix_tts_active_streams` | gauge | — | TTS audio streams this process is serving. |
+| `omnix_tts_completed_pcm_streams_total` | counter | — | TTS PCM streams completed. |
+
+Live voice calls report their per-phrase timings in their own diagnostics and
+release gates; they are not in this registry yet.
+
 ### Event streams
 
 The shared job event stream (`/events`, `/api/jobs/events`; `stream="jobs"`).
@@ -144,5 +155,5 @@ process registry: the provider metrics above for calls its jobs make, and
 | Area | Metrics |
 |---|---|
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
-| Speech | TTS first-audio latency; live calls active; STT latency |
+| Speech | live voice call phrase timings and active calls |
 | Events and outbox | outbox publish rate; agent-run and Chat streams |

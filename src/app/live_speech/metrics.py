@@ -4,6 +4,11 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from app.observability.metrics import record_speech_turn
+
+
+_TURN_STAGES = {"final_transcript": "transcript", "first_audio_delta": "first_audio"}
+
 
 def now_ms() -> int:
     return int(time.time() * 1000)
@@ -31,6 +36,10 @@ class LiveSpeechMetrics:
         field_name = f"{name}_ms"
         if hasattr(self, field_name) and getattr(self, field_name) is None:
             setattr(self, field_name, now_ms())
+            stage = _TURN_STAGES.get(name)
+            if stage is not None and self.speech_stopped_ms is not None:
+                # Latency the user hears: from the end of their speech (WP-10.3).
+                record_speech_turn(stage, (getattr(self, field_name) - self.speech_stopped_ms) / 1000)
 
     def drop_stale_chunk(self) -> None:
         self.stale_chunks_dropped += 1
