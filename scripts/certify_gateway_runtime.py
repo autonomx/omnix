@@ -83,6 +83,7 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
         def no_local_registry():
             raise AssertionError('certification processes must use remote TTS')
         audio_registry.get_audio_registry = no_local_registry
+        from app.observability.metrics import request_snapshot
         from app.production import create_production_app
         app = create_production_app(config)
         # Failure certification can shorten observation deadlines without
@@ -103,7 +104,7 @@ def _serve(control, url, role, tts_url, ownership_lease_seconds=30):
             services = getattr(app.state, 'runtime_services', None)
             control.send({'python_bytes': tracemalloc.get_traced_memory()[0], 'threads': threading.active_count(),
                           'tasks': len(asyncio.all_tasks()), 'process_id': os.getpid(), 'role': role,
-                          'requests': app.state.runtime_metrics.snapshot() if services else {},
+                          'requests': request_snapshot() if services else {},
                           'pool': services.jobs.database.pool_statistics() if services else {}})
     async def run():
         await asyncio.gather(server.serve(sockets=[listener]), commands())

@@ -20,6 +20,7 @@ async def measure(samples: int, delay_ms: float) -> dict:
     started = time.perf_counter()
     from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
     from app.gateway.main import create_gateway_app
+    from app.observability.metrics import request_snapshot
     import httpx
 
     import_ms = (time.perf_counter() - started) * 1000
@@ -91,7 +92,7 @@ async def measure(samples: int, delay_ms: float) -> dict:
         "database_configured": bool(os.environ.get("OMNIX_DATABASE_URL")),
         "samples": samples,
         "error_count": 0,
-        "active_requests_at_end": gateway.state.runtime_metrics.snapshot()['active_requests'],
+        "active_requests_at_end": request_snapshot()['active_requests'],
         "recovery_duration_ms": None,
         "simulated_store_delay_ms": delay_ms,
         "gateway_import_ms": import_ms,
