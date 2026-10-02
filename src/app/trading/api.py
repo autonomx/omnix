@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
@@ -18,6 +19,8 @@ from .models import BarsResponse, CanonicalInstrument, ProviderBinding, Provider
 from .repositories import TradingDocumentRepository, default_trading_repository
 from .service import TradingMarketDataService, default_market_data_service
 from .streaming.manager import StreamingBarUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderRuntimeStatus(BaseModel):
@@ -218,9 +221,11 @@ def create_trading_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("market_data_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "market_data_failed", "message": str(exc)},
+                detail={"code": "market_data_failed", "message": "The market data provider request failed."},
             ) from exc
 
     @router.get("/quotes", response_model=QuoteResponse)
@@ -239,9 +244,11 @@ def create_trading_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("quote_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "quote_failed", "message": str(exc)},
+                detail={"code": "quote_failed", "message": "The quote request failed."},
             ) from exc
 
     @router.get("/currency-rates", response_model=CurrencyRateResponse)
@@ -255,9 +262,11 @@ def create_trading_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("currency_rate_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "currency_rate_failed", "message": str(exc)},
+                detail={"code": "currency_rate_failed", "message": "The currency rate request failed."},
             ) from exc
 
     @router.get("/diagnostics", response_model=TradingDiagnosticsResponse)

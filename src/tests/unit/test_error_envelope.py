@@ -94,3 +94,27 @@ def test_validation_errors_are_invalid_request_problems() -> None:
 ])
 def test_problem_codes(status, detail, code) -> None:
     assert problem_code(status, detail) == code
+
+
+def test_a_failing_market_data_provider_does_not_leak_its_error(caplog) -> None:
+    from types import SimpleNamespace
+
+    from app.trading.api import create_trading_router
+
+    def failing_service():
+        def bars(*_args):
+            raise RuntimeError("GET https://api.example.test/v2/bars?apiKey=sk-live-secret failed")
+
+        return SimpleNamespace(bars=bars)
+
+    app = FastAPI()
+    install_error_envelope(app)
+    app.include_router(create_trading_router(market_service_factory=failing_service))
+
+    with caplog.at_level(logging.WARNING, logger="app.trading.api"):
+        response = TestClient(app).get("/api/trading/bars", params={"instrument_id": "AAPL"})
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "market_data_failed"
+    assert "sk-live-secret" not in response.text and "api.example.test" not in response.text
+    assert "sk-live-secret" in caplog.text  # the operator still has the cause

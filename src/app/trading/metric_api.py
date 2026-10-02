@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
@@ -15,6 +16,8 @@ from .metric_data import (
     TradingMetricDataService,
     default_metric_data_service,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_metric_units(response: MarketMetricResponse) -> MarketMetricResponse:
@@ -78,9 +81,11 @@ def create_trading_metric_router(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            # The provider error can carry URLs and credentials: log it, return the code (WP-10.5).
+            logger.warning("metric_data_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "metric_data_failed", "message": str(exc)},
+                detail={"code": "metric_data_failed", "message": "The metric data request failed."},
             ) from exc
 
     return router

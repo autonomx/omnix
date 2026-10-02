@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +17,8 @@ from .research import (
     generate_market_research,
 )
 from .service import TradingMarketDataService, default_market_data_service
+
+logger = logging.getLogger(__name__)
 
 
 MarketServiceFactory = Callable[[], TradingMarketDataService]
@@ -72,9 +75,10 @@ def create_trading_research_router(
                 detail={"code": "research_provider_unavailable", "message": str(exc)},
             ) from exc
         except Exception as exc:
+            logger.warning("research_failed", exc_info=True)
             raise HTTPException(
                 status_code=502,
-                detail={"code": "research_failed", "message": f"{type(exc).__name__}: {exc}"},
+                detail={"code": "research_failed", "message": "The research provider request failed."},
             ) from exc
 
     return router

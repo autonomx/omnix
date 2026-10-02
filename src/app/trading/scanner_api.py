@@ -53,7 +53,8 @@ def create_trading_scanner_router(
             return repository_factory().create_definition(definition)
         except Exception as exc:
             if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                # Not the database's message: it names constraints and values (WP-10.5).
+                raise HTTPException(status_code=409, detail="scanner_definition_exists") from exc
             raise
 
     @router.put("/{scanner_id}", response_model=TradingScannerDefinition)

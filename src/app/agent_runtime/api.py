@@ -8,6 +8,7 @@ from app.security.permissions import ensure_permission
 
 import asyncio
 import json
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -45,6 +46,8 @@ from .profiles import get_agent_profile, resolve_profile_capabilities
 from .request_policy import allowed_workspace_root, validate_request_policy
 from .subagents import ChildRunRequest
 from .service import AgentRunService, default_agent_run_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agent-runs", tags=["agent-runtime"])
 
@@ -206,7 +209,9 @@ def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> Age
                      details={"profile": spec.profile, "provider_id": spec.model.provider_id})
         return started
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"agent_start_failed:{type(exc).__name__}:{exc}") from exc
+        # The failure text can carry paths and provider errors: log it, return the code (WP-10.5).
+        logger.exception("agent_start_failed")
+        raise HTTPException(status_code=503, detail="agent_start_failed") from exc
 
 
 @router.post("/{run_id}/children", response_model=AgentRunSnapshot, status_code=202)
