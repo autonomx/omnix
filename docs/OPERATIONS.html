@@ -588,7 +588,7 @@ npm run web:build</code></pre></div>
 <li><a href="../SPEC.html">../SPEC.html</a> for target platform rules.</li>
 </ul>
 <h2 id="listener-policy">Listener policy</h2>
-<p>Omnix-managed services default to loopback. Non-loopback binding requires both <code>OMNIX_BIND_HOST=&lt;address&gt;</code> and <code>OMNIX_ALLOW_LAN=true</code> and emits a startup warning. Use <code>OMNIX_BIND_HOST</code> instead of legacy per-service listener host variables. <code>OMNIX_ALLOWED_ORIGINS</code> is a comma-separated list of exact HTTP(S) origins; wildcards are rejected for credential-bearing CORS. The standalone compatibility API defaults to port <code>8101</code>, avoiding the API replica port <code>8001</code>.</p>
+<p>Omnix-managed services default to loopback. Non-loopback binding requires both <code>OMNIX_BIND_HOST=&lt;address&gt;</code> and <code>OMNIX_ALLOW_LAN=true</code> and emits a startup warning. Use <code>OMNIX_BIND_HOST</code> instead of legacy per-service listener host variables. <code>OMNIX_ALLOWED_ORIGINS</code> is a comma-separated list of exact HTTP(S) origins; wildcards are rejected for credential-bearing CORS.</p>
 <p>The request guard rejects untrusted Hosts with 421, and untrusted browser Origins or missing <code>X-Omnix-Client</code> on state-changing HTTP requests with 403. WebSockets with untrusted Origins close with policy code 1008. Add legitimate public hostnames to <code>OMNIX_ALLOWED_HOSTS</code> and browser origins to <code>OMNIX_ALLOWED_ORIGINS</code>. Command-line mutation requests must send <code>X-Omnix-Client: cli</code>. This header is a request guard, not authentication.</p>
 <h2 id="sign-in-and-sessions">Sign-in and sessions</h2>
 <p><code>OMNIX_AUTH_MODE</code> selects how the gateway authenticates requests:</p>

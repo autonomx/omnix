@@ -24,4 +24,4 @@ tenant_bootstrap = ["app/persistence/identity_service.py", "app/persistence/star
 packages = ["app.rpg.core", "app.rpg.session", "app.rpg.combat", "app.rpg.economy", "app.rpg.items", "app.rpg.world", "app.rpg.social", "app.rpg.action_resolver"]
 
 [production]
-entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/nemotron_eou_stt_server.py", "src/openai_api.py", "src/parakeet_stt_runtime.py", "src/parakeet_stt_server.py", "src/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]
+entrypoints = ["src/__init__.py", "src/launch.py", "src/main.py", "src/nemotron_eou_stt_server.py", "src/parakeet_stt_runtime.py", "src/parakeet_stt_server.py", "src/tts_server.py", "src/sitecustomize.py", "src/usercustomize.py"]

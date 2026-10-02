@@ -565,8 +565,7 @@ Omnix-managed listeners bind to `127.0.0.1`. `OMNIX_BIND_HOST` selects the addre
 any non-loopback address also requires `OMNIX_ALLOW_LAN=true`. The launcher
 passes the validated address to gateway, web, STT, TTS and image services.
 Legacy `OMNIX_TTS_HOST` and `OMNIX_GATEWAY_HOST` listener settings are replaced
-by `OMNIX_BIND_HOST`. The standalone compatibility API uses port `8101`
-(`OMNIX_OPENAI_API_PORT` overrides it), leaving `8001` available for API replicas.
+by `OMNIX_BIND_HOST`.
 
 For an explicitly exposed Vite listener, set `OMNIX_BIND_HOST=0.0.0.0` and
 `OMNIX_ALLOW_LAN=true` before running `npm --prefix src/apps/web run dev:lan`

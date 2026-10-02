@@ -8,11 +8,7 @@ from app.assist_core.mode_chat import ModeChatResponse
 from app.characters.repository import InMemoryCharacterRepository
 from app.chat import ChatSessionStore, CreateChatSessionRequest
 from app.gateway.main import create_gateway_app
-
-
-class EmptyJobStore:
-    def list_events(self, after_id: int, limit: int):
-        return []
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 class StaticPlanner:
@@ -76,8 +72,9 @@ def test_live_voice_action_streams_a_hermes_review_proposal(monkeypatch, tmp_pat
         lambda: characters,
     )
     session = store.create_session(CreateChatSessionRequest(title="Live Agent"))
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(
-        job_store_factory=lambda: EmptyJobStore(),
+        job_store_factory=lambda: job_store,
         chat_store_factory=lambda: store,
     )
     client = TestClient(

@@ -282,32 +282,17 @@ $env:LM_API_TOKEN = "your-lm-studio-token"
 
 ## OpenAI-compatible endpoints
 
-Omnix has two local OpenAI-shaped API surfaces plus an upstream provider
+Omnix has one local OpenAI-shaped API surface plus an upstream provider
 adapter. They serve different purposes and should not be treated as one
 unrestricted proxy.
 
 | Surface | Base URL | Main endpoints | Notes |
 | --- | --- | --- | --- |
-| Standalone compatibility server | `http://127.0.0.1:8101/v1` | `GET /models`, `POST /chat/completions`, `POST /audio/speech`, `POST /audio/transcriptions`, voice routes | Local-client compatibility server from `src/openai_api.py`; chat and transcription are currently placeholder implementations |
 | Governed agent model gateway | `http://127.0.0.1:8000/api/agent-model/v1` | `GET /models`, `POST /chat/completions` | Requires `X-Omnix-Agent-Run-Id`, uses the run-bound provider/model, and enforces agent budgets and policy |
 | Upstream OpenAI-compatible provider | Configured provider URL, commonly ending in `/v1` | Omnix calls `<base_url>/chat/completions` | Use for LM Studio, llama.cpp, OpenRouter, Azure-style, or other compatible deployments |
 
-Start the standalone local compatibility server when an external local client
-needs a conventional `/v1` base URL:
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8101
-```
-
-The standalone API currently exposes `GET /health`, `GET /v1/models`,
-`POST /v1/chat/completions`, `GET /v1/audio/voices`,
-`GET /v1/audio/voices/{voice_id}`,
-`GET /v1/audio/voices/{voice_id}/preview`, `POST /v1/audio/speech`, and
-`POST /v1/audio/transcriptions`. Use `http://127.0.0.1:8101/docs` for its
-generated Swagger reference. It has no authentication middleware and allows
-all CORS origins, so keep it on loopback or protect it before exposing it to a
-network.
+Local clients that need a general `/v1` chat endpoint, such as Open WebUI or
+SDK scripts, should use the model server directly (LM Studio or llama.cpp).
 
 The agent gateway is stricter. Discover the exact model bound to an existing
 durable run, then pass that model ID unchanged:
@@ -385,7 +370,6 @@ root or another working directory:
 | `scripts/requirements/bootstrap_omnix_flux_env.ps1` | Provision the optional CUDA/image conda environment |
 | `scripts/requirements/download_model.bat` / `scripts/requirements/download_model.sh` | Download the example GGUF model into `resources/models/llm` |
 | `scripts/requirements/download_tts_only.bat` | Download the Qwen3-TTS model into `resources/models/tts` |
-| `scripts/start_openai_api.bat` / `scripts/start_openai_api.sh` | Start the standalone OpenAI-compatible API on port `8101` |
 | `scripts/start_parakeet_stt.bat` | Start the Windows Parakeet/Nemotron STT service on port `5201` |
 | `scripts/run_tests.bat` | Run the legacy Windows pytest groups |
 | `scripts/run_playwright_tests.py` | Run the Playwright, API, frontend, and live-voice suites |

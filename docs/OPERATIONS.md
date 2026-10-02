@@ -604,8 +604,7 @@ Omnix-managed services default to loopback. Non-loopback binding requires both
 `OMNIX_BIND_HOST=<address>` and `OMNIX_ALLOW_LAN=true` and emits a startup warning.
 Use `OMNIX_BIND_HOST` instead of legacy per-service listener host variables.
 `OMNIX_ALLOWED_ORIGINS` is a comma-separated list of exact HTTP(S) origins;
-wildcards are rejected for credential-bearing CORS. The standalone compatibility
-API defaults to port `8101`, avoiding the API replica port `8001`.
+wildcards are rejected for credential-bearing CORS.
 
 The request guard rejects untrusted Hosts with 421, and untrusted browser
 Origins or missing `X-Omnix-Client` on state-changing HTTP requests with 403.

@@ -1,12 +1,11 @@
 # OpenAI-compatible endpoints
 
-Omnix exposes two different OpenAI-shaped HTTP surfaces and can also call
-upstream providers that implement the OpenAI chat-completions contract. Keep
-these surfaces separate when configuring clients:
+Omnix exposes one OpenAI-shaped HTTP surface and can also call upstream
+providers that implement the OpenAI chat-completions contract. Keep them
+separate when configuring clients:
 
 | Surface | Base URL | Purpose | Authority boundary |
 | --- | --- | --- | --- |
-| Standalone compatibility server | `http://127.0.0.1:8101/v1` | Local clients such as Open WebUI, SillyTavern, scripts, and SDK examples | Legacy/local compatibility layer; chat and transcription are currently placeholder implementations |
 | Agent model gateway | `http://127.0.0.1:8000/api/agent-model/v1` | Omnix agent-runtime model calls | Requires an existing durable run and exact run-bound model; budgets and provider selection are enforced by Omnix |
 | Upstream compatible provider | Configured provider URL, usually ending in `/v1` | LM Studio, llama.cpp, OpenRouter, Azure-compatible deployments, or another OpenAI-shaped service consumed by Omnix | Provider credentials and upstream policy remain external to Omnix |
 
@@ -19,137 +18,12 @@ an external application.
 ```omnix-diagram openai-compatibility
 ```
 
-## Standalone local compatibility server
-
-The standalone server is implemented in `src/openai_api.py`. It is useful for
-local integrations that expect a conventional `/v1` base URL. Start it from
-the repository root with a loopback bind:
-
-```powershell
-$env:PYTHONPATH = "src"
-python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8101
-```
-
-Or run the module's built-in entry point:
-
-```powershell
-python src/openai_api.py
-```
-
-The built-in entry point listens on `127.0.0.1:8101`. Non-loopback binding requires
-both `OMNIX_BIND_HOST` and `OMNIX_ALLOW_LAN=true`. CORS origins are explicitly
-configured through `OMNIX_ALLOWED_ORIGINS`. Every route except `GET`/`HEAD /health`
-requires `X-Omnix-Service-Token`, including `/docs` and `/openapi.json`.
-Use the same `OMNIX_SERVICE_TOKEN` as the gateway and model services; the local
-launcher provisions it in protected storage. Standalone launches must receive
-the credential through their environment. Missing or invalid credentials return 401.
-
-All state-changing requests require a non-empty `X-Omnix-Client` header.
-Browser requests must also use an allowed `Origin`; the Host allow-list defaults
-to localhost, 127.0.0.1 and IPv6 loopback. These request guards do not grant
-authentication or capability authority.
-
-HTTP errors use `{"error":"<code>","request_id":"<id>"}` and omit provider
-tracebacks. `OMNIX_MAX_UPLOAD_BYTES` bounds streamed requests at 50 MiB by default.
-
-### Endpoint reference
-
-| Method | Path | Purpose | Current behavior |
-| --- | --- | --- | --- |
-| `GET` | `/health` | Process and service status | Returns server status, TTS availability, STT availability, and a timestamp |
-| `GET` | `/v1/models` | List model IDs | Returns the models declared in `AVAILABLE_MODELS` in `src/openai_api.py` |
-| `POST` | `/v1/chat/completions` | Chat completion | Accepts standard messages and streaming mode, but currently returns deterministic placeholder text rather than calling the configured LLM provider |
-| `GET` | `/v1/audio/voices` | List voices | Returns built-in compatibility voices plus discoverable custom voice profiles |
-| `GET` | `/v1/audio/voices/{voice_id}` | Read one voice | Returns voice metadata or `404` |
-| `GET` | `/v1/audio/voices/{voice_id}/preview` | Preview a voice | Currently returns a JSON placeholder message; it is not an audio preview response |
-| `POST` | `/v1/audio/speech` | Text to speech | Routes through the shared TTS provider and returns streamed audio when a provider is configured and ready |
-| `POST` | `/v1/audio/transcriptions` | Audio transcription | Route exists, but currently returns a placeholder transcript and does not yet implement OpenAI-style multipart upload processing |
-
-The FastAPI-generated reference is also available while the server is running:
-
-- Swagger UI: `http://127.0.0.1:8101/docs`
-- OpenAPI JSON: `http://127.0.0.1:8101/openapi.json`
-
-### Chat completion example
-
-The standalone API accepts the familiar chat-completions shape:
-
-```bash
-curl http://127.0.0.1:8101/v1/chat/completions \
-  -H "X-Omnix-Service-Token: $OMNIX_SERVICE_TOKEN" \
-  -H "Authorization: Bearer local-dev-only" \
-  -H "X-Omnix-Client: cli" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "mistral-7b-instruct-v0.2",
-    "messages": [
-      {"role": "user", "content": "Summarize the Omnix workspace in one sentence."}
-    ],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-The standalone server validates the service credential. It does not use the
-OpenAI-style bearer token for that check; clients must send the service header.
-
-For streaming, set `"stream": true`. The response uses server-sent events with
-`data: ...` JSON chunks and a final `data: [DONE]` marker. The current stream is
-also deterministic placeholder output.
-
-### OpenAI Python client example
-
-Install the client in the active environment if it is not already available:
-
-```bash
-pip install openai
-```
-
-Then point its base URL at the standalone server:
-
-```python
-from openai import OpenAI
-import os
-
-client = OpenAI(
-    base_url="http://127.0.0.1:8101/v1",
-    api_key="local-dev-only",
-    default_headers={"X-Omnix-Client": "sdk", "X-Omnix-Service-Token": os.environ["OMNIX_SERVICE_TOKEN"]},
-)
-
-models = client.models.list()
-print([model.id for model in models.data])
-
-completion = client.chat.completions.create(
-    model="mistral-7b-instruct-v0.2",
-    messages=[{"role": "user", "content": "Hello from an OpenAI-compatible client."}],
-)
-print(completion.choices[0].message.content)
-```
-
-### Speech example
-
-The speech route follows the common JSON request shape and returns an audio
-stream. The selected voice must be available to the shared TTS provider:
-
-```bash
-curl http://127.0.0.1:8101/v1/audio/speech \
-  -H "X-Omnix-Service-Token: $OMNIX_SERVICE_TOKEN" \
-  -H "Authorization: Bearer local-dev-only" \
-  -H "X-Omnix-Client: cli" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "tts-1",
-    "voice": "alloy",
-    "input": "Omnix speech compatibility test.",
-    "response_format": "mp3"
-  }' \
-  --output omnix-speech.mp3
-```
-
-The requested `response_format` becomes the response media type, but the
-actual encoding is supplied by the configured TTS provider. Verify the worker
-output before relying on a format in an automated pipeline.
+Local clients that need a general `/v1` chat endpoint, such as Open WebUI,
+SillyTavern or SDK scripts, should use the model server directly: LM Studio
+(`http://127.0.0.1:1234/v1`) or a llama.cpp server. Omnix no longer ships a
+standalone compatibility server on port `8101`; its chat and transcription
+endpoints returned placeholder text, and its speech endpoint duplicated the
+TTS service.
 
 ## Agent model gateway
 
@@ -275,21 +149,16 @@ event types.
 
 ## Troubleshooting checklist
 
-1. Confirm the process and port: `8101` for the standalone server or `8000` for
-   the main gateway.
-2. Check `/health`, `/docs`, or `/openapi.json` on the standalone server.
-3. For the agent gateway, verify the run ID exists and call `/models` first.
-4. Use the exact `<provider_id>::<model_id>` returned for that run.
-5. Check provider/model readiness in `/providers`, `/models`, and
+1. Confirm the main gateway is running on port `8000`.
+2. For the agent gateway, verify the run ID exists and call `/models` first.
+3. Use the exact `<provider_id>::<model_id>` returned for that run.
+4. Check provider/model readiness in `/providers`, `/models`, and
    `/diagnostics` in the web app.
-6. Inspect the selected worker, job/run state, logs, and event stream before
+5. Inspect the selected worker, job/run state, logs, and event stream before
    changing client parameters.
-7. Treat placeholder responses from `src/openai_api.py` as compatibility
-   scaffolding, not evidence that a production LLM or STT backend is connected.
 
 ## Source of truth
 
-- Standalone compatibility surface: `src/openai_api.py`
 - Agent model gateway: `src/app/agent_runtime/model_gateway.py`
 - Shared upstream provider: `src/app/providers/openai_compatible_provider.py`
 - Realtime compatibility metadata: `src/app/live_speech/compat.py`

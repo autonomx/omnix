@@ -196,7 +196,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_OIDC_REQUIRED_GROUP` | string | — | security | Controls oidc required group for security. |
 | `OMNIX_OIDC_SCOPES` | list | — | security | Controls oidc scopes for security. |
 | `OMNIX_OIDC_WORKSPACE_ID` | string | `workspace:local` | security | Controls oidc workspace id for security. |
-| `OMNIX_OPENAI_API_PORT` | integer | `8101` | tooling | Controls openai api port for tooling. |
 | `OMNIX_PERSISTENCE_MODE` | string | — | kernel, trading | Controls persistence mode for kernel, trading. |
 | `OMNIX_PLAYWRIGHT_SEARCH_HEADLESS` | string | `1` | research | Controls playwright search headless for research. |
 | `OMNIX_PRIVATE_BROWSER` | string | — | launcher | Controls private browser for launcher. |

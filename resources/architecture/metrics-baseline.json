@@ -7380,7 +7380,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 46
+      "value": 39
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -7485,5 +7485,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "03213e28586aaedbedf32e2949010519c9bcfef7e3c5ab391faf65ef95437b66"
+  "source_digest": "d75527963e3dab0a158c25c860bb1d785a8d7cb50e647b6491398477fc5b55b9"
 }

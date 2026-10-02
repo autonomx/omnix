@@ -186,7 +186,7 @@ def test_invalid_upload_configuration_fails_closed(monkeypatch, raw):
         max_upload_bytes()
 
 
-@pytest.mark.parametrize("module", ["tts_server", "nemotron_eou_stt_server", "openai_api", "app.image_service_runtime"])
+@pytest.mark.parametrize("module", ["tts_server", "nemotron_eou_stt_server", "app.image_service_runtime"])
 def test_every_composed_model_route_is_authenticated(monkeypatch, module):
     monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
     app = importlib.import_module(module).app
@@ -217,31 +217,6 @@ def test_health_does_not_expose_provider_failure(monkeypatch):
     assert response.json()["error"] == "model_unavailable"
     assert "Traceback" not in response.text
     assert "private" not in response.text
-
-
-def test_openai_stream_failure_keeps_error_details_private_and_correlates_request(monkeypatch):
-    import openai_api
-    token = secrets.token_urlsafe(32)
-    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", token)
-
-    def broken_chunk(**_kwargs):
-        raise RuntimeError(f"Traceback: private credential {token}")
-
-    monkeypatch.setattr(openai_api, "ChatStreamResponse", broken_chunk)
-    client = TestClient(openai_api.app, base_url="http://127.0.0.1", headers=service_headers())
-    response = client.post("/v1/chat/completions", json={"model": "test", "messages": [{"role": "user", "content": "test"}], "stream": True})
-    assert response.status_code == 200
-    events = [
-        line.removeprefix("data: ")
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    payloads = [json.loads(event) for event in events if event != "[DONE]"]
-    assert payloads == [
-        {"error": "model_service_error", "request_id": response.headers["x-request-id"]}
-    ]
-    assert token not in response.text
-    assert "Traceback" not in response.text
 
 
 @pytest.mark.parametrize("request_id", ["server-request-identifier", None])
