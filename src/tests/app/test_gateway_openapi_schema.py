@@ -39,6 +39,7 @@ _DOCUMENTED_NON_JSON_RESPONSES = {
     ("DELETE", "/api/trading/strategies/{strategy_id}"),
     ("POST", "/api/chat/sessions/{session_id}/messages/stream"),
     ("GET", "/api/jobs/events"),
+    ("GET", "/metrics"),
 }
 
 

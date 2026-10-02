@@ -50,6 +50,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/image/routes/assets.py` | GET | `/api/assets/{asset_id}/file` | Allowlisted image bytes |
 | `src/app/rpg/api/feature_routes/rpg_map_editor_routes.py` | POST | `/api/rpg/map-editor/export` | Validated JSON document download |
 | `src/app/rpg/api/feature_routes/rpg_world_bundle_routes.py` | GET | `/api/rpg/worlds/{world_id}/export` | ZIP archive bytes |
+| `src/app/gateway/kernel_routes/__init__.py` | GET | `/metrics` | Prometheus text exposition |
 | `src/app/trading/strategy_api.py` | DELETE | `/api/trading/strategies/{strategy_id}` | 204 No Content |
 
 The only internal route excluded from OpenAPI is `POST /api/hermes/assistant/tools/execute`, the service-token assistant-tool executor. It is mounted through `FeatureModule.internal_routers` and retains its explicit `require_service_token` dependency. Internal routes are not a general-purpose exception category; new internal handlers must use the feature's internal router and service-token authorization.
