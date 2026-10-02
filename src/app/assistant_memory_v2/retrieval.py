@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -31,7 +32,14 @@ from .policy import visibility_satisfied
 from .relationship_store import PostgresMemoryV2RelationshipStore
 from .search_index import PostgresMemoryV2SearchIndex, SearchIndexHit
 
+logger = logging.getLogger(__name__)
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+_SEMANTIC_FLOOR = 0.78
+_SEMANTIC_SPAN = 0.12
+_SEMANTIC_MARGIN = 0.04
 
 
 def _tokens(text: str) -> set[str]:
@@ -112,6 +120,7 @@ class UnifiedMemoryV2Retriever:
         index_graph_revision_provider: IndexRevisionProvider | None = None,
         search_index: PostgresMemoryV2SearchIndex | None = None,
         derived_store: PostgresMemoryV2DerivedStateStore | None = None,
+        embedding_index: Any | None = None,
     ) -> None:
         self.graph_store = graph_store
         self.observation_store = observation_store
@@ -120,6 +129,8 @@ class UnifiedMemoryV2Retriever:
         self.index_graph_revision_provider = index_graph_revision_provider or (lambda _space: 0)
         self.search_index = search_index
         self.derived_store = derived_store
+        # VoiceMem-style embedding retrieval (PostgresMemoryV2EmbeddingIndex); None: words only.
+        self.embedding_index = embedding_index
 
     @staticmethod
     def _deadline_exceeded(started: float, deadline_ms: float) -> bool:
@@ -226,8 +237,13 @@ class UnifiedMemoryV2Retriever:
         )
 
     @staticmethod
-    def _indexed_assertion_candidate(hit: SearchIndexHit, query: RetrievalQuery) -> RetrievalCandidate:
+    def _indexed_assertion_candidate(
+        hit: SearchIndexHit, query: RetrievalQuery, cosine: float | None = None,
+    ) -> RetrievalCandidate:
         semantic = max(0.0, min(1.0, _lexical_similarity(query.text, hit.content)))
+        if cosine is not None:
+            # e5 cosines sit between about 0.78 (unrelated) and 0.90+ (the same fact).
+            semantic = max(semantic, max(0.0, min(1.0, (cosine - _SEMANTIC_FLOOR) / _SEMANTIC_SPAN)))
         recency = _recency_score(hit.valid_from, query.as_of)
         composite = (
             0.42 * semantic
@@ -253,11 +269,41 @@ class UnifiedMemoryV2Retriever:
                 "active_graph_assertion",
                 "evidence_active",
                 "visibility_match",
-                "search_projection_candidate",
+                "search_projection_candidate" if cosine is None else "embedding_candidate",
             ),
             evidence_observation_ids=hit.evidence_observation_ids,
             policy=hit.policy,
         )
+
+    def _embedding_candidates(self, query: RetrievalQuery) -> list[RetrievalCandidate]:
+        """Assertions near the question in embedding space, under the same visibility filters.
+
+        Unrelated e5 neighbours score close to related ones, so only the entries
+        within a small margin of the best match are kept.
+        """
+        if self.embedding_index is None or self.search_index is None:
+            return []
+        try:
+            nearest = self.embedding_index.nearest(query.space, query.text, limit=max(query.top_k, 8))
+        except Exception:  # embeddings are an accelerator: fall back to words
+            logger.warning("memory_v2_embedding_retrieval_failed", exc_info=True)
+            return []
+        if not nearest:
+            return []
+        threshold = max(_SEMANTIC_FLOOR, nearest[0][1] - _SEMANTIC_MARGIN)
+        kept = {ref_id: cosine for ref_id, cosine in nearest if cosine >= threshold}
+        if not kept:
+            return []
+        hits = self.search_index.search(
+            query.space,
+            query.text,
+            visible_scopes=query.visible_scopes,
+            domains=query.domains,
+            limit=len(kept),
+            as_of=query.as_of,
+            ref_ids=tuple(kept),
+        )
+        return [self._indexed_assertion_candidate(hit, query, cosine=kept[hit.ref_id]) for hit in hits]
 
     def _episode_candidate(
         self,
@@ -425,6 +471,10 @@ class UnifiedMemoryV2Retriever:
                     self._indexed_assertion_candidate(hit, query) for hit in hits
                 )
                 used_projection = bool(hits)
+                if not self._deadline_exceeded(started, query.deadline_ms):
+                    semantic = self._embedding_candidates(query)
+                    candidates.extend(semantic)
+                    used_projection = used_projection or bool(semantic)
 
         # A fresh projection is preferred. If it produces no lexical candidates, use a
         # bounded graph fallback so valid low-lexical memories are not silently lost.

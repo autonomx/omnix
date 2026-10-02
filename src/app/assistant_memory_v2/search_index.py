@@ -405,13 +405,22 @@ class PostgresMemoryV2SearchIndex:
         domains: tuple[str, ...] = (),
         limit: int = 20,
         as_of: datetime | None = None,
+        ref_ids: tuple[str, ...] | None = None,
     ) -> list[SearchIndexHit]:
+        """Entries matching ``text``, or exactly ``ref_ids`` (semantic matches), under the same visibility."""
         if not visible_scopes:
             return []
-        match = match_query(text)
-        if match is None:
-            return []
-        text = match
+        if ref_ids is not None:
+            if not ref_ids:
+                return []
+            match_sql, match_value = "i.ref_id = ANY(%s)", list(ref_ids)
+            rank_sql, rank_params = "0.0::float8", []
+        else:
+            match = match_query(text)
+            if match is None:
+                return []
+            match_sql, match_value = "i.search_vector @@ to_tsquery('simple', %s)", match
+            rank_sql, rank_params = "ts_rank_cd(i.search_vector, to_tsquery('simple', %s))", [match]
         active_evidence_sql = (
             "NOT EXISTS ("
             " SELECT 1 FROM jsonb_array_elements_text(i.evidence_observation_ids) evidence_id"
@@ -424,7 +433,7 @@ class PostgresMemoryV2SearchIndex:
             "i.principal_id = %s",
             "i.owner_type = %s",
             "i.owner_id = %s",
-            "i.search_vector @@ to_tsquery('simple', %s)",
+            match_sql,
             active_evidence_sql,
             "i.effective_visibility <@ %s::jsonb",
             "(a.valid_from IS NULL OR a.valid_from <= %s)",
@@ -434,7 +443,7 @@ class PostgresMemoryV2SearchIndex:
         effective_as_of = as_of or datetime.now(timezone.utc)
         where_params: list[Any] = [
             *_space_values(space),
-            text,
+            match_value,
             visible_json,
             effective_as_of,
             effective_as_of,
@@ -442,12 +451,12 @@ class PostgresMemoryV2SearchIndex:
         if domains:
             conditions.append("i.domain = ANY(%s)")
             where_params.append(list(domains))
-        params = [text, *where_params, max(1, min(int(limit), 1000))]
+        params = [*rank_params, *where_params, max(1, min(int(limit), 1000))]
         with self.database.transaction() as connection:
             rows = connection.execute(
                 f"""
                 SELECT i.ref_id, i.item_type, i.domain, i.content,
-                       ts_rank_cd(i.search_vector, to_tsquery('simple', %s)) AS rank,
+                       {rank_sql} AS rank,
                        i.evidence_observation_ids, i.source_revision,
                        a.confidence, a.valid_from, a.valid_until,
                        p.sensitivity, p.effective_visibility, p.trust_class,

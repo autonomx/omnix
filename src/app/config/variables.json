@@ -1204,6 +1204,20 @@
     "type": "string"
   },
   {
+    "default": "1",
+    "description": "Controls memory embeddings for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_MEMORY_EMBEDDINGS",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls memory embedding model dir for assistant-memory.",
+    "feature": "assistant-memory",
+    "name": "OMNIX_MEMORY_EMBEDDING_MODEL_DIR",
+    "type": "string"
+  },
+  {
     "default": null,
     "description": "Controls memory structured extraction mode for assistant-memory.",
     "feature": "assistant-memory",

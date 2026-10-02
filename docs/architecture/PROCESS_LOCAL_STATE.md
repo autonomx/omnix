@@ -39,6 +39,7 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/assistant_memory/temporal_retrieval.py:27` `_PRELOAD_CACHE` | container | cache | 512 | 300.0 | invalidate_temporal_retrieval | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/assistant_memory/temporal_retrieval.py:22` `_PRELOAD_EXECUTOR` | executor | cache | — | — | — | Fixed process-local worker pool for bounded provider or health work; persistent job and model ownership remain with their stores. |
 | `src/app/assistant_memory/temporal_retrieval.py:26` `_PRELOAD_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
+| `src/app/assistant_memory_v2/embeddings.py:121` `_load_embedder.__cache__` | function_cache (app.caching.bounded_cache.bounded_lru_cache maxsize=1) | cache | 1 | 86400.0 | _load_embedder.cache_clear | Holds this process's one loaded embedding model (ONNX session and tokenizer); a source-declared capacity of one and a 24-hour expiry bound it, and it carries no state between requests or replicas. |
 | `src/app/assistant_tools/browser_adapter.py:153` `_BROWSER_SESSION_GENERATIONS` | container | cache | 4096 | 3600.0 | _clear_browser_session_generation | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/assistant_tools/browser_adapter.py:152` `_BROWSER_SESSION_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/assistant_tools/browser_adapter.py:154` `_PLAYWRIGHT_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
@@ -207,4 +208,4 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/voice_debug.py:37` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/voice_debug.py:34` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 
-Scanned entries: 200; unapproved entries: 0; unbounded caches: 31.
+Scanned entries: 201; unapproved entries: 0; unbounded caches: 32.

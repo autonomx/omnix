@@ -15,7 +15,12 @@ deterministic distractors. Three paths answer every question:
   question is not used);
 - ``v1_companion``: the companion's temporal ranker (term overlap and time
   of day, top 12);
-- ``v2``: ``UnifiedMemoryV2Retriever`` (top 12 within the same budget).
+- ``v2_words``: ``UnifiedMemoryV2Retriever`` by words only (top 12 within the same budget);
+- ``v2``: the same with VoiceMem's embedding retrieval (multilingual-e5-small),
+  when the model is installed (``python -m app.assistant_memory_v2.embeddings download``).
+
+Besides the 24 questions, 8 "hard" paraphrases share no meaningful word with
+their memory.
 
 Reported per path and store size: recall (questions whose memory was in the
 prompt), the share of injected memories that were relevant, tokens injected,
@@ -70,6 +75,18 @@ TARGETS = [
     ("relationship", "Ana from accounting approves my expense reports", "Who approves my expense reports?", False),
     ("fact", "My gym membership renews every January", "When does my gym membership renew?", False),
     ("preference", "I like my desk lamp set to warm white", "What lighting do I like at my desk?", True),
+]
+
+# (target index, question sharing no meaningful word with the memory)
+HARD = [
+    (0, "Which title do I enjoy playing most?"),
+    (2, "Where is my sibling based?"),
+    (3, "Is there anything I must not eat?"),
+    (6, "Who joins me for weekend jogs?"),
+    (9, "What kind of pet do I have?"),
+    (11, "Which city did I relocate to?"),
+    (13, "What computer do I work on?"),
+    (16, "What vehicle do I own?"),
 ]
 
 _SUBJECTS = ["coworker", "neighbor", "cousin", "friend", "client", "teacher", "landlord", "colleague"]
@@ -152,7 +169,17 @@ class V2Store:
         self.coordinator = PostgresMemoryV2DerivedCoordinator(
             database, observation_store=self.observations, graph_store=self.graph, derived_store=self.derived,
         )
+        from app.assistant_memory_v2.embedding_index import PostgresMemoryV2EmbeddingIndex
+
+        self.embeddings = PostgresMemoryV2EmbeddingIndex(database)
         self.retriever = UnifiedMemoryV2Retriever(
+            graph_store=self.graph, observation_store=self.observations,
+            episode_store=PostgresMemoryV2EpisodeStore(database),
+            relationship_store=PostgresMemoryV2RelationshipStore(database),
+            index_graph_revision_provider=self.search.index_graph_revision,
+            search_index=self.search, derived_store=self.derived, embedding_index=self.embeddings,
+        )
+        self.words_retriever = UnifiedMemoryV2Retriever(
             graph_store=self.graph, observation_store=self.observations,
             episode_store=PostgresMemoryV2EpisodeStore(database),
             relationship_store=PostgresMemoryV2RelationshipStore(database),
@@ -176,12 +203,14 @@ class V2Store:
         if prepared is not None:
             self.coordinator.commit(prepared)
         self.search.rebuild(space)
+        self.embeddings.sync(space)
         return space
 
-    def ask(self, space, question: str) -> tuple[list[str], int]:
+    def ask(self, space, question: str, *, words_only: bool = False) -> tuple[list[str], int]:
         from app.assistant_memory_v2.contracts import RetrievalQuery, VisibilityScope
 
-        result = self.retriever.retrieve(RetrievalQuery(
+        retriever = self.words_retriever if words_only else self.retriever
+        result = retriever.retrieve(RetrievalQuery(
             query_id=f"benchmark:{uuid4().hex}", space=space,
             visible_scopes=(VisibilityScope(kind="global", scope_id=PROFILE_ID),),
             text=question, authority="final", as_of=NOW, top_k=TOP_K, token_budget=TOKEN_BUDGET, deadline_ms=2_000,
@@ -213,15 +242,18 @@ def score(selected_ids: list[str], relevant_id: str, tokens: int, elapsed_ms: fl
     }
 
 
-def summarize(rows: list[dict], paraphrase_flags: list[bool]) -> dict:
+def summarize(rows: list[dict], kinds: list[str]) -> dict:
     def recall(selection):
         return round(sum(row["hit"] for row in selection) / len(selection), 3) if selection else None
 
+    main = [row for row, kind in zip(rows, kinds) if kind != "hard"]
+    rows_all, rows = rows, main
     injected = [row["injected"] for row in rows]
     return {
         "recall": recall(rows),
-        "recall_keyword_questions": recall([row for row, p in zip(rows, paraphrase_flags) if not p]),
-        "recall_paraphrased_questions": recall([row for row, p in zip(rows, paraphrase_flags) if p]),
+        "recall_keyword_questions": recall([row for row, k in zip(rows_all, kinds) if k == "keyword"]),
+        "recall_paraphrased_questions": recall([row for row, k in zip(rows_all, kinds) if k == "paraphrase"]),
+        "recall_hard_paraphrases": recall([row for row, k in zip(rows_all, kinds) if k == "hard"]),
         "relevant_share_of_injected": round(sum(row["hit"] for row in rows) / max(1, sum(injected)), 4),
         "mean_memories_injected": round(statistics.mean(injected), 1),
         "mean_tokens_injected": round(statistics.mean(row["tokens"] for row in rows), 1),
@@ -247,8 +279,15 @@ def main() -> int:
     apply_migrations(database)
     v2 = V2Store(database)
     principals: list[str] = []
-    report: dict = {"token_budget": TOKEN_BUDGET, "top_k": TOP_K, "questions": len(TARGETS), "sizes": {}}
-    paraphrase_flags = [paraphrase for *_rest, paraphrase in TARGETS]
+    from app.assistant_memory_v2.embeddings import MODEL_ID, default_embedder
+
+    embedder = default_embedder()
+    report: dict = {"token_budget": TOKEN_BUDGET, "top_k": TOP_K, "questions": len(TARGETS),
+                    "hard_paraphrases": len(HARD), "embedding_model": MODEL_ID if embedder else None, "sizes": {}}
+    questions = [(index, question, "paraphrase" if paraphrase else "keyword")
+                 for index, (_c, _m, question, paraphrase) in enumerate(TARGETS)]
+    questions += [(index, question, "hard") for index, question in HARD]
+    kinds = [kind for _index, _question, kind in questions]
     try:
         for size in [int(item) for item in args.sizes.split(",")]:
             rng = random.Random(args.seed + size)
@@ -259,23 +298,24 @@ def main() -> int:
             space = v2.load(principal, records)
             load_seconds = round(time.perf_counter() - load_started, 2)
             content_to_id = {record.content: record.id for record in records}
-            results: dict[str, list[dict]] = {"v1_chat": [], "v1_companion": [], "v2": []}
-            for index, (_category, _content, question, _paraphrase) in enumerate(TARGETS):
+            results: dict[str, list[dict]] = {"v1_chat": [], "v1_companion": [], "v2_words": [], "v2": []}
+            for index, question, _kind in questions:
                 relevant = f"target-{index:02d}"
                 for path, run in (("v1_chat", lambda q: run_v1_chat(records, q)),
                                   ("v1_companion", lambda q: run_v1_companion(records, q))):
                     started = time.perf_counter()
                     ids, tokens = run(question)
                     results[path].append(score(ids, relevant, tokens, (time.perf_counter() - started) * 1000))
-                started = time.perf_counter()
-                contents, tokens = v2.ask(space, question)
-                elapsed = (time.perf_counter() - started) * 1000
-                # v2 renders an assertion as "<subject> <predicate> <memory text>".
-                matched = [next((rid for text, rid in content_to_id.items() if c.endswith(text)), "") for c in contents]
-                results["v2"].append(score(matched, relevant, tokens, elapsed))
+                for path, words_only in (("v2_words", True), ("v2", False)):
+                    started = time.perf_counter()
+                    contents, tokens = v2.ask(space, question, words_only=words_only)
+                    elapsed = (time.perf_counter() - started) * 1000
+                    # v2 renders an assertion as "<subject> <predicate> <memory text>".
+                    matched = [next((rid for text, rid in content_to_id.items() if c.endswith(text)), "") for c in contents]
+                    results[path].append(score(matched, relevant, tokens, elapsed))
             report["sizes"][str(size)] = {
                 "v2_load_seconds": load_seconds,
-                **{path: summarize(rows, paraphrase_flags) for path, rows in results.items()},
+                **{path: summarize(rows, kinds) for path, rows in results.items()},
             }
             print(json.dumps({"size": size, **{p: report["sizes"][str(size)][p]["recall"] for p in results}}), flush=True)
     finally:

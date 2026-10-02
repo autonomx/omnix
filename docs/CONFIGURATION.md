@@ -176,6 +176,8 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LOG_FORMAT` | string | `text` | observability | Controls log format for observability. |
 | `OMNIX_LOG_LEVEL` | string | — | observability, worker | Controls log level for observability, worker. |
 | `OMNIX_LOG_LEVELS` | string | — | observability | Controls log levels for observability. |
+| `OMNIX_MEMORY_EMBEDDINGS` | string | `1` | assistant-memory | Controls memory embeddings for assistant-memory. |
+| `OMNIX_MEMORY_EMBEDDING_MODEL_DIR` | string | — | assistant-memory | Controls memory embedding model dir for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER` | string | — | assistant-memory | Controls memory structured extraction provider for assistant-memory. |

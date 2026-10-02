@@ -548,6 +548,16 @@ moving them into blob-backed asset records is a follow-up.
 
 ## Memory v2 cutover readiness
 
+Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
+embedding model is installed: run `python -m app.assistant_memory_v2.embeddings download`
+once on each host that runs the memory worker or serves retrieval (about
+490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
+`resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
+The convergence worker embeds new memories after each projection; without the
+model, retrieval uses words only. `OMNIX_MEMORY_EMBEDDINGS=0` turns it off.
+`python scripts/compare_memory_retrieval.py --database-url <disposable test database>`
+compares v1 and v2 retrieval on the same memories.
+
 Legacy (v1) memory remains authoritative until an operator activates a v2
 authority epoch; that switch is a human decision. Before deciding, read the
 shadow-comparison report:

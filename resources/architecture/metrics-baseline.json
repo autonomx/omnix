@@ -263,6 +263,8 @@
       "app.assistant_memory_v2.contracts",
       "app.assistant_memory_v2.convergence",
       "app.assistant_memory_v2.derived_state",
+      "app.assistant_memory_v2.embedding_index",
+      "app.assistant_memory_v2.embeddings",
       "app.assistant_memory_v2.episode_store",
       "app.assistant_memory_v2.federated_retrieval",
       "app.assistant_memory_v2.grant_store",
@@ -2870,6 +2872,20 @@
       },
       {
         "approved": true,
+        "cache_decorator": "app.caching.bounded_cache.bounded_lru_cache",
+        "category": "cache",
+        "invalidation": "_load_embedder.cache_clear",
+        "kind": "function_cache",
+        "line": 121,
+        "max_entries": 1,
+        "maxsize": 1,
+        "path": "src/app/assistant_memory_v2/embeddings.py",
+        "reason": "Holds this process's one loaded embedding model (ONNX session and tokenizer); a source-declared capacity of one and a 24-hour expiry bound it, and it carries no state between requests or replicas.",
+        "symbol": "_load_embedder.__cache__",
+        "ttl_seconds": 86400.0
+      },
+      {
+        "approved": true,
         "category": "cache",
         "invalidation": "_clear_browser_session_generation",
         "kind": "container",
@@ -4778,6 +4794,11 @@
         "approved": true,
         "path": "src/app/assistant_memory/temporal_retrieval.py",
         "symbol": "_PRELOAD_LOCK"
+      },
+      {
+        "approved": true,
+        "path": "src/app/assistant_memory_v2/embeddings.py",
+        "symbol": "_load_embedder.__cache__"
       },
       {
         "approved": true,
@@ -7465,5 +7486,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "c67f9e284f21b7a5bcd301ab38f377ba9b33e548aa279f45f025eb2eb64bd4f2"
+  "source_digest": "d61a3540ca582b9da07a17087ad9c877de21aa2a7ee5133c3d41d99c6a219ff0"
 }

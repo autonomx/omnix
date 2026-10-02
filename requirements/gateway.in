@@ -9,6 +9,9 @@ requests
 python-multipart
 websockets
 numpy
+# Memory v2 embeddings (multilingual-e5-small on CPU; no PyTorch).
+onnxruntime
+tokenizers
 soundfile
 pydub
 pypdf

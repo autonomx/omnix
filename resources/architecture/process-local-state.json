@@ -253,6 +253,15 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/assistant_memory_v2/embeddings.py",
+      "symbol": "_load_embedder.__cache__",
+      "category": "cache",
+      "reason": "Holds this process's one loaded embedding model (ONNX session and tokenizer); a source-declared capacity of one and a 24-hour expiry bound it, and it carries no state between requests or replicas.",
+      "max_entries": 1,
+      "ttl_seconds": 86400.0,
+      "invalidation": "_load_embedder.cache_clear"
+    },
+    {
       "path": "src/app/assistant_tools/browser_adapter.py",
       "symbol": "_BROWSER_SESSION_GENERATIONS",
       "category": "cache",
