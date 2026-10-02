@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-02 | WP-7.6 | The query pass times each list route through the composed app and explains the queries of routes whose time grows with volume, instead of ranking statements with `pg_stat_statements`. | The extension is not in the local PostgreSQL build; the acceptance criterion is route p95, which this measures directly. |
+| 2026-10-02 | WP-7.6 | RPG campaigns are not seeded. | RPG is being retired; its list routes are not part of the platform's supported surface. |
 | 2026-10-01 | WP-7.4 | The event counter takes the greater of its value and the run's indexed `MAX(sequence)`, so it catches up with events written by code that predates it; a mixed-version deploy can still race (old code locks the run row, new code the counter row) and fail one append on the primary key. | Expand-phase coexistence: during a rolling deploy at most one append conflicts and is retried by its caller; once old code is gone the counter alone orders appends. |
 | 2026-10-01 | WP-7.4 | Live token streaming to the UI is unchanged (it already came from the runtime process); only persisted progress is sampled. | The UI does not read `message_update` rows; the final text is persisted at `message_end`/`turn_end` or recovered from in-memory deltas. |
 | 2026-10-01 | WP-7.3 | `live-speech` becomes an opt-in feature: `OMNIX_ENABLED_FEATURES=all` leaves it out; naming it enables it. | Its `/v1/realtime` endpoint runs offline echo engines; the web client that would use it is not wired into any page. |

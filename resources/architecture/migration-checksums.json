@@ -133,7 +133,8 @@
     "src/app/persistence/migrations/0110_chat_message_search_index.sql": "e35e0230423f69acd7e17691208002e9d888ed8877c6edc59efb9522a7583e62",
     "src/app/persistence/migrations/0111_conversation_summary_session_index.sql": "f76d53240d4785f3226df64dd6d8fa23c4a6e8864a7942d97dce80a020cbcc8d",
     "src/app/persistence/migrations/0112_agent_run_event_counters.sql": "f4e373b706763d5602307c37519bb3f1ace051d040fd12e4ecaed53728d19f20",
-    "src/app/persistence/migrations/0113_agent_run_event_type_index.sql": "856494f4ca97f4f712cdc5ccf0df3b4347fe7d55494c150e06433dfde735ca09"
+    "src/app/persistence/migrations/0113_agent_run_event_type_index.sql": "856494f4ca97f4f712cdc5ccf0df3b4347fe7d55494c150e06433dfde735ca09",
+    "src/app/persistence/migrations/0114_assets_recent_index.sql": "bca91264c815dab4249474cb6aa852b2a35e50e08f1255ba627f1b351b8ef9df"
   },
   "normalization": "UTF-8 without BOM; CRLF normalized to LF",
   "schema_version": 1,

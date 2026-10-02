@@ -2,6 +2,7 @@
   "omnix_agent_approvals.request_payload": "keep; execution_key is matched among one run's approvals, already narrowed by the run index",
   "omnix_agent_plan_revisions.payload": "keep; semantic_review is read from one run's plan revisions",
   "omnix_agent_run_commands.payload": "keep; task_revision_id and quality_stage filter one run's pending commands",
+  "omnix_agent_run_events.payload": "keep; tool_call_id containment is evaluated on one run's events of one type, already narrowed by idx_omnix_agent_events_type (WP-7.4)",
   "omnix_assets.metadata": "keep; filename is projected in audiobook source listings, never filtered",
   "omnix_audiobook_annotations.evidence": "keep; classifier_analysis_job_id is read within one project's annotations",
   "omnix_audiobook_projects.settings": "keep; settings fields are read and updated for one project by id",
