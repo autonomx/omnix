@@ -763,7 +763,6 @@
       "app.providers.stt_live_websocket",
       "app.providers.stt_segment_scheduler",
       "app.providers.stt_streaming_audio",
-      "app.providers.tts_abstraction",
       "app.providers.tts_artifacts",
       "app.providers.tts_priority",
       "app.providers.tts_service",
@@ -3994,27 +3993,6 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 124,
-        "path": "src/app/providers/tts_abstraction.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_TTS_PROVIDER_LOCK"
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "invalidation": "clear_tts_provider_registrations",
-        "kind": "container",
-        "line": 123,
-        "max_entries": 64,
-        "path": "src/app/providers/tts_abstraction.py",
-        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-        "symbol": "_tts_providers",
-        "ttl_seconds": 86400.0
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "kind": "lock",
         "line": 21,
         "path": "src/app/research/cache.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
@@ -5362,16 +5340,6 @@
         "approved": true,
         "path": "src/app/providers/stt_live_websocket.py",
         "symbol": "_SESSION_STATES"
-      },
-      {
-        "approved": true,
-        "path": "src/app/providers/tts_abstraction.py",
-        "symbol": "_TTS_PROVIDER_LOCK"
-      },
-      {
-        "approved": true,
-        "path": "src/app/providers/tts_abstraction.py",
-        "symbol": "_tts_providers"
       },
       {
         "approved": true,
@@ -7534,5 +7502,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "75f5cd90c5b14a18be6754135e7a6bd3fc155e86c01c57a8ac0692768a8a80e6"
+  "source_digest": "347a025a5092f582456ae5c65cb783a2123c614e3af334c9d5d76c9a1f57e7c1"
 }

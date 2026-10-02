@@ -6,7 +6,9 @@ import json
 import os
 import socket
 import subprocess
+import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -37,6 +39,13 @@ def _probe_host(host: str) -> str:
         return host
 
 
+def _drain(stream: Any, tail: deque) -> None:
+    """Read the server's output so it never blocks on a full pipe; keep the tail."""
+    with stream:
+        for line in stream:
+            tail.append(line.rstrip())
+
+
 class LlamaCppProvider(BaseProvider):
     """Provider for a local llama.cpp OpenAI-compatible server."""
 
@@ -49,6 +58,8 @@ class LlamaCppProvider(BaseProvider):
         ProviderCapability.MODELS,
     ]
     SERVER_BINARY_NAMES = ["llama-server.exe", "llama-server", "llama.exe", "llama"]
+    STARTUP_TIMEOUT_SECONDS = 120.0
+    LOG_TAIL_LINES = 200
 
     def _validate_config(self):
         if not self.config.base_url:
@@ -115,12 +126,60 @@ class LlamaCppProvider(BaseProvider):
                 cwd=binary.parent,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
                 bufsize=1,
             )
         except Exception as exc:
             raise ConnectionError(f"Failed to start server: {exc}") from exc
         self._server_process = proc
+        self._server_log: deque[str] = deque(maxlen=self.LOG_TAIL_LINES)
+        self._server_log_reader = threading.Thread(
+            target=_drain, args=(proc.stdout, self._server_log),
+            name=f"llamacpp-log-{proc.pid}", daemon=True,
+        )
+        self._server_log_reader.start()
         return proc.pid
+
+    def server_log_tail(self) -> list[str]:
+        """The last lines the started server printed, for diagnostics."""
+        return list(getattr(self, "_server_log", ()))
+
+    def _ensure_server(self, model_path: Path) -> None:
+        """Use a running server; start one only when ``auto_start`` is enabled."""
+        if self._is_server_running():
+            return
+        if not self.config.extra_params.get("auto_start"):
+            raise ConnectionError(
+                f"llama.cpp server is not running at {self.config.base_url}; "
+                "start it or enable auto_start"
+            )
+        if not self._start_server(str(model_path)):
+            raise ConnectionError("Failed to start llama.cpp server")
+        self._wait_until_ready()
+
+    def _wait_until_ready(self) -> None:
+        """Poll until the started server answers; fail early if it exits."""
+        proc = getattr(self, "_server_process", None)
+        deadline = time.monotonic() + self.STARTUP_TIMEOUT_SECONDS
+        pause = threading.Event()
+        while time.monotonic() < deadline:
+            if self._is_server_running():
+                return
+            if proc is not None and proc.poll() is not None:
+                # Let the reader collect the server's last words before reporting.
+                self._server_log_reader.join(timeout=2.0)
+                last = self.server_log_tail()[-1:] or ["no output"]
+                self._server_process = None
+                raise ConnectionError(
+                    f"llama.cpp server exited during startup (code {proc.returncode}): {last[0]}"
+                )
+            pause.wait(0.5)
+        self._stop_server()
+        raise ConnectionError(
+            f"llama.cpp server did not answer within {self.STARTUP_TIMEOUT_SECONDS:.0f} s"
+        )
 
     def _stop_server(self) -> bool:
         """Stop the server this provider started, and nothing else."""
@@ -177,13 +236,7 @@ class LlamaCppProvider(BaseProvider):
         if not model_name:
             raise ModelNotFoundError("No model specified")
         model_path = self._resolve_model_path(model_name)
-        if not self._is_server_running():
-            pid = self._start_server(str(model_path))
-            if not pid:
-                raise ConnectionError("Failed to start llama.cpp server")
-            time.sleep(2)
-            if not self._is_server_running():
-                raise ConnectionError("Server started but not responding")
+        self._ensure_server(model_path)
         transport = pop_structured_transport_options(kwargs)
         payload: Dict[str, Any] = {
             "model": model_name,

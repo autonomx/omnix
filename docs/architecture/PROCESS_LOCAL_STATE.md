@@ -143,8 +143,6 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/providers/stt_live_runtime_support.py:17` `_TRANSCRIBE_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/providers/stt_live_websocket.py:68` `_PROVIDER_SCHEDULERS` | container | cache | 4 | 3600.0 | clear_provider_schedulers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/providers/stt_live_websocket.py:72` `_SESSION_STATES` | container | cache | 64 | 600.0 | clear_stt_session_states | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
-| `src/app/providers/tts_abstraction.py:124` `_TTS_PROVIDER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
-| `src/app/providers/tts_abstraction.py:123` `_tts_providers` | container | cache | 64 | 86400.0 | clear_tts_provider_registrations | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/research/cache.py:21` `_CACHE_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 | `src/app/research/cache.py:20` `_CACHE_STATES` | container | cache | 16 | 86400.0 | clear_research_cache_states | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/research/compatibility.py:26` `_counts` | container | cache | 8 | 2592000.0 | reset_research_compatibility_telemetry | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
@@ -208,4 +206,4 @@ Each entry is assigned one of the roadmap categories: cache, coordination, or pe
 | `src/app/voice_debug.py:35` `_LOGGERS` | container | cache | 64 | 3600.0 | clear_voice_debug_loggers | Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority. |
 | `src/app/voice_debug.py:32` `_LOGGER_LOCK` | lock | cache | — | — | — | Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas. |
 
-Scanned entries: 201; unapproved entries: 0; unbounded caches: 31.
+Scanned entries: 199; unapproved entries: 0; unbounded caches: 31.

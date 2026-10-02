@@ -1009,21 +1009,6 @@
       "invalidation": "clear_stt_session_states"
     },
     {
-      "path": "src/app/providers/tts_abstraction.py",
-      "symbol": "_TTS_PROVIDER_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
-      "path": "src/app/providers/tts_abstraction.py",
-      "symbol": "_tts_providers",
-      "category": "cache",
-      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-      "max_entries_symbol": "MAX_TTS_PROVIDER_REGISTRATIONS",
-      "ttl_symbol": "TTS_PROVIDER_REGISTRATION_TTL_SECONDS",
-      "invalidation": "clear_tts_provider_registrations"
-    },
-    {
       "path": "src/app/research/cache.py",
       "symbol": "_CACHE_LOCK",
       "category": "cache",

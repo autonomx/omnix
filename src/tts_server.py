@@ -17,7 +17,7 @@ from typing import Annotated, Any, Dict, List
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from app.config.env import env_bool, env_int, env_str, environment
@@ -39,8 +39,13 @@ app = FastAPI(title="Omnix TTS Service", version="1.0")
 app.add_middleware(ModelServiceMiddleware)
 
 
+# One request synthesizes at most this much text (about 25 minutes of speech);
+# longer work is split by the caller (audiobook render units, live phrases).
+MAX_TTS_TEXT_CHARS = 20_000
+
+
 class TtsGenerateRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
     speaker: str = "default"
     language: str = "en"
     speed: float = 1.0
@@ -50,7 +55,7 @@ class TtsGenerateRequest(BaseModel):
 
 
 class TtsGenerateStreamRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
     speaker: str = "default"
     language: str = "en"
     chunk_size: int = 6
