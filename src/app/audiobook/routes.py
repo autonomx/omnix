@@ -34,6 +34,9 @@ from .extraction import (
     normalize_extraction_settings,
     parse_page_ranges,
 )
+from app.errors import error_code
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .service import AudiobookService
@@ -811,7 +814,8 @@ def start_export(project_id: str, request: StartExport) -> dict[str, str]:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=409, detail="audiobook asset is unavailable") from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning("audiobook_export_unavailable", exc_info=True)
+        raise HTTPException(status_code=503, detail=error_code(exc, "audiobook_export_unavailable")) from exc
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 

@@ -118,3 +118,15 @@ def test_a_failing_market_data_provider_does_not_leak_its_error(caplog) -> None:
     assert response.json()["code"] == "market_data_failed"
     assert "sk-live-secret" not in response.text and "api.example.test" not in response.text
     assert "sk-live-secret" in caplog.text  # the operator still has the cause
+
+
+@pytest.mark.parametrize(("message", "code"), [
+    ("image_service_unreachable:<urlopen error [Errno 111] 10.0.0.5:5301 refused>", "image_service_unreachable"),
+    ("image_service_http_500:model_service_error", "image_service_http_500"),
+    ("image_service_not_configured", "image_service_not_configured"),
+    ("Connection to http://10.0.0.5 failed: boom", "fallback_code"),
+])
+def test_error_code_keeps_only_the_leading_code(message, code) -> None:
+    from app.errors import error_code
+
+    assert error_code(RuntimeError(message), "fallback_code") == code

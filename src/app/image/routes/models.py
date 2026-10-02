@@ -1,5 +1,7 @@
 """Gateway controls for the external image model service."""
 from __future__ import annotations
+
+import logging
 from app.config.env import env_str as _env_str
 
 import inspect
@@ -23,6 +25,9 @@ from app.image_http_client import (
     start_image_service_via_launcher,
     unload_image_model_via_service,
 )
+from app.errors import error_code
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -271,7 +276,8 @@ async def _call_service(function, *args: Any) -> dict[str, Any]:
     try:
         result = await run_in_threadpool(function, *args)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        logger.warning("image_service_call_failed", exc_info=True)
+        raise HTTPException(status_code=503, detail=error_code(exc, "image_service_unavailable")) from exc
     if not isinstance(result, dict):
         raise HTTPException(status_code=502, detail="invalid_image_service_response")
     return result

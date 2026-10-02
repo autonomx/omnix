@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -20,6 +22,9 @@ from .research.repository import TradingResearchRepository, default_research_rep
 from .research.review import Recommendation, create_reviewed_validation_report
 from .research.shadow_repository import TradingShadowResearchRepository, default_shadow_repository
 from .research.validation import build_validation_report
+from app.errors import error_code
+
+logger = logging.getLogger(__name__)
 
 
 class StartTradingResearchInput(BaseModel):
@@ -120,7 +125,9 @@ def create_trading_hermes_research_router(
                 })
             return result.model_copy(update={"brief":brief})
         except ValueError as exc: raise HTTPException(status_code=422,detail=str(exc)) from exc
-        except RuntimeError as exc: raise HTTPException(status_code=503,detail=str(exc)) from exc
+        except RuntimeError as exc:
+            logger.warning("hermes_research_unavailable", exc_info=True)
+            raise HTTPException(status_code=503, detail=error_code(exc, "hermes_research_unavailable")) from exc
 
     @router.get("/audit",response_model=TradingResearchAuditView)
     async def audit(instrument_id: str=Query(min_length=3,max_length=200),as_of: datetime | None=None):

@@ -37,6 +37,17 @@ def problem_code(status: int, detail: Any) -> str:
     return _status_code_name(status)
 
 
+def error_code(exc: BaseException, default: str) -> str:
+    """The code an exception message starts with (``code`` or ``code:cause``), else ``default``.
+
+    Service clients raise ``RuntimeError("image_service_unreachable:<cause>")``;
+    the cause can name hosts, paths or a provider's reply, so routes return
+    only the code and log the rest.
+    """
+    head = str(exc).split(":", 1)[0].strip()
+    return head if _CODE.fullmatch(head) else default
+
+
 def problem_body(status: int, detail: Any, *, path: str, request_id: str | None, code: str | None = None) -> dict[str, Any]:
     """RFC 9457 problem details; ``detail`` keeps the route's own value, so existing clients read it unchanged."""
     try:
@@ -106,6 +117,7 @@ def install_error_envelope(app: Any) -> None:
 __all__ = [
     "LegacyPersistenceRetired",
     "PROBLEM_MEDIA_TYPE",
+    "error_code",
     "install_error_envelope",
     "problem_body",
     "problem_code",

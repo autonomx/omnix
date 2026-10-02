@@ -2979,7 +2979,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 45,
+        "line": 48,
         "path": "src/app/audiobook/routes.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_SERVICE_CONTEXT_LOCK"
@@ -3491,7 +3491,7 @@
         "category": "cache",
         "invalidation": "clear_image_download_metadata",
         "kind": "container",
-        "line": 34,
+        "line": 39,
         "max_entries": 32,
         "path": "src/app/image/routes/models.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3503,7 +3503,7 @@
         "category": "cache",
         "invalidation": "clear_image_download_metadata",
         "kind": "container",
-        "line": 33,
+        "line": 38,
         "max_entries": 32,
         "path": "src/app/image/routes/models.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3514,7 +3514,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 29,
+        "line": 34,
         "path": "src/app/image/routes/models.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DOWNLOAD_TOTALS_LOCK"
@@ -7465,5 +7465,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "d63a1e912e364ed4148f2d7fdc9b80031ce1debbcfaaefae3f3687dacfcf25a7"
+  "source_digest": "c419595c684377cf946315151bbceddb2c2e5328036edf5f8c31b4a569b6731d"
 }
