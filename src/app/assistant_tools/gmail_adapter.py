@@ -134,15 +134,33 @@ def default_fake_gmail_adapter() -> FakeGmailRuntimeAdapter:
 _DEFAULT_GMAIL_ADAPTER = default_fake_gmail_adapter()
 
 
-def get_gmail_runtime_adapter() -> GmailRuntimeAdapter:
+def get_gmail_runtime_adapter() -> GmailRuntimeAdapter | None:
+    """The connected Gmail account; ``None`` when no Google account is connected.
+
+    Sample messages are used only when ``OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL`` is
+    set (demos and tests), never as a silent fallback for a real request.
+    """
+    if _env_str("OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return _DEFAULT_GMAIL_ADAPTER
     credential = credential_for_tool("gmail")
     if credential and credential.access_token:
         return GoogleGmailRuntimeAdapter(credential=credential)
-    return _DEFAULT_GMAIL_ADAPTER
+    return None
 
 
 def run_gmail_tool_request(request: AssistantToolRequest, adapter: GmailRuntimeAdapter | None = None) -> AssistantToolResult:
     runtime = adapter or get_gmail_runtime_adapter()
+    if runtime is None:
+        return AssistantToolResult(
+            tool_id=request.tool_id,
+            action_id=request.action_id,
+            session_id=request.session_id,
+            risk_level="low",
+            state_changed=False,
+            result_summary="Gmail is not connected. Connect a Google account to use Gmail.",
+            output={"connection_status": "missing_credentials"},
+            error="missing_credentials",
+        )
     try:
         if request.action_id == "gmail.read_email":
             query = str(request.input.get("query") or request.input.get("q") or "")

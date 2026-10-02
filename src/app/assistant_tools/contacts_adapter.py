@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from app.config.env import env_str as _env_str
+
 from .models import AssistantToolRequest, AssistantToolResult
 
 
@@ -47,12 +49,31 @@ def default_fake_contacts_adapter() -> FakeContactsRuntimeAdapter:
 _DEFAULT_CONTACTS_ADAPTER = default_fake_contacts_adapter()
 
 
-def get_contacts_runtime_adapter() -> ContactsRuntimeAdapter:
-    return _DEFAULT_CONTACTS_ADAPTER
+def get_contacts_runtime_adapter() -> ContactsRuntimeAdapter | None:
+    """``None``: Omnix has no contacts integration yet.
+
+    Sample contacts are used only when ``OMNIX_ASSISTANT_TOOLS_FAKE_CONTACTS``
+    is set (demos and tests); a real request must not resolve a recipient to
+    an invented address.
+    """
+    if _env_str("OMNIX_ASSISTANT_TOOLS_FAKE_CONTACTS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return _DEFAULT_CONTACTS_ADAPTER
+    return None
 
 
 def run_contacts_tool_request(request: AssistantToolRequest, adapter: ContactsRuntimeAdapter | None = None) -> AssistantToolResult:
     runtime = adapter or get_contacts_runtime_adapter()
+    if runtime is None:
+        return AssistantToolResult(
+            tool_id=request.tool_id,
+            action_id=request.action_id,
+            session_id=request.session_id,
+            risk_level="low",
+            state_changed=False,
+            result_summary="Contacts are not connected; Omnix has no contacts integration yet.",
+            output={"connection_status": "not_connected"},
+            error="contacts_not_connected",
+        )
     query = str(request.input.get("query") or request.input.get("q") or "")
     if request.action_id == "contacts.search_contacts":
         contacts = runtime.search_contacts(query, limit=int(request.input.get("limit") or 10))

@@ -861,27 +861,6 @@
     "type": "string"
   },
   {
-    "default": "false",
-    "description": "Controls hermes sidecar enabled for hermes.",
-    "feature": "hermes",
-    "name": "OMNIX_HERMES_SIDECAR_ENABLED",
-    "type": "string"
-  },
-  {
-    "default": "5",
-    "description": "Controls hermes sidecar timeout seconds for hermes.",
-    "feature": "hermes",
-    "name": "OMNIX_HERMES_SIDECAR_TIMEOUT_SECONDS",
-    "type": "string"
-  },
-  {
-    "default": "http://127.0.0.1:8765",
-    "description": "Controls hermes sidecar url for hermes.",
-    "feature": "hermes",
-    "name": "OMNIX_HERMES_SIDECAR_URL",
-    "type": "string"
-  },
-  {
     "default": null,
     "description": "Controls ibkr client id for trading.",
     "feature": "trading",

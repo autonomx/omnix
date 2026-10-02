@@ -127,9 +127,6 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | `worker` | kernel | Controls gateway background role for kernel. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
-| `OMNIX_HERMES_SIDECAR_ENABLED` | string | `false` | hermes | Controls hermes sidecar enabled for hermes. |
-| `OMNIX_HERMES_SIDECAR_TIMEOUT_SECONDS` | string | `5` | hermes | Controls hermes sidecar timeout seconds for hermes. |
-| `OMNIX_HERMES_SIDECAR_URL` | string | `http://127.0.0.1:8765` | hermes | Controls hermes sidecar url for hermes. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
 | `OMNIX_IBKR_ENABLED` | string | — | trading | Controls ibkr enabled for trading. |
 | `OMNIX_IBKR_HOST` | string | — | trading | Controls ibkr host for trading. |

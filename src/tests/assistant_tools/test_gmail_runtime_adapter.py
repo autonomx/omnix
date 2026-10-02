@@ -86,3 +86,28 @@ def test_connected_gmail_adapter_reads_messages_through_google_api(monkeypatch):
     assert messages == [GmailMessageRecord(id="msg-1", sender="ada@example.com", subject="Hello", snippet="Hello from Gmail", thread_id="thread-1")]
 
 
+
+
+def test_without_a_connected_account_gmail_reports_missing_credentials(monkeypatch):
+    monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL", raising=False)
+    monkeypatch.setattr("app.assistant_tools.gmail_adapter.credential_for_tool", lambda _tool: None)
+
+    result = run_gmail_tool_request(
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.read_email", input={"query": "receipt"}),
+    )
+
+    assert result.error == "missing_credentials"
+    assert result.output == {"connection_status": "missing_credentials"}
+    assert result.state_changed is False
+
+
+def test_sample_gmail_data_needs_the_explicit_flag(monkeypatch):
+    monkeypatch.setenv("OMNIX_ASSISTANT_TOOLS_FAKE_GMAIL", "1")
+    monkeypatch.setattr("app.assistant_tools.gmail_adapter.credential_for_tool", lambda _tool: None)
+
+    result = run_gmail_tool_request(
+        AssistantToolRequest(tool_id="gmail", action_id="gmail.read_email", input={"query": ""}),
+    )
+
+    assert result.error is None
+    assert result.output["messages"]
