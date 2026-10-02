@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import hashlib
 import json
 from dataclasses import dataclass
@@ -9,6 +11,40 @@ from typing import Any
 from app.persistence.database import PostgresDatabase, default_database
 
 from .contracts import DerivedPolicyEnvelope, MemorySpaceKey, VisibilityScope
+
+
+# Words that carry no meaning for memory lookup ("What is my favorite game?"
+# keeps "favorite" and "game"). The index uses the 'simple' configuration, which
+# keeps every word, so a question's own words must not be required.
+_STOPWORDS = frozenset("""
+a about above after again against all am an and any are as at be because been before being below between both
+but by can could did do does doing down during each few for from further had has have having he her here hers
+herself him himself his how i if in into is it its itself just me more most my myself no nor not now of off on
+once only or other our ours ourselves out over own same she should so some such than that the their theirs them
+themselves then there these they this those through to too under until up very was we were what when where which
+while who whom why will with would you your yours yourself yourselves tell remember know please
+""".split())
+_WORD = re.compile(r"[a-z0-9]+")
+_MAX_TERMS = 24
+
+
+def match_query(text: str) -> str | None:
+    """A tsquery that matches any meaningful word of ``text`` (longer words as prefixes).
+
+    ``plainto_tsquery`` required every word, so a natural question matched
+    nothing. Words are reduced to ``[a-z0-9]`` before they reach the query,
+    so user text cannot inject tsquery syntax.
+    """
+    terms: list[str] = []
+    for word in _WORD.findall(text.casefold()):
+        if len(word) < 2 or word in _STOPWORDS or word in terms:
+            continue
+        terms.append(word)
+        if len(terms) == _MAX_TERMS:
+            break
+    if not terms:
+        return None
+    return " | ".join(f"{word}:*" if len(word) >= 4 else word for word in terms)
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,6 +408,10 @@ class PostgresMemoryV2SearchIndex:
     ) -> list[SearchIndexHit]:
         if not visible_scopes:
             return []
+        match = match_query(text)
+        if match is None:
+            return []
+        text = match
         active_evidence_sql = (
             "NOT EXISTS ("
             " SELECT 1 FROM jsonb_array_elements_text(i.evidence_observation_ids) evidence_id"
@@ -384,7 +424,7 @@ class PostgresMemoryV2SearchIndex:
             "i.principal_id = %s",
             "i.owner_type = %s",
             "i.owner_id = %s",
-            "i.search_vector @@ plainto_tsquery('simple', %s)",
+            "i.search_vector @@ to_tsquery('simple', %s)",
             active_evidence_sql,
             "i.effective_visibility <@ %s::jsonb",
             "(a.valid_from IS NULL OR a.valid_from <= %s)",
@@ -407,7 +447,7 @@ class PostgresMemoryV2SearchIndex:
             rows = connection.execute(
                 f"""
                 SELECT i.ref_id, i.item_type, i.domain, i.content,
-                       ts_rank_cd(i.search_vector, plainto_tsquery('simple', %s)) AS rank,
+                       ts_rank_cd(i.search_vector, to_tsquery('simple', %s)) AS rank,
                        i.evidence_observation_ids, i.source_revision,
                        a.confidence, a.valid_from, a.valid_until,
                        p.sensitivity, p.effective_visibility, p.trust_class,
