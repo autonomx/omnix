@@ -184,7 +184,7 @@ class ProviderRegistry:
             
         provider_class = self._providers.get(provider_name)
         if not provider_class:
-            logger.warning(f"Provider '{provider_name}' not found")
+            logger.debug(f"Provider '{provider_name}' not found")
             return None
             
         # Build ProviderConfig

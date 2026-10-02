@@ -233,7 +233,7 @@ class AudioProviderRegistry:
             
         provider_class = self._tts_providers.get(provider_name)
         if not provider_class:
-            logger.warning(f"TTS Provider '{provider_name}' not found")
+            logger.debug(f"TTS Provider '{provider_name}' not found")
             return None
             
         # Build AudioProviderConfig
@@ -285,7 +285,7 @@ class AudioProviderRegistry:
             
         provider_class = self._stt_providers.get(provider_name)
         if not provider_class:
-            logger.warning(f"STT Provider '{provider_name}' not found")
+            logger.debug(f"STT Provider '{provider_name}' not found")
             return None
             
         # Build AudioProviderConfig

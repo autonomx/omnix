@@ -100,7 +100,7 @@ class TextFormatter(logging.Formatter):
 
 def configure_logging(*, log_format: str | None = None, level: str | None = None, stream: Any = None) -> logging.Handler:
     """Install (or replace) the process's one structured log handler."""
-    chosen = (log_format or env_str("OMNIX_LOG_FORMAT", "text")).strip().lower()
+    chosen = (log_format or env_str("OMNIX_LOG_FORMAT", "text") or "text").strip().lower()
     if chosen not in {"text", "json"}:
         raise ValueError("OMNIX_LOG_FORMAT must be text or json")
     handler = logging.StreamHandler(stream or sys.stderr)
@@ -112,8 +112,8 @@ def configure_logging(*, log_format: str | None = None, level: str | None = None
         if getattr(existing, _HANDLER_MARKER, False):
             root.removeHandler(existing)
     root.addHandler(handler)
-    root.setLevel((level or env_str("OMNIX_LOG_LEVEL", "INFO")).strip().upper() or "INFO")
-    for entry in env_str("OMNIX_LOG_LEVELS", "").split(","):
+    root.setLevel((level or env_str("OMNIX_LOG_LEVEL", "INFO") or "INFO").strip().upper() or "INFO")
+    for entry in (env_str("OMNIX_LOG_LEVELS", "") or "").split(","):
         name, _, value = entry.partition("=")
         if name.strip() and value.strip():
             logging.getLogger(name.strip()).setLevel(value.strip().upper())
