@@ -1,5 +1,6 @@
 """FLUX.2 Klein image provider."""
 from __future__ import annotations
+import logging
 
 import contextlib
 import gc
@@ -18,6 +19,8 @@ from app.image.flux_pipeline_loading import (
 )
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
 from app.runtime.paths import generated_images_root
+
+logger = logging.getLogger(__name__)
 
 _PIPELINE_LOCK = threading.Lock()
 _GENERATE_LOCK = threading.Lock()
@@ -291,7 +294,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                 raise RuntimeError(f"flux_klein_missing_runtime:{compat.get('error')}")
 
             pipeline_name = (compat.get("details") or {}).get("pipeline_class", "unknown")
-            print(f"[FLUX] Using pipeline: {pipeline_name}")
+            logger.info(f"[FLUX] Using pipeline: {pipeline_name}")
 
             local_dir = self._local_dir()
             prefer_local = bool(self.config.get("prefer_local_files", True))
@@ -326,7 +329,7 @@ class FluxKleinImageProvider(BaseImageProvider):
                 if memory
                 else ""
             )
-            print(f"[FLUX] Memory mode: {memory_mode}{memory_text}")
+            logger.info(f"[FLUX] Memory mode: {memory_mode}{memory_text}")
 
             pipe = build_flux_pipeline(
                 repo_or_path,

@@ -1,5 +1,6 @@
 """Segmented WebSocket transport for Nemotron ASR + Parakeet Realtime EOU."""
 from __future__ import annotations
+import logging
 from app.config.env import env_str as _env_str
 
 import asyncio
@@ -32,6 +33,8 @@ from app.providers.nemotron_eou_streaming import (
     model_manager,
 )
 
+logger = logging.getLogger(__name__)
+
 SEGMENTED_PROTOCOL = "segmented-v1"
 PROVIDER_NAME = "nemotron_parakeet_eou"
 FRAME_SAMPLES = 320
@@ -61,8 +64,7 @@ HYBRID_NEGOTIATION = LiveSttNegotiation(
 
 
 def _metric(event: str, **fields: Any) -> None:
-    print(
-        "[STT_METRIC] "
+    logger.info("[STT_METRIC] "
         + json.dumps(
             {
                 "event": event,
@@ -72,9 +74,7 @@ def _metric(event: str, **fields: Any) -> None:
             },
             sort_keys=True,
             default=str,
-        ),
-        flush=True,
-    )
+        ))
 
 
 def _field(data: dict[str, Any], camel: str, snake: str, default: Any = None) -> Any:

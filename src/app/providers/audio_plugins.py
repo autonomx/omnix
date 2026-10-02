@@ -104,11 +104,12 @@ class ParakeetSTT(BaseSTTProvider):
             
     def _parse_response(self, response) -> Dict[str, Any]:
         """Helper to robustly parse the server response"""
-        print(f"[PARAKEET-PLUGIN] Server Response Status: {response.status_code}")
+        logger.debug(f"[PARAKEET-PLUGIN] Server Response Status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            print(f"[PARAKEET-PLUGIN] Server Response JSON: {data}")
+            # The response carries the transcript: log its shape only (content-free logs).
+            logger.debug("[PARAKEET-PLUGIN] Server response keys: %s", sorted(data) if isinstance(data, dict) else type(data).__name__)
             
             # Be highly permissive of response structure (OpenAI format or Custom)
             text = data.get("text", "")
@@ -126,7 +127,7 @@ class ParakeetSTT(BaseSTTProvider):
                     "duration": data.get("duration")
                 }
             else:
-                print("[PARAKEET-PLUGIN] Silence detected or empty text returned.")
+                logger.debug("[PARAKEET-PLUGIN] Silence detected or empty text returned.")
                 return {
                     "success": False,
                     "text": "",
@@ -138,12 +139,12 @@ class ParakeetSTT(BaseSTTProvider):
         # Handle failures
         try:
             error_body = response.json()
-            print(f"[PARAKEET-PLUGIN] Server Error JSON: {error_body}")
+            logger.warning(f"[PARAKEET-PLUGIN] Server Error JSON: {error_body}")
             error_msg = error_body.get('error', error_body.get('message', response.text))
         except Exception:
             error_msg = f"Status {response.status_code}: {response.text}"
             
-        print(f"[PARAKEET-PLUGIN] Transcription failed: {error_msg}")
+        logger.warning(f"[PARAKEET-PLUGIN] Transcription failed: {error_msg}")
         return {"success": False, "error": error_msg}
 
     def transcribe(self, audio_file_path: str, language: Optional[str] = None, 
@@ -164,7 +165,7 @@ class ParakeetSTT(BaseSTTProvider):
             return self._parse_response(response)
             
         except Exception as e:
-            print(f"[PARAKEET-PLUGIN] Exception: {e}")
+            logger.warning(f"[PARAKEET-PLUGIN] Exception: {e}")
             import traceback
             traceback.print_exc()
             return {"success": False, "error": str(e)}
@@ -199,7 +200,7 @@ class ParakeetSTT(BaseSTTProvider):
                         data['language'] = language
                     data.update(kwargs)
                     
-                    print(f"[PARAKEET-PLUGIN] Sending audio to {base_url}/transcribe. Size: {len(audio_data)} bytes, {len(int16_data)} samples, {sample_rate}Hz")
+                    logger.debug(f"[PARAKEET-PLUGIN] Sending audio to {base_url}/transcribe. Size: {len(audio_data)} bytes, {len(int16_data)} samples, {sample_rate}Hz")
                     response = _stt_http().post(f"{base_url}/transcribe", files=files, data=data, timeout=120,
                                                 headers=service_headers())
                     
@@ -209,7 +210,7 @@ class ParakeetSTT(BaseSTTProvider):
                     os.unlink(temp_audio_path)
         
         except Exception as e:
-            print(f"[PARAKEET-PLUGIN] Raw exception: {e}")
+            logger.warning(f"[PARAKEET-PLUGIN] Raw exception: {e}")
             import traceback
             traceback.print_exc()
             return {"success": False, "error": str(e)}
@@ -261,7 +262,7 @@ class ParakeetSTT(BaseSTTProvider):
                 ws.close()
                 
             except (ImportError, Exception) as ws_error:
-                print(f"[PARAKEET-PLUGIN] WebSocket failed ({ws_error}), falling back to HTTP streaming")
+                logger.warning(f"[PARAKEET-PLUGIN] WebSocket failed ({ws_error}), falling back to HTTP streaming")
                 
                 # Fallback to HTTP streaming
                 # This is a simplified implementation - in practice, you'd want to use
@@ -277,7 +278,7 @@ class ParakeetSTT(BaseSTTProvider):
                 yield {"final": ""}
                 
         except Exception as e:
-            print(f"[PARAKEET-PLUGIN] Streaming STT error: {e}")
+            logger.warning(f"[PARAKEET-PLUGIN] Streaming STT error: {e}")
             yield {"error": str(e)}
     
     def get_capabilities(self) -> List[AudioProviderCapability]:

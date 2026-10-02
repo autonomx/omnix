@@ -32,7 +32,7 @@ def test_a_spec_must_name_the_class_that_declares_its_id() -> None:
         wrong.load()
 
 
-def test_a_provider_that_fails_to_import_is_skipped(monkeypatch, capsys) -> None:
+def test_a_provider_that_fails_to_import_is_skipped(monkeypatch, caplog) -> None:
     broken = ProviderSpec("missing", "llm", "app.providers.does_not_exist", "Missing", frozenset({"chat"}))
     monkeypatch.setattr(catalog, "CATALOG", (*catalog.CATALOG, broken))
     registry = ProviderRegistry()
@@ -41,4 +41,4 @@ def test_a_provider_that_fails_to_import_is_skipped(monkeypatch, capsys) -> None
 
     assert "missing" not in registry._providers
     assert "cerebras" in registry._providers
-    assert "Error loading provider missing" in capsys.readouterr().out
+    assert "Error loading provider missing" in caplog.text

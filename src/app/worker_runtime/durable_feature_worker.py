@@ -328,8 +328,10 @@ class DurableFeatureJobWorker:
 
     def _run_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         try:
-            attempt = max(1, int(getattr(job, "_attempt_count", 0) or job.attempts or 1))
-            with statement_class("job"), log_context(job_id=job.id, attempt=attempt, feature=job.module):
+            attempt = max(1, int(getattr(job, "_attempt_count", 0) or getattr(job, "attempts", 0) or 1))
+            with statement_class("job"), log_context(
+                job_id=job.id, attempt=attempt, feature=getattr(job, "module", None),
+            ):
                 self._execute_claimed(job, cancellation)
         finally:
             with self._active_lock:

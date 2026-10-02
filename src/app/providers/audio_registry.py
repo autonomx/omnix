@@ -1,3 +1,4 @@
+import logging
 """
 Audio Provider Registry - Factory for Audio Providers
 
@@ -9,6 +10,8 @@ from typing import Any, Dict, List, Optional, Type
 
 from .audio_base import AudioProviderConfig, BaseSTTProvider, BaseTTSProvider
 from .exceptions import ProviderRegistrationError
+
+logger = logging.getLogger(__name__)
 
 
 class AudioProviderRegistry:
@@ -38,13 +41,13 @@ class AudioProviderRegistry:
                 try:
                     provider_class = spec.load()
                 except Exception as exc:
-                    print(f"Error loading {kind.upper()} provider {spec.id} from {spec.module}: {exc}")
+                    logger.warning(f"Error loading {kind.upper()} provider {spec.id} from {spec.module}: {exc}")
                     continue
                 if not issubclass(provider_class, base):
                     raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a {base.__name__}")
                 target[spec.id] = provider_class
         self._discovered = True
-        print(f"[INFO] Audio provider discovery complete. {len(self._tts_providers)} TTS and {len(self._stt_providers)} STT providers available")
+        logger.info(f"[INFO] Audio provider discovery complete. {len(self._tts_providers)} TTS and {len(self._stt_providers)} STT providers available")
 
     def register_tts_provider(self, provider_class: Type[BaseTTSProvider]) -> None:
         """
@@ -67,7 +70,7 @@ class AudioProviderRegistry:
             raise ProviderRegistrationError(f"TTS Provider '{provider_name}' is already registered")
             
         self._tts_providers[provider_name] = provider_class
-        print(f"[INFO] Manually registered TTS provider: {provider_name}")
+        logger.info(f"[INFO] Manually registered TTS provider: {provider_name}")
     
     def register_stt_provider(self, provider_class: Type[BaseSTTProvider]) -> None:
         """
@@ -90,7 +93,7 @@ class AudioProviderRegistry:
             raise ProviderRegistrationError(f"STT Provider '{provider_name}' is already registered")
             
         self._stt_providers[provider_name] = provider_class
-        print(f"[INFO] Manually registered STT provider: {provider_name}")
+        logger.info(f"[INFO] Manually registered STT provider: {provider_name}")
     
     def unregister_tts_provider(self, provider_name: str) -> bool:
         """
@@ -104,7 +107,7 @@ class AudioProviderRegistry:
         """
         if provider_name in self._tts_providers:
             del self._tts_providers[provider_name]
-            print(f"[INFO] Unregistered TTS provider: {provider_name}")
+            logger.info(f"[INFO] Unregistered TTS provider: {provider_name}")
             return True
         return False
     
@@ -120,7 +123,7 @@ class AudioProviderRegistry:
         """
         if provider_name in self._stt_providers:
             del self._stt_providers[provider_name]
-            print(f"[INFO] Unregistered STT provider: {provider_name}")
+            logger.info(f"[INFO] Unregistered STT provider: {provider_name}")
             return True
         return False
     
@@ -174,7 +177,7 @@ class AudioProviderRegistry:
                 }
                 providers_list.append(info)
             except Exception as e:
-                print(f"Error getting info for TTS provider {name}: {e}")
+                logger.warning(f"Error getting info for TTS provider {name}: {e}")
                 
         return providers_list
     
@@ -200,7 +203,7 @@ class AudioProviderRegistry:
                 }
                 providers_list.append(info)
             except Exception as e:
-                print(f"Error getting info for STT provider {name}: {e}")
+                logger.warning(f"Error getting info for STT provider {name}: {e}")
                 
         return providers_list
     
@@ -229,7 +232,7 @@ class AudioProviderRegistry:
             
         provider_class = self._tts_providers.get(provider_name)
         if not provider_class:
-            print(f"TTS Provider '{provider_name}' not found")
+            logger.warning(f"TTS Provider '{provider_name}' not found")
             return None
             
         # Build AudioProviderConfig
@@ -281,7 +284,7 @@ class AudioProviderRegistry:
             
         provider_class = self._stt_providers.get(provider_name)
         if not provider_class:
-            print(f"STT Provider '{provider_name}' not found")
+            logger.warning(f"STT Provider '{provider_name}' not found")
             return None
             
         # Build AudioProviderConfig

@@ -1,5 +1,6 @@
 """Inference and diagnostics support for low-latency Parakeet live STT."""
 from __future__ import annotations
+import logging
 
 from app.config.env import environment
 
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from app.providers.stt_streaming_audio import DEFAULT_SAMPLE_RATE, write_pcm16_wav
+
+logger = logging.getLogger(__name__)
 
 _TRANSCRIBE_LOCK = threading.Lock()
 _WARMED = False
@@ -44,7 +47,7 @@ def metric(event: str, **fields: Any) -> None:
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         **fields,
     }
-    print("[STT_METRIC] " + json.dumps(payload, sort_keys=True, default=str), flush=True)
+    logger.info("[STT_METRIC] " + json.dumps(payload, sort_keys=True, default=str))
 
 
 def extract_text(output: Any) -> str:

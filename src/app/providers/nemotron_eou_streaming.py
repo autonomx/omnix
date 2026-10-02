@@ -6,6 +6,7 @@ Imports of torch/numpy/NeMo are deliberately lazy so launcher and CI imports do
 not require the heavyweight speech environment.
 """
 from __future__ import annotations
+import logging
 
 from app.config.env import environment
 
@@ -18,6 +19,8 @@ import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 NEMOTRON_MODEL_NAME = "nvidia/nemotron-speech-streaming-en-0.6b"
 EOU_MODEL_NAME = "nvidia/parakeet_realtime_eou_120m-v1"
@@ -55,8 +58,7 @@ def has_meaningful_transcript(text: str) -> bool:
 
 
 def _metric(event: str, **fields: Any) -> None:
-    print(
-        "[STT_METRIC] "
+    logger.info("[STT_METRIC] "
         + json.dumps(
             {
                 "event": event,
@@ -66,9 +68,7 @@ def _metric(event: str, **fields: Any) -> None:
             },
             sort_keys=True,
             default=str,
-        ),
-        flush=True,
-    )
+        ))
 
 
 def _extract_text(value: Any) -> str:
@@ -288,21 +288,19 @@ class NemotronEouModelManager:
             self.eou_device = _select_device(torch, "OMNIX_EOU_DEVICE", fallback_device)
             nemotron_name = environment().get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME).strip()
             eou_name = environment().get("OMNIX_EOU_MODEL", EOU_MODEL_NAME).strip()
-            print(f"[STT] Loading authoritative Nemotron model {nemotron_name} on {self.nemotron_device}")
+            logger.info(f"[STT] Loading authoritative Nemotron model {nemotron_name} on {self.nemotron_device}")
             self.nemotron_model = ASRModel.from_pretrained(model_name=nemotron_name)
             self.nemotron_model.to(self.nemotron_device)
             self.nemotron_model.eval()
             _configure_streaming_context(self.nemotron_model, self.nemotron_right_context)
-            print(f"[STT] Loading Parakeet Realtime EOU model {eou_name} on {self.eou_device}")
+            logger.info(f"[STT] Loading Parakeet Realtime EOU model {eou_name} on {self.eou_device}")
             self.eou_model = ASRModel.from_pretrained(model_name=eou_name)
             self.eou_model.to(self.eou_device)
             self.eou_model.eval()
             _configure_streaming_context(self.eou_model, self.eou_right_context)
-            print(
-                "[STT] Hybrid streaming ready: "
+            logger.info("[STT] Hybrid streaming ready: "
                 f"Nemotron right_context={self.nemotron_right_context}, "
-                f"EOU right_context={self.eou_right_context}, feed_chunk_ms={self.feed_chunk_ms}"
-            )
+                f"EOU right_context={self.eou_right_context}, feed_chunk_ms={self.feed_chunk_ms}")
 
     def health_details(self) -> dict[str, Any]:
         return {

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging
 
 from app.config.env import env_str, environment
 
@@ -7,6 +8,8 @@ import time
 import traceback
 from contextvars import ContextVar
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 _PROVIDER_TRACE_ROWS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
     "RPG_PROVIDER_TRACE_ROWS",
@@ -102,17 +105,14 @@ def provider_call_enter(
     if extra:
         row.update(extra)
     _rows().append(row)
-    print(
-        "[RPG][provider-call][enter]",
-        {
+    logger.info('[RPG][provider-call][enter] %s', {
             "provider": row["provider"],
             "method": row["method"],
             "model": row["model"],
             "purpose": row["purpose"],
             "message_count": row["message_count"],
             "prompt_chars": row["prompt_chars"],
-        },
-    )
+        })
     return row
 
 
@@ -124,13 +124,10 @@ def provider_call_exit(row: Dict[str, Any], *, ok: bool, error: str = "") -> Non
     row["ok"] = bool(ok)
     row["error"] = error
     row["elapsed_seconds"] = round(elapsed, 3)
-    print(
-        "[RPG][provider-call][exit]",
-        {
+    logger.warning('[RPG][provider-call][exit] %s', {
             "provider": row.get("provider"),
             "purpose": row.get("purpose"),
             "elapsed_seconds": row.get("elapsed_seconds"),
             "ok": row.get("ok"),
             "error": row.get("error"),
-        },
-    )
+        })

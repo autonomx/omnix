@@ -1,3 +1,4 @@
+import logging
 """
 Provider Registry - the LLM providers listed in ``app.providers.catalog``,
 plus a factory for creating provider instances.
@@ -7,6 +8,8 @@ from typing import Any, Dict, List, Optional, Type
 
 from .base import BaseProvider, ProviderConfig
 from .exceptions import ProviderRegistrationError
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderRegistry:
@@ -37,13 +40,13 @@ class ProviderRegistry:
             try:
                 provider_class = spec.load()
             except Exception as exc:
-                print(f"Error loading provider {spec.id} from {spec.module}: {exc}")
+                logger.warning(f"Error loading provider {spec.id} from {spec.module}: {exc}")
                 continue
             if not issubclass(provider_class, BaseProvider):
                 raise ProviderRegistrationError(f"{spec.module}.{spec.attribute} is not a BaseProvider")
             self._providers[spec.id] = provider_class
         self._discovered = True
-        print(f"Provider discovery complete. {len(self._providers)} providers available")
+        logger.info(f"Provider discovery complete. {len(self._providers)} providers available")
 
     def register_provider(self, provider_class: Type[BaseProvider]) -> None:
         """
@@ -66,7 +69,7 @@ class ProviderRegistry:
             raise ProviderRegistrationError(f"Provider '{provider_name}' is already registered")
             
         self._providers[provider_name] = provider_class
-        print(f"Manually registered provider: {provider_name}")
+        logger.info(f"Manually registered provider: {provider_name}")
     
     def unregister_provider(self, provider_name: str) -> bool:
         """
@@ -80,7 +83,7 @@ class ProviderRegistry:
         """
         if provider_name in self._providers:
             del self._providers[provider_name]
-            print(f"Unregistered provider: {provider_name}")
+            logger.info(f"Unregistered provider: {provider_name}")
             return True
         return False
     
@@ -119,7 +122,7 @@ class ProviderRegistry:
                 }
                 providers_list.append(info)
             except Exception as e:
-                print(f"Error getting info for provider {name}: {e}")
+                logger.warning(f"Error getting info for provider {name}: {e}")
                 
         return providers_list
 
@@ -180,7 +183,7 @@ class ProviderRegistry:
             
         provider_class = self._providers.get(provider_name)
         if not provider_class:
-            print(f"Provider '{provider_name}' not found")
+            logger.warning(f"Provider '{provider_name}' not found")
             return None
             
         # Build ProviderConfig

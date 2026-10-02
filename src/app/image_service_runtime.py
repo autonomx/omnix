@@ -240,26 +240,26 @@ def configure_device_permits() -> None:
 @app.on_event("startup")
 async def startup_load_provider():
     if not is_image_generation_enabled():
-        print("[IMAGE SERVICE] Image generation disabled; models remain unloaded.")
+        _LOG.info("[IMAGE SERVICE] Image generation disabled; models remain unloaded.")
         return
 
     if not _truthy(environment().get("OMNIX_IMAGE_PRELOAD", "0")):
-        print("[IMAGE SERVICE] Ready for on-demand loading; image models are not resident.")
+        _LOG.info("[IMAGE SERVICE] Ready for on-demand loading; image models are not resident.")
         return
 
     provider = environment().get("OMNIX_IMAGE_PROVIDER", "").strip() or None
     try:
-        print("[IMAGE SERVICE] Preloading image provider...")
+        _LOG.info("[IMAGE SERVICE] Preloading image provider...")
         result = await run_in_threadpool(load_image_provider, provider)
-        print("[IMAGE SERVICE] Image provider preload complete:", result)
+        _LOG.info('[IMAGE SERVICE] Image provider preload complete: %s', result)
     except Exception as exc:
-        print("[IMAGE SERVICE] Image provider preload failed:", repr(exc))
+        _LOG.warning('[IMAGE SERVICE] Image provider preload failed: %s', repr(exc))
 
     if not _truthy(environment().get("OMNIX_IMAGE_WARMUP", "0")):
         return
 
     try:
-        print("[IMAGE SERVICE] Running tiny image-model warmup...")
+        _LOG.info("[IMAGE SERVICE] Running tiny image-model warmup...")
         warmup = await run_in_threadpool(
             generate_image_local,
             {
@@ -275,9 +275,9 @@ async def startup_load_provider():
                 "no_cache": True,
             },
         )
-        print("[IMAGE SERVICE] Warmup complete:", {"ok": warmup.ok, "error": warmup.error})
+        _LOG.info('[IMAGE SERVICE] Warmup complete: %s', {"ok": warmup.ok, "error": warmup.error})
     except Exception as exc:
-        print("[IMAGE SERVICE] Warmup failed:", repr(exc))
+        _LOG.warning('[IMAGE SERVICE] Warmup failed: %s', repr(exc))
 
 
 @app.get("/health")
