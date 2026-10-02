@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.assist_core.hermes_client import HermesSidecarClient
+from app.providers.base import ChatResponse
 from tests.support.http import mock_http_client
 import app.research.planner as planner_module
 from app.research.planner import (
@@ -146,10 +147,12 @@ def test_invalid_hermes_plan_falls_back_to_local_planner() -> None:
 
 def test_selected_provider_generates_saved_title_steps_and_operations(monkeypatch) -> None:
     class FakeProvider:
-        def chat_completion(self, **kwargs):
+        def chat_completion(self, messages, **kwargs):
             assert kwargs["model"] == "research-model"
             assert kwargs["stream"] is False
-            return SimpleNamespace(
+            assert kwargs["temperature"] == 0.0 and kwargs["max_tokens"] == 1_400
+            return ChatResponse(
+                model="research-model",
                 content=json.dumps(
                     {
                         "title": "Nvidia Stock Deep Research",
@@ -184,8 +187,9 @@ def test_selected_provider_generates_saved_title_steps_and_operations(monkeypatc
 
 def test_selected_provider_without_search_operation_falls_back_to_bounded_local_plan(monkeypatch) -> None:
     class StopOnlyProvider:
-        def chat_completion(self, **_kwargs):
-            return SimpleNamespace(
+        def chat_completion(self, messages, **_kwargs):
+            return ChatResponse(
+                model="gpt-5.6-luna",
                 content=json.dumps(
                     {
                         "title": "NVIDIA Stock Research",
@@ -211,3 +215,28 @@ def test_selected_provider_without_search_operation_falls_back_to_bounded_local_
     assert decision.backend == "provider_fallback"
     assert any(operation.operation == "web_search" for operation in decision.plan.operations)
     assert "provider_planner_unavailable:RuntimeError" in decision.warnings
+
+
+def test_the_provider_plan_uses_the_providers_json_schema_mode(monkeypatch) -> None:
+    calls: list[dict] = []
+
+    class SchemaProvider:
+        provider_name = "lmstudio"
+
+        def chat_completion(self, messages, **kwargs):
+            calls.append(kwargs)
+            plan = {
+                "objective": "Assess the Rust release cadence",
+                "operations": [{"operation": "web_search", "query": "Rust release schedule"}],
+            }
+            return ChatResponse(model="research-model", content=json.dumps(plan), finish_reason="stop")
+
+    monkeypatch.setattr("app.providers.service.get_provider", lambda provider_name=None: SchemaProvider())
+    decision = ResearchPlanner(
+        prefer_hermes=False, provider_id="lmstudio", model_id="research-model", use_provider=True,
+    ).plan(ResearchPlanningRequest(question="How often does Rust release?"))
+
+    assert decision.backend == "provider"
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[0]["response_format"]["json_schema"]["name"] == "research_provider_plan"
+    assert calls[0]["request_timeout_seconds"] == 30
