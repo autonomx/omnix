@@ -435,6 +435,7 @@
       "app.characters.visemes",
       "app.characters.voice_consent",
       "app.chat",
+      "app.chat.admission",
       "app.chat.assistant_turns",
       "app.chat.character_store",
       "app.chat.compaction",
@@ -7304,7 +7305,7 @@
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 387
+      "value": 386
     },
     "inline_prompt_strings": {
       "direction": "lower",
@@ -7484,5 +7485,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "ff96b5158990df5cb53c17060bfd395978fcf81ff3ab78ef33b67fb6953fd11d"
+  "source_digest": "03213e28586aaedbedf32e2949010519c9bcfef7e3c5ab391faf65ef95437b66"
 }

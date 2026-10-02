@@ -15,6 +15,7 @@ from app.gateway.kernel_routes.live_event_stream import (
     resilient_live_job_event_stream,
 )
 from app.providers import ChatResponse
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 @dataclass
@@ -196,8 +197,10 @@ def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeyp
     )
     monkeypatch.setattr(provider_service, "get_provider", lambda _provider_name=None: FakeChatProvider())
 
+    # Streamed turns are admitted as jobs, like the job route's.
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(
-        job_store_factory=lambda: FakeJobStore([]),
+        job_store_factory=lambda: job_store,
         chat_store_factory=lambda: store,
     )
     client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})

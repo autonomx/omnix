@@ -734,68 +734,95 @@ def _run_chat_generation_job(
         content = str(answer.get("content") or "").strip()
         metadata = dict(answer.get("metadata") or {})
         metadata["reply_to_message_id"] = message_id
-        atomic_completion = getattr(job_store, 'chat_completion', None)
-        transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
-        with transaction, chat_job_commit_lock(job.id):
-            if _cancel_requested(job_store, job.id):
-                _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
-                return
-            require_owner = getattr(job_store, "require_chat_execution_owner", None)
-            if callable(require_owner):
-                require_owner(job.id)
+
+        def before_commit() -> None:
             _persist_routing_metadata(chat_store, session, user_message)
             if context_items:
                 metadata["context_sources"] = _context_source_summaries(context_items)
                 metadata["context_diagnostics"] = context_diagnostics
-            completed = chat_store.complete_streamed_reply(
-                session_id,
-                message_id,
-                content,
-                metadata,
-            )
-            if completed is None:
-                raise RuntimeError("Chat response could not be persisted.")
-            if completion_hook is not None:
-                try:
-                    completion_hook(
-                        chat_store,
-                        session_id,
-                        message_id,
-                        context_items,
-                        context_diagnostics,
-                    )
-                except Exception:
-                    if not callable(atomic_completion):
-                        _remove_assistant_reply(chat_store, session_id, message_id)
-                    raise
-            completed_job = job_store.complete_job(
-                job.id,
-                CompleteJobRequest(
-                    output_refs=[
-                        {
-                            "type": "chat_response",
-                            "module": "chatbot",
-                            "session_id": session_id,
-                            "message_id": message_id,
-                            "content": content,
-                        }
-                    ],
-                    logs=[
-                        {
-                            "level": "info",
-                            "message": "Chat response generated and persisted.",
-                            "session_id": session_id,
-                            "message_id": message_id,
-                        }
-                    ],
-                ),
-            )
-            if completed_job is None:
-                raise RuntimeError("Chat generation completed but its job disappeared.")
+
+        hook = None
+        if completion_hook is not None:
+            def hook() -> None:
+                completion_hook(chat_store, session_id, message_id, context_items, context_diagnostics)
+
+        _commit_chat_reply(
+            chat_store, job_store, job, session_id=session_id, message_id=message_id,
+            content=content, metadata=metadata, before_commit=before_commit, completion_hook=hook,
+        )
     except _ChatGenerationInterrupted:
         _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
     except Exception as exc:  # pragma: no cover - exercised through job state
         _fail_job(chat_store, job_store, job, exc, session_id=session_id, message_id=message_id)
+
+
+def _commit_chat_reply(
+    chat_store: Any,
+    job_store: Any,
+    job: JobRecord,
+    *,
+    session_id: str,
+    message_id: str,
+    content: str,
+    metadata: dict[str, Any],
+    before_commit: Callable[[], None] | None = None,
+    completion_hook: Callable[[], None] | None = None,
+) -> ChatSession | None:
+    """Persist a reply and complete its job atomically, unless the turn was canceled.
+
+    Returns the updated session, or ``None`` when a cancellation won the race.
+    """
+    atomic_completion = getattr(job_store, 'chat_completion', None)
+    transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
+    with transaction, chat_job_commit_lock(job.id):
+        if _cancel_requested(job_store, job.id):
+            _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
+            return None
+        require_owner = getattr(job_store, "require_chat_execution_owner", None)
+        if callable(require_owner):
+            require_owner(job.id)
+        if before_commit is not None:
+            before_commit()
+        completed = chat_store.complete_streamed_reply(
+            session_id,
+            message_id,
+            content,
+            metadata,
+        )
+        if completed is None:
+            raise RuntimeError("Chat response could not be persisted.")
+        if completion_hook is not None:
+            try:
+                completion_hook()
+            except Exception:
+                if not callable(atomic_completion):
+                    _remove_assistant_reply(chat_store, session_id, message_id)
+                raise
+        completed_job = job_store.complete_job(
+            job.id,
+            CompleteJobRequest(
+                output_refs=[
+                    {
+                        "type": "chat_response",
+                        "module": "chatbot",
+                        "session_id": session_id,
+                        "message_id": message_id,
+                        "content": content,
+                    }
+                ],
+                logs=[
+                    {
+                        "level": "info",
+                        "message": "Chat response generated and persisted.",
+                        "session_id": session_id,
+                        "message_id": message_id,
+                    }
+                ],
+            ),
+        )
+        if completed_job is None:
+            raise RuntimeError("Chat generation completed but its job disappeared.")
+    return completed
 
 
 def _fail_job(
