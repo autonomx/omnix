@@ -203,9 +203,13 @@ def create_gateway_app(
         openapi_url=None,
     )
     _install_local_browser_cors(gateway)
-    from app.rpg.api.feature_routes import add_rpg_debug_middleware
+    from app.runtime.feature_catalog import enabled_feature_ids
 
-    add_rpg_debug_middleware(gateway)
+    if "rpg" in enabled_feature_ids(runtime_config):
+        # Importing it loads the RPG route package; skip when RPG is off (WP-7.7).
+        from app.rpg.api.feature_routes import add_rpg_debug_middleware
+
+        add_rpg_debug_middleware(gateway)
     gateway.state.runtime_started = False
     gateway.state.background_runtime = background_runtime
     gateway.state.scheduler_runtime = scheduler_runtime

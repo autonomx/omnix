@@ -574,3 +574,27 @@ def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
     assert prompt.json()["rendered_text"] == "Reply to hello."
     assert characters.status_code == 200
     assert characters.json()["characters"] == []
+
+
+def test_disabled_features_are_not_imported():
+    """Composing without RPG and trading imports neither package (WP-7.7)."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[3]
+    script = (
+        "import sys\n"
+        "from app.config.runtime import RuntimeConfig\n"
+        "from app.gateway.main import create_gateway_app\n"
+        "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith(('app.rpg', 'app.trading')))\n"
+        "print(len(loaded), loaded[:5])\n"
+    )
+    environment = {**os.environ, "PYTHONPATH": str(src), "OMNIX_ALLOWED_HOSTS": "localhost"}
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=src, env=environment, capture_output=True, text=True, timeout=180
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.strip().splitlines()[-1] == "0 []"
