@@ -62,8 +62,8 @@
     ],
     "lint_counts": {
       "AL001": 68,
-      "AL008": 94,
-      "AL009": 169,
+      "AL008": 90,
+      "AL009": 168,
       "AL011": 3
     },
     "mypy_ignored_modules": [
@@ -432,25 +432,6 @@
       "app.characters.repository",
       "app.characters.service",
       "app.characters.session_models",
-      "app.characters.stage1_contracts",
-      "app.characters.stage1_http",
-      "app.characters.stage1_preflight",
-      "app.characters.stage1_runner",
-      "app.characters.stage2_contracts",
-      "app.characters.stage2_discovery",
-      "app.characters.stage2_fixtures",
-      "app.characters.stage2_http",
-      "app.characters.stage2_preflight",
-      "app.characters.stage2_runner",
-      "app.characters.stage2_verification",
-      "app.characters.stage3_contracts",
-      "app.characters.stage3_http",
-      "app.characters.stage3_preflight",
-      "app.characters.stage3_runner",
-      "app.characters.stage4_contracts",
-      "app.characters.stage4_http",
-      "app.characters.stage4_preflight",
-      "app.characters.stage4_runner",
       "app.characters.visemes",
       "app.characters.voice_consent",
       "app.chat",
@@ -7328,7 +7309,7 @@
     "inline_prompt_strings": {
       "direction": "lower",
       "target": 10,
-      "value": 97
+      "value": 94
     },
     "install_hook_functions": {
       "direction": "lower",
@@ -7373,7 +7354,7 @@
     "print_calls": {
       "direction": "lower",
       "target": 0,
-      "value": 94
+      "value": 90
     },
     "process_local_state_unapproved": {
       "direction": "lower",
@@ -7413,7 +7394,7 @@
     "silent_broad_excepts": {
       "direction": "lower",
       "target": 10,
-      "value": 169
+      "value": 168
     },
     "star_imports": {
       "direction": "lower",
@@ -7503,5 +7484,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "ed97c84741378e0dc443e63088aa1f7291ffc61f2b4d94ec2c29a9d1edd507ee"
+  "source_digest": "ff96b5158990df5cb53c17060bfd395978fcf81ff3ab78ef33b67fb6953fd11d"
 }

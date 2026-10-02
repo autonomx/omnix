@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from app.characters.stage1_http import HttpStage1Gateway, TTS_PCM_WEBSOCKET_PATH
-from app.characters.stage1_preflight import Stage1PrepareConfig
+from tests.rehearsal.characters.stage1_http import HttpStage1Gateway, TTS_PCM_WEBSOCKET_PATH
+from tests.rehearsal.characters.stage1_preflight import Stage1PrepareConfig
 
 
 class FakeWebsocket:

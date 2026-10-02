@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.characters.stage2_contracts import (
+from tests.rehearsal.characters.stage2_contracts import (
     Stage2Check,
     Stage2Checkpoint,
     Stage2Metrics,
     Stage2Report,
 )
-from app.characters.stage2_verification import (
+from tests.rehearsal.characters.stage2_verification import (
     cleanup_and_verify_forget,
     resume_stage2_cleanup,
 )

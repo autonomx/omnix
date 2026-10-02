@@ -7,14 +7,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from app.prompts import prompt_template
-
-
-PERSONALITY_PROMPT_TEMPLATE = prompt_template(
-    'characters.stage1_contracts.personality_prompt', "1",
-    'Be warm, relaxed, concise, and lightly humorous. Remain clearly an AI character.',
-)
-
 
 CheckStatus = Literal["pass", "fail", "review", "skipped"]
 Decision = Literal["pass", "blocked", "needs_review"]
@@ -101,7 +93,7 @@ class Stage1PrepareConfig(BaseModel):
     character_id: str = "stage1-maya"
     display_name: str = "Maya Stage 1"
     personality_prompt: str = (
-        PERSONALITY_PROMPT_TEMPLATE.text
+        "Be warm, relaxed, concise, and lightly humorous. Remain clearly an AI character."
     )
     greeting: str = "Hey, good to hear from you."
     voice_asset_id: str | None = None

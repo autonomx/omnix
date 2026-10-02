@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.characters.stage2_contracts import Stage2PrepareConfig, marker_memory
-from app.characters.stage2_discovery import discover_stage2_cleanup
+from tests.rehearsal.characters.stage2_contracts import Stage2PrepareConfig, marker_memory
+from tests.rehearsal.characters.stage2_discovery import discover_stage2_cleanup
 
 from tests.unit.characters.test_stage2_preflight import FakeStage2Gateway
 

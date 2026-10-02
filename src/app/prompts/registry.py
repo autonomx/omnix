@@ -34,7 +34,6 @@ PROMPT_MODULES: tuple[str, ...] = (
     "app.characters.avatar_generation_service",
     "app.characters.avatar_viseme_generation",
     "app.characters.interaction",
-    "app.characters.stage1_contracts",
     "app.chat.live_call_greeting",
     "app.chat.live_conversation_proactive",
     "app.desktop_companion.commentary",

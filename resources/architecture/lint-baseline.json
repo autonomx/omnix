@@ -114,7 +114,7 @@
       "count": 1,
       "fingerprint": "<module>:app.assistant_tools.repo_adapter",
       "lines": [
-        24
+        25
       ],
       "path": "src/app/agent_runtime/service_core.py",
       "rule": "AL001"
@@ -633,42 +633,6 @@
       "rule": "AL001"
     },
     {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        122
-      ],
-      "path": "src/app/characters/stage1_preflight.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        180
-      ],
-      "path": "src/app/characters/stage2_preflight.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        103
-      ],
-      "path": "src/app/characters/stage3_preflight.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        46
-      ],
-      "path": "src/app/characters/stage4_preflight.py",
-      "rule": "AL008"
-    },
-    {
       "count": 2,
       "fingerprint": "FluxKleinImageProvider._ensure_pipeline:print",
       "lines": [
@@ -682,14 +646,14 @@
       "count": 8,
       "fingerprint": "startup_load_provider:print",
       "lines": [
-        296,
-        300,
-        305,
-        307,
-        309,
-        315,
-        331,
-        333
+        243,
+        247,
+        252,
+        254,
+        256,
+        262,
+        278,
+        280
       ],
       "path": "src/app/image_service_runtime.py",
       "rule": "AL008"
@@ -901,7 +865,7 @@
       "count": 1,
       "fingerprint": "_metric:print",
       "lines": [
-        61
+        64
       ],
       "path": "src/app/providers/nemotron_eou_live_websocket.py",
       "rule": "AL008"
@@ -1123,7 +1087,7 @@
       "count": 1,
       "fingerprint": "default_structured_proposal_provider:except",
       "lines": [
-        195
+        204
       ],
       "path": "src/app/assistant_memory/structured_provider.py",
       "rule": "AL009"
@@ -1214,15 +1178,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "HttpStage1Gateway.stream_tts:except",
-      "lines": [
-        244
-      ],
-      "path": "src/app/characters/stage1_http.py",
-      "rule": "AL009"
-    },
-    {
-      "count": 1,
       "fingerprint": "AssistantTurnCoordinator._load:except",
       "lines": [
         313
@@ -1261,7 +1216,7 @@
       "count": 1,
       "fingerprint": "_unload_instances:except",
       "lines": [
-        50
+        55
       ],
       "path": "src/app/image/lifecycle.py",
       "rule": "AL009"
@@ -1270,8 +1225,8 @@
       "count": 2,
       "fingerprint": "_validate_load_budget:except",
       "lines": [
-        93,
-        99
+        145,
+        151
       ],
       "path": "src/app/image/lifecycle.py",
       "rule": "AL009"
@@ -1407,7 +1362,7 @@
       "count": 1,
       "fingerprint": "ChatGPTCodexProvider._reset_process_state:except",
       "lines": [
-        1215
+        1248
       ],
       "path": "src/app/providers/chatgpt_codex_provider.py",
       "rule": "AL009"
@@ -2448,7 +2403,7 @@
       "count": 1,
       "fingerprint": "_kill_windows_port_owners:except",
       "lines": [
-        164
+        172
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -2457,7 +2412,7 @@
       "count": 1,
       "fingerprint": "get_tts_service_status:except",
       "lines": [
-        292
+        300
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"
@@ -2466,7 +2421,7 @@
       "count": 1,
       "fingerprint": "initialize_tts_provider:except",
       "lines": [
-        237
+        245
       ],
       "path": "src/tts_server.py",
       "rule": "AL009"

@@ -195,10 +195,6 @@
     "sha256": "2f77d81e36cf445bbd1129649098ce9f236081dfc64076b1741b26099c9f445e",
     "version": "1"
   },
-  "characters.stage1_contracts.personality_prompt": {
-    "sha256": "8ff3cb47555a71337741cc19e80d4dfcac9998723c36b737cad2f31f1aaf7a3b",
-    "version": "1"
-  },
   "chat.live_call_greeting.prompt": {
     "sha256": "936e8acb869e3a2f63d9d0b1103bf13a625d6cee48b0c164a88e5b7d9547d67a",
     "version": "1"
