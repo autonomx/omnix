@@ -146,16 +146,16 @@ if [ ! -f "src/app/providers/vendor/qwen_tts/__init__.py" ]; then
     error
 fi
 
-echo "[1/9][FLUX] Checking pip..."
+echo "[1/10][FLUX] Checking pip..."
 "$RPG_FLUX_PYTHON" -m pip --version
 
 echo ""
-echo "[2/9][FLUX] Removing conflicting torch packages..."
+echo "[2/10][FLUX] Removing conflicting torch packages..."
 "$RPG_FLUX_PYTHON" -m pip uninstall -y torch torchvision torchaudio
 "$RPG_FLUX_PYTHON" -m pip uninstall -y torchtext torchdata
 
 echo ""
-echo "[3/9][FLUX] Installing the hashed image runtime lock..."
+echo "[3/10][FLUX] Installing the hashed image runtime lock..."
 "$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/image.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked image runtime into $RPG_FLUX_ENV"
@@ -190,19 +190,19 @@ fi
 echo "[FLUX] Cleanup complete."
 
 echo ""
-echo "[4/9][FLUX] Gateway requirements are included in requirements/image.lock.txt."
+echo "[4/10][FLUX] Gateway requirements are included in requirements/image.lock.txt."
 
 echo ""
-echo "[5/9][FLUX] FLUX requirements are included in requirements/image.lock.txt."
+echo "[5/10][FLUX] FLUX requirements are included in requirements/image.lock.txt."
 
 echo ""
-echo "[6/9][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
+echo "[6/10][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
 
 echo ""
-echo "[7/9][FLUX] Runtime dependency pins are managed by requirements/image.in and its hashed lock."
+echo "[7/10][FLUX] Runtime dependency pins are managed by requirements/image.in and its hashed lock."
 
 echo ""
-echo "[8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."
+echo "[8/10][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."
 mkdir -p "$OMNIX_LLM_MODELS_DIR"
 "$RPG_FLUX_PYTHON" -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='qwen/Qwen3-4B-Instruct-2507-GGUF', filename='qwen3-4b-instruct-2507-q8_0.gguf', local_dir='$OMNIX_LLM_MODELS_DIR', local_dir_use_symlinks=False)" 2>/dev/null
 if [ $? -ne 0 ]; then
@@ -212,7 +212,14 @@ else
 fi
 
 echo ""
-echo "[9/9][FLUX] Verifying main app runtime..."
+echo "[9/10][FLUX] Downloading the Memory v2 embedding model (multilingual-e5-small)..."
+if ! PYTHONPATH="$OMNIX_REPO_ROOT/src" "$RPG_FLUX_PYTHON" -m app.assistant_memory_v2.embeddings download; then
+    echo "WARNING: Could not download the Memory v2 embedding model. Memory retrieval will match words only."
+    echo "         Retry later with: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.assistant_memory_v2.embeddings download"
+fi
+
+echo ""
+echo "[10/10][FLUX] Verifying main app runtime..."
 export PYTHONPATH="$OMNIX_REPO_ROOT/src"
 "$RPG_FLUX_PYTHON" -c "import torch, torchvision, torchaudio; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('torchaudio:', torchaudio.__version__)"
 "$RPG_FLUX_PYTHON" -c "import torch; print('torch:', torch.__version__)"

@@ -174,6 +174,18 @@ Use Python 3.11. `requirements.txt` installs the gateway runtime from its
 hash-locked dependency set. Install test tools from `requirements/dev.lock.txt`;
 the image, TTS, and STT runtimes have separate locks and isolated environments.
 
+`setup.bat` / `setup.sh` also download Memory v2's embedding model
+(`intfloat/multilingual-e5-small`, about 490 MB, pinned and SHA-256 checked)
+into `resources/models/multilingual-e5-small`. Rerunning setup skips files that
+already match their checksum. If the download fails, setup warns and continues,
+and memory retrieval matches words only until the model is present. On a host
+installed by hand, run it once after the dependency install:
+
+```bash
+PYTHONPATH=src python -m app.assistant_memory_v2.embeddings download
+PYTHONPATH=src python -m app.assistant_memory_v2.embeddings status
+```
+
 ### GPU/PyTorch note
 
 `requirements.txt` intentionally does not install the repository's CUDA

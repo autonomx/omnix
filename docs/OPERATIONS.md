@@ -549,7 +549,8 @@ moving them into blob-backed asset records is a follow-up.
 ## Memory v2 cutover readiness
 
 Memory v2 retrieves by meaning as well as by words, as VoiceMem does, when its
-embedding model is installed: run `python -m app.assistant_memory_v2.embeddings download`
+embedding model is installed. `setup.bat` / `setup.sh` download it; on a host
+installed by hand, run `python -m app.assistant_memory_v2.embeddings download`
 once on each host that runs the memory worker or serves retrieval (about
 490 MB, pinned `intfloat/multilingual-e5-small`, SHA-256 checked, stored under
 `resources/models/multilingual-e5-small` or `OMNIX_MEMORY_EMBEDDING_MODEL_DIR`).
