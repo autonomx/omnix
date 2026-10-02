@@ -26,6 +26,7 @@ from app.providers.service import get_tts_provider
 from app.providers.tts_priority import generation_class, other_process_priority_pending
 
 from .hashing import canonical_json, text_hash
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 from .render_cache import find_valid_render
 from .render_planner import RenderUnit, load_chapter_units
 from .model_identity import assert_model_revision
@@ -71,7 +72,7 @@ def _generation_progress_callback(
                 if now - last_renewal >= 60:
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=lease_token, lease_seconds=3600,
+                        lease_token=lease_token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     last_renewal = now
                 work.jobs.update_progress(
@@ -177,7 +178,7 @@ def _checkpoint(
     )
     work.jobs.renew_lease(
         context, job_id=job_id, worker_id=worker_id,
-        lease_token=lease_token, lease_seconds=3600,
+        lease_token=lease_token, lease_seconds=JOB_LEASE_SECONDS,
     )
     work.jobs.update_progress(
         context, job_id=job_id, worker_id=worker_id, lease_token=lease_token,
@@ -295,7 +296,7 @@ def _save_render(
                 )
             else:
                 work.jobs.renew_lease(context, job_id=job_id, worker_id=worker_id,
-                                      lease_token=lease_token, lease_seconds=3600)
+                                      lease_token=lease_token, lease_seconds=JOB_LEASE_SECONDS)
                 work.jobs.update_progress(
                     context, job_id=job_id, worker_id=worker_id, lease_token=lease_token,
                     progress={"current": completed, "total": total,
@@ -319,7 +320,7 @@ def run_render_once(
             return False
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["gpu:tts:offline"],
-            job_types=["audiobook.render-chapter"], lease_seconds=3600,
+            job_types=["audiobook.render-chapter"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -328,6 +329,15 @@ def run_render_once(
             context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _render_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _render_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     try:
@@ -422,7 +432,7 @@ def run_render_once(
                             or other_process_priority_pending())
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     work.commit()
                 if not busy:
@@ -641,7 +651,7 @@ def run_preview_once(
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["gpu:tts:preview"],
-            job_types=["audiobook.preview-span"], lease_seconds=3600,
+            job_types=["audiobook.preview-span"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -651,6 +661,15 @@ def run_preview_once(
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _preview_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _preview_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     try:
@@ -700,7 +719,7 @@ def run_preview_once(
                     work.commit()
                     return True
                 work.jobs.renew_lease(context, job_id=job_id, worker_id=worker_id,
-                                      lease_token=token, lease_seconds=3600)
+                                      lease_token=token, lease_seconds=JOB_LEASE_SECONDS)
                 cached = find_valid_render(work.connection, context, blobs, key)
                 work.commit()
             if cached is not None:

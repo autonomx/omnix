@@ -4,6 +4,8 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-02 | WP-8.7 | Audiobook keeps its own claim loops instead of moving its jobs to `job_handlers` on the shared durable worker; it adopts that worker's lease model (two-minute lease, renewal every 30 seconds in the background, lease-fenced checkpoint writes). | Render jobs checkpoint per synthesized unit and yield to higher-priority speech before each claim; moving them onto the shared worker is a larger change than this polish. The guide tells new features to prefer `job_handlers`. |
+| 2026-10-02 | WP-8.7 | Audiobook responses stay `dict[str, object]`; the guide lists typed response models as the reference's one gap. | WP-2.2's schema gate covers request bodies and schema inclusion. Typing 44 responses changes the generated web contract, which WP-9.3 (typed API client) migrates. |
 | 2026-10-02 | WP-8.1 | The 7 remaining compat modules (5 RPG category A, 2 RPG category B) are not renamed. | RPG is being retired; renaming code scheduled for deletion only churns imports. They leave with RPG. |
 | 2026-10-02 | WP-7.6 | The query pass times each list route through the composed app and explains the queries of routes whose time grows with volume, instead of ranking statements with `pg_stat_statements`. | The extension is not in the local PostgreSQL build; the acceptance criterion is route p95, which this measures directly. |
 | 2026-10-02 | WP-7.6 | RPG campaigns are not seeded. | RPG is being retired; its list routes are not part of the platform's supported surface. |

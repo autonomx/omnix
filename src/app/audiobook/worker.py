@@ -32,6 +32,7 @@ from .annotation import (
 from .classifier import local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 
 
 _LOG = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ def run_ingest_once(
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.ingest"], lease_seconds=3600,
+            job_types=["audiobook.ingest"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -151,6 +152,15 @@ def run_ingest_once(
             context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _ingest_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _ingest_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id = job["id"]
     token = job["lease_token"]
     payload = job["input_payload"]
@@ -245,7 +255,7 @@ def run_ingest_once(
         with unit_of_work(database) as work:
             work.jobs.renew_lease(
                 context, job_id=job_id, worker_id=worker_id,
-                lease_token=token, lease_seconds=3600,
+                lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
             )
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested" or not PostgresAudiobookRepository(
@@ -301,7 +311,7 @@ def run_analyze_once(
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.analyze"], lease_seconds=3600,
+            job_types=["audiobook.analyze"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -310,6 +320,15 @@ def run_analyze_once(
             context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _analyze_claimed(database, context, job, worker_id=worker_id)
+
+
+def _analyze_claimed(
+    database: PostgresDatabase, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     force_reclassify = bool(payload.get("force_reclassify"))
@@ -447,7 +466,7 @@ def run_analyze_once(
                     raise _AnalysisPaused
                 renewal.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
-                    lease_token=token, lease_seconds=3600,
+                    lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                 )
                 window_number = context_payload.get("window_number")
                 window_count = context_payload.get("window_count")
@@ -540,7 +559,7 @@ def run_analyze_once(
                     completed_spans += int(span_count)
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     work.jobs.update_progress(
                         context, job_id=job_id, worker_id=worker_id, lease_token=token,
@@ -679,7 +698,7 @@ def run_analyze_once(
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
-                    lease_token=token, lease_seconds=3600,
+                    lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                 )
                 work.jobs.update_progress(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,

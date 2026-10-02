@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.audiobook import model_identity
+from app.providers import tts_artifacts
 
 
 def test_model_revision_tracks_weights_and_tokenizer(tmp_path, monkeypatch) -> None:
@@ -11,7 +12,14 @@ def test_model_revision_tracks_weights_and_tokenizer(tmp_path, monkeypatch) -> N
     tokenizer.mkdir()
     (tokenizer / "model.safetensors").write_bytes(b"codec version one")
     (tmp_path / "config.json").write_text('{"revision": 1}', encoding="utf-8")
-    monkeypatch.setattr(model_identity, "_configured_model_dir", lambda: tmp_path)
+    real_port = tts_artifacts.local_model_artifacts
+
+    def port(provider_id):
+        if provider_id == "faster-qwen3-tts":
+            return tts_artifacts.LocalModelArtifacts(model_id="Qwen3-TTS", directory=tmp_path)
+        return real_port(provider_id)
+
+    monkeypatch.setattr(tts_artifacts, "local_model_artifacts", port)
 
     original = model_identity.current_model_identity()
     assert original["model_revision"].startswith("sha256:")

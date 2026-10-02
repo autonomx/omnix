@@ -45,7 +45,7 @@ CATALOG: tuple[ProviderSpec, ...] = (
     _llm("openrouter", "openrouter_provider", "OpenRouterProvider", "streaming", "models"),
     ProviderSpec(
         "faster-qwen3-tts", "tts", "app.providers.faster_qwen3_tts_provider", "FasterQwen3TTSProvider",
-        frozenset({"synthesis", "streaming", "voice_clone"}),
+        frozenset({"synthesis", "streaming", "voice_clone", "local_artifacts"}),
     ),
     ProviderSpec("parakeet", "stt", "app.providers.audio_plugins", "ParakeetSTT", frozenset({"transcription"})),
 )

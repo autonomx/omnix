@@ -6,6 +6,7 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from app.persistence.blob_store import BlobIntegrityError
@@ -17,6 +18,7 @@ from app.persistence.unit_of_work import unit_of_work
 from .assembly import PausePolicy
 from .assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from .hashing import canonical_json
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 from .render_cache import find_valid_render
 from .render_planner import load_chapter_units
 
@@ -35,7 +37,7 @@ def run_assemble_once(
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.assemble-chapter"], lease_seconds=3600,
+            job_types=["audiobook.assemble-chapter"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -45,6 +47,15 @@ def run_assemble_once(
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _assemble_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _assemble_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     storage_key: str | None = None
@@ -138,7 +149,7 @@ def run_assemble_once(
                         raise _AssemblyCancelled()
                     renewal.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     renewal.commit()
                 last_renewal = now

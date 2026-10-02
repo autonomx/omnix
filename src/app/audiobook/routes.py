@@ -4,15 +4,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import tempfile
 import threading
 from contextvars import copy_context
 from pathlib import Path
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, BinaryIO
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
@@ -45,6 +45,8 @@ _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
 _SERVICE_CONTEXT_LOCK = threading.Lock()
 _SERVICE_CONTEXT: tuple[Any, Any] | None = None
 _BINARY_SCHEMA = {"schema": {"type": "string", "format": "binary"}}
+_SPOOL_IN_MEMORY_BYTES = 1024 * 1024
+_MAX_COVER_BYTES = 10 * 1024 * 1024
 
 
 def _binary_response(*media_types: str) -> dict[int, dict[str, Any]]:
@@ -189,6 +191,45 @@ class SetDocumentOverride(BaseModel):
     role_override: str | None = None
 
 
+def _octet_stream_body(title: str) -> dict[str, Any]:
+    """OpenAPI for a raw body the route reads as a stream instead of a parameter."""
+    return {"requestBody": {"required": True, "content": {"application/octet-stream": {
+        "schema": {"contentMediaType": "application/octet-stream", "title": title, "type": "string"},
+    }}}}
+
+
+def _declared_length(request: Request) -> int:
+    try:
+        return int(request.headers.get("content-length", "0") or 0)
+    except ValueError:
+        return 0
+
+
+async def _spool_body(request: Request, *, limit: int, what: str) -> BinaryIO:
+    """Copy the body to a temporary file, refusing it once it passes ``limit``.
+
+    The cap also holds for chunked uploads that declare no Content-Length.
+    Small bodies stay in memory; larger ones spill to disk.
+    """
+    if _declared_length(request) > limit:
+        raise HTTPException(status_code=413, detail=f"{what} is too large")
+    spool = tempfile.SpooledTemporaryFile(max_size=_SPOOL_IN_MEMORY_BYTES)
+    size = 0
+    try:
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > limit:
+                raise HTTPException(status_code=413, detail=f"{what} is too large")
+            spool.write(chunk)
+        if not size:
+            raise HTTPException(status_code=422, detail=f"{what} content is required")
+        spool.seek(0)
+        return spool
+    except BaseException:
+        spool.close()
+        raise
+
+
 def _service_and_context() -> tuple["AudiobookService", Any]:
     global _SERVICE_CONTEXT
     if _SERVICE_CONTEXT is None:
@@ -203,728 +244,736 @@ def _service_and_context() -> tuple["AudiobookService", Any]:
     return _SERVICE_CONTEXT
 
 
-def create_audiobook_router() -> APIRouter:
-    router = APIRouter()
+router = APIRouter()
 
-    @router.get("/api/audiobook/projects", tags=["audiobook"])
-    def list_projects(offset: int = Query(default=0, ge=0)) -> dict[str, object]:
-        service, context = _service_and_context()
-        return {"projects": service.list_projects(context, offset=offset)}
 
-    @router.get("/api/audiobook/voices", tags=["audiobook"])
-    def list_voices() -> dict[str, object]:
-        from .service import AudiobookService
+@router.get("/api/audiobook/projects", tags=["audiobook"])
+def list_projects(offset: int = Query(default=0, ge=0)) -> dict[str, object]:
+    service, context = _service_and_context()
+    return {"projects": service.list_projects(context, offset=offset)}
 
-        return {"voices": AudiobookService.list_voices()}
 
-    @router.get("/api/audiobook/models/current", tags=["audiobook"])
-    def audiobook_model() -> dict[str, object]:
-        from .model_identity import current_model_identity
+@router.get("/api/audiobook/voices", tags=["audiobook"])
+def list_voices() -> dict[str, object]:
+    from .service import AudiobookService
 
-        try:
-            return current_model_identity()
-        except ValueError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"voices": AudiobookService.list_voices()}
 
-    @router.get("/api/audiobook/source-library", tags=["audiobook"])
-    def source_library() -> dict[str, object]:
-        return _source_library_files()
 
-    @router.post("/api/audiobook/projects", tags=["audiobook"])
-    def create_project(request: CreateAudiobookProject) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.create_project(context, **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+@router.get("/api/audiobook/models/current", tags=["audiobook"])
+def audiobook_model() -> dict[str, object]:
+    from .model_identity import current_model_identity
 
-    @router.patch("/api/audiobook/projects/{project_id}", tags=["audiobook"])
-    def update_project(project_id: str, request: UpdateAudiobookProject) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.update_project(context, project_id=project_id, **request.model_dump())
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        return current_model_identity()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    @router.delete("/api/audiobook/projects/{project_id}", tags=["audiobook"], status_code=204)
-    def delete_project(project_id: str) -> Response:
-        service, context = _service_and_context()
-        try:
-            service.delete_project(context, project_id=project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        return Response(status_code=204)
 
-    @router.delete("/api/audiobook/projects/{project_id}/assets/{asset_id}", tags=["audiobook"])
-    def delete_asset(project_id: str, asset_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.delete_asset(context, project_id=project_id, asset_id=asset_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook asset not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+@router.get("/api/audiobook/source-library", tags=["audiobook"])
+def source_library() -> dict[str, object]:
+    return _source_library_files()
 
-    @router.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
-    def get_project(project_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.get_project(context, project_id, include_text=False)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @router.get("/api/audiobook/projects/{project_id}/chapters/{chapter_id}", tags=["audiobook"])
-    def get_chapter(project_id: str, chapter_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.get_chapter(context, project_id=project_id,
-                                       chapter_id=chapter_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook chapter not found") from exc
+@router.post("/api/audiobook/projects", tags=["audiobook"])
+def create_project(request: CreateAudiobookProject) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.create_project(context, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.get(
-        "/api/audiobook/projects/{project_id}/document-structure",
-        tags=["audiobook"],
-    )
-    def get_document_structure(
-        project_id: str, chapter_id: str | None = Query(default=None),
-    ) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.get_document_structure(
-                context, project_id=project_id, chapter_id=chapter_id,
-            )
-        except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="audiobook project not found"
-            ) from exc
 
-    @router.patch(
-        "/api/audiobook/projects/{project_id}/reading-policy",
-        tags=["audiobook"],
-    )
-    def set_reading_policy(
-        project_id: str, request: SetAudiobookMode,
-    ) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.set_audiobook_mode(
-                context, project_id=project_id, mode=request.mode,
-            )
-        except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="audiobook project not found"
-            ) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+@router.patch("/api/audiobook/projects/{project_id}", tags=["audiobook"])
+def update_project(project_id: str, request: UpdateAudiobookProject) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.update_project(context, project_id=project_id, **request.model_dump())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/api/audiobook/projects/{project_id}/document-overrides",
-        tags=["audiobook"],
-    )
-    def set_document_override(
-        project_id: str, request: SetDocumentOverride,
-    ) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.set_document_override(
-                context, project_id=project_id, **request.model_dump(),
-            )
-        except KeyError as exc:
-            raise HTTPException(
-                status_code=404, detail="audiobook project not found"
-            ) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post(
-        "/api/audiobook/projects/{project_id}/source",
-        tags=["audiobook"],
-        status_code=202,
-        # The body is read as a stream (below); declare it for the contract.
-        openapi_extra={
-            "requestBody": {
-                "required": True,
-                "content": {
-                    "application/octet-stream": {
-                        "schema": {
-                            "contentMediaType": "application/octet-stream",
-                            "title": "Source Content",
-                            "type": "string",
-                        }
-                    }
-                },
-            }
-        },
-    )
-    async def upload_source(
-        project_id: str, request: Request,
-        source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
-        filename: str = Query(default="book"),
-        exclude_pages: str | None = Query(default=None, max_length=500),
-    ) -> dict[str, str]:
-        from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+@router.delete("/api/audiobook/projects/{project_id}", tags=["audiobook"], status_code=204)
+def delete_project(project_id: str) -> Response:
+    service, context = _service_and_context()
+    try:
+        service.delete_project(context, project_id=project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    return Response(status_code=204)
 
-        if int(request.headers.get("content-length", "0") or 0) > MAX_SOURCE_BYTES:
+
+@router.delete("/api/audiobook/projects/{project_id}/assets/{asset_id}", tags=["audiobook"])
+def delete_asset(project_id: str, asset_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.delete_asset(context, project_id=project_id, asset_id=asset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook asset not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
+def get_project(project_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.get_project(context, project_id, include_text=False)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.get("/api/audiobook/projects/{project_id}/chapters/{chapter_id}", tags=["audiobook"])
+def get_chapter(project_id: str, chapter_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.get_chapter(context, project_id=project_id,
+                                   chapter_id=chapter_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook chapter not found") from exc
+
+
+@router.get(
+    "/api/audiobook/projects/{project_id}/document-structure",
+    tags=["audiobook"],
+)
+def get_document_structure(
+    project_id: str, chapter_id: str | None = Query(default=None),
+) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.get_document_structure(
+            context, project_id=project_id, chapter_id=chapter_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="audiobook project not found"
+        ) from exc
+
+
+@router.patch(
+    "/api/audiobook/projects/{project_id}/reading-policy",
+    tags=["audiobook"],
+)
+def set_reading_policy(
+    project_id: str, request: SetAudiobookMode,
+) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.set_audiobook_mode(
+            context, project_id=project_id, mode=request.mode,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="audiobook project not found"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/api/audiobook/projects/{project_id}/document-overrides",
+    tags=["audiobook"],
+)
+def set_document_override(
+    project_id: str, request: SetDocumentOverride,
+) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.set_document_override(
+            context, project_id=project_id, **request.model_dump(),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404, detail="audiobook project not found"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post(
+    "/api/audiobook/projects/{project_id}/source",
+    tags=["audiobook"],
+    status_code=202,
+    openapi_extra=_octet_stream_body("Source Content"),
+)
+async def upload_source(
+    project_id: str, request: Request,
+    source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
+    filename: str = Query(default="book"),
+    exclude_pages: str | None = Query(default=None, max_length=500),
+) -> dict[str, str]:
+    from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+
+    source = await _spool_body(request, limit=MAX_SOURCE_BYTES, what="source")
+    try:
+        service, context = await asyncio.to_thread(_service_and_context)
+        extraction_settings = _page_extraction_settings(source_format, exclude_pages)
+        return await asyncio.to_thread(
+            service.submit_source, context, project_id=project_id,
+            source_format=source_format, content=source, filename=filename,
+            extraction_settings=extraction_settings,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except UnsupportedSource as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        source.close()
+
+
+@router.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
+async def import_library_source(
+    project_id: str, filename: str = Query(min_length=1),
+    exclude_pages: str | None = Query(default=None, max_length=500),
+) -> dict[str, str]:
+    from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+
+    try:
+        path = _resolve_source_library_file(filename)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="source file not found in audiobook directory") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        if path.stat().st_size > MAX_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="source is too large")
-        # Stop reading as soon as the cap is exceeded, including chunked
-        # uploads that send no Content-Length.
-        received = bytearray()
-        async for chunk in request.stream():
-            received.extend(chunk)
-            if len(received) > MAX_SOURCE_BYTES:
-                raise HTTPException(status_code=413, detail="source is too large")
-        if not received:
-            raise HTTPException(status_code=422, detail="source content is required")
-        content = bytes(received)
+        source = path.open("rb")
+    except OSError as exc:
+        raise HTTPException(status_code=409, detail="source file could not be read") from exc
+    try:
         service, context = await asyncio.to_thread(_service_and_context)
-        try:
-            extraction_settings = _page_extraction_settings(source_format, exclude_pages)
-            return await asyncio.to_thread(
-                service.submit_source, context, project_id=project_id,
-                source_format=source_format, content=content, filename=filename,
-                extraction_settings=extraction_settings,
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except UnsupportedSource as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        source_format = path.suffix.lower().lstrip(".")
+        extraction_settings = _page_extraction_settings(source_format, exclude_pages)
+        return await asyncio.to_thread(
+            service.submit_source, context, project_id=project_id,
+            source_format=source_format, content=source, filename=path.name,
+            extraction_settings=extraction_settings,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except UnsupportedSource as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=409, detail="source file could not be read") from exc
+    finally:
+        source.close()
 
-    @router.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
-    async def import_library_source(
-        project_id: str, filename: str = Query(min_length=1),
-        exclude_pages: str | None = Query(default=None, max_length=500),
-    ) -> dict[str, str]:
-        from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 
-        try:
-            path = _resolve_source_library_file(filename)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail="source file not found in audiobook directory") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        try:
-            if path.stat().st_size > MAX_SOURCE_BYTES:
-                raise HTTPException(status_code=413, detail="source is too large")
-            content = await asyncio.to_thread(path.read_bytes)
-        except OSError as exc:
-            raise HTTPException(status_code=409, detail="source file could not be read") from exc
-        service, context = await asyncio.to_thread(_service_and_context)
-        try:
-            source_format = path.suffix.lower().lstrip(".")
-            extraction_settings = _page_extraction_settings(source_format, exclude_pages)
-            return await asyncio.to_thread(
-                service.submit_source, context, project_id=project_id,
-                source_format=source_format, content=content, filename=path.name,
-                extraction_settings=extraction_settings,
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except UnsupportedSource as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+@router.get(
+    "/api/audiobook/projects/{project_id}/source/download",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses=_binary_response(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/epub+zip",
+        "text/html",
+        "text/markdown",
+        "application/pdf",
+        "text/plain",
+    ),
+    tags=["audiobook"],
+)
+def download_source(project_id: str) -> StreamingResponse:
+    service, context = _service_and_context()
+    try:
+        handle, mime, filename = service.open_source(context, project_id=project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook source not found") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="audiobook source failed integrity verification") from exc
 
-    @router.get(
-        "/api/audiobook/projects/{project_id}/source/download",
-        response_model=None,
-        response_class=StreamingResponse,
-        responses=_binary_response(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/epub+zip",
-            "text/html",
-            "text/markdown",
-            "application/pdf",
-            "text/plain",
+    def chunks():
+        with handle:
+            while chunk := handle.read(1024 * 1024):
+                yield chunk
+
+    safe_filename = filename.replace('"', '').replace('\r', '').replace('\n', '')
+    suffix = Path(safe_filename).suffix.lower().lstrip('.')
+    fallback_name = f"audiobook.{suffix}" if suffix in SUPPORTED_SOURCE_FORMATS else "audiobook"
+    return StreamingResponse(chunks(), media_type=mime,
+                             background=BackgroundTask(handle.close), headers={
+        "Content-Length": str(os.fstat(handle.fileno()).st_size),
+        "Content-Disposition": (
+            f'attachment; filename="{fallback_name}"; filename*=UTF-8\'\'{quote(safe_filename, safe="")}'
         ),
-        tags=["audiobook"],
-    )
-    def download_source(project_id: str) -> StreamingResponse:
-        service, context = _service_and_context()
-        try:
-            handle, mime, filename = service.open_source(context, project_id=project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook source not found") from exc
-        except (OSError, ValueError) as exc:
-            raise HTTPException(status_code=409, detail="audiobook source failed integrity verification") from exc
+    })
 
-        def chunks():
-            with handle:
-                while chunk := handle.read(1024 * 1024):
-                    yield chunk
 
-        safe_filename = filename.replace('"', '').replace('\r', '').replace('\n', '')
-        suffix = Path(safe_filename).suffix.lower().lstrip('.')
-        fallback_name = f"audiobook.{suffix}" if suffix in SUPPORTED_SOURCE_FORMATS else "audiobook"
-        return StreamingResponse(chunks(), media_type=mime,
-                                 background=BackgroundTask(handle.close), headers={
-            "Content-Length": str(os.fstat(handle.fileno()).st_size),
-            "Content-Disposition": (
-                f'attachment; filename="{fallback_name}"; filename*=UTF-8\'\'{quote(safe_filename, safe="")}'
-            ),
-        })
+@router.post(
+    "/api/audiobook/projects/{project_id}/cover",
+    tags=["audiobook"],
+    openapi_extra=_octet_stream_body("Cover Content"),
+)
+async def upload_cover(
+    project_id: str, request: Request, filename: str = Query(default="cover"),
+) -> dict[str, str]:
+    with await _spool_body(request, limit=_MAX_COVER_BYTES, what="cover") as cover:
+        content = cover.read()
+    service, context = await asyncio.to_thread(_service_and_context)
+    try:
+        return await asyncio.to_thread(service.set_cover, context,
+                                       project_id=project_id, content=content,
+                                       filename=filename)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
-    async def upload_cover(
-                           project_id: str,
-                           request: Request,
-                           cover_content: bytes = Body(..., media_type="application/octet-stream"),
-                           filename: str = Query(default="cover")) -> dict[str, str]:
-        if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="cover is too large")
-        content = cover_content
-        if len(content) > 10 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="cover is too large")
-        service, context = await asyncio.to_thread(_service_and_context)
-        try:
-            return await asyncio.to_thread(service.set_cover, context,
-                                           project_id=project_id, content=content,
-                                           filename=filename)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @router.get(
-        "/api/audiobook/projects/{project_id}/cover",
-        response_model=None,
-        response_class=Response,
-        responses=_binary_response("image/jpeg", "image/png"),
-        tags=["audiobook"],
-    )
-    def project_cover(project_id: str) -> Response:
-        service, context = _service_and_context()
-        try:
-            content, mime = service.read_cover(context, project_id=project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook cover not found") from exc
-        except (OSError, ValueError) as exc:
-            raise HTTPException(status_code=409, detail="audiobook cover failed integrity verification") from exc
-        return Response(content, media_type=mime)
+@router.get(
+    "/api/audiobook/projects/{project_id}/cover",
+    response_model=None,
+    response_class=Response,
+    responses=_binary_response("image/jpeg", "image/png"),
+    tags=["audiobook"],
+)
+def project_cover(project_id: str) -> Response:
+    service, context = _service_and_context()
+    try:
+        content, mime = service.read_cover(context, project_id=project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook cover not found") from exc
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail="audiobook cover failed integrity verification") from exc
+    return Response(content, media_type=mime)
 
-    @router.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
-    def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.add_speaker(context, project_id=project_id, **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions", tags=["audiobook"])
-    def exclude_span_text(project_id: str, span_id: str, body: ExcludeSpanText) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.exclude_span_text(context, project_id=project_id, span_id=span_id, **body.model_dump())
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="current source span not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+@router.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
+def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.add_speaker(context, project_id=project_id, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
-    @router.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
-    def restore_span_text(project_id: str, exclusion_id: str) -> dict[str, bool]:
-        service, context = _service_and_context()
-        try:
-            return service.restore_span_text(context, project_id=project_id, exclusion_id=exclusion_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="speech exclusion not found") from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
-    def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.set_pronunciation(context, project_id=project_id,
-                                             **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+@router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions", tags=["audiobook"])
+def exclude_span_text(project_id: str, span_id: str, body: ExcludeSpanText) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.exclude_span_text(context, project_id=project_id, span_id=span_id, **body.model_dump())
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="current source span not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @router.post(
-        "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject",
-        tags=["audiobook"],
-    )
-    def reject_speaker(project_id: str, speaker_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.reject_speaker(
-                context, project_id=project_id, speaker_id=speaker_id,
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
-    def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.assign_voice(
-                context, project_id=project_id, speaker_id=speaker_id,
-                voice_profile_id=request.voice_profile_id,
-            )
-        except (ValueError, OSError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="speaker not found") from exc
+@router.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
+def restore_span_text(project_id: str, exclusion_id: str) -> dict[str, bool]:
+    service, context = _service_and_context()
+    try:
+        return service.restore_span_text(context, project_id=project_id, exclusion_id=exclusion_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="speech exclusion not found") from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
-    def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.confirm_alias(context, project_id=project_id,
-                                         speaker_id=speaker_id, alias=request.alias)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    @router.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
-    def resolve_issue(project_id: str, issue_id: str, request: ResolveReviewIssue) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.resolve_issue(
-                context, project_id=project_id, issue_id=issue_id, **request.model_dump(),
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/annotation", tags=["audiobook"])
-    def revise_span(project_id: str, span_id: str, request: ReviseSpanAnnotation) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.revise_span(context, project_id=project_id,
-                                       span_id=span_id, **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="span or speaker not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
-    def start_render(project_id: str, request: StartRender) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.start_render(context, project_id=project_id, **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel", tags=["audiobook"])
-    def cancel_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.cancel_job(context, project_id=project_id, job_id=job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/pause", tags=["audiobook"])
-    def pause_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.pause_job(context, project_id=project_id, job_id=job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/resume", tags=["audiobook"])
-    def resume_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.resume_job(context, project_id=project_id, job_id=job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/render/pause", tags=["audiobook"])
-    def pause_audiobook_render_queue(project_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.pause_render_queue(context, project_id=project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/render/resume", tags=["audiobook"])
-    def resume_audiobook_render_queue(project_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.pause_render_queue(context, project_id=project_id, resume=True)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])
-    def stop_audiobook_render_queue(project_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.stop_render_queue(context, project_id=project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
-    def retry_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.retry_pipeline_job(context, project_id=project_id, job_id=job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/extract-quotes", tags=["audiobook"], status_code=202)
-    def extract_quotes(project_id: str, body: ClassificationRequest | None = None) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.reclassify_source(
-                context, project_id=project_id, custom_rules=body.custom_rules if body else None,
-                extraction_only=True,
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
-    def reclassify_audiobook(
-        project_id: str, body: ClassificationRequest | None = None,
-    ) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.reclassify_source(
-                context, project_id=project_id,
-                custom_rules=body.custom_rules if body else None,
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/classification-rules", tags=["audiobook"])
-    def save_classification_rules(project_id: str, body: ClassificationRequest) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.save_classification_rules(context, project_id=project_id, custom_rules=body.custom_rules)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @router.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
-    def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.start_preview(context, project_id=project_id,
+@router.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
+def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.set_pronunciation(context, project_id=project_id,
                                          **request.model_dump())
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.get(
-        "/api/audiobook/projects/{project_id}/previews/{job_id}/audio",
-        response_model=None,
-        response_class=Response,
-        responses=_binary_response("audio/wav"),
-        tags=["audiobook"],
-    )
-    def preview_audio(project_id: str, job_id: str) -> Response:
-        service, context = _service_and_context()
-        try:
-            content = service.read_preview(context, project_id=project_id,
-                                           job_id=job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="preview audio not found") from exc
-        return Response(content, media_type="audio/wav")
-
-    @router.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
-    def start_export(project_id: str, request: StartExport) -> dict[str, str]:
-        service, context = _service_and_context()
-        try:
-            return service.start_export(context, project_id=project_id, format=request.format)
-        except ValueError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=409, detail="audiobook asset is unavailable") from exc
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
-    def list_exports(project_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return {"exports": service.list_exports(context, project_id)}
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
-
-    @router.get(
-        "/api/audiobook/projects/{project_id}/exports/{export_id}/download",
-        response_model=None,
-        response_class=StreamingResponse,
-        responses=_binary_response(
-            "audio/mp4", "audio/flac", "audio/wav", "audio/mpeg"
-        ),
-        tags=["audiobook"],
-    )
-    def download_export(project_id: str, export_id: str) -> StreamingResponse:
-        service, context = _service_and_context()
-        try:
-            handle, mime, format = service.open_export(
-                context, project_id=project_id, export_id=export_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook export not found") from exc
-        def chunks():
-            with handle:
-                while chunk := handle.read(1024 * 1024):
-                    yield chunk
-
-        return StreamingResponse(chunks(), media_type=mime,
-                                 background=BackgroundTask(handle.close), headers={
-            "Content-Length": str(os.fstat(handle.fileno()).st_size),
-            "Content-Disposition": f'attachment; filename="audiobook.{format}"',
-        })
-
-    @router.get("/api/audiobook/projects/{project_id}/exports/{export_id}/report", tags=["audiobook"])
-    def export_report(project_id: str, export_id: str) -> dict[str, object]:
-        service, context = _service_and_context()
-        try:
-            return service.export_report(context, project_id=project_id,
-                                         export_id=export_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="audiobook export not found") from exc
-
-    return router
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
 
-def create_audiobook_background_worker() -> BackgroundWorker:
-    stop = threading.Event()
-    thread: threading.Thread | None = None
-    render_thread: threading.Thread | None = None
-    preview_thread: threading.Thread | None = None
+@router.post(
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject",
+    tags=["audiobook"],
+)
+def reject_speaker(project_id: str, speaker_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.reject_speaker(
+            context, project_id=project_id, speaker_id=speaker_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="speaker not found") from exc
 
-    def worker_runtime() -> tuple[Any, Any] | None:
-        while not stop.is_set():
+
+@router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
+def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.assign_voice(
+            context, project_id=project_id, speaker_id=speaker_id,
+            voice_profile_id=request.voice_profile_id,
+        )
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="speaker not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
+def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.confirm_alias(context, project_id=project_id,
+                                     speaker_id=speaker_id, alias=request.alias)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="speaker not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
+def resolve_issue(project_id: str, issue_id: str, request: ResolveReviewIssue) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.resolve_issue(
+            context, project_id=project_id, issue_id=issue_id, **request.model_dump(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/spans/{span_id}/annotation", tags=["audiobook"])
+def revise_span(project_id: str, span_id: str, request: ReviseSpanAnnotation) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.revise_span(context, project_id=project_id,
+                                   span_id=span_id, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="span or speaker not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
+def start_render(project_id: str, request: StartRender) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.start_render(context, project_id=project_id, **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel", tags=["audiobook"])
+def cancel_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.cancel_job(context, project_id=project_id, job_id=job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/pause", tags=["audiobook"])
+def pause_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.pause_job(context, project_id=project_id, job_id=job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/resume", tags=["audiobook"])
+def resume_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.resume_job(context, project_id=project_id, job_id=job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/render/pause", tags=["audiobook"])
+def pause_audiobook_render_queue(project_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.pause_render_queue(context, project_id=project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/render/resume", tags=["audiobook"])
+def resume_audiobook_render_queue(project_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.pause_render_queue(context, project_id=project_id, resume=True)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])
+def stop_audiobook_render_queue(project_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.stop_render_queue(context, project_id=project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
+def retry_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.retry_pipeline_job(context, project_id=project_id, job_id=job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/extract-quotes", tags=["audiobook"], status_code=202)
+def extract_quotes(project_id: str, body: ClassificationRequest | None = None) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.reclassify_source(
+            context, project_id=project_id, custom_rules=body.custom_rules if body else None,
+            extraction_only=True,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
+def reclassify_audiobook(
+    project_id: str, body: ClassificationRequest | None = None,
+) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.reclassify_source(
+            context, project_id=project_id,
+            custom_rules=body.custom_rules if body else None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/classification-rules", tags=["audiobook"])
+def save_classification_rules(project_id: str, body: ClassificationRequest) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.save_classification_rules(context, project_id=project_id, custom_rules=body.custom_rules)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
+def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.start_preview(context, project_id=project_id,
+                                     **request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.get(
+    "/api/audiobook/projects/{project_id}/previews/{job_id}/audio",
+    response_model=None,
+    response_class=Response,
+    responses=_binary_response("audio/wav"),
+    tags=["audiobook"],
+)
+def preview_audio(project_id: str, job_id: str) -> Response:
+    service, context = _service_and_context()
+    try:
+        content = service.read_preview(context, project_id=project_id,
+                                       job_id=job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="preview audio not found") from exc
+    return Response(content, media_type="audio/wav")
+
+
+@router.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
+def start_export(project_id: str, request: StartExport) -> dict[str, str]:
+    service, context = _service_and_context()
+    try:
+        return service.start_export(context, project_id=project_id, format=request.format)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=409, detail="audiobook asset is unavailable") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
+def list_exports(project_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return {"exports": service.list_exports(context, project_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+
+@router.get(
+    "/api/audiobook/projects/{project_id}/exports/{export_id}/download",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses=_binary_response(
+        "audio/mp4", "audio/flac", "audio/wav", "audio/mpeg"
+    ),
+    tags=["audiobook"],
+)
+def download_export(project_id: str, export_id: str) -> StreamingResponse:
+    service, context = _service_and_context()
+    try:
+        handle, mime, format = service.open_export(
+            context, project_id=project_id, export_id=export_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook export not found") from exc
+    def chunks():
+        with handle:
+            while chunk := handle.read(1024 * 1024):
+                yield chunk
+
+    return StreamingResponse(chunks(), media_type=mime,
+                             background=BackgroundTask(handle.close), headers={
+        "Content-Length": str(os.fstat(handle.fileno()).st_size),
+        "Content-Disposition": f'attachment; filename="audiobook.{format}"',
+    })
+
+
+@router.get("/api/audiobook/projects/{project_id}/exports/{export_id}/report", tags=["audiobook"])
+def export_report(project_id: str, export_id: str) -> dict[str, object]:
+    service, context = _service_and_context()
+    try:
+        return service.export_report(context, project_id=project_id,
+                                     export_id=export_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="audiobook export not found") from exc
+
+
+class _AudiobookWorkers:
+    """The pipeline, render and preview loops behind the audiobook background worker.
+
+    Each loop claims durable jobs only while this process owns background work,
+    and exits when ownership is revoked.
+    """
+
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._threads: list[threading.Thread] = []
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._threads = [
+            self._spawn("audiobook-ingest", self._pipeline_loop),
+            self._spawn("audiobook-render", self._render_loop),
+            self._spawn("audiobook-preview", self._preview_loop),
+        ]
+
+    def stop(self) -> None:
+        self._stop.set()
+        for thread in self._threads:
+            thread.join(timeout=2.0)
+        if any(thread.is_alive() for thread in self._threads):
+            raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
+
+    @staticmethod
+    def _spawn(name: str, loop: Any) -> threading.Thread:
+        # Threads do not inherit context variables: keep the owner's scope.
+        thread = threading.Thread(target=copy_context().run, args=(loop,), name=name, daemon=True)
+        thread.start()
+        return thread
+
+    def _pipeline_loop(self) -> None:
+        from .assembly_service import run_assemble_once
+        from .export_service import run_export_once
+        from .worker import run_analyze_once, run_ingest_once
+
+        def step(database: Any, blobs: Any, context: Any, worker_id: str) -> bool:
+            return bool(
+                run_ingest_once(database, blobs, context, worker_id=worker_id)
+                or run_analyze_once(database, context, worker_id=worker_id)
+                or run_assemble_once(database, blobs, context, worker_id=worker_id)
+                or run_export_once(database, blobs, context, worker_id=worker_id)
+            )
+
+        self._poll("ingest", step, failure="ingest_poll_failed")
+
+    def _render_loop(self) -> None:
+        from .render_service import run_render_once
+
+        self._poll("render", lambda database, blobs, context, worker_id: run_render_once(
+            database, blobs, context, worker_id=worker_id,
+        ), failure="render_poll_failed")
+
+    def _preview_loop(self) -> None:
+        from .render_service import run_preview_once
+
+        self._poll("preview", lambda database, blobs, context, worker_id: run_preview_once(
+            database, blobs, context, worker_id=worker_id,
+        ), failure="preview_poll_failed")
+
+    def _poll(self, kind: str, step: Any, *, failure: str) -> None:
+        runtime = self._runtime()
+        if runtime is None:
+            return
+        service, context = runtime
+        worker_id = f"audiobook:{kind}:{uuid4().hex}"
+        while not self._stop.is_set():
+            try:
+                require_background_owner()
+                if not step(service.database, service.blobs, context, worker_id):
+                    self._stop.wait(1.0)
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                self._error(failure, exc)
+                self._stop.wait(5.0)
+
+    def _runtime(self) -> tuple[Any, Any] | None:
+        while not self._stop.is_set():
             try:
                 require_background_owner()
                 return _service_and_context()
             except BackgroundOwnershipUnavailable:
                 return None
             except Exception as exc:
-                worker_error("initialize_failed", exc)
-                stop.wait(5.0)
+                self._error("initialize_failed", exc)
+                self._stop.wait(5.0)
         return None
 
-    def worker_error(transition: str, error: Exception) -> None:
+    @staticmethod
+    def _error(transition: str, error: Exception) -> None:
         runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
                            transition=transition, error=error, level="warning")
 
-    def worker_loop() -> None:
-        from .assembly_service import run_assemble_once
-        from .export_service import run_export_once
-        from .worker import run_analyze_once, run_ingest_once
 
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = service.blobs
-        worker_id = f"audiobook:ingest:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                active = run_ingest_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    active = run_analyze_once(database, context, worker_id=worker_id)
-                if not active:
-                    active = run_assemble_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    active = run_export_once(database, blobs, context, worker_id=worker_id)
-                if not active:
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("ingest_poll_failed", exc)
-                stop.wait(5.0)
+def create_audiobook_router() -> APIRouter:
+    return router
 
-    def start_worker() -> None:
-        nonlocal thread, render_thread, preview_thread
-        stop.clear()
-        thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
-        thread.start()
-        render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
-        render_thread.start()
-        preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
-        preview_thread.start()
 
-    def render_worker_loop() -> None:
-        from .render_service import run_render_once
-
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = service.blobs
-        worker_id = f"audiobook:render:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                if not run_render_once(database, blobs, context, worker_id=worker_id):
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("render_poll_failed", exc)
-                stop.wait(5.0)
-
-    def preview_worker_loop() -> None:
-        from .render_service import run_preview_once
-
-        runtime = worker_runtime()
-        if runtime is None:
-            return
-        service, context = runtime
-        database = service.database
-        blobs = service.blobs
-        worker_id = f"audiobook:preview:{uuid4().hex}"
-        while not stop.is_set():
-            try:
-                require_background_owner()
-                if not run_preview_once(database, blobs, context, worker_id=worker_id):
-                    stop.wait(1.0)
-            except BackgroundOwnershipUnavailable:
-                return
-            except Exception as exc:
-                worker_error("preview_poll_failed", exc)
-                stop.wait(5.0)
-
-    def stop_worker() -> None:
-        stop.set()
-        if thread is not None:
-            thread.join(timeout=2.0)
-        if render_thread is not None:
-            render_thread.join(timeout=2.0)
-        if preview_thread is not None:
-            preview_thread.join(timeout=2.0)
-        if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
-            raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
-
-    monitor = SimpleNamespace(start=start_worker)
+def create_audiobook_background_worker() -> BackgroundWorker:
+    workers = _AudiobookWorkers()
 
     async def startup() -> None:
-        await asyncio.to_thread(monitor.start)
+        await asyncio.to_thread(workers.start)
 
     async def shutdown() -> None:
-        await asyncio.to_thread(stop_worker)
+        await asyncio.to_thread(workers.stop)
 
     return BackgroundWorker(
-        name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+        name="audiobook", monitor=workers, startup=(startup,), shutdown=(shutdown,),
         requires=frozenset({RuntimeCapability.RUN_JOB_WORKERS}),
     )

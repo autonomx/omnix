@@ -377,8 +377,10 @@
       "app.audiobook.feature",
       "app.audiobook.hashing",
       "app.audiobook.integrity",
+      "app.audiobook.leases",
       "app.audiobook.model_identity",
       "app.audiobook.models",
+      "app.audiobook.project_repository",
       "app.audiobook.render_cache",
       "app.audiobook.render_keys",
       "app.audiobook.render_planner",
@@ -770,6 +772,7 @@
       "app.providers.stt_segment_scheduler",
       "app.providers.stt_streaming_audio",
       "app.providers.tts_abstraction",
+      "app.providers.tts_artifacts",
       "app.providers.tts_priority",
       "app.providers.tts_service",
       "app.replay",
@@ -3024,7 +3027,7 @@
         "category": "cache",
         "invalidation": "_fingerprint.cache_clear",
         "kind": "function_cache",
-        "line": 37,
+        "line": 33,
         "max_entries": 4,
         "maxsize": 4,
         "path": "src/app/audiobook/model_identity.py",
@@ -7390,7 +7393,7 @@
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 391
+      "value": 387
     },
     "inline_prompt_strings": {
       "direction": "lower",
@@ -7570,5 +7573,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "8dfe200f0033633814ab4ff38d057105bd7b739d8f8a0bd9b78cf7e2b6d39dac"
+  "source_digest": "119256bbe73625872664053d1c9817a70467088562c2802062b75f8cdf78ca14"
 }

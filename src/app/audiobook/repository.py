@@ -12,7 +12,7 @@ from .integrity import validate_revision
 from .models import SourceRevision
 
 
-def _cancel_current_render_jobs(jobs: Any, context: TenantContext, render_run_id: str) -> None:
+def cancel_render_run_jobs(jobs: Any, context: TenantContext, render_run_id: str) -> None:
     cursor = None
     while True:
         rows = jobs.query_jobs(
@@ -216,7 +216,7 @@ class PostgresAudiobookRepository:
             from app.persistence.job_repository import PostgresJobRepository
 
             jobs = PostgresJobRepository(self.connection)
-            _cancel_current_render_jobs(jobs, context, str(active[0]))
+            cancel_render_run_jobs(jobs, context, str(active[0]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects

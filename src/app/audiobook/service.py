@@ -1,6 +1,7 @@
 """Application service for durable projects and asynchronous source ingestion."""
 from __future__ import annotations
 
+import hashlib
 from uuid import uuid4
 from pathlib import Path
 from io import BytesIO
@@ -27,8 +28,8 @@ from .extraction import (
 )
 from .spans import DETECTOR_VERSION
 from .analysis_repository import PostgresAudiobookAnalysisRepository
-from .hashing import bytes_hash
-from .repository import PostgresAudiobookRepository
+from .project_repository import PostgresAudiobookProjectRepository
+from .repository import PostgresAudiobookRepository, cancel_render_run_jobs
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
 from .render_readiness import check_book_render_readiness
@@ -62,6 +63,26 @@ if set(_MIME) != set(SUPPORTED_SOURCE_FORMATS):  # pragma: no cover - developer 
     raise RuntimeError("audiobook source format MIME mappings are incomplete")
 
 
+def _projects(work: Any) -> PostgresAudiobookProjectRepository:
+    return PostgresAudiobookProjectRepository(work.connection)
+
+
+def _measure_source(stream: BinaryIO) -> tuple[int, str]:
+    """Size and SHA-256 of a seekable stream, which is left rewound.
+
+    Reading stops just past ``MAX_SOURCE_BYTES``; the size then reports the
+    source as too large without hashing the rest.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    stream.seek(0)
+    while size <= MAX_SOURCE_BYTES and (chunk := stream.read(1024 * 1024)):
+        size += len(chunk)
+        digest.update(chunk)
+    stream.seek(0)
+    return size, digest.hexdigest()
+
+
 class AudiobookService:
     def __init__(self, database: PostgresDatabase, blobs: BlobStore) -> None:
         self.database = database
@@ -70,14 +91,9 @@ class AudiobookService:
     @staticmethod
     def _require_active_project(connection: Any, context: TenantContext,
                                 project_id: str, *, lock: bool = False) -> None:
-        locking = " FOR UPDATE" if lock else ""
-        row = connection.execute(
-            "SELECT 1 FROM omnix_audiobook_projects "
-            "WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL" + locking,
-            (context.workspace_id, project_id),
-        ).fetchone()
-        if row is None:
-            raise KeyError(project_id)
+        PostgresAudiobookProjectRepository(connection).require_active(
+            context, project_id, lock=lock,
+        )
 
     def create_project(
         self, context: TenantContext, *, title: str, author: str = "", language: str = "en",
@@ -102,16 +118,7 @@ class AudiobookService:
 
     @staticmethod
     def _save_classification_rules(work: Any, context: TenantContext, project_id: str, rules: str) -> None:
-        row = work.connection.execute(
-            """UPDATE omnix_audiobook_projects
-                  SET settings = jsonb_set(settings, '{classification_rules}', to_jsonb(%s::text), true),
-                      settings_revision = settings_revision + 1,
-                      updated_at = CURRENT_TIMESTAMP
-                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                RETURNING id""",
-            (rules, context.workspace_id, project_id),
-        ).fetchone()
-        if row is None:
+        if not _projects(work).save_classification_rules(context, project_id, rules):
             raise KeyError(project_id)
 
     def save_classification_rules(
@@ -132,19 +139,9 @@ class AudiobookService:
         if not title:
             raise ValueError("title is required")
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET title = %s, author = %s,
-                          state = CASE WHEN state = 'exported'
-                                       THEN 'ready_to_export' ELSE state END,
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s
-                      AND deleted_at IS NULL
-                    RETURNING id, title, author, language, state,
-                              current_source_revision_id""",
-                (title, author, context.workspace_id, project_id),
-            ).fetchone()
+            row = _projects(work).update_metadata(
+                context, project_id, title=title, author=author,
+            )
             if row is None:
                 raise KeyError(project_id)
             work.commit()
@@ -157,13 +154,8 @@ class AudiobookService:
     def delete_project(self, context: TenantContext, *, project_id: str) -> None:
         """Hide a project while retaining immutable source and production history."""
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT id FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
-            if project is None:
+            projects = _projects(work)
+            if projects.lock_active(context, project_id) is None:
                 raise KeyError(project_id)
             jobs = work.jobs.query_jobs(
                 context,
@@ -175,16 +167,7 @@ class AudiobookService:
             )
             for job in jobs:
                 work.jobs.request_cancel(context, str(job["id"]))
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET deleted_at = CURRENT_TIMESTAMP,
-                          current_source_revision_id = NULL,
-                          state = 'deleted',
-                          settings = settings - 'current_render_run_id',
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
-                (context.workspace_id, project_id),
-            )
+            projects.mark_deleted(context, project_id)
             work.commit()
 
     def list_projects(self, context: TenantContext, *, offset: int = 0) -> list[dict[str, object]]:
@@ -204,18 +187,11 @@ class AudiobookService:
                     include_text: bool = True) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             repository = PostgresAudiobookRepository(work.connection)
+            projects = _projects(work)
             project = repository.get_project(context, project_id)
             if project is None:
                 raise KeyError(project_id)
-            cover_row = work.connection.execute(
-                """SELECT p.cover_asset_id, p.settings, a.created_at
-                     FROM omnix_audiobook_projects p
-                     LEFT JOIN omnix_assets a
-                       ON a.workspace_id = p.workspace_id AND a.id = p.cover_asset_id
-                      AND a.lifecycle_status = 'active'
-                    WHERE p.workspace_id = %s AND p.id = %s""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            cover_row = projects.cover_summary(context, project_id)
             project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
             project["cover_created_at"] = cover_row[2].isoformat() if cover_row and cover_row[2] else None
             project_settings = dict(cover_row[1] or {}) if cover_row else {}
@@ -227,19 +203,7 @@ class AudiobookService:
             project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
             project["render_policy_version"] = RENDER_POLICY_VERSION
             project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
-            source_row = work.connection.execute(
-                """SELECT r.source_format, a.metadata->>'filename', a.byte_size, a.created_at
-                     FROM omnix_audiobook_projects p
-                     LEFT JOIN omnix_audiobook_source_revisions r
-                       ON r.workspace_id = p.workspace_id
-                      AND r.id = p.current_source_revision_id
-                     JOIN omnix_assets a
-                       ON a.workspace_id = r.workspace_id
-                      AND a.id = r.original_asset_id
-                    WHERE p.workspace_id = %s AND p.id = %s
-                      AND a.lifecycle_status = 'active'""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            source_row = projects.source_summary(context, project_id)
             project["source_format"] = str(source_row[0]) if source_row else None
             project["source_filename"] = str(source_row[1]) if source_row and source_row[1] else None
             project["source_size_bytes"] = int(source_row[2]) if source_row and source_row[2] is not None else 0
@@ -250,17 +214,9 @@ class AudiobookService:
                     chapter["spans"] = repository.list_spans(context, chapter["id"])
                     chapter["span_count"] = len(chapter["spans"])
             elif project["current_source_revision_id"]:
-                chapter_rows = work.connection.execute(
-                    """SELECT id, ordinal, title, canonical_hash,
-                              length(canonical_text),
-                              (SELECT count(*) FROM omnix_audiobook_spans s
-                                WHERE s.workspace_id = c.workspace_id
-                                  AND s.chapter_id = c.id)
-                         FROM omnix_audiobook_chapters AS c
-                        WHERE c.workspace_id = %s AND c.source_revision_id = %s
-                        ORDER BY ordinal""",
-                    (context.workspace_id, project["current_source_revision_id"]),
-                ).fetchall()
+                chapter_rows = projects.chapter_summaries(
+                    context, project["current_source_revision_id"],
+                )
                 chapters = [{"id": str(row[0]), "ordinal": int(row[1]),
                              "title": str(row[2]), "canonical_hash": str(row[3]),
                              "character_count": int(row[4]), "span_count": int(row[5])}
@@ -273,13 +229,7 @@ class AudiobookService:
                 ) if project["state"] not in {"extracted", "ingesting"} else []
             )
             project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
-            pronunciation_rows = work.connection.execute(
-                """SELECT DISTINCT ON (source_term) source_term, spoken_term, revision
-                     FROM omnix_audiobook_pronunciations
-                    WHERE workspace_id = %s AND project_id = %s
-                    ORDER BY source_term, revision DESC""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            pronunciation_rows = projects.current_pronunciations(context, project_id)
             project["pronunciations"] = [
                 {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
                 for row in pronunciation_rows
@@ -326,26 +276,14 @@ class AudiobookService:
                                        and int(job["attempt_count"]) < int(job["max_attempts"]))}
                     for job in job_rows
                 ]
-                render_job_ids = [str(job["id"]) for job in job_rows]
-                counts = work.connection.execute(
-                    """
-                    SELECT COALESCE(sum(jsonb_array_length(b.desired_keys)), 0),
-                           COALESCE(sum(jsonb_array_length(b.completed_keys)), 0)
-                      FROM omnix_audiobook_render_batches AS b
-                     WHERE b.workspace_id = %s AND b.job_id = ANY(%s)
-                    """, (context.workspace_id, render_job_ids),
-                ).fetchone()
-                project["render_progress"] = {"total": int(counts[0]), "completed": int(counts[1])}
+                total, completed = projects.render_key_counts(
+                    context, [str(job["id"]) for job in job_rows],
+                )
+                project["render_progress"] = {"total": total, "completed": completed}
             else:
                 project["render_jobs"] = []
                 project["render_progress"] = {"total": 0, "completed": 0}
-            export_rows = work.connection.execute(
-                """SELECT job_id, format, id, manifest_hash
-                     FROM omnix_audiobook_export_manifests
-                    WHERE workspace_id = %s AND project_id = %s
-                    ORDER BY created_at DESC LIMIT 20""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            export_rows = projects.recent_export_manifests(context, project_id)
             project["export_jobs"] = [
                 {"id": job["id"], "status": job["status"], "progress": job["progress"],
                  "error": job["error"], "format": str(row[1]), "manifest_id": str(row[2]),
@@ -368,33 +306,18 @@ class AudiobookService:
                 for job in preview_rows
             ]
             if project["current_source_revision_id"]:
-                text_rows = work.connection.execute(
-                    """SELECT canonical_text
-                         FROM omnix_audiobook_chapters
-                        WHERE workspace_id = %s AND source_revision_id = %s
-                        ORDER BY ordinal""",
-                    (context.workspace_id, project["current_source_revision_id"]),
-                ).fetchall()
+                text_rows = projects.chapter_texts(
+                    context, project["current_source_revision_id"],
+                )
                 for chapter, row in zip(chapters, text_rows):
                     chapter["word_count"] = len(str(row[0]).split())
                     chapter["estimated_runtime_seconds"] = (chapter["word_count"] / WORDS_PER_MINUTE) * 60.0
                 word_count = sum(chapter["word_count"] for chapter in chapters)
-                runtime_row = work.connection.execute(
-                    """SELECT COALESCE(sum(latest.duration_seconds), 0)
-                         FROM omnix_audiobook_chapters AS ch
-                         LEFT JOIN LATERAL (
-                             SELECT duration_seconds
-                               FROM omnix_audiobook_chapter_assemblies
-                              WHERE workspace_id = ch.workspace_id
-                                AND chapter_id = ch.id
-                              ORDER BY created_at DESC LIMIT 1
-                         ) AS latest ON TRUE
-                        WHERE ch.workspace_id = %s AND ch.source_revision_id = %s""",
-                    (context.workspace_id, project["current_source_revision_id"]),
-                ).fetchone()
                 project["word_count"] = word_count
                 project["estimated_runtime_seconds"] = (word_count / WORDS_PER_MINUTE) * 60.0
-                project["actual_runtime_seconds"] = float(runtime_row[0] or 0.0)
+                project["actual_runtime_seconds"] = projects.assembled_runtime_seconds(
+                    context, project["current_source_revision_id"],
+                )
             else:
                 project["word_count"] = 0
                 project["estimated_runtime_seconds"] = 0.0
@@ -413,36 +336,15 @@ class AudiobookService:
         from .speech_plan import build_speech_plan
 
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """SELECT c.id, c.ordinal, c.title, c.canonical_text, c.canonical_hash,
-                          c.source_revision_id, p.state, p.settings
-                     FROM omnix_audiobook_chapters c
-                     JOIN omnix_audiobook_projects p
-                       ON p.workspace_id = c.workspace_id
-                      AND p.current_source_revision_id = c.source_revision_id
-                    WHERE c.workspace_id = %s AND p.id = %s AND c.id = %s
-                      AND p.deleted_at IS NULL""",
-                (context.workspace_id, project_id, chapter_id),
-            ).fetchone()
+            projects = _projects(work)
+            row = projects.current_chapter(context, project_id, chapter_id)
             if row is None:
                 raise KeyError(chapter_id)
             spans = PostgresAudiobookRepository(work.connection).list_spans(context, chapter_id)
-            annotation_rows = work.connection.execute(
-                """SELECT s.id, a.id, a.revision, a.role, a.speaker_id,
-                          a.speaker_candidate, a.delivery, a.evidence, a.review_status
-                     FROM omnix_audiobook_spans s
-                     LEFT JOIN LATERAL (
-                         SELECT id, revision, role, speaker_id, speaker_candidate,
-                                delivery, evidence, review_status
-                           FROM omnix_audiobook_annotations
-                          WHERE workspace_id = s.workspace_id AND span_id = s.id
-                          ORDER BY revision DESC LIMIT 1
-                     ) a ON TRUE
-                    WHERE s.workspace_id = %s AND s.chapter_id = %s
-                      AND (%s::boolean OR a.review_status = 'user_resolved')
-                    ORDER BY s.ordinal""",
-                (context.workspace_id, chapter_id, row[6] not in {"extracted", "ingesting"}),
-            ).fetchall()
+            annotation_rows = projects.latest_annotations(
+                context, chapter_id,
+                include_unresolved=row[6] not in {"extracted", "ingesting"},
+            )
             annotations = {
                 str(item[0]): {"id": str(item[1]), "revision": int(item[2]),
                                "role": str(item[3]),
@@ -452,14 +354,10 @@ class AudiobookService:
                                "review_status": str(item[8])}
                 for item in annotation_rows if item[1] is not None
             }
-            pronunciation_rows = work.connection.execute(
-                """SELECT DISTINCT ON (source_term) source_term, spoken_term
-                     FROM omnix_audiobook_pronunciations
-                    WHERE workspace_id = %s AND project_id = %s
-                    ORDER BY source_term, revision DESC""",
-                (context.workspace_id, project_id),
-            ).fetchall()
-            overrides = {str(term): str(spoken) for term, spoken in pronunciation_rows}
+            overrides = {
+                str(term): str(spoken)
+                for term, spoken, _revision in projects.current_pronunciations(context, project_id)
+            }
             structure_repository = PostgresAudiobookDocumentStructureRepository(
                 work.connection
             )
@@ -545,12 +443,7 @@ class AudiobookService:
         from dataclasses import asdict
 
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT current_source_revision_id, settings
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            project = _projects(work).structure_settings(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             mode = str(dict(project[1] or {}).get("audiobook_mode") or "standard")
@@ -613,42 +506,13 @@ class AudiobookService:
         if mode not in {"standard", "story_only", "verbatim"}:
             raise ValueError("audiobook mode must be standard, story_only, or verbatim")
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT state, settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_render_settings(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             if project[1]:
-                rows = work.jobs.query_jobs(
-                    context,
-                    module="audiobook",
-                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                    input_fields=(("render_run_id", str(project[1])),),
-                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                    limit=500,
-                    for_update=True,
-                )
-                for job in rows:
-                    work.jobs.request_cancel(context, str(job["id"]))
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET settings = jsonb_set(
-                              settings - 'current_render_run_id',
-                              '{audiobook_mode}', to_jsonb(%s::text), true
-                          ),
-                          state = CASE
-                              WHEN state IN ('rendering', 'mastering', 'rendered',
-                                             'ready_to_export', 'exported')
-                              THEN 'ready_to_render' ELSE state END,
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                (mode, context.workspace_id, project_id),
-            )
+                cancel_render_run_jobs(work.jobs, context, str(project[1]))
+            projects.set_audiobook_mode(context, project_id, mode)
             work.commit()
         return {
             "project_id": project_id, "audiobook_mode": mode,
@@ -661,14 +525,8 @@ class AudiobookService:
         role_override: str | None = None,
     ) -> dict[str, object]:
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT current_source_revision_id, state,
-                          settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_for_override(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             if not project[0]:
@@ -743,17 +601,7 @@ class AudiobookService:
                     "max_attempts": 3,
                 })
             if project[2]:
-                rows = work.jobs.query_jobs(
-                    context,
-                    module="audiobook",
-                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                    input_fields=(("render_run_id", str(project[2])),),
-                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                    limit=500,
-                    for_update=True,
-                )
-                for job in rows:
-                    work.jobs.request_cancel(context, str(job["id"]))
+                cancel_render_run_jobs(work.jobs, context, str(project[2]))
             next_state = (
                 "analyzing"
                 if reanalysis_required
@@ -766,15 +614,7 @@ class AudiobookService:
                     else str(project[1])
                 )
             )
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET settings = settings - 'current_render_run_id',
-                          state = %s,
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                (next_state, context.workspace_id, project_id),
-            )
+            projects.set_state_clearing_render(context, project_id, next_state)
             work.commit()
         return {
             **result,
@@ -794,76 +634,37 @@ class AudiobookService:
     @staticmethod
     def _invalidate_speech_audio(work: Any, context: TenantContext, project_id: str, render_run_id: Any) -> None:
         if render_run_id:
-            jobs = work.jobs.query_jobs(
-                context,
-                module="audiobook",
-                job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                input_fields=(("render_run_id", str(render_run_id)),),
-                statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                limit=500,
-                for_update=True,
-            )
-            for job in jobs:
-                work.jobs.request_cancel(context, str(job["id"]))
-        work.connection.execute(
-            """UPDATE omnix_audiobook_projects
-                  SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
-                                   THEN 'ready_to_render' ELSE state END,
-                      settings = settings - 'current_render_run_id',
-                      settings_revision = settings_revision + 1, updated_at = CURRENT_TIMESTAMP
-                WHERE workspace_id = %s AND id = %s""",
-            (context.workspace_id, project_id),
-        )
+            cancel_render_run_jobs(work.jobs, context, str(render_run_id))
+        _projects(work).reset_render(context, project_id)
 
     def exclude_span_text(
         self, context: TenantContext, *, project_id: str, span_id: str,
         start_offset: int, end_offset: int, source_text: str,
     ) -> dict[str, str]:
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """SELECT s.source_text, s.start_offset, c.canonical_hash, c.ordinal,
-                          p.settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects p
-                     JOIN omnix_audiobook_chapters c ON c.workspace_id = p.workspace_id
-                      AND c.source_revision_id = p.current_source_revision_id
-                     JOIN omnix_audiobook_spans s ON s.workspace_id = c.workspace_id AND s.chapter_id = c.id
-                    WHERE p.workspace_id = %s AND p.id = %s AND s.id = %s AND p.deleted_at IS NULL
-                    FOR UPDATE OF p""",
-                (context.workspace_id, project_id, span_id),
-            ).fetchone()
+            projects = _projects(work)
+            row = projects.lock_current_span(context, project_id, span_id)
             if row is None:
                 raise KeyError(span_id)
             if not 0 <= start_offset < end_offset <= len(row[0]) or row[0][start_offset:end_offset] != source_text:
                 raise ValueError("selected text no longer matches the current source span")
-            exclusion = work.connection.execute(
-                """INSERT INTO omnix_audiobook_speech_exclusions
-                       (id, workspace_id, project_id, chapter_hash, chapter_ordinal, start_offset, end_offset, source_text)
-                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                     ON CONFLICT (workspace_id, project_id, chapter_hash, chapter_ordinal, start_offset, end_offset)
-                     DO UPDATE SET active = TRUE, updated_at = CURRENT_TIMESTAMP
-                     RETURNING id""",
-                (f"ab:exclude:{uuid4().hex}", context.workspace_id, project_id, row[2], row[3],
-                 int(row[1]) + start_offset, int(row[1]) + end_offset, source_text),
-            ).fetchone()
+            exclusion_id = projects.upsert_speech_exclusion(
+                context, project_id, exclusion_id=f"ab:exclude:{uuid4().hex}",
+                chapter_hash=row[2], chapter_ordinal=row[3],
+                start_offset=int(row[1]) + start_offset,
+                end_offset=int(row[1]) + end_offset, source_text=source_text,
+            )
             self._invalidate_speech_audio(work, context, project_id, row[4])
             work.commit()
-        return {"id": str(exclusion[0])}
+        return {"id": exclusion_id}
 
     def restore_span_text(self, context: TenantContext, *, project_id: str, exclusion_id: str) -> dict[str, bool]:
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_render_run(context, project_id)
             if project is None:
                 raise KeyError(project_id)
-            row = work.connection.execute(
-                """UPDATE omnix_audiobook_speech_exclusions SET active = FALSE, updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND project_id = %s AND id = %s RETURNING id""",
-                (context.workspace_id, project_id, exclusion_id),
-            ).fetchone()
-            if row is None:
+            if not projects.deactivate_speech_exclusion(context, project_id, exclusion_id):
                 raise KeyError(exclusion_id)
             self._invalidate_speech_audio(work, context, project_id, project[0])
             work.commit()
@@ -877,57 +678,19 @@ class AudiobookService:
         if not term or not spoken or len(term) > 128 or len(spoken) > 256:
             raise ValueError("pronunciation terms must be non-empty and within length limits")
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT state, settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_render_settings(context, project_id)
             if project is None:
                 raise KeyError(project_id)
-            current = work.connection.execute(
-                """SELECT revision, spoken_term FROM omnix_audiobook_pronunciations
-                    WHERE workspace_id = %s AND project_id = %s AND source_term = %s
-                    ORDER BY revision DESC LIMIT 1""",
-                (context.workspace_id, project_id, term),
-            ).fetchone()
+            current = projects.latest_pronunciation(context, project_id, term)
             if current and current[1] == spoken:
                 return {"source_term": term, "spoken_term": spoken, "revision": int(current[0])}
             revision = int(current[0]) + 1 if current else 1
-            from .hashing import canonical_json
-
-            work.connection.execute(
-                """INSERT INTO omnix_audiobook_pronunciations
-                    (id, workspace_id, project_id, revision, source_term,
-                     spoken_term, settings)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)""",
-                (f"ab:pron:{uuid4().hex}", context.workspace_id, project_id,
-                 revision, term, spoken,
-                 canonical_json({"confirmed_by_user_id": context.user_id})),
+            projects.append_pronunciation(
+                context, project_id, pronunciation_id=f"ab:pron:{uuid4().hex}",
+                revision=revision, source_term=term, spoken_term=spoken,
             )
-            if project[1]:
-                rows = work.jobs.query_jobs(
-                    context,
-                    module="audiobook",
-                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                    input_fields=(("render_run_id", str(project[1])),),
-                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                    limit=500,
-                    for_update=True,
-                )
-                for job in rows:
-                    work.jobs.request_cancel(context, str(job["id"]))
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
-                                                    'ready_to_export', 'exported')
-                                       THEN 'ready_to_render' ELSE state END,
-                          settings = settings - 'current_render_run_id',
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, project_id),
-            )
+            self._invalidate_speech_audio(work, context, project_id, project[1])
             work.commit()
         return {"source_term": term, "spoken_term": spoken, "revision": revision}
 
@@ -953,12 +716,8 @@ class AudiobookService:
         blob = self.blobs.put_bytes(storage_key, content)
         try:
             with unit_of_work(self.database) as work:
-                project = work.connection.execute(
-                    """SELECT id FROM omnix_audiobook_projects
-                        WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
-                    (context.workspace_id, project_id),
-                ).fetchone()
-                if project is None:
+                projects = _projects(work)
+                if projects.lock_active(context, project_id) is None:
                     raise KeyError(project_id)
                 work.assets.create(context, {
                     "id": asset_id, "module": "audiobook", "asset_type": "cover",
@@ -967,15 +726,7 @@ class AudiobookService:
                     "storage_provider": blob["storage_provider"], "storage_key": storage_key,
                     "metadata": {"filename": filename},
                 })
-                work.connection.execute(
-                    """UPDATE omnix_audiobook_projects
-                          SET cover_asset_id = %s,
-                              state = CASE WHEN state = 'exported' THEN 'ready_to_export' ELSE state END,
-                              settings_revision = settings_revision + 1,
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    (asset_id, context.workspace_id, project_id),
-                )
+                projects.set_cover(context, project_id, asset_id)
                 work.commit()
         except Exception:
             if blob["created"]:
@@ -985,15 +736,7 @@ class AudiobookService:
 
     def read_cover(self, context: TenantContext, *, project_id: str) -> tuple[bytes, str]:
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """SELECT a.storage_key, a.checksum_sha256, a.mime_type
-                     FROM omnix_audiobook_projects p
-                     JOIN omnix_assets a ON a.workspace_id = p.workspace_id
-                                        AND a.id = p.cover_asset_id
-                    WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
-                      AND a.lifecycle_status = 'active'""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            row = _projects(work).cover_blob(context, project_id)
             work.rollback()
         if row is None:
             raise KeyError(project_id)
@@ -1009,66 +752,30 @@ class AudiobookService:
         storage_key: str
         relationship: str
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT cover_asset_id
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                    FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_cover(context, project_id)
             if project is None:
                 raise KeyError(project_id)
 
-            asset = work.connection.execute(
-                """SELECT id, storage_key, revision, lifecycle_status
-                     FROM omnix_assets
-                    WHERE workspace_id = %s AND id = %s
-                    FOR UPDATE""",
-                (context.workspace_id, asset_id),
-            ).fetchone()
+            asset = projects.lock_asset(context, asset_id)
             if asset is None or str(asset[3]) == "deleted":
                 raise KeyError(asset_id)
             storage_key = str(asset[1])
 
             if project[0] is not None and str(project[0]) == asset_id:
                 relationship = "cover"
+            elif projects.is_export_output(context, project_id, asset_id):
+                relationship = "export"
+            elif projects.is_source_original(context, project_id, asset_id):
+                raise ValueError("the manuscript source cannot be deleted")
             else:
-                export = work.connection.execute(
-                    """SELECT id
-                         FROM omnix_audiobook_exports
-                        WHERE workspace_id = %s AND project_id = %s
-                          AND output_asset_id = %s""",
-                    (context.workspace_id, project_id, asset_id),
-                ).fetchone()
-                if export is not None:
-                    relationship = "export"
-                else:
-                    source = work.connection.execute(
-                        """SELECT 1
-                             FROM omnix_audiobook_source_revisions
-                            WHERE workspace_id = %s AND project_id = %s
-                              AND original_asset_id = %s
-                            LIMIT 1""",
-                        (context.workspace_id, project_id, asset_id),
-                    ).fetchone()
-                    if source is not None:
-                        raise ValueError("the manuscript source cannot be deleted")
-                    raise KeyError(asset_id)
+                raise KeyError(asset_id)
 
             deleted = work.assets.mark_deleted(
                 context, asset_id=asset_id, expected_revision=int(asset[2]),
             )
             if relationship == "cover":
-                work.connection.execute(
-                    """UPDATE omnix_audiobook_projects
-                          SET cover_asset_id = NULL,
-                              state = CASE WHEN state = 'exported'
-                                           THEN 'ready_to_export' ELSE state END,
-                              settings_revision = settings_revision + 1,
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, project_id),
-                )
+                projects.set_cover(context, project_id, None)
             work.audit.append(
                 context,
                 aggregate_type="asset",
@@ -1085,20 +792,7 @@ class AudiobookService:
     def open_source(self, context: TenantContext, *, project_id: str) -> tuple[BinaryIO, str, str]:
         """Open the current immutable source revision for browser download."""
         with unit_of_work(self.database) as work:
-            row = work.connection.execute(
-                """SELECT a.storage_key, a.checksum_sha256, a.mime_type,
-                          r.source_format, a.metadata->>'filename'
-                     FROM omnix_audiobook_projects p
-                     JOIN omnix_audiobook_source_revisions r
-                       ON r.workspace_id = p.workspace_id
-                      AND r.id = p.current_source_revision_id
-                     JOIN omnix_assets a
-                       ON a.workspace_id = r.workspace_id
-                      AND a.id = r.original_asset_id
-                    WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
-                      AND a.lifecycle_status = 'active'""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            row = _projects(work).current_source_blob(context, project_id)
             work.rollback()
         if row is None:
             raise KeyError(project_id)
@@ -1398,13 +1092,8 @@ class AudiobookService:
             if status not in terminal:
                 raise ValueError("only terminal audiobook jobs can be retried")
             payload = dict(job["input_payload"] or {})
-            project = work.connection.execute(
-                """SELECT current_source_revision_id,
-                          settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_revision_and_run(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             if job_type == "audiobook.ingest" and project[0] is not None:
@@ -1446,12 +1135,7 @@ class AudiobookService:
                     "audiobook.assemble-chapter": "mastering",
                 }[job_type]
             if next_state is not None:
-                work.connection.execute(
-                    """UPDATE omnix_audiobook_projects
-                          SET state = %s, updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    (next_state, context.workspace_id, project_id),
-                )
+                projects.set_state(context, project_id, next_state)
             work.commit()
         return {"job_id": retry_id, "retry_of": job_id, "type": job_type}
 
@@ -1464,24 +1148,8 @@ class AudiobookService:
         if custom_rules is not None:
             custom_rules = self._normalize_classification_rules(custom_rules)
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT p.current_source_revision_id,
-                          p.settings->>'current_render_run_id',
-                          r.original_asset_id,
-                          r.source_format,
-                          r.extractor_version,
-                          r.extraction_settings,
-                          p.settings->>'classification_rules',
-                          p.settings->>'quote_extraction_rules'
-                     FROM omnix_audiobook_projects p
-                     JOIN omnix_audiobook_source_revisions r
-                       ON r.workspace_id = p.workspace_id
-                      AND r.id = p.current_source_revision_id
-                    WHERE p.workspace_id = %s AND p.id = %s
-                      AND p.deleted_at IS NULL
-                    FOR UPDATE OF p""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_with_current_revision(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             requested_rules = custom_rules
@@ -1512,39 +1180,12 @@ class AudiobookService:
             if active_analysis or active_ingest:
                 raise ValueError("classification is already running")
 
-            stale_detector = bool(work.connection.execute(
-                """SELECT EXISTS (
-                       SELECT 1
-                         FROM omnix_audiobook_spans s
-                         JOIN omnix_audiobook_chapters c
-                           ON c.workspace_id = s.workspace_id
-                          AND c.id = s.chapter_id
-                        WHERE c.workspace_id = %s
-                          AND c.source_revision_id = %s
-                          AND s.detector_version <> %s
-                   )""",
-                (context.workspace_id, str(source_revision_id), DETECTOR_VERSION),
-            ).fetchone()[0])
-            needs_style_rediscovery = bool(work.connection.execute(
-                """SELECT EXISTS (
-                       SELECT 1
-                         FROM omnix_audiobook_review_issues i
-                         JOIN omnix_audiobook_annotations a
-                           ON a.workspace_id = i.workspace_id
-                          AND a.id = i.annotation_id
-                         JOIN omnix_audiobook_spans s
-                           ON s.workspace_id = a.workspace_id
-                          AND s.id = a.span_id
-                         JOIN omnix_audiobook_chapters c
-                           ON c.workspace_id = s.workspace_id
-                          AND c.id = s.chapter_id
-                        WHERE i.workspace_id = %s
-                          AND c.source_revision_id = %s
-                          AND i.status = 'open'
-                          AND i.reason = 'POSSIBLE_MISSED_DIALOGUE'
-                   )""",
-                (context.workspace_id, str(source_revision_id)),
-            ).fetchone()[0])
+            stale_detector = projects.has_stale_spans(
+                context, str(source_revision_id), DETECTOR_VERSION,
+            )
+            needs_style_rediscovery = projects.has_open_missed_dialogue(
+                context, str(source_revision_id),
+            )
             if not extraction_only and (
                 str(project[4]) != EXTRACTOR_VERSION or stale_detector
                 or custom_rules != str(project[7] or "")
@@ -1556,17 +1197,7 @@ class AudiobookService:
                 self._save_classification_rules(work, context, project_id, custom_rules)
             render_run_id = project[1]
             if render_run_id:
-                render_jobs = work.jobs.query_jobs(
-                    context,
-                    module="audiobook",
-                    job_types=("audiobook.render-chapter", "audiobook.assemble-chapter"),
-                    input_fields=(("project_id", project_id), ("render_run_id", str(render_run_id))),
-                    statuses=("queued", "waiting", "retrying", "leased", "running", "paused", "cancel_requested"),
-                    limit=500,
-                    for_update=True,
-                )
-                for job in render_jobs:
-                    work.jobs.request_cancel(context, str(job["id"]))
+                cancel_render_run_jobs(work.jobs, context, str(render_run_id))
 
             if needs_reextract:
                 job_id = f"ab:reextract:{uuid4().hex}"
@@ -1620,15 +1251,7 @@ class AudiobookService:
                 })
                 next_state = "analyzing"
 
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET state = %s,
-                          settings = settings - 'current_render_run_id',
-                          settings_revision = settings_revision + 1,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                (next_state, context.workspace_id, project_id),
-            )
+            projects.set_state_clearing_render(context, project_id, next_state)
             work.commit()
 
         return {
@@ -1648,12 +1271,8 @@ class AudiobookService:
             raise ValueError("this TTS provider does not apply generation seeds")
         assert_model_revision(provider_id, model_id, model_revision)
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """
-                SELECT current_source_revision_id, state FROM omnix_audiobook_projects
-                 WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE
-                """, (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_render_source(context, project_id)
             if project is None:
                 raise KeyError(project_id)
             readiness = check_book_render_readiness(
@@ -1682,16 +1301,7 @@ class AudiobookService:
                     "max_attempts": 5,
                 })
                 jobs.append(job_id)
-            work.connection.execute(
-                """
-                UPDATE omnix_audiobook_projects
-                   SET state = 'rendering',
-                       settings = jsonb_set(settings, '{current_render_run_id}', to_jsonb(%s::text), true),
-                       settings_revision = settings_revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE workspace_id = %s AND id = %s
-                """, (render_run_id, context.workspace_id, project_id),
-            )
+            projects.start_render_run(context, project_id, render_run_id)
             work.commit()
         return {
             "project_id": project_id,
@@ -1724,19 +1334,11 @@ class AudiobookService:
                 raise ValueError("preview voice profile is unavailable")
             voice_revision_hash = voice_reference_revision(materialize_asset(profile))
         with unit_of_work(self.database) as work:
-            project = work.connection.execute(
-                """SELECT current_source_revision_id FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
-                (context.workspace_id, project_id),
-            ).fetchone()
+            projects = _projects(work)
+            project = projects.lock_current_revision(context, project_id)
             if project is None:
                 raise KeyError(project_id)
-            chapter = work.connection.execute(
-                """SELECT id FROM omnix_audiobook_chapters
-                    WHERE workspace_id = %s AND id = %s AND source_revision_id = %s""",
-                (context.workspace_id, chapter_id, project[0]),
-            ).fetchone()
-            if chapter is None:
+            if not projects.chapter_in_revision(context, chapter_id, project[0]):
                 raise ValueError("chapter is not in the current source")
             units = load_chapter_units(work.connection, context, project_id=project_id,
                                        chapter_id=chapter_id, span_id=span_id,
@@ -1781,11 +1383,7 @@ class AudiobookService:
             valid_render = False
             render_id = refs.get("render_id")
             if render_id and asset is not None:
-                render = work.connection.execute(
-                    """SELECT audio_asset_id, audio_checksum FROM omnix_audiobook_renders
-                        WHERE workspace_id = %s AND id = %s""",
-                    (context.workspace_id, str(render_id)),
-                ).fetchone()
+                render = _projects(work).render_audio(context, str(render_id))
                 valid_render = bool(
                     render
                     and str(render[0]) == asset["id"]
@@ -1821,16 +1419,7 @@ class AudiobookService:
     def list_exports(self, context: TenantContext, project_id: str) -> list[dict[str, object]]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id)
-            rows = work.connection.execute(
-                """SELECT e.id, e.format, e.manifest_hash, e.output_asset_id,
-                          e.created_at, a.byte_size, a.created_at
-                     FROM omnix_audiobook_exports e
-                     JOIN omnix_assets a ON a.id = e.output_asset_id AND a.workspace_id = e.workspace_id
-                    WHERE e.workspace_id = %s AND e.project_id = %s
-                      AND a.lifecycle_status = 'active'
-                    ORDER BY e.created_at DESC""",
-                (context.workspace_id, project_id),
-            ).fetchall()
+            rows = _projects(work).list_exports(context, project_id)
             work.rollback()
         return [{"id": row[0], "format": row[1], "manifest_hash": row[2],
                  "asset_id": row[3], "created_at": row[4].isoformat(),
@@ -1840,14 +1429,7 @@ class AudiobookService:
                     export_id: str) -> tuple[BinaryIO, str, str]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id)
-            row = work.connection.execute(
-                """SELECT e.format, a.storage_key, a.checksum_sha256
-                     FROM omnix_audiobook_exports e
-                     JOIN omnix_assets a ON a.id = e.output_asset_id
-                    WHERE e.workspace_id = %s AND e.project_id = %s AND e.id = %s
-                      AND a.lifecycle_status = 'active'""",
-                (context.workspace_id, project_id, export_id),
-            ).fetchone()
+            row = _projects(work).export_blob(context, project_id, export_id)
             work.rollback()
         if row is None:
             raise KeyError(export_id)
@@ -1874,31 +1456,34 @@ class AudiobookService:
 
     def submit_source(
         self, context: TenantContext, *, project_id: str,
-        source_format: str, content: bytes, filename: str,
+        source_format: str, content: bytes | BinaryIO, filename: str,
         extraction_settings: dict[str, object] | None = None,
     ) -> dict[str, str]:
+        """Store a source and queue its ingestion.
+
+        ``content`` is bytes or a seekable binary stream; a stream is hashed
+        and stored in bounded chunks, never read into memory whole.
+        """
         if source_format not in _MIME:
             raise UnsupportedSource(f"unsupported source format: {source_format}")
-        if not content or len(content) > MAX_SOURCE_BYTES:
+        stream = BytesIO(content) if isinstance(content, (bytes, bytearray)) else content
+        size, source_hash = _measure_source(stream)
+        if not size or size > MAX_SOURCE_BYTES:
             raise UnsupportedSource("source is empty or exceeds the supported size limit")
         extraction_settings = normalize_extraction_settings(source_format, extraction_settings)
-        source_hash = bytes_hash(content)
         asset_id = f"ab:source:{uuid4().hex}"
         storage_key = f"audiobook/source/{asset_id.split(':')[-1]}-{source_hash}"
         job_id = f"ab:job:{uuid4().hex}"
-        blob = self.blobs.put_bytes(storage_key, content)
+        blob = self.blobs.put_stream(storage_key, stream, max_bytes=MAX_SOURCE_BYTES)
+        if blob["checksum_sha256"] != source_hash:
+            self.blobs.delete(storage_key)
+            raise UnsupportedSource("the source changed while it was being stored")
         try:
             with unit_of_work(self.database) as work:
                 repository = PostgresAudiobookRepository(work.connection)
                 if repository.get_project(context, project_id) is None:
                     raise KeyError(project_id)
-                rules_row = work.connection.execute(
-                    """SELECT settings->>'classification_rules'
-                         FROM omnix_audiobook_projects
-                        WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                        FOR UPDATE""",
-                    (context.workspace_id, project_id),
-                ).fetchone()
+                rules_row = _projects(work).lock_classification_rules(context, project_id)
                 if rules_row is None:
                     raise KeyError(project_id)
                 custom_rules = str(rules_row[0] or "")

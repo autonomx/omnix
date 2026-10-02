@@ -20,6 +20,7 @@ from .export import (FORMAT_MIME, ffmetadata,
                      ffmpeg_binary, ffmpeg_command, ffmpeg_version,
                      freeze_manifest, manifest_hash)
 from .hashing import canonical_json
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 
 
 _LOG = logging.getLogger(__name__)
@@ -225,7 +226,7 @@ def run_export_once(database: PostgresDatabase, blobs: BlobStore,
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.export"], lease_seconds=3600,
+            job_types=["audiobook.export"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -235,6 +236,15 @@ def run_export_once(database: PostgresDatabase, blobs: BlobStore,
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _export_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _export_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     storage_key = None
     persisted = False
@@ -317,7 +327,7 @@ def run_export_once(database: PostgresDatabase, blobs: BlobStore,
                                 return True
                             work.jobs.renew_lease(
                                 context, job_id=job_id, worker_id=worker_id,
-                                lease_token=token, lease_seconds=3600,
+                                lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                             )
                             work.commit()
                 if return_code != 0:

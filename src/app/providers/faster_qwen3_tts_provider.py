@@ -359,7 +359,23 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
     generation_strategy_revision = "faster-qwen3-tts-generation-v4"
-    
+
+    @staticmethod
+    def local_model_artifacts():
+        """The installed model directory that audiobook renders are pinned to."""
+        from app.settings.access import load_settings
+
+        from .tts_artifacts import LocalArtifactsUnavailable, LocalModelArtifacts
+
+        settings = load_settings().get("faster-qwen3-tts", {})
+        source = _resolve_model_source(_resolve_qwen3_model_name(settings))
+        directory = Path(source).expanduser().resolve()
+        if not directory.is_dir():
+            raise LocalArtifactsUnavailable("a local, pinned FasterQwen model directory is required")
+        if not list(directory.glob("*.safetensors")):
+            raise LocalArtifactsUnavailable("the configured FasterQwen model has no weight files")
+        return LocalModelArtifacts(model_id="Qwen3-TTS", directory=directory)
+
     default_capabilities = [
         AudioProviderCapability.STREAMING,
         AudioProviderCapability.VOICE_CLONING,

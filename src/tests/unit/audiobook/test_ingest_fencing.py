@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.audiobook.repository import PostgresAudiobookRepository, _cancel_current_render_jobs
+from app.audiobook.repository import PostgresAudiobookRepository, cancel_render_run_jobs
 from app.audiobook.worker import run_ingest_once
 from app.persistence.tenant import local_tenant_context
 
@@ -67,7 +67,7 @@ def test_render_cancellation_pages_through_all_matching_jobs():
         return first_page if len(calls) == 1 else second_page
 
     jobs = SimpleNamespace(query_jobs=query_jobs, request_cancel=lambda _context, job_id: canceled.append(job_id))
-    _cancel_current_render_jobs(jobs, context, "render:active")
+    cancel_render_run_jobs(jobs, context, "render:active")
 
     assert len(canceled) == 101
     assert calls[0]["after_created"] is None
