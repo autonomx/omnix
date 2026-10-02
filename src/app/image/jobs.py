@@ -1,7 +1,6 @@
 """Background execution and shared asset persistence for image jobs."""
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,10 +60,6 @@ def enqueue_image_job(
             ),
         ],
         input_payload=payload,
-        compat={
-            "legacy_system": "src/app/image/job_queue.py",
-            "legacy_queue_bypassed": True,
-        },
     )
     if idempotency_key is None:
         return store.create_job(request)
@@ -135,7 +130,7 @@ def execute_image_job(
         "Generating image - 0%",
         stage_id="generate-image",
     )
-    progress_poller = _start_image_generation_progress_poll(job_store, job.id)
+    provider_payload["_progress_callback"] = _generation_progress(job_store, job.id)
     try:
         result = generate_fn(provider_payload)
     except Exception as exc:
@@ -146,9 +141,6 @@ def execute_image_job(
             str(exc) or "Image generation failed",
             retryable=True,
         )
-    finally:
-        if progress_poller is not None:
-            progress_poller()
 
     if not bool(getattr(result, "ok", False)):
         message = str(getattr(result, "error", "") or "Image generation failed")
@@ -364,89 +356,31 @@ def _update_progress(
         )
 
 
-def _start_image_generation_progress_poll(
-    job_store: Any,
-    job_id: str,
-) -> Callable[[], None] | None:
-    try:
-        from app.image_http_client import (
-            get_image_generation_progress,
-            is_image_service_enabled,
-        )
-    except ImportError:
-        return None
-
-    if not is_image_service_enabled():
-        return None
-
-    stop = threading.Event()
+def _generation_progress(job_store: Any, job_id: str) -> Callable[[int, int, str], None]:
+    """Turn provider steps into job progress: up to 94 % while generating, 95 % at the end."""
     last_percent = -1
 
-    def poll_once() -> None:
+    def report(current: int, total: int, message: str = "Generating image") -> None:
         nonlocal last_percent
-        try:
-            data = get_image_generation_progress(job_id)
-        except RuntimeError:
-            return
-        if not bool(data.get("ok")):
-            return
-        total = int(data.get("total") or 1)
-        current = int(data.get("current") or 0)
-        generation_percent = max(
-            0,
-            min(100, round((current / max(1, total)) * 100)),
-        )
+        generation_percent = max(0, min(100, round((current / max(1, total)) * 100)))
         percent = (
             95
             if generation_percent >= 100
             else max(0, min(94, round(generation_percent * 0.95)))
         )
-        if percent < last_percent:
-            return
-        if (
-            percent == last_percent
-            and str(data.get("message") or "").strip() == "Generating image"
-        ):
+        message = str(message or "Generating image").strip() or "Generating image"
+        if percent < last_percent or (percent == last_percent and message == "Generating image"):
             return
         last_percent = percent
-        message = (
-            str(data.get("message") or "Generating image").strip()
-            or "Generating image"
-        )
         if message.lower() == "generating image":
             message = (
                 "Finalizing image..."
                 if generation_percent >= 100
                 else f"Generating image - {percent}%"
             )
-        _update_progress(
-            job_store,
-            job_id,
-            percent,
-            100,
-            message,
-            stage_id="generate-image",
-        )
-        if generation_percent >= 100:
-            stop.set()
+        _update_progress(job_store, job_id, percent, 100, message, stage_id="generate-image")
 
-    def poll_loop() -> None:
-        while not stop.wait(0.5):
-            poll_once()
-
-    thread = threading.Thread(
-        target=poll_loop,
-        name=f"omnix-image-progress-{job_id.removeprefix('job:')[:8]}",
-        daemon=True,
-    )
-    thread.start()
-
-    def stop_polling() -> None:
-        poll_once()
-        stop.set()
-        thread.join(timeout=1.5)
-
-    return stop_polling
+    return report
 
 
 def _fail(

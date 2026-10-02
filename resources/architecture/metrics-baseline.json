@@ -566,17 +566,13 @@
       "app.gateway.scheduler_runtime",
       "app.gateway.schemas",
       "app.image",
-      "app.image.api",
       "app.image.asset_store",
       "app.image.cache",
-      "app.image.chat_hooks",
       "app.image.config",
-      "app.image.consumer_adapters",
       "app.image.downloads",
       "app.image.feature",
       "app.image.flux_pipeline_loading",
       "app.image.job_contracts",
-      "app.image.job_queue",
       "app.image.jobs",
       "app.image.lifecycle",
       "app.image.models",
@@ -588,7 +584,6 @@
       "app.image.providers.flux_klein_provider",
       "app.image.providers.mock_provider",
       "app.image.providers.registry",
-      "app.image.queue_runner",
       "app.image.reference_assets",
       "app.image.reference_transport",
       "app.image.routes",
@@ -596,10 +591,7 @@
       "app.image.routes.models",
       "app.image.routes.references",
       "app.image.routes.workspace",
-      "app.image.runtime_status",
       "app.image.service",
-      "app.image.settings_api",
-      "app.image.story_hooks",
       "app.image.style",
       "app.launcher",
       "app.launcher.control_app",
@@ -3484,7 +3476,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 19,
+        "line": 24,
         "path": "src/app/image/lifecycle.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_LIFECYCLE_LOCK"
@@ -3494,7 +3486,7 @@
         "category": "cache",
         "invalidation": "_pop_cached_providers",
         "kind": "container",
-        "line": 17,
+        "line": 19,
         "max_entries": 4,
         "path": "src/app/image/lifecycle.py",
         "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
@@ -3505,7 +3497,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 18,
+        "line": 20,
         "path": "src/app/image/lifecycle.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_PROVIDER_LOCK"
@@ -3582,29 +3574,8 @@
       {
         "approved": true,
         "category": "cache",
-        "invalidation": "_clear_generation_progress",
-        "kind": "container",
-        "line": 64,
-        "max_entries": 256,
-        "path": "src/app/image_service_runtime.py",
-        "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-        "symbol": "_GENERATION_PROGRESS",
-        "ttl_seconds": 86400.0
-      },
-      {
-        "approved": true,
-        "category": "cache",
         "kind": "lock",
         "line": 61,
-        "path": "src/app/image_service_runtime.py",
-        "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
-        "symbol": "_GENERATION_PROGRESS_LOCK"
-      },
-      {
-        "approved": true,
-        "category": "cache",
-        "kind": "lock",
-        "line": 58,
         "path": "src/app/image_service_runtime.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_MODEL_OPERATION_LOCK"
@@ -5191,16 +5162,6 @@
         "approved": true,
         "path": "src/app/image/routes/models.py",
         "symbol": "_DOWNLOAD_TOTALS_LOCK"
-      },
-      {
-        "approved": true,
-        "path": "src/app/image_service_runtime.py",
-        "symbol": "_GENERATION_PROGRESS"
-      },
-      {
-        "approved": true,
-        "path": "src/app/image_service_runtime.py",
-        "symbol": "_GENERATION_PROGRESS_LOCK"
       },
       {
         "approved": true,
@@ -7383,7 +7344,7 @@
     "fixed_sleeps_in_tests": {
       "direction": "lower",
       "target": 5,
-      "value": 38
+      "value": 37
     },
     "foreign_attribute_assignments": {
       "direction": "lower",
@@ -7468,7 +7429,7 @@
     "routes_without_permission": {
       "direction": "lower",
       "target": 0,
-      "value": 47
+      "value": 46
     },
     "rpg_nondeterminism": {
       "direction": "lower",
@@ -7573,5 +7534,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "119256bbe73625872664053d1c9817a70467088562c2802062b75f8cdf78ca14"
+  "source_digest": "75f5cd90c5b14a18be6754135e7a6bd3fc155e86c01c57a8ac0692768a8a80e6"
 }

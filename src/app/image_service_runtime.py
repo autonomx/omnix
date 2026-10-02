@@ -1,18 +1,21 @@
 """Standalone image service runtime with explicit multi-model lifecycle."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
+import logging
 from pathlib import Path
 
 from app.config.env import environment
 
 import os
 import threading
-from collections import OrderedDict
 from time import monotonic
-from typing import Any, Dict
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from app.security.model_service import ModelServiceMiddleware
 
@@ -58,10 +61,8 @@ app.add_middleware(ModelServiceMiddleware)
 _MODEL_OPERATION_LOCK = threading.Lock()
 _MODEL_OPERATION_TTL_SECONDS = 3600.0
 _MODEL_OPERATION: tuple[str, str, float] = ("idle", "", monotonic())
-_GENERATION_PROGRESS_LOCK = threading.Lock()
-_GENERATION_PROGRESS_MAX_ENTRIES = 256
-_GENERATION_PROGRESS_TTL_SECONDS = 86_400.0
-_GENERATION_PROGRESS: OrderedDict[str, tuple[Dict[str, Any], float]] = OrderedDict()
+_NDJSON = "application/x-ndjson"
+_LOG = logging.getLogger(__name__)
 
 
 def _truthy(value: str) -> bool:
@@ -206,88 +207,34 @@ def _generation_response(result) -> Dict[str, Any]:
     }
 
 
-def _request_id(payload: Dict[str, Any]) -> str:
-    request_id = str(payload.get("request_id") or "").strip()
-    if request_id:
-        return request_id
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        return str(metadata.get("request_id") or "").strip()
-    return ""
+def configure_device_permits() -> None:
+    """Coordinate this process's GPU use with the other Omnix processes.
 
+    Image model residency and generation slots are granted by the shared
+    PostgreSQL permit service, as in the gateway and the TTS server. A
+    service started without a database runs uncoordinated, for local tools.
+    """
+    from app.config.runtime import DevicePermitSettings
+    from app.persistence.config import DatabaseConfigurationError
+    from app.persistence.database import default_database
+    from app.persistence.device_permits import configure_default_device_permit_service
 
-def _set_generation_progress(
-    request_id: str,
-    *,
-    current: int,
-    total: int,
-    message: str,
-    status: str,
-) -> None:
-    request_id = request_id.strip()
-    if not request_id:
+    try:
+        database = default_database()
+    except DatabaseConfigurationError:
+        _LOG.warning("image service has no database; device permits are not coordinated")
         return
-    total = max(1, int(total or 1))
-    current = max(0, min(total, int(current or 0)))
-    now = monotonic()
-    with _GENERATION_PROGRESS_LOCK:
-        _prune_generation_progress_locked(now)
-        _GENERATION_PROGRESS[request_id] = ({
-            "ok": True,
-            "request_id": request_id,
-            "current": current,
-            "total": total,
-            "percent": round((current / total) * 100),
-            "message": message,
-            "status": status,
-        }, now)
-        _GENERATION_PROGRESS.move_to_end(request_id)
-        while len(_GENERATION_PROGRESS) > _GENERATION_PROGRESS_MAX_ENTRIES:
-            _GENERATION_PROGRESS.popitem(last=False)
-
-
-def _get_generation_progress(request_id: str) -> Dict[str, Any]:
-    request_id = request_id.strip()
-    with _GENERATION_PROGRESS_LOCK:
-        now = monotonic()
-        _prune_generation_progress_locked(now)
-        entry = _GENERATION_PROGRESS.get(request_id)
-        if entry is None:
-            progress: Dict[str, Any] = {}
-        else:
-            progress, _ = entry
-            _GENERATION_PROGRESS[request_id] = (progress, now)
-            _GENERATION_PROGRESS.move_to_end(request_id)
-            progress = dict(progress)
-    if progress:
-        return progress
-    return {
-        "ok": False,
-        "request_id": request_id,
-        "current": 0,
-        "total": 1,
-        "percent": 0,
-        "message": "No generation progress is available.",
-        "status": "missing",
-    }
-
-
-def _prune_generation_progress_locked(now: float) -> None:
-    while _GENERATION_PROGRESS:
-        request_id, (_progress, touched) = next(iter(_GENERATION_PROGRESS.items()))
-        if now - touched <= _GENERATION_PROGRESS_TTL_SECONDS:
-            return
-        _GENERATION_PROGRESS.pop(request_id, None)
-
-
-def _clear_generation_progress(request_id: str | None = None) -> None:
-    """Invalidate cached progress for a request or every request."""
-
-    with _GENERATION_PROGRESS_LOCK:
-        if request_id is None:
-            _GENERATION_PROGRESS.clear()
-        else:
-            _GENERATION_PROGRESS.pop(request_id, None)
+    permit_config = DevicePermitSettings.from_environment(environment())
+    configure_default_device_permit_service(
+        database,
+        device_id=permit_config.device_id,
+        capacities={
+            model_class: (capacity, reserved)
+            for model_class, capacity, reserved in permit_config.capacities
+        },
+        lease_seconds=permit_config.lease_seconds,
+        tts_model_owner=permit_config.tts_model_owner,
+    )
 
 
 @app.on_event("startup")
@@ -380,56 +327,62 @@ async def provider_download(request: Request, request_body: ProviderDownloadRequ
 
 @app.post("/generate")
 async def generate(request: Request, request_body: GenerateRequestBody):
+    """Generate one image.
+
+    With ``Accept: application/x-ndjson`` the response streams one JSON line
+    per provider step (``{"event": "progress", ...}``) and ends with
+    ``{"event": "result", ...}`` or ``{"event": "error", ...}``; otherwise it
+    is the result alone.
+    """
     payload = request_body.model_dump(exclude_unset=True, by_alias=True)
     payload = payload if isinstance(payload, dict) else {}
-    request_id = _request_id(payload)
     provider = _provider_name(payload.get("provider") or get_active_image_provider_name())
     definition = _model_definition(provider)
     explicit_load = _truthy(environment().get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1"))
     if explicit_load and definition.get("supports_local_model") and not is_image_provider_loaded(provider):
-        _set_generation_progress(
-            request_id,
-            current=0,
-            total=1,
-            message="Image model is not loaded.",
-            status="failed",
-        )
         raise HTTPException(status_code=503, detail="model_unavailable")
-
-    def report_progress(current: int, total: int, message: str = "Generating image") -> None:
-        _set_generation_progress(
-            request_id,
-            current=current,
-            total=total,
-            message=message,
-            status="running",
-        )
-
-    if request_id:
-        payload["_progress_callback"] = report_progress
-        _set_generation_progress(
-            request_id,
-            current=0,
-            total=int(payload.get("steps") or payload.get("num_inference_steps") or 1),
-            message="Generating image",
-            status="running",
-        )
+    if _NDJSON in request.headers.get("accept", ""):
+        return StreamingResponse(_generation_events(payload), media_type=_NDJSON)
     result = await run_in_threadpool(generate_image_local, payload)
-    _set_generation_progress(
-        request_id,
-        current=1,
-        total=1,
-        message="Generation complete" if result.ok else "Image generation failed",
-        status="completed" if result.ok else "failed",
-    )
     if not result.ok:
         raise HTTPException(status_code=500, detail="model_service_error")
-    return _generation_response(result)
+    return await run_in_threadpool(_generation_response, result)
 
 
-@app.get("/generate/progress/{request_id}")
-def generate_progress(request_id: str):
-    return _get_generation_progress(request_id)
+async def _generation_events(payload: Dict[str, Any]) -> AsyncIterator[bytes]:
+    loop = asyncio.get_running_loop()
+    events: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+
+    def report_progress(current: int, total: int, message: str = "Generating image") -> None:
+        # Called on the generation thread; hand the step to the event loop.
+        loop.call_soon_threadsafe(events.put_nowait, {
+            "event": "progress", "current": int(current), "total": max(1, int(total)),
+            "message": str(message),
+        })
+
+    payload["_progress_callback"] = report_progress
+    generation = asyncio.ensure_future(run_in_threadpool(generate_image_local, payload))
+    while not generation.done() or not events.empty():
+        step = asyncio.ensure_future(events.get())
+        await asyncio.wait({step, generation}, return_when=asyncio.FIRST_COMPLETED)
+        if step.done():
+            yield _ndjson_line(step.result())
+        else:
+            step.cancel()
+    try:
+        result = generation.result()
+    except Exception:
+        yield _ndjson_line({"event": "error", "error": "model_service_error"})
+        return
+    if not result.ok:
+        yield _ndjson_line({"event": "error", "error": "model_service_error"})
+        return
+    response = await run_in_threadpool(_generation_response, result)
+    yield _ndjson_line({"event": "result", **response})
+
+
+def _ndjson_line(event: Dict[str, Any]) -> bytes:
+    return (json.dumps(event, default=str) + "\n").encode("utf-8")
 
 
 @app.post("/provider/load")

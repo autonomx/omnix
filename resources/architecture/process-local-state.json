@@ -695,21 +695,6 @@
     },
     {
       "path": "src/app/image_service_runtime.py",
-      "symbol": "_GENERATION_PROGRESS",
-      "category": "cache",
-      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; this state is a cache, not a cross-process authority.",
-      "max_entries_symbol": "_GENERATION_PROGRESS_MAX_ENTRIES",
-      "ttl_symbol": "_GENERATION_PROGRESS_TTL_SECONDS",
-      "invalidation": "_clear_generation_progress"
-    },
-    {
-      "path": "src/app/image_service_runtime.py",
-      "symbol": "_GENERATION_PROGRESS_LOCK",
-      "category": "cache",
-      "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
-    },
-    {
-      "path": "src/app/image_service_runtime.py",
       "symbol": "_MODEL_OPERATION_LOCK",
       "category": "cache",
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."

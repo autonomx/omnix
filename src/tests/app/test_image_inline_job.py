@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+import threading
 from pathlib import Path
 
 from app.image.models import ImageGenerationResponse
@@ -145,12 +145,9 @@ def test_image_job_reports_milestone_progress_during_generation(monkeypatch, tmp
     assert completed.progress.message == "completed"
 
 
-def test_image_job_polls_service_step_progress(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("OMNIX_IMAGE_ENABLED", "1")
-    monkeypatch.setenv("OMNIX_IMAGE_URL", "http://127.0.0.1:5301")
+def test_image_job_reports_provider_steps_without_a_poller_thread(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(Path, "is_file", lambda _path: True)
     job_store = InMemoryJobStore(tmp_path / "jobs")
-    asset_store = MemoryAssetStore()
     job = job_store.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -168,22 +165,21 @@ def test_image_job_polls_service_step_progress(monkeypatch, tmp_path) -> None:
             },
         )
     )
-    progress_rows = [
-        {"ok": True, "current": 4, "total": 32, "message": "Generating image"},
-        {"ok": True, "current": 16, "total": 32, "message": "Generating image"},
-        {"ok": True, "current": 32, "total": 32, "message": "Generating image"},
-    ]
-    progress_calls = []
+    reported = []
+    record = job_store.update_progress
 
-    def fake_progress(_request_id):
-        progress_calls.append(_request_id)
-        return progress_rows.pop(0) if progress_rows else {"ok": True, "current": 32, "total": 32, "message": "Generating image"}
+    def update_progress(job_id, **progress):
+        reported.append((progress["current"], progress["message"]))
+        return record(job_id, **progress)
 
-    monkeypatch.setattr("app.image_http_client.get_image_generation_progress", fake_progress)
+    monkeypatch.setattr(job_store, "update_progress", update_progress)
+    threads_before = {thread.name for thread in threading.enumerate()}
 
     def generate(payload):
         assert payload["request_id"] == job.id
-        time.sleep(1.25)
+        for step in (4, 16, 16, 32):
+            payload["_progress_callback"](step, 32, "Generating image")
+        assert {thread.name for thread in threading.enumerate()} <= threads_before
         return ImageGenerationResponse(
             ok=True,
             provider=payload["provider"],
@@ -193,10 +189,11 @@ def test_image_job_polls_service_step_progress(monkeypatch, tmp_path) -> None:
             height=payload["height"],
         )
 
-    completed = execute_image_job(job_store, job, asset_store=asset_store, generate_fn=generate)
+    completed = execute_image_job(job_store, job, asset_store=MemoryAssetStore(), generate_fn=generate)
 
     assert completed.status.value == "completed"
-    assert progress_calls
+    steps = [entry for entry in reported if entry[1].startswith(("Generating image -", "Finalizing"))]
+    assert steps == [(0, "Generating image - 0%"), (11, "Generating image - 11%"), (48, "Generating image - 48%"), (95, "Finalizing image...")]
 
 
 def test_invalid_image_job_fails_without_generation(monkeypatch, tmp_path) -> None:

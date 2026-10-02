@@ -8,11 +8,6 @@ from typing import Any, Dict
 
 from app.image.cache import image_cache_key, lookup_image_cache, store_image_cache
 from app.image.config import get_active_image_provider_name, get_provider_config
-from app.image.consumer_adapters import (
-    build_chat_image_request,
-    build_story_image_request,
-)
-from app.image.job_queue import enqueue_image_job
 from app.image.lifecycle import (
     get_cached_provider,
     get_or_create_image_provider,
@@ -393,7 +388,13 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
 
 def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
     if is_image_service_enabled() and environment().get("OMNIX_IMAGE_SERVICE_MODE") != "1":
-        data = generate_image_via_service(payload if isinstance(payload, dict) else {})
+        request_payload = dict(payload) if isinstance(payload, dict) else {}
+        # The callback cannot cross the wire; the service streams its steps back.
+        progress_callback = request_payload.pop("_progress_callback", None)
+        data = generate_image_via_service(
+            request_payload,
+            on_progress=progress_callback if callable(progress_callback) else None,
+        )
         return ImageGenerationResponse(
             ok=bool(data.get("ok")),
             provider=_safe_str(data.get("provider")),
@@ -411,11 +412,3 @@ def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
         )
 
     return generate_image_local(payload)
-
-
-def enqueue_chat_image(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return enqueue_image_job(build_chat_image_request(payload))
-
-
-def enqueue_story_image(payload: Dict[str, Any]) -> Dict[str, Any]:
-    return enqueue_image_job(build_story_image_request(payload))

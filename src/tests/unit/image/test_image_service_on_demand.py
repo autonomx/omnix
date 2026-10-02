@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import json
 import pytest
 import secrets
 
@@ -39,31 +40,6 @@ def _status(*, loaded: bool) -> dict:
             "local_dir": "resources/models/image/flux2-klein-4b",
         },
     }
-
-
-def test_image_progress_state_is_bounded_expiring_and_invalidatable(monkeypatch):
-    now = {"value": 0.0}
-    monkeypatch.setattr(image_service_app, "monotonic", lambda: now["value"])
-    monkeypatch.setattr(image_service_app, "_GENERATION_PROGRESS_MAX_ENTRIES", 2)
-    monkeypatch.setattr(image_service_app, "_GENERATION_PROGRESS_TTL_SECONDS", 5.0)
-    image_service_app._clear_generation_progress()
-
-    for request_id in ("progress-a", "progress-b", "progress-c"):
-        image_service_app._set_generation_progress(
-            request_id,
-            current=1,
-            total=2,
-            message="Working",
-            status="running",
-        )
-
-    assert image_service_app._get_generation_progress("progress-a")["status"] == "missing"
-    assert image_service_app._get_generation_progress("progress-c")["status"] == "running"
-    image_service_app._clear_generation_progress("progress-c")
-    assert image_service_app._get_generation_progress("progress-c")["status"] == "missing"
-
-    now["value"] = 10.0
-    assert image_service_app._get_generation_progress("progress-b")["status"] == "missing"
 
 
 def test_image_model_operation_diagnostic_expires(monkeypatch):
@@ -175,7 +151,9 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
     monkeypatch.setattr(image_service_app, "is_image_provider_loaded", lambda _provider=None: True)
 
     def generate_image_local(payload):
-        payload["_progress_callback"](16, 32, "Generating image")
+        progress = payload.get("_progress_callback")
+        if progress is not None:
+            progress(16, 32, "Generating image")
         return SimpleNamespace(
             ok=True,
             provider="flux_klein",
@@ -201,23 +179,42 @@ def test_loaded_generate_uses_real_generation_path(monkeypatch):
             "/generate",
             json={"prompt": "castle", "width": 768, "height": 768, "request_id": "job:test"},
         )
-        progress_response = client.get("/generate/progress/job:test")
+        streamed = client.post(
+            "/generate",
+            json={"prompt": "castle", "width": 768, "height": 768, "request_id": "job:test"},
+            headers={"Accept": "application/x-ndjson"},
+        )
 
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert response.json()["status"] == "completed"
-    assert progress_response.status_code == 200
-    assert progress_response.json()["status"] == "completed"
-    assert progress_response.json()["percent"] == 100
+    assert streamed.status_code == 200
+    assert streamed.headers["content-type"].startswith("application/x-ndjson")
+    events = [json.loads(line) for line in streamed.text.splitlines()]
+    assert events[0] == {"event": "progress", "current": 16, "total": 32, "message": "Generating image"}
+    assert events[-1]["event"] == "result"
+    assert events[-1]["ok"] is True and events[-1]["seed"] == 7
+    assert "/generate/progress/{request_id}" not in image_service_app.app.openapi()["paths"]
 
 
-def test_generation_progress_endpoint_reports_missing_request():
+def test_streamed_generation_failure_ends_with_an_error_event(monkeypatch):
+    monkeypatch.setenv("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "0")
+    monkeypatch.setattr(image_service_app, "is_image_generation_enabled", lambda: True)
+    monkeypatch.setattr(image_service_app, "get_active_image_provider_name", lambda: "flux_klein")
+
+    def generate_image_local(_payload):
+        raise RuntimeError("CUDA out of memory at C:/private/path")
+
+    monkeypatch.setattr(image_service_app, "generate_image_local", generate_image_local)
     with TestClient(image_service_app.app, base_url="http://127.0.0.1", headers=service_headers()) as client:
-        response = client.get("/generate/progress/job:missing")
+        streamed = client.post(
+            "/generate", json={"prompt": "castle"}, headers={"Accept": "application/x-ndjson"},
+        )
 
-    assert response.status_code == 200
-    assert response.json()["ok"] is False
-    assert response.json()["status"] == "missing"
+    assert streamed.status_code == 200
+    events = [json.loads(line) for line in streamed.text.splitlines()]
+    # No traceback or local path leaves the service.
+    assert events == [{"event": "error", "error": "model_service_error"}]
 
 
 def test_provider_defaults_are_model_specific():

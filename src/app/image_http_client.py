@@ -4,14 +4,21 @@ from __future__ import annotations
 from app.config.env import env_str, environment
 
 import json
+import logging
 import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from app.security.service_token import service_headers
+
+
+_LOG = logging.getLogger(__name__)
+_NDJSON = "application/x-ndjson"
+
+ProgressCallback = Callable[[int, int, str], None]
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -238,11 +245,6 @@ def start_image_service_via_launcher(
     }
 
 
-def get_image_generation_progress(request_id: str) -> Dict[str, Any]:
-    encoded = urllib.parse.quote(str(request_id or ""), safe="")
-    return request_image_service("GET", f"/generate/progress/{encoded}", timeout=5.0)
-
-
 def download_image_model_via_service(
     provider: str = "flux_klein",
     hf_token: str = "",
@@ -262,7 +264,10 @@ def unload_image_model_via_service(provider: str = "flux_klein") -> Dict[str, An
     return post_image_service("/provider/unload", {"provider": provider}, timeout=120.0)
 
 
-def generate_image_via_service(payload: Dict[str, Any]) -> Dict[str, Any]:
+def generate_image_via_service(
+    payload: Dict[str, Any], *, on_progress: ProgressCallback | None = None,
+) -> Dict[str, Any]:
+    """Generate on the image service; ``on_progress`` receives its step events."""
     if not is_image_generation_enabled():
         return image_disabled_response(source="image_http_client")
 
@@ -274,4 +279,47 @@ def generate_image_via_service(payload: Dict[str, Any]) -> Dict[str, Any]:
         if not request_payload.get(REFERENCE_IMAGES_PAYLOAD_KEY):
             request_payload[REFERENCE_IMAGES_PAYLOAD_KEY] = encode_reference_assets(reference_asset_ids)
 
-    return post_image_service("/generate", request_payload, timeout=900.0)
+    if on_progress is None:
+        return post_image_service("/generate", request_payload, timeout=900.0)
+    return _generate_streaming(request_payload, on_progress)
+
+
+def _generate_streaming(payload: dict[str, Any], on_progress: ProgressCallback) -> dict[str, Any]:
+    """POST /generate as NDJSON: step events while it runs, then the result."""
+    base = _image_service_url()
+    if not base:
+        raise RuntimeError("image_service_not_configured")
+    headers = {"Accept": _NDJSON, "Content-Type": "application/json",
+               "X-Omnix-Client": "gateway", **service_headers()}
+    req = urllib.request.Request(f"{base}/generate", data=json.dumps(payload).encode("utf-8"),
+                                 headers=headers, method="POST")
+    try:
+        with urllib.request.build_opener(_NoRedirect()).open(req, timeout=900.0) as resp:
+            for line in resp:
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                kind = event.pop("event", "")
+                if kind == "result":
+                    return event
+                if kind == "error":
+                    raise RuntimeError(f"image_service_http_500:{event.get('error') or 'model_service_error'}")
+                if kind == "progress":
+                    _report(on_progress, event)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"image_service_http_{exc.code}:{raw}") from exc
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"image_service_unreachable:{exc}") from exc
+    raise RuntimeError("image_service_unreachable:the stream ended without a result")
+
+
+def _report(on_progress: ProgressCallback, event: dict[str, Any]) -> None:
+    # Progress is advisory: a failed report must not abandon the generation.
+    try:
+        on_progress(int(event.get("current") or 0), int(event.get("total") or 1),
+                    str(event.get("message") or ""))
+    except Exception:
+        _LOG.warning("image progress report failed", exc_info=True)
