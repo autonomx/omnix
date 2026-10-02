@@ -602,7 +602,7 @@ test('storyteller module queues a shared story job', async ({ page }) => {
 
   await expect(page.locator('#module-title')).toHaveText('Storyteller');
   await page.getByLabel('Provider').selectOption('lmstudio');
-  await page.getByLabel('Title').fill('The Glass Orchard');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('The Glass Orchard');
   await page.getByLabel('Premise').fill('A city grows fruit made of memory.');
   await page.getByRole('button', { name: 'Queue story' }).click();
 
