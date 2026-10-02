@@ -323,6 +323,7 @@
       "app.assistant_memory_v2.runtime",
       "app.assistant_memory_v2.search_index",
       "app.assistant_memory_v2.semantic_enrichment",
+      "app.assistant_memory_v2.shadow_report",
       "app.assistant_memory_v2.speculative_prefetch",
       "app.assistant_memory_v2.temporal",
       "app.assistant_tools",
@@ -7485,5 +7486,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "b32f6b6c86dd11b71e8434c96102e65939e2796a7b01e045c08fcfe109a139d4"
+  "source_digest": "d23d0dce0d10f42617f5b33c41e7dfe5c3eb71dbd45942163618f0949da5dcc6"
 }

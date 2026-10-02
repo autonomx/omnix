@@ -486,6 +486,26 @@ returns its key. A gateway on another host then never needs the image
 service's disk. Voice clones are still file-managed on the voice/TTS host;
 moving them into blob-backed asset records is a follow-up.
 
+## Memory v2 cutover readiness
+
+Legacy (v1) memory remains authoritative until an operator activates a v2
+authority epoch; that switch is a human decision. Before deciding, read the
+shadow-comparison report:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m app.assistant_memory_v2.shadow_report
+```
+
+It is read-only and covers every workspace. It prints the current authority
+epoch and, for each v2 memory space, its watermarks, latest shadow retrieval
+evaluation (recall, precision, pass) and latest cutover readiness receipt, with
+a status: `not_evaluated`, `evaluation_stale` (observations arrived after the
+evaluation), `shadow_failed`, `not_ready` (no current ready receipt) or
+`ready`. It also lists v1 owners with active memories that have no v2 space yet.
+`--require-ready` exits 1 unless every space is `ready` and every v1 owner is
+imported. `ready` is advisory: activation re-checks each receipt under lock.
+
 ## Secrets and networked integrations
 
 Connected assistant tools (Gmail, Calendar, GitHub and others) keep their
