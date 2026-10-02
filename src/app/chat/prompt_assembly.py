@@ -1,14 +1,24 @@
 """Typed, trust-separated provider prompt assembly."""
 from __future__ import annotations
 
+import logging
+
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.characters import default_character_service, neutralize_legacy_system_prompt, resolve_system_session_identity
+from app.characters.contracts import (
+    default_character_service,
+    neutralize_legacy_system_prompt,
+    resolve_system_session_identity,
+)
+from app.conversation.contracts import PromptMemoryItem
 
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
+
+logger = logging.getLogger(__name__)
 
 PromptRole = Literal["system", "user", "assistant"]
 
@@ -18,22 +28,6 @@ class PromptTurn(BaseModel):
     role: PromptRole
     content: str
     message_id: str | None = None
-
-
-class PromptMemoryItem(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    memory_id: str
-    content: str
-    scope: str
-    category: str
-    revision: int = Field(ge=1)
-    source: Literal[
-        "character",
-        "system",
-        "shared_system",
-        "memory_v2",
-        "shared_memory_v2",
-    ] = "system"
 
 
 class PromptHistoryItem(BaseModel):
@@ -83,6 +77,7 @@ def _active_segment_summary(session: ChatSession) -> str | None:
     try:
         segments = default_character_service().repository.segments(session.id)
     except Exception:
+        logger.debug("suppressed error in %s", "_active_segment_summary", exc_info=True)
         return None
     segment = next((item for item in segments if item.id == session.active_segment_id), None)
     return segment.carryover_summary if segment else None
@@ -100,10 +95,11 @@ def build_prompt_assembly(
     assistant_identity: list[str] | None = None,
     budget: PromptBudget | None = None,
     recent_message_limit: int | None = None,
+    identity_resolver: Callable[[ChatSession], Any] | None = None,
 ) -> PromptAssembly:
     """Build one stable structure for streaming and non-streaming generation."""
 
-    interaction = resolve_system_session_identity(session)
+    interaction = (identity_resolver or resolve_system_session_identity)(session)
     session_system_messages = [
         neutralize_legacy_system_prompt(message.content)
         for message in session.messages

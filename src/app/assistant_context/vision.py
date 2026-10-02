@@ -1,12 +1,45 @@
 """OpenAI-compatible desktop image resolver."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Callable, Literal
 
 import httpx
 
-from .models import AssistantContextItem, DesktopCaptureMode
+from app.conversation.contracts import AssistantContextItem
+
+from .models import DesktopCaptureMode
+from app.prompts import prompt_template
+
+
+USER_PROMPT_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt', "1",
+    'Describe what is visible and relevant on this desktop.',
+)
+
+USER_PROMPT_2_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt_2', "1",
+    (
+        '{prompt}\n'
+        '\n'
+        'The first image is a chronological contact sheet of earlier game frames ({timing}). The '
+        'second image is the current high-resolution frame. Distinguish the current state from '
+        'visible changes and do not invent causes.'
+    ),
+)
+
+USER_PROMPT_3_TEMPLATE = prompt_template(
+    'assistant_context.vision.user_prompt_3', "1",
+    (
+        '{prompt}\n'
+        '\n'
+        'This image is a labeled chronological sheet ending at NOW. Distinguish the current '
+        'state from visible changes and do not invent causes.'
+    ),
+)
+
 
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 _DEFAULT_TIMEOUT_SECONDS = 25.0
@@ -55,7 +88,7 @@ def _is_codex_model_ref(value: str | None) -> bool:
 
 def _settings_profile() -> dict[str, Any]:
     try:
-        from app.shared import load_settings
+        from app.settings.access import load_settings
 
         settings = load_settings()
     except Exception:
@@ -110,12 +143,12 @@ class DesktopVisionClient:
         client: httpx.Client | None = None,
     ) -> None:
         self.base_url = (
-            base_url or os.environ.get("OMNIX_VISION_BASE_URL") or "http://127.0.0.1:1234/v1"
+            base_url or environment().get("OMNIX_VISION_BASE_URL") or "http://127.0.0.1:1234/v1"
         ).rstrip("/")
-        self.api_key = api_key if api_key is not None else os.environ.get("OMNIX_VISION_API_KEY", "")
-        self.default_model = default_model or os.environ.get("OMNIX_VISION_MODEL")
+        self.api_key = api_key if api_key is not None else environment().get("OMNIX_VISION_API_KEY", "")
+        self.default_model = default_model or environment().get("OMNIX_VISION_MODEL")
         self.timeout_seconds = timeout_seconds or float(
-            os.environ.get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
+            environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self.client = client
 
@@ -304,18 +337,15 @@ class DesktopVisionClient:
         fallback_mode: FallbackMode,
         history_timestamps: list[float],
     ) -> str:
-        prompt = " ".join(question.split()).strip() or "Describe what is visible and relevant on this desktop."
+        prompt = " ".join(question.split()).strip() or USER_PROMPT_TEMPLATE.text
         if fallback_mode == "multi_image":
             timing = ", ".join(f"{value:.2f}s" for value in history_timestamps)
             return (
-                f"{prompt}\n\nThe first image is a chronological contact sheet of earlier game frames "
-                f"({timing or 'oldest to newest'}). The second image is the current high-resolution frame. "
-                "Distinguish the current state from visible changes and do not invent causes."
+                USER_PROMPT_2_TEMPLATE.format(prompt=prompt, timing=timing or 'oldest to newest')
             )
         if fallback_mode == "combined_sheet":
             return (
-                f"{prompt}\n\nThis image is a labeled chronological sheet ending at NOW. "
-                "Distinguish the current state from visible changes and do not invent causes."
+                USER_PROMPT_3_TEMPLATE.format(prompt=prompt)
             )
         return prompt
 
@@ -380,19 +410,19 @@ class CodexDesktopVisionClient:
     ) -> None:
         configured_model = (
             default_model
-            or os.environ.get("OMNIX_VISION_MODEL")
+            or environment().get("OMNIX_VISION_MODEL")
             or _configured_companion_vision_model()
             or _configured_codex_model()
         )
         self.default_model = _model_key(configured_model) or "gpt-5.6-sol"
         self.timeout_seconds = timeout_seconds or float(
-            os.environ.get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
+            environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self._provider_factory = provider_factory or self._default_provider
 
     @staticmethod
     def _default_provider() -> Any:
-        from app.shared import get_provider
+        from app.providers.service import get_provider
 
         provider = get_provider("chatgpt_codex")
         if provider is None:
@@ -504,8 +534,8 @@ def default_desktop_vision_client() -> DesktopVisionClient | CodexDesktopVisionC
     actually be sent there.
     """
 
-    provider = os.environ.get("OMNIX_VISION_PROVIDER", "").strip().casefold()
-    environment_model = os.environ.get("OMNIX_VISION_MODEL", "").strip()
+    provider = environment().get("OMNIX_VISION_PROVIDER", "").strip().casefold()
+    environment_model = environment().get("OMNIX_VISION_MODEL", "").strip()
     companion_model = _configured_companion_vision_model()
     configured_model = environment_model or companion_model
     use_codex = provider in {"codex", "chatgpt_codex"}

@@ -6,12 +6,23 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatSession
-from app.gateway import live_chat_speculation as speculation
-from app.gateway import live_chat_speculation_handshake as handshake
-from app.gateway import live_chat_speculation_inline_stream as inline_stream
-from app.gateway.live_chat_speculation_inline_stream import (
+from app.chat import live_chat_speculation as speculation
+from app.chat import live_chat_speculation_handshake as handshake
+from app.chat import live_chat_speculation_inline_stream as inline_stream
+from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
+from app.chat.live_chat_speculation_inline_stream import (
     register_live_chat_speculation_inline_stream_routes,
 )
+from tests.support.routers import include_router_registrar
+
+
+def _cors_app() -> FastAPI:
+    from app.gateway.app_factory import _install_local_browser_cors
+
+    app = FastAPI()
+    _install_local_browser_cors(app)
+    return app
 
 
 class _FakeProvider:
@@ -32,6 +43,7 @@ class _FakeProvider:
 
 class _FakeStore:
     def __init__(self) -> None:
+        self.live_voice_chat_port = create_live_voice_chat_port()
         self.get_session_calls = 0
         self.session = ChatSession(
             id="session-inline",
@@ -67,7 +79,7 @@ def _event_payloads(body: str) -> list[dict]:
 
 def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClient:
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: provider,
     )
@@ -82,19 +94,21 @@ def _client(store: _FakeStore, provider: _FakeProvider, monkeypatch) -> TestClie
         lambda _session_id: None,
     )
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(
+    include_router_registrar(
         app,
+        speculation.register_live_chat_speculation_routes,
         chat_store_factory=lambda: store,
     )
-    register_live_chat_speculation_inline_stream_routes(
+    include_router_registrar(
         app,
+        register_live_chat_speculation_inline_stream_routes,
         chat_store_factory=lambda: store,
     )
     return TestClient(app)
 
 
 def test_local_vite_origin_can_preflight_direct_gateway_speculation() -> None:
-    app = FastAPI(title="Omnix Web Gateway")
+    app = _cors_app()
     response = TestClient(app).options(
         "/api/live/speculation/sessions/session-inline/start-stream",
         headers={
@@ -111,7 +125,7 @@ def test_local_vite_origin_can_preflight_direct_gateway_speculation() -> None:
 
 
 def test_nonlocal_origin_is_not_allowed_by_direct_gateway_cors() -> None:
-    app = FastAPI(title="Omnix Web Gateway")
+    app = _cors_app()
     response = TestClient(app).options(
         "/api/live/speculation/sessions/session-inline/start-stream",
         headers={

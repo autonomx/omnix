@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 
 from pydantic import BaseModel
 
 from app.characters.live_conversation_profile import LiveConversationProfileStore
-from app.gateway import live_chat_prompt_cache as prompt_cache
+from app.characters.models import UpdateCharacterRequest
+from app.characters.service import CharacterService
+from app.live_voice.prompt import cache as prompt_cache
 
 
 class _FakeIdentity(BaseModel):
@@ -31,7 +34,7 @@ def _character_session() -> SimpleNamespace:
 def test_reuses_character_snapshot_preloaded_by_live_call(monkeypatch) -> None:
     prompt_cache._reset_live_prompt_cache_for_tests()
     snapshot = SimpleNamespace(id="sofia", version=7)
-    prompt_cache._cache_character_snapshot(snapshot)
+    prompt_cache.cache_character_snapshot(snapshot)
     resolution_calls: list[object] = []
 
     def fake_resolve(selection: object, *, character: object) -> _FakeIdentity:
@@ -45,8 +48,8 @@ def test_reuses_character_snapshot_preloaded_by_live_call(monkeypatch) -> None:
     monkeypatch.setattr(prompt_cache, "resolve_interaction_context", fake_resolve)
     monkeypatch.setattr(prompt_cache, "default_character_service", lambda: FailingService())
 
-    first = prompt_cache._resolve_system_session_identity_cached(_character_session())
-    second = prompt_cache._resolve_system_session_identity_cached(_character_session())
+    first = prompt_cache.resolve_system_session_identity_cached(_character_session())
+    second = prompt_cache.resolve_system_session_identity_cached(_character_session())
 
     assert first.marker == "resolved"
     assert second.marker == "resolved"
@@ -54,12 +57,33 @@ def test_reuses_character_snapshot_preloaded_by_live_call(monkeypatch) -> None:
     assert len(resolution_calls) == 1
 
 
+def test_character_service_snapshot_events_seed_and_invalidate_prompt_cache() -> None:
+    prompt_cache._reset_live_prompt_cache_for_tests()
+    prompt_cache.ensure_character_snapshot_observers()
+    snapshot = SimpleNamespace(id="sofia", version=7)
+
+    class Repository:
+        def get(self, character_id, *, include_archived=False):
+            del character_id, include_archived
+            return SimpleNamespace(snapshot=lambda: snapshot)
+
+        def update(self, character_id, request):
+            del request
+            return SimpleNamespace(id=character_id)
+
+    service = CharacterService(repository=Repository())
+    service.resolve_snapshot("sofia")
+    assert ("sofia", 7) in prompt_cache._CHARACTER_SNAPSHOTS
+
+    service.update("sofia", UpdateCharacterRequest(expected_version=7))
+    assert ("sofia", 7) not in prompt_cache._CHARACTER_SNAPSHOTS
+
+
 def test_profile_cache_uses_file_signature_and_observes_updates(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     prompt_cache._reset_live_prompt_cache_for_tests()
-    prompt_cache.install_live_chat_prompt_cache_hook()
     path = tmp_path / "live-conversation-profiles.json"
     path.write_text(
         json.dumps(
@@ -82,8 +106,8 @@ def test_profile_cache_uses_file_signature_and_observes_updates(
 
     monkeypatch.setattr(Path, "read_text", counting_read_text)
 
-    first = store.get("chat:test")
-    second = store.get("chat:test")
+    first = prompt_cache.get_live_conversation_profile_cached(store, "chat:test")
+    second = prompt_cache.get_live_conversation_profile_cached(store, "chat:test")
 
     assert first.effective.talkativeness == 10
     assert second.effective.talkativeness == 10
@@ -99,8 +123,28 @@ def test_profile_cache_uses_file_signature_and_observes_updates(
         ),
         encoding="utf-8",
     )
-    updated = store.get("chat:test")
+    updated = prompt_cache.get_live_conversation_profile_cached(store, "chat:test")
 
     assert updated.effective.talkativeness == 20
     assert updated.effective.profile_version == 2
     assert read_calls == 2
+
+
+def test_prompt_dependency_cache_expires_and_supports_invalidation(monkeypatch) -> None:
+    now = [5.0]
+    cache: OrderedDict[str, object] = OrderedDict()
+    monkeypatch.setattr(prompt_cache, "_cache_now", lambda: now[0])
+
+    prompt_cache._bounded_put(cache, "identity", {"value": 1})
+    assert prompt_cache._cache_get(cache, "identity") == {"value": 1}
+
+    now[0] += prompt_cache._CACHE_TTL_SECONDS + 1
+    assert prompt_cache._cache_get(cache, "identity") is None
+
+    prompt_cache._bounded_put(cache, "identity", {"value": 2})
+    prompt_cache.clear_live_prompt_caches()
+    snapshot = SimpleNamespace(id="sofia", version=99)
+    prompt_cache.cache_character_snapshot(snapshot)
+    assert ("sofia", 99) in prompt_cache._CHARACTER_SNAPSHOTS
+    prompt_cache.clear_live_prompt_caches()
+    assert ("sofia", 99) not in prompt_cache._CHARACTER_SNAPSHOTS

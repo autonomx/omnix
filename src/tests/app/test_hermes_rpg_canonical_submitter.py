@@ -1,87 +1,51 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
-from app.assist_core.hermes_rpg_canonical_submitter import hermes_rpg_canonical_submitter
+from app.assist_core import hermes_rpg_canonical_submitter as submitter
+from app.rpg.session import interactive_first_call_runtime, service
 
 
-@dataclass
-class _Player:
-    name: str = "Hero"
+def test_default_submitter_loads_and_runs_the_durable_turn_pipeline(monkeypatch) -> None:
+    session = {
+        "manifest": {"session_id": "session-1"},
+        "simulation_state": {"player_state": {"id": "player-1"}},
+    }
+    calls: list[tuple[str, str, dict]] = []
 
-    def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name}
+    monkeypatch.setattr(service, "load_session", lambda session_id: session if session_id == "session-1" else None)
 
+    def apply_turn(session_id, command, **kwargs):
+        calls.append((session_id, command, kwargs))
+        return {
+            "ok": True,
+            "turn_id": "turn-2",
+            "narration": "The door opens.",
+            "events": [{"kind": "door_opened"}],
+            "state_changed": True,
+        }
 
-@dataclass
-class _Event:
-    event_type: str = "command"
+    monkeypatch.setattr(interactive_first_call_runtime, "apply_turn", apply_turn)
 
-    def to_dict(self) -> dict[str, Any]:
-        return {"type": self.event_type}
-
-
-@dataclass
-class _Session:
-    session_id: str = "s1"
-    turn_count: int = 3
-    player: _Player = field(default_factory=_Player)
-
-
-@dataclass
-class _TurnResult:
-    narration: str = "You check your pack."
-    state_changes: dict[str, Any] = field(default_factory=lambda: {"inspected": True})
-    events: list[_Event] = field(default_factory=lambda: [_Event()])
-    choices: list[str] = field(default_factory=list)
-    error: str | None = None
-    dice_roll: Any = None
-    fail_state: Any = None
-
-
-def test_hermes_rpg_canonical_submitter_uses_loader_and_executor() -> None:
-    seen: list[tuple[str, str]] = []
-
-    def loader(session_id: str) -> _Session:
-        seen.append(("load", session_id))
-        return _Session(session_id=session_id)
-
-    def executor(session: _Session, command_text: str) -> _TurnResult:
-        seen.append((session.session_id, command_text))
-        return _TurnResult()
-
-    payload = hermes_rpg_canonical_submitter(
-        {"session_id": "s1", "command_text": "check inventory"},
-        loader=loader,
-        executor=executor,
+    result = submitter.hermes_rpg_canonical_submitter(
+        {"session_id": "session-1", "command_text": "open the door"}
     )
 
-    assert seen == [("load", "s1"), ("s1", "check inventory")]
-    assert payload["ok"] is True
-    assert payload["success"] is True
-    assert payload["source"] == "hermes_rpg_canonical_submitter"
-    assert payload["turn"] == 3
-    assert payload["player"] == {"name": "Hero"}
-    assert payload["events"] == [{"type": "command"}]
-    assert payload["state_changed"] is True
+    assert result["ok"] is True
+    assert result["state_changed"] is True
+    assert result["turn"] == "turn-2"
+    assert result["narration"] == "The door opens."
+    assert result["player"] == {"id": "player-1"}
+    assert calls[0][0:2] == ("session-1", "open the door")
+    assert calls[0][2]["session_override"] == session
+    assert calls[0][2]["performance_override"]["narration_mode"] == "blocking"
 
 
-def test_hermes_rpg_canonical_submitter_blocks_missing_command() -> None:
-    payload = hermes_rpg_canonical_submitter({"session_id": "s1", "command_text": "   "})
-
-    assert payload["ok"] is False
-    assert payload["error"] == "missing_command"
-    assert payload["state_changed"] is False
-
-
-def test_hermes_rpg_canonical_submitter_reports_missing_game() -> None:
-    payload = hermes_rpg_canonical_submitter(
-        {"session_id": "missing", "command_text": "look"},
-        loader=lambda session_id: None,
-        executor=lambda session, command: _TurnResult(),
+def test_submitter_treats_an_explicit_failed_turn_as_failure() -> None:
+    result = submitter.hermes_rpg_canonical_submitter(
+        {"session_id": "session-1", "command_text": "wait"},
+        loader=lambda _session_id: {"manifest": {"session_id": "session-1"}},
+        executor=lambda _session, _command: {"ok": False},
     )
 
-    assert payload["ok"] is False
-    assert payload["error"] == "game_not_found"
-    assert payload["state_changed"] is False
+    assert result["ok"] is False
+    assert result["error"] == "turn_failed"
+    assert result["state_changed"] is False

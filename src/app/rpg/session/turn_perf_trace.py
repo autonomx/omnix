@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import time
 import traceback
@@ -14,7 +16,7 @@ _TURN_TRACE_ROWS: ContextVar[List[Dict[str, Any]] | None] = ContextVar(
 
 
 def turn_perf_trace_enabled() -> bool:
-    return os.getenv("RPG_TRACE_SESSION_TURN", "").strip().lower() in {
+    return env_str("RPG_TRACE_SESSION_TURN", "").strip().lower() in {
         "1",
         "true",
         "yes",

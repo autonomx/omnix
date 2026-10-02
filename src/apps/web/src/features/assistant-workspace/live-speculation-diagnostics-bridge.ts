@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';

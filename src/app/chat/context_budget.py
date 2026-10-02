@@ -1,11 +1,12 @@
 """Deterministic token estimates and bounded prompt-section helpers."""
 from __future__ import annotations
 
-import os
+from app.config.env import environment
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.conversation.contracts import estimate_tokens
 
-from app.assistant_memory.settings import load_memory_runtime_settings
+from app.assistant_memory.contracts import load_memory_runtime_settings
 
 DEFAULT_INPUT_TOKEN_BUDGET = 65_536
 DEFAULT_OUTPUT_TOKEN_RESERVE = 4_096
@@ -35,14 +36,6 @@ class PromptBudgetDiagnostics(BaseModel):
     section_tokens: dict[str, int] = Field(default_factory=dict)
 
 
-def estimate_tokens(text: str) -> int:
-    """Stable conservative estimate suitable for provider-independent budgeting."""
-
-    if not text:
-        return 0
-    return max(1, (len(text.encode("utf-8")) + 3) // 4)
-
-
 def trim_to_token_budget(text: str, max_tokens: int, *, marker: str = "\n[truncated]") -> str:
     if max_tokens <= 0:
         return ""
@@ -62,7 +55,7 @@ def trim_to_token_budget(text: str, max_tokens: int, *, marker: str = "\n[trunca
 
 def prompt_budget_from_env() -> PromptBudget:
     def integer(name: str, fallback: int) -> int:
-        value = (os.environ.get(name) or "").strip()
+        value = (environment().get(name) or "").strip()
         if not value:
             return fallback
         try:

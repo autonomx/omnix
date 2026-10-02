@@ -1,16 +1,19 @@
 """Durable TaskGraph scheduling, parallel launch, aggregation, and recovery."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import json
 import logging
 import threading
 import uuid
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Any, Callable
 
 from app.assistant_tools.models import AssistantToolRequest
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .contracts import AgentRunCommand, AgentRunSpec, ModelRef
@@ -43,16 +46,10 @@ class TaskGraphRuntimeError(RuntimeError):
 _AGENT_NODE_KINDS = {"agent", "evidence_read", "synthesis"}
 
 
-def _default_capability_executor(
-    session_id: str,
-    request: AssistantToolRequest,
-) -> Any:
-    # Keep assistant-tool adapters out of the Agent Runtime import graph. The
-    # eager Hermes import formed a cycle through config_store -> registry ->
-    # app.agent_runtime while persistence startup was importing Chat.
-    from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
-
-    return hermes_assistant_tool_execute_payload(session_id, request)
+def _default_capability_executor(session_id: str, request: AssistantToolRequest) -> Any:
+    # Capability nodes are never pre-approved: the tool policy decides, and a
+    # call that needs approval fails the node (WP-4.5).
+    return execute_capability(CapabilityGrant("task_graph", session_id), request, user_request=session_id)
 
 
 class PostgresTaskGraphRuntime:
@@ -62,6 +59,7 @@ class PostgresTaskGraphRuntime:
     launch already-compiled node envelopes, observe status, pass declared
     outputs over graph edges, and cancel work.
     """
+    context = RequestTenant()
 
     def __init__(
         self,
@@ -72,7 +70,7 @@ class PostgresTaskGraphRuntime:
         model_overrides: dict[str, ModelRef] | None = None,
     ) -> None:
         self.database = database or default_database()
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = None  # follows the request tenant
         self._agent_service = agent_service
         self.capability_executor = capability_executor or _default_capability_executor
         self.model_overrides = dict(model_overrides or {})
@@ -454,7 +452,8 @@ class PostgresTaskGraphRuntime:
 
         try:
             events = self.agent_service.events(child_run_id, after_sequence=0)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("TaskGraph child result lookup", exc)
             return None
         for event in reversed(list(events)):
             if event.event_type != "model.message":
@@ -737,16 +736,25 @@ class PostgresTaskGraphRuntime:
             selected_model=selected_model,
         )
         try:
-            contextual_start = getattr(
-                self.agent_service,
-                "start_with_context",
-                None,
-            )
-            child = (
-                contextual_start(spec, reference_context=reference_context)
-                if callable(contextual_start)
-                else self.agent_service.start(spec)
-            )
+            service = self.agent_service
+            job_store = getattr(service, "job_store", None)
+            submit_start = getattr(service, "submit_start", None)
+            if callable(submit_start):
+                if job_store is None:
+                    raise RuntimeError("durable agent job service is not composed")
+                child = submit_start(
+                    spec,
+                    job_store=job_store,
+                    task_graph_run_id=run_id,
+                    task_graph_node_ids=[nodes[0].id],
+                )
+            else:
+                contextual_start = getattr(service, "start_with_context", None)
+                child = (
+                    contextual_start(spec, reference_context=reference_context)
+                    if callable(contextual_start)
+                    else service.start(spec)
+                )
         except Exception as exc:
             for node, claim in zip(nodes, claims):
                 self._store_node(
@@ -937,7 +945,6 @@ class PostgresTaskGraphRuntime:
                 session_id=f"task-graph:{run_id}",
                 proposal_id=f"task-graph:{run_id}:{node.id}:{claimed.attempts}",
                 input={**inputs, **node.input_template},
-                approved=node.approval_policy == "allow_automatic",
             )
             try:
                 payload = self.capability_executor(f"task-graph:{run_id}", request)
@@ -1005,12 +1012,25 @@ class PostgresTaskGraphRuntime:
             if value
         )
         try:
-            contextual_start = getattr(self.agent_service, "start_with_context", None)
-            child = (
-                contextual_start(spec, reference_context=reference_context)
-                if callable(contextual_start)
-                else self.agent_service.start(spec)
-            )
+            service = self.agent_service
+            job_store = getattr(service, "job_store", None)
+            submit_start = getattr(service, "submit_start", None)
+            if callable(submit_start):
+                if job_store is None:
+                    raise RuntimeError("durable agent job service is not composed")
+                child = submit_start(
+                    spec,
+                    job_store=job_store,
+                    task_graph_run_id=run_id,
+                    task_graph_node_ids=[node.id],
+                )
+            else:
+                contextual_start = getattr(service, "start_with_context", None)
+                child = (
+                    contextual_start(spec, reference_context=reference_context)
+                    if callable(contextual_start)
+                    else service.start(spec)
+                )
         except Exception as exc:
             self._store_node(
                 run_id,
@@ -1297,6 +1317,7 @@ class PostgresTaskGraphRuntime:
         run_id: str,
         node_id: str,
         *,
+        approved_by: str,
         approval_id: str | None = None,
     ) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
@@ -1311,7 +1332,7 @@ class PostgresTaskGraphRuntime:
                 run_id,
                 node_id,
                 status="completed",
-                output={**state.output, "approved": True, "result": True},
+                output={**state.output, "approved": True, "approved_by": approved_by, "result": True},
                 expected_state=state,
                 expected_statuses=("waiting_for_approval",),
                 graph_revision=snapshot.graph.revision,
@@ -1328,7 +1349,7 @@ class PostgresTaskGraphRuntime:
             AgentRunCommand(
                 run_id=str(state.child_run_id),
                 command_type="approve",
-                payload={"approval_id": child_approval_id},
+                payload={"approval_id": child_approval_id, "issued_by": approved_by},
             )
         )
         return self.advance(run_id)
@@ -1384,7 +1405,8 @@ class PostgresTaskGraphRuntime:
                     payload={"reason": "task_graph_cancelled"},
                 )
             )
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("TaskGraph child cancellation", exc)
             pass
 
     def cancel(
@@ -1629,6 +1651,6 @@ class PostgresTaskGraphRuntime:
         return self.advance(run_id)
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_task_graph_runtime() -> PostgresTaskGraphRuntime:
     return PostgresTaskGraphRuntime()

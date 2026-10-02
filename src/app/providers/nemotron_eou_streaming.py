@@ -6,6 +6,9 @@ Imports of torch/numpy/NeMo are deliberately lazy so launcher and CI imports do
 not require the heavyweight speech environment.
 """
 from __future__ import annotations
+import logging
+
+from app.config.env import environment
 
 import json
 import os
@@ -17,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 NEMOTRON_MODEL_NAME = "nvidia/nemotron-speech-streaming-en-0.6b"
 EOU_MODEL_NAME = "nvidia/parakeet_realtime_eou_120m-v1"
 SAMPLE_RATE = 16_000
@@ -26,7 +31,7 @@ EOB_TOKEN = "<EOB>"
 
 def env_int(name: str, default: int) -> int:
     try:
-        return int(os.environ.get(name, str(default)).strip())
+        return int(environment().get(name, str(default)).strip())
     except (TypeError, ValueError):
         return default
 
@@ -53,8 +58,7 @@ def has_meaningful_transcript(text: str) -> bool:
 
 
 def _metric(event: str, **fields: Any) -> None:
-    print(
-        "[STT_METRIC] "
+    logger.info("[STT_METRIC] "
         + json.dumps(
             {
                 "event": event,
@@ -64,9 +68,7 @@ def _metric(event: str, **fields: Any) -> None:
             },
             sort_keys=True,
             default=str,
-        ),
-        flush=True,
-    )
+        ))
 
 
 def _extract_text(value: Any) -> str:
@@ -110,7 +112,7 @@ def _normalize_streaming_hypotheses(hypotheses: Any) -> Any:
 
 
 def _select_device(torch_module: Any, env_name: str, fallback: str) -> str:
-    requested = os.environ.get(env_name, fallback).strip().lower()
+    requested = environment().get(env_name, fallback).strip().lower()
     if requested == "auto":
         return "cuda" if torch_module.cuda.is_available() else "cpu"
     if requested.startswith("cuda") and not torch_module.cuda.is_available():
@@ -281,32 +283,30 @@ class NemotronEouModelManager:
             import torch
             from nemo.collections.asr.models import ASRModel
 
-            fallback_device = os.environ.get("OMNIX_STT_DEVICE", "auto")
+            fallback_device = environment().get("OMNIX_STT_DEVICE", "auto")
             self.nemotron_device = _select_device(torch, "OMNIX_NEMOTRON_DEVICE", fallback_device)
             self.eou_device = _select_device(torch, "OMNIX_EOU_DEVICE", fallback_device)
-            nemotron_name = os.environ.get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME).strip()
-            eou_name = os.environ.get("OMNIX_EOU_MODEL", EOU_MODEL_NAME).strip()
-            print(f"[STT] Loading authoritative Nemotron model {nemotron_name} on {self.nemotron_device}")
+            nemotron_name = environment().get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME).strip()
+            eou_name = environment().get("OMNIX_EOU_MODEL", EOU_MODEL_NAME).strip()
+            logger.info(f"[STT] Loading authoritative Nemotron model {nemotron_name} on {self.nemotron_device}")
             self.nemotron_model = ASRModel.from_pretrained(model_name=nemotron_name)
             self.nemotron_model.to(self.nemotron_device)
             self.nemotron_model.eval()
             _configure_streaming_context(self.nemotron_model, self.nemotron_right_context)
-            print(f"[STT] Loading Parakeet Realtime EOU model {eou_name} on {self.eou_device}")
+            logger.info(f"[STT] Loading Parakeet Realtime EOU model {eou_name} on {self.eou_device}")
             self.eou_model = ASRModel.from_pretrained(model_name=eou_name)
             self.eou_model.to(self.eou_device)
             self.eou_model.eval()
             _configure_streaming_context(self.eou_model, self.eou_right_context)
-            print(
-                "[STT] Hybrid streaming ready: "
+            logger.info("[STT] Hybrid streaming ready: "
                 f"Nemotron right_context={self.nemotron_right_context}, "
-                f"EOU right_context={self.eou_right_context}, feed_chunk_ms={self.feed_chunk_ms}"
-            )
+                f"EOU right_context={self.eou_right_context}, feed_chunk_ms={self.feed_chunk_ms}")
 
     def health_details(self) -> dict[str, Any]:
         return {
             "provider": "nemotron_parakeet_eou",
-            "authoritative_transcript_model": os.environ.get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME),
-            "endpoint_model": os.environ.get("OMNIX_EOU_MODEL", EOU_MODEL_NAME),
+            "authoritative_transcript_model": environment().get("OMNIX_NEMOTRON_MODEL", NEMOTRON_MODEL_NAME),
+            "endpoint_model": environment().get("OMNIX_EOU_MODEL", EOU_MODEL_NAME),
             "nemotron_device": self.nemotron_device,
             "eou_device": self.eou_device,
             "chunk_ms": self.feed_chunk_ms,

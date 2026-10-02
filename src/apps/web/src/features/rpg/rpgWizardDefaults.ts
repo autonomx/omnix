@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { DEFAULT_SETTINGS_DOCUMENT } from '../settings/settingsDefaults';
 import { rpgCampaignDefaults } from '../settings/moduleDefaults';
 import type { SettingsDocument } from '../settings/settingsDocumentTypes';

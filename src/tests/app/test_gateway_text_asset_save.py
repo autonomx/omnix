@@ -8,11 +8,15 @@ from app.gateway.main import create_gateway_app
 
 def test_gateway_saves_text_asset(tmp_path) -> None:
     store = SharedAssetStore(tmp_path / "assets" / "manifest.json")
-    client = TestClient(create_gateway_app(asset_store_factory=lambda: store))
+    client = TestClient(
+        create_gateway_app(asset_store_factory=lambda: store),
+        base_url="http://localhost",
+    )
 
     response = client.post(
         "/api/assets/story",
         json={"title": "Saved Story", "content": "# Saved Story\n\nText."},
+        headers={"X-Omnix-Client": "test"},
     )
 
     assert response.status_code == 200

@@ -23,7 +23,7 @@ def _approval(**updates):
         approval_id="approval-1",
         run_id="run-1",
         capability_id=updates.pop("capability_id", "home.set_state"),
-        state="approved",
+        state=updates.pop("state", "approved"),
         request_payload=payload,
         **updates,
     )
@@ -128,3 +128,14 @@ def test_command_permission_keeps_cwd_inside_workspace(tmp_path) -> None:
     outside.mkdir()
     assert _path_is_within(str(workspace), str(nested))
     assert not _path_is_within(str(workspace), str(outside))
+
+
+def test_executions_are_approved_by_the_recorded_principal() -> None:
+    from app.agent_runtime.broker_api import _approver
+    from app.capabilities.executor import LEGACY_APPROVER
+
+    assert _approver(_approval(resolution_payload={"decided_by": "user:alice"})) == "user:alice"
+    # Decisions recorded before approvals named their principal stay valid.
+    assert _approver(_approval()) == LEGACY_APPROVER
+    assert _approver(_approval(state="pending")) is None
+    assert _approver(_approval(state="rejected", resolution_payload={"decided_by": "user:alice"})) is None

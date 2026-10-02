@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 from app.providers.structured.legacy import decode_legacy_json_object
 from app.rpg.ai.pre_runtime_intent_fast_path import FAST_PATH_SOURCE
@@ -26,7 +26,7 @@ _ALLOWED_RISK_DOMAINS = {
     "quest", "relationship_change", "reward", "service", "threat", "travel", "unknown",
 }
 _SEMANTIC_FAST_PATH_SOURCE = "phase14_18_semantic_reused_action_fast_path_v1"
-_SEMANTIC_PACKET_SCHEMA: Dict[str, Any] = {
+_SEMANTIC_PACKET_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "action_intent": {"type": "object"},
@@ -43,11 +43,11 @@ _SEMANTIC_PACKET_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _safe_dict(v: Any) -> Dict[str, Any]:
+def _safe_dict(v: Any) -> dict[str, Any]:
     return dict(v) if isinstance(v, dict) else {}
 
 
-def _safe_list(v: Any) -> List[Any]:
+def _safe_list(v: Any) -> list[Any]:
     return v if isinstance(v, list) else []
 
 
@@ -80,7 +80,7 @@ def _clip_text(text: Any, limit: int = 120) -> str:
     return _safe_str(text).strip()[:limit]
 
 
-def _prompt_payload(prompt: str) -> Dict[str, Any]:
+def _prompt_payload(prompt: str) -> dict[str, Any]:
     if "INPUT:\n" not in prompt:
         return {}
     try:
@@ -119,7 +119,7 @@ def _semantic_family_for_action(action_type: str) -> str:
 
 
 def _attach_first_call_diagnostics(
-    advisory: Dict[str, Any],
+    advisory: dict[str, Any],
     *,
     prompt: str = "",
     raw_result: Any,
@@ -128,7 +128,7 @@ def _attach_first_call_diagnostics(
     provider_called: bool = False,
     provider_error: str = "",
     parse_ok: bool | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     advisory = _safe_dict(advisory)
     prompt = _safe_str(prompt)
     payload = _prompt_payload(prompt) if prompt else {}
@@ -208,7 +208,8 @@ def _complete_raw_text(llm_gateway: Any, prompt: str) -> tuple[Any, str, str]:
             if isinstance(result, dict)
             else _safe_str(result)
         )
-        return result, raw_text, "semantic_action_intelligence.complete_semantic_packet"
+        source = "semantic_action_intelligence.complete_semantic_packet"
+        return _repair_provider_message_content(result, raw_text, source)
     if hasattr(llm_gateway, "complete"):
         result = llm_gateway.complete(prompt)
         raw_text = (
@@ -216,15 +217,34 @@ def _complete_raw_text(llm_gateway: Any, prompt: str) -> tuple[Any, str, str]:
             if isinstance(result, dict)
             else _safe_str(result)
         )
-        return result, raw_text, "semantic_action_intelligence.complete"
+        source = "semantic_action_intelligence.complete"
+        return _repair_provider_message_content(result, raw_text, source)
     if hasattr(llm_gateway, "complete_json"):
         result = llm_gateway.complete_json(prompt)
         raw_text = json.dumps(result, ensure_ascii=False, sort_keys=True) if isinstance(result, dict) and result else ""
-        return result, raw_text, "semantic_action_intelligence.complete_json"
+        source = "semantic_action_intelligence.complete_json"
+        return _repair_provider_message_content(result, raw_text, source)
     return {}, "", "semantic_action_intelligence.no_provider_method"
 
 
-def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> str:
+def _repair_provider_message_content(
+    result: Any,
+    raw_text: str,
+    source: str,
+) -> tuple[Any, str, str]:
+    from app.rpg.session.visible_response_contract import (
+        extract_provider_message_content,
+        is_invalid_visible_value,
+    )
+
+    if is_invalid_visible_value(raw_text):
+        extracted = extract_provider_message_content(result)
+        if extracted:
+            return result, extracted, f"{source}:choices_message_content"
+    return result, raw_text, source
+
+
+def build_semantic_action_prompt(player_input: str, simulation_state: dict[str, Any], runtime_state: dict[str, Any], candidate_action: dict[str, Any]) -> str:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
     candidate_action = _safe_dict(candidate_action)
@@ -256,10 +276,23 @@ def build_semantic_action_prompt(player_input: str, simulation_state: Dict[str, 
         "Never reveal private_context or private NPC biography/inventory in final_narration_candidate.\n"
         "Return exactly action_intent, semantic_advisory, dialogue_gate, final_narration_candidate, and reason with all nested fields required by the schema.\n"
     )
-    return instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
+    from app.rpg.presentation.dialogue_quality import dialogue_quality_contract_text
+
+    prompt = instructions + "\nINPUT:\n" + json.dumps(payload, sort_keys=True)
+    return (
+        f"{prompt}\nDIALOGUE_QUALITY_CONTRACT:\n{dialogue_quality_contract_text()}"
+        "\n\nSTRICT VISIBLE RESPONSE RULES:\n"
+        "- final_narration_candidate.npc.speaker must be the NPC who answers, never Player, you, narrator, scene, or system.\n"
+        "- final_narration_candidate.npc.line must be the NPC's answer, not a restatement of the player's request.\n"
+        "- priority_context.dialogue_resolution is authoritative when locked is true; keep that target_id even when the current utterance does not repeat the NPC's name.\n"
+        "- Use priority_context.dialogue_context.recent_turns as an exact speaker/target transcript. Declarative answers, corrections, pronouns, and topic continuations may all be dialogue replies.\n"
+        "- Resolve a different target only when dialogue_resolution supplies multiple candidate_target_ids and the transcript genuinely disambiguates one of them.\n"
+        "- If you cannot safely produce an NPC answer, leave final_narration_candidate empty and set dialogue_gate.safe_to_display_now false.\n"
+        "- Use only allowed utterance_mode and risk_domain enum values from the input lists.\n"
+    )
 
 
-def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_semantic_action_advisory(advisory: dict[str, Any], candidate_action: dict[str, Any]) -> dict[str, Any]:
     advisory = _safe_dict(advisory)
     candidate_action = _safe_dict(candidate_action)
     action_intent = _safe_dict(advisory.get("action_intent"))
@@ -428,10 +461,47 @@ def normalize_semantic_action_advisory(advisory: Dict[str, Any], candidate_actio
     ):
         if key in advisory:
             normalized[key] = advisory[key]
+    visible = _safe_dict(normalized.get("visible_response"))
+    npc = _safe_dict(visible.get("npc"))
+    speaker = _safe_str(npc.get("speaker")).strip().casefold()
+    line = _safe_str(npc.get("line")).strip()
+    if speaker in {"player", "you", "the player", "adventurer", "traveler"} or _line_restates_player_input(
+        line,
+        normalized,
+    ):
+        normalized["visible_response"] = {}
+        normalized["final_narration_candidate"] = {}
+        gate = _safe_dict(normalized.get("direct_response_gate"))
+        gate["safe_to_display_now"] = False
+        flags = [str(flag) for flag in gate.get("risk_flags", []) if str(flag)]
+        if "invalid_npc_visible_response" not in flags:
+            flags.append("invalid_npc_visible_response")
+        gate["risk_flags"] = flags
+        gate["reason"] = "visible_response_rejected_player_speaker_or_restatement"
+        normalized["direct_response_gate"] = gate
+        normalized["dialogue_gate"] = gate
+        normalized["visible_response_repaired"] = True
     return normalized
 
 
-def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
+def _line_restates_player_input(line: str, advisory: dict[str, Any]) -> bool:
+    import re
+
+    normalize = lambda value: re.sub(r"[^a-z0-9]+", " ", _safe_str(value).casefold()).strip()
+    line_norm = normalize(line)
+    if not line_norm:
+        return False
+    diagnostics = _safe_dict(advisory.get("first_call_grounding_diagnostics"))
+    packet = _safe_dict(diagnostics.get("turn_grounding_packet"))
+    player_input = normalize(packet.get("player_input"))
+    if not player_input:
+        return False
+    return line_norm == player_input or (
+        player_input in line_norm and len(line_norm) <= len(player_input) + 30
+    )
+
+
+def _is_action_fast_path_advisory(candidate_action: dict[str, Any]) -> bool:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
     return bool(
@@ -442,7 +512,7 @@ def _is_action_fast_path_advisory(candidate_action: Dict[str, Any]) -> bool:
     )
 
 
-def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def _semantic_action_from_action_fast_path(candidate_action: dict[str, Any]) -> dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     diagnostics = _safe_dict(candidate_action.get("first_call_grounding_diagnostics"))
     reason = _safe_str(
@@ -485,7 +555,7 @@ def _semantic_action_from_action_fast_path(candidate_action: Dict[str, Any]) -> 
     return normalize_semantic_action_advisory(raw, candidate_action)
 
 
-def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: Dict[str, Any], runtime_state: Dict[str, Any], candidate_action: Dict[str, Any]) -> Dict[str, Any]:
+def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation_state: dict[str, Any], runtime_state: dict[str, Any], candidate_action: dict[str, Any]) -> dict[str, Any]:
     candidate_action = _safe_dict(candidate_action)
     if llm_gateway is None:
         return {}
@@ -493,7 +563,7 @@ def get_semantic_action_advisory(llm_gateway: Any, player_input: str, simulation
     raw_result: Any = {}
     raw_text = ""
     source = "semantic_action_intelligence.complete"
-    parsed: Dict[str, Any] = {}
+    parsed: dict[str, Any] = {}
     provider_error = ""
     try:
         raw_result, raw_text, source = _complete_raw_text(llm_gateway, prompt)

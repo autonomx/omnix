@@ -184,6 +184,17 @@ afterEach(() => {
 });
 
 describe('live voice PCM session', () => {
+  it('keeps the call-affinity cookie for the session lifetime', async () => {
+    const session = await createLiveVoicePcmSession(
+      'live-call:s1:test', 'Jinx', reporter,
+      { sessionScoped: true, affinityKey: 'session:one' },
+    );
+
+    expect(document.cookie).toContain('omnix_call_affinity=session%3Aone');
+    await session.stop('test-cleanup');
+    expect(document.cookie).not.toContain('omnix_call_affinity=');
+  });
+
   it('maps a delayed worklet event back to its audio output time', () => {
     expect(resolveWorkletPlaybackPerformanceTimeMs(
       { audio_context_time_seconds: 10 },

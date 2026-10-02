@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from app.gateway.live_voice_release_gate import (
+from app.live_voice.release_gate import (
     REQUIRED_LIVE_VOICE_SCENARIOS,
     LiveVoiceReleaseThresholds,
     evaluate_live_voice_log,
@@ -145,10 +145,11 @@ def test_release_gate_reads_jsonl_and_ignores_invalid_records(tmp_path) -> None:
 
 def test_release_gate_route_evaluates_supplied_evidence() -> None:
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://localhost")
 
     response = client.post(
         "/api/tts/live-call/diagnostics/release-gate/evaluate",
+        headers={"X-Omnix-Client": "test"},
         json={
             "events": _passing_events(samples=2, trials=2),
             "thresholds": {
@@ -166,13 +167,13 @@ def test_release_gate_route_evaluates_supplied_evidence() -> None:
 
 
 def test_release_gate_route_reads_current_log(monkeypatch, tmp_path) -> None:
-    from app.gateway import live_voice_diagnostics_routes
+    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     path = tmp_path / "live-call-streaming.log"
     path.write_text("", encoding="utf-8")
     monkeypatch.setattr(live_voice_diagnostics_routes, "diagnostics_log_path", lambda: str(path))
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://localhost")
 
     response = client.get(
         "/api/tts/live-call/diagnostics/release-gate",

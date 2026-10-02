@@ -6,8 +6,9 @@ abilities still use validated deterministic world-effect operations.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.ability_system import DEFAULT_SKILL_XP_PER_ABILITY_USE, grant_skill_xp, tick_ability_state
@@ -19,7 +20,7 @@ WORLD_SCALE_DEFAULT_COOLDOWN = 8
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:

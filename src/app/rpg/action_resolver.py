@@ -7,7 +7,7 @@ No randomness without explicit seed.
 from __future__ import annotations
 
 import random
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # ---------------------------------------------------------------------------
 # Action Profiles
@@ -83,11 +83,12 @@ def _get_skill_level(actor: Dict[str, Any], skill_id: str) -> int:
     return _safe_int(skill, 0)
 
 
-def _make_rng(seed: Optional[int] = None) -> random.Random:
-    rng = random.Random()
-    if seed is not None:
-        rng.seed(seed)
-    return rng
+def _make_rng(seed: int | random.Random) -> random.Random:
+    if isinstance(seed, random.Random):
+        return seed
+    if seed is None:
+        raise ValueError("an explicit RPG action RNG seed is required")
+    return random.Random(seed)
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +184,7 @@ def resolve_attack_roll(
     attacker: Dict[str, Any],
     defender: Dict[str, Any],
     weapon: Dict[str, Any],
-    seed: Optional[int] = None,
+    seed: int | random.Random,
 ) -> Dict[str, Any]:
     """Deterministic attack resolution. Returns hit/miss/crit/graze + damage."""
     rng = _make_rng(seed)
@@ -242,7 +243,8 @@ def resolve_noncombat_check(
     player_state: Dict[str, Any],
     action_type: str,
     difficulty: str = "normal",
-    seed: Optional[int] = None,
+    *,
+    seed: int | random.Random,
 ) -> Dict[str, Any]:
     """Resolve a non-combat skill check (persuade, sneak, hack, etc.)."""
     rng = _make_rng(seed)
@@ -284,7 +286,7 @@ def resolve_noncombat_check(
 def resolve_player_action(
     simulation_state: Dict[str, Any],
     action: Dict[str, Any],
-    seed: Optional[int] = None,
+    seed: int | random.Random,
 ) -> Dict[str, Any]:
     """Main entry point: resolve any player action type."""
     sim = _safe_dict(simulation_state)
@@ -349,7 +351,7 @@ def resolve_player_action(
         }
 
     difficulty = str(action.get("difficulty", "normal"))
-    result = resolve_noncombat_check(player_state, action_type, difficulty, seed)
+    result = resolve_noncombat_check(player_state, action_type, difficulty, seed=seed)
     result["target_name"] = _target_name(_safe_dict(action.get("target")))
     if not result["target_name"]:
         result["target_name"] = str(
@@ -397,7 +399,12 @@ def resolve_player_action(
 # Legacy compatibility
 # ---------------------------------------------------------------------------
 
-def resolve_action(player, action_type: str, difficulty: str = "normal", seed: Optional[int] = None) -> Dict[str, Any]:
+def resolve_action(
+    player,
+    action_type: str,
+    difficulty: str = "normal",
+    seed: int | random.Random = 0,
+) -> Dict[str, Any]:
     """Legacy wrapper for old PlayerState-based calls."""
     if isinstance(player, dict):
         ps = player
@@ -413,7 +420,7 @@ def resolve_action(player, action_type: str, difficulty: str = "normal", seed: O
             },
             "skills": getattr(player, 'skills', {}),
         }
-    result = resolve_noncombat_check(ps, action_type, difficulty, seed)
+    result = resolve_noncombat_check(ps, action_type, difficulty, seed=seed)
     damage = 0
     if action_type in ("attack", "attack_melee") and result["outcome"] in ("success", "critical_success"):
         damage = 5 + _get_stat(ps, "strength")

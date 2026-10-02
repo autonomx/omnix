@@ -8,8 +8,9 @@ from fastapi.testclient import TestClient
 
 from app.assistant_context.routes import register_assistant_context_routes
 from app.chat import ChatSessionStore, CreateChatSessionRequest
-from app.jobs import CancelJobRequest, SQLiteJobStore
-from app.jobs.research_inline import (
+from app.jobs import CancelJobRequest
+from tests.support.in_memory_jobs import InMemoryJobStore
+from app.research.jobs import (
     DeepResearchWorkflowResult,
     execute_research_job,
     load_research_checkpoint,
@@ -24,6 +25,9 @@ from app.research.planner import ResearchOperation, ResearchPlan
 from app.research.policy import ResearchPolicy
 from app.research.release_policy import ResearchReleasePolicy
 from app.research.settings import ResearchRuntimeSettings
+import pytest
+
+pytestmark = pytest.mark.usefixtures("legacy_test_persistence")
 
 
 class ContextServiceMustNotRun:
@@ -56,7 +60,7 @@ def test_deep_research_route_returns_user_turn_and_queued_job_before_generation(
 ) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep research"))
     app = FastAPI()
     register_test_routes(app, chat_store, job_store)
@@ -87,7 +91,7 @@ def test_deep_research_executor_persists_partial_message_and_completes_shared_jo
     log_path = tmp_path / "deep-research.log"
     monkeypatch.setenv("OMNIX_DEEP_RESEARCH_LOG_PATH", str(log_path))
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     session = chat_store.create_session(CreateChatSessionRequest(title="Deep research"))
     app = FastAPI()
     register_test_routes(app, chat_store, job_store)
@@ -136,7 +140,7 @@ def test_deep_research_executor_persists_partial_message_and_completes_shared_jo
 def test_research_checkpoint_round_trips_on_job_stage(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     session = chat_store.create_session(CreateChatSessionRequest(title="Checkpoint research"))
     app = FastAPI()
     register_test_routes(app, chat_store, job_store)
@@ -172,7 +176,7 @@ def test_research_checkpoint_round_trips_on_job_stage(tmp_path, monkeypatch) -> 
 def test_deep_research_executor_acknowledges_cancellation(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_INLINE_RESEARCH_JOB_EXECUTOR", "0")
     chat_store = ChatSessionStore(tmp_path / "chat.json")
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
     session = chat_store.create_session(CreateChatSessionRequest(title="Cancel research"))
     app = FastAPI()
     register_test_routes(app, chat_store, job_store)

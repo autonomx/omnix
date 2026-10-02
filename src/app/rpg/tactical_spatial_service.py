@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_grid_contracts import GridMapDefinition
@@ -28,7 +28,7 @@ def move_actor_tactically(
     policy: TacticalSpatialPolicy | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         instance_hint = work.map_instances.get_instance(context, map_instance_id)
         if instance_hint is None:
@@ -135,7 +135,7 @@ def attack_tactically(
     policy: TacticalSpatialPolicy | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         instance_hint = work.map_instances.get_instance(context, map_instance_id)
         if instance_hint is None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from app.gateway.live_chat_speculative_tts import (
+from app.live_voice.speech.chat_speculative_tts import (
     _PROVIDER_GENERATION_LOCK,
     _accept_entry,
     _cancel_entry,
@@ -13,7 +13,7 @@ from app.gateway.live_chat_speculative_tts import (
     clear_speculative_tts_cache,
     speculative_tts_cache_snapshot,
 )
-from app.gateway.tts_stream_contract import TtsStreamRequest
+from app.conversation.tts_stream_contract import TtsStreamRequest
 
 
 class BlockingTwoChunkProvider:

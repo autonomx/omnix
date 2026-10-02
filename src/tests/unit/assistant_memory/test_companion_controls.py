@@ -11,7 +11,7 @@ from app.assistant_memory.controls import (
     undo_automatic_memory,
 )
 from app.assistant_memory.management_routes import register_memory_management_routes
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.observability import (
     memory_usage_snapshot,
     record_memory_usage,
@@ -61,11 +61,17 @@ class _Store:
     def get_session(self, session_id: str):
         return next((item for item in self.sessions if item.id == session_id), None)
 
-    def _load_sessions(self):
-        return self.sessions
-
-    def _save_sessions(self, sessions):
-        self.sessions = sessions
+    def clear_memory_snapshots_for_owner(self, owner_type: str, owner_id: str) -> int:
+        changed = 0
+        for session in self.sessions:
+            actual_owner = "character" if session.interaction_mode == "character" else "system"
+            actual_id = session.character_id if actual_owner == "character" else "system-assistant"
+            if (actual_owner, actual_id) != (owner_type, owner_id):
+                continue
+            session.memory_enabled = False
+            session.memory_snapshot_id = None
+            changed += 1
+        return changed
 
 
 def test_archive_restore_export_and_reset_are_owner_scoped() -> None:
@@ -193,4 +199,6 @@ def test_management_static_control_routes_are_reachable() -> None:
     usage_response = client.get("/api/assistant/memory/usage", params={"session_id": "chat:controls"})
     assert usage_response.status_code == 200
     assert usage_response.json()["diagnostics_policy"] == "content_free"
-    assert "/api/assistant/memory/export" not in client.get("/openapi.json").json()["paths"]
+    schema = client.get("/openapi.json").json()
+    assert "/api/assistant/memory/export" in schema["paths"]
+    assert "get" in schema["paths"]["/api/assistant/memory/export"]

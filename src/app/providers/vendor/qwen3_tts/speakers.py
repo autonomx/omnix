@@ -5,7 +5,7 @@ Normalized speaker enumeration for vendored Qwen3-TTS.
 from pathlib import Path
 from typing import Any, Dict, List
 
-from app.shared import VOICE_CLONES_DIR
+from app.runtime.paths import VOICE_CLONES_DIR
 
 
 def list_available_speakers(model: Any = None) -> List[Dict[str, Any]]:

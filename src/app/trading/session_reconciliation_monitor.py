@@ -7,17 +7,18 @@ It never substitutes IEX, web quotes, adjusted daily bars, or partial prints.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
-import os
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .providers.alpaca_sip import AlpacaSipResearchProvider
@@ -44,20 +45,22 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_session_reconciliation_monitor"
 _SESSION_CLOSE = time(16, 0)
 _DEFAULT_CREATE_AFTER = time(16, 5)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def session_reconciliation_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_SESSION_RECONCILIATION_MONITOR", "1")
 
@@ -65,7 +68,7 @@ def session_reconciliation_monitor_enabled() -> bool:
 def _interval_seconds() -> float:
     try:
         value = float(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_INTERVAL_SECONDS",
                 "300",
             )
@@ -78,7 +81,7 @@ def _interval_seconds() -> float:
 def _retry_minutes() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_RETRY_MINUTES",
                 "15",
             )
@@ -91,7 +94,7 @@ def _retry_minutes() -> int:
 def _max_age_days() -> int:
     try:
         value = int(
-            os.environ.get(
+            _env_str(
                 "OMNIX_TRADING_SESSION_RECONCILIATION_MAX_AGE_DAYS",
                 "7",
             )
@@ -197,6 +200,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -226,6 +230,7 @@ def _prospective_experiment_outcomes(
                     invalidation_price=invalidation,
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "_prospective_experiment_outcomes", exc_info=True)
                 continue
 
             champion_outcome = None
@@ -290,6 +295,7 @@ def _prospective_experiment_outcomes(
                     invalidation_price=invalidation,
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "_prospective_experiment_outcomes", exc_info=True)
                 continue
             records.append(
                 {
@@ -853,14 +859,13 @@ class TradingSessionReconciliationMonitor:
                 await task
 
 
-def register_trading_session_reconciliation_monitor(
-    gateway: FastAPI,
-) -> TradingSessionReconciliationMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_session_reconciliation_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingSessionReconciliationMonitor):
-        return existing
+        return None
     monitor = TradingSessionReconciliationMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if session_reconciliation_monitor_enabled():
@@ -869,14 +874,13 @@ def register_trading_session_reconciliation_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingSessionReconciliationMonitor",
-    "register_trading_session_reconciliation_monitor",
+    "create_trading_session_reconciliation_monitor_worker",
     "session_reconciliation_monitor_enabled",
 ]

@@ -4,24 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pydantic import BaseModel, Field
-
-
-class SettingsPayload(BaseModel):
-    success: bool = True
-    provider: str
-    audio_provider_tts: str
-    audio_provider_stt: str
-    image_enabled: bool
-    rpg_visual_enabled: bool
-    worker_urls: dict[str, str] = Field(default_factory=dict)
-    hermes_status: dict[str, Any] = Field(default_factory=dict)
-    hermes_commands: dict[str, str] = Field(default_factory=dict)
-    settings: dict[str, Any] = Field(default_factory=dict)
-
-
-class SettingsSaveResponse(BaseModel):
-    success: bool = True
+from app.settings.models import SettingsPayload, SettingsSaveResponse
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -81,7 +64,7 @@ def _hermes_commands_payload() -> dict[str, str]:
 
 
 def get_legacy_settings_payload() -> dict[str, Any]:
-    from app.shared import load_secrets, load_settings
+    from app.settings.access import load_secrets, load_settings
 
     settings = _deep_copy(load_settings())
     secrets = load_secrets()
@@ -100,7 +83,7 @@ def get_legacy_settings_payload() -> dict[str, Any]:
 
 
 def get_settings_payload() -> SettingsPayload:
-    from app.shared import load_settings
+    from app.settings.access import load_settings
 
     settings = load_settings()
     image = _safe_dict(settings.get("image"))
@@ -135,7 +118,7 @@ def apply_settings_payload(
     touching the secret store for ordinary provider/configuration changes.
     """
 
-    from app.shared import DEFAULT_SETTINGS
+    from app.config.defaults import DEFAULT_SETTINGS
 
     secrets_changed = False
 
@@ -197,7 +180,7 @@ def apply_settings_payload(
 
 
 def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
-    from app.shared import load_secrets, load_settings, save_secrets, save_settings
+    from app.settings.access import load_secrets, load_settings, save_secrets, save_settings
 
     from .audio_cache import invalidate_changed_audio_caches
 

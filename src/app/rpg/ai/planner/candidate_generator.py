@@ -244,7 +244,7 @@ class CandidateGenerator:
                 event = action.create_event(combined)
                 candidates.append([event])
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "CandidateGenerator.generate_with_combos", exc_info=True)
 
         # Combo candidates (action sequences)
         for action in applicable[:3]:  # Limit to top 3 for combos

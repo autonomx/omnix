@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import logging
 import os
@@ -12,7 +14,9 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Iterator
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
+
+logger = logging.getLogger(__name__)
 
 RPG_DEBUG_ENABLED_ENV = "OMNIX_RPG_DEBUG_LOGS"
 RPG_DEBUG_LOG_DIR_ENV = "OMNIX_RPG_LOG_DIR"
@@ -26,11 +30,9 @@ _MAX_DEPTH = 7
 _LOGGER_NAMES = (
     "app.rpg",
     "app.gateway.rpg",
-    "app.gateway.rpg_session_routes",
+    "app.rpg.api.feature_routes.rpg_session_routes",
     "app.gateway.rpg_direct_turn_routes",
-    "app.gateway.rpg_turn_job_mirror",
-    "app.jobs.inline_feature_jobs",
-    "app.jobs.rpg_last10_report",
+    "app.rpg.jobs.turn_job_mirror",
 )
 _STANDARD_LOG_RECORD_FIELDS = frozenset(logging.makeLogRecord({}).__dict__)
 _REDACTED_KEY_PARTS = (
@@ -51,12 +53,12 @@ _last_cleanup_date: str | None = None
 
 
 def rpg_debug_logging_enabled() -> bool:
-    value = os.getenv(RPG_DEBUG_ENABLED_ENV, "1").strip().lower()
+    value = env_str(RPG_DEBUG_ENABLED_ENV, "1").strip().lower()
     return value not in {"0", "false", "no", "off", "disabled"}
 
 
 def rpg_debug_log_dir() -> Path:
-    override = os.getenv(RPG_DEBUG_LOG_DIR_ENV, "").strip()
+    override = env_str(RPG_DEBUG_LOG_DIR_ENV, "").strip()
     if override:
         return Path(override).expanduser().resolve()
     return resources_root() / "logs" / "rpg"
@@ -358,11 +360,11 @@ def _cleanup_expired_logs(directory: Path) -> None:
 
 
 def _retention_days() -> int:
-    return _positive_int(os.getenv(RPG_DEBUG_RETENTION_DAYS_ENV), _DEFAULT_RETENTION_DAYS, minimum=1, maximum=365)
+    return _positive_int(env_str(RPG_DEBUG_RETENTION_DAYS_ENV), _DEFAULT_RETENTION_DAYS, minimum=1, maximum=365)
 
 
 def _max_field_chars() -> int:
-    return _positive_int(os.getenv(RPG_DEBUG_MAX_FIELD_CHARS_ENV), _DEFAULT_MAX_FIELD_CHARS, minimum=256, maximum=250_000)
+    return _positive_int(env_str(RPG_DEBUG_MAX_FIELD_CHARS_ENV), _DEFAULT_MAX_FIELD_CHARS, minimum=256, maximum=250_000)
 
 
 def _positive_int(value: str | None, default: int, *, minimum: int, maximum: int) -> int:
@@ -411,7 +413,7 @@ def _sanitize(value: Any, *, key: str = "", depth: int = 0) -> Any:
         try:
             return _sanitize(model_dump(mode="json"), key=key, depth=depth + 1)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_sanitize", exc_info=True)
     return _sanitize(str(value), key=key, depth=depth + 1)
 
 

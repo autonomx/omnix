@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gateway.background_runtime import GatewayBackgroundRuntime
+from app.runtime.background import GatewayBackgroundRuntime
+from app.providers import service as shared
 from app.gateway.lifecycle import gateway_lifespan
 from app.chat import generation_jobs as jobs
 from app.trading.metric_data import BinanceLiquidationBuffer
@@ -151,7 +152,8 @@ def test_api_role_never_starts_liquidation_streams_and_collector_shutdown_is_bou
 def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
 
-    monkeypatch.setattr(jobs, "_provider_slots", threading.BoundedSemaphore(2))
+    permit_slots = threading.BoundedSemaphore(2)
+    monkeypatch.setattr(jobs, "device_permit_slot", lambda *_args, **_kwargs: permit_slots)
     entered = []
     both_entered, release = threading.Event(), threading.Event()
     state = SimpleNamespace(status=jobs.JobStatus.RUNNING)
@@ -173,7 +175,7 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
                 job_store=store,
                 session=None,
                 user_message=None,
-                request=None,
+                request=SimpleNamespace(provider_id="lmstudio"),
                 context_items=[],
                 job=SimpleNamespace(id=str(index)),
             )
@@ -186,13 +188,13 @@ def test_canceled_providers_keep_capacity_until_their_invocations_exit(monkeypat
             for future in futures:
                 future.result(timeout=2)
         assert len(entered) == 2
-        assert jobs._provider_slots._value == 0
+        assert permit_slots._value == 0
     finally:
         release.set()
 
 
 def test_delivery_worker_restarts_explicitly_and_drops_post_shutdown_checkpoints():
-    from app.gateway.live_voice_runtime_offload import DeliveryPersistenceWorker
+    from app.live_voice.speech.runtime_offload import DeliveryPersistenceWorker
 
     received = []
     finished = threading.Event()
@@ -215,7 +217,7 @@ def test_delivery_worker_restarts_explicitly_and_drops_post_shutdown_checkpoints
     assert received == [{"turn": "first"}, {"turn": "second"}]
 
 def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
     monkeypatch.delenv("OMNIX_GATEWAY_TTS_HTTP", raising=False)
@@ -231,18 +233,20 @@ def test_api_replica_cannot_construct_local_qwen_tts(monkeypatch):
         lambda: pytest.fail("API replica attempted to construct local GPU TTS"),
     )
     with pytest.raises(RuntimeError, match="cannot construct the local GPU TTS"):
-        shared.get_tts_provider()
+        provider_service.get_tts_provider()
 
 
 def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypatch):
     from fastapi import FastAPI
-    from app.gateway import live_voice_runtime_offload as offload
+    from app.live_voice.speech import runtime_offload as offload
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
     monkeypatch.delenv("OMNIX_GATEWAY_TTS_HTTP", raising=False)
     monkeypatch.delenv("OMNIX_TTS_URL", raising=False)
     app = FastAPI(title="Omnix Web Gateway")
-    offload.register_live_voice_runtime_offload(app)
+    from tests.support.routers import include_router_registrar
+
+    include_router_registrar(app, offload.register_live_voice_runtime_offload)
     resolver = app.state.live_voice_tts_provider_resolver
     calls = []
     monkeypatch.setattr(
@@ -252,13 +256,13 @@ def test_api_replica_without_shared_tts_does_not_start_provider_refresh(monkeypa
     monkeypatch.setattr(resolver, "start", lambda: calls.append("start"))
     startup = next(
         handler for handler in app.router.on_startup
-        if handler.__module__ == "app.gateway.live_voice_runtime_offload"
+        if handler.__module__ == "app.live_voice.speech.runtime_offload"
     )
     asyncio.run(startup())
     assert calls == []
 
 def test_api_replica_uses_shared_tts_url_without_local_registry(monkeypatch):
-    from app import shared
+    from app.providers import service as provider_service
     from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
 
     monkeypatch.setenv("OMNIX_GATEWAY_BACKGROUND_ROLE", "api")
@@ -274,7 +278,7 @@ def test_api_replica_uses_shared_tts_url_without_local_registry(monkeypatch):
         shared, "get_audio_registry",
         lambda: pytest.fail("API replica attempted to construct local GPU TTS"),
     )
-    provider = shared.get_tts_provider()
+    provider = provider_service.get_tts_provider()
     assert isinstance(provider, QwenHttpGatewayProvider)
     assert provider.base_url == "http://127.0.0.1:5101"
 

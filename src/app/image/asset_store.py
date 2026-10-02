@@ -1,13 +1,17 @@
 """Global image asset store (IMG-4)."""
 from __future__ import annotations
 
+import logging
+
 import hashlib
 import json
 import os
 import re
 from typing import Any, Dict
 
-from app.runtime_paths import generated_images_root
+from app.runtime.paths import generated_images_root
+
+logger = logging.getLogger(__name__)
 
 ASSET_DIR = str(generated_images_root())
 MANIFEST_PATH = os.path.join(ASSET_DIR, "manifest.json")
@@ -169,6 +173,6 @@ def cleanup_unused_image_assets():
             try:
                 os.remove(full)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "cleanup_unused_image_assets", exc_info=True)
 
     return {"ok": True}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
@@ -24,6 +25,12 @@ class ScannerResultListResponse(BaseModel):
     results: list[TradingScannerResult]
 
 
+class ScannerRunCancelResponse(BaseModel):
+    ok: Literal[True]
+    run_id: str
+    status: Literal["cancellation_requested"]
+
+
 RepositoryFactory = Callable[[], TradingScannerRepository]
 ManagerFactory = Callable[[], TradingScannerManager]
 
@@ -35,22 +42,23 @@ def create_trading_scanner_router(
     router = APIRouter(prefix="/api/trading/scanners", tags=["trading-scanners"])
 
     @router.get("", response_model=ScannerDefinitionListResponse)
-    async def list_scanners(limit: int = Query(default=100, ge=1, le=200)):
+    def list_scanners(limit: int = Query(default=100, ge=1, le=200)):
         return ScannerDefinitionListResponse(
             scanners=repository_factory().list_definitions(limit)
         )
 
     @router.post("", response_model=TradingScannerDefinition, status_code=201)
-    async def create_scanner(definition: TradingScannerDefinition):
+    def create_scanner(definition: TradingScannerDefinition):
         try:
             return repository_factory().create_definition(definition)
         except Exception as exc:
             if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                # Not the database's message: it names constraints and values (WP-10.5).
+                raise HTTPException(status_code=409, detail="scanner_definition_exists") from exc
             raise
 
     @router.put("/{scanner_id}", response_model=TradingScannerDefinition)
-    async def update_scanner(
+    def update_scanner(
         scanner_id: str,
         definition: TradingScannerDefinition,
         if_match: int = Header(alias="If-Match", ge=1),
@@ -74,7 +82,7 @@ def create_trading_scanner_router(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.get("/runs", response_model=ScannerRunListResponse)
-    async def list_runs(
+    def list_runs(
         scanner_id: str | None = Query(default=None, max_length=200),
         limit: int = Query(default=100, ge=1, le=500),
     ):
@@ -82,13 +90,19 @@ def create_trading_scanner_router(
             runs=repository_factory().list_runs(scanner_id=scanner_id, limit=limit)
         )
 
-    @router.post("/runs/{run_id}/cancel", status_code=202)
-    async def cancel_run(run_id: str):
+    @router.post(
+        "/runs/{run_id}/cancel",
+        response_model=ScannerRunCancelResponse,
+        status_code=202,
+    )
+    async def cancel_run(run_id: str) -> ScannerRunCancelResponse:
         await manager_factory().cancel_run(run_id)
-        return {"ok": True, "run_id": run_id, "status": "cancellation_requested"}
+        return ScannerRunCancelResponse(
+            ok=True, run_id=run_id, status="cancellation_requested"
+        )
 
     @router.get("/runs/{run_id}/results", response_model=ScannerResultListResponse)
-    async def list_results(
+    def list_results(
         run_id: str,
         limit: int = Query(default=500, ge=1, le=500),
     ):

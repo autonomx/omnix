@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .market_evidence import (
@@ -16,9 +15,9 @@ from .market_evidence import (
     TradeAuthorizationAssessment,
     premarket_evidence_feature_compatible,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 _MAX_LATEST_BAR_LATENCY_SECONDS = Decimal("90")
@@ -39,11 +38,11 @@ def _minute_floor(value: datetime) -> datetime:
 
 def _expected_latest_start(observed_at: datetime, session_date: date) -> datetime | None:
     observed_et = observed_at.astimezone(_ET)
-    if observed_et.date() != session_date or observed_et.time() <= _REGULAR_OPEN:
+    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
+    if observed_et.date() != session_date or observed_et < opening + timedelta(minutes=1):
         return None
     floor = _minute_floor(observed_et)
     expected = floor - timedelta(minutes=1)
-    opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
     close = datetime.combine(session_date, _REGULAR_CLOSE, tzinfo=_ET)
     return min(max(expected, opening), close - timedelta(minutes=1)).astimezone(timezone.utc)
 

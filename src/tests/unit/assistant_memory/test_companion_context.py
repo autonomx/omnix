@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from app.assistant_memory import companion_context
 from app.assistant_memory.companion_context import (
     build_companion_context_packet,
     invalidate_companion_context,
@@ -79,6 +80,31 @@ def test_packet_is_bounded_sectioned_and_query_relevant() -> None:
     assert packet.prompt_memory[0].memory_id == "memory:1"
 
 
+def test_feature_category_overrides_are_per_call_and_cache_keyed() -> None:
+    invalidate_companion_context()
+    memories = [_item(20, "routine", "water the balcony plants", scope="global")]
+    message = SimpleNamespace(content="hello")
+    overrides = {"routine": "due_routines"}
+
+    live_voice_packet = build_companion_context_packet(
+        _session(),
+        message,
+        memories,
+        token_budget=100,
+        category_section_overrides=overrides,
+        category_score_overrides={"routine": 575},
+    )
+    ordinary_packet = build_companion_context_packet(
+        _session(),
+        message,
+        memories,
+        token_budget=100,
+    )
+
+    assert live_voice_packet.sections["due_routines"][0].activation_score == 605
+    assert ordinary_packet.sections["stable_profile"][0].memory_id == "memory:20"
+
+
 def test_packet_cache_is_content_safe_and_fast() -> None:
     invalidate_companion_context()
     memories = [
@@ -120,6 +146,28 @@ def test_packet_cache_is_content_safe_and_fast() -> None:
     assert "content" not in repr(diagnostics).lower()
     assert diagnostics["selected_count"] == second.selected_count
     assert diagnostics["cache_dimension_version"] == 2
+
+
+def test_packet_baseline_cache_expires_and_can_be_invalidated(monkeypatch) -> None:
+    invalidate_companion_context()
+    now_value = [10.0]
+    monkeypatch.setattr(companion_context, "_baseline_cache_now", lambda: now_value[0])
+    memories = [_item(71, "fact", "The user takes Route X.")]
+    message = SimpleNamespace(content="hello")
+    fixed_now = datetime(2026, 7, 20, 7, 5, tzinfo=ZoneInfo("America/Vancouver"))
+    options = {"token_budget": 500, "now": fixed_now, "timezone_name": "America/Vancouver"}
+
+    first = build_companion_context_packet(_session(), message, memories, **options)
+    assert first.cache_hit is False
+    repeated = build_companion_context_packet(_session(), message, memories, **options)
+    assert repeated.cache_hit is True
+
+    now_value[0] += companion_context._BASELINE_CACHE_TTL_SECONDS + 1
+    expired = build_companion_context_packet(_session(), message, memories, **options)
+    assert expired.cache_hit is False
+
+    invalidate_companion_context()
+    assert not companion_context._baseline_cache
 
 
 def test_packet_cache_key_covers_scope_privacy_locale_timezone_and_time_bucket() -> None:

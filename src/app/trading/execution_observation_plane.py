@@ -7,15 +7,20 @@ backfilled from a quote that existed before the model completed merely because a
 later price move makes that counterfactual attractive.
 """
 
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
+from collections.abc import Callable
 from datetime import datetime, timezone
 from decimal import Decimal
 from threading import RLock
+from time import monotonic
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .binding_authority import BindingPurpose
 from .execution import ExecutionObservation
+
+_DEFAULT_MAX_INSTRUMENTS = 512
+_DEFAULT_RETENTION_SECONDS = 3600.0
 
 
 class ExecutionObservationEnvelope(BaseModel):
@@ -63,15 +68,26 @@ class CausalExecutionSelection(BaseModel):
 
 
 class ExecutionObservationPlane:
-    def __init__(self, *, max_observations_per_instrument: int = 600) -> None:
+    def __init__(
+        self,
+        *,
+        max_observations_per_instrument: int = 600,
+        max_instruments: int = _DEFAULT_MAX_INSTRUMENTS,
+        retention_seconds: float = _DEFAULT_RETENTION_SECONDS,
+        clock: Callable[[], float] = monotonic,
+    ) -> None:
         if max_observations_per_instrument < 2:
             raise ValueError("execution plane requires at least two observations")
+        if max_instruments < 1 or retention_seconds <= 0:
+            raise ValueError("execution plane bounds must be positive")
         self.max_observations_per_instrument = max_observations_per_instrument
+        self.max_instruments = max_instruments
+        self.retention_seconds = retention_seconds
+        self._clock = clock
         self._lock = RLock()
-        self._rows: dict[str, deque[ExecutionObservationEnvelope]] = defaultdict(
-            lambda: deque(maxlen=self.max_observations_per_instrument)
-        )
-        self._seen: dict[str, set[tuple[object, ...]]] = defaultdict(set)
+        self._rows: OrderedDict[str, deque[ExecutionObservationEnvelope]] = OrderedDict()
+        self._seen: dict[str, set[tuple[object, ...]]] = {}
+        self._last_touched: OrderedDict[str, float] = OrderedDict()
 
     @staticmethod
     def _identity(observation: ExecutionObservation) -> tuple[object, ...]:
@@ -104,20 +120,37 @@ class ExecutionObservationPlane:
         )
         key = self._identity(observation)
         instrument_id = observation.instrument_id
+        now = self._clock()
         with self._lock:
-            if key in self._seen[instrument_id]:
+            self._prune_expired_locked(now)
+            rows = self._rows.get(instrument_id)
+            if rows is not None:
+                self._touch_instrument_locked(instrument_id, now)
+            else:
+                self._ensure_capacity_locked()
+                rows = deque(maxlen=self.max_observations_per_instrument)
+                self._rows[instrument_id] = rows
+                self._seen[instrument_id] = set()
+                self._touch_instrument_locked(instrument_id, now)
+            seen = self._seen[instrument_id]
+            if key in seen:
                 return False
-            rows = self._rows[instrument_id]
             if len(rows) == rows.maxlen and rows:
                 old = rows[0]
-                self._seen[instrument_id].discard(self._identity(old.observation))
+                seen.discard(self._identity(old.observation))
             rows.append(envelope)
-            self._seen[instrument_id].add(key)
+            seen.add(key)
         return True
 
     def observations(self, instrument_id: str) -> tuple[ExecutionObservationEnvelope, ...]:
         with self._lock:
-            return tuple(self._rows.get(instrument_id, ()))
+            now = self._clock()
+            self._prune_expired_locked(now)
+            rows = self._rows.get(instrument_id)
+            if rows is None:
+                return ()
+            self._touch_instrument_locked(instrument_id, now)
+            return tuple(rows)
 
     def latest(
         self,
@@ -208,17 +241,46 @@ class ExecutionObservationPlane:
         with self._lock:
             self._rows.clear()
             self._seen.clear()
+            self._last_touched.clear()
+
+    def _touch_instrument_locked(self, instrument_id: str, now: float) -> None:
+        self._last_touched[instrument_id] = now
+        self._last_touched.move_to_end(instrument_id)
+        self._rows.move_to_end(instrument_id)
+
+    def _prune_expired_locked(self, now: float) -> None:
+        while self._last_touched:
+            instrument_id, touched = next(iter(self._last_touched.items()))
+            if now - touched <= self.retention_seconds:
+                break
+            self._last_touched.pop(instrument_id, None)
+            self._rows.pop(instrument_id, None)
+            self._seen.pop(instrument_id, None)
+
+    def _ensure_capacity_locked(self) -> None:
+        while len(self._rows) >= self.max_instruments:
+            instrument_id, _ = self._last_touched.popitem(last=False)
+            self._rows.pop(instrument_id, None)
+            self._seen.pop(instrument_id, None)
 
 
-_DEFAULT_PLANE = ExecutionObservationPlane()
+_DEFAULT_PLANE = ExecutionObservationPlane(
+    max_instruments=_DEFAULT_MAX_INSTRUMENTS,
+    retention_seconds=_DEFAULT_RETENTION_SECONDS,
+)
 
 
 def default_execution_observation_plane() -> ExecutionObservationPlane:
     return _DEFAULT_PLANE
 
 
+def clear_default_execution_observation_plane() -> None:
+    _DEFAULT_PLANE.clear()
+
+
 __all__ = [
     "CausalExecutionSelection",
+    "clear_default_execution_observation_plane",
     "ExecutionObservationEnvelope",
     "ExecutionObservationPlane",
     "default_execution_observation_plane",

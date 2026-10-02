@@ -6,9 +6,11 @@ an unlimited transcript or relying on regexes to choose an execution lane.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+from app.config.env import env_str as _env_str
+
 import hashlib
 import json
-import os
 import re
 from typing import Any, Literal
 
@@ -232,7 +234,7 @@ def _workspace_name(value: str | None) -> str | None:
 def build_routing_environment(user_message: Any) -> RoutingEnvironment:
     metadata = getattr(user_message, "metadata", {}) or {}
     selected = str(metadata.get("workspace_root") or "").strip()
-    configured = str(os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "") or "").strip()
+    configured = str(_env_str("OMNIX_AGENT_DEFAULT_REPOSITORY", "") or "").strip()
     if selected:
         workspace = _workspace_name(selected)
         source = "turn_attachment"
@@ -324,7 +326,8 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
     if isinstance(explicit, dict):
         try:
             explicit_objective = ActiveObjective.model_validate(explicit)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("active objective snapshot lookup", exc, level="DEBUG")
             explicit_objective = None
 
     # A terminal run snapshot is newer and more authoritative state than a

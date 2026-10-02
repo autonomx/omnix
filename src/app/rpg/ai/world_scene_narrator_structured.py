@@ -1,9 +1,52 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
-from app.rpg.ai.world_scene_narrator_payloads import *
+from app.rpg.ai.world_scene_narrator_payloads import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+    sanitize_memory_narration_payload as sanitize_memory_narration_payload, _merge_bs1_sanitized_payload as _merge_bs1_sanitized_payload,
+    _build_ambient_conversation_line as _build_ambient_conversation_line, _bound_text as _bound_text, _clean_npc_dialogue_line as _clean_npc_dialogue_line,
+    _is_accommodation_request as _is_accommodation_request, _has_authoritative_accommodation_offer as _has_authoritative_accommodation_offer,
+    _ground_accommodation_npc_line as _ground_accommodation_npc_line, _service_result_from_context as _service_result_from_context,
+    _recalled_service_memories_from_context as _recalled_service_memories_from_context,
+    _format_recalled_service_memories_for_prompt as _format_recalled_service_memories_for_prompt, _recalled_npc_memories_from_context as _recalled_npc_memories_from_context,
+    _format_recalled_npc_memories_for_prompt as _format_recalled_npc_memories_for_prompt, _conversation_result_from_context as _conversation_result_from_context,
+    _format_conversation_beat_for_prompt as _format_conversation_beat_for_prompt, _apply_grounded_conversation_beat as _apply_grounded_conversation_beat,
+    _line_has_prior_memory_reference as _line_has_prior_memory_reference, _memory_reference_is_backed as _memory_reference_is_backed,
+    _strip_unbacked_memory_reference_from_npc_line as _strip_unbacked_memory_reference_from_npc_line, _strip_service_meta_language as _strip_service_meta_language,
+    _service_offer_label_with_price as _service_offer_label_with_price, _join_natural as _join_natural, _strip_basic_markdown as _strip_basic_markdown,
+    _travel_result_from_context as _travel_result_from_context, _grounded_travel_narration as _grounded_travel_narration, _grounded_travel_action as _grounded_travel_action,
+    _final_grounded_service_action_text as _final_grounded_service_action_text, _service_grounded_action_result as _service_grounded_action_result,
+    _service_grounded_npc_line as _service_grounded_npc_line, _normalized_text_for_compare as _normalized_text_for_compare,
+    _fallback_non_service_narration as _fallback_non_service_narration, _sanitize_repeated_player_input_narration as _sanitize_repeated_player_input_narration,
+    _naturalize_service_debug_language as _naturalize_service_debug_language, _service_grounded_narration_text as _service_grounded_narration_text,
+    _service_narration_needs_grounding as _service_narration_needs_grounding, _service_claim_needs_grounding as _service_claim_needs_grounding,
+    _service_purchase_is_applied as _service_purchase_is_applied, _selected_service_offer as _selected_service_offer,
+    _service_extract_price_tokens as _service_extract_price_tokens, _successful_service_purchase_text_needs_grounding as _successful_service_purchase_text_needs_grounding,
+    _ground_action_result_text as _ground_action_result_text, _player_input_action_text as _player_input_action_text,
+    _build_authoritative_action_line as _build_authoritative_action_line,
+    _titleize_action as _titleize_action, _first_nonempty as _first_nonempty, _extract_text_lines as _extract_text_lines, _normalize_speaker_block as _normalize_speaker_block,
+    _build_safe_prompt_context as _build_safe_prompt_context, _build_speaker_turns as _build_speaker_turns, _extract_json_object_from_text as _extract_json_object_from_text,
+    _normalize_narration_json as _normalize_narration_json, _parse_llm_narration_payload as _parse_llm_narration_payload, _strict_narration_payload as _strict_narration_payload,
+    _recent_authoritative_facts as _recent_authoritative_facts, _extract_continuity_price_facts as _extract_continuity_price_facts,
+    _extract_present_actor_names as _extract_present_actor_names, _extract_price_tokens as _extract_price_tokens, _sanitize_narration_text as _sanitize_narration_text,
+    _authoritative_action_text as _authoritative_action_text, _authoritative_reward_text as _authoritative_reward_text, _allowed_npc_speakers as _allowed_npc_speakers,
+    _sanitize_npc_block as _sanitize_npc_block, _desystemify_text as _desystemify_text, _strip_meta_narration as _strip_meta_narration,
+    _fallback_in_world_narration as _fallback_in_world_narration, _enforce_npc_behavior as _enforce_npc_behavior, _sanitize_narration_payload as _sanitize_narration_payload,
+    _render_narration_text_from_json as _render_narration_text_from_json, _recover_narration_from_raw_text as _recover_narration_from_raw_text,
+    _structured_fallback_response as _structured_fallback_response,
+)
+
+
 
 def _build_scene_summary(scene: Dict[str, Any], llm_narrative: str) -> str:
     scene = _safe_dict(scene)
@@ -42,14 +85,16 @@ def _build_combat_facts_block(narration_context: Dict[str, Any]) -> str:
 
     parts = []
     if combat_state:
-        parts.append(f'state={_safe_str(combat_state.get("phase") or "idle")}')
+        parts.append(f"state={_safe_str(combat_state.get('phase') or 'idle')}")
     if combat_result:
-        parts.append(f'hit={bool(combat_result.get("hit"))}')
-        parts.append(f'damage={int(combat_result.get("damage_total", 0) or 0)}')
-        parts.append(f'target_downed={bool(combat_result.get("target_downed"))}')
+        parts.append(f"hit={bool(combat_result.get('hit'))}")
+        parts.append(f"damage={int(combat_result.get('damage_total', 0) or 0)}")
+        parts.append(f"target_downed={bool(combat_result.get('target_downed'))}")
     if npc_combat_result:
-        parts.append(f'npc_counterattack_hit={bool(npc_combat_result.get("hit"))}')
-        parts.append(f'npc_counterattack_damage={int(npc_combat_result.get("damage_total", 0) or 0)}')
+        parts.append(f"npc_counterattack_hit={bool(npc_combat_result.get('hit'))}")
+        parts.append(
+            f"npc_counterattack_damage={int(npc_combat_result.get('damage_total', 0) or 0)}"
+        )
     return ", ".join(parts) if parts else "- none"
 
 
@@ -60,7 +105,15 @@ def _build_action_result_line(narration_context: Dict[str, Any]) -> str:
         hit = bool(combat_result.get("hit"))
         damage_total = int(combat_result.get("damage_total", 0) or 0)
         target_downed = bool(combat_result.get("target_downed"))
-        target_name = _safe_str(combat_result.get("target_name") or _safe_dict(narration_context.get("resolved_result")).get("target_name")).strip() or "the target"
+        target_name = (
+            _safe_str(
+                combat_result.get("target_name")
+                or _safe_dict(narration_context.get("resolved_result")).get(
+                    "target_name"
+                )
+            ).strip()
+            or "the target"
+        )
         if not hit:
             return f"You miss {target_name}."
         if target_downed:
@@ -117,17 +170,20 @@ def _pick_npc_reply_text(llm_narrative: str) -> str:
     """Extract NPC dialogue from LLM narrative text."""
     # Look for quoted text or dialogue patterns
     import re
+
     quotes = re.findall(r'"([^"]*)"', _safe_str(llm_narrative))
     if quotes:
         return quotes[0]
     # Look for dialogue after colons
-    dialogue_match = re.search(r':\s*([^.!?]+[.!?])', _safe_str(llm_narrative))
+    dialogue_match = re.search(r":\s*([^.!?]+[.!?])", _safe_str(llm_narrative))
     if dialogue_match:
         return dialogue_match.group(1).strip()
     return ""
 
 
-def _build_npc_reply_block(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> str:
+def _build_npc_reply_block(
+    scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str
+) -> str:
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
 
@@ -201,7 +257,9 @@ def _build_rewards_block(narration_context: Dict[str, Any]) -> str:
     return " · ".join(parts)
 
 
-def _collect_emphasis_markers(scene: Dict[str, Any], narration_context: Dict[str, Any], blocks: Dict[str, str]) -> List[str]:
+def _collect_emphasis_markers(
+    scene: Dict[str, Any], narration_context: Dict[str, Any], blocks: Dict[str, str]
+) -> List[str]:
     scene = _safe_dict(scene)
     narration_context = _safe_dict(narration_context)
     resolved = _safe_dict(narration_context.get("resolved_result"))
@@ -221,7 +279,12 @@ def _collect_emphasis_markers(scene: Dict[str, Any], narration_context: Dict[str
         if text:
             markers.append(text)
 
-    damage = int(_safe_dict(resolved.get("combat_result")).get("damage", resolved.get("damage", 0)) or 0)
+    damage = int(
+        _safe_dict(resolved.get("combat_result")).get(
+            "damage", resolved.get("damage", 0)
+        )
+        or 0
+    )
     if damage > 0:
         markers.append(f"{damage} damage")
 
@@ -255,7 +318,9 @@ def apply_narration_emphasis(text: str, emphasis_markers: List[str]) -> str:
     return rendered
 
 
-def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str) -> Dict[str, Any]:
+def build_structured_narration(
+    scene: Dict[str, Any], narration_context: Dict[str, Any], llm_narrative: str
+) -> Dict[str, Any]:
     from app.rpg.ai.world_scene_narrator_prompts import (
         _with_scene_response_defaults,
         parse_scene_response,
@@ -264,7 +329,9 @@ def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[st
     parsed = _with_scene_response_defaults(parse_scene_response(llm_narrative))
     npc = _normalize_speaker_block(parsed.get("npc"))
     npc_text = npc.get("text", "")
-    action_text = _safe_str(parsed.get("action")).strip() or _build_action_result_line(narration_context)
+    action_text = _safe_str(parsed.get("action")).strip() or _build_action_result_line(
+        narration_context
+    )
     rewards_text = _build_rewards_block(narration_context)
     speaker_turns = _build_speaker_turns(parsed)
 
@@ -315,4 +382,121 @@ def build_structured_narration(scene: Dict[str, Any], narration_context: Dict[st
 # Data models
 # ---------------------------------------------------------------------------
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+__all__ = (
+    'annotations',
+    'json',
+    'logging',
+    're',
+    'traceback',
+    'dataclass',
+    'field',
+    'Any',
+    'Callable',
+    'Dict',
+    'List',
+    'Optional',
+    'normalize_grounding_settings',
+    'select_grounded_narration_candidate',
+    'memory_reference_is_backed',
+    'build_runtime_npc_response_architecture',
+    'build_runtime_current_turn_prompt_contract',
+    'format_runtime_prompt_contract_block',
+    'build_runtime_presentation_guardrails_block',
+    'sanitize_unsupported_combat_payload',
+    'parse_runtime_provider_payload',
+    'build_encounter_view',
+    'logger',
+    '_ACTIVE_NARRATIONS',
+    'NARRATION_JSON_FORMAT_VERSION',
+    'NARRATION_JSON_SCHEMA_HINT',
+    '_extract_llm_text',
+    '_llm_text',
+    '_attach_social_context',
+    '_safe_str_p6',
+    '_attach_npc_mind_context',
+    '_NARRATION_MAX_MARKDOWN',
+    '_safe_str',
+    '_safe_dict',
+    '_safe_list',
+    '_title_case_token',
+    '_force_live_llm_required',
+    'sanitize_memory_narration_payload',
+    '_merge_bs1_sanitized_payload',
+    '_build_ambient_conversation_line',
+    '_bound_text',
+    '_clean_npc_dialogue_line',
+    '_is_accommodation_request',
+    '_has_authoritative_accommodation_offer',
+    '_ground_accommodation_npc_line',
+    '_service_result_from_context',
+    '_recalled_service_memories_from_context',
+    '_format_recalled_service_memories_for_prompt',
+    '_recalled_npc_memories_from_context',
+    '_format_recalled_npc_memories_for_prompt',
+    '_conversation_result_from_context',
+    '_format_conversation_beat_for_prompt',
+    '_apply_grounded_conversation_beat',
+    '_line_has_prior_memory_reference',
+    '_memory_reference_is_backed',
+    '_strip_unbacked_memory_reference_from_npc_line',
+    '_strip_service_meta_language',
+    '_service_offer_label_with_price',
+    '_join_natural',
+    '_strip_basic_markdown',
+    '_travel_result_from_context',
+    '_grounded_travel_narration',
+    '_grounded_travel_action',
+    '_final_grounded_service_action_text',
+    '_service_grounded_action_result',
+    '_service_grounded_npc_line',
+    '_normalized_text_for_compare',
+    '_fallback_non_service_narration',
+    '_sanitize_repeated_player_input_narration',
+    '_naturalize_service_debug_language',
+    '_service_grounded_narration_text',
+    '_service_narration_needs_grounding',
+    '_service_claim_needs_grounding',
+    '_service_purchase_is_applied',
+    '_selected_service_offer',
+    '_service_extract_price_tokens',
+    '_successful_service_purchase_text_needs_grounding',
+    '_ground_action_result_text',
+    '_player_input_action_text',
+    '_build_authoritative_action_line',
+    '_build_action_result_line',
+    '_build_rewards_block',
+    '_titleize_action',
+    '_first_nonempty',
+    '_extract_text_lines',
+    '_normalize_speaker_block',
+    '_build_safe_prompt_context',
+    '_build_speaker_turns',
+    '_extract_json_object_from_text',
+    '_normalize_narration_json',
+    '_parse_llm_narration_payload',
+    '_strict_narration_payload',
+    '_recent_authoritative_facts',
+    '_extract_continuity_price_facts',
+    '_extract_present_actor_names',
+    '_extract_price_tokens',
+    '_sanitize_narration_text',
+    '_authoritative_action_text',
+    '_authoritative_reward_text',
+    '_allowed_npc_speakers',
+    '_sanitize_npc_block',
+    '_desystemify_text',
+    '_strip_meta_narration',
+    '_fallback_in_world_narration',
+    '_enforce_npc_behavior',
+    '_sanitize_narration_payload',
+    '_render_narration_text_from_json',
+    '_recover_narration_from_raw_text',
+    '_structured_fallback_response',
+    '_build_scene_summary',
+    '_build_combat_facts_block',
+    '_pick_npc_reply_text',
+    '_build_npc_reply_block',
+    '_collect_emphasis_markers',
+    'apply_narration_emphasis',
+    'build_structured_narration',
+)

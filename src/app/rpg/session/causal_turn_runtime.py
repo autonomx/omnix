@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping
 
 from app.rpg.world.causal_runtime import (
     advance_installed_causal_runtime,
-    install_causal_runtime,
+    initialize_causal_runtime,
 )
 from app.rpg.world.causal_runtime_projection import (
     project_causal_runtime_to_subsystems,
@@ -155,7 +155,7 @@ def advance_causal_runtime_for_turn(
         bootstrap = _bootstrap_from_session(session)
         if not bootstrap:
             return result
-        runtime = install_causal_runtime(simulation, bootstrap)
+        runtime = initialize_causal_runtime(simulation, bootstrap)
 
     turn = _turn_value(result, session)
     key = _turn_key(session_id, result, session, turn)

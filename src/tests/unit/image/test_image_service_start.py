@@ -10,7 +10,8 @@ def test_start_image_service_uses_launcher_then_lightweight_readiness_probe(monk
     monkeypatch.setenv("OMNIX_LAUNCHER_URL", "http://127.0.0.1:5055")
     monkeypatch.setenv("OMNIX_IMAGE_URL", "http://127.0.0.1:5301")
 
-    def request_json(method: str, url: str, payload, timeout: float):
+    def request_json(method: str, url: str, payload, timeout: float, *, authenticated=False):
+        assert authenticated == url.startswith("http://127.0.0.1:5301/")
         nonlocal readiness_attempts
         calls.append((method, url))
         if url.endswith("/openapi.json"):
@@ -51,7 +52,8 @@ def test_start_image_service_skips_launcher_when_runtime_is_already_ready(monkey
     monkeypatch.setenv("OMNIX_LAUNCHER_URL", "http://127.0.0.1:5055")
     monkeypatch.setenv("OMNIX_IMAGE_URL", "http://127.0.0.1:5301")
 
-    def request_json(method: str, url: str, payload, timeout: float):
+    def request_json(method: str, url: str, payload, timeout: float, *, authenticated=False):
+        assert authenticated is True
         calls.append((method, url))
         if url.endswith("/openapi.json"):
             return {"openapi": "3.1.0"}

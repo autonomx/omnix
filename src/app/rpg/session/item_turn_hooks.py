@@ -7,8 +7,9 @@ changing public route schemas.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.item_diagnostics import build_item_diagnostics, record_item_diagnostics
@@ -42,7 +43,7 @@ def _turn(state: dict[str, Any], current_turn: int | None = None) -> int:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _mechanics(state: dict[str, Any]) -> dict[str, Any]:

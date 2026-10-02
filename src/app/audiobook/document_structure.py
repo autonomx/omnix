@@ -5,6 +5,8 @@ provenance, recurrence, and policy projections without mutating source text.
 """
 from __future__ import annotations
 
+import logging
+
 import json
 import re
 from collections import Counter, defaultdict, deque
@@ -14,6 +16,8 @@ from typing import Any
 
 from .hashing import text_hash
 from .models import SourceRevision, SourceSpan
+
+logger = logging.getLogger(__name__)
 
 
 DOCUMENT_STRUCTURE_VERSION = "document-role-v1"
@@ -779,6 +783,7 @@ def analyze_document_structure(
                     region_classifier(payload), {item.id for item in region}
                 )
             except Exception:
+                logger.debug("suppressed error in %s", "analyze_document_structure", exc_info=True)
                 continue
             for item in region:
                 result = parsed.get(item.id)

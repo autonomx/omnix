@@ -10,18 +10,19 @@ It has no paper repository and can never create or authorize an order.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
 import hashlib
-import os
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
@@ -41,9 +42,11 @@ from .strategy_repository import (
 )
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_prospective_economic_monitor"
 _SOURCE_STATE_EVENT_TYPE = "deep_recovery_state"
 _SOURCE_EVENT_TYPE = "deep_recovery_shadow"
@@ -53,18 +56,18 @@ _OUTCOME_EVENT_TYPE = "prospective_economic_outcome"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_prospective_economic_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_PROSPECTIVE_ECONOMIC_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(10.0, value)
@@ -80,6 +83,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -652,14 +656,13 @@ class TradingStrategyProspectiveEconomicMonitor:
         }
 
 
-def register_trading_strategy_prospective_economic_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyProspectiveEconomicMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_prospective_economic_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyProspectiveEconomicMonitor):
-        return existing
+        return None
     monitor = TradingStrategyProspectiveEconomicMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_prospective_economic_monitor_enabled():
@@ -668,14 +671,13 @@ def register_trading_strategy_prospective_economic_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyProspectiveEconomicMonitor",
-    "register_trading_strategy_prospective_economic_monitor",
+    "create_trading_strategy_prospective_economic_monitor_worker",
     "strategy_prospective_economic_monitor_enabled",
 ]

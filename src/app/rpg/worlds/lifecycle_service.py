@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_jobs import WORLD_TOPIC_JOB_TYPE
@@ -206,7 +206,7 @@ def world_deletion_eligibility(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -225,7 +225,7 @@ def delete_world_project(
 ) -> dict[str, Any]:
     if not acknowledge_permanent:
         raise ValueError("world_delete_acknowledgement_required")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
@@ -246,10 +246,15 @@ def delete_world_project(
             "WHERE workspace_id = %s AND world_id = %s",
             (context.workspace_id, world_id),
         )
-        work.connection.execute(
-            "DELETE FROM omnix_jobs WHERE workspace_id = %s AND job_type = %s "
-            "AND (metadata->>'world_id' = %s OR input_payload->>'world_id' = %s)",
-            (context.workspace_id, WORLD_TOPIC_JOB_TYPE, world_id, world_id),
+        work.jobs.delete_jobs(
+            context,
+            job_type=WORLD_TOPIC_JOB_TYPE,
+            input_fields=(("world_id", world_id),),
+        )
+        work.jobs.delete_jobs(
+            context,
+            job_type=WORLD_TOPIC_JOB_TYPE,
+            metadata_fields=(("world_id", world_id),),
         )
         work.connection.execute(
             "DELETE FROM omnix_rpg_campaigns WHERE workspace_id = %s AND id IN ("
@@ -325,7 +330,7 @@ def archive_world_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
@@ -356,7 +361,7 @@ def restore_world_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
@@ -385,7 +390,7 @@ def archive_scenario_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         scenario = _get_scenario(work, context, scenario_id, for_update=True)
         if scenario is None:
@@ -408,7 +413,7 @@ def restore_scenario_project(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         scenario = _get_scenario(work, context, scenario_id, for_update=True)
         if scenario is None:

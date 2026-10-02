@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from collections import defaultdict
@@ -9,9 +11,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .alerts import (
     TradingAlert,
@@ -37,18 +39,18 @@ _MONITOR_STATE_KEY = "_omnix_trading_alert_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_alert_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_ALERT_MONITOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_ALERT_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
@@ -274,12 +276,13 @@ class TradingAlertMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_alert_monitor(gateway: FastAPI) -> TradingAlertMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_alert_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingAlertMonitor):
-        return existing
+        return None
     monitor = TradingAlertMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
+    setattr(state, _MONITOR_STATE_KEY, monitor)
 
     async def startup() -> None:
         if trading_alert_monitor_enabled():
@@ -288,7 +291,6 @@ def register_trading_alert_monitor(gateway: FastAPI) -> TradingAlertMonitor:
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

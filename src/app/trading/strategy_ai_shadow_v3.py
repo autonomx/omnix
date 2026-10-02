@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Canonical AI Shadow v3 alpha contracts and deterministic geometry.
 
 The LLM owns setup/thesis classification only. Stops, targets, R math, execution
@@ -12,7 +16,6 @@ import time as monotonic_time
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -29,11 +32,11 @@ from .models import MarketBar
 from .research import _provider_identity, default_research_provider
 from .strategy_ai_shadow_v2 import build_market_structure_snapshot
 from .trigger_plan import AuthoritativeTradeGeometry, TriggerCondition
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 AI_SHADOW_V3_POLICY_VERSION = "ai-shadow-v3-canonical-1"
 RUNNER_GEOMETRY_CHALLENGER_VERSION = "runner-geometry-challenger-v1"
-_ET = ZoneInfo("America/New_York")
 
 V3State = Literal["avoid", "watch", "armed", "enter"]
 SetupFamily = Literal[
@@ -385,6 +388,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

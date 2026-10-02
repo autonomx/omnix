@@ -1,0 +1,23 @@
+{
+  "omnix_agent_approvals.request_payload": "keep; execution_key is matched among one run's approvals, already narrowed by the run index",
+  "omnix_agent_plan_revisions.payload": "keep; semantic_review is read from one run's plan revisions",
+  "omnix_agent_run_commands.payload": "keep; task_revision_id and quality_stage filter one run's pending commands",
+  "omnix_agent_run_events.payload": "keep; tool_call_id containment is evaluated on one run's events of one type, already narrowed by idx_omnix_agent_events_type (WP-7.4)",
+  "omnix_assets.metadata": "keep; filename is projected in audiobook source listings, never filtered",
+  "omnix_audiobook_annotations.evidence": "keep; classifier_analysis_job_id is read within one project's annotations",
+  "omnix_audiobook_projects.settings": "keep; settings fields are read and updated for one project by id",
+  "omnix_audiobook_render_batches.completed_keys": "keep; containment check on one batch selected by id",
+  "omnix_audiobook_source_revisions.metadata": "keep; filename is projected for one project's revisions",
+  "omnix_characters.profile": "keep; display_name orders one workspace's characters (keyset paging, WP-5.5); promote to a column if character counts grow past thousands",
+  "omnix_chat_messages.metadata": "keep; assistant_turn_id and reply_to_message_id are matched within one session, narrowed by the session/position index",
+  "omnix_jobs.input_payload": "indexed; session_id has the expression index idx on (workspace_id, input_payload->>'session_id') for chat jobs; awaiting_plan_approval and submission_id filter rows already selected by job type and status",
+  "omnix_jobs.metadata": "keep; compat_contract fields are evaluated on claim candidates already selected by status and availability",
+  "omnix_memory_v2_derived_policy_envelopes.source_observation_ids": "keep; containment is evaluated after the (principal, owner) filter of one owner's envelopes",
+  "omnix_memory_v2_search_index_entries.evidence_observation_ids": "keep; containment is evaluated after the (principal, owner) filter of one owner's entries",
+  "omnix_module_records.payload": "indexed for chat summaries (session_id, migration 0111); character_id, proposal_id, error and created_at filter one record type of one workspace, already narrowed by the module index",
+  "omnix_retention_policies.metadata": "keep; maintenance_only is read from a table of about a dozen policies",
+  "omnix_rpg_narrative_retirement_records.deletion_audit_jsonb": "keep; RPG is being retired",
+  "omnix_rpg_world_revisions.document_jsonb": "keep; RPG is being retired",
+  "omnix_runtime_nodes.metadata": "keep; workspace_id is read from the few live runtime nodes",
+  "omnix_trading_strategy_events.payload": "keep; entry_time orders one strategy's events in paper analytics; promote if the analytics read becomes a hot path"
+}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { describe, expect, it, vi } from 'vitest';
 import type { BrowserAudioCaptureSession, BrowserAudioMediaDevices } from './audio-capture-browser';
 import { createBrowserLiveAssistantController } from './browser-live-controller';

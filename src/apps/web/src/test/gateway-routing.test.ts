@@ -9,8 +9,7 @@ import { canUseApi, gatewayRouting, resolveApiOrigins } from '../../gateway-rout
 
 describe('gateway routing policy', () => {
   it('balances Chat while keeping speech on the worker unless shared TTS is configured', () => {
-    for (const url of ['/api/chat/sessions', '/api/chat/sessions/a', '/api/chat/sessions/a/messages',
-      '/api/chat/sessions/a/messages/stream?q=1']) {
+    for (const url of ['/api/chat/sessions', '/api/chat/sessions/a', '/api/chat/sessions/a/messages']) {
       expect(canUseApi({ url, method: 'POST', headers: {} })).toBe(true);
     }
     const speech = { url: '/api/tts/stream/websocket', method: 'POST', headers: {} };
@@ -25,6 +24,29 @@ describe('gateway routing policy', () => {
     }
     expect(canUseApi({ url: '/api/chat/sessions/a/messages/stream', method: 'POST',
       headers: { 'x-omnix-gateway-affinity': 'worker' } })).toBe(false);
+  });
+  it('sends live calls to APIs only with remote TTS and recognizes websocket cookies', () => {
+    const liveChat = {
+      url: '/api/chat/sessions/session-a/messages/stream',
+      method: 'POST',
+      headers: { 'x-omnix-call-id': 'session-a' },
+    };
+    const liveChatWithoutAffinity = { ...liveChat, headers: {} };
+    expect(canUseApi(liveChat)).toBe(false);
+    expect(canUseApi(liveChat, true)).toBe(true);
+    expect(canUseApi(liveChatWithoutAffinity, true)).toBe(false);
+    expect(canUseApi({
+      ...liveChatWithoutAffinity,
+      headers: { cookie: 'omnix_call_affinity=session-a' },
+    }, true)).toBe(true);
+    expect(canUseApi({
+      url: '/api/tts/live-call/websocket',
+      method: 'GET',
+      headers: { cookie: 'omnix_call_affinity=session-a' },
+    }, true)).toBe(true);
+    expect(canUseApi({
+      url: '/api/tts/live-call/websocket', method: 'GET', headers: {},
+    }, true)).toBe(false);
   });
   it('balances only read operations for jobs and market data', () => {
     for (const url of ['/api/jobs', '/api/jobs/a', '/events?after_id=10', '/api/trading/bars']) {
@@ -119,13 +141,37 @@ describe('real Vite HTTP, SSE, and WebSocket proxy', () => {
     expect(values.every((value) => value.path === '/api/chat/sessions?check=1')).toBe(true);
     expect(responses.every((res) => res.headers.get('x-omnix-gateway-route')?.startsWith('api-'))).toBe(true);
   });
-  it('pins controls and live voice affinity, and blocks private routing prefixes', async () => {
+  it('routes live calls by stable affinity, keeps controls on the worker, and blocks private prefixes', async () => {
     const control = await fetch(base + '/api/trading/monitors/start', { method: 'POST' });
     expect((await control.json()).label).toBe('worker');
-    const live = await fetch(base + '/api/chat/sessions/a/messages', { method: 'POST', headers: { 'X-Omnix-Gateway-Affinity': 'worker' } });
-    expect((await live.json()).label).toBe('worker');
+    const live = await fetch(base + '/api/chat/sessions/a/messages/stream', {
+      method: 'POST', body: JSON.stringify({ live_voice_turn_id: 'turn-a' }),
+      headers: { 'X-Omnix-Call-Id': 'affinity-a' },
+    });
+    const liveLabel = live.headers.get('x-omnix-gateway-route');
+    await live.body?.cancel();
+    expect(liveLabel).toMatch(/^api-[12]$/u);
+
+    const unpinnedLive = await fetch(base + '/api/chat/sessions/b/messages/stream', {
+      method: 'POST', body: JSON.stringify({ live_voice_turn_id: 'turn-b' }),
+    });
+    expect(unpinnedLive.headers.get('x-omnix-gateway-route')).toBe('worker');
+    await unpinnedLive.body?.cancel();
     expect((await fetch(base + '/__omnix_gateway_replica_0/api/settings')).status).toBe(404);
     expect((await fetch(base + '/ready')).headers.get('x-omnix-gateway-route')).toBe('worker');
+
+    const beforeSocket = hits.length;
+    const req = request(base + '/api/tts/live-call/websocket', { headers: {
+      Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13',
+      'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+      Cookie: 'omnix_call_affinity=affinity-a',
+    } });
+    const upgraded = once(req, 'upgrade');
+    req.end();
+    const [response, socket] = await upgraded;
+    expect(response.headers['x-omnix-gateway-route']).toBe(liveLabel);
+    expect(hits[beforeSocket].label).toBe(liveLabel);
+    socket.destroy();
   });
   it('delivers SSE before completion and closes the upstream on cancellation', async () => {
     const response = await fetch(base + '/api/chat/sessions/a/messages/stream', { method: 'POST', body: '{}' });

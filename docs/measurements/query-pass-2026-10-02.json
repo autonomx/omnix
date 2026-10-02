@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "measurement": "list endpoint latency at benchmark volumes (WP-7.6)",
+  "revision": "fcd34e7749d77b55258aaf12af6dbf6634df2ad9",
+  "python": "3.11.4",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "database": "omnix_bench",
+  "samples": 30,
+  "budget_p95_ms": 100.0,
+  "routes": {
+    "/api/assets?limit=50": {
+      "p50_ms": 13.15,
+      "p95_ms": 17.0,
+      "max_ms": 17.28,
+      "within_budget": true,
+      "response_bytes": 21613
+    },
+    "/api/jobs?limit=100": {
+      "p50_ms": 6.21,
+      "p95_ms": 9.0,
+      "max_ms": 9.83,
+      "within_budget": true,
+      "response_bytes": 52455
+    },
+    "/api/jobs?limit=100&status=completed": {
+      "p50_ms": 7.22,
+      "p95_ms": 9.05,
+      "max_ms": 146.07,
+      "within_budget": true,
+      "response_bytes": 52087
+    },
+    "/api/chat/sessions?limit=100": {
+      "p50_ms": 4.02,
+      "p95_ms": 5.22,
+      "max_ms": 5.32,
+      "within_budget": true,
+      "response_bytes": 71786
+    },
+    "/api/chat/sessions/chat:bench-5333": {
+      "p50_ms": 3.85,
+      "p95_ms": 5.78,
+      "max_ms": 5.89,
+      "within_budget": true,
+      "response_bytes": 16053
+    },
+    "/api/agent-runs/agent-run:bench-1/events?limit=500": {
+      "p50_ms": 5.27,
+      "p95_ms": 7.11,
+      "max_ms": 7.29,
+      "within_budget": true,
+      "response_bytes": 110785
+    },
+    "/api/trading/strategies": {
+      "p50_ms": 2.64,
+      "p95_ms": 3.94,
+      "max_ms": 5.29,
+      "within_budget": true,
+      "response_bytes": 7556
+    },
+    "/api/trading/strategies/bench-strategy-1/events": {
+      "p50_ms": 5.62,
+      "p95_ms": 6.92,
+      "max_ms": 7.34,
+      "within_budget": true,
+      "response_bytes": 104001
+    }
+  }
+}

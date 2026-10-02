@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,6 +69,13 @@ def client_and_runtime() -> tuple[TestClient, FakeOrchestrator]:
         app,
         orchestrator_factory=lambda: runtime,
         preflight_service_factory=FakePreflightService,
+        chat_store_factory=lambda: SimpleNamespace(
+            get_session=lambda session_id: SimpleNamespace(
+                id=session_id,
+                interaction_mode="system",
+            )
+        ),
+        activity_bridge_factory=lambda: SimpleNamespace(clear=lambda *_args: None),
         build_identity_factory=lambda: DesktopCompanionBuildIdentity(
             exact_commit_sha="abcdef0123456789",
             app_version="2.3.4",

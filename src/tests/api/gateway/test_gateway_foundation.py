@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import logging
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -18,7 +19,7 @@ if str(SRC_DIR) not in sys.path:
 def _client() -> TestClient:
     from app.gateway.main import create_gateway_app
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    return TestClient(create_gateway_app(), raise_server_exceptions=False, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
 
 def test_gateway_health_is_provider_free() -> None:
@@ -140,7 +141,7 @@ def test_gateway_worker_health_reports_unreachable_worker() -> None:
         "OMNIX_GATEWAY_WORKERS": "tts",
         "OMNIX_WORKER_TTS_URL": "http://127.0.0.1:5101",
     }
-    with patch.dict("os.environ", env, clear=True), patch('app.gateway.workers.urlopen', side_effect=URLError('offline')):
+    with patch.dict("os.environ", env, clear=True), patch('app.runtime.worker_health.urlopen', side_effect=URLError('offline')):
         client = _client()
         response = client.get("/api/workers/health")
 
@@ -176,11 +177,18 @@ def test_gateway_payload_policy_forbids_browser_worker_access() -> None:
 
 def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None:
     from app.gateway import main as gateway_main
+    from app.gateway import app_factory as gateway_app_factory
     from app.trading import strategy_monitor as monitor_module
-    from app.trading.strategy_monitor import TradingStrategyMonitor, register_trading_strategy_monitor
+    from app.runtime.capabilities import RuntimeCapabilities
+    from app.runtime.config import RuntimeConfig
+    from app.runtime.features import FeatureContext
+    from app.trading.strategy_monitor import (
+        TradingStrategyMonitor,
+        create_trading_strategy_monitor_worker,
+    )
 
     monkeypatch.setattr(
-        gateway_main,
+        gateway_app_factory,
         "recover_abandoned_chat_generation_jobs",
         lambda *_args: 0,
     )
@@ -201,15 +209,33 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
     monkeypatch.setattr(TradingStrategyMonitor, "run_once", no_op_run_once)
 
     app = FastAPI(
-        lifespan=lambda current_app: gateway_main._gateway_lifespan(
+        lifespan=lambda current_app: gateway_app_factory._gateway_lifespan(
             current_app,
             get_chat_store=lambda: object(),
             get_job_store=lambda: object(),
         )
     )
-    monitor = register_trading_strategy_monitor(app)
+    from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
+    from app.runtime.background import register_background_worker
 
-    with TestClient(app):
+    app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
+    config = RuntimeConfig()
+    worker = create_trading_strategy_monitor_worker(
+        FeatureContext(
+            feature_id="trading",
+            config=None,
+            runtime=config,
+            capabilities=RuntimeCapabilities.from_config(config),
+            services=None,
+            logger=logging.getLogger("tests.trading"),
+            runtime_state=app.state,
+        )
+    )
+    assert worker is not None
+    monitor = worker.monitor
+    register_background_worker(app.state.background_registry, worker)
+
+    with TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"}):
         assert monitor._task is not None
         assert not monitor._task.done()
 

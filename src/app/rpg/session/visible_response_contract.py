@@ -39,6 +39,15 @@ _VISIBLE_STRING_KEYS = (
     "content",
     "action",
 )
+_PLACEHOLDER_MARKERS = (
+    "npc line will be filled",
+    "filled upon runtime resolution",
+    "intent is to ask",
+    "runtime resolution",
+    "placeholder",
+    "todo",
+)
+_WORLD_INFO_TERMS = ("rumor", "rumour", "gossip", "news", "heard", "word around", "word is")
 
 
 def _d(value: Any) -> dict[str, Any]:
@@ -189,6 +198,65 @@ def invalid_visible_selection_reason(selection: Any) -> str:
     visible = _d(data.get("visible_response")) or data
     if is_invalid_visible_value(visible):
         return "invalid_visible_response_text"
+    return ""
+
+
+def validate_first_call_selection(selection: Any) -> dict[str, Any]:
+    """Reject placeholder, parse-noise and world-info selections at the owner."""
+
+    data = _d(selection)
+    if not data.get("consumable"):
+        return deepcopy(data)
+    if _selection_has_placeholder_line(data):
+        source = _s(data.get("source") or "first_call_dialogue_v1")
+        return {
+            "consumable": False,
+            "reason": "no_safe_non_stateful_visible_response",
+            "rejection_reasons": [f"{source}:placeholder_npc_line"],
+            "rejected_visible_response": deepcopy(data.get("visible_response") or {}),
+            "source": "first_call_dialogue_placeholder_guard_v1",
+        }
+    reason = invalid_visible_selection_reason(data) or _world_info_requires_runtime_reason(data)
+    if not reason:
+        return deepcopy(data)
+    source = _s(data.get("source") or "first_call_dialogue_v1")
+    return {
+        "consumable": False,
+        "reason": "no_safe_non_stateful_visible_response",
+        "rejection_reasons": [f"{source}:{reason}"],
+        "rejected_visible_response": deepcopy(data.get("visible_response") or {}),
+        "source": "visible_response_contract_guard_v1",
+    }
+
+
+def _selection_has_placeholder_line(selection: dict[str, Any]) -> bool:
+    visible = _d(selection.get("visible_response"))
+    npc = _d(visible.get("npc"))
+    selected_npc = _d(selection.get("npc"))
+    line = npc.get("line") or selected_npc.get("line")
+    text = _s(line).casefold().strip()
+    return (
+        text.startswith("[")
+        and text.endswith("]")
+        and any(marker in text for marker in _PLACEHOLDER_MARKERS)
+    )
+
+
+def _world_info_requires_runtime_reason(selection: dict[str, Any]) -> str:
+    diagnostics = _d(selection.get("first_call_grounding_diagnostics"))
+    advisory = _d(selection.get("advisory"))
+    if not diagnostics:
+        diagnostics = _d(advisory.get("first_call_grounding_diagnostics"))
+    packet = _d(diagnostics.get("turn_grounding_packet"))
+    player_input = _s(packet.get("player_input")).casefold()
+    if not player_input or not any(term in player_input for term in _WORLD_INFO_TERMS):
+        return ""
+    priority = _d(packet.get("priority_context"))
+    npc_context = _d(packet.get("npc_context"))
+    addressed_ids = _l(priority.get("addressed_npc_ids"))
+    addressed_profiles = _l(npc_context.get("addressed_npcs"))
+    if addressed_ids or addressed_profiles or selection.get("npc"):
+        return "world_info_inquiry_requires_runtime"
     return ""
 
 

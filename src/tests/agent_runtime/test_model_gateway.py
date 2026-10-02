@@ -68,6 +68,39 @@ def test_provider_stream_iterator_stays_on_one_worker_thread() -> None:
     assert observed_threads[0] != threading.get_ident()
 
 
+def test_waiting_for_stream_chunks_parks_no_executor_thread(monkeypatch) -> None:
+    def forbidden(*args, **kwargs):
+        raise AssertionError("each chunk must not occupy an executor thread")
+
+    monkeypatch.setattr(asyncio, "to_thread", forbidden)
+
+    async def collect() -> list[int]:
+        return [value async for value in _stream_responses(iter(range(100)))]
+
+    assert asyncio.run(collect()) == list(range(100))
+
+
+def test_a_slow_stream_consumer_holds_back_the_provider() -> None:
+    produced: list[int] = []
+
+    def provider_stream():
+        for value in range(200):
+            produced.append(value)
+            yield value
+
+    async def read_three_slowly() -> list[int]:
+        stream = _stream_responses(provider_stream())
+        values = [await anext(stream) for _ in range(3)]
+        # Give the producer time to run as far ahead as it is allowed to.
+        await asyncio.sleep(0.3)
+        await stream.aclose()
+        return values
+
+    assert asyncio.run(read_three_slowly()) == [0, 1, 2]
+    # At most the 32-item buffer plus the item being published runs ahead.
+    assert len(produced) <= 3 + 32 + 1
+
+
 
 def test_agent_model_messages_preserve_images() -> None:
     rows = [

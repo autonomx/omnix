@@ -42,12 +42,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Install Memory v2 test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest pydantic ruff fastapi httpx requests python-multipart pillow playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Lint Memory v2
         run: |
           ruff check \
@@ -59,6 +58,8 @@ jobs:
           # test_memory_v2_live_codex_matrix_hardening.py; keep ignores scoped to this file.
           ruff check --ignore I001,TRY004,B017 \
             src/tests/persistence/test_live_codex_memory_v2_matrix.py
+      - name: Apply PostgreSQL migrations
+        run: python -m app.persistence migrate
       - name: Run Memory v2 contract and PostgreSQL integration tests
         run: |
           python -m pytest \

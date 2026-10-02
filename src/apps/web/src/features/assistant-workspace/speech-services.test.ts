@@ -8,6 +8,30 @@ import {
 } from './speech-services';
 
 describe('speech service clients', () => {
+  it('uses the gateway transcription path without authority parameters or a repeated suffix', async () => {
+    const requests: SpeechServiceTransportRequest[] = [];
+    const transport: SpeechServiceTransport = async <TResponse>(request: SpeechServiceTransportRequest) => {
+      requests.push(request);
+      return { text: 'hello' } as TResponse;
+    };
+    for (const baseUrl of ['/api/stt?authority=auto', '/api/stt/transcribe?language=en', '/api/stt/ws/transcribe']) {
+      await createSttServiceClient({ baseUrl, transport }).transcribeAudio({ audio: new ArrayBuffer(2) });
+    }
+    expect(requests.map((request) => request.url)).toEqual(Array(3).fill('/api/stt/transcribe'));
+  });
+
+  it('sends the browser client marker without a service credential', async () => {
+    let sentHeaders: HeadersInit | undefined;
+    const transport = createFetchSpeechServiceTransport(async (_url, options) => {
+      sentHeaders = options?.headers;
+      return new Response(JSON.stringify({ text: 'hello' }));
+    });
+    await transport({ url: '/api/stt/transcribe', method: 'POST', body: new FormData() });
+    const headers = new Headers(sentHeaders);
+    expect(headers.get('X-Omnix-Client')).toBe('web');
+    expect(headers.has('X-Omnix-Service-Token')).toBe(false);
+  });
+
   it('posts audio to the configured STT service', async () => {
     const requests: SpeechServiceTransportRequest[] = [];
     const transport: SpeechServiceTransport = async <TResponse>(request: SpeechServiceTransportRequest) => {

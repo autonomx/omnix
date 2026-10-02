@@ -5,9 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-InteractionMode = Literal["system", "character"]
-SharedMemoryAccess = Literal["none", "read_only"]
-TranscriptPolicy = Literal["persistent", "temporary", "none"]
+from app.conversation.contracts import InteractionMode, SharedMemoryAccess, TranscriptPolicy
+
 CharacterStatus = Literal["active", "archived"]
 
 SYSTEM_ASSISTANT_ID = "system-assistant"

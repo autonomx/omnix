@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
+
 import sys
 from copy import deepcopy
 from time import perf_counter
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.ai.action_intelligence import get_action_advisory  # noqa: F401
 from app.rpg.ai.compact_dialogue import (
@@ -12,9 +14,16 @@ from app.rpg.ai.compact_dialogue import (
 from app.rpg.ai.semantic_action_intelligence import get_semantic_action_advisory
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.first_call_dialogue import build_non_stateful_dialogue_result
+from app.rpg.session.dialogue_fallbacks import repair_dialogue_fallback
 from app.rpg.session.public_state_bridge import hydrate_simulation_player
 from app.rpg.session.semantic_interaction import attach_semantic_interaction
-from app.rpg.session import runtime as canonical_runtime
+from app.rpg.economy.service_resolver import resolve_service_turn
+from app.rpg.session.companion_turn_runtime import _build_turn_id
+from app.rpg.session.service_runtime import service_action_from_result
+from app.rpg.session.session_runtime_store import load_runtime_session, save_runtime_session
+from app.rpg.session.turn_response_composition import apply_turn as _apply_composed_turn
+
+logger = logging.getLogger(__name__)
 
 _FAST_DIRECT_SOURCE = "ce212_fast_direct_runtime_budget_v1"
 _RECURSION_LIMIT_FLOOR = 10000
@@ -31,7 +40,7 @@ def _ms_since(start: float) -> float:
     return round((perf_counter() - start) * 1000.0, 3)
 
 
-def _attach_manual_stage_timing(result: Dict[str, Any], timing: Dict[str, Any]) -> Dict[str, Any]:
+def _attach_manual_stage_timing(result: dict[str, Any], timing: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result, dict):
         return result
     result["manual_turn_stage_timing"] = dict(timing)
@@ -42,11 +51,11 @@ def _attach_manual_stage_timing(result: Dict[str, Any], timing: Dict[str, Any]) 
     return result
 
 
-def _d(value: Any) -> Dict[str, Any]:
+def _d(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _l(value: Any) -> List[Any]:
+def _l(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -68,55 +77,39 @@ def _b(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
-def _load_manual_session_override(session_id: str) -> Dict[str, Any]:
-    """Best-effort bridge for manual scenario sessions."""
-    if not _s(session_id).startswith("manual_service_"):
-        return {}
-    try:
-        from tests.rpg.manual.session_helpers import _ensure_manual_session
-
-        return _d(_ensure_manual_session(session_id))
-    except Exception:
-        return {}
-
-
-def _select_session(session_id: str, session_override: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _select_session(session_id: str, session_override: dict[str, Any] | None = None) -> dict[str, Any]:
     override = _d(session_override)
     if override:
         return deepcopy(override)
 
-    manual = _load_manual_session_override(session_id)
-    if manual:
-        return manual
-
-    loaded = canonical_runtime.load_runtime_session(session_id)
+    loaded = load_runtime_session(session_id)
     return _d(loaded)
 
 
-def _first_call_diagnostics(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
+def _first_call_diagnostics(action_advisory: dict[str, Any], semantic_advisory: dict[str, Any]) -> dict[str, Any]:
     return _d(
         _d(semantic_advisory).get("first_call_grounding_diagnostics")
         or _d(action_advisory).get("first_call_grounding_diagnostics")
     )
 
 
-def _packet_from_diagnostics(diagnostics: Dict[str, Any]) -> Dict[str, Any]:
+def _packet_from_diagnostics(diagnostics: dict[str, Any]) -> dict[str, Any]:
     return _d(_d(diagnostics).get("turn_grounding_packet"))
 
 
-def _first_call_packet(action_advisory: Dict[str, Any], semantic_advisory: Dict[str, Any]) -> Dict[str, Any]:
+def _first_call_packet(action_advisory: dict[str, Any], semantic_advisory: dict[str, Any]) -> dict[str, Any]:
     return _packet_from_diagnostics(_first_call_diagnostics(action_advisory, semantic_advisory))
 
 
-def _addressed_profile(packet: Dict[str, Any]) -> Dict[str, Any]:
+def _addressed_profile(packet: dict[str, Any]) -> dict[str, Any]:
     addressed = _l(_d(packet.get("npc_context")).get("addressed_npcs"))
     return _d(addressed[0]) if addressed else {}
 
 
 def _stateful_action_from_first_call(
-    action_advisory: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-) -> Dict[str, Any]:
+    action_advisory: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+) -> dict[str, Any]:
     semantic_advisory = _d(semantic_advisory)
     action_advisory = _d(action_advisory)
     source = semantic_advisory or action_advisory
@@ -138,14 +131,14 @@ def _stateful_action_from_first_call(
     return {k: v for k, v in action.items() if v not in (None, "", {})}
 
 
-def _disable_duplicate_runtime_first_call(performance_override: Dict[str, Any] | None) -> Dict[str, Any]:
+def _disable_duplicate_runtime_first_call(performance_override: dict[str, Any] | None) -> dict[str, Any]:
     merged = dict(_d(performance_override))
     merged.setdefault("enable_action_advisory", False)
     merged.setdefault("enable_semantic_action_advisory", False)
     return merged
 
 
-def _narration_mode(performance_override: Dict[str, Any] | None, runtime_state: Dict[str, Any]) -> str:
+def _narration_mode(performance_override: dict[str, Any] | None, runtime_state: dict[str, Any]) -> str:
     perf = _d(performance_override)
     runtime_state = _d(runtime_state)
     settings = _d(runtime_state.get("runtime_settings") or runtime_state.get("settings"))
@@ -160,7 +153,7 @@ def _narration_mode(performance_override: Dict[str, Any] | None, runtime_state: 
 
 def _prepare_stateful_runtime_session(
     session_id: str,
-    session: Dict[str, Any],
+    session: dict[str, Any],
     *,
     narration_mode: str,
 ) -> None:
@@ -176,8 +169,8 @@ def _prepare_stateful_runtime_session(
         manifest["session_id"] = session_id
         manifest.setdefault("id", session_id)
         session_to_save["manifest"] = manifest
-        canonical_runtime.save_runtime_session(session_to_save)
-        loaded = canonical_runtime.load_runtime_session(session_id)
+        save_runtime_session(session_to_save)
+        loaded = load_runtime_session(session_id)
         if isinstance(loaded, dict):
             loaded_runtime = _d(loaded.get("runtime_state"))
             loaded_runtime["narration_mode"] = narration_mode
@@ -185,16 +178,17 @@ def _prepare_stateful_runtime_session(
             if narration_mode in {"deferred", "deterministic", "disabled"}:
                 loaded_runtime["deferred_runtime_narration"] = True
             loaded["runtime_state"] = loaded_runtime
-            canonical_runtime.save_runtime_session(loaded)
+            save_runtime_session(loaded)
     except Exception:
+        logger.debug("suppressed error in %s", "_prepare_stateful_runtime_session", exc_info=True)
         return
 
 
 def _stateful_runtime_performance_override(
-    performance_override: Dict[str, Any] | None,
+    performance_override: dict[str, Any] | None,
     *,
     narration_mode: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     merged = _disable_duplicate_runtime_first_call(performance_override)
     merged["narration_mode"] = narration_mode
     if narration_mode in {"deferred", "deterministic", "disabled"}:
@@ -202,19 +196,19 @@ def _stateful_runtime_performance_override(
     return merged
 
 
-def _fast_turn_mode(performance_override: Dict[str, Any] | None) -> bool:
+def _fast_turn_mode(performance_override: dict[str, Any] | None) -> bool:
     # First-call shortcuts are disabled: every gameplay turn must build the
     # foreground semantic packet through the provider before runtime acts.
     return False
 
 
-def _fast_direct_action(player_input: str, performance_override: Dict[str, Any] | None) -> Dict[str, Any]:
+def _fast_direct_action(player_input: str, performance_override: dict[str, Any] | None) -> dict[str, Any]:
     # Disabled for now.  Keep the helper as a compatibility stub for older
     # harnesses, but never bypass the first-call semantic LLM.
     return {}
 
 
-def _fast_direct_diagnostics(player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
+def _fast_direct_diagnostics(player_input: str, action: dict[str, Any]) -> dict[str, Any]:
     return {
         "source": _FAST_DIRECT_SOURCE,
         "provider_parse_ok": True,
@@ -229,7 +223,7 @@ def _fast_direct_diagnostics(player_input: str, action: Dict[str, Any]) -> Dict[
     }
 
 
-def _fast_direct_advisory(player_input: str, action: Dict[str, Any]) -> Dict[str, Any]:
+def _fast_direct_advisory(player_input: str, action: dict[str, Any]) -> dict[str, Any]:
     diagnostics = _fast_direct_diagnostics(player_input, action)
     return {
         "action_type": _s(action.get("action_type")),
@@ -242,7 +236,7 @@ def _fast_direct_advisory(player_input: str, action: Dict[str, Any]) -> Dict[str
     }
 
 
-def _mark_fast_direct_runtime_state(session: Dict[str, Any], action: Dict[str, Any]) -> Dict[str, Any]:
+def _mark_fast_direct_runtime_state(session: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
     session = _d(session)
     runtime_state = _d(session.get("runtime_state"))
     runtime_state["fast_direct_runtime"] = True
@@ -260,11 +254,11 @@ def _mark_fast_direct_runtime_state(session: Dict[str, Any], action: Dict[str, A
 
 
 def _attach_fast_direct_result(
-    result: Dict[str, Any],
+    result: dict[str, Any],
     *,
     player_input: str,
-    action: Dict[str, Any],
-) -> Dict[str, Any]:
+    action: dict[str, Any],
+) -> dict[str, Any]:
     if not isinstance(result, dict):
         return result
     advisory = _fast_direct_advisory(player_input, action)
@@ -287,10 +281,10 @@ def _attach_fast_direct_result(
 
 
 def _fast_direct_performance_override(
-    performance_override: Dict[str, Any] | None,
+    performance_override: dict[str, Any] | None,
     *,
     narration_mode: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     merged = _stateful_runtime_performance_override(performance_override, narration_mode=narration_mode)
     merged["enable_live_narration_llm"] = False
     merged["enable_narration_retry"] = False
@@ -299,7 +293,7 @@ def _fast_direct_performance_override(
     return merged
 
 
-def _deterministic_narration_from_result(result: Dict[str, Any]) -> str:
+def _deterministic_narration_from_result(result: dict[str, Any]) -> str:
     result = _d(result)
     nested = _d(result.get("result"))
     authoritative = _d(result.get("authoritative"))
@@ -316,13 +310,13 @@ def _deterministic_narration_from_result(result: Dict[str, Any]) -> str:
 
 
 def _apply_stateful_narration_contract(
-    result: Dict[str, Any],
+    result: dict[str, Any],
     *,
     narration_mode: str,
-    action_advisory: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-    selection: Dict[str, Any],
-) -> Dict[str, Any]:
+    action_advisory: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+    selection: dict[str, Any],
+) -> dict[str, Any]:
     if not isinstance(result, dict):
         return result
     nested = _d(result.get("result"))
@@ -373,7 +367,7 @@ def _apply_stateful_narration_contract(
     return result
 
 
-def _is_nonstateful_direct_npc_dialogue(advisory: Dict[str, Any]) -> bool:
+def _is_nonstateful_direct_npc_dialogue(advisory: dict[str, Any]) -> bool:
     advisory = _d(advisory)
     if not advisory:
         return False
@@ -410,7 +404,7 @@ _NON_NPC_TARGET_HINTS = {
 }
 
 
-def _direct_npc_target_hint(*advisories: Dict[str, Any]) -> bool:
+def _direct_npc_target_hint(*advisories: dict[str, Any]) -> bool:
     for advisory in advisories:
         advisory = _d(advisory)
         action_intent = _d(advisory.get("action_intent"))
@@ -435,8 +429,8 @@ def _direct_npc_target_hint(*advisories: Dict[str, Any]) -> bool:
 def _is_direct_npc_question_from_packet(
     *,
     player_input: str,
-    action_advisory: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
+    action_advisory: dict[str, Any],
+    semantic_advisory: dict[str, Any],
 ) -> bool:
     """Heuristic safety net for malformed/default-stateful first-call outputs."""
     packet = _first_call_packet(action_advisory, semantic_advisory)
@@ -509,11 +503,12 @@ def _is_direct_npc_question_from_packet(
 
 
 def _should_safe_fallback_nonstateful_dialogue(
-    action_advisory: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-    selection: Dict[str, Any],
+    action_advisory: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+    selection: dict[str, Any],
     *,
     player_input: str = "",
+    service_matched: bool = False,
 ) -> bool:
     if _d(selection).get("consumable"):
         return False
@@ -527,7 +522,16 @@ def _should_safe_fallback_nonstateful_dialogue(
         return True
     if _d(selection).get("reason") != "no_safe_non_stateful_visible_response":
         return False
-    return _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory)
+    if _is_nonstateful_direct_npc_dialogue(semantic_advisory) or _is_nonstateful_direct_npc_dialogue(action_advisory):
+        return True
+    from app.rpg.session.interpretive_adjudication import should_use_interpretive_adjudication
+
+    return should_use_interpretive_adjudication(
+        player_input=player_input,
+        semantic_advisory=_d(semantic_advisory) or _d(action_advisory),
+        selection=_d(selection),
+        service_matched=service_matched,
+    )
 
 
 def _direct_dialogue_fallback_topic(player_input: str) -> str:
@@ -575,7 +579,7 @@ def _direct_dialogue_fallback_topic(player_input: str) -> str:
 def _safe_dialogue_fallback_line(
     *,
     speaker: str,
-    profile: Dict[str, Any],
+    profile: dict[str, Any],
     player_input: str,
 ) -> tuple[str, str]:
     topic = _direct_dialogue_fallback_topic(player_input)
@@ -640,19 +644,47 @@ def _safe_dialogue_fallback_line(
         if example:
             return (topic, example)
 
-    return (topic, "Ask that plainly again, and I will answer as best I can.")
+    return repair_dialogue_fallback(
+        topic=topic,
+        line="Ask that plainly again, and I will answer as best I can.",
+        speaker=speaker,
+        profile=profile,
+        player_input=player_input,
+    )
 
 
 def _safe_dialogue_fallback_result(
     *,
-    session: Dict[str, Any],
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
+    session: dict[str, Any],
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
     player_input: str,
-    action_advisory: Dict[str, Any],
-    semantic_advisory: Dict[str, Any],
-    selection: Dict[str, Any],
-) -> Dict[str, Any]:
+    action_advisory: dict[str, Any],
+    semantic_advisory: dict[str, Any],
+    selection: dict[str, Any],
+    service_matched: bool = False,
+) -> dict[str, Any]:
+    from app.rpg.session.interpretive_adjudication import (
+        build_interpretive_adjudication_result,
+        should_use_interpretive_adjudication,
+    )
+
+    if should_use_interpretive_adjudication(
+        player_input=player_input,
+        semantic_advisory=_d(semantic_advisory) or _d(action_advisory),
+        selection=_d(selection),
+        service_matched=service_matched,
+    ):
+        return build_interpretive_adjudication_result(
+            session=session,
+            simulation_state=simulation_state,
+            runtime_state=runtime_state,
+            player_input=player_input,
+            action_advisory=action_advisory,
+            semantic_advisory=semantic_advisory,
+            selection=selection,
+        )
+
     diagnostics = _first_call_diagnostics(action_advisory, semantic_advisory)
     packet = _packet_from_diagnostics(diagnostics)
     profile = _addressed_profile(packet)
@@ -696,7 +728,7 @@ def _safe_dialogue_fallback_result(
         "grounding_validation": deepcopy(grounding_validation),
         "source": "first_call_dialogue_safe_fallback_v1",
     }
-    return {
+    result = {
         "consumed": True,
         "ok": True,
         "result": deepcopy(resolved_result),
@@ -721,21 +753,36 @@ def _safe_dialogue_fallback_result(
         "player_input": _s(player_input),
         "source": "first_call_dialogue_safe_fallback_v1",
     }
+    from .narrative_engine_bridge import canonicalize_direct_dialogue_result
+
+    manifest = _d(session.get("manifest"))
+    session_id = _s(
+        manifest.get("session_id")
+        or manifest.get("id")
+        or session.get("session_id")
+        or session.get("id")
+        or "runtime"
+    )
+    return canonicalize_direct_dialogue_result(
+        result,
+        session_id=session_id,
+        player_input=_s(player_input),
+    )
 
 
-def apply_turn(
+def _apply_turn_core(
     session_id: str,
     player_input: str,
-    action: Dict[str, Any] | None = None,
+    action: dict[str, Any] | None = None,
     *,
-    performance_override: Dict[str, Any] | None = None,
-    session_override: Dict[str, Any] | None = None,
-) -> Dict[str, Any]:
+    performance_override: dict[str, Any] | None = None,
+    session_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Interactive CLI two-call entry point."""
 
     manual_start = perf_counter()
     recursion_limit = _ensure_runtime_recursion_budget()
-    timing: Dict[str, Any] = {
+    timing: dict[str, Any] = {
         "manual_turn_timing_source": "interactive_first_call_runtime_v1",
         "runtime_recursion_limit": recursion_limit,
         "pre_runtime_intent_llm_ms": 0.0,
@@ -767,7 +814,7 @@ def apply_turn(
         _prepare_stateful_runtime_session(session_id, session, narration_mode=narration_mode)
         timing["state_snapshot_ms"] += _ms_since(prepare_start)
         runtime_start = perf_counter()
-        result = canonical_runtime.apply_turn(
+        result = _apply_composed_turn(
             session_id=session_id,
             player_input=_s(player_input),
             action=fast_direct_action,
@@ -798,7 +845,7 @@ def apply_turn(
         return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
 
     try:
-        service_match = canonical_runtime.resolve_service_turn(
+        service_match = resolve_service_turn(
             player_input=_s(player_input),
             action=candidate_action,
             resolved_action={},
@@ -809,8 +856,8 @@ def apply_turn(
         service_match = {}
     service_matched = bool(_d(service_match).get("matched"))
 
-    action_advisory: Dict[str, Any] = {}
-    semantic_advisory: Dict[str, Any] = {}
+    action_advisory: dict[str, Any] = {}
+    semantic_advisory: dict[str, Any] = {}
     llm_start = perf_counter()
     try:
         gateway = build_app_llm_gateway()
@@ -846,7 +893,7 @@ def apply_turn(
     )
     timing["grounding_validation_ms"] += _ms_since(validation_start)
     if non_stateful_result.get("consumed"):
-        non_stateful_result["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
+        non_stateful_result["turn_id"] = _build_turn_id(runtime_state)
         non_stateful_result["tick"] = int(runtime_state.get("tick", 0) or 0)
         non_stateful_result["first_call_action_advisory"] = action_advisory
         non_stateful_result["first_call_semantic_advisory"] = semantic_advisory
@@ -865,6 +912,7 @@ def apply_turn(
         semantic_advisory,
         selection,
         player_input=_s(player_input),
+        service_matched=service_matched,
     )
     timing["repair_ms"] += _ms_since(repair_start)
     if should_fallback:
@@ -877,9 +925,10 @@ def apply_turn(
             action_advisory=action_advisory,
             semantic_advisory=semantic_advisory,
             selection=selection,
+            service_matched=service_matched,
         )
         timing["repair_ms"] += _ms_since(repair_start)
-        fallback["turn_id"] = canonical_runtime._build_turn_id(runtime_state)
+        fallback["turn_id"] = _build_turn_id(runtime_state)
         fallback["tick"] = int(runtime_state.get("tick", 0) or 0)
         timing["manual_turn_ms"] = _ms_since(manual_start)
         return _attach_manual_stage_timing(fallback, timing)
@@ -888,7 +937,7 @@ def apply_turn(
     if not first_call_action:
         first_call_action = candidate_action
     if service_matched:
-        first_call_action = canonical_runtime.service_action_from_result(
+        first_call_action = service_action_from_result(
             _s(player_input),
             first_call_action,
             service_match,
@@ -906,7 +955,7 @@ def apply_turn(
     timing["state_snapshot_ms"] += _ms_since(prepare_start)
 
     runtime_start = perf_counter()
-    result = canonical_runtime.apply_turn(
+    result = _apply_composed_turn(
         session_id=session_id,
         player_input=_s(player_input),
         action=first_call_action,
@@ -935,7 +984,36 @@ def apply_turn(
     return _attach_manual_stage_timing(result, timing) if isinstance(result, dict) else result
 
 
-def _safe_deferred_enqueue_ms(result: Dict[str, Any]) -> float:
+def apply_turn(
+    session_id: str,
+    player_input: str,
+    action: dict[str, Any] | None = None,
+    *,
+    performance_override: dict[str, Any] | None = None,
+    session_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the interactive turn through the explicit ordered stage pipeline."""
+
+    from app.rpg.session.pipeline import TurnContext, run_turn_pipeline
+
+    context = TurnContext(
+        session_id=session_id,
+        player_input=player_input,
+        action=action,
+        performance_override=performance_override,
+        session_override=session_override,
+        execute_core=lambda: _apply_turn_core(
+            session_id,
+            player_input,
+            action,
+            performance_override=performance_override,
+            session_override=session_override,
+        ),
+    )
+    return run_turn_pipeline(context).result
+
+
+def _safe_deferred_enqueue_ms(result: dict[str, Any]) -> float:
     for source in (result, _d(result.get("result")), _d(result.get("turn_runtime")), _d(result.get("performance"))):
         for key in ("deferred_enqueue_ms", "background_enqueue_ms"):
             value = source.get(key)

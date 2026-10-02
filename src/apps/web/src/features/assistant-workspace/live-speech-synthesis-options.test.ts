@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {

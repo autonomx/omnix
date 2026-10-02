@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import hashlib
 import os
@@ -9,9 +11,9 @@ from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution import ExecutionObservation
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
@@ -29,11 +31,11 @@ _MONITOR_STATE_KEY = "_omnix_trading_paper_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_paper_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_PAPER_MONITOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_PAPER_MONITOR", "1")
 
@@ -41,7 +43,7 @@ def trading_paper_monitor_enabled() -> bool:
 def _interval_seconds() -> float:
     """Idle account scan cadence; active execution uses a separate fast cadence."""
     try:
-        value = float(os.environ.get("OMNIX_TRADING_PAPER_INTERVAL_SECONDS", "15"))
+        value = float(environment().get("OMNIX_TRADING_PAPER_INTERVAL_SECONDS", "15"))
     except ValueError:
         value = 15.0
     return max(5.0, value)
@@ -50,7 +52,7 @@ def _interval_seconds() -> float:
 def _active_interval_seconds() -> float:
     """Fallback polling cadence while any order/protection needs execution evidence."""
     try:
-        value = float(os.environ.get("OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS", "1"))
+        value = float(environment().get("OMNIX_TRADING_PAPER_ACTIVE_INTERVAL_SECONDS", "1"))
     except ValueError:
         value = 1.0
     return max(0.25, min(5.0, value))
@@ -432,12 +434,13 @@ class TradingPaperMonitor:
             await self._sleep_until_next_cycle()
 
 
-def register_trading_paper_monitor(gateway: FastAPI) -> TradingPaperMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_paper_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingPaperMonitor):
-        return existing
+        return None
     monitor = TradingPaperMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
+    setattr(state, _MONITOR_STATE_KEY, monitor)
 
     async def startup() -> None:
         if trading_paper_monitor_enabled():
@@ -446,7 +449,6 @@ def register_trading_paper_monitor(gateway: FastAPI) -> TradingPaperMonitor:
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

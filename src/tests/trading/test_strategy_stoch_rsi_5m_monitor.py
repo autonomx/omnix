@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -110,7 +109,8 @@ def test_strategy_document_is_shadow_only() -> None:
         _config(mode="auto_paper")
 
 
-def test_monitor_persists_stoch_rsi_evidence_without_execution(
+@pytest.mark.anyio
+async def test_monitor_persists_stoch_rsi_evidence_without_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -128,13 +128,11 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
     monitor = TradingStrategyMonitor(interval_seconds=30)
     monitor.current_run_id = "stoch-test-run"
 
-    asyncio.run(
-        monitor._run_stoch_rsi_5m_config(
-            _config(),
-            repository,
-            market,
-            now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
-        )
+    await monitor._run_stoch_rsi_5m_config(
+        _config(),
+        repository,
+        market,
+        now_utc=datetime(2026, 9, 10, 13, 45, tzinfo=timezone.utc),
     )
 
     assert market.calls == 1

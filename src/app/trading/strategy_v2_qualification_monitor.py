@@ -1,17 +1,16 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .paper import PaperExecutionPolicy
@@ -36,9 +35,9 @@ from .strategy_v2_qualification import (
 )
 from .trade_logging import trade_log
 from .us_equity_calendar import early_close_time, regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_v2_qualification_monitor"
 _REPLAY_SPREAD_BPS = Decimal("150")
 _REPLAY_INITIAL_CASH = Decimal("100000")
@@ -48,18 +47,18 @@ BarLoader = Callable[..., dict[str, list[object]]]
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_v2_qualification_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_V2_QUALIFICATION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_V2_QUALIFICATION", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS", "300"))
+        value = float(_env_str("OMNIX_TRADING_V2_QUALIFICATION_INTERVAL_SECONDS", "300"))
     except ValueError:
         value = 300.0
     return max(60.0, value)
@@ -455,12 +454,13 @@ class TradingStrategyV2QualificationMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_v2_qualification_monitor(gateway: FastAPI) -> TradingStrategyV2QualificationMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_v2_qualification_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyV2QualificationMonitor):
-        return existing
+        return None
     monitor = TradingStrategyV2QualificationMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_v2_qualification_monitor_enabled():
@@ -469,15 +469,14 @@ def register_trading_strategy_v2_qualification_monitor(gateway: FastAPI) -> Trad
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyV2QualificationMonitor",
-    "register_trading_strategy_v2_qualification_monitor",
+    "create_trading_strategy_v2_qualification_monitor_worker",
     "replay_v2_shadow_session",
     "strategy_v2_qualification_monitor_enabled",
 ]

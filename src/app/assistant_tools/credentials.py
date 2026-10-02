@@ -1,15 +1,16 @@
-"""Private credential storage for connected assistant tools."""
+"""Credentials of connected assistant tools, kept in the secret store (WP-4.9).
+
+OAuth tokens and OAuth client secrets never reach PostgreSQL, the settings
+document or a plaintext file: each workspace's credentials are one secret in
+``app.security.secrets``.
+"""
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-DEFAULT_CREDENTIALS_PATH = Path("resources/data/assistant_tool_credentials.json")
-DEFAULT_OAUTH_CLIENTS_PATH = Path("resources/data/assistant_tool_oauth_clients.json")
+from app.security.secrets import require_writable, secret_store
 
 
 class AssistantToolCredentialRecord(BaseModel):
@@ -40,120 +41,72 @@ class AssistantToolOAuthClientsPayload(BaseModel):
     clients: list[AssistantToolOAuthClientRecord] = Field(default_factory=list)
 
 
-def assistant_tool_credentials_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH")
-    return Path(configured) if configured else DEFAULT_CREDENTIALS_PATH
+def _secret_name(kind: str) -> str:
+    from app.runtime.tenant_context import LOCAL_WORKSPACE_ID, current_tenant
 
-
-def assistant_tool_oauth_clients_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH")
-    return Path(configured) if configured else DEFAULT_OAUTH_CLIENTS_PATH
-
-
-def load_assistant_tool_credentials(path: Path | None = None) -> AssistantToolCredentialsPayload:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_assistant_tool_credentials(path)
-    credentials_path = path or assistant_tool_credentials_path()
-    if not credentials_path.exists():
-        return AssistantToolCredentialsPayload()
     try:
-        data = json.loads(credentials_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return AssistantToolCredentialsPayload()
-    return AssistantToolCredentialsPayload.model_validate(data)
+        workspace = current_tenant().workspace_id
+    except RuntimeError:
+        workspace = LOCAL_WORKSPACE_ID
+    return f"assistant-tools/{workspace}/{kind}"
 
 
-def save_assistant_tool_credentials(payload: AssistantToolCredentialsPayload, path: Path | None = None) -> AssistantToolCredentialsPayload:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_assistant_tool_credentials(payload, path)
-    credentials_path = path or assistant_tool_credentials_path()
-    credentials_path.parent.mkdir(parents=True, exist_ok=True)
-    credentials_path.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
+def load_assistant_tool_credentials() -> AssistantToolCredentialsPayload:
+    raw = secret_store().get(_secret_name("credentials"))
+    return AssistantToolCredentialsPayload.model_validate_json(raw) if raw else AssistantToolCredentialsPayload()
+
+
+def save_assistant_tool_credentials(payload: AssistantToolCredentialsPayload) -> AssistantToolCredentialsPayload:
+    require_writable(secret_store()).set(_secret_name("credentials"), payload.model_dump_json())
     return payload
 
 
-def load_assistant_tool_oauth_clients(path: Path | None = None) -> AssistantToolOAuthClientsPayload:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_assistant_tool_oauth_clients(path)
-    clients_path = path or assistant_tool_oauth_clients_path()
-    if not clients_path.exists():
-        return AssistantToolOAuthClientsPayload()
-    try:
-        data = json.loads(clients_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return AssistantToolOAuthClientsPayload()
-    return AssistantToolOAuthClientsPayload.model_validate(data)
+def load_assistant_tool_oauth_clients() -> AssistantToolOAuthClientsPayload:
+    raw = secret_store().get(_secret_name("oauth-clients"))
+    return AssistantToolOAuthClientsPayload.model_validate_json(raw) if raw else AssistantToolOAuthClientsPayload()
 
 
-def save_assistant_tool_oauth_clients(payload: AssistantToolOAuthClientsPayload, path: Path | None = None) -> AssistantToolOAuthClientsPayload:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_assistant_tool_oauth_clients(payload, path)
-    clients_path = path or assistant_tool_oauth_clients_path()
-    clients_path.parent.mkdir(parents=True, exist_ok=True)
-    clients_path.write_text(payload.model_dump_json(indent=2), encoding="utf-8")
+def save_assistant_tool_oauth_clients(payload: AssistantToolOAuthClientsPayload) -> AssistantToolOAuthClientsPayload:
+    require_writable(secret_store()).set(_secret_name("oauth-clients"), payload.model_dump_json())
     return payload
 
 
-def oauth_client_for_provider(provider: str, path: Path | None = None) -> AssistantToolOAuthClientRecord | None:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().oauth_client_for_provider(provider, path)
-    payload = load_assistant_tool_oauth_clients(path)
+def oauth_client_for_provider(provider: str) -> AssistantToolOAuthClientRecord | None:
     normalized = provider.lower()
-    return next((record for record in payload.clients if record.provider.lower() == normalized), None)
+    return next(
+        (record for record in load_assistant_tool_oauth_clients().clients if record.provider.lower() == normalized),
+        None,
+    )
 
 
-def upsert_oauth_client(record: AssistantToolOAuthClientRecord, path: Path | None = None) -> AssistantToolOAuthClientRecord:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().upsert_oauth_client(record, path)
-    payload = load_assistant_tool_oauth_clients(path)
+def upsert_oauth_client(record: AssistantToolOAuthClientRecord) -> AssistantToolOAuthClientRecord:
+    payload = load_assistant_tool_oauth_clients()
     normalized = record.provider.lower()
     payload.clients = [current for current in payload.clients if current.provider.lower() != normalized]
     payload.clients.append(record)
-    save_assistant_tool_oauth_clients(payload, path)
+    save_assistant_tool_oauth_clients(payload)
     return record
 
 
-def credential_for_tool(tool_id: str, path: Path | None = None) -> AssistantToolCredentialRecord | None:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().credential_for_tool(tool_id, path)
-    payload = load_assistant_tool_credentials(path)
-    return next((record for record in payload.credentials if record.tool_id == tool_id), None)
+def credential_for_tool(tool_id: str) -> AssistantToolCredentialRecord | None:
+    return next((record for record in load_assistant_tool_credentials().credentials if record.tool_id == tool_id), None)
 
 
-def upsert_tool_credential(record: AssistantToolCredentialRecord, path: Path | None = None) -> AssistantToolCredentialRecord:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().upsert_tool_credential(record, path)
-    payload = load_assistant_tool_credentials(path)
+def upsert_tool_credential(record: AssistantToolCredentialRecord) -> AssistantToolCredentialRecord:
+    payload = load_assistant_tool_credentials()
     payload.credentials = [current for current in payload.credentials if current.tool_id != record.tool_id]
     payload.credentials.append(record)
-    save_assistant_tool_credentials(payload, path)
+    save_assistant_tool_credentials(payload)
     return record
 
 
-def delete_tool_credential(tool_id: str, path: Path | None = None) -> None:
-    from app.persistence.runtime import uses_postgresql_runtime
-    if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().delete_tool_credential(tool_id, path)
-    payload = load_assistant_tool_credentials(path)
-    payload.credentials = [record for record in payload.credentials if record.tool_id != tool_id]
-    save_assistant_tool_credentials(payload, path)
+def delete_tool_credential(tool_id: str) -> None:
+    payload = load_assistant_tool_credentials()
+    remaining = [record for record in payload.credentials if record.tool_id != tool_id]
+    if len(remaining) == len(payload.credentials):
+        return
+    payload.credentials = remaining
+    save_assistant_tool_credentials(payload)
 
 
 def expires_at_from_now(expires_in: object) -> str | None:

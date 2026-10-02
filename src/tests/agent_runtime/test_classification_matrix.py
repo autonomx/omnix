@@ -12,6 +12,20 @@ from app.agent_runtime.chat_bridge import (
 from app.agent_runtime.contracts import AgentRunSpec, ModelRef
 from app.agent_runtime.router import OmnixRouteDecision, route_omnix_request
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
+import app.chat.character_store as character_store
+from app.chat.assistant_turns import AssistantTurnCoordinator
+from app.characters.repository import InMemoryCharacterRepository
+from app.characters.service import CharacterService
+
+
+def _use_memory_character_service(tmp_path, monkeypatch) -> None:
+    service = CharacterService(InMemoryCharacterRepository(tmp_path / "characters.sqlite3"))
+    monkeypatch.setattr(character_store, "default_character_service", lambda: service)
+    monkeypatch.setattr(
+        character_store,
+        "default_assistant_turn_coordinator",
+        lambda _database=None: AssistantTurnCoordinator(tmp_path / "assistant-turns.json"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -153,7 +167,8 @@ def test_mixed_intent_uses_agent_adviser_without_partial_direct_execution(prompt
     assert decision.reason == "mixed_intent_task"
 
 
-def test_research_mode_is_preserved_on_user_message_metadata(tmp_path) -> None:
+def test_research_mode_is_preserved_on_user_message_metadata(tmp_path, monkeypatch) -> None:
+    _use_memory_character_service(tmp_path, monkeypatch)
     store = ChatSessionStore(tmp_path / "chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Research"))
     appended = store.begin_user_message(

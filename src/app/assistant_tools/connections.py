@@ -1,9 +1,12 @@
 """Assistant tool provider connection discovery."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import json
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +53,8 @@ class AssistantToolOAuthClientPayload(BaseModel):
 
 GOOGLE_TOOL_IDS = {"gmail", "calendar", "contacts"}
 _OAUTH_STATE_TTL_SECONDS = 600.0
+_MAX_PENDING_OAUTH_STATES = 2048
+_PENDING_OAUTH_LOCK = threading.RLock()
 _PENDING_OAUTH_STATES: dict[str, tuple[str, str, float]] = {}
 
 
@@ -379,7 +384,7 @@ def _safe_str(value: object) -> str:
 
 def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> str:
     provider_key = provider.upper()
-    configured = os.environ.get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
+    configured = environment().get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
     if configured:
         return configured
     base_url = (request_base_url or "http://127.0.0.1:8000").rstrip("/")
@@ -388,8 +393,8 @@ def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> s
 
 def _oauth_client_credentials(provider: str) -> tuple[str, str]:
     provider_key = provider.upper()
-    env_client_id = os.environ.get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
-    env_client_secret = os.environ.get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
+    env_client_id = environment().get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
+    env_client_secret = environment().get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
     if env_client_id or env_client_secret:
         return env_client_id, env_client_secret
     record = oauth_client_for_provider(provider)
@@ -408,16 +413,26 @@ def _provider_for_tool(tool_id: str) -> str:
 
 def _issue_oauth_state(provider: str, tool_id: str) -> str:
     now = time.monotonic()
-    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
-        if expires_at <= now:
-            _PENDING_OAUTH_STATES.pop(token, None)
-    token = secrets.token_urlsafe(32)
-    _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
-    return token
+    with _PENDING_OAUTH_LOCK:
+        _prune_pending_oauth_locked(now)
+        while len(_PENDING_OAUTH_STATES) >= _MAX_PENDING_OAUTH_STATES:
+            oldest = min(_PENDING_OAUTH_STATES, key=lambda key: _PENDING_OAUTH_STATES[key][2])
+            _PENDING_OAUTH_STATES.pop(oldest, None)
+        token = secrets.token_urlsafe(32)
+        _PENDING_OAUTH_STATES[token] = (provider, tool_id, now + _OAUTH_STATE_TTL_SECONDS)
+        return token
+
+
+def clear_pending_oauth_states() -> None:
+    """Invalidate pending OAuth handshakes for tests and controlled resets."""
+
+    with _PENDING_OAUTH_LOCK:
+        _PENDING_OAUTH_STATES.clear()
 
 
 def _consume_oauth_state(provider: str, token: str) -> str | None:
-    value = _PENDING_OAUTH_STATES.pop(token, None)
+    with _PENDING_OAUTH_LOCK:
+        value = _PENDING_OAUTH_STATES.pop(token, None)
     if value is None:
         return None
     stored_provider, tool_id, expires_at = value
@@ -426,8 +441,14 @@ def _consume_oauth_state(provider: str, token: str) -> str | None:
     return tool_id
 
 
+def _prune_pending_oauth_locked(now: float) -> None:
+    for token, (_provider, _tool_id, expires_at) in list(_PENDING_OAUTH_STATES.items()):
+        if expires_at <= now:
+            _PENDING_OAUTH_STATES.pop(token, None)
+
+
 def _load_local_env() -> None:
-    if os.environ.get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
+    if environment().get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
         return
     env_path = Path(__file__).resolve().parents[3] / ".env.local"
     if not env_path.exists():
@@ -440,4 +461,4 @@ def _load_local_env() -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         if key:
-            os.environ.setdefault(key, value)
+            environment().setdefault(key, value)

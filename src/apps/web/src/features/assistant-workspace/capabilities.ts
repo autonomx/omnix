@@ -20,7 +20,7 @@ export type CapabilityInvocation = {
   projectId?: string;
   sessionId?: string;
   arguments: Record<string, unknown>;
-  approved: boolean;
+  approvalDecision: 'pending' | 'approved' | 'denied';
   requestedAt: string;
 };
 
@@ -65,9 +65,9 @@ export function createCapabilityInvocation(invocation: CapabilityInvocation): Ca
 
 export function canInvokeCapability(
   definition: CapabilityDefinition,
-  invocation: Pick<CapabilityInvocation, 'capabilityId' | 'scope' | 'approved'>,
+  invocation: Pick<CapabilityInvocation, 'capabilityId' | 'scope' | 'approvalDecision'>,
 ): boolean {
-  return definition.id === invocation.capabilityId && invocation.approved && canUseCapability(definition, invocation.scope);
+  return definition.id === invocation.capabilityId && invocation.approvalDecision === 'approved' && canUseCapability(definition, invocation.scope);
 }
 
 export async function executeCapabilityInvocation(
@@ -77,7 +77,7 @@ export async function executeCapabilityInvocation(
 ): Promise<CapabilityExecutionRecord> {
   const safeInvocation = createCapabilityInvocation(invocation);
 
-  if (!safeInvocation.approved) {
+  if (safeInvocation.approvalDecision !== 'approved') {
     return {
       invocation: safeInvocation,
       status: 'denied',
@@ -126,7 +126,7 @@ export function createCapabilityEvents(record: CapabilityExecutionRecord): Assis
       toolCallId: invocation.id,
       toolName: invocation.capabilityId,
       arguments: { ...invocation.arguments },
-      approved: invocation.approved,
+      approved: invocation.approvalDecision === 'approved',
     },
     createdAt,
   };

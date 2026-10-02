@@ -25,8 +25,6 @@ the absence of obsolete application routes.
 - Trading uses its current gateway and registered strategies/monitors. Older
   numbered research strategies remain registered; a version suffix does not
   establish that they are unused.
-- `openai_api.py` is a separately documented client integration with launch
-  scripts. It is not a previous browser app.
 - TTS, Parakeet, image and runtime-control worker servers are active services.
 - Persistence migrations, legacy session/document imports, RPG saved-state
   adapters and memory migration code preserve existing user data.

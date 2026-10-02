@@ -27,8 +27,9 @@ Key Features:
 
 from __future__ import annotations
 
-import time
 from typing import Any, Dict, List, Optional
+
+from app.runtime.clock import utc_now
 
 # [FIX #4] Goal cooldown to prevent feedback loops
 GOAL_COOLDOWN_TICKS = 5
@@ -150,7 +151,7 @@ class GoalState:
         self.emotional_drive = emotional_drive
         self.context_match = context_match
         self.progress = 0.0
-        self.created_at = time.time()
+        self.created_at = utc_now().timestamp()
         self._last_progress = 0.0
         self.stalled_ticks = 0
         self.max_stalled_ticks = max_stalled_ticks

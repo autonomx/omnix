@@ -9,7 +9,7 @@ from app.audiobook.worker import run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations, discover_migrations
 
 
@@ -27,7 +27,7 @@ def test_removal_is_local_durable_source_bound_and_reversible(tmp_path, monkeypa
     database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3))
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         blobs = LocalBlobStore(tmp_path)
         service = AudiobookService(database, blobs)
         book = service.create_project(context, title="Speech removal")

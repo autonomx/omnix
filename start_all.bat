@@ -5,9 +5,27 @@ if exist "%~dp0.tools\npm-global" set "PATH=%~dp0.tools\npm-global;%PATH%"
 if exist "%~dp0.tools\npm-global\agent-browser.cmd" set "OMNIX_AGENT_BROWSER_COMMAND=%~dp0.tools\npm-global\agent-browser.cmd"
 if exist "%~dp0.tools\npm-global\mcporter.cmd" set "OMNIX_AGENT_MCPORTER_COMMAND=%~dp0.tools\npm-global\mcporter.cmd"
 
-set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
-set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
-set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
+if not defined CONDA_ROOT set "CONDA_ROOT=%USERPROFILE%\miniconda3"
+set "RPG_FLUX_PYTHON=%CONDA_ROOT%\envs\rpg-flux\python.exe"
+set "RPG_TTS_PYTHON=%CONDA_ROOT%\envs\rpg-tts\python.exe"
+set "RPG_STT_PYTHON=%CONDA_ROOT%\envs\rpg-stt\python.exe"
+
+if not exist "%RPG_FLUX_PYTHON%" (
+    echo ERROR: Locked rpg-flux runtime not found. Run setup.bat first.
+    exit /b 1
+)
+"%RPG_FLUX_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+if errorlevel 1 (
+    echo ERROR: The locked image runtime requires Python 3.11. Run setup.bat.
+    exit /b 1
+)
+if exist "%RPG_STT_PYTHON%" (
+    "%RPG_STT_PYTHON%" -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+    if errorlevel 1 (
+        echo ERROR: The locked STT runtime requires Python 3.11. Run setup.bat.
+        exit /b 1
+    )
+)
 
 REM A second launcher must not auto-start services before failing to bind 5055.
 if /I not "%~1"=="--postgres-only" if /I not "%~1"=="--database-credential-injected-check" (
@@ -64,8 +82,8 @@ if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HER
 if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
 if not defined OMNIX_CHARACTER_MODE_ENABLED set "OMNIX_CHARACTER_MODE_ENABLED=1"
 
-REM Agent lifecycle diagnostics. Override OMNIX_AGENT_DEBUG_LOGS=0 to disable.
-if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=1"
+REM Agent lifecycle diagnostics are opt-in: set OMNIX_AGENT_DEBUG_LOGS=1 to enable.
+if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=0"
 if not defined OMNIX_AGENT_LOG_DIR set "OMNIX_AGENT_LOG_DIR=%~dp0resources\logs\agent"
 if not defined OMNIX_AGENT_LOG_RETENTION_DAYS set "OMNIX_AGENT_LOG_RETENTION_DAYS=30"
 if not defined OMNIX_AGENT_LOG_MAX_FIELD_CHARS set "OMNIX_AGENT_LOG_MAX_FIELD_CHARS=12000"
@@ -176,11 +194,18 @@ if /I "%~1"=="--database-credential-injected-check" (
     endlocal
     exit /b 0
 )
+echo [POSTGRES] Applying pending schema migrations before starting services...
+"%RPG_FLUX_PYTHON%" -m app.persistence migrate
+if errorlevel 1 (
+    echo ERROR: PostgreSQL migrations failed. Omnix services were not started.
+    pause
+    exit /b 1
+)
 if /I "%OMNIX_KASA_ENABLED%"=="1" (
     "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
     if errorlevel 1 (
         echo WARNING: python-kasa could not be imported in rpg-flux; see the error above.
-        echo          Run: "%RPG_FLUX_PYTHON%" -m pip install "python-kasa^>=0.7.7,^<0.8"
+        echo          Run setup.bat to install the hash-locked image runtime from requirements\image.lock.txt.
     )
 )
 
@@ -230,13 +255,17 @@ set "OMNIX_KASA_DEVICE_ALIAS=%OMNIX_KASA_DEVICE_ALIAS%"
 set "KASA_USERNAME=%KASA_USERNAME%"
 set "KASA_PASSWORD=%KASA_PASSWORD%"
 
+if not defined OMNIX_BIND_HOST set "OMNIX_BIND_HOST=127.0.0.1"
+"%RPG_FLUX_PYTHON%" -c "from app.runtime.net import bind_host; bind_host()"
+if errorlevel 1 exit /b 1
+
 REM The launcher normally auto-starts the gateway and web app. This watchdog
 REM retries the managed gateway, waits for API health, and then retries the web
 REM start so a slow first gateway boot cannot leave the web service stopped.
 start "Omnix Startup Check" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
+  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Headers @{'X-Omnix-Client'='launcher'} -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
 
-"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055 --lifespan on
+"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host "%OMNIX_BIND_HOST%" --port 5055 --lifespan on
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"
 
 endlocal & exit /b %OMNIX_EXIT_CODE%

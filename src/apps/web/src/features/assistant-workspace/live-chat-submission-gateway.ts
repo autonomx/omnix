@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 export type LiveChatSubmissionInput = {
   sessionId: string;
   text: string;

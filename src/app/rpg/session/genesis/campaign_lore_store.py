@@ -1,17 +1,21 @@
 """PostgreSQL-backed Campaign Bible access and on-demand location lore."""
 from __future__ import annotations
 
+import logging
+
 import re
 from copy import deepcopy
 from typing import Any, Mapping
 
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.security.tenant_context import current_tenant
+from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.service import save_session
 from app.rpg.worlds.published_canon_projection import project_published_canon
+
+logger = logging.getLogger(__name__)
 
 _PLAYER_VISIBLE_VISIBILITY = {
     "public",
@@ -336,7 +340,7 @@ def _generate_location_text(
             if generated:
                 return generated
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_generate_location_text", exc_info=True)
     return _fallback_location_text(_text(location.get("name")) or "Current Location")
 
 
@@ -523,7 +527,7 @@ def load_campaign_lore(
     location = current_location_identity(session)
     try:
         db = database or default_database()
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             if campaign is None:
@@ -663,7 +667,7 @@ def persist_campaign_lore(
     portable = _portable_bible(session)
     try:
         db = database or default_database()
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             if campaign is None:
@@ -946,7 +950,7 @@ def regenerate_campaign_lore_document(
         raise KeyError(document_id)
     campaign_id = _campaign_id(session_id, hydrated)
     db = database or default_database()
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         source_record = work.campaign_bibles.get(context, campaign_id)
         if source_record is None:

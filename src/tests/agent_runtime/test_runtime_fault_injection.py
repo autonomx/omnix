@@ -24,7 +24,7 @@ from app.agent_runtime.semantic_classifier import classify_semantic_intent_safel
 from app.agent_runtime.service import AgentRunService
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 from app.agent_runtime.repository import PostgresAgentRunRepository
 
@@ -181,7 +181,6 @@ def test_initial_runtime_start_failure_is_persisted_as_failed(monkeypatch) -> No
     try:
         run_id = f"start-fault-{uuid.uuid4().hex}"
         service = AgentRunService(database, worker_id="fault-worker")
-        monkeypatch.setattr(service, "_ensure_supervisor", lambda: None)
         monkeypatch.setattr(
             service.runtime,
             "start",
@@ -197,7 +196,7 @@ def test_initial_runtime_start_failure_is_persisted_as_failed(monkeypatch) -> No
         with pytest.raises(RuntimeError, match="pi boot failed"):
             service.start(spec)
 
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         with unit_of_work(database) as work:
             repository = PostgresAgentRunRepository(work.connection, context)
             persisted = repository.get_run(run_id)

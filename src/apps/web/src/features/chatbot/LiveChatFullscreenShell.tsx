@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 

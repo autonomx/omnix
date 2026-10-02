@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { VoiceWorkspace } from './VoiceWorkspace';
@@ -37,6 +37,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Mantine transitions schedule state updates on timers. Let the last ones
+// run while jsdom still exists; otherwise they can fire after teardown
+// ("window is not defined") and fail an otherwise green run.
+afterAll(async () => {
+  await new Promise((resolve) => setTimeout(resolve, 400));
+});
+
 describe('VoiceWorkspace', () => {
   it('plays the completed speech when the job list still has a queued summary', async () => {
     let detailRequests = 0;
@@ -61,7 +68,8 @@ describe('VoiceWorkspace', () => {
       if (path === '/api/jobs/job%3Anew') {
         detailRequests += 1;
         return Response.json(detailRequests === 1 ? queuedJob : {
-          ...queuedJob, status: 'completed', output_refs: [{ title: 'New speech', data_url: 'data:audio/wav;base64,bmV3' }],
+          // Current contract: audio is served from the stored asset.
+          ...queuedJob, status: 'completed', output_refs: [{ title: 'New speech', asset_id: 'audio:new', audio_url: '/api/assets/audio%3Anew/audio' }],
         });
       }
       return new Response('not found', { status: 404 });
@@ -76,7 +84,7 @@ describe('VoiceWorkspace', () => {
 
     expect(await screen.findByText('Generating new speech… · 1 speaker')).toBeInTheDocument();
     expect(await screen.findByText('New speech · 1 speaker', {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(document.querySelector('audio')).toHaveAttribute('src', 'data:audio/wav;base64,bmV3');
+    expect(document.querySelector('audio')).toHaveAttribute('src', '/api/assets/audio%3Anew/audio');
   });
 
   it('loads central defaults, resets local edits, and queues TTS through the shared jobs API', async () => {

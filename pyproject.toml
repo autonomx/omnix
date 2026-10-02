@@ -1,0 +1,154 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnix"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+description = "Omnix local-first application platform"
+readme = "README.md"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["F", "E9", "W6", "B006", "B008", "B017", "PLE", "UP006", "UP007"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/app/assistant_memory/controls.py" = ["I001"]
+"src/app/assistant_memory/initiative.py" = ["BLE001"]
+"src/app/assistant_memory/jobs.py" = ["UP012"]
+"src/app/assistant_memory/observability.py" = ["UP037"]
+"src/app/assistant_memory/paralinguistic_state.py" = ["FURB167", "UP037", "FLY002"]
+"src/app/assistant_memory/structured_extraction.py" = ["FURB167", "BLE001"]
+"src/app/assistant_memory/structured_provider.py" = ["BLE001"]
+"src/app/assistant_memory/temporal_retrieval.py" = ["I001", "DTZ007"]
+"src/app/chat/character_store.py" = ["I001"]
+"src/app/chat/compaction.py" = ["I001", "UP012", "UP037"]
+"src/app/chat/provider_metrics.py" = ["PLR0124"]
+"src/app/gateway/blocking_route_offload.py" = ["UP035"]
+"src/app/gateway/event_loop_lag_monitor.py" = ["UP035"]
+"src/app/providers/lmstudio_provider.py" = ["BLE001", "RUF012", "UP006", "UP007", "UP035", "UP045"]
+"src/app/providers/stt_live_runtime_support.py" = ["BLE001"]
+"src/app/providers/stt_live_websocket.py" = ["BLE001", "S110", "UP037"]
+"src/app/providers/stt_segment_scheduler.py" = ["BLE001", "UP035"]
+"src/tests/app/test_chat_response_metrics.py" = ["I001"]
+"src/tests/app/test_gateway_event_loop_lag_monitor.py" = ["ASYNC251"]
+"src/tests/app/test_live_chat_authoritative_state_source.py" = ["FLY002"]
+"src/tests/app/test_live_chat_postgres_fast_path.py" = ["I001"]
+"src/tests/app/test_live_full_duplex_acceptance.py" = ["RUF012"]
+"src/tests/app/test_live_material_context.py" = ["I001"]
+"src/tests/app/test_live_voice_runtime_offload.py" = ["PIE807"]
+"src/tests/app/test_tts_stream_contract_performance.py" = ["RUF012"]
+"src/tests/unit/assistant_memory/test_companion_completion_acceptance.py" = ["I001"]
+"src/tests/unit/assistant_memory/test_companion_controls.py" = ["I001"]
+"src/tests/unit/assistant_memory/test_companion_phase8_evaluation.py" = ["I001"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+pythonpath = ["src"]
+addopts = "-q --tb=short --strict-markers --import-mode=importlib"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+  "postgres: requires disposable PostgreSQL",
+  "multiprocess: requires multiple processes",
+  "gpu: requires a GPU/model runtime",
+  "live_provider: calls a live external/provider service",
+  "playwright: browser automation test",
+  "slow: long-running deterministic test",
+  "smoke: quick smoke test",
+  "api: API contract test",
+  "frontend: frontend-oriented Python test",
+  "js_analysis: static JavaScript analysis",
+  "e2e: end-to-end test",
+  "functional: functional test",
+  "live_codex: opt-in real ChatGPT-authenticated Codex test",
+]
+
+[tool.mypy]
+files = ["src/app"]
+python_version = "3.11"
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "app.agent_runtime", "app.agent_runtime.*",
+  "app.production",
+  "app.runtime_composition",
+  "app.llamacpp_installer",
+  "app.assistant_context", "app.assistant_context.*",
+  "app.assistant_memory", "app.assistant_memory.*",
+  "app.assistant_memory_v2", "app.assistant_memory_v2.*",
+  "app.assistant_tools", "app.assistant_tools.*",
+  "app.assist_core", "app.assist_core.*",
+  "app.audiobook", "app.audiobook.*",
+  "app.assets", "app.assets.*",
+  "app.characters", "app.characters.*",
+  "app.character_interactions", "app.character_interactions.*",
+  "app.chat", "app.chat.*",
+  "app.companion_activity", "app.companion_activity.*",
+  "app.data", "app.data.*",
+  "app.desktop_companion", "app.desktop_companion.*",
+  "app.gateway", "app.gateway.*",
+  "app.image", "app.image.*",
+  "app.launcher", "app.launcher.*",
+  "app.live_speech", "app.live_speech.*",
+  "app.live_voice", "app.live_voice.*",
+  "app.persistence", "app.persistence.*",
+  "app.platform", "app.platform.*",
+  "app.prompts", "app.prompts.*",
+  "app.providers", "app.providers.*",
+  "app.replay", "app.replay.*",
+  "app.research", "app.research.*",
+  "app.rpg", "app.rpg.*",
+  "app.settings", "app.settings.*",
+  "app.story", "app.story.*",
+  "app.testing", "app.testing.*",
+  "app.trading", "app.trading.*",
+  "app.voice", "app.voice.*",
+  "app.worker_runtime", "app.worker_runtime.*",
+  "app.runtime.background",
+  "app.runtime.feature_catalog",
+  "app.runtime.features",
+  "app.runtime.hooks",
+  "app.runtime.live_voice_config",
+  "app.runtime.logging",
+  "app.runtime.process_environment",
+  "app.runtime.tenant_context",
+  "app.runtime.worker_health",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+  "app.runtime.config",
+  "app.runtime.capabilities",
+  "app.runtime.contracts",
+  "app.runtime.paths",
+  "app.runtime.net",
+  "app.persistence.contracts",
+  "app.persistence.module_repositories",
+  "app.persistence.repository_registry",
+  "app.persistence.shared_repository_specs",
+  "app.persistence.transaction_binding",
+  "app.persistence.transaction_policy",
+  "app.persistence.unit_of_work",
+  "app.config", "app.config.*",
+  "app.jobs", "app.jobs.*",
+  "app.capabilities", "app.capabilities.*",
+  "app.conversation", "app.conversation.*",
+  "app.observability", "app.observability.*",
+  "app.security", "app.security.*",
+]
+ignore_errors = false
+disallow_untyped_defs = true
+no_implicit_optional = true

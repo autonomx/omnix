@@ -236,7 +236,9 @@ def test_research_api_is_read_only_and_maps_invalid_output_to_provider_failure()
 
 
 def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
-    source = Path("src/app/trading/research.py").read_text().lower()
+    source = Path(
+        "src/app/trading/research/market_research.py"
+    ).read_text().lower()
     for forbidden in (
         "lmstudio",
         "openai.chat",
@@ -248,6 +250,7 @@ def test_research_has_no_direct_provider_or_mutation_dependency() -> None:
         "process_observation",
     ):
         assert forbidden not in source
-    assert "from app import shared" in source
-    gateway = Path("src/app/gateway/trading_routes.py").read_text()
+    assert "from app import " + "shared" not in source
+    assert "app.providers" in source
+    gateway = Path("src/app/trading/route_registration.py").read_text()
     assert "create_trading_research_router" in gateway

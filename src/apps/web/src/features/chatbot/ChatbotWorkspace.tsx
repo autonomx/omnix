@@ -1,3 +1,6 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';

@@ -9,22 +9,39 @@ from app.assistant_tools.models import (
     AssistantToolResult,
     AssistantToolReviewDecision,
 )
-from app.chat.live_agent_store import install_live_agent_store_hooks
+from app.chat.character_store import _CharacterSessionMixin
+from app.chat.live_agent_store import LiveAgentPlanner
 from app.chat.models import ChatMessage, ChatSession
 
 
-class KasaFlowStore:
-    def __init__(self, session: ChatSession) -> None:
+class StaticPlanner:
+    def __init__(self, response: ModeChatResponse) -> None:
+        self.response = response
+
+    def plan_proposal(self, **kwargs):
+        return self.response
+
+
+class UnusedPlanner:
+    def plan_proposal(self, **kwargs):
+        raise AssertionError("the pending proposal should be handled without planning")
+
+
+class KasaFlowStore(_CharacterSessionMixin):
+    def __init__(self, session: ChatSession, planner=None) -> None:
         self.sessions = [session]
         self.provider_calls = 0
+        self.live_agent_planner: LiveAgentPlanner = planner or UnusedPlanner()
 
-    def _load_sessions(self):
-        return self.sessions
+    def get_session(self, session_id):
+        return next((item for item in self.sessions if item.id == session_id), None)
 
-    def _save_sessions(self, sessions):
-        self.sessions = sessions
+    def _save_session(self, session):
+        self.sessions = [
+            session if item.id == session.id else item for item in self.sessions
+        ]
 
-    def stream_provider_reply_chunks(
+    def _stream_provider_reply_chunks_with_turn(
         self,
         session,
         user_message,
@@ -127,18 +144,22 @@ def _execution_payload(request: AssistantToolRequest) -> HermesAssistantToolExec
     )
 
 
-def test_kasa_write_proposal_requires_next_turn_confirmation(monkeypatch) -> None:
+def test_kasa_write_proposal_requires_next_turn_confirmation(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setenv("OMNIX_LIVE_AGENT_ENABLED", "1")
     monkeypatch.setenv("OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED", "1")
     monkeypatch.setenv("HERMES_ENABLED", "1")
+    from app.chat.assistant_turns import AssistantTurnCoordinator
+
+    coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
+    monkeypatch.setattr(
+        "app.chat.live_agent_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
     first = _message("request", "Turn off the Kasa desk plug")
     session = _session(first)
-    store = KasaFlowStore(session)
-    install_live_agent_store_hooks(KasaFlowStore)
-    monkeypatch.setattr(
-        "app.chat.live_agent_store.plan_live_agent_proposal",
-        lambda **kwargs: _proposal_response(),
-    )
+    store = KasaFlowStore(session, planner=StaticPlanner(_proposal_response()))
 
     proposal_events = list(
         store.stream_provider_reply_chunks(
@@ -164,13 +185,13 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(monkeypatch) -> Non
     session.messages.append(assistant)
     confirm = _message("confirm", "confirm")
     session.messages.append(confirm)
-    captured: list[AssistantToolRequest] = []
+    captured: list[tuple[AssistantToolRequest, bool]] = []
 
-    def execute(user_request: str, request: AssistantToolRequest):
-        captured.append(request)
+    def execute(grant, request: AssistantToolRequest, *, user_request: str = ""):
+        captured.append((request, grant.approved))
         return _execution_payload(request)
 
-    monkeypatch.setattr("app.chat.live_agent_store.hermes_assistant_tool_execute_payload", execute)
+    monkeypatch.setattr("app.chat.live_agent_store.execute_capability", execute)
     execution_events = list(
         store.stream_provider_reply_chunks(
             session,
@@ -181,9 +202,9 @@ def test_kasa_write_proposal_requires_next_turn_confirmation(monkeypatch) -> Non
     )
     completed = next(event for event in execution_events if event["type"] == "complete")
 
-    assert captured[0].approved is True
-    assert captured[0].action_id == "kasa.turn_off"
-    assert captured[0].session_id == "chat:kasa"
+    assert captured[0][1] is True
+    assert captured[0][0].action_id == "kasa.turn_off"
+    assert captured[0][0].session_id == "chat:kasa"
     assert completed["content"] == "Verified Desk Plug is off."
     assert completed["metadata"]["executes"] is True
     assert assistant.metadata["kasa_execution_status"] == "executed"
@@ -223,9 +244,8 @@ def test_kasa_write_proposal_can_be_rejected_without_execution(monkeypatch) -> N
     session = _session(reject)
     session.messages = [proposal, reject]
     store = KasaFlowStore(session)
-    install_live_agent_store_hooks(KasaFlowStore)
     monkeypatch.setattr(
-        "app.chat.live_agent_store.hermes_assistant_tool_execute_payload",
+        "app.chat.live_agent_store.execute_capability",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not execute")),
     )
 

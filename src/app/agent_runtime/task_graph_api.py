@@ -1,6 +1,9 @@
 """HTTP control surface for durable multi-profile TaskGraph runs."""
 from __future__ import annotations
 
+from app.capabilities.approvals import require_approver
+from app.security import audit
+
 import asyncio
 import json
 from typing import Literal
@@ -36,7 +39,6 @@ def get_task_graph_run(run_id: str) -> TaskGraphRunSnapshot:
 @router.get(
     "/{run_id}/optimization",
     response_model=TaskGraphOptimizationPlan,
-    include_in_schema=False,
 )
 def get_task_graph_optimization(run_id: str) -> TaskGraphOptimizationPlan:
     snapshot = default_task_graph_runtime().get_status(run_id)
@@ -73,12 +75,16 @@ def command_task_graph_run(
         if request.command == "cancel":
             return runtime.cancel(run_id)
         if request.command in {"approve", "reject"}:
+            approver = require_approver("agent:approve")
             if not request.node_id:
                 raise HTTPException(status_code=422, detail="node_id_required")
+            audit.record("approval.decide", target_type="task_graph_node", target_id=f"{run_id}/{request.node_id}",
+                         details={"decision": request.command, "approval_id": request.approval_id})
             if request.command == "approve":
                 return runtime.approve(
                     run_id,
                     request.node_id,
+                    approved_by=approver,
                     approval_id=request.approval_id,
                 )
             return runtime.reject(
@@ -93,8 +99,18 @@ def command_task_graph_run(
     raise HTTPException(status_code=422, detail="unsupported_task_graph_command")
 
 
-@router.get("/{run_id}/events/stream")
-async def stream_task_graph_events(
+@router.get(
+    "/{run_id}/events/stream",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Task graph run events as Server-Sent Events.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
+def stream_task_graph_events(
     run_id: str,
     after_sequence: int = 0,
 ) -> StreamingResponse:
@@ -102,17 +118,22 @@ async def stream_task_graph_events(
     if runtime.get_status(run_id) is None:
         raise HTTPException(status_code=404, detail="task_graph_run_not_found")
 
+    from app.events.run_streams import run_event_wakeups, wakeup_key
+    from app.runtime.tenant_context import current_tenant
+
+    key = wakeup_key(current_tenant().workspace_id, "task_graph_run", run_id)
+
     async def generate():
         sequence = max(0, after_sequence)
-        idle = 0
-        while True:
-            rows = await asyncio.to_thread(
-                runtime.stream_events,
-                run_id,
-                after_sequence=sequence,
-            )
-            if rows:
-                idle = 0
+        # Woken by the outbox relay when the run has new events (WP-5.3);
+        # without a notification the stream reads every few seconds.
+        with run_event_wakeups().subscribe(key) as wakeups:
+            while True:
+                rows = await asyncio.to_thread(
+                    runtime.stream_events,
+                    run_id,
+                    after_sequence=sequence,
+                )
                 for event in rows:
                     sequence = max(sequence, int(event.sequence or 0))
                     yield (
@@ -120,18 +141,15 @@ async def stream_task_graph_events(
                         f"event: {event.event_type}\n"
                         f"data: {json.dumps(event.model_dump(mode='json'), sort_keys=True)}\n\n"
                     )
-            else:
-                idle += 1
-                if idle % 15 == 0:
-                    yield ": heartbeat\n\n"
 
-            snapshot = await asyncio.to_thread(runtime.get_status, run_id)
-            if snapshot is None or snapshot.status in {
-                "completed",
-                "failed",
-                "cancelled",
-            }:
-                return
-            await asyncio.sleep(1)
+                snapshot = await asyncio.to_thread(runtime.get_status, run_id)
+                if snapshot is None or snapshot.status in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }:
+                    return
+                if not rows and not await wakeups.wait():
+                    yield ": heartbeat\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

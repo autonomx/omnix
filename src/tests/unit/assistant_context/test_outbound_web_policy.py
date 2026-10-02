@@ -1,3 +1,4 @@
+import gzip
 import httpx
 import pytest
 
@@ -39,7 +40,12 @@ def test_policy_enforces_content_type_and_expansion_limits() -> None:
     responses = iter(
         (
             httpx.Response(200, headers={"content-type": "image/png"}, content=b"png"),
-            httpx.Response(200, headers={"content-type": "text/html"}, content=b"x" * 64),
+            # Small on the wire, large once inflated: exercises the decompression cap.
+            httpx.Response(
+                200,
+                headers={"content-type": "text/html", "content-encoding": "gzip"},
+                content=gzip.compress(b"x" * 4096),
+            ),
         )
     )
     client = httpx.Client(
@@ -49,8 +55,9 @@ def test_policy_enforces_content_type_and_expansion_limits() -> None:
     policy = OutboundWebPolicy(
         resolver=public_resolver,
         client=client,
-        max_compressed_bytes=32,
-        max_decompressed_bytes=48,
+        # The policy floors both limits at 1 KiB so misconfiguration cannot disable fetching.
+        max_compressed_bytes=1024,
+        max_decompressed_bytes=2048,
     )
     with pytest.raises(OutboundWebPolicyError, match="unsupported_response_content_type"):
         policy.fetch("https://example.test/image")

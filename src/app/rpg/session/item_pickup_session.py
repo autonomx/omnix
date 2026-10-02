@@ -6,8 +6,9 @@ can call it to mutate inventory/scene nodes and receive trace-ready output.
 """
 from __future__ import annotations
 
+from app.runtime.clock import utc_now
+
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 
 from app.rpg.session.item_pickups import apply_scene_item_pickup, list_scene_item_nodes
@@ -33,7 +34,7 @@ def _turn(state: dict[str, Any]) -> int:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _mechanics(state: dict[str, Any]) -> dict[str, Any]:

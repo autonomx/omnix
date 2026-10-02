@@ -1,15 +1,46 @@
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
+from fastapi.routing import APIRoute
+
 from app.gateway.main import create_gateway_app
+from scripts.export_gateway_openapi import _stabilize_equivalent_io_schemas
 
 
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
 _INTERNAL_JOB_LIST_PARAMETERS = {"limit", "full"}
+_DOCUMENTED_NON_JSON_RESPONSES = {
+    ("DELETE", "/api/audiobook/projects/{project_id}"),
+    ("GET", "/api/audiobook/projects/{project_id}/source/download"),
+    ("GET", "/api/audiobook/projects/{project_id}/cover"),
+    ("GET", "/api/audiobook/projects/{project_id}/previews/{job_id}/audio"),
+    ("GET", "/api/audiobook/projects/{project_id}/exports/{export_id}/download"),
+    ("GET", "/api/assistant/tools/connect/google/callback"),
+    ("GET", "/api/assistant/tools/connect/github/callback"),
+    ("GET", "/api/assets/{asset_id}/audio"),
+    ("GET", "/api/auth/local/callback"),
+    ("GET", "/api/auth/oidc/login"),
+    ("GET", "/api/auth/oidc/callback"),
+    ("POST", "/api/auth/logout"),
+    ("GET", "/api/agent-runs/{run_id}/events/stream"),
+    ("GET", "/api/agent-runs/{run_id}/workspace-preview/{asset_path}"),
+    ("GET", "/api/task-graph-runs/{run_id}/events/stream"),
+    ("GET", "/api/character-live2d/runtime/{filename}"),
+    ("GET", "/api/character-live2d/assets/{asset_id}/{asset_path}"),
+    ("GET", "/api/assets/{asset_id}/file"),
+    ("GET", "/api/voice/cues/{voice_id}/{cue_id}/{variant_id}.wav"),
+    ("GET", "/api/rpg/worlds/{world_id}/export"),
+    ("DELETE", "/api/trading/strategies/{strategy_id}"),
+    ("POST", "/api/chat/sessions/{session_id}/messages/stream"),
+    ("GET", "/api/jobs/events"),
+    ("GET", "/metrics"),
+}
 
 
 def _normalize_openapi(value: Any) -> Any:
@@ -54,7 +85,9 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
     generated_path = repo_root / "src" / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
 
     generated_schema = _normalize_openapi(_route_surface(json.loads(generated_path.read_text(encoding="utf-8"))))
-    current_schema = _normalize_openapi(_route_surface(create_gateway_app().openapi()))
+    live_schema = create_gateway_app().openapi()
+    _stabilize_equivalent_io_schemas(live_schema)
+    current_schema = _normalize_openapi(_route_surface(live_schema))
 
     if generated_schema != current_schema:
         print(
@@ -64,3 +97,41 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
         )
 
     assert generated_schema == current_schema
+
+
+def test_browser_routes_have_typed_contracts_or_documented_transport_responses() -> None:
+    app = create_gateway_app()
+    schema = app.openapi()
+    repo_root = Path(__file__).resolve().parents[3]
+    transport_inventory = (repo_root / "docs" / "architecture" / "api-transport-exceptions.md").read_text(
+        encoding="utf-8"
+    )
+    model_less_routes: set[tuple[str, str]] = set()
+
+    checked = 0
+    for effective in effective_routes(app):
+        route = effective.original_route
+        if not isinstance(route, APIRoute) or not effective.include_in_schema:
+            continue
+        checked += 1
+        route_path = effective.path.replace(":path}", "}")
+        methods = route.methods or {"GET"}
+        for method in methods:
+            operation = schema["paths"].get(route_path, {}).get(method.lower())
+            assert operation is not None, f"missing OpenAPI operation for {method} {route_path}"
+            request_body = operation.get("requestBody")
+            if request_body is not None:
+                body_content = request_body.get("content", {})
+                assert body_content, f"request body has no media schema for {method} {route_path}"
+                assert all(
+                    isinstance(media.get("schema"), dict) and media["schema"]
+                    for media in body_content.values()
+                ), f"request body has an empty schema for {method} {route_path}"
+            if route.response_model is None:
+                key = (method.upper(), route_path)
+                model_less_routes.add(key)
+                assert key in _DOCUMENTED_NON_JSON_RESPONSES
+                assert route_path in transport_inventory
+
+    assert checked > 100, "route walk must see the composed feature routes"
+    assert model_less_routes <= _DOCUMENTED_NON_JSON_RESPONSES

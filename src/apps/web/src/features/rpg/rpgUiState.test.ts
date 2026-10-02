@@ -307,7 +307,7 @@ describe('rpg UI state', () => {
           },
         ],
       },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
       selectedSessionId: 'created-live',
       selectedSession: {
         manifest: { session_id: 'created-live', title: 'Elara - Rusty Flagon' },
@@ -359,7 +359,7 @@ describe('rpg UI state', () => {
       inventory: {
         sessions: [{ manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' } }],
       },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
       selectedSessionId: 'purchase-live',
       selectedSession: {
         manifest: { session_id: 'purchase-live', title: 'Elara - Rusty Flagon' },
@@ -396,7 +396,7 @@ describe('rpg UI state', () => {
   it('projects registered service offers from the latest turn contract', () => {
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'service-live', title: 'Tavern' }] },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
       selectedSessionId: 'service-live',
       selectedSession: {
         manifest: { session_id: 'service-live' },
@@ -425,6 +425,7 @@ describe('rpg UI state', () => {
         sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
       },
       jobs: {
+        has_more: false,
         jobs: [
           {
             id: 'job:turn-live',
@@ -551,7 +552,7 @@ describe('rpg UI state', () => {
           ],
         },
       },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
     });
 
     expect(state.storyMessages.filter((message) => message.tone === 'player').map((message) => message.text)).toEqual([
@@ -583,7 +584,7 @@ describe('rpg UI state', () => {
           player_state: { currency: { gold: 0, silver: 8, copper: 5 } },
         },
       },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
     });
 
     expect(state.heroSummary.name).toBe('Alyndra');
@@ -597,6 +598,7 @@ describe('rpg UI state', () => {
         sessions: [{ session_id: 'session-live', title: 'Live campaign', updated_at: '2026-06-22T01:00:00Z' }],
       },
       jobs: {
+        has_more: false,
         jobs: [
           {
             id: 'job:empty-response',
@@ -632,6 +634,7 @@ describe('rpg UI state', () => {
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
       jobs: {
+        has_more: false,
         jobs: [{
           id: 'job:foreground-turn',
           module: 'rpg',
@@ -674,7 +677,7 @@ describe('rpg UI state', () => {
     }));
     const state = createRpgWorkspaceState({
       inventory: { sessions: [{ session_id: 'session-live', title: 'Live campaign' }] },
-      jobs: { jobs: [] },
+      jobs: { jobs: [], has_more: false },
       selectedSessionId: 'session-live',
       selectedSession: {
         manifest: { session_id: 'session-live', title: 'Live campaign' },
@@ -700,6 +703,7 @@ describe('rpg UI state', () => {
         ],
       },
       jobs: {
+        has_more: false,
         jobs: [
           {
             id: 'job:old-turn',

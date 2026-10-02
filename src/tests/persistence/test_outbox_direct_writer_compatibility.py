@@ -6,7 +6,7 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
 
 
@@ -33,7 +33,13 @@ def test_database_generates_unique_event_keys_for_atomic_direct_writers() -> Non
     database = _database()
     try:
         apply_migrations(database)
-        context = bootstrap_local_tenant(database)
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_persistence_cutover "
+                "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+                "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+            )
+        context = ensure_local_identity(database)
         with database.transaction() as connection:
             connection.execute(
                 "DELETE FROM omnix_outbox_events WHERE aggregate_id = %s",

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import hashlib
-from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from app.shared import load_settings
+from app.caching.bounded_cache import bounded_lru_cache
+
+if TYPE_CHECKING:
+    from app.providers.tts_artifacts import LocalModelArtifacts
 
 
 _MODEL_SUFFIXES = {".safetensors", ".json", ".txt", ".model"}
@@ -15,25 +18,18 @@ class ModelIdentityError(ValueError):
     retryable = False
 
 
-def _configured_model_dir() -> Path:
-    # Keep gateway/Audiobook route registration lightweight. The FasterQwen
-    # provider imports NumPy and other synthesis dependencies that unrelated
-    # gateway workflows do not install. Resolve the concrete model only when
-    # model identity is actually requested.
-    from app.providers.faster_qwen3_tts_provider import _resolve_qwen3_model_name
-    from app.providers.vendor.qwen3_tts.loader import _resolve_model_source
+def _local_artifacts(provider_id: str) -> LocalModelArtifacts:
+    # Imported on demand: the providers package loads every LLM provider, and
+    # audiobook route registration should stay lightweight.
+    from app.providers.tts_artifacts import LocalArtifactsUnavailable, local_model_artifacts
 
-    settings = load_settings().get("faster-qwen3-tts", {})
-    source = _resolve_model_source(_resolve_qwen3_model_name(settings))
-    directory = Path(source).expanduser().resolve()
-    if not directory.is_dir():
-        raise ModelIdentityError("a local, pinned FasterQwen model directory is required")
-    if not list(directory.glob("*.safetensors")):
-        raise ModelIdentityError("the configured FasterQwen model has no weight files")
-    return directory
+    try:
+        return local_model_artifacts(provider_id)
+    except LocalArtifactsUnavailable as exc:
+        raise ModelIdentityError(str(exc)) from exc
 
 
-@lru_cache(maxsize=4)
+@bounded_lru_cache(max_entries=4, ttl_seconds=3600.0)
 def _fingerprint(filenames: tuple[tuple[str, int, int], ...], directory: str) -> str:
     digest = hashlib.sha256()
     root = Path(directory)
@@ -51,9 +47,8 @@ def _fingerprint(filenames: tuple[tuple[str, int, int], ...], directory: str) ->
 
 
 def current_model_identity(provider_id: str = "faster-qwen3-tts") -> dict[str, object]:
-    if provider_id != "faster-qwen3-tts":
-        raise ModelIdentityError(f"verified audiobook model identity is unavailable for {provider_id}")
-    directory = _configured_model_dir()
+    artifacts = _local_artifacts(provider_id)
+    directory = artifacts.directory
     files = sorted(
         (path for path in directory.rglob("*")
          if path.is_file() and path.suffix.lower() in _MODEL_SUFFIXES),
@@ -64,8 +59,8 @@ def current_model_identity(provider_id: str = "faster-qwen3-tts") -> dict[str, o
          path.stat().st_mtime_ns) for path in files
     )
     if not fingerprints:
-        raise ModelIdentityError("the configured FasterQwen model has no artifacts")
-    return {"provider_id": provider_id, "model_id": "Qwen3-TTS",
+        raise ModelIdentityError(f"the configured {provider_id} model has no artifacts")
+    return {"provider_id": provider_id, "model_id": artifacts.model_id,
             "model_revision": _fingerprint(fingerprints, str(directory)),
             "artifact_count": len(fingerprints)}
 

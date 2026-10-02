@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { listenerBackchannelsRolloutEnabled } from './live-voice-backchannel';

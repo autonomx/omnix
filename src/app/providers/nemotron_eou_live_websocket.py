@@ -1,14 +1,15 @@
 """Segmented WebSocket transport for Nemotron ASR + Parakeet Realtime EOU."""
 from __future__ import annotations
+import logging
+from app.config.env import env_str as _env_str
 
 import asyncio
-import base64
 import json
 import math
-import os
 import struct
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,16 +19,21 @@ from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
     CAP_AUTHORITATIVE_FINAL,
     CAP_AUTHORITATIVE_PREVIEW,
+    CAP_BINARY_AUDIO_FRAMES,
     CAP_PARTIAL_TRANSCRIPTS,
     CAP_RESULT_REPLAY,
     CAP_SEGMENTED_AUDIO,
     LiveSttNegotiation,
+    audio_message_pcm,
+    receive_client_message,
 )
 from app.providers.nemotron_eou_streaming import (
     SAMPLE_RATE,
     NemotronEouModelManager,
     model_manager,
 )
+
+logger = logging.getLogger(__name__)
 
 SEGMENTED_PROTOCOL = "segmented-v1"
 PROVIDER_NAME = "nemotron_parakeet_eou"
@@ -36,6 +42,7 @@ MAX_SEGMENT_AUDIO_MS = 15_000
 MAX_SEGMENT_BYTES = int(SAMPLE_RATE * 2 * MAX_SEGMENT_AUDIO_MS / 1_000)
 MAX_REPLAY_RESULTS = 64
 SESSION_TTL_SECONDS = 600.0
+MAX_SESSION_STATES = 64
 
 HYBRID_NEGOTIATION = LiveSttNegotiation(
     provider=PROVIDER_NAME,
@@ -50,14 +57,14 @@ HYBRID_NEGOTIATION = LiveSttNegotiation(
             CAP_PARTIAL_TRANSCRIPTS,
             CAP_AUTHORITATIVE_EOU,
             CAP_AUTHORITATIVE_PREVIEW,
+            CAP_BINARY_AUDIO_FRAMES,
         }
     ),
 )
 
 
 def _metric(event: str, **fields: Any) -> None:
-    print(
-        "[STT_METRIC] "
+    logger.info("[STT_METRIC] "
         + json.dumps(
             {
                 "event": event,
@@ -67,9 +74,7 @@ def _metric(event: str, **fields: Any) -> None:
             },
             sort_keys=True,
             default=str,
-        ),
-        flush=True,
-    )
+        ))
 
 
 def _field(data: dict[str, Any], camel: str, snake: str, default: Any = None) -> Any:
@@ -98,7 +103,7 @@ def pcm16le_rms(payload: bytes) -> float:
 
 def preview_tail_rms_threshold() -> float:
     try:
-        value = float(os.environ.get("OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD", "0.012"))
+        value = float(_env_str("OMNIX_STT_PREVIEW_TAIL_RMS_THRESHOLD", "0.012"))
     except (TypeError, ValueError):
         return 0.012
     return min(0.05, max(0.001, value))
@@ -195,20 +200,43 @@ class HybridSessionState:
         self.last_seen = time.monotonic()
 
 
-_SESSION_STATES: dict[str, HybridSessionState] = {}
+_SESSION_STATES: OrderedDict[str, HybridSessionState] = OrderedDict()
 
 
 def _session_state(session_id: str) -> HybridSessionState:
     now = time.monotonic()
-    stale = [key for key, value in _SESSION_STATES.items() if now - value.last_seen > SESSION_TTL_SECONDS]
-    for key in stale:
-        _SESSION_STATES.pop(key, None)
+    _prune_session_states(now)
     state = _SESSION_STATES.get(session_id)
     if state is None:
+        if len(_SESSION_STATES) >= MAX_SESSION_STATES:
+            idle = next(
+                (key for key, value in _SESSION_STATES.items() if not value.segments),
+                None,
+            )
+            if idle is None:
+                raise RuntimeError("nemotron_live_session_capacity")
+            _SESSION_STATES.pop(idle, None)
         state = HybridSessionState(session_id=session_id)
         _SESSION_STATES[session_id] = state
+    _SESSION_STATES.move_to_end(session_id)
     state.last_seen = now
     return state
+
+
+def clear_nemotron_session_states() -> None:
+    """Invalidate transient segmented-audio replay and assembly state."""
+
+    _SESSION_STATES.clear()
+
+
+def _prune_session_states(now: float) -> None:
+    stale = [
+        key
+        for key, value in _SESSION_STATES.items()
+        if now - value.last_seen > SESSION_TTL_SECONDS and not value.segments
+    ]
+    for key in stale:
+        _SESSION_STATES.pop(key, None)
 
 
 async def _safe_send(websocket: WebSocket, lock: asyncio.Lock, payload: dict[str, Any]) -> bool:
@@ -319,8 +347,9 @@ def _schedule_stream_drain(
                     "segmentId": segment.segment_id,
                     "sequence": segment.sequence,
                     "retryable": False,
-                    "errorCode": type(exc).__name__,
-                    "error": str(exc),
+                    "errorCode": "model_service_error",
+                    "error": "model_service_error",
+                    "request_id": websocket.scope.get("state", {}).get("request_id") or uuid.uuid4().hex,
                 },
             )
         finally:
@@ -369,7 +398,7 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
         )
         try:
             while True:
-                data = await websocket.receive_json()
+                data = await receive_client_message(websocket)
                 message_type = str(data.get("type", ""))
                 if message_type == "hello":
                     active_session_id = str(_field(data, "sessionId", "session_id", active_session_id))[:120]
@@ -422,9 +451,9 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                         state.segments[segment_id] = segment
                         owned_segments[segment_id] = state
                     try:
-                        payload = base64.b64decode(str(data.get("data", "")), validate=True)
+                        payload = audio_message_pcm(data, validate=True)
                         accepted = segment.append(sample_start, payload)
-                    except Exception as exc:  # noqa: BLE001 - malformed frames become protocol errors
+                    except Exception:  # noqa: BLE001 - malformed frames become protocol errors
                         manager.release(segment_id)
                         state.segments.pop(segment_id, None)
                         await _safe_send(
@@ -435,8 +464,9 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                                 "segmentId": segment_id,
                                 "sequence": sequence,
                                 "retryable": False,
-                                "errorCode": type(exc).__name__,
-                                "error": str(exc),
+                                "errorCode": "model_service_error",
+                                "error": "model_service_error",
+                                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
                             },
                         )
                         continue
@@ -669,8 +699,9 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
                                 "segmentId": segment.segment_id,
                                 "sequence": segment.sequence,
                                 "retryable": False,
-                                "errorCode": type(exc).__name__,
-                                "error": str(exc),
+                                "errorCode": "model_service_error",
+                                "error": "model_service_error",
+                                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
                             },
                         )
                     finally:
@@ -682,7 +713,10 @@ def install_nemotron_eou_websocket(app: Any, manager: NemotronEouModelManager = 
             return
         except Exception as exc:  # noqa: BLE001 - top-level websocket fault containment
             _metric("stt_hybrid_websocket_failed", error_type=type(exc).__name__, error=str(exc))
-            await _safe_send(websocket, send_lock, {"type": "error", "error": str(exc)})
+            await _safe_send(websocket, send_lock, {
+                "type": "error", "error": "model_service_error",
+                "request_id": websocket.scope.get("state", {}).get("request_id", connection_id),
+            })
         finally:
             released = 0
             for segment_id, state in tuple(owned_segments.items()):

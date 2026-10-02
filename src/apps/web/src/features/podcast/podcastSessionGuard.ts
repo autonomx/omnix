@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { omnixApiClient } from '../../api/client';
 import { podcastDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';

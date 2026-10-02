@@ -1,6 +1,10 @@
 """Manifest-backed shared asset store with compatibility read-through."""
 from __future__ import annotations
 
+import logging
+
+from app.config.env import env_str, environment
+
 import errno
 import json
 import os
@@ -12,9 +16,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, BinaryIO, Iterator
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
+from .content import delete_asset_content
 from .models import AssetListResponse, AssetMigrationPreview, AssetRecord, AssetType
+from .paging import paginate_assets
+
+logger = logging.getLogger(__name__)
 
 
 _AUDIO_MIME_TYPES = {
@@ -29,8 +37,7 @@ _AUDIO_MIME_TYPES = {
 }
 _MANIFEST_LOCK_TIMEOUT_SECONDS = 30.0
 _MANIFEST_LOCK_POLL_SECONDS = 0.01
-_PROCESS_LOCKS: dict[str, threading.RLock] = {}
-_PROCESS_LOCKS_GUARD = threading.Lock()
+_PROCESS_LOCK = threading.RLock()
 
 
 def _utcnow() -> str:
@@ -45,7 +52,7 @@ def _mtime_iso(path: Path) -> str:
 
 
 def default_asset_manifest_path() -> Path:
-    override = os.environ.get("OMNIX_ASSETS_MANIFEST_PATH")
+    override = environment().get("OMNIX_ASSETS_MANIFEST_PATH")
     if override:
         return Path(override)
     return resources_data_root() / "assets" / "manifest.json"
@@ -72,7 +79,7 @@ def _safe_audio_asset_id(root: Path, path: Path) -> str:
 
 
 def _legacy_audio_roots() -> list[Path]:
-    override = os.environ.get("OMNIX_LEGACY_AUDIO_DIRS")
+    override = environment().get("OMNIX_LEGACY_AUDIO_DIRS")
     if override:
         return [Path(part) for part in override.split(os.pathsep) if part.strip()]
 
@@ -96,15 +103,6 @@ def _legacy_audio_module(root: Path) -> str:
     if "tts" in name or "voice" in name:
         return "voice"
     return "audio"
-
-
-def _process_lock_for(path: Path) -> threading.RLock:
-    try:
-        key = str(path.resolve())
-    except OSError:
-        key = str(path.absolute())
-    with _PROCESS_LOCKS_GUARD:
-        return _PROCESS_LOCKS.setdefault(key, threading.RLock())
 
 
 def _acquire_os_file_lock(handle: BinaryIO, lock_path: Path) -> None:
@@ -157,7 +155,9 @@ def _release_os_file_lock(handle: BinaryIO) -> None:
 def _exclusive_manifest_lock(manifest_path: Path) -> Iterator[None]:
     lock_path = manifest_path.with_name(f"{manifest_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with _process_lock_for(lock_path):
+    # One process mutex bounds local lock bookkeeping; the OS lock remains the
+    # cross-process authority for each manifest path.
+    with _PROCESS_LOCK:
         with lock_path.open("a+b") as handle:
             _acquire_os_file_lock(handle, lock_path)
             try:
@@ -173,13 +173,22 @@ class SharedAssetStore:
         self.manifest_path = Path(manifest_path) if manifest_path else default_asset_manifest_path()
         self.manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def list_assets(self) -> AssetListResponse:
+    def list_assets(
+        self,
+        *,
+        asset_type: str | None = None,
+        modules: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> AssetListResponse:
         assets = self._load_manifest()
         for asset in self._legacy_voice_clone_assets():
             assets.setdefault(asset.id, asset)
         for asset in self._legacy_audio_assets():
             assets.setdefault(asset.id, asset)
-        return AssetListResponse(assets=list(assets.values()))
+        return paginate_assets(
+            assets.values(), asset_type=asset_type, modules=modules, limit=limit, cursor=cursor
+        )
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         normalized_id = str(asset_id)
@@ -219,11 +228,9 @@ class SharedAssetStore:
 
         file_deleted = False
         file_error = ""
-        path = Path(str(asset.storage_path or ""))
-        if delete_file and str(asset.storage_path or "").strip() and path.is_file():
+        if delete_file:
             try:
-                path.unlink()
-                file_deleted = True
+                file_deleted = delete_asset_content(asset)
             except OSError as exc:
                 file_error = str(exc)
 
@@ -289,13 +296,10 @@ class SharedAssetStore:
 
     def _legacy_voice_clone_assets(self) -> list[AssetRecord]:
         """Expose voice clone profiles from metadata or recover them from audio files."""
-        try:
-            import app.shared as shared
-        except Exception:
-            return []
+        from app.runtime.paths import VOICE_CLONES_DIR, VOICE_CLONES_FILE
 
-        manifest_path = Path(getattr(shared, "VOICE_CLONES_FILE", ""))
-        clones_dir = Path(getattr(shared, "VOICE_CLONES_DIR", manifest_path.parent))
+        manifest_path = Path(VOICE_CLONES_FILE)
+        clones_dir = Path(VOICE_CLONES_DIR)
         raw: Any = {}
         if manifest_path.is_file():
             try:
@@ -379,7 +383,7 @@ class SharedAssetStore:
                 },
                 created_at=_mtime_iso(audio_path or manifest_path),
                 compat={
-                    "legacy_system": "app.shared.VOICE_CLONES_FILE",
+                    "legacy_system": "resources/voice_clones/voice_clones.json",
                     "legacy_manifest": str(manifest_path),
                     "legacy_voice_id": legacy_name,
                 },
@@ -495,6 +499,7 @@ class SharedAssetStore:
             try:
                 assets[str(asset_id)] = AssetRecord(**payload)
             except Exception:
+                logger.debug("suppressed error in %s", "SharedAssetStore._load_manifest", exc_info=True)
                 continue
         return assets
 

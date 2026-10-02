@@ -18,7 +18,8 @@ def test_windows_launcher_enables_proposal_only_live_agent_pilot() -> None:
         'set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=1"'
     ) in source
     assert 'if not defined OMNIX_START_HERMES set "OMNIX_START_HERMES=1"' in source
-    assert 'if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=1"' in source
+    # Agent debug logs are opt-in (WP-10.1): the launcher does not enable them.
+    assert 'if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=0"' in source
     assert (
         'if not defined OMNIX_AGENT_LOG_DIR '
         'set "OMNIX_AGENT_LOG_DIR=%~dp0resources\\logs\\agent"'
@@ -64,6 +65,19 @@ def test_windows_launcher_loads_protected_database_credential_and_checks_health(
     assert "Write-Output $databaseUrl" not in credential_script
 
 
+def test_windows_launcher_runs_migrations_after_database_checks_before_services() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    health_check = source.index('"%RPG_FLUX_PYTHON%" -m app.persistence health')
+    credential_check = source.index('if /I "%~1"=="--database-credential-injected-check"')
+    migration = source.index('"%RPG_FLUX_PYTHON%" -m app.persistence migrate')
+    launcher_start = source.index('"%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app')
+
+    assert health_check < credential_check < migration < launcher_start
+    assert "PostgreSQL migrations failed. Omnix services were not started." in source
+
+
 def test_windows_launcher_retries_web_after_slow_gateway_startup() -> None:
     root = Path(__file__).resolve().parents[3]
     source = (root / "start_all.bat").read_text(encoding="utf-8")
@@ -80,14 +94,21 @@ def test_windows_launcher_retries_web_after_slow_gateway_startup() -> None:
 
 def test_kasa_requirement_matches_launcher_python_version() -> None:
     root = Path(__file__).resolve().parents[3]
-    main_requirements = (root / "scripts" / "requirements" / "requirements-rpg-main-nohf.txt").read_text(encoding="utf-8")
+    gateway_input = (root / "requirements" / "gateway.in").read_text(encoding="utf-8")
+    image_input = (root / "requirements" / "image.in").read_text(encoding="utf-8")
+    gateway_lock = (root / "requirements" / "gateway.lock.txt").read_text(encoding="utf-8")
     general_requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+    setup = (root / "setup.bat").read_text(encoding="utf-8")
     launcher = (root / "start_all.bat").read_text(encoding="utf-8")
 
-    for requirements in (main_requirements, general_requirements):
-        assert 'python-kasa>=0.7.7,<0.8; python_version < "3.11"' in requirements
-        assert 'python-kasa>=0.10.2,<1.0; python_version >= "3.11"' in requirements
-    assert "python-kasa^>=0.7.7,^<0.8" in launcher
+    assert "python-kasa" in gateway_input
+    assert "-r gateway.in" in image_input
+    assert "-r requirements/gateway.lock.txt" in general_requirements
+    assert "python-kasa==" in gateway_lock
+    assert "python=3.11" in setup
+    assert "--require-hashes -r requirements\\image.lock.txt" in setup
+    assert "Run setup.bat to install the hash-locked image runtime" in launcher
+    assert "python-kasa^>=0.7.7" not in launcher
     assert "python-kasa could not be imported" in launcher
 
 

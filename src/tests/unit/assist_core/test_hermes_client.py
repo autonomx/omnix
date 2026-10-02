@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 
+import httpx
+
 from app.assist_core.core import AssistantRequest
 from app.assist_core.hermes_client import HermesSidecarClient
+from tests.support.http import mock_http_client
 
 
 class _Response:
@@ -35,11 +38,11 @@ class _Response:
 def test_plan_requests_strict_nonexecuting_json(monkeypatch) -> None:
     captured: dict = {}
 
-    def post(url, *, headers, data, timeout):
-        captured.update(json.loads(data))
-        return _Response()
+    def handle(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_Response().json())
 
-    monkeypatch.setattr("app.assist_core.hermes_client.requests.post", post)
+    monkeypatch.setattr("app.assist_core.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
 
     result = HermesSidecarClient().plan(
         AssistantRequest(
@@ -56,3 +59,65 @@ def test_plan_requests_strict_nonexecuting_json(monkeypatch) -> None:
     assert "only allowlisted tools" in system_prompt
     assert result.success is True
     assert result.requires_confirmation is True
+
+
+def _client_replying(monkeypatch, content, *, status: int = 200) -> list[dict]:
+    captured: list[dict] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        if status != 200:
+            return httpx.Response(status, json={"error": "unavailable"})
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}]})
+
+    monkeypatch.setattr("app.assist_core.hermes_client.shared_http_client", lambda name: mock_http_client(handle))
+    return captured
+
+
+def _research_request():
+    from app.research.planner import ResearchPlanningRequest
+
+    return ResearchPlanningRequest(question="What is the current Rust release?")
+
+
+def test_research_plan_accepts_fenced_json_and_sends_the_same_request(monkeypatch) -> None:
+    fenced = "```json\n" + json.dumps({"objective": "Find the latest Rust release"}) + "\n```"
+    captured = _client_replying(monkeypatch, fenced)
+
+    plan = HermesSidecarClient().plan_research(_research_request())
+
+    assert plan.objective == "Find the latest Rust release"
+    assert set(captured[0]) == {"model", "stream", "messages"}
+    assert captured[0]["model"] == "hermes-agent"
+
+
+def test_an_invalid_research_plan_is_a_sidecar_error(monkeypatch) -> None:
+    import pytest
+
+    from app.assist_core.hermes_client import HermesSidecarError
+
+    _client_replying(monkeypatch, json.dumps({"title": "no objective"}))
+    with pytest.raises(HermesSidecarError, match="valid research plan"):
+        HermesSidecarClient().plan_research(_research_request())
+
+
+def test_an_http_failure_is_raised_unchanged(monkeypatch) -> None:
+    import pytest
+
+    _client_replying(monkeypatch, "", status=503)
+    with pytest.raises(httpx.HTTPStatusError):
+        HermesSidecarClient().plan_research(_research_request())
+
+
+def test_evidence_decision_is_a_json_object(monkeypatch) -> None:
+    import pytest
+
+    from app.assist_core.hermes_client import HermesSidecarError
+
+    captured = _client_replying(monkeypatch, json.dumps({"requirement": "none", "confidence": 0.9}))
+    assert HermesSidecarClient().classify_agent_evidence("say hi", "chat")["requirement"] == "none"
+    assert captured[0]["response_format"] == {"type": "json_object"}
+
+    _client_replying(monkeypatch, json.dumps(["not", "an", "object"]))
+    with pytest.raises(HermesSidecarError, match="valid evidence decision"):
+        HermesSidecarClient().classify_agent_evidence("say hi", "chat")

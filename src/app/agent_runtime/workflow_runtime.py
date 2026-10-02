@@ -1,23 +1,30 @@
 """PostgreSQL-backed deterministic WorkflowRuntime."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 import json
 import os
 import threading
 import uuid
-from typing import Any, Callable
+from typing import Any
 
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
+from app.capabilities.executor import (
+    LEGACY_APPROVER,
+    CapabilityExecutor,
+    CapabilityGrant,
+    execute_capability,
+)
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import RequestTenant
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.unit_of_work import unit_of_work
 
-from .capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from .interfaces import WorkflowRuntime
 from .workflows import (
     WORKFLOW_END,
@@ -40,14 +47,15 @@ def _json(value: Any) -> str:
 
 
 class PostgresWorkflowRuntime(WorkflowRuntime):
+    context = RequestTenant()
     def __init__(
         self,
         database: PostgresDatabase | None = None,
         *,
-        capability_executor: Callable[[str, AssistantToolRequest], Any] = hermes_assistant_tool_execute_payload,
+        capability_executor: CapabilityExecutor = execute_capability,
     ) -> None:
         self.database = database or default_database()
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = None  # follows the request tenant
         self.capability_executor = capability_executor
         self.worker_id = f"workflow:{os.getpid()}:{uuid.uuid4().hex[:12]}"
         self._supervisor_started = False
@@ -516,27 +524,29 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             return
         self._set_status(run_id, "cancelled")
 
-    def approve(self, run_id: str, step_id: str) -> None:
+    def approve(self, run_id: str, step_id: str, *, approved_by: str) -> None:
         self._ensure_supervisor()
-        self._resolve_approval(run_id, step_id, approved=True)
+        self._resolve_approval(run_id, step_id, approved_by=approved_by)
         self._advance(run_id)
 
     def reject(self, run_id: str, step_id: str) -> None:
         self._ensure_supervisor()
-        self._resolve_approval(run_id, step_id, approved=False)
+        self._resolve_approval(run_id, step_id, approved_by=None)
 
-    def _resolve_approval(self, run_id: str, step_id: str, *, approved: bool) -> None:
+    def _resolve_approval(self, run_id: str, step_id: str, *, approved_by: str | None) -> None:
+        approved = approved_by is not None
         with unit_of_work(self.database) as work:
             if approved:
+                # The approver is kept with the step until it executes (WP-4.5).
                 row = work.connection.execute(
                     """
                     UPDATE omnix_workflow_step_runs
-                       SET status = 'approved'
+                       SET status = 'approved', result = jsonb_build_object('approved_by', %s::text)
                      WHERE workspace_id = %s AND run_id = %s AND step_id = %s
                        AND status = 'waiting_for_approval'
                     RETURNING step_id
                     """,
-                    (self.context.workspace_id, run_id, step_id),
+                    (approved_by, self.context.workspace_id, run_id, step_id),
                 ).fetchone()
                 if row is None:
                     raise WorkflowRuntimeError("workflow step is not waiting for approval")
@@ -581,7 +591,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                         if approved
                         else "workflow.approval.rejected"
                     ),
-                    payload={"step_id": step_id},
+                    payload={"step_id": step_id, **({"approved_by": approved_by} if approved else {})},
                 ),
             )
             if not approved:
@@ -690,6 +700,9 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     )
                 return
 
+            approved_by = None
+            if approval_required:
+                approved_by = str((step_row.get("result") or {}).get("approved_by") or LEGACY_APPROVER)
             claimed = self._claim_step(run_id, step.id)
             if claimed is None:
                 return
@@ -700,7 +713,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                     run_id,
                     step,
                     context,
-                    approved=approval_required,
+                    approved_by=approved_by,
                 )
             except Exception as exc:
                 message = str(exc)[:1000]
@@ -755,12 +768,12 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         step: WorkflowStepDefinition,
         context: dict[str, Any],
         *,
-        approved: bool,
+        approved_by: str | None,
     ) -> dict[str, Any]:
         if step.timeout_seconds is None:
-            return self._execute_step(run_id, step, context, approved=approved)
+            return self._execute_step(run_id, step, context, approved_by=approved_by)
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"workflow-{step.id[:16]}")
-        future = executor.submit(self._execute_step, run_id, step, context, approved=approved)
+        future = executor.submit(self._execute_step, run_id, step, context, approved_by=approved_by)
         try:
             return future.result(timeout=step.timeout_seconds)
         except FutureTimeout as exc:
@@ -777,7 +790,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         step: WorkflowStepDefinition,
         context: dict[str, Any],
         *,
-        approved: bool,
+        approved_by: str | None,
     ) -> dict[str, Any]:
         if step.kind == "condition":
             return {
@@ -785,7 +798,7 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
                 "matched": self._condition(step.condition, context),
             }
         if step.kind == "approval":
-            return {"approved": approved}
+            return {"approved": approved_by is not None, "approved_by": approved_by}
         namespace = str(step.capability_id).split(".", 1)[0]
         request = AssistantToolRequest(
             tool_id=namespace,
@@ -793,9 +806,12 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             session_id=f"workflow:{run_id}",
             proposal_id=f"workflow:{run_id}:{step.id}",
             input=self._render_input(step.input_template, context),
-            approved=approved,
         )
-        payload = self.capability_executor(f"workflow:{run_id}", request)
+        payload = self.capability_executor(
+            CapabilityGrant("workflow", f"workflow:{run_id}", approved_by=approved_by),
+            request,
+            user_request=f"workflow:{run_id}",
+        )
         execution = payload.execution_result
         if execution.error:
             raise WorkflowRuntimeError(execution.error)
@@ -1150,7 +1166,8 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         while not self._supervisor_stop.is_set():
             try:
                 self._supervise_once()
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("workflow supervisor iteration", exc)
                 pass
             self._supervisor_stop.wait(30.0)
 
@@ -1263,9 +1280,10 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         for run_id in resumable:
             try:
                 self._advance(run_id)
-            except Exception:
+            except Exception as exc:
                 # The run remains durable; the next supervisor pass retries only
                 # safe boundary states. In-flight side effects are never replayed.
+                log_recovered_exception("workflow recovery", exc)
                 continue
 
     def _enqueue_due_schedule_fires(self) -> None:
@@ -1379,10 +1397,11 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
             )
             try:
                 run_id = self._start_definition(definition, payload)
-            except Exception:
+            except Exception as exc:
                 # Keep the fire pending. A later supervisor pass retries the
                 # durable dispatch; deterministic run idempotency prevents
                 # duplicate workflow execution if the first attempt committed.
+                log_recovered_exception("scheduled workflow dispatch", exc)
                 continue
             with unit_of_work(self.database) as work:
                 work.connection.execute(
@@ -1425,6 +1444,6 @@ class PostgresWorkflowRuntime(WorkflowRuntime):
         return WorkflowDefinition.model_validate(row[0]) if row else None
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_workflow_runtime() -> PostgresWorkflowRuntime:
     return PostgresWorkflowRuntime()

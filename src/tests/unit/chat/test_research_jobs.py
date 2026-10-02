@@ -30,6 +30,9 @@ class TargetedMetadataStore:
                     return True
         return False
 
+    def get_session(self, session_id: str) -> ChatSession | None:
+        return next((session for session in self.sessions if session.id == session_id), None)
+
     def _load_sessions(self) -> list[ChatSession]:
         return self.sessions
 

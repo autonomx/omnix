@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from .models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,

@@ -9,7 +9,6 @@ there instead of introducing a parallel mutable store.
 
 import hashlib
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from .strategy_dynamic_discovery import (
     AttributionEvent,
@@ -19,8 +18,8 @@ from .strategy_dynamic_discovery import (
     ShadowQualificationEvidence,
 )
 from .strategy_repository import StrategyEvent, TradingStrategyRepository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 EVENT_DISCOVERY = "interday_discovery_event"
 EVENT_CANDIDATE = "interday_dynamic_candidate"
 EVENT_ATTRIBUTION = "interday_candidate_attribution"

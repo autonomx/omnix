@@ -7,23 +7,50 @@ preserve capability/completion authority.
 from __future__ import annotations
 
 import json
+import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from .coding_skills import compile_coding_skills, trusted_skill_paths
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
-from .debug_logging import log_agent_activity
-from . import pi_runtime_core as _pi_runtime_core
+from app.observability.agent_logging import log_agent_activity
 from .pi_runtime_core import (
     PiAgentRuntime as _CorePiAgentRuntime,
     PiRpcSession,
     agent_path_roots,
     build_agent_environment,
+    normalize_pi_event as _core_normalize_pi_event,
     pi_broker_extension_path,
     pi_guard_extension_path,
     pi_model_provider_extension_path,
-    pi_rpc_argv as _imported_core_pi_rpc_argv,
+    pi_rpc_argv as _core_pi_rpc_argv,
 )
 from .repository_guidance import compile_repository_guidance
+from app.prompts import prompt_template
+
+
+MANDATORY_BROWSER_VALIDATION_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.pi_runtime.mandatory_browser_validation_prompt', "1",
+    (
+        'MANDATORY UI VALIDATION FOR THIS RUN: Omnix has issued governed browser authority '
+        'because this objective changes a rendered UI. Before settling, open the relevant route '
+        'with browser.open using workspace_preview=true, inspect the exact component named by '
+        'the objective and the final diff, exercise the changed interaction, and finish with '
+        'browser.assert_* against the actual changed element/state. Do not substitute a unit '
+        'test, screenshot, or a similarly named shell control for this proof.'
+    ),
+)
+
+INITIAL_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.pi_runtime.initial_prompt', "1",
+    (
+        'INDEPENDENT REVIEW MODE: remain read-only, inspect the immutable snapshot critically, '
+        'do not propose authority expansion, do not modify files, and return the structured '
+        'verdict requested by the review task. Reviewer process success is not approval.'
+    ),
+)
+
 
 
 _ENGINEERING_WORKFLOW = """PI-OWNED ENGINEERING LOOP FOR MUTATING CODING TASKS
@@ -53,13 +80,7 @@ def _mandatory_browser_validation_prompt(spec: AgentRunSpec) -> str:
     ):
         return ""
     return (
-        "MANDATORY UI VALIDATION FOR THIS RUN: Omnix has issued governed browser "
-        "authority because this objective changes a rendered UI. Before settling, "
-        "open the relevant route with browser.open using workspace_preview=true, "
-        "inspect the exact component named by the objective and the final diff, "
-        "exercise the changed interaction, and finish with browser.assert_* against "
-        "the actual changed element/state. Do not substitute a unit test, screenshot, "
-        "or a similarly named shell control for this proof."
+        MANDATORY_BROWSER_VALIDATION_PROMPT_TEMPLATE.text
     )
 
 
@@ -67,16 +88,8 @@ def _mandatory_browser_validation_prompt(spec: AgentRunSpec) -> str:
 # active. Pi's --tools flag filters extension tools as well as built-ins, so the
 # broker extension registering omnix_plan is insufficient unless argv includes
 # it. This adds no capability authority: every plan decision remains server-side.
-_CORE_PI_RPC_ARGV = getattr(
-    _pi_runtime_core,
-    "_omnix_base_pi_rpc_argv",
-    _imported_core_pi_rpc_argv,
-)
-_pi_runtime_core._omnix_base_pi_rpc_argv = _CORE_PI_RPC_ARGV
-
-
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
-    argv = list(_CORE_PI_RPC_ARGV(spec, pi_path=pi_path))
+    argv = list(_core_pi_rpc_argv(spec, pi_path=pi_path))
     for skill_path in trusted_skill_paths(profile=spec.profile):
         argv.extend(["--skill", str(skill_path)])
     planning_enabled = (
@@ -99,22 +112,40 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     return argv
 
 
-_pi_runtime_core.pi_rpc_argv = pi_rpc_argv
-
-
 # Pi can report provider failures inside message_end/turn_end rather than through
 # a top-level error event. The core normalizer historically treated those turns
 # as ordinary assistant messages, allowing a usage/quota failure to look like a
 # successful settle and later consume stalled-run recovery attempts. Keep the
 # core implementation stable, but install a narrow public-runtime normalization
 # hook that turns terminal provider failures into explicit run failures.
-_CORE_NORMALIZE_PI_EVENT = getattr(
-    _pi_runtime_core,
-    "_omnix_base_normalize_pi_event",
-    _pi_runtime_core.normalize_pi_event,
-)
-_pi_runtime_core._omnix_base_normalize_pi_event = _CORE_NORMALIZE_PI_EVENT
-_LAST_PROVIDER_FAILURE: dict[str, str] = {}
+_MAX_PROVIDER_FAILURES = 4096
+_PROVIDER_FAILURE_TTL_SECONDS = 3600.0
+_LAST_PROVIDER_FAILURE: dict[str, tuple[str, float]] = {}
+_LAST_PROVIDER_FAILURE_LOCK = threading.RLock()
+
+
+def _provider_failure_now() -> float:
+    return time.monotonic()
+
+
+def _prune_provider_failures_locked(now: float) -> None:
+    for run_id, (_signature, expires_at) in list(_LAST_PROVIDER_FAILURE.items()):
+        if expires_at <= now:
+            _LAST_PROVIDER_FAILURE.pop(run_id, None)
+
+
+def _has_provider_failure(run_id: str) -> bool:
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        _prune_provider_failures_locked(_provider_failure_now())
+        return run_id in _LAST_PROVIDER_FAILURE
+
+
+def clear_provider_failures(run_id: str | None = None) -> None:
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        if run_id is None:
+            _LAST_PROVIDER_FAILURE.clear()
+        else:
+            _LAST_PROVIDER_FAILURE.pop(run_id, None)
 
 
 def _provider_failure_event(
@@ -178,9 +209,16 @@ def _provider_failure_event(
     # turn_end. Emit one durable run failure per unique provider failure so the
     # service does not process two terminal transitions for the same turn.
     signature = f"{provider_error_code}:{error_message}"
-    if _LAST_PROVIDER_FAILURE.get(run_id) == signature:
-        return None
-    _LAST_PROVIDER_FAILURE[run_id] = signature
+    now = _provider_failure_now()
+    with _LAST_PROVIDER_FAILURE_LOCK:
+        _prune_provider_failures_locked(now)
+        previous = _LAST_PROVIDER_FAILURE.get(run_id)
+        if previous is not None and previous[0] == signature:
+            return None
+        if run_id not in _LAST_PROVIDER_FAILURE and len(_LAST_PROVIDER_FAILURE) >= _MAX_PROVIDER_FAILURES:
+            oldest = min(_LAST_PROVIDER_FAILURE, key=lambda key: _LAST_PROVIDER_FAILURE[key][1])
+            _LAST_PROVIDER_FAILURE.pop(oldest, None)
+        _LAST_PROVIDER_FAILURE[run_id] = (signature, now + _PROVIDER_FAILURE_TTL_SECONDS)
     return AgentEvent(
         run_id=run_id,
         event_type="run.failed",
@@ -211,30 +249,40 @@ def normalize_pi_event(
         return provider_failure
     if (
         str(payload.get("type") or "") in {"message_end", "turn_end"}
-        and run_id in _LAST_PROVIDER_FAILURE
+        and _has_provider_failure(run_id)
     ):
         return None
     # Once a provider terminal failure has been emitted, Pi may still publish
     # the mechanical agent_settled event for that failed turn. Suppress it so a
     # failed provider request cannot re-enter the quality state machine as an
     # apparent successful settle.
-    if str(payload.get("type") or "") == "agent_settled" and run_id in _LAST_PROVIDER_FAILURE:
+    if str(payload.get("type") or "") == "agent_settled" and _has_provider_failure(run_id):
         return None
-    return _CORE_NORMALIZE_PI_EVENT(
+    return _core_normalize_pi_event(
         run_id,
         payload,
         task_revision_id=task_revision_id,
     )
 
 
-# PiRpcSession resolves normalize_pi_event from pi_runtime_core at execution
-# time, so bind the public hardened normalizer there as well. This preserves the
-# split core/wrapper architecture while making every Pi session observe the same
-# provider-failure semantics.
-_pi_runtime_core.normalize_pi_event = normalize_pi_event
-
-
 class PiAgentRuntime(_CorePiAgentRuntime):
+    def __init__(
+        self,
+        *,
+        pi_path: str = "pi",
+        event_sink: Callable[[AgentEvent], None] | None = None,
+        argv_builder: Callable[..., list[str]] = pi_rpc_argv,
+        event_normalizer: Callable[..., AgentEvent | None] = normalize_pi_event,
+        run_token_issuer: Callable[[AgentRunSpec], str] | None = None,
+    ) -> None:
+        super().__init__(
+            pi_path=pi_path,
+            event_sink=event_sink,
+            argv_builder=argv_builder,
+            event_normalizer=event_normalizer,
+            run_token_issuer=run_token_issuer,
+        )
+
     @staticmethod
     def _initial_prompt(
         spec: AgentRunSpec,
@@ -285,9 +333,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
                 sections.append(browser_prompt)
         else:
             sections.append(
-                "INDEPENDENT REVIEW MODE: remain read-only, inspect the immutable snapshot critically, "
-                "do not propose authority expansion, do not modify files, and return the structured verdict "
-                "requested by the review task. Reviewer process success is not approval."
+                INITIAL_PROMPT_TEMPLATE.text
             )
         return "\n\n".join(sections)
 

@@ -13,6 +13,8 @@ Scene types supported:
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 # Phase 8: player-facing state updates
@@ -21,6 +23,8 @@ from app.rpg.player import (
     update_codex_from_state,
     update_journal_from_state,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Scene type constants
@@ -379,6 +383,7 @@ def generate_scenes_from_incidents(
             except Exception:
                 # Skip incidents that fail to map — they will be logged
                 # by the caller if needed.
+                logger.debug("suppressed error in %s", "generate_scenes_from_incidents", exc_info=True)
                 continue
 
     return scenes[:max_scenes]

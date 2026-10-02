@@ -1,9 +1,9 @@
-"""FastAPI routes for Character Mode live-avatar packs."""
+"""Router registration for Character Mode live-avatar packs."""
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from .avatar_models import (
     CharacterAvatarPack,
@@ -19,17 +19,16 @@ from .repository import CharacterConflictError, CharacterNotFoundError
 
 
 def register_character_avatar_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     service_factory: Callable[[], CharacterAvatarService] = default_character_avatar_service,
 ) -> None:
-    @app.get(
+    @router.get(
         "/api/characters/{character_id}/avatar-pack/optional",
         response_model=CharacterAvatarPack | None,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def get_optional_character_avatar_pack(
+    def get_optional_character_avatar_pack(
         character_id: str,
     ) -> CharacterAvatarPack | None:
         try:
@@ -37,25 +36,23 @@ def register_character_avatar_routes(
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get(
+    @router.get(
         "/api/characters/{character_id}/avatar-pack",
         response_model=CharacterAvatarPack,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def get_character_avatar_pack(character_id: str) -> CharacterAvatarPack:
+    def get_character_avatar_pack(character_id: str) -> CharacterAvatarPack:
         try:
             return service_factory().get(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.put(
+    @router.put(
         "/api/characters/{character_id}/avatar-pack",
         response_model=CharacterAvatarPack,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def upsert_character_avatar_pack(
+    def upsert_character_avatar_pack(
         character_id: str,
         request: UpsertCharacterAvatarPackRequest,
     ) -> CharacterAvatarPack:
@@ -68,13 +65,12 @@ def register_character_avatar_routes(
         except CharacterAvatarAssetError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.delete(
+    @router.delete(
         "/api/characters/{character_id}/avatar-pack",
         response_model=DeleteCharacterAvatarPackResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def delete_character_avatar_pack(
+    def delete_character_avatar_pack(
         character_id: str,
     ) -> DeleteCharacterAvatarPackResponse:
         try:

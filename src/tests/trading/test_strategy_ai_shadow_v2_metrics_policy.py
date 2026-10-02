@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.trading.strategy_ai_shadow_v2_metrics_policy import (
-    _decision_outcome_metrics_policy,
-    _episode_metrics_policy,
-    _lift_metrics_policy,
-)
+from app.trading.strategy_ai_shadow_v2_hardening import _episode_metrics, _lift_metrics
+from app.trading.strategy_ai_shadow_v2_roadmap_policy import _decision_outcome_metrics
 from app.trading.strategy_ai_shadow_v2_roadmap_policy import AI_SHADOW_V2_POLICY_VERSION
 from app.trading.strategy_repository import StrategyEvent
 
@@ -87,7 +84,7 @@ def _decision_outcome(event_id: str, *, arm: str, decision_event_id: str) -> Str
 
 
 def test_metrics_ignore_stale_policy_episodes() -> None:
-    metrics = _episode_metrics_policy(
+    metrics = _episode_metrics(
         [
             _episode("current", policy_version=AI_SHADOW_V2_POLICY_VERSION, positive=True, entered=True),
             _episode("stale", policy_version="old-policy", positive=False, entered=True),
@@ -119,7 +116,7 @@ def test_decision_metrics_use_only_observations_present_in_both_arms() -> None:
         _decision_outcome("out-catalyst-1", arm="full_session_catalyst", decision_event_id="catalyst-1"),
     ]
 
-    metrics = _decision_outcome_metrics_policy(events, "full_session_control")
+    metrics = _decision_outcome_metrics(events, "full_session_control")
 
     assert metrics["paired_only"] is True
     assert metrics["paired_decision_count"] == 1
@@ -151,7 +148,7 @@ def test_episode_lift_is_not_claimed_when_decision_schedule_is_unpaired() -> Non
         ),
     ]
 
-    metrics = _lift_metrics_policy(events)["full_session"]
+    metrics = _lift_metrics(events)["full_session"]
 
     assert metrics["comparison_valid"] is False
     assert metrics["requires_same_decision_schedule"] is True

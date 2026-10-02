@@ -11,15 +11,14 @@ of signals without giving indicators order authority.
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .models import MarketBar
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 Interval = Literal["1m", "5m"]
 
 

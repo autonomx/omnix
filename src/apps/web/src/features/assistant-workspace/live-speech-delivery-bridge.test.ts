@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';

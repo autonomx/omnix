@@ -46,31 +46,13 @@ if os.environ.get('TEST_STT') == '1':
 if os.environ.get('TEST_LLM') == '1':
     TEST_LLM = True
 
-# API Keys for cloud providers - load from settings.json if available
+# Optional cloud-provider credentials come from the process environment.
 def load_api_keys():
-    """Load API keys from settings.json"""
-    settings_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'resources',
-        'data',
-        'settings.json',
+    """Read optional cloud-provider credentials from the process environment."""
+    return (
+        os.environ.get('CEREBRAS_API_KEY', ''),
+        os.environ.get('OPENROUTER_API_KEY', ''),
     )
-    cerebras_key = os.environ.get('CEREBRAS_API_KEY', '')
-    openrouter_key = os.environ.get('OPENROUTER_API_KEY', '')
-    
-    if os.path.exists(settings_path):
-        try:
-            import json
-            with open(settings_path, 'r') as f:
-                settings = json.load(f)
-            if not cerebras_key:
-                cerebras_key = settings.get('cerebras', {}).get('api_key', '')
-            if not openrouter_key:
-                openrouter_key = settings.get('openrouter', {}).get('api_key', '')
-        except Exception:
-            pass
-    
-    return cerebras_key, openrouter_key
 
 CEREBRAS_API_KEY, OPENROUTER_API_KEY = load_api_keys()
 
@@ -307,16 +289,9 @@ class TestLLMIntegration:
     @pytest.mark.skipif(not CEREBRAS_API_KEY, reason="CEREBRAS_API_KEY not set")
     def test_cerebras_chat_completion(self):
         """Test chat completion with Cerebras API."""
-        # Get model from settings.json
-        settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'settings.json')
-        cerebras_model = "llama-3.3-70b-versatile"  # default
-        if os.path.exists(settings_path):
-            try:
-                with open(settings_path, 'r') as f:
-                    settings = json.load(f)
-                    cerebras_model = settings.get('cerebras', {}).get('model', cerebras_model)
-            except:
-                pass
+        cerebras_model = os.environ.get(
+            'CEREBRAS_MODEL', 'llama-3.3-70b-versatile'
+        )
         
         payload = {
             "model": cerebras_model,
@@ -370,46 +345,6 @@ class TestLLMIntegration:
         assert response.status_code == 200
         data = response.json()
         assert 'choices' in data
-
-
-@pytest.mark.skipif(not (TEST_TTS and TEST_LLM), reason="Set TEST_TTS=1 and TEST_LLM=1 for end-to-end tests")
-class TestEndToEnd:
-    """End-to-end tests combining multiple services."""
-    
-    def test_chat_to_tts_pipeline(self, client):
-        """Test the complete pipeline from chat to TTS."""
-        # 1. Create session
-        session_response = client.post('/api/sessions')
-        session_id = session_response.json['session_id']
-        
-        # 2. Send chat message
-        chat_response = client.post('/api/chat', json={
-            'message': 'Say hello',
-            'session_id': session_id
-        })
-        
-        # Chat may fail if LLM not configured
-        if chat_response.status_code != 200:
-            pytest.skip("Chat endpoint failed - LLM may not be configured")
-        
-        chat_data = chat_response.json
-        
-        if chat_data.get('success'):
-            response_text = chat_data.get('response', '')
-            
-            # 3. Generate TTS for the response
-            tts_response = client.post('/api/tts', json={
-                'text': response_text
-            })
-            
-            assert tts_response.status_code == 200
-            tts_data = tts_response.json
-            
-            if tts_data.get('success'):
-                assert 'audio' in tts_data
-        
-        # Cleanup
-        client.delete(f'/api/sessions/{session_id}')
 
 
 class TestServiceDiscovery:

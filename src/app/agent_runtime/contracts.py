@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Literal
+import secrets
 import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -673,7 +674,7 @@ class AgentArtifact(BaseModel):
 class AgentApproval(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    approval_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    approval_id: str = Field(default_factory=lambda: secrets.token_urlsafe(24))
     run_id: str
     capability_id: str
     state: AgentApprovalState = "pending"

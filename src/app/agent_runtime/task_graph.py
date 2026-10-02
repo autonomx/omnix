@@ -14,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from .contracts import (
     AcceptancePlan,
     AgentApprovalPolicy,

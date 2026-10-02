@@ -5,7 +5,6 @@ from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -26,9 +25,9 @@ from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_sessio
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
 from .us_equity_calendar import early_close_time, regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 HistoricalUniverseMode = Literal["captured_only", "captured_or_reconstructed", "reconstructed_only"]
 HistoricalUniverseOrigin = Literal["captured", "reconstructed"]

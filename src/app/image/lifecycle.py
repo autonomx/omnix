@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import contextlib
+import logging
+import os
 import threading
+import time
+from collections import OrderedDict
 from typing import Any, Dict
 
 from app.image.config import get_active_image_provider_name, get_provider_config
@@ -12,9 +16,14 @@ from app.image.providers.registry import (
     is_supported_image_provider,
 )
 
-_PROVIDER_CACHE: Dict[str, Any] = {}
+_PROVIDER_CACHE: OrderedDict[str, tuple[Any, float]] = OrderedDict()
 _PROVIDER_LOCK = threading.RLock()
+# The device's image model-owner lease, held while any provider is cached.
+_RESIDENCY: Any = None
+_LOG = logging.getLogger(__name__)
 _LIFECYCLE_LOCK = threading.RLock()
+MAX_CACHED_IMAGE_PROVIDERS = 4
+IMAGE_PROVIDER_CACHE_TTL_SECONDS = 24 * 60 * 60.0
 _GIB = float(1024**3)
 
 
@@ -44,22 +53,84 @@ def _unload_instances(providers: Dict[str, Any]) -> list[str]:
             if hasattr(provider, "unload"):
                 provider.unload()
         except Exception:
-            pass
+            _LOG.debug("suppressed error in %s", "_unload_instances", exc_info=True)
         unloaded.append(provider_name)
     return unloaded
+
+
+def _hold_residency() -> None:
+    """Own the device's image model slot before a provider can load weights.
+
+    One process per device holds image models; a second process is refused
+    instead of loading a competing copy into the same GPU. Without a
+    configured permit service (tests, single-process tools) nothing is held.
+    """
+    global _RESIDENCY
+    from app.persistence.device_permits import DevicePermitError, default_device_permit_service
+
+    service = default_device_permit_service()
+    with _PROVIDER_LOCK:
+        if service is None or _RESIDENCY is not None:
+            return
+        try:
+            _RESIDENCY = service.hold_model_owner(
+                "image", holder_id=f"image:{os.getpid()}", process_role="image",
+                on_lost=_residency_lost,
+            )
+        except DevicePermitError as exc:
+            raise RuntimeError(f"image_model_owned_elsewhere:{exc}") from exc
+
+
+def _release_residency_if_idle() -> None:
+    global _RESIDENCY
+    with _PROVIDER_LOCK:
+        if _PROVIDER_CACHE or _RESIDENCY is None:
+            return
+        guard, _RESIDENCY = _RESIDENCY, None
+    try:
+        guard.close()
+    except Exception:
+        _LOG.warning("image model-owner lease release failed", exc_info=True)
+
+
+def _residency_lost() -> None:
+    """The lease expired or was taken over: stop using the GPU's image slot."""
+    global _RESIDENCY
+    with _PROVIDER_LOCK:
+        # Called from the guard's renewal thread, which has already stopped.
+        _RESIDENCY = None
+    _LOG.error("image model-owner lease lost; unloading image providers")
+    _unload_instances(_pop_cached_providers())
 
 
 def _pop_cached_providers(*, keep: str = "") -> Dict[str, Any]:
     keep = _safe_str(keep).strip().lower()
     with _PROVIDER_LOCK:
         selected = {
-            provider_name: provider
-            for provider_name, provider in _PROVIDER_CACHE.items()
+            provider_name: value[0]
+            for provider_name, value in _PROVIDER_CACHE.items()
             if not keep or provider_name != keep
         }
         for provider_name in selected:
             _PROVIDER_CACHE.pop(provider_name, None)
     return selected
+
+
+def _expire_cached_providers() -> None:
+    now = time.monotonic()
+    with _PROVIDER_LOCK:
+        expired = [
+            name
+            for name, (_provider, expires_at) in _PROVIDER_CACHE.items()
+            if expires_at <= now
+        ]
+        providers = [
+            _PROVIDER_CACHE.pop(name)[0]
+            for name in expired
+        ]
+    _unload_instances({str(index): provider for index, provider in enumerate(providers)})
+    if providers:
+        _release_residency_if_idle()
 
 
 def _validate_load_budget(provider_name: str) -> None:
@@ -72,12 +143,14 @@ def _validate_load_budget(provider_name: str) -> None:
     try:
         import torch
     except Exception:
+        _LOG.debug("suppressed error in %s", "_validate_load_budget", exc_info=True)
         return
     if not torch.cuda.is_available():
         return
     try:
         free_bytes, total_bytes = torch.cuda.mem_get_info()
     except Exception:
+        _LOG.debug("suppressed error in %s", "_validate_load_budget", exc_info=True)
         return
     free_gib = free_bytes / _GIB
     total_gib = total_bytes / _GIB
@@ -92,19 +165,49 @@ def _validate_load_budget(provider_name: str) -> None:
 
 def get_cached_provider(provider_name: str | None = None):
     provider_name = _safe_str(provider_name).strip().lower() or get_active_image_provider_name()
+    _expire_cached_providers()
     with _PROVIDER_LOCK:
-        return _PROVIDER_CACHE.get(provider_name)
+        value = _PROVIDER_CACHE.get(provider_name)
+        if value is None:
+            return None
+        _PROVIDER_CACHE.move_to_end(provider_name)
+        _PROVIDER_CACHE[provider_name] = (
+            value[0],
+            time.monotonic() + IMAGE_PROVIDER_CACHE_TTL_SECONDS,
+        )
+        return value[0]
 
 
 def get_or_create_image_provider(provider_name: str | None = None):
     provider_name = _safe_str(provider_name).strip().lower() or "flux_klein"
-
+    _expire_cached_providers()
+    evicted: Any = None
     with _PROVIDER_LOCK:
-        provider = _PROVIDER_CACHE.get(provider_name)
-        if provider is None:
-            provider = _build_provider(provider_name)
-            _PROVIDER_CACHE[provider_name] = provider
-        return provider
+        cached = _PROVIDER_CACHE.get(provider_name)
+        if cached is None:
+            _hold_residency()
+            try:
+                provider = _build_provider(provider_name)
+            except Exception:
+                _release_residency_if_idle()
+                raise
+            if len(_PROVIDER_CACHE) >= MAX_CACHED_IMAGE_PROVIDERS:
+                _evicted_name, evicted_value = _PROVIDER_CACHE.popitem(last=False)
+                evicted = evicted_value[0]
+            _PROVIDER_CACHE[provider_name] = (
+                provider,
+                time.monotonic() + IMAGE_PROVIDER_CACHE_TTL_SECONDS,
+            )
+        else:
+            provider = cached[0]
+            _PROVIDER_CACHE.move_to_end(provider_name)
+            _PROVIDER_CACHE[provider_name] = (
+                provider,
+                time.monotonic() + IMAGE_PROVIDER_CACHE_TTL_SECONDS,
+            )
+    if evicted is not None:
+        _unload_instances({"evicted": evicted})
+    return provider
 
 
 def _build_provider(provider_name: str):
@@ -156,10 +259,12 @@ def load_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
             provider.load()
         except Exception:
             with _PROVIDER_LOCK:
-                if _PROVIDER_CACHE.get(provider_name) is provider:
+                cached = _PROVIDER_CACHE.get(provider_name)
+                if cached is not None and cached[0] is provider:
                     _PROVIDER_CACHE.pop(provider_name, None)
             with contextlib.suppress(Exception):
                 provider.unload()
+            _release_residency_if_idle()
             raise
 
         result: Dict[str, Any] = {
@@ -178,9 +283,11 @@ def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
 
     with _LIFECYCLE_LOCK:
         with _PROVIDER_LOCK:
-            provider = _PROVIDER_CACHE.pop(provider_name, None)
+            cached = _PROVIDER_CACHE.pop(provider_name, None)
+            provider = cached[0] if cached is not None else None
         if provider is not None and hasattr(provider, "unload"):
             provider.unload()
+        _release_residency_if_idle()
 
     return {
         "ok": True,
@@ -193,12 +300,16 @@ def unload_image_provider(provider_name: str | None = None) -> Dict[str, Any]:
 def unload_all_image_providers() -> Dict[str, Any]:
     with _LIFECYCLE_LOCK:
         unloaded = _unload_instances(_pop_cached_providers())
+        _release_residency_if_idle()
     return {"ok": True, "unloaded": unloaded}
 
 
 def get_image_provider_cache_status() -> Dict[str, Any]:
+    _expire_cached_providers()
     with _PROVIDER_LOCK:
-        providers = dict(_PROVIDER_CACHE)
+        providers = {
+            name: value[0] for name, value in _PROVIDER_CACHE.items()
+        }
     loaded_providers = [
         provider_name
         for provider_name, provider in sorted(providers.items())

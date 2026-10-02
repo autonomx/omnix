@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime.capabilities import default_capability_registry
+from app.capabilities import default_capability_registry
 from app.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,
 )
-from app.agent_runtime.mcp_policy import (
+from app.capabilities.mcp_policy import (
     configured_mcp_capability_ids,
     load_mcp_policy,
 )
@@ -471,3 +471,23 @@ def test_plain_sidebar_mutation_requires_browser_proof() -> None:
     browser_spec = next(item for item in plan if item.id == "browser-validation")
     assert browser_spec.required is True
     assert "browser.assert_text_not_contains" in browser_spec.description
+
+
+def test_capability_registry_is_reused_until_the_mcp_policy_file_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = tmp_path / "policy.json"
+    _write_policy(policy)
+    monkeypatch.setenv("OMNIX_AGENT_MCP_POLICY_PATH", str(policy))
+
+    first = default_capability_registry()
+    assert default_capability_registry() is first  # not rebuilt per call (WP-7.4)
+    assert first.get("mcp.docs.search_docs") is not None
+
+    policy.write_text('{"version": 1, "servers": []}', encoding="utf-8")
+
+    edited = default_capability_registry()
+    assert edited is not first
+    assert edited.get("mcp.docs.search_docs") is None
+    assert load_mcp_policy().servers == ()

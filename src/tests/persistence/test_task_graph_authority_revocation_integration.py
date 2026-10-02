@@ -11,7 +11,7 @@ from app.agent_runtime.task_graph import TaskGraph, TaskNode, task_node_fingerpr
 from app.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -55,7 +55,7 @@ def _create_running_child(repository: PostgresAgentRunRepository, run_id: str) -
 def test_revision_revokes_invalidated_child_before_current_identity_is_cleared() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         graph_run_id = f"graph-{uuid.uuid4().hex}"
         child_run_id = f"child-{uuid.uuid4().hex}"
         node = TaskNode(
@@ -115,7 +115,7 @@ def test_revision_revokes_invalidated_child_before_current_identity_is_cleared()
 def test_node_cancellation_revokes_child_authority_before_process_cleanup() -> None:
     database = _database()
     try:
-        context = bootstrap_local_tenant(database)
+        context = ensure_local_identity(database)
         graph_run_id = f"graph-{uuid.uuid4().hex}"
         child_run_id = f"child-{uuid.uuid4().hex}"
         node = TaskNode(

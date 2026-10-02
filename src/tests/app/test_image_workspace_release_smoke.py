@@ -4,32 +4,30 @@ from fastapi.testclient import TestClient
 
 from app.assets import SharedAssetStore
 from app.gateway.main import create_gateway_app
-import app.gateway.image_asset_routes as image_asset_routes
-import app.gateway.image_workspace_routes as image_workspace_routes
 from app.image.models import ImageGenerationResponse
-from app.jobs import SQLiteJobStore
-from app.jobs.image_inline import execute_image_job
+from app.image.jobs import execute_image_job
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
+    # Manifest-backed stores only: do not read through to PostgreSQL image
+    # assets that other tests in the same database created.
+    monkeypatch.setattr("app.persistence.runtime.uses_postgresql_runtime", lambda: False)
     jobs_path = tmp_path / "jobs.sqlite"
     manifest_path = tmp_path / "assets" / "manifest.json"
-    jobs = SQLiteJobStore(jobs_path)
+    jobs = InMemoryJobStore(jobs_path)
     assets = SharedAssetStore(manifest_path)
     image_path = tmp_path / "generated" / "harbor.png"
     image_path.parent.mkdir()
     image_path.write_bytes(b"PNG-release-smoke")
 
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: assets)
-
     client = TestClient(
         create_gateway_app(
             job_store_factory=lambda: jobs,
             asset_store_factory=lambda: assets,
-        )
+        ),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
     )
     queued_response = client.post(
         "/api/jobs",
@@ -93,16 +91,15 @@ def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> 
     assert "event: job.created" in event_stream
     assert "event: job.completed" in event_stream
 
-    reloaded_jobs = SQLiteJobStore(jobs_path)
+    reloaded_jobs = InMemoryJobStore(jobs_path)
     reloaded_assets_store = SharedAssetStore(manifest_path)
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: reloaded_jobs)
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: reloaded_assets_store)
-    monkeypatch.setattr(image_asset_routes, "default_asset_store", lambda: reloaded_assets_store)
     reloaded_client = TestClient(
         create_gateway_app(
             job_store_factory=lambda: reloaded_jobs,
             asset_store_factory=lambda: reloaded_assets_store,
-        )
+        ),
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
     )
     reloaded_assets = reloaded_client.get("/api/image-generation/assets").json()["assets"]
     assert [asset["id"] for asset in reloaded_assets] == [asset_id]

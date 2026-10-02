@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { describe, expect, it, vi } from 'vitest';
 
 import { LiveMaterialClient } from './live-material-client';

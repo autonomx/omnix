@@ -6,9 +6,11 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -16,6 +18,7 @@ from app.persistence.unit_of_work import unit_of_work
 from .assembly import PausePolicy
 from .assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
 from .hashing import canonical_json
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 from .render_cache import find_valid_render
 from .render_planner import load_chapter_units
 
@@ -28,13 +31,13 @@ class _AssemblyCancelled(Exception):
 
 
 def run_assemble_once(
-    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.assemble-chapter"], lease_seconds=3600,
+            job_types=["audiobook.assemble-chapter"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -44,6 +47,15 @@ def run_assemble_once(
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _assemble_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _assemble_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     storage_key: str | None = None
@@ -117,7 +129,7 @@ def run_assemble_once(
             work.rollback()
         if selected is None:
             with tempfile.NamedTemporaryFile(prefix="omnix-chapter-", suffix=".wav",
-                                             dir=blobs.root, delete=False) as output:
+                                             dir=blobs.scratch_dir(), delete=False) as output:
                 output_path = Path(output.name)
             last_renewal = time.monotonic()
 
@@ -137,7 +149,7 @@ def run_assemble_once(
                         raise _AssemblyCancelled()
                     renewal.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
-                        lease_token=token, lease_seconds=3600,
+                        lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                     )
                     renewal.commit()
                 last_renewal = now
@@ -200,28 +212,29 @@ def run_assemble_once(
                           "output_audio_bytes": selected[2],
                           "wall_seconds": round(time.perf_counter() - started_at, 3)},
             )
-            remaining = work.connection.execute(
-                """
-                SELECT count(*)
-                  FROM omnix_jobs AS render_job
-                 WHERE render_job.workspace_id = %s
-                   AND render_job.module = 'audiobook'
-                   AND render_job.job_type = 'audiobook.render-chapter'
-                   AND render_job.input_payload->>'render_run_id' = %s
-                   AND NOT EXISTS (
-                       SELECT 1
-                         FROM omnix_jobs AS assembly_job
-                        WHERE assembly_job.workspace_id = render_job.workspace_id
-                          AND assembly_job.module = 'audiobook'
-                          AND assembly_job.job_type = 'audiobook.assemble-chapter'
-                          AND assembly_job.input_payload->>'render_run_id' = %s
-                          AND assembly_job.input_payload->>'chapter_id'
-                              = render_job.input_payload->>'chapter_id'
-                          AND assembly_job.status = 'completed'
-                   )
-                """,
-                (context.workspace_id, payload["render_run_id"], payload["render_run_id"]),
-            ).fetchone()[0]
+            render_jobs = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.render-chapter",
+                input_fields=(("render_run_id", str(payload["render_run_id"])),),
+                limit=500,
+            )
+            completed_assemblies = work.jobs.query_jobs(
+                context,
+                module="audiobook",
+                job_type="audiobook.assemble-chapter",
+                input_fields=(("render_run_id", str(payload["render_run_id"])),),
+                statuses=("completed",),
+                limit=500,
+            )
+            assembled_chapters = {
+                str((job["input_payload"] or {}).get("chapter_id") or "")
+                for job in completed_assemblies
+            }
+            remaining = sum(
+                1 for job in render_jobs
+                if str((job["input_payload"] or {}).get("chapter_id") or "") not in assembled_chapters
+            )
             if int(remaining) == 0:
                 work.connection.execute(
                     """UPDATE omnix_audiobook_projects SET state = 'ready_to_export',

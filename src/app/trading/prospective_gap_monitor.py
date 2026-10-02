@@ -6,31 +6,31 @@ post-open confirmation and deterministic post-close finalization.
 
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
 from datetime import date, datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
 from .us_equity_calendar import early_close_time, regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_prospective_gap_monitor"
 _PREMARKET_HANDOFF_INGEST_START = time(9, 24)
 _PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)
 
 
 def _flag(name: str, default: str) -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def prospective_gap_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR", "1")
 
@@ -142,14 +142,13 @@ class ProspectiveGapMonitor:
         return self._task is not None and not self._task.done()
 
 
-def register_prospective_gap_monitor(gateway: FastAPI) -> ProspectiveGapMonitor | None:
-    if not prospective_gap_monitor_enabled():
-        return None
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_prospective_gap_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, ProspectiveGapMonitor):
-        return existing
+        return None
     monitor = ProspectiveGapMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         monitor.start()
@@ -157,14 +156,13 @@ def register_prospective_gap_monitor(gateway: FastAPI) -> ProspectiveGapMonitor 
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "ProspectiveGapMonitor",
     "prospective_gap_monitor_enabled",
-    "register_prospective_gap_monitor",
+    "create_prospective_gap_monitor_worker",
 ]

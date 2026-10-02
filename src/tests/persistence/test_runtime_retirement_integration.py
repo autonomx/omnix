@@ -47,20 +47,34 @@ def _reset(database: PostgresDatabase) -> None:
             "omnix_memory_snapshots, omnix_memory_candidates, omnix_memory_events, "
             "omnix_memory_records, omnix_conversation_segments, "
             "omnix_character_versions, omnix_characters, omnix_asset_versions, "
-            "omnix_assets, omnix_settings, omnix_secret_references, "
+            "omnix_assets, omnix_settings_entries, omnix_settings, omnix_secret_references, "
             "omnix_audit_events, omnix_idempotency_keys, "
             "omnix_workspace_memberships, omnix_workspaces, omnix_users CASCADE"
         )
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'legacy_preflight', import_run_id = NULL,
+               SET mode = 'legacy_preflight', authority_state = 'legacy_preflight',
+                   import_run_id = NULL,
                    source_hash = NULL, activated_at = NULL,
                    rollback_recorded_at = NULL, metadata = '{}'::jsonb,
                    updated_at = CURRENT_TIMESTAMP
              WHERE singleton = TRUE
             """
         )
+
+
+def _restore_runtime_authority() -> None:
+    database = _database()
+    try:
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_persistence_cutover "
+                "SET mode = 'postgresql', authority_state = 'postgresql_stabilized', "
+                "updated_at = CURRENT_TIMESTAMP WHERE singleton = TRUE"
+            )
+    finally:
+        database.close()
 
 
 _RUNTIME_SCRIPT = r'''
@@ -71,39 +85,66 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.persistence.startup import bootstrap_postgresql_runtime
-from app.persistence.runtime import LegacyPersistenceRetired
-from app.persistence.runtime_install import runtime_adapters_installed
-
+from app.errors import LegacyPersistenceRetired
 status = bootstrap_postgresql_runtime()
 assert status.ready is True
 assert status.backend == "postgresql"
 assert status.cutover_mode == "postgresql"
-assert runtime_adapters_installed() is True
 
 connection = sqlite3.connect(":memory:")
 connection.close()
 # Production does not mutate the standard library. Domain factories remain PostgreSQL-only.
 
-from app import shared
+from app.persistence.database import default_database
+from app.security.tenant_context import current_tenant
+from app.settings.access import (
+    install_settings_service,
+    load_secrets,
+    load_settings,
+    save_secrets,
+    save_settings,
+)
+from app.settings.registry import core_setting_specs
+from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.settings.service import SettingRevisionConflict, SettingsService
 
-shared.save_settings({"provider": "lmstudio", "lmstudio": {"model": "runtime-model"}})
-assert shared.load_settings()["lmstudio"]["model"] == "runtime-model"
-shared.save_sessions({"legacy:runtime": {"title": "Runtime legacy route"}})
-assert shared.load_sessions()["legacy:runtime"]["title"] == "Runtime legacy route"
-
-def add_runtime_session(current):
-    current["legacy:mutated"] = {"title": "Transactional runtime route"}
-
-shared.update_sessions(add_runtime_session)
-assert shared.load_sessions()["legacy:mutated"]["title"] == "Transactional runtime route"
-assert shared.load_secrets() == {
+settings_service = SettingsService(
+    default_database(), current_tenant, specs=core_setting_specs()
+)
+install_settings_service(settings_service)
+settings_service.register_specs((assistant_memory_setting_spec(),))
+save_settings({
+    "provider": "lmstudio",
+    "lmstudio": {
+        "base_url": "http://localhost:1234",
+        "direct": False,
+        "model": "runtime-model",
+    },
+})
+assert load_settings()["lmstudio"]["model"] == "runtime-model"
+try:
+    settings_service.set("provider", "cerebras", expected_revision=0)
+except SettingRevisionConflict:
+    pass
+else:
+    raise AssertionError("a stale settings revision unexpectedly overwrote the provider")
+assert settings_service.get("provider")["value"] == "lmstudio"
+with default_database().connection() as connection:
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_module_records "
+        "WHERE module = 'platform' AND record_type = 'settings'"
+    ).fetchone()[0] == 0
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_settings"
+    ).fetchone()[0] == 0
+assert load_secrets() == {
     "api_keys": {
         "openrouter": "runtime-openrouter-key",
         "cerebras": "runtime-cerebras-key",
     }
 }
-shared.save_secrets({"api_keys": {"openrouter": "environment-cannot-be-overridden"}})
-assert shared.load_secrets() == {
+save_secrets({"api_keys": {"openrouter": "environment-cannot-be-overridden"}})
+assert load_secrets() == {
     "api_keys": {
         "openrouter": "runtime-openrouter-key",
         "cerebras": "runtime-cerebras-key",
@@ -119,13 +160,17 @@ from app.assistant_tools.credentials import (
     save_assistant_tool_credentials,
 )
 
+from app.security.secrets import SecretStoreUnavailable
+
+# Credentials go to the secret store only (WP-4.9); with the read-only env
+# store, saving fails closed and nothing is written in plaintext.
 assert load_assistant_tool_credentials().credentials == []
 try:
     save_assistant_tool_credentials(AssistantToolCredentialsPayload())
-except LegacyPersistenceRetired:
+except SecretStoreUnavailable:
     pass
 else:
-    raise AssertionError("plaintext assistant-tool credentials unexpectedly remained writable")
+    raise AssertionError("assistant-tool credentials were saved without a writable secret store")
 
 from app.assist_core.house_state import load_house_state, save_house_state
 
@@ -143,13 +188,21 @@ assert default_assistant_turn_coordinator().get(assistant_turn.assistant_turn_id
 
 from app.assistant_memory.settings import (
     AssistantMemorySettingsUpdate,
-    AssistantMemorySettingsStore,
 )
 
 from app.assistant_memory.settings import default_memory_settings_store
 memory_settings = default_memory_settings_store()
 memory_settings.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
 assert memory_settings.load_persisted().suggestions_enabled is True
+with default_database().connection() as connection:
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_settings_entries "
+        "WHERE key = 'assistant_memory.runtime'"
+    ).fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT COUNT(*) FROM omnix_module_records "
+        "WHERE module = 'assistant-memory' AND record_type = 'runtime-settings'"
+    ).fetchone()[0] == 0
 
 from app.characters.live_conversation_profile import (
     LiveConversationProfileUpdate,
@@ -173,7 +226,6 @@ assert load_assistant_tool_ledger().entries[0].execution_id == ledger_entry.exec
 
 for variable in (
     "OMNIX_ASSISTANT_TURN_STORE_PATH",
-    "OMNIX_CHAT_MEMORY_SETTINGS_PATH",
     "OMNIX_LIVE_CONVERSATION_PROFILE_PATH",
     "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH",
     "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH",
@@ -182,11 +234,15 @@ for variable in (
     assert not Path(os.environ[variable]).exists(), variable
 
 from app.chat.models import ChatMessage, ChatSession
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+from app.runtime.feature_catalog import load_feature
+from app.persistence.repository_registry import install_repository_specs
+
+install_repository_specs(tuple(load_feature("chat").repositories))
 
 now = datetime.now(timezone.utc).isoformat()
 chat_repository = PostgresChatRepositoryAdapter()
-chat_repository.save_sessions([
+chat_repository.create_session(
     ChatSession(
         id="chat:runtime",
         title="Runtime PostgreSQL",
@@ -200,13 +256,13 @@ chat_repository.save_sessions([
         updated_at=now,
         messages=[ChatMessage(id="message:runtime", role="user", content="hello", created_at=now)],
     )
-])
-loaded_chats = chat_repository.load_sessions()
-assert len(loaded_chats) == 1
-assert loaded_chats[0].messages[0].content == "hello"
+)
+loaded_chat = chat_repository.get_session("chat:runtime")
+assert loaded_chat is not None
+assert loaded_chat.messages[0].content == "hello"
 
 from app.characters.models import CreateCharacterRequest
-from app.persistence.character_compat import PostgresCharacterRepositoryAdapter
+from app.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
 
 characters = PostgresCharacterRepositoryAdapter()
 created_character = characters.create(CreateCharacterRequest(
@@ -219,8 +275,8 @@ created_character = characters.create(CreateCharacterRequest(
 assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
-from app.assistant_memory.models import MemoryRecord
-from app.persistence.memory_compat import PostgresMemoryRepositoryAdapter
+from app.memory_contracts import MemoryRecord
+from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
 record = MemoryRecord(
@@ -248,7 +304,7 @@ memories.create_record(record)
 assert memories.get_record("memory:runtime").content == "PostgreSQL is authoritative"
 
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 
 jobs = PostgresJobStoreAdapter()
 job = jobs.create_job(CreateJobRequest(
@@ -260,7 +316,7 @@ job = jobs.create_job(CreateJobRequest(
 assert jobs.get_job(job.id).id == job.id
 
 from app.assets.models import AssetRecord, AssetType
-from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
 
 with tempfile.TemporaryDirectory() as directory:
     source = Path(directory) / "runtime.txt"
@@ -278,7 +334,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert stored_asset.id == "asset:runtime"
     assert any(item.id == "asset:runtime" for item in assets.list_assets().assets)
 
-from app.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
+from app.rpg.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
 
 session = {
     "manifest": {"session_id": "campaign:runtime", "title": "Runtime campaign", "turn_count": 0},
@@ -293,20 +349,24 @@ from app.assets import store as asset_store_module
 from app.assistant_memory import service as memory_service_module
 from app.characters import service as character_service_module
 from app.chat import repository as chat_repository_module
-from app.jobs import store as job_store_module
+from app.runtime_composition import production_job_store
 
 assert chat_repository_module.InMemoryChatRepository.__name__ == "InMemoryChatRepository"
 assert memory_service_module.InMemoryMemoryRepository.__name__ == "InMemoryMemoryRepository"
 assert character_service_module.CharacterRepository.__name__ == "InMemoryCharacterRepository"
 assert asset_store_module.SharedAssetStore.__name__ == "SharedAssetStore"
 assert assets_package.SharedAssetStore.__name__ == "SharedAssetStore"
-assert job_store_module.default_job_store().__class__.__name__ == "PostgresJobStoreAdapter"
+assert production_job_store().__class__.__name__ == "PostgresJobStoreAdapter"
 
 print("runtime-postgresql-cutover-ok")
 '''
 
 
-def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_path: Path) -> None:
+def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+) -> None:
+    request.addfinalizer(_restore_runtime_authority)
     database = _database()
     try:
         _reset(database)
@@ -321,9 +381,10 @@ def test_explicit_application_bootstrap_uses_postgresql_and_rejects_sqlite(tmp_p
             "OMNIX_PERSISTENCE_MODE": "postgresql",
             "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
             "OMNIX_ASSISTANT_TURN_STORE_PATH": str(tmp_path / "assistant-turns.json"),
-            "OMNIX_CHAT_MEMORY_SETTINGS_PATH": str(tmp_path / "memory-settings.json"),
             "OMNIX_LIVE_CONVERSATION_PROFILE_PATH": str(tmp_path / "conversation-profiles.json"),
             "OMNIX_ASSISTANT_TOOLS_LEDGER_PATH": str(tmp_path / "assistant-tools-ledger.jsonl"),
+            "OMNIX_SECRET_STORE": "env",
+            # Former plaintext locations: they must never be created.
             "OMNIX_ASSISTANT_TOOLS_CREDENTIALS_PATH": str(tmp_path / "assistant-tool-credentials.json"),
             "OMNIX_ASSISTANT_TOOLS_OAUTH_CLIENTS_PATH": str(tmp_path / "assistant-tool-oauth-clients.json"),
             "OMNIX_PROVIDER_SECRETS_PATH": str(tmp_path / "provider-api-keys.dpapi"),

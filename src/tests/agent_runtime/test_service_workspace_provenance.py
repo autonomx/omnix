@@ -54,6 +54,7 @@ def _service() -> AgentRunService:
     service = object.__new__(AgentRunService)
     service.context = SimpleNamespace(workspace_id="workspace-1")
     service.blob_store = _BlobStore()
+    service.workspace_authority_factory = WorkspaceAuthority
     return service
 
 

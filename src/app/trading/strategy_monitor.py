@@ -1,31 +1,31 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
+import sys
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .binding_authority import require_execution_binding
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
-from .gapper_dataset import GapperCandidate
-from .market_data_recovery import latest_clean_bars
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
-from .strategies.gap_pullback import evaluate_gap_pullback
-from .strategies.models import GapPullbackResult, StochRsi5mConfig
+from .strategies import evaluate_gap_pullback
+from .strategies.models import GapPullbackResult
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -35,6 +35,12 @@ from .strategy_repository import (
 )
 from .strategy_data_integrity import assess_universe_integrity
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
+from .strategy_evaluability import (
+    assess_bar_coverage,
+    assess_session_evaluability,
+    candidate_morning_evidence_eligible,
+    resolve_causal_equity_bars,
+)
 from .strategy_managed_finviz_shadow import (
     managed_finviz_shadow_autoprovision_enabled,
     provision_managed_finviz_shadow_strategy,
@@ -64,13 +70,16 @@ from .strategy_stoch_trend_capture import (
     evaluate_stoch_trend_capture,
     stoch_trend_capture_risk_decision,
 )
-from .strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
+from .strategy_stoch_rsi_5m_monitor import record_stoch_rsi_5m_candidates
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
     evaluate_v2_prospective_qualification,
     v2_profile_fingerprint,
 )
+from .strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
+from .market_evidence_guards import _AuthorizedStrategyPaperRepository
+from . import strategy_v2_qualification as _strategy_v2_qualification
 from .strategy_v2_management import (
     v2_active_stop_for_prior_high,
     v2_hold_expired,
@@ -79,9 +88,10 @@ from .strategy_v2_management import (
 )
 from .strategy_timeframes import proposal_priority, resample_final_bars
 from .trade_logging import trade_log
+from . import strategy_session_evidence as _session_evidence
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_monitor"
 _REGULAR_OPEN = time(9, 30)
 _DIAGNOSTIC_LOG_INTERVAL = timedelta(minutes=5)
@@ -105,37 +115,35 @@ def _current_session_1m_integrity(
     session_date: date,
     observed_at: datetime,
 ) -> tuple[bool, str]:
-    observed_et = observed_at.astimezone(_ET)
-    if observed_et.date() < session_date or (
-        observed_et.date() == session_date and observed_et.time() < _REGULAR_OPEN
-    ):
-        return False, "CURRENT_SESSION_NOT_STARTED"
-    regular = [
-        bar
-        for bar in bars
-        if _REGULAR_OPEN <= bar.start_time.astimezone(_ET).time() < time(16, 0)
-    ]
-    if not regular:
-        return False, "CURRENT_SESSION_1M_UNAVAILABLE"
-    first = regular[0].start_time.astimezone(_ET)
-    if first.time() > _REGULAR_OPEN:
-        return False, "OPENING_1M_HISTORY_INCOMPLETE"
-    return True, "CURRENT_SESSION_1M_READY"
+    assessment = assess_bar_coverage(
+        list(bars),
+        session_date=session_date,
+        observed_at=observed_at,
+        provider="configured_history",
+    )
+    if assessment.ready:
+        return True, "CURRENT_SESSION_1M_READY"
+    return (
+        False,
+        assessment.reason_codes[0]
+        if assessment.reason_codes
+        else "CURRENT_SESSION_1M_UNAVAILABLE",
+    )
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_strategy_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_STRATEGY_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_STRATEGY_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
@@ -1210,6 +1218,44 @@ class TradingStrategyMonitor:
         market_service: TradingMarketDataService,
         universe,
     ) -> list[_EntryProposal]:
+        now = datetime.now(timezone.utc)
+        universe_session_date = getattr(universe, "session_date", None)
+        if config.mode == "shadow" and (
+            universe_session_date is None
+            or universe_session_date == now.astimezone(_ET).date()
+        ):
+            market_service = _session_evidence._CurrentSessionMarketDataProxy(
+                market_service,
+                session_date=universe_session_date or now.astimezone(_ET).date(),
+                observed_at=now,
+            )
+        market_service = _session_evidence._FullSessionMarketServiceProxy(
+            market_service,
+            session_date=getattr(
+                universe,
+                "session_date",
+                now.astimezone(_ET).date(),
+            ),
+            observed_at=now,
+            allow_shadow_fallback=config.mode == "shadow",
+        )
+        if isinstance(universe, GapperUniverseSnapshot):
+            session_assessment = assess_session_evaluability(universe, config.config)
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id="__universe__",
+                event_type="session_evaluability",
+                state=session_assessment.status,
+                reason_code="SESSION_EVALUABILITY_ASSESSED",
+                observed_at=universe.evaluation_time,
+                payload={
+                    **session_assessment.model_dump(mode="json"),
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         evaluated_any = False
@@ -2275,192 +2321,142 @@ class TradingStrategyMonitor:
                     for proposal in proposals
                 ],
             )
+        if isinstance(universe, GapperUniverseSnapshot):
+            await self._record_diagnostic_v2_candidates(
+                config,
+                strategy_repository,
+                market_service,
+                universe,
+            )
+        if hasattr(universe, "session_date") and hasattr(universe, "candidates"):
+            await _session_evidence._collect_trend_signal(
+                self,
+                config,
+                strategy_repository,
+                market_service,
+                universe,
+                now=now,
+            )
         return proposals
 
-    async def _evaluate_stoch_rsi_5m_candidates(
+    async def _record_diagnostic_v2_candidates(
         self,
         config: TradingStrategyConfigDocument,
         strategy_repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
         universe,
-        *,
-        observed_at: datetime | None = None,
     ) -> None:
-        """Record deterministic 5m Stoch RSI evidence without creating orders."""
+        if config.config.strategy_version != "2.0.0" or config.mode != "shadow":
+            return
 
-        stoch_config = config.config
-        if not isinstance(stoch_config, StochRsi5mConfig):
-            raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
-        evaluation_clock = (
-            observed_at.astimezone(timezone.utc)
-            if observed_at is not None
-            else datetime.now(timezone.utc)
-        )
         for candidate in universe.candidates:
-            candidate_observed_at = evaluation_clock
-            # Premarket/universe enrichment gaps are not a Stoch-RSI dependency.
-            # This arm is qualified from the finalized regular-session 5m event
-            # sequence it actually consumes.
-            coverage_certificate = None
-
-            try:
-                recovery_method = getattr(market_service, "recovered_bars", None)
-                if callable(recovery_method):
-                    recovered = await asyncio.to_thread(
-                        recovery_method,
-                        candidate.instrument_id,
-                        "5m",
-                        500,
-                        candidate.binding_id,
-                        session_date=universe.session_date,
-                        as_of=candidate_observed_at,
-                    )
-                    response_bars = list(recovered.bars)
-                    bar_provenance = {
-                        "resolved_binding": recovered.report.resolved_binding,
-                        "dataset_fingerprint": recovered.report.dataset_fingerprint,
-                        "as_of": (
-                            response_bars[-1].end_time
-                            if response_bars
-                            else recovered.report.as_of
-                        ),
-                        "bar_count": len(response_bars),
-                        "source_providers": list(recovered.report.source_providers),
-                        "recovered_bar_count": recovered.report.recovered_bar_count,
-                    }
-                else:
-                    response = await asyncio.to_thread(
-                        market_service.bars,
-                        candidate.instrument_id,
-                        "5m",
-                        500,
-                        candidate.binding_id,
-                    )
-                    response_bars = list(response.bars)
-                    bar_provenance = {
-                        "resolved_binding": response.provenance.resolved_binding,
-                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
-                        "as_of": response.provenance.as_of,
-                        "bar_count": len(response_bars),
-                    }
-                coverage_certificate = qualify_bar_feature(
-                    response_bars,
-                    FeatureRequirement(
-                        requirement_id="stoch-rsi-5m-recursive-v2",
-                        feature_name="stoch_rsi_5m_recursive_state",
-                        interval="5m",
-                        dependency_class="RECURSIVE",
-                        allow_approximate_reseed=True,
-                        reseed_after_clean_bars=30,
+            morning_ok, morning_reasons = candidate_morning_evidence_eligible(
+                candidate,
+                config.config,
+            )
+            if morning_ok:
+                continue
+            now = datetime.now(timezone.utc)
+            bars, coverage, primary_error = await asyncio.to_thread(
+                resolve_causal_equity_bars,
+                market_service,
+                candidate,
+                session_date=universe.session_date,
+                observed_at=now,
+                allow_shadow_fallback=True,
+            )
+            if not coverage.ready:
+                continue
+            diagnostic_candidate = candidate.model_copy(
+                update={
+                    "market_data_complete": True,
+                    "data_quality_flags": (),
+                    "premarket_dollar_volume": max(
+                        candidate.premarket_dollar_volume,
+                        config.config.minimum_premarket_dollar_volume,
                     ),
-                    instrument_id=candidate.instrument_id,
-                    session_date=universe.session_date,
-                    observed_at=candidate_observed_at,
-                )
-                if coverage_certificate.status == "INVALID":
-                    await self._event(
-                        strategy_repository,
-                        config,
-                        instrument_id=candidate.instrument_id,
-                        event_type="stoch_rsi_5m",
-                        state="data_gap",
-                        reason_code="STOCH_RSI_5M_FEATURE_DATA_INCOMPLETE",
-                        observed_at=candidate_observed_at,
-                        payload={
-                            "universe_id": universe.universe_id,
-                            "coverage_certificate": coverage_certificate.model_dump(mode="json"),
-                            "candidate_market_data_complete": getattr(
-                                candidate, "market_data_complete", None
-                            ),
-                            "candidate_data_quality_flags": list(
-                                getattr(candidate, "data_quality_flags", ())
-                            ),
-                            "research_only": True,
-                            "execution_authority": False,
-                        },
+                    "tod_rvol": max(
+                        candidate.tod_rvol or Decimal("0"),
+                        config.config.minimum_tod_rvol,
+                    ),
+                    "spread_bps": Decimal("0"),
+                }
+            )
+            diagnostic_config = config.config.model_copy(
+                update={
+                    "minimum_gap_pct": min(
+                        config.config.minimum_gap_pct,
+                        candidate.gap_pct,
+                    ),
+                    "minimum_price": min(
+                        config.config.minimum_price,
+                        candidate.premarket_price,
+                    ),
+                    "maximum_price": max(
+                        config.config.maximum_price,
+                        candidate.premarket_price,
+                    ),
+                    "minimum_premarket_dollar_volume": Decimal("0"),
+                    "minimum_tod_rvol": Decimal("0"),
+                    "maximum_spread_bps": max(
+                        config.config.maximum_spread_bps,
+                        Decimal("100000"),
+                    ),
+                    "require_catalyst_evidence": False,
+                    "reject_dilution_flags": (),
+                    "float_preference_mode": "ignore",
+                }
+            )
+            structure = resample_final_bars(
+                bars,
+                diagnostic_config.structure_interval,
+            )
+            if not structure:
+                continue
+            result = evaluate_gap_pullback_v2(
+                diagnostic_candidate,
+                structure,
+                diagnostic_config,
+            )
+            result = result.model_copy(
+                update={
+                    "features": result.features.model_copy(
+                        update={
+                            "spread_bps": candidate.spread_bps,
+                            "tod_rvol": candidate.tod_rvol,
+                        }
                     )
-                    continue
-                evaluation_bars = response_bars
-                if coverage_certificate.status == "DEGRADED":
-                    evaluation_bars = latest_clean_bars(
-                        response_bars,
-                        session_date=universe.session_date,
-                        interval="5m",
-                        as_of=candidate_observed_at,
-                    )
-                snapshot = evaluate_stoch_rsi_5m(evaluation_bars, stoch_config)
-                event_observed_at = snapshot.as_of or candidate_observed_at
-                payload = {
+                }
+            )
+            observed_at = structure[-1].end_time
+            persisted = await self._event(
+                strategy_repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="diagnostic_state",
+                state=result.state,
+                reason_code=result.reason_code,
+                observed_at=observed_at,
+                payload={
                     "universe_id": universe.universe_id,
-                    "universe_source": getattr(universe, "discovery_source", None),
-                    "strategy_version": config.strategy_version,
-                    "mode": "shadow",
-                    "snapshot": snapshot.model_dump(mode="json"),
-                    "coverage_certificate": (
-                        coverage_certificate.model_dump(mode="json")
-                        if coverage_certificate is not None
-                        else None
-                    ),
-                    "five_minute_ema_period": 5,
-                    "entry_policy": {
-                        "oversold_arm_threshold": str(
-                            stoch_config.oversold_threshold
-                        ),
-                        "recovery_confirmation_threshold": str(
-                            stoch_config.recovery_threshold
-                        ),
-                        "entry_above_ema_period": 5,
-                    },
-                    "exit_policy": {
-                        "close_below_ema_period": 5,
-                        "stoch_rsi_cross_down_below": "80",
-                        "stoch_rsi_overbought_cross_down_above": str(
-                            stoch_config.overbought_threshold
-                        ),
-                        "allow_sequential_trades_per_symbol": True,
-                    },
-                    "bar_provenance": bar_provenance,
+                    "qualification_eligible": False,
+                    "morning_evidence_reason_codes": list(morning_reasons),
+                    "bar_coverage": coverage.model_dump(mode="json"),
+                    "primary_bar_error": primary_error,
+                    "features": result.features.model_dump(mode="json"),
+                    "transitions": list(result.transitions),
+                    "signal": result.signal.model_dump(mode="json")
+                    if result.signal
+                    else None,
                     "research_only": True,
                     "execution_authority": False,
-                }
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=candidate.instrument_id,
-                    event_type="stoch_rsi_5m",
-                    state=snapshot.state,
-                    reason_code=snapshot.reason_code,
-                    observed_at=event_observed_at,
-                    payload=payload,
+                },
+            )
+            if persisted:
+                self.diagnostic_evaluation_count = (
+                    getattr(self, "diagnostic_evaluation_count", 0) + 1
                 )
-            except Exception as exc:
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=candidate.instrument_id,
-                    event_type="stoch_rsi_5m",
-                    state="waiting_data",
-                    reason_code="STOCH_RSI_5M_MARKET_DATA_UNAVAILABLE",
-                    observed_at=candidate_observed_at,
-                    payload={
-                        "universe_id": universe.universe_id,
-                        "error_type": type(exc).__name__,
-                        "detail": str(exc),
-                        "research_only": True,
-                        "execution_authority": False,
-                    },
-                )
-                trade_log(
-                    "auto_trading",
-                    "stoch_rsi_5m_evaluation_error",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    instrument_id=candidate.instrument_id,
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                    research_only=True,
-                    execution_authority=False,
-                )
+
 
     async def _run_stoch_rsi_5m_config(
         self,
@@ -2526,11 +2522,13 @@ class TradingStrategyMonitor:
             )
             return
 
-        await self._evaluate_stoch_rsi_5m_candidates(
-            config,
-            strategy_repository,
-            market_service,
-            universe,
+        await record_stoch_rsi_5m_candidates(
+            record_event=self._event,
+            current_run_id=self.current_run_id,
+            config=config,
+            strategy_repository=strategy_repository,
+            market_service=market_service,
+            universe=universe,
             observed_at=now_utc,
         )
         trade_log(
@@ -2554,6 +2552,15 @@ class TradingStrategyMonitor:
         paper_repository: TradingPaperRepository,
         market_service: TradingMarketDataService,
     ) -> None:
+        paper_repository = _AuthorizedStrategyPaperRepository(
+            delegate=paper_repository,
+            monitor=self,
+            config=config,
+            strategy_repository=strategy_repository,
+            market_service=market_service,
+            monitor_module=sys.modules[__name__],
+            qualification_module=_strategy_v2_qualification,
+        )
         cycle_started_at = datetime.now(timezone.utc)
         log_cycle_heartbeat = self._should_log_diagnostic(
             ("strategy_cycle_heartbeat", config.strategy_id),
@@ -3403,53 +3410,57 @@ class TradingStrategyMonitor:
                 )
             await asyncio.sleep(self.interval_seconds)
 
+async def prepare_trading_strategy_monitor_for_scheduled_execution(
+    monitor: TradingStrategyMonitor,
+) -> None:
+    if not managed_finviz_shadow_autoprovision_enabled():
+        return
+    try:
+        provision = await asyncio.to_thread(
+            provision_managed_finviz_shadow_strategy,
+            strategy_repository=monitor.strategy_repository_factory(),
+            paper_repository=monitor.paper_repository_factory(),
+        )
+        monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
+        monitor.managed_finviz_shadow_provision_error = None
+        if (
+            monitor.last_error is not None
+            and monitor.last_error.startswith("managed_finviz_shadow_provision:")
+        ):
+            monitor.last_error = None
+    except Exception as exc:
+        monitor.managed_finviz_shadow_provision = None
+        monitor.managed_finviz_shadow_provision_error = (
+            f"{type(exc).__name__}: {exc}"
+        )
+        monitor.last_error = (
+            "managed_finviz_shadow_provision: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        trade_log(
+            "auto_trading",
+            "managed_finviz_shadow_provision_error",
+            error_type=type(exc).__name__,
+            detail=str(exc),
+        )
 
-def register_trading_strategy_monitor(gateway: FastAPI) -> TradingStrategyMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+
+def create_trading_strategy_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyMonitor):
-        return existing
+        return None
     monitor = TradingStrategyMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
-        if managed_finviz_shadow_autoprovision_enabled():
-            try:
-                provision = await asyncio.to_thread(
-                    provision_managed_finviz_shadow_strategy,
-                    strategy_repository=monitor.strategy_repository_factory(),
-                    paper_repository=monitor.paper_repository_factory(),
-                )
-                monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
-                monitor.managed_finviz_shadow_provision_error = None
-                if (
-                    monitor.last_error is not None
-                    and monitor.last_error.startswith(
-                        "managed_finviz_shadow_provision:"
-                    )
-                ):
-                    monitor.last_error = None
-            except Exception as exc:
-                monitor.managed_finviz_shadow_provision = None
-                monitor.managed_finviz_shadow_provision_error = (
-                    f"{type(exc).__name__}: {exc}"
-                )
-                monitor.last_error = (
-                    "managed_finviz_shadow_provision: "
-                    f"{type(exc).__name__}: {exc}"
-                )
-                trade_log(
-                    "auto_trading",
-                    "managed_finviz_shadow_provision_error",
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
-                )
+        await prepare_trading_strategy_monitor_for_scheduled_execution(monitor)
         if trading_strategy_monitor_enabled():
             monitor.start()
 
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

@@ -7,18 +7,17 @@ but it can never place or authorize an order.
 """
 
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import asyncio
 import hashlib
-import os
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_deep_recovery import (
@@ -36,27 +35,32 @@ from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_v2_qualification import v2_profile_fingerprint
 from .trade_logging import trade_log
+from .market_evidence_guards import _CoverageMarketService
+from .strategy_session_evidence import (
+    _FullSessionMarketServiceProxy,
+    _PartialCurrentSessionMarketDataProxy,
+)
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_deep_recovery_shadow_monitor"
 _STATE_EVENT_TYPE = "deep_recovery_state"
 _SIGNAL_EVENT_TYPE = "deep_recovery_shadow"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_deep_recovery_shadow_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_INTERVAL_SECONDS", "30"))
+        value = float(_env_str("OMNIX_TRADING_DEEP_RECOVERY_SHADOW_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
@@ -197,6 +201,23 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         *,
         now: datetime,
     ) -> int:
+        if not getattr(market_service, "allow_partial_current_session", False):
+            market_service = _PartialCurrentSessionMarketDataProxy(
+                market_service,
+                session_date=now.astimezone(_ET).date(),
+                observed_at=now,
+            )
+        market_service = _FullSessionMarketServiceProxy(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+            allow_shadow_fallback=True,
+        )
+        market_service = _CoverageMarketService(
+            market_service,
+            session_date=now.astimezone(_ET).date(),
+            observed_at=now,
+        )
         if not _eligible(config):
             return 0
         today_et = now.astimezone(_ET).date()
@@ -420,14 +441,13 @@ class TradingStrategyDeepRecoveryShadowMonitor:
         }
 
 
-def register_trading_strategy_deep_recovery_shadow_monitor(
-    gateway: FastAPI,
-) -> TradingStrategyDeepRecoveryShadowMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_strategy_deep_recovery_shadow_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingStrategyDeepRecoveryShadowMonitor):
-        return existing
+        return None
     monitor = TradingStrategyDeepRecoveryShadowMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if strategy_deep_recovery_shadow_monitor_enabled():
@@ -436,14 +456,13 @@ def register_trading_strategy_deep_recovery_shadow_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyDeepRecoveryShadowMonitor",
-    "register_trading_strategy_deep_recovery_shadow_monitor",
+    "create_trading_strategy_deep_recovery_shadow_monitor_worker",
     "strategy_deep_recovery_shadow_monitor_enabled",
 ]

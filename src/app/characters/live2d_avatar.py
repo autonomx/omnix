@@ -16,12 +16,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import certifi
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.assets.content import asset_available, materialize_asset
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_service import CharacterAvatarService, default_character_avatar_service
@@ -279,12 +280,12 @@ class CharacterLive2DAvatarService:
 
     def catalog(self, character_id: str) -> Live2DModelCatalogResponse:
         current = self.avatar_service_factory().optional_get(character_id)
-        assets = {asset.id: asset for asset in self.asset_store_factory().list_assets().assets}
+        store = self.asset_store_factory()
         models = []
         for entry in _MODEL_CATALOG:
             asset_id = _asset_id(entry["id"])
-            asset = assets.get(asset_id)
-            installed = bool(asset and Path(asset.storage_path).is_file())
+            asset = store.get_asset(asset_id)
+            installed = bool(asset and asset_available(asset))
             models.append(
                 Live2DModelCatalogItem(
                     **{
@@ -365,7 +366,8 @@ class CharacterLive2DAvatarService:
         if asset is None or asset.module != "character-live2d" or asset.type != AssetType.SETTINGS_ARTIFACT:
             raise FileNotFoundError(asset_id)
         root_value = str(dict(asset.metadata or {}).get("root_path") or "")
-        root = Path(root_value) if root_value else Path(asset.storage_path).parent
+        # Live2D models are installed directory trees on local disk.
+        root = Path(root_value) if root_value else materialize_asset(asset).parent
         root = root.resolve()
         requested = (root / _safe_relative_path(asset_path)).resolve()
         if requested != root and root not in requested.parents:
@@ -379,7 +381,7 @@ class CharacterLive2DAvatarService:
         asset_store = self.asset_store_factory()
         asset_id = _asset_id(entry["id"])
         existing = asset_store.get_asset(asset_id)
-        if existing is not None and Path(existing.storage_path).is_file():
+        if existing is not None and asset_available(existing):
             return existing, False
 
         model_root = self.models_root / entry["id"]
@@ -547,29 +549,27 @@ class CharacterLive2DAvatarService:
 
 
 def register_character_live2d_avatar_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
     service_factory: Callable[[], CharacterLive2DAvatarService] = CharacterLive2DAvatarService,
 ) -> None:
-    @app.get(
+    @router.get(
         "/api/characters/{character_id}/live2d-models",
         response_model=Live2DModelCatalogResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def live2d_model_catalog(character_id: str) -> Live2DModelCatalogResponse:
+    def live2d_model_catalog(character_id: str) -> Live2DModelCatalogResponse:
         try:
             return service_factory().catalog(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/live2d-avatar",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def activate_live2d_avatar(
+    def activate_live2d_avatar(
         character_id: str,
         request: ActivateLive2DAvatarRequest,
     ) -> Live2DAvatarActionResponse:
@@ -580,24 +580,33 @@ def register_character_live2d_avatar_routes(
         except (ValueError, OSError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.post(
+    @router.post(
         "/api/characters/{character_id}/live2d-avatar/disable",
         response_model=Live2DAvatarActionResponse,
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def disable_live2d_avatar(character_id: str) -> Live2DAvatarActionResponse:
+    def disable_live2d_avatar(character_id: str) -> Live2DAvatarActionResponse:
         try:
             return service_factory().disable(character_id)
         except CharacterNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get(
+    @router.get(
         "/api/character-live2d/runtime/{filename}",
+        response_model=None,
+        response_class=FileResponse,
+        responses={
+            200: {
+                "description": "Live2D runtime script or binary content.",
+                "content": {
+                    "text/javascript": {"schema": {"type": "string", "format": "binary"}},
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                },
+            }
+        },
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def live2d_runtime_file(filename: str) -> FileResponse:
+    def live2d_runtime_file(filename: str) -> FileResponse:
         try:
             path = service_factory().runtime_file(filename)
         except FileNotFoundError as exc:
@@ -605,12 +614,24 @@ def register_character_live2d_avatar_routes(
         media_type = "text/javascript" if path.suffix == ".js" else "application/octet-stream"
         return FileResponse(path, media_type=media_type)
 
-    @app.get(
+    @router.get(
         "/api/character-live2d/assets/{asset_id}/{asset_path:path}",
+        response_model=None,
+        response_class=FileResponse,
+        responses={
+            200: {
+                "description": "Live2D model asset bytes with an extension-derived media type.",
+                "content": {
+                    "application/json": {"schema": {"type": "object", "additionalProperties": True}},
+                    "image/*": {"schema": {"type": "string", "format": "binary"}},
+                    "audio/*": {"schema": {"type": "string", "format": "binary"}},
+                    "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+                },
+            }
+        },
         tags=["characters"],
-        include_in_schema=False,
     )
-    async def live2d_model_file(asset_id: str, asset_path: str) -> FileResponse:
+    def live2d_model_file(asset_id: str, asset_path: str) -> FileResponse:
         try:
             path = service_factory().model_file(asset_id, asset_path)
         except FileNotFoundError as exc:

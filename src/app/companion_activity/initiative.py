@@ -1,7 +1,7 @@
 """Session-scoped initiative lease authority with TTL and interruption semantics."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import threading
 import uuid
 from dataclasses import dataclass
@@ -604,7 +604,7 @@ def default_companion_initiative_authority() -> CompanionInitiativeAuthorityStor
     if _default_authority is None:
         with _default_lock:
             if _default_authority is None:
-                if (os.environ.get("OMNIX_DATABASE_URL") or "").strip():
+                if (_env_str("OMNIX_DATABASE_URL") or "").strip():
                     _default_authority = PostgresCompanionInitiativeAuthority()
                 else:
                     _default_authority = CompanionInitiativeAuthority()

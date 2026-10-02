@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useMemo, useState } from 'react';
 import { tradingHermesResearchApi } from './tradingHermesResearchApi';
 import type { HermesResearchAudit, HermesResearchValidation, ResearchRecommendation } from './tradingHermesResearchApi';
@@ -101,7 +102,6 @@ export function TradingHermesResearchPanel({ strategy }: { strategy: TradingStra
     if (instrumentId) void loadAudit(instrumentId);
     // Deliberately refresh only when the selected candidate changes. Operators can
     // change the as-of timestamp and explicitly press Refresh to avoid hidden time travel.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instrumentId]);
 
   const runResearch = async () => {

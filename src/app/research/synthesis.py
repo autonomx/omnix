@@ -337,11 +337,11 @@ def _provider_completion(
     provider_id: str | None,
     model_id: str | None,
 ) -> tuple[str, dict[str, Any]]:
-    from app import shared
+    from app.providers import service as provider_service
     from app.providers import ChatMessage
 
     provider_key = _provider_key(provider_id)
-    provider = shared.get_provider(provider_key)
+    provider = provider_service.get_provider(provider_key)
     if provider is None:
         raise RuntimeError("research synthesis provider is unavailable")
     response = provider.chat_completion(

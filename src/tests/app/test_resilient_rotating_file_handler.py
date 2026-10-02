@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import logging.handlers
 
-from app.gateway.resilient_rotating_file_handler import ResilientRotatingFileHandler
+from app.observability.resilient_rotating_file_handler import ResilientRotatingFileHandler
 
 
 def test_permission_error_uses_copy_truncate_fallback(tmp_path, monkeypatch) -> None:

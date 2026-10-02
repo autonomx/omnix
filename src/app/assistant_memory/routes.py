@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from app.chat import ChatSessionStore, default_chat_store
-from app.chat.memory_session import (
+from app.conversation.contracts import ChatSessionMutationPort
+from .session import (
     RefreshSessionMemoryRequest,
     SessionMemoryConflictError,
     SessionMemoryState,
@@ -18,32 +18,38 @@ from .management_routes import register_memory_management_routes
 from .owner_defaults import default_memory_service
 from .service import MemoryService
 from .settings_routes import register_memory_settings_routes
+from .settings import AssistantMemorySettingsStore
 
 _GET_ROUTE_NAME = "assistant_memory_session_state_endpoint"
 _REFRESH_ROUTE_NAME = "assistant_memory_session_refresh_endpoint"
 
 
 def register_assistant_memory_routes(
-    app: FastAPI,
+    router: APIRouter,
     *,
-    chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
+    chat_store_factory: Callable[[], ChatSessionMutationPort] | None = None,
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+    memory_settings_store_factory: Callable[[], AssistantMemorySettingsStore] | None = None,
 ) -> None:
-    route_names = {getattr(route, "name", "") for route in app.routes}
+    def get_chat_store() -> ChatSessionMutationPort:
+        if chat_store_factory is None:
+            raise HTTPException(status_code=503, detail="Chat session storage is unavailable")
+        return chat_store_factory()
+
+    route_names = {getattr(route, "name", "") for route in router.routes}
     if _GET_ROUTE_NAME not in route_names:
 
-        @app.get(
+        @router.get(
             "/api/chat/sessions/{session_id}/memory",
             response_model=SessionMemoryState,
             tags=["chat-memory"],
-            include_in_schema=False,
             name=_GET_ROUTE_NAME,
         )
-        async def assistant_memory_session_state_endpoint(
+        def assistant_memory_session_state_endpoint(
             session_id: str,
         ) -> SessionMemoryState:
             state = get_session_memory_state(
-                chat_store_factory(),
+                get_chat_store(),
                 memory_service_factory(),
                 session_id,
             )
@@ -53,20 +59,19 @@ def register_assistant_memory_routes(
 
     if _REFRESH_ROUTE_NAME not in route_names:
 
-        @app.post(
+        @router.post(
             "/api/chat/sessions/{session_id}/memory/refresh",
             response_model=SessionMemoryState,
             tags=["chat-memory"],
-            include_in_schema=False,
             name=_REFRESH_ROUTE_NAME,
         )
-        async def assistant_memory_session_refresh_endpoint(
+        def assistant_memory_session_refresh_endpoint(
             session_id: str,
             request: RefreshSessionMemoryRequest,
         ) -> SessionMemoryState:
             try:
                 state = refresh_session_memory(
-                    chat_store_factory(),
+                    get_chat_store(),
                     memory_service_factory(),
                     session_id,
                     request,
@@ -80,9 +85,12 @@ def register_assistant_memory_routes(
                 raise HTTPException(status_code=404, detail="chat session not found")
             return state
 
-    register_memory_settings_routes(app)
+    register_memory_settings_routes(
+        router,
+        settings_store_factory=memory_settings_store_factory,
+    )
     register_memory_management_routes(
-        app,
-        chat_store_factory=chat_store_factory,
+        router,
+        chat_store_factory=get_chat_store,
         memory_service_factory=memory_service_factory,
     )

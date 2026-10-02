@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
@@ -13,7 +14,7 @@ from .integrity import SourceIntegrityError, validate_revision
 from .models import CanonicalChapter, SourceRevision, SourceSpan
 
 
-def _asset_check(connection: Any, blobs: LocalBlobStore, context: TenantContext,
+def _asset_check(connection: Any, blobs: BlobStore, context: TenantContext,
                  asset_id: str, checksum: str) -> bool:
     row = connection.execute(
         """SELECT checksum_sha256, storage_provider, storage_key, lifecycle_status
@@ -29,7 +30,7 @@ def _asset_check(connection: Any, blobs: LocalBlobStore, context: TenantContext,
         return False
 
 
-def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
+def audit_export(database: PostgresDatabase, blobs: BlobStore,
                  context: TenantContext, *, project_id: str,
                  export_id: str) -> dict[str, Any]:
     with unit_of_work(database) as work:
@@ -98,22 +99,21 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
         check("original_asset", str(source[0]), _asset_check(
             work.connection, blobs, context, str(source[0]), str(source[1])))
         manifest = dict(export[1])
-        rendered_chapter_rows = work.connection.execute(
-            """SELECT input_payload->>'chapter_id'
-                 FROM omnix_jobs
-                WHERE workspace_id = %s
-                  AND module = 'audiobook'
-                  AND job_type = 'audiobook.render-chapter'
-                  AND input_payload->>'render_run_id' = %s
-                  AND input_payload->>'source_revision_id' = %s
-                ORDER BY input_payload->>'chapter_id'""",
-            (
-                context.workspace_id,
-                str(manifest.get("render_run_id") or ""),
-                revision.id,
+        rendered_chapter_jobs = work.jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.render-chapter",
+            input_fields=(
+                ("render_run_id", str(manifest.get("render_run_id") or "")),
+                ("source_revision_id", revision.id),
             ),
-        ).fetchall()
-        rendered_chapter_ids = {str(row[0]) for row in rendered_chapter_rows}
+            order_by="created_asc",
+            limit=500,
+        )
+        rendered_chapter_ids = {
+            str((job["input_payload"] or {}).get("chapter_id") or "")
+            for job in rendered_chapter_jobs
+        }
         expected_audio_chapters = [
             (item.id, item.canonical_hash)
             for item in revision.chapters

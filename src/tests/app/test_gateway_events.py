@@ -7,8 +7,15 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.chat.store import ChatSessionStore
-from app.gateway.main import create_gateway_app, _live_job_event_stream, _parse_event_id, _sse_comment, _sse_event
+from app.gateway.main import create_gateway_app
+from app.gateway.kernel_routes.live_event_stream import (
+    _parse_event_id,
+    _sse_comment,
+    _sse_event,
+    resilient_live_job_event_stream,
+)
 from app.providers import ChatResponse
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 @dataclass
@@ -55,7 +62,7 @@ def test_live_job_event_stream_resumes_after_supplied_event_id():
                 FakeJobEvent(id=2, event_type="job.updated", payload={"job_id": "current"}),
             ]
         )
-        stream = _live_job_event_stream(store, after_id=1)
+        stream = resilient_live_job_event_stream(store, after_id=1)
         try:
             chunks = [await anext(stream), await anext(stream), await anext(stream)]
         finally:
@@ -82,7 +89,7 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
         ]
     )
     app = create_gateway_app(job_store_factory=lambda: store)
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.get("/api/jobs/events?after_id=1&limit=5")
 
@@ -99,7 +106,7 @@ def test_finite_job_events_endpoint_emits_sse_ids_and_honors_after_id():
 
 def test_legacy_tts_sse_endpoint_is_removed():
     app = create_gateway_app(job_store_factory=lambda: FakeJobStore([]))
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post(
         "/api/tts/stream/server-sent-events",
@@ -139,7 +146,7 @@ def test_chat_session_delete_endpoint_removes_session(tmp_path):
         job_store_factory=lambda: FakeJobStore([]),
         chat_store_factory=lambda: store,
     )
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.delete(f"/api/chat/sessions/{first.id}")
 
@@ -154,7 +161,7 @@ def test_chat_session_delete_endpoint_removes_session(tmp_path):
 
 
 def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeypatch, tmp_path):
-    from app import shared
+    from app.providers import service as provider_service
 
     class CompletionOrderingStore(ChatSessionStore):
         completion_persisted = False
@@ -188,13 +195,15 @@ def test_chat_stream_endpoint_emits_sentence_chunks_and_persists_session(monkeyp
             },
         )()
     )
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_name=None: FakeChatProvider())
+    monkeypatch.setattr(provider_service, "get_provider", lambda _provider_name=None: FakeChatProvider())
 
+    # Streamed turns are admitted as jobs, like the job route's.
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = create_gateway_app(
-        job_store_factory=lambda: FakeJobStore([]),
+        job_store_factory=lambda: job_store,
         chat_store_factory=lambda: store,
     )
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
 
     response = client.post(
         f"/api/chat/sessions/{session.id}/messages/stream",

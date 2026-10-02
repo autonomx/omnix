@@ -1,0 +1,776 @@
+{
+  "turns": [
+    {
+      "arc_updates": [
+        {
+          "arc_event": "observe_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "observe_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "observe",
+            "intent_tick": 0,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:first_call"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "observe_success"
+        }
+      ],
+      "scenario": "first_call",
+      "state_hash": "2dd66383dfe9dfd5432510fa2f88d5447c3bb324235a680329a4debb2569589f",
+      "turn": 0,
+      "visible_response": "Turn 1: first call resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "attack_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "attack_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "attack",
+            "intent_tick": 1,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:combat"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "attack_success"
+        }
+      ],
+      "scenario": "combat",
+      "state_hash": "1258a3f7788b8f15fd66228ad80de76492d8bd7e8f11ff542ea214a0340f801a",
+      "turn": 1,
+      "visible_response": "Turn 2: combat resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "persuade_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "persuade_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "persuade",
+            "intent_tick": 2,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:dialogue"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "persuade_success"
+        }
+      ],
+      "scenario": "dialogue",
+      "state_hash": "007818e2934c08b9df9bebb602c723f71a78715fe88001d021dd3df209ccf1c2",
+      "turn": 2,
+      "visible_response": "Turn 3: dialogue resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "action_failure"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "action_failure": 1
+        },
+        "failure_count": 1,
+        "failure_reasons": {
+          "normal_fail": 1
+        },
+        "npc_failures": {
+          "unknown": [
+            "unknown"
+          ]
+        },
+        "success_count": 0,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "message": "fails to accomplish anything",
+          "original_action": "use_item",
+          "outcome": "normal_fail",
+          "source": "mara",
+          "type": "action_failure"
+        }
+      ],
+      "scenario": "item_use",
+      "state_hash": "d49a4df07ec0d7f7fdc26b17599449cc02fcaf7dd31f8bbbcd5baccdf3d275e6",
+      "turn": 3,
+      "visible_response": "Turn 4: item use resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "action_failure"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "action_failure": 1
+        },
+        "failure_count": 1,
+        "failure_reasons": {
+          "normal_fail": 1
+        },
+        "npc_failures": {
+          "unknown": [
+            "unknown"
+          ]
+        },
+        "success_count": 0,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "message": "stumbles while moving",
+          "original_action": "move",
+          "outcome": "normal_fail",
+          "source": "mara",
+          "type": "action_failure"
+        }
+      ],
+      "scenario": "travel",
+      "state_hash": "8076684a610ef5c969470fd043e93fdee0a1a58722069bbdf69b91d65640bc57",
+      "turn": 4,
+      "visible_response": "Turn 5: travel resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "wait_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "wait_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "wait",
+            "intent_tick": 5,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:idle"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "wait_success"
+        }
+      ],
+      "scenario": "idle",
+      "state_hash": "7b2aa868726015163cacfce40bb5857f8d9fa3c205d3b8f79301baf99a2f72b5",
+      "turn": 5,
+      "visible_response": "Turn 6: idle resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "inspect_success"
+        },
+        {
+          "arc_event": "wait_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "inspect_success": 1,
+          "wait_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 2,
+        "total_actions": 2
+      },
+      "events": [
+        {
+          "action": {
+            "action": "inspect",
+            "intent_tick": 6,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:fast_path"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "inspect_success"
+        },
+        {
+          "action": {
+            "action": "wait",
+            "intent_tick": 6,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "companion",
+            "success_rate": 0.81,
+            "target": "target:fast_path"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "wait_success"
+        }
+      ],
+      "scenario": "fast_path",
+      "state_hash": "e2e8a646ef6aadf3cd8c13da2a33e6400f62c3d8b7b05ba2f82e61448bb82b53",
+      "turn": 6,
+      "visible_response": "Turn 7: fast path resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "observe_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "observe_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "observe",
+            "intent_tick": 7,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:first_call"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "observe_success"
+        }
+      ],
+      "scenario": "first_call",
+      "state_hash": "eb818505ab9a95e01f5b2a7f3bbba8a4de79563b7b6d6922c7c75d0d24bdcccb",
+      "turn": 7,
+      "visible_response": "Turn 8: first call resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "attack_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "attack_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "attack",
+            "intent_tick": 8,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:combat"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "attack_success"
+        }
+      ],
+      "scenario": "combat",
+      "state_hash": "1b5f6ac9793c2e3bd43af5e33587f90a59e4addfad7e82629a54bb8057c0d389",
+      "turn": 8,
+      "visible_response": "Turn 9: combat resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "persuade_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "persuade_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "persuade",
+            "intent_tick": 9,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:dialogue"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "persuade_success"
+        }
+      ],
+      "scenario": "dialogue",
+      "state_hash": "adcb40d4bb86d9d004d32f9f661b442e980f40b58d85d5adceaefca76207f072",
+      "turn": 9,
+      "visible_response": "Turn 10: dialogue resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "use_item_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "use_item_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "use_item",
+            "intent_tick": 10,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:item_use"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "use_item_success"
+        }
+      ],
+      "scenario": "item_use",
+      "state_hash": "428d896b61618498225deae9c1b83d0520a334760ebdf33ef15f91061584c84b",
+      "turn": 10,
+      "visible_response": "Turn 11: item use resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "move_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "move_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "move",
+            "intent_tick": 11,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:travel"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "move_success"
+        }
+      ],
+      "scenario": "travel",
+      "state_hash": "6456c4601b55ce1f9b8850857fde1e03d7936069c23fffc11cf26103a559b43a",
+      "turn": 11,
+      "visible_response": "Turn 12: travel resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "wait_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "wait_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "wait",
+            "intent_tick": 12,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:idle"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "wait_success"
+        }
+      ],
+      "scenario": "idle",
+      "state_hash": "62619ffbc60c21a2e24ddc2f42a2151df8ba1ccb08b1777df5d5268eab5bc117",
+      "turn": 12,
+      "visible_response": "Turn 13: idle resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "inspect_success"
+        },
+        {
+          "arc_event": "wait_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "inspect_success": 1,
+          "wait_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 2,
+        "total_actions": 2
+      },
+      "events": [
+        {
+          "action": {
+            "action": "inspect",
+            "intent_tick": 13,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:fast_path"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "inspect_success"
+        },
+        {
+          "action": {
+            "action": "wait",
+            "intent_tick": 13,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "companion",
+            "success_rate": 0.81,
+            "target": "target:fast_path"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "wait_success"
+        }
+      ],
+      "scenario": "fast_path",
+      "state_hash": "89ffdaab42c4b7f99075fbc06102f140be604b817315a323cbe2258f0a99a234",
+      "turn": 13,
+      "visible_response": "Turn 14: fast path resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "action_failure"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "action_failure": 1
+        },
+        "failure_count": 1,
+        "failure_reasons": {
+          "normal_fail": 1
+        },
+        "npc_failures": {
+          "unknown": [
+            "unknown"
+          ]
+        },
+        "success_count": 0,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "message": "fails to accomplish anything",
+          "original_action": "observe",
+          "outcome": "normal_fail",
+          "source": "mara",
+          "type": "action_failure"
+        }
+      ],
+      "scenario": "first_call",
+      "state_hash": "c2f115a53532f7241970cf4d72e4afe828b7ff19595ecbc4ef2f132f5be860df",
+      "turn": 14,
+      "visible_response": "Turn 15: first call resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "attack_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "attack_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "attack",
+            "intent_tick": 15,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:combat"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "attack_success"
+        }
+      ],
+      "scenario": "combat",
+      "state_hash": "8fa7148275d16744f37cfc75aae8d3b936924b37c47b9e5ba7933b8b2a8dc288",
+      "turn": 15,
+      "visible_response": "Turn 16: combat resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "action_failure"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "action_failure": 1
+        },
+        "failure_count": 1,
+        "failure_reasons": {
+          "critical_failure": 1
+        },
+        "npc_failures": {
+          "unknown": [
+            "unknown"
+          ]
+        },
+        "success_count": 0,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "message": "accidentally insults everyone present",
+          "original_action": "persuade",
+          "outcome": "critical_failure",
+          "source": "mara",
+          "type": "action_failure"
+        }
+      ],
+      "scenario": "dialogue",
+      "state_hash": "c3ad010e6ae00fb77c4215f9ae2c000297d6f36acdeb9611fcfc7647b6686e10",
+      "turn": 16,
+      "visible_response": "Turn 17: dialogue resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "action_failure"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "action_failure": 1
+        },
+        "failure_count": 1,
+        "failure_reasons": {
+          "normal_fail": 1
+        },
+        "npc_failures": {
+          "unknown": [
+            "unknown"
+          ]
+        },
+        "success_count": 0,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "message": "fails to accomplish anything",
+          "original_action": "use_item",
+          "outcome": "normal_fail",
+          "source": "mara",
+          "type": "action_failure"
+        }
+      ],
+      "scenario": "item_use",
+      "state_hash": "b8276351e715b62630afd6e9dcd12d0dafc2753d66964954ca9666457c92f001",
+      "turn": 17,
+      "visible_response": "Turn 18: item use resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "move_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "move_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "move",
+            "intent_tick": 18,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:travel"
+          },
+          "outcome": "critical_success",
+          "source": "mara",
+          "target": "unknown",
+          "type": "move_success"
+        }
+      ],
+      "scenario": "travel",
+      "state_hash": "196662fc3289ea928abfd8eb0567ab341b7bfae64a784ccd0ecd823f5ace0a7a",
+      "turn": 18,
+      "visible_response": "Turn 19: travel resolved."
+    },
+    {
+      "arc_updates": [
+        {
+          "arc_event": "wait_success"
+        }
+      ],
+      "director_feedback": {
+        "event_types_generated": {
+          "wait_success": 1
+        },
+        "failure_count": 0,
+        "failure_reasons": {},
+        "npc_failures": {},
+        "success_count": 1,
+        "total_actions": 1
+      },
+      "events": [
+        {
+          "action": {
+            "action": "wait",
+            "intent_tick": 19,
+            "npc_id": "mara",
+            "priority": 1.0,
+            "source": "player",
+            "success_rate": 0.72,
+            "target": "target:idle"
+          },
+          "source": "mara",
+          "target": "unknown",
+          "type": "wait_success"
+        }
+      ],
+      "scenario": "idle",
+      "state_hash": "df01754408bc08e8fc825789fc9e41cc8844d2fe937caed29e25e79602b6a946",
+      "turn": 19,
+      "visible_response": "Turn 20: idle resolved."
+    }
+  ]
+}

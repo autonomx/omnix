@@ -7,13 +7,12 @@ from typing import Any
 
 from .database import PostgresDatabase, default_database
 from .runtime import RuntimePersistenceStatus, ensure_postgresql_runtime_ready
-from .runtime_install import install_postgresql_runtime_adapters
 
 
 def bootstrap_postgresql_runtime(
     database: PostgresDatabase | None = None,
 ) -> RuntimePersistenceStatus:
-    """Verify PostgreSQL authority and install runtime adapters exactly once.
+    """Verify PostgreSQL authority exactly once at process startup.
 
     This function is the supported persistence bootstrap for application
     processes. It is deliberately explicit so importing modules, running pip,
@@ -22,8 +21,20 @@ def bootstrap_postgresql_runtime(
     """
 
     db = database or default_database()
-    status = ensure_postgresql_runtime_ready(db)
-    install_postgresql_runtime_adapters()
+    status = ensure_postgresql_runtime_ready(
+        db,
+        auto_initialize_fresh_install=True,
+        apply_schema_changes=False,
+    )
+    from .identity_service import ensure_local_identity
+    from app.runtime.tenant_context import install_process_tenant
+
+    tenant = ensure_local_identity(db)
+    install_process_tenant(tenant)
+    from app.security.audit import install_audit_sink
+    from .audit import PostgresAuditSink
+
+    install_audit_sink(PostgresAuditSink(db))
     return status
 
 

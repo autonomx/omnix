@@ -12,8 +12,7 @@ on:
       - "src/app/desktop_companion/chat_activity.py"
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
-      - "src/app/gateway/assistant_context_routes.py"
-      - "src/app/gateway/companion_activity_user_turn.py"
+      - "src/app/assistant_context/routes.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
@@ -36,8 +35,7 @@ on:
       - "src/app/desktop_companion/chat_activity.py"
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
-      - "src/app/gateway/assistant_context_routes.py"
-      - "src/app/gateway/companion_activity_user_turn.py"
+      - "src/app/assistant_context/routes.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
@@ -84,16 +82,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
 
       - name: Install test dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install \
-            pytest ruff pydantic fastapi httpx requests python-multipart pillow playwright \
-            "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
-
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Ruff Companion Activity Runtime
         run: |
           ruff check \
@@ -104,8 +98,7 @@ jobs:
             src/app/desktop_companion/chat_activity.py \
             src/app/desktop_companion/routes.py \
             src/app/desktop_companion/runtime.py \
-            src/app/gateway/assistant_context_routes.py \
-            src/app/gateway/companion_activity_user_turn.py \
+            src/app/assistant_context/routes.py \
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_activity_user_turn_integration.py \

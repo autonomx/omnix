@@ -5,7 +5,8 @@ All logic is deterministic and bounded.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from app.runtime.clock import utc_now
+
 from typing import Any, Dict, List
 
 from app.rpg.social.conversation_presentation import build_conversation_payload
@@ -113,7 +114,7 @@ def _is_low_value_internal_npc_event(event: Dict[str, Any], player_loc: str) -> 
     return False
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 
 # ── Ambient update contract (Phase 0.4) ───────────────────────────────────

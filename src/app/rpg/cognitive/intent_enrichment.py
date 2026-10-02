@@ -38,12 +38,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
+
+from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
 
 logger = logging.getLogger(__name__)
 
 # Allowed intent types — LLM cannot create new ones
-ALLOWED_INTENTS: Set[str] = {
+ALLOWED_INTENTS: set[str] = {
     "expand_influence",
     "attack_target",
     "deliver_aid",
@@ -93,10 +95,10 @@ class IntentEnrichment:
                         Can be None if LLM enrichment not needed.
             cooldown_ticks: Minimum ticks between LLM enrichment calls.
         """
-        self.llm_client = llm_client
+        self.llm_client = adapt_base_provider(llm_client)
         self.cooldown_ticks = cooldown_ticks
         self._last_llm_call_tick: int = -cooldown_ticks  # Ready immediately
-        self._stats: Dict[str, int] = {
+        self._stats: dict[str, int] = {
             "enrichment_attempts": 0,
             "enrichment_success": 0,
             "enrichment_fallbacks": 0,
@@ -105,11 +107,11 @@ class IntentEnrichment:
     
     def enrich(
         self,
-        intent: Optional[Dict[str, Any]],
+        intent: Optional[dict[str, Any]],
         character: Any,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         current_tick: int = 0,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Enrich an intent with LLM-based refinement.
         
         If the base intent is None, returns None.
@@ -153,7 +155,7 @@ class IntentEnrichment:
     def _should_use_llm(
         self,
         character: Any,
-        intent: Dict[str, Any],
+        intent: dict[str, Any],
     ) -> bool:
         """Determine if LLM should be used for this character/intent.
         
@@ -186,10 +188,10 @@ class IntentEnrichment:
     
     def _llm_enrich_intent(
         self,
-        intent: Dict[str, Any],
+        intent: dict[str, Any],
         character: Any,
-        world_state: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        world_state: dict[str, Any],
+    ) -> dict[str, Any]:
         """Use LLM to enrich an intent with context-aware refinement.
         
         The LLM receives a constrained prompt and must return valid JSON
@@ -269,9 +271,9 @@ Return JSON ONLY with this structure:
     
     def _validate_and_apply(
         self,
-        llm_response: Dict[str, Any],
-        original_intent: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        llm_response: dict[str, Any],
+        original_intent: dict[str, Any],
+    ) -> dict[str, Any]:
         """Validate LLM response and apply changes to original intent.
         
         Guardrails:
@@ -321,7 +323,7 @@ Return JSON ONLY with this structure:
         
         return enriched
     
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str) -> dict[str, Any]:
         """Parse JSON from LLM text response.
         
         Args:
@@ -345,9 +347,9 @@ Return JSON ONLY with this structure:
     
     def _extract_threats(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Extract nearby threats from world state.
         
         Args:
@@ -374,9 +376,9 @@ Return JSON ONLY with this structure:
     
     def _extract_allies(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Extract potential allies from world state.
         
         Args:
@@ -402,7 +404,7 @@ Return JSON ONLY with this structure:
     
     def _extract_faction_context(
         self,
-        world_state: Dict[str, Any],
+        world_state: dict[str, Any],
         character: Any,
     ) -> str:
         """Extract faction dynamics as human-readable text.
@@ -441,7 +443,7 @@ Return JSON ONLY with this structure:
                 return ", ".join(f"{k}: {v:.2f}" for k, v in items[:10])
         return "No belief data"
     
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get enrichment statistics.
         
         Returns:

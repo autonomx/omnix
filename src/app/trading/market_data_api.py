@@ -8,12 +8,12 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.persistence.provider_secret_store import (
+from app.security.provider_secret_store import (
     load_trading_provider_secrets,
     save_trading_provider_secrets,
     trading_provider_credential_sources,
 )
-from app.persistence.runtime import LegacyPersistenceRetired
+from app.errors import LegacyPersistenceRetired
 from app.trading.ibkr_evidence import default_ibkr_evidence_store
 from app.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
 from app.trading.providers.ibkr_runtime import default_ibkr_runtime
@@ -127,7 +127,7 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
 def create_trading_market_data_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/market-data", tags=["trading-market-data"])
 
-    @router.get("/yahoo-evidence/diagnostics", include_in_schema=False)
+    @router.get("/yahoo-evidence/diagnostics")
     async def yahoo_evidence_diagnostics() -> dict[str, object]:
         """Operator diagnostics for durable Yahoo evidence and gap recovery."""
 
@@ -135,7 +135,7 @@ def create_trading_market_data_router() -> APIRouter:
         yahoo = diagnostics.get("yahoo_hardening")
         return yahoo if isinstance(yahoo, dict) else {}
 
-    @router.get("/yahoo-evidence/diagnostics/{session_date}", include_in_schema=False)
+    @router.get("/yahoo-evidence/diagnostics/{session_date}")
     async def yahoo_evidence_session_diagnostics(
         session_date: date,
     ) -> dict[str, object]:
@@ -147,7 +147,7 @@ def create_trading_market_data_router() -> APIRouter:
             session_date,
         )
 
-    @router.get("/providers/ibkr/diagnostics", include_in_schema=False)
+    @router.get("/providers/ibkr/diagnostics")
     async def ibkr_diagnostics() -> dict[str, object]:
         """Operator view of Gateway/client/rollout state without storing credentials."""
 
@@ -171,7 +171,7 @@ def create_trading_market_data_router() -> APIRouter:
             await asyncio.to_thread(default_ibkr_runtime().refresh_settings)
         return await asyncio.to_thread(_ibkr_status)
 
-    @router.get("/providers/ibkr/diagnostics/{session_date}", include_in_schema=False)
+    @router.get("/providers/ibkr/diagnostics/{session_date}")
     async def ibkr_session_diagnostics(session_date: date) -> dict[str, object]:
         """Durable zero-authority IBKR quote/recovery soak metrics for one session."""
 
@@ -180,7 +180,7 @@ def create_trading_market_data_router() -> APIRouter:
             session_date,
         )
 
-    @router.get("/providers/ibkr/authority/{instrument_id:path}", include_in_schema=False)
+    @router.get("/providers/ibkr/authority/{instrument_id:path}")
     async def ibkr_authority(instrument_id: str) -> dict[str, object]:
         """Explain per-contract IBKR LIVE_DATA authority for an already observed symbol."""
 

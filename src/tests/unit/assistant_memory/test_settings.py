@@ -1,21 +1,30 @@
 from __future__ import annotations
 
-import json
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from app.assistant_memory.routes import register_assistant_memory_routes
-from app.assistant_memory.settings import (
-    AssistantMemorySettingsStore,
-    AssistantMemorySettingsUpdate,
-)
+from app.assistant_memory.settings import AssistantMemorySettingsUpdate
 from app.chat.compaction import compaction_enabled
+from app.chat.context_budget import prompt_budget_from_env
 from app.chat.history_search import history_recall_enabled
 from app.chat.memory_prompt import chat_memory_enabled
-from app.chat.context_budget import prompt_budget_from_env
 from app.assistant_memory.jobs import memory_suggestions_enabled
 from app.assistant_memory.hermes_adapter import hermes_memory_sync_enabled
+from tests.support.assistant_memory_settings import (
+    InMemorySettingsService,
+    in_memory_assistant_memory_settings_store,
+)
+from app.settings.service import SettingRevisionConflict
+
+
+def _install_service(monkeypatch):
+    import app.settings.access as settings_access
+
+    service, store = in_memory_assistant_memory_settings_store()
+    monkeypatch.setattr(settings_access, "current_settings_service", lambda: service)
+    return service, store
 
 
 def clear_feature_env(monkeypatch):
@@ -31,11 +40,9 @@ def clear_feature_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-def test_persisted_settings_enforce_independent_server_features(tmp_path, monkeypatch):
+def test_persisted_settings_enforce_independent_server_features(monkeypatch):
     clear_feature_env(monkeypatch)
-    path = tmp_path / "memory-settings.json"
-    monkeypatch.setenv("OMNIX_CHAT_MEMORY_SETTINGS_PATH", str(path))
-    store = AssistantMemorySettingsStore(path)
+    _service, store = _install_service(monkeypatch)
 
     status = store.update(
         AssistantMemorySettingsUpdate(
@@ -52,6 +59,7 @@ def test_persisted_settings_enforce_independent_server_features(tmp_path, monkey
 
     assert status.settings.curated_memory_enabled is True
     assert status.settings.suggestions_enabled is False
+    assert status.settings_source == "settings_service"
     assert chat_memory_enabled() is True
     assert memory_suggestions_enabled() is False
     assert history_recall_enabled() is True
@@ -60,14 +68,18 @@ def test_persisted_settings_enforce_independent_server_features(tmp_path, monkey
     budget = prompt_budget_from_env()
     assert budget.memory_tokens == 3210
     assert budget.history_tokens == 6543
-    assert json.loads(path.read_text(encoding="utf-8"))["retention_days"] == 90
+    assert store.load_persisted().retention_days == 90
 
 
-def test_environment_overrides_are_reported_and_take_precedence(tmp_path, monkeypatch):
+def test_environment_overrides_are_reported_and_take_precedence(monkeypatch):
     clear_feature_env(monkeypatch)
-    path = tmp_path / "memory-settings.json"
-    store = AssistantMemorySettingsStore(path)
-    store.update(AssistantMemorySettingsUpdate(curated_memory_enabled=False, memory_token_budget=1000))
+    _service, store = _install_service(monkeypatch)
+    store.update(
+        AssistantMemorySettingsUpdate(
+            curated_memory_enabled=False,
+            memory_token_budget=1000,
+        )
+    )
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_TOKEN_BUDGET", "7777")
 
@@ -75,14 +87,21 @@ def test_environment_overrides_are_reported_and_take_precedence(tmp_path, monkey
 
     assert status.settings.curated_memory_enabled is True
     assert status.settings.memory_token_budget == 7777
-    assert status.environment_overrides == ["curated_memory_enabled", "memory_token_budget"]
+    assert status.environment_overrides == [
+        "curated_memory_enabled",
+        "memory_token_budget",
+    ]
 
 
-def test_inferred_memory_approval_cannot_be_disabled(tmp_path):
-    store = AssistantMemorySettingsStore(tmp_path / "memory-settings.json")
+def test_inferred_memory_approval_cannot_be_disabled(monkeypatch):
+    _service, store = _install_service(monkeypatch)
 
     try:
-        store.update(AssistantMemorySettingsUpdate(require_approval_for_inferred_memory=False))
+        store.update(
+            AssistantMemorySettingsUpdate(
+                require_approval_for_inferred_memory=False
+            )
+        )
     except ValueError as exc:
         assert str(exc) == "approval is required for inferred memory"
     else:
@@ -91,12 +110,49 @@ def test_inferred_memory_approval_cannot_be_disabled(tmp_path):
     assert store.load_effective().settings.require_approval_for_inferred_memory is True
 
 
-def test_settings_routes_return_content_free_diagnostics_and_are_hidden(tmp_path, monkeypatch):
-    clear_feature_env(monkeypatch)
-    path = tmp_path / "memory-settings.json"
-    monkeypatch.setenv("OMNIX_CHAT_MEMORY_SETTINGS_PATH", str(path))
+def test_settings_read_fails_closed_without_a_settings_service(monkeypatch):
+    import app.settings.access as settings_access
+    from app.assistant_memory.settings import load_memory_runtime_status
+
+    def unavailable_service():
+        raise RuntimeError("settings service is not installed")
+
+    monkeypatch.setattr(settings_access, "current_settings_service", unavailable_service)
+    with pytest.raises(RuntimeError, match="settings service is not installed"):
+        load_memory_runtime_status()
+
+
+def test_memory_settings_updates_use_optimistic_revisions(monkeypatch):
+    service = InMemorySettingsService()
+    from app.assistant_memory.persistence.settings_store import (
+        ASSISTANT_MEMORY_SETTINGS_KEY,
+        SettingsServiceAssistantMemorySettingsStore,
+    )
+
+    first = SettingsServiceAssistantMemorySettingsStore(service)
+    second = SettingsServiceAssistantMemorySettingsStore(service)
+    current = service.get(ASSISTANT_MEMORY_SETTINGS_KEY)
+    assert current is not None
+    stale_revision = int(current["revision"])
+    first.update(AssistantMemorySettingsUpdate(memory_token_budget=1200))
+    assert first.load_persisted().memory_token_budget == 1200
+    assert second.load_persisted().memory_token_budget == 1200
+    assert stale_revision == 0
+    with pytest.raises(SettingRevisionConflict, match="revision conflict"):
+        service.set(
+            ASSISTANT_MEMORY_SETTINGS_KEY,
+            first.load_persisted().model_dump(mode="json"),
+            expected_revision=stale_revision,
+        )
+
+
+def test_settings_routes_are_content_free_and_typed_in_openapi():
+    _service, store = in_memory_assistant_memory_settings_store()
     app = FastAPI()
-    register_assistant_memory_routes(app)
+    register_assistant_memory_routes(
+        app,
+        memory_settings_store_factory=lambda: store,
+    )
     client = TestClient(app)
 
     updated = client.post(
@@ -125,4 +181,7 @@ def test_settings_routes_return_content_free_diagnostics_and_are_hidden(tmp_path
     assert rejected.json()["detail"]["code"] == "memory_privacy_policy_rejected"
 
     schema = client.get("/openapi.json").json()
-    assert "/api/assistant/memory/settings" not in schema["paths"]
+    operations = schema["paths"]["/api/assistant/memory/settings"]
+    assert {"get", "post"} <= set(operations)
+    assert "application/json" in operations["post"]["requestBody"]["content"]
+    assert "application/json" in operations["get"]["responses"]["200"]["content"]

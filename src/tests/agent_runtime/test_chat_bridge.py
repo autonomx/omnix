@@ -427,7 +427,18 @@ def test_natural_continuation_uses_context_without_reference_regex(monkeypatch, 
     assert passed_context == context
 
 
-def test_direct_request_does_not_build_canonical_routing_context() -> None:
+def test_direct_request_does_not_build_canonical_routing_context(monkeypatch) -> None:
+    from app.assistant_tools.config_store import default_assistant_tools_config
+    from app.assistant_tools.gate import review_assistant_tool_request
+
+    monkeypatch.setattr(
+        chat_bridge,
+        "review_assistant_tool_request",
+        lambda request: review_assistant_tool_request(
+            request,
+            config=default_assistant_tools_config(),
+        ),
+    )
     calls = []
     session = SimpleNamespace(id="chat-direct", provider_id="test", model_id="model", messages=[])
     message = SimpleNamespace(
@@ -832,8 +843,8 @@ def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkey
     )
     monkeypatch.setattr(
         chat_bridge,
-        "hermes_assistant_tool_execute_payload",
-        lambda _content, request: SimpleNamespace(
+        "execute_capability",
+        lambda _grant, request, user_request="": SimpleNamespace(
             execution_result=AssistantToolResult(
                 tool_id=request.tool_id,
                 action_id=request.action_id,

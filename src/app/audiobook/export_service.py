@@ -7,10 +7,12 @@ import tempfile
 import time
 import wave
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from app.persistence.blob_store import LocalBlobStore
+
 from app.persistence.database import PostgresDatabase
+from app.persistence.contracts import BlobStore
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
@@ -18,12 +20,13 @@ from .export import (FORMAT_MIME, ffmetadata,
                      ffmpeg_binary, ffmpeg_command, ffmpeg_version,
                      freeze_manifest, manifest_hash)
 from .hashing import canonical_json
+from .leases import JOB_LEASE_SECONDS, lease_heartbeat
 
 
 _LOG = logging.getLogger(__name__)
 
 
-def _stage_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
+def _stage_book_input(blobs: BlobStore, assets: list[tuple[str, str]],
                       root: Path) -> Path:
     """Prepare verified chapter files for FFmpeg's concat demuxer."""
     if not assets:
@@ -49,7 +52,7 @@ def _stage_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
     return playlist
 
 
-def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
+def start_export(database: PostgresDatabase, blobs: BlobStore,
                  context: TenantContext, *, project_id: str,
                  format: str = "m4b") -> dict[str, str]:
     if format not in FORMAT_MIME:
@@ -76,37 +79,49 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
         ).fetchone()
         if source is None:
             raise ValueError("canonical source is missing")
+        render_jobs = work.jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.render-chapter",
+            input_fields=(("render_run_id", str(project[7])),),
+            order_by="created_asc",
+            limit=500,
+        )
+        rendered_chapter_ids = sorted({
+            str((job["input_payload"] or {}).get("chapter_id") or "")
+            for job in render_jobs
+            if (job["input_payload"] or {}).get("chapter_id")
+        })
         chapter_rows = work.connection.execute(
-            """SELECT c.id, c.ordinal, c.title, c.canonical_hash
-                 FROM omnix_audiobook_chapters AS c
-                WHERE c.workspace_id = %s AND c.source_revision_id = %s
-                  AND EXISTS (
-                      SELECT 1
-                        FROM omnix_jobs AS rj
-                       WHERE rj.workspace_id = c.workspace_id
-                         AND rj.module = 'audiobook'
-                         AND rj.job_type = 'audiobook.render-chapter'
-                         AND rj.input_payload->>'render_run_id' = %s
-                         AND rj.input_payload->>'chapter_id' = c.id
-                  )
-                ORDER BY c.ordinal""",
-            (context.workspace_id, source[0], project[7]),
+            """SELECT id, ordinal, title, canonical_hash
+                 FROM omnix_audiobook_chapters
+                WHERE workspace_id = %s AND source_revision_id = %s
+                  AND id = ANY(%s)
+                ORDER BY ordinal""",
+            (context.workspace_id, source[0], rendered_chapter_ids),
         ).fetchall()
+        assembly_jobs = work.jobs.query_jobs(
+            context,
+            module="audiobook",
+            job_type="audiobook.assemble-chapter",
+            input_fields=(("render_run_id", str(project[7])),),
+            statuses=("completed",),
+            order_by="completed_desc",
+            limit=500,
+        )
+        latest_assembly_by_chapter: dict[str, dict[str, Any]] = {}
+        for assembly_job in assembly_jobs:
+            chapter_id = str((assembly_job["input_payload"] or {}).get("chapter_id") or "")
+            if chapter_id and chapter_id not in latest_assembly_by_chapter:
+                latest_assembly_by_chapter[chapter_id] = assembly_job
         if not chapter_rows:
             raise ValueError("render run has no audiobook chapters")
         chapters = []
         for chapter_id, ordinal, title, canonical_hash in chapter_rows:
-            job = work.connection.execute(
-                """SELECT output_refs FROM omnix_jobs
-                    WHERE workspace_id = %s AND job_type = 'audiobook.assemble-chapter'
-                      AND input_payload->>'render_run_id' = %s
-                      AND input_payload->>'chapter_id' = %s AND status = 'completed'
-                    ORDER BY completed_at DESC LIMIT 1""",
-                (context.workspace_id, project[7], chapter_id),
-            ).fetchone()
-            if not job or not job[0]:
+            job = latest_assembly_by_chapter.get(str(chapter_id))
+            if not job or not job["output_refs"]:
                 raise ValueError(f"chapter {ordinal} has no completed assembly")
-            assembly_id = job[0][0]["assembly_id"]
+            assembly_id = job["output_refs"][0]["assembly_id"]
             assembly = work.connection.execute(
                 """SELECT ca.assembly_key, ca.render_ids, ca.audio_asset_id,
                           ca.audio_checksum, ca.duration_seconds, ca.sample_rate,
@@ -206,12 +221,12 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
             "manifest_hash": manifest_hash(manifest)}
 
 
-def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
+def run_export_once(database: PostgresDatabase, blobs: BlobStore,
                     context: TenantContext, *, worker_id: str) -> bool:
     with unit_of_work(database) as work:
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["cpu"],
-            job_types=["audiobook.export"], lease_seconds=3600,
+            job_types=["audiobook.export"], lease_seconds=JOB_LEASE_SECONDS,
         )
         if job is None:
             work.rollback()
@@ -221,6 +236,15 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
             lease_token=job["lease_token"],
         )
         work.commit()
+    with lease_heartbeat(database, context, job_id=job["id"], worker_id=worker_id,
+                         lease_token=job["lease_token"]):
+        return _export_claimed(database, blobs, context, job, worker_id=worker_id)
+
+
+def _export_claimed(
+    database: PostgresDatabase, blobs: BlobStore, context: TenantContext,
+    job: dict[str, Any], *, worker_id: str,
+) -> bool:
     job_id, token = job["id"], job["lease_token"]
     storage_key = None
     persisted = False
@@ -261,7 +285,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:
             raise ValueError("FFmpeg version differs from frozen manifest")
         with tempfile.TemporaryDirectory(prefix="omnix-audiobook-",
-                                         dir=blobs.root) as temporary:
+                                         dir=blobs.scratch_dir()) as temporary:
             root = Path(temporary)
             input_path = _stage_book_input(blobs, assets, root)
             staged_audio_bytes = sum(path.stat().st_size for path in root.glob("chapter-*.wav"))
@@ -303,7 +327,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
                                 return True
                             work.jobs.renew_lease(
                                 context, job_id=job_id, worker_id=worker_id,
-                                lease_token=token, lease_seconds=3600,
+                                lease_token=token, lease_seconds=JOB_LEASE_SECONDS,
                             )
                             work.commit()
                 if return_code != 0:

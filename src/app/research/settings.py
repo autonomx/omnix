@@ -1,6 +1,8 @@
 """Runtime adapter for centralized Settings Control Center research defaults."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import os
 from typing import Literal, cast
 
@@ -44,12 +46,12 @@ class ResearchRuntimeSettings(BaseModel):
 
     @property
     def effective_provider(self) -> ResearchProvider:
-        env_provider = os.environ.get("OMNIX_WEB_SEARCH_PROVIDER", "").strip().lower()
+        env_provider = environment().get("OMNIX_WEB_SEARCH_PROVIDER", "").strip().lower()
         if (
             self.provider == "duckduckgo"
             and (
                 env_provider == "playwright"
-                or (env_provider in {"brave", "tavily"} and os.environ.get("OMNIX_WEB_SEARCH_API_KEY"))
+                or (env_provider in {"brave", "tavily"} and environment().get("OMNIX_WEB_SEARCH_API_KEY"))
             )
         ):
             return cast(ResearchProvider, env_provider)
@@ -66,7 +68,7 @@ def load_research_runtime_settings() -> ResearchRuntimeSettings:
 
     environment_policy = research_policy_from_env()
     try:
-        from app.shared import load_settings
+        from app.settings.access import load_settings
         from app.platform.settings_profile_repository import load_settings_profile
 
         profile = load_settings_profile(load_settings())
@@ -102,4 +104,4 @@ def apply_research_planner_environment(settings: ResearchRuntimeSettings) -> Non
     """Expose the central planner preference to the existing planner feature boundary."""
 
     if settings.hermes_planner_enabled:
-        os.environ.setdefault("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "1")
+        environment().setdefault("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "1")

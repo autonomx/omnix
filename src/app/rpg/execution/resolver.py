@@ -18,6 +18,8 @@ planning attached to resolved action metadata.
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Optional
 
 from .consequences import ConsequenceBuilder
@@ -29,6 +31,8 @@ from .models import (
     SceneTransition,
 )
 from .transitions import SceneTransitionBuilder
+
+logger = logging.getLogger(__name__)
 
 # Supported event types that this resolver may emit.
 SUPPORTED_EVENT_TYPES = frozenset({
@@ -582,6 +586,7 @@ class ActionResolver:
                 npc_decision=npc_decision,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "ActionResolver._attach_dialogue_payload", exc_info=True)
             return
 
         resolved.metadata["dialogue_response"] = payload.get("response")

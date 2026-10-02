@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import {
   readEffectiveLiveConversationProfile,
   type AssistantBackchannelMode,

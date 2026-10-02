@@ -1,11 +1,13 @@
 """Proposal-only Hermes planner used by automatically routed live voice turns."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import asdict
 from typing import Any
 
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+from app.capabilities.executor import CapabilityGrant, execute_capability
 from app.assistant_tools.kasa_plan import (
     KASA_READ_TOOLS,
     is_kasa_tool_name,
@@ -49,7 +51,7 @@ def plan_live_agent_proposal(
     try:
         result = HermesSidecarClient(
             base_url=config.base_url,
-            api_key=os.environ.get("HERMES_API_KEY") or None,
+            api_key=environment().get("HERMES_API_KEY") or None,
             timeout=min(config.timeout_seconds, timeout_seconds),
         ).plan(request)
     except Exception as exc:
@@ -78,10 +80,10 @@ def _apply_kasa_reads(result, *, content: str, session_id: str) -> None:
     for call in result.tool_calls:
         if call.name not in KASA_READ_TOOLS:
             continue
-        request = kasa_request_from_tool_call(call, session_id=session_id, approved=False)
+        request = kasa_request_from_tool_call(call, session_id=session_id)
         if request is None:
             continue
-        payload = hermes_assistant_tool_execute_payload(content, request)
+        payload = execute_capability(CapabilityGrant("live_agent", session_id or "live-agent"), request, user_request=content)
         execution = payload.execution_result
         rows.append(
             ToolResult(

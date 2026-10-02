@@ -1,4 +1,4 @@
-"""Versioned Settings Control Center persistence over the legacy settings file."""
+"""Versioned settings profiles and normalization of legacy payload shapes."""
 from __future__ import annotations
 
 import hashlib
@@ -64,6 +64,7 @@ _PROFILE_KEY_ALIASES = {
     "temporary_asset_cleanup": "temporaryAssetCleanup",
     "reduce_motion": "reduceMotion",
     "live_captions": "liveCaptions",
+    "text_scale": "textScale",
 }
 _OPEN_RECORD_PATHS = {
     ("global", "routing", "taskOverrides"),
@@ -223,6 +224,24 @@ def load_settings_profile(settings: dict[str, Any]) -> SettingsProfile:
     return profile
 
 
+def _validate_outbound_endpoints(profile: SettingsProfile, previous: SettingsProfile) -> None:
+    """Endpoints changed by this save must pass the outbound URL policy (WP-4.10)."""
+    from app.security.url_policy import UrlPolicyError, check_outbound_url
+
+    errors: list[dict[str, Any]] = []
+    for name in ("lmstudio", "llamacpp", "parakeet"):
+        url = getattr(getattr(profile.provider_configs, name, None), "base_url", None)
+        before = getattr(getattr(previous.provider_configs, name, None), "base_url", None)
+        if not url or url == before:
+            continue
+        try:
+            check_outbound_url(url)
+        except UrlPolicyError as exc:
+            errors.append({"path": f"providerConfigs.{name}.baseUrl", "message": str(exc)})
+    if errors:
+        raise SettingsProfileValidationError(errors)
+
+
 def save_settings_profile(settings: dict[str, Any], patch: dict[str, Any], base_revision: str | None = None) -> SettingsProfile:
     current = load_settings_profile(settings)
     if base_revision and base_revision != current.revision:
@@ -234,6 +253,7 @@ def save_settings_profile(settings: dict[str, Any], patch: dict[str, Any], base_
     except ValidationError as exc:
         raise SettingsProfileValidationError(exc.errors()) from exc
     _validate_profile(profile)
+    _validate_outbound_endpoints(profile, current)
     payload = profile.model_dump(mode="json", by_alias=True)
     profile.revision = _revision(payload)
     settings[SETTINGS_PROFILE_KEY] = profile.model_dump(mode="json", by_alias=True)

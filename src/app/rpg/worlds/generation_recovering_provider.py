@@ -37,12 +37,12 @@ from app.rpg.worlds.generation_structured_recovery import (
     semantic_correction_messages,
     validate_payload,
 )
-from app.rpg_world_forge_provider import (
+from app.rpg.worlds.providers.world_forge import (
     WorldForgeTopicResponse,
     _payload,
     _token_estimate,
 )
-from app.rpg_world_forge_single_pass_provider import (
+from app.rpg.worlds.providers.single_pass import (
     SinglePassWorldForgeProviderError,
     _definitions,
     _field_contract,

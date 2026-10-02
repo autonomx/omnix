@@ -8,6 +8,7 @@ from __future__ import annotations
 import socket
 import threading
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -20,7 +21,8 @@ from pydantic import BaseModel, Field
 from app.jobs.executor import JobHandler
 from app.jobs.models import CreateJobRequest, JobRecord, JobStage, ResourceClass
 from app.providers.facade import default_provider_facade
-from app.runtime_paths import resources_models_root
+from app.runtime.paths import resources_models_root
+from app.runtime.pagination import page_limit
 
 CacheStatus = Literal["available", "configured", "missing_path", "not_configured", "unreachable"]
 RefreshScope = Literal["providers", "models", "all"]
@@ -72,8 +74,11 @@ UrlReachable = Callable[[str], bool]
 ProviderFacadeFactory = Callable[[], Any]
 CacheStatusFactory = Callable[[], ProviderModelCachePayload]
 
-_REFRESH_HISTORY: dict[str, list[ProviderModelRefreshSnapshot]] = {}
+_REFRESH_HISTORY: OrderedDict[str, list[ProviderModelRefreshSnapshot]] = OrderedDict()
 _REFRESH_LOCK = threading.RLock()
+MAX_REFRESH_HISTORY_KEYS = 128
+MAX_REFRESH_SNAPSHOTS_PER_KEY = 100
+PROVIDER_REFRESH_HISTORY_TTL_SECONDS = 30 * 24 * 60 * 60
 
 
 class InMemoryProviderModelRefreshStore:
@@ -108,7 +113,13 @@ class InMemoryProviderModelRefreshStore:
             created_at=_utcnow(),
         )
         with _REFRESH_LOCK:
-            _REFRESH_HISTORY.setdefault(self._key, []).append(deepcopy(snapshot))
+            _prune_refresh_history_locked(datetime.now(timezone.utc))
+            history = _REFRESH_HISTORY.setdefault(self._key, [])
+            history.append(deepcopy(snapshot))
+            del history[:-MAX_REFRESH_SNAPSHOTS_PER_KEY]
+            _REFRESH_HISTORY.move_to_end(self._key)
+            while len(_REFRESH_HISTORY) > MAX_REFRESH_HISTORY_KEYS:
+                _REFRESH_HISTORY.popitem(last=False)
         return snapshot
 
     def latest_snapshot(self) -> ProviderModelRefreshSnapshot | None:
@@ -117,15 +128,41 @@ class InMemoryProviderModelRefreshStore:
 
     def list_snapshots(self, *, limit: int = 20) -> list[ProviderModelRefreshSnapshot]:
         with _REFRESH_LOCK:
+            _prune_refresh_history_locked(datetime.now(timezone.utc))
             values = sorted(
                 _REFRESH_HISTORY.setdefault(self._key, []),
                 key=lambda item: (item.created_at, item.id),
                 reverse=True,
             )
-            return deepcopy(values[: max(1, min(int(limit), 500))])
+            _REFRESH_HISTORY.move_to_end(self._key)
+            return deepcopy(values[: page_limit(limit, default=20)])
 
     def history(self, *, limit: int = 20) -> ProviderModelRefreshHistory:
         return ProviderModelRefreshHistory(snapshots=self.list_snapshots(limit=limit))
+
+
+def clear_provider_refresh_history() -> None:
+    """Clear provider-free refresh history for tests and controlled resets."""
+
+    with _REFRESH_LOCK:
+        _REFRESH_HISTORY.clear()
+
+
+def _prune_refresh_history_locked(now: datetime) -> None:
+    cutoff = now.timestamp() - PROVIDER_REFRESH_HISTORY_TTL_SECONDS
+    for key, snapshots in list(_REFRESH_HISTORY.items()):
+        retained = []
+        for snapshot in snapshots:
+            try:
+                created_at = datetime.fromisoformat(snapshot.created_at).timestamp()
+            except (TypeError, ValueError):
+                continue
+            if created_at >= cutoff:
+                retained.append(snapshot)
+        if retained:
+            _REFRESH_HISTORY[key] = retained[-MAX_REFRESH_SNAPSHOTS_PER_KEY:]
+        else:
+            _REFRESH_HISTORY.pop(key, None)
 
 
 def default_provider_model_refresh_db_path() -> Path:
@@ -207,7 +244,7 @@ class ProviderModelCacheStatusService:
     def _load_settings(self) -> dict[str, Any]:
         if self._settings_loader:
             return self._settings_loader()
-        from app.shared import load_settings
+        from app.settings.access import load_settings
 
         return load_settings()
 

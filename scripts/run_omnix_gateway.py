@@ -10,7 +10,7 @@ from pathlib import Path
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--host", default=None)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--app", default="app.production:app")
     parser.add_argument("--reload", action="store_true")
@@ -26,6 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    from app.runtime.net import bind_host
+
+    args.host = bind_host(args.host)
 
     if args.check:
         from app.persistence.startup import bootstrap_status_payload
@@ -34,8 +37,17 @@ def main() -> int:
         return 0
 
     import uvicorn
+    from app.security.service_credentials import initialize_service_token
 
-    from gateway_cluster import replica_ports, serve_cluster, watch_parent_stdin
+    initialize_service_token()
+
+    from gateway_cluster import (
+        replica_ports,
+        serve_cluster,
+        start_local_job_worker,
+        stop_children,
+        watch_parent_stdin,
+    )
 
     count = args.api_replicas
     if count is None:
@@ -47,21 +59,34 @@ def main() -> int:
     replica_ports(args.port, count)
     if count:
         return serve_cluster(args, count)
-    if args.managed_stdin:
+    job_worker = start_local_job_worker(Path(__file__).resolve().parents[1], os.environ)
+    try:
         if args.reload:
-            raise ValueError("Managed gateway shutdown requires reload disabled")
-        server = uvicorn.Server(uvicorn.Config(args.app, host=args.host, port=args.port))
-        watch_parent_stdin(server)
+            uvicorn.run(args.app, host=args.host, port=args.port, reload=True)
+            return 0
+        from app.runtime.drain import create_draining_server
+
+        # SIGTERM drains first (WP-6.7); the short graceful timeout only covers
+        # what is still open after the drain window.
+        server = create_draining_server(
+            uvicorn.Config(
+                args.app,
+                host=args.host,
+                port=args.port,
+                timeout_graceful_shutdown=5,
+                # Outlive the ingress's pooled upstream connections (Nginx
+                # keeps them 60 s): if uvicorn closes first, Nginx can reuse a
+                # dying connection and return 502 without retrying.
+                timeout_keep_alive=75,
+            )
+        )
+        if args.managed_stdin:
+            watch_parent_stdin(server)
         server.run()
         return 0
-
-    uvicorn.run(
-        args.app,
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
-    return 0
+    finally:
+        if job_worker is not None:
+            stop_children([job_worker])
 
 
 if __name__ == "__main__":

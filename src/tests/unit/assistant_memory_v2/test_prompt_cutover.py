@@ -21,6 +21,9 @@ from app.chat import memory_prompt
 from app.chat.prompt_assembly import PromptAssembly, PromptMemoryItem, PromptTurn
 from app.chat.prompt_rendering import _memory_section
 
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
+
 NOW = datetime(2026, 9, 14, 3, 0, tzinfo=timezone.utc)
 
 
@@ -241,9 +244,9 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
 
 def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
     import app.assistant_memory_v2.authority as authority_module
-    from app.persistence import runtime_install
+    from app.persistence import runtime
 
-    monkeypatch.setattr(runtime_install, "runtime_adapters_installed", lambda: True)
+    monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: True)
     monkeypatch.setattr(
         authority_module.PostgresMemoryV2AuthorityStore,
         "current",

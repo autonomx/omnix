@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """Durable zero-authority IBKR observation and recovery diagnostics."""
 
 import json
@@ -14,10 +16,10 @@ from typing import Any
 
 
 def _default_root() -> Path:
-    configured = os.getenv("OMNIX_TRADING_IBKR_EVIDENCE_DIR", "").strip()
+    configured = env_str("OMNIX_TRADING_IBKR_EVIDENCE_DIR", "").strip()
     if configured:
         return Path(configured)
-    if os.getenv("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return Path(tempfile.gettempdir()) / f"omnix-ibkr-evidence-test-{os.getpid()}"
     return Path("resources/trading/ibkr_evidence")
 

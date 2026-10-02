@@ -8,6 +8,7 @@ from app.agent_runtime.contracts import (
     AgentRunSpec,
     ModelRef,
 )
+from app.agent_runtime import pi_runtime
 from app.agent_runtime.pi_runtime import PiAgentRuntime, normalize_pi_event
 
 
@@ -88,6 +89,30 @@ def test_duplicate_turn_end_and_settle_after_provider_failure_are_suppressed() -
     assert first.event_type == "run.failed"
     assert duplicate is None
     assert settle is None
+
+
+def test_provider_failure_registry_is_bounded_expiring_and_clearable(monkeypatch) -> None:
+    pi_runtime.clear_provider_failures()
+    now = 100.0
+    monkeypatch.setattr(pi_runtime, "_provider_failure_now", lambda: now)
+    monkeypatch.setattr(pi_runtime, "_MAX_PROVIDER_FAILURES", 1)
+    monkeypatch.setattr(pi_runtime, "_PROVIDER_FAILURE_TTL_SECONDS", 10.0)
+
+    first = normalize_pi_event("run-first", _usage_limit_payload("message_end"))
+    assert first is not None
+    assert pi_runtime._has_provider_failure("run-first") is True
+    assert normalize_pi_event("run-first", {"type": "agent_settled"}) is None
+
+    now += 11
+    assert pi_runtime._has_provider_failure("run-first") is False
+    assert normalize_pi_event("run-first", {"type": "agent_settled"}) is not None
+
+    normalize_pi_event("run-first", _usage_limit_payload("message_end"))
+    normalize_pi_event("run-second", _usage_limit_payload("message_end"))
+    assert set(pi_runtime._LAST_PROVIDER_FAILURE) == {"run-second"}
+
+    pi_runtime.clear_provider_failures("run-second")
+    assert not pi_runtime._LAST_PROVIDER_FAILURE
 
 
 def test_intentional_request_abort_is_not_reclassified_as_provider_failure() -> None:

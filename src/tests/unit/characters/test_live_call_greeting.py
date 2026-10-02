@@ -58,7 +58,7 @@ def test_generated_greeting_is_ephemeral_and_excludes_canned_profile_line(monkey
             yield SimpleNamespace(content="Hey there! ", model="test-model", usage={"completion_tokens": 3})
             yield SimpleNamespace(content="How are you doing?", model="test-model")
 
-    monkeypatch.setattr("app.chat.live_call_greeting.shared.get_provider", lambda _name=None: FakeProvider())
+    monkeypatch.setattr("app.chat.live_call_greeting.provider_service.get_provider", lambda _name=None: FakeProvider())
 
     events = list(stream_live_call_greeting_chunks(FakeStore(), session))
 
@@ -94,7 +94,7 @@ def test_generated_greeting_is_bounded_to_one_short_spoken_line(monkeypatch) -> 
                 model="test-model",
             )
 
-    monkeypatch.setattr("app.chat.live_call_greeting.shared.get_provider", lambda _name=None: FakeProvider())
+    monkeypatch.setattr("app.chat.live_call_greeting.provider_service.get_provider", lambda _name=None: FakeProvider())
 
     events = list(stream_live_call_greeting_chunks(FakeStore(), session))
     greeting = events[0]["text"]

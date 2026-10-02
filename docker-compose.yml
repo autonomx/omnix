@@ -4,6 +4,22 @@ services:
       file: docker-compose.postgres.yml
       service: postgres
 
+  omnix-migrate:
+    image: omnix:latest
+    build: .
+    command: ["python", "-m", "app.persistence", "migrate"]
+    volumes:
+      - ./resources:/app/resources
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/src
+      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+      OMNIX_MIGRATION_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   omnix:
     image: omnix:latest
     build: .
@@ -17,8 +33,8 @@ services:
       OMNIX_GATEWAY_BACKGROUND_ROLE: worker
       OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
     depends_on:
-      postgres:
-        condition: service_healthy
+      omnix-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   omnix-api:
@@ -36,8 +52,8 @@ services:
       OMNIX_TTS_STARTUP_WARMUP: "0"
       OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
     depends_on:
-      postgres:
-        condition: service_healthy
+      omnix-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:

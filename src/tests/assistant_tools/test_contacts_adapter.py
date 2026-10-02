@@ -25,3 +25,14 @@ def test_contacts_request_returns_matching_records():
 
     assert result.error is None
     assert result.output["contacts"][0]["name"] == "Ada Lovelace"
+
+
+def test_without_an_integration_contacts_report_not_connected(monkeypatch):
+    monkeypatch.delenv("OMNIX_ASSISTANT_TOOLS_FAKE_CONTACTS", raising=False)
+
+    result = run_contacts_tool_request(
+        AssistantToolRequest(tool_id="contacts", action_id="contacts.resolve_recipient", input={"query": "Ada"}),
+    )
+
+    assert result.error == "contacts_not_connected"
+    assert result.output == {"connection_status": "not_connected"}

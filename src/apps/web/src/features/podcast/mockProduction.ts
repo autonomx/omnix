@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { ProductionStage } from '../conversation-production/types';
 
 export interface MockProductionStage {

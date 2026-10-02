@@ -1,5 +1,6 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
-const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
+const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const INSTALLED_KEY = '__omnixLiveSpeculationDirectGatewayTransportInstalled';
 const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://127.0.0.1:8000';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -36,7 +37,7 @@ export async function directLiveGatewayFetch(
 ): Promise<Response> {
   const fetchImpl = previousFetch ?? window.fetch.bind(window);
   const directUrl = resolveDirectLiveGatewayUrl(input, init);
-  if (!directUrl) return fetchImpl(input, withLiveVoiceWorkerAffinity(input, init));
+  if (!directUrl) return fetchImpl(input, withLiveVoiceCallAffinity(input, init));
 
   const startedAt = now();
   try {
@@ -67,11 +68,15 @@ export async function directLiveGatewayFetch(
   }
 }
 
-export function withLiveVoiceWorkerAffinity(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
+export function withLiveVoiceCallAffinity(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
   if ((init?.method ?? 'GET').toUpperCase() !== 'POST' || !isChatStreamPath(input)
     || !isLiveVoiceChatBody(init?.body)) return init;
   const headers = new Headers(init?.headers);
-  headers.set('X-Omnix-Gateway-Affinity', 'worker');
+  const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : '';
+  const path = new URL(rawUrl, window.location.origin).pathname;
+  const sessionId = CHAT_STREAM_PATH.exec(path)?.[1];
+  const callId = sessionId ? decodeURIComponent(sessionId) : liveVoiceTurnId(init?.body);
+  headers.set('X-Omnix-Call-Id', encodeURIComponent(callId));
   return { ...init, headers };
 }
 
@@ -176,14 +181,18 @@ function localDirectGatewayEnabled(
 }
 
 function isLiveVoiceChatBody(body: BodyInit | null | undefined): boolean {
-  if (typeof body !== 'string' || !body.trim()) return false;
+  return Boolean(liveVoiceTurnId(body));
+}
+
+function liveVoiceTurnId(body: BodyInit | null | undefined): string {
+  if (typeof body !== 'string' || !body.trim()) return '';
   try {
     const parsed = JSON.parse(body) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
     const turnId = (parsed as Record<string, unknown>).live_voice_turn_id;
-    return typeof turnId === 'string' && turnId.trim().length > 0;
+    return typeof turnId === 'string' ? turnId.trim() : '';
   } catch {
-    return false;
+    return '';
   }
 }
 

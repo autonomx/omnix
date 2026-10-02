@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.chat.assistant_turns import AssistantTurnCoordinator
+from app.chat.character_store import _start_assistant_turn
 from app.chat.compaction import build_deterministic_summary
 from app.chat.models import (
     ChatMessage,
@@ -14,6 +15,10 @@ from app.chat.models import (
     project_message_content,
 )
 from app.chat.prompt_assembly import build_prompt_assembly
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 class StreamingProvider:
@@ -57,8 +62,8 @@ def test_assistant_turn_coordinator_persists_terminal_interruption(tmp_path) -> 
 def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(monkeypatch, tmp_path) -> None:
     provider = StreamingProvider()
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         "app.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,
@@ -111,6 +116,47 @@ def test_streamed_turn_ids_are_idempotent_and_interruption_blocks_completion(mon
     assert coordinator.get(assistant_turn_id).lifecycle == "interrupted"
 
 
+def test_streaming_user_message_starts_running_in_initial_store_write(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
+    monkeypatch.setattr(
+        "app.chat.character_store.default_assistant_turn_coordinator",
+        lambda: coordinator,
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    session = ChatSession(
+        id="chat:initial-streaming",
+        title="New chat",
+        created_at=now,
+        updated_at=now,
+    )
+    user_message = ChatMessage(
+        id="msg:initial-streaming",
+        role="user",
+        content="hello",
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+    started = _start_assistant_turn(
+        session,
+        user_message,
+        SendChatMessageRequest(
+            content="hello",
+            user_turn_id="voice-user-turn:initial-streaming",
+            speech_segment_id="voice-segment:initial-streaming",
+        ),
+        streaming=True,
+    )
+    turn = coordinator.get(started.assistant_turn_id)
+
+    assert turn is not None
+    assert turn.lifecycle == "streaming"
+    assert turn.provider_execution == "running"
+    assert user_message.metadata["assistant_turn"]["lifecycle"] == "streaming"
+
+
 def test_completed_audio_turn_still_persists_assistant_transcript(monkeypatch, tmp_path) -> None:
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
     monkeypatch.setattr(
@@ -152,8 +198,8 @@ def test_completed_audio_turn_still_persists_assistant_transcript(monkeypatch, t
 def test_client_disconnect_persists_generated_interrupted_transcript(monkeypatch, tmp_path) -> None:
     provider = StreamingProvider()
     coordinator = AssistantTurnCoordinator(tmp_path / "assistant-turns.json")
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     monkeypatch.setattr(
         "app.chat.character_store.default_assistant_turn_coordinator",
         lambda: coordinator,

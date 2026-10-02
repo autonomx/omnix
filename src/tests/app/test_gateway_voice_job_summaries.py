@@ -11,8 +11,9 @@ class FakeVoiceJobStore:
     def __init__(self, jobs: list[JobRecord]) -> None:
         self.jobs = jobs
 
-    def list_jobs(self) -> list[JobRecord]:
-        return self.jobs
+    def list_jobs(self, *, limit: int | None = None, modules=None, **_filters) -> list[JobRecord]:
+        jobs = [job for job in self.jobs if not modules or job.module in modules]
+        return jobs if limit is None else jobs[:limit]
 
 
 def make_job(job_id: str, module: str, audio_payload: str) -> JobRecord:
@@ -49,7 +50,7 @@ def make_job(job_id: str, module: str, audio_payload: str) -> JobRecord:
 
 
 def test_voice_job_summary_route_bounds_inline_browser_payloads(monkeypatch) -> None:
-    from app.gateway import voice_job_summary_routes
+    from app.voice import voice_job_summary_routes
 
     audio = "data:audio/wav;base64," + ("A" * 1_000)
     jobs = [

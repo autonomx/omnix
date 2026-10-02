@@ -1,6 +1,8 @@
 """Frozen export planning and lossless book assembly."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import io
 import os
 import shutil
@@ -19,7 +21,7 @@ FORMAT_MIME = {
 
 
 def ffmpeg_binary() -> str:
-    configured = os.environ.get("OMNIX_FFMPEG", "").strip()
+    configured = environment().get("OMNIX_FFMPEG", "").strip()
     executable = configured or shutil.which("ffmpeg")
     if not executable:
         # The repository's Windows development environment may carry the

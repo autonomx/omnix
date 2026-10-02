@@ -33,7 +33,12 @@ class AssetRecord(BaseModel):
     module: str
     type: AssetType
     mime_type: str
-    storage_path: str
+    # Local filesystem path for file-discovered or legacy assets. Blob-backed
+    # assets set ``storage_key`` instead (WP-5.8); read either through
+    # ``app.assets.content`` rather than opening this path directly.
+    storage_path: str = ""
+    storage_key: str | None = None
+    checksum_sha256: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     source_job_id: str | None = None
     parent_asset_ids: list[str] = Field(default_factory=list)
@@ -42,8 +47,16 @@ class AssetRecord(BaseModel):
     compat: dict[str, Any] = Field(default_factory=dict)
 
 
+class AssetContentTooLarge(ValueError):
+    """Raised when a bounded asset-content read exceeds its caller's limit."""
+
+
 class AssetListResponse(BaseModel):
+    """A page of assets, newest first (WP-5.5)."""
+
     assets: list[AssetRecord]
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
 class AssetMigrationPreview(BaseModel):

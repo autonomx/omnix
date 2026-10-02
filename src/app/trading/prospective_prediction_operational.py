@@ -19,7 +19,6 @@ import json
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -53,9 +52,8 @@ from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
 from .us_equity_calendar import early_close_time
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 PROSPECTIVE_OPERATIONAL_VERSION = "prospective-gap-operational-v1"
 RAW_5M_FALLBACK_PRICE_VERSION = "sip-analysis-prices-raw-5m-fallback-v1"

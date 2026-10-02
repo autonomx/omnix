@@ -9,17 +9,18 @@ IBKR LIVE_DATA gate is explicitly enabled.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
-import os
 from contextlib import suppress
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution import assess_execution_observation, execution_observation_from_quote
 from .execution_observation_plane import (
@@ -38,25 +39,27 @@ from .strategy_shadow_universe import (
 from .streaming.manager import StreamingQuoteUpdate
 from .trade_logging import trade_log
 from .us_equity_calendar import us_equity_session
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_ibkr_market_data_monitor"
-_ET = ZoneInfo("America/New_York")
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ibkr_market_data_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_IBKR_MONITOR_IN_TESTS", "0")
     return load_ibkr_settings()[0].monitor_enabled
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
+        value = float(_env_str("OMNIX_IBKR_DEMAND_RECONCILE_SECONDS", "5"))
     except ValueError:
         value = 5.0
     return max(1.0, value)
@@ -66,7 +69,7 @@ def _market_data_line_budget() -> int:
     """Conservative default leaves headroom under a typical 100-line allowance."""
 
     try:
-        value = int(os.environ.get("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
+        value = int(_env_str("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
     except ValueError:
         value = 80
     return max(1, value)
@@ -342,7 +345,7 @@ class TradingIbkrMarketDataMonitor:
             try:
                 provider.unsubscribe_quote(instrument_id, listener=callback)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_subscription", exc_info=True)
         self.subscription_remove_count += 1
 
     def _run_once_blocking(self) -> int:
@@ -451,17 +454,16 @@ class TradingIbkrMarketDataMonitor:
             for instrument_id in list(self._keys):
                 self._remove_subscription(market_service, provider, instrument_id)
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "TradingIbkrMarketDataMonitor._remove_all_subscriptions", exc_info=True)
 
 
-def register_trading_ibkr_market_data_monitor(
-    gateway: FastAPI,
-) -> TradingIbkrMarketDataMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ibkr_market_data_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingIbkrMarketDataMonitor):
-        return existing
+        return None
     monitor = TradingIbkrMarketDataMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if ibkr_market_data_monitor_enabled():
@@ -470,14 +472,13 @@ def register_trading_ibkr_market_data_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingIbkrMarketDataMonitor",
     "ibkr_market_data_monitor_enabled",
-    "register_trading_ibkr_market_data_monitor",
+    "create_trading_ibkr_market_data_monitor_worker",
 ]

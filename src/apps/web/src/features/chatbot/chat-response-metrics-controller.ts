@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { createLiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
 
 type JsonRecord = Record<string, unknown>;

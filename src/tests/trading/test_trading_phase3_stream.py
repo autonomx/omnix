@@ -14,6 +14,9 @@ from app.trading.streaming.manager import StreamingBarUpdate
 
 
 class EmptyRepository:
+    def iter(self, record_type: str):
+        return iter(self.list(record_type, limit=10_000))
+
     def list(self, record_type: str, *, limit: int = 100):
         return []
 

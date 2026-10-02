@@ -6,14 +6,16 @@ import time
 import pytest
 from typing import Any
 
-from app.gateway import live_voice_execution_lane as execution_lane
-from app.gateway.live_voice_execution_lane import (
+from app.live_voice.speech import tts_lane as execution_lane
+from app.live_voice.speech.tts_lane import (
     PriorityTtsScheduler,
     TtsLanePriority,
-    live_voice_execution_lane_config,
     reset_live_voice_execution_lane_for_tests,
-    resolve_live_voice_chat_route,
     resolve_live_voice_tts_provider,
+)
+from app.runtime.live_voice_config import (
+    live_voice_execution_lane_config,
+    resolve_live_voice_chat_route,
 )
 
 
@@ -89,7 +91,7 @@ def test_dedicated_tts_reuses_started_provider_without_reloading_settings(monkey
         settings_calls += 1
         return {"faster-qwen3-tts": {"device": "cuda"}}
 
-    monkeypatch.setattr(execution_lane.shared, "load_settings", load_settings)
+    monkeypatch.setattr(execution_lane, "load_settings", load_settings)
     monkeypatch.setattr(execution_lane, "get_audio_registry", lambda: registry)
 
     try:
@@ -249,8 +251,8 @@ def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> N
     assert accepted_acquired["wait_ms"] >= 0
 
 def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatch) -> None:
-    from app import runtime_config
-    from app.runtime_config import GatewayRole, RuntimeConfig
+    from app.runtime import config as runtime_config
+    from app.runtime.config import GatewayRole, RuntimeConfig
 
     reset_live_voice_execution_lane_for_tests()
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
@@ -271,8 +273,8 @@ def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatc
 
 
 def test_api_dedicated_qwen_uses_remote_runtime_endpoint(monkeypatch) -> None:
-    from app import runtime_config
-    from app.runtime_config import GatewayRole, RuntimeConfig, ServiceEndpoint
+    from app.runtime import config as runtime_config
+    from app.runtime.config import GatewayRole, RuntimeConfig, ServiceEndpoint
     from app.providers import qwen_http_gateway
 
     reset_live_voice_execution_lane_for_tests()

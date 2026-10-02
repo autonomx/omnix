@@ -1,6 +1,6 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -8,7 +8,7 @@ from typing import Any
 
 import requests
 
-from app.persistence.provider_secret_store import load_trading_provider_secrets
+from app.security.provider_secret_store import load_trading_provider_secrets
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import COINMARKETCAP_POLICY, bindings_for_instrument, instrument_by_id
 from app.trading.models import BarsResponse, DatasetProvenance, MarketBar, ProviderBinding
@@ -39,8 +39,8 @@ class _CoinMarketCapHttpError(ProviderDataUnavailableError):
 
 def _environment_api_key() -> str:
     return (
-        os.environ.get("COINMARKETCAP_API_KEY")
-        or os.environ.get("CMC_PRO_API_KEY")
+        _env_str("COINMARKETCAP_API_KEY")
+        or _env_str("CMC_PRO_API_KEY")
         or ""
     ).strip()
 

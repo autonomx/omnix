@@ -3,8 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.research import ResearchMode
-
+ResearchMode = Literal["disabled", "quick", "deep"]
 ResearchProvider = Literal["duckduckgo", "brave", "tavily", "playwright"]
 
 
@@ -129,3 +128,23 @@ class AssistantSettingsProfile(BaseModel):
         le=1,
         alias="desktopCompanionMinimumChangeConfidence",
     )
+
+
+class AgentProviderPrice(BaseModel):
+    """What one provider charges, so an agent run's cost can be metered."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    input_usd_per_million: float = Field(default=0.0, ge=0, le=10_000, alias="inputUsdPerMillion")
+    output_usd_per_million: float = Field(default=0.0, ge=0, le=10_000, alias="outputUsdPerMillion")
+
+
+class AgentRunSettingsProfile(BaseModel):
+    """Default limits for agent runs started without their own (unset: unlimited)."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    default_max_output_tokens: int | None = Field(default=None, ge=1, le=100_000_000, alias="defaultMaxOutputTokens")
+    default_max_cost_usd: float | None = Field(default=None, ge=0, le=100_000, alias="defaultMaxCostUsd")
+    provider_prices: dict[str, AgentProviderPrice] = Field(default_factory=dict, alias="providerPrices")
+

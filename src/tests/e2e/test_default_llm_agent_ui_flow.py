@@ -390,7 +390,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             content = str(complete.get("content") or "")
             metadata = complete.get("metadata")
             assert isinstance(metadata, dict), complete
-            assert "Started coding Agent run" in content, content
+            assert "Queued coding Agent run" in content, content
 
             route = metadata.get("omnix_route")
             routing = metadata.get("routing_decision")
@@ -530,7 +530,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             revised_content = str(revised_complete.get("content") or "")
             revised_metadata = revised_complete.get("metadata")
             assert isinstance(revised_metadata, dict), revised_complete
-            assert "Started coding Agent run" in revised_content, revised_content
+            assert "Queued coding Agent run" in revised_content, revised_content
             revised_routing = revised_metadata.get("routing_decision")
             assert isinstance(revised_routing, dict), revised_metadata
             assert revised_routing.get("production_router") == "semantic_v2"
@@ -627,7 +627,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             latest_content = str(latest_complete.get("content") or "")
             latest_metadata = latest_complete.get("metadata")
             assert isinstance(latest_metadata, dict), latest_complete
-            assert "Started coding Agent run" in latest_content, latest_content
+            assert "Queued coding Agent run" in latest_content, latest_content
             latest_agent_run = latest_metadata.get("agent_run")
             latest_run_id = (
                 str(latest_agent_run.get("run_id") or "").strip()

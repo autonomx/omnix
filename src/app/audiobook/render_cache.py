@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.blob_store import BlobIntegrityError, LocalBlobStore
+from app.persistence.blob_store import BlobIntegrityError
+from app.persistence.contracts import BlobStore
 from app.persistence.tenant import TenantContext
 
 
-def valid_render_blob(render: dict[str, Any], asset: dict[str, Any], blobs: LocalBlobStore) -> bool:
+def valid_render_blob(render: dict[str, Any], asset: dict[str, Any], blobs: BlobStore) -> bool:
     if render["audio_asset_id"] != asset["id"]:
         return False
     if asset["module"] != "audiobook" or asset["lifecycle_status"] != "active":
@@ -26,7 +27,7 @@ def valid_render_blob(render: dict[str, Any], asset: dict[str, Any], blobs: Loca
 
 
 def find_valid_render(
-    connection: Any, context: TenantContext, blobs: LocalBlobStore, render_key: str,
+    connection: Any, context: TenantContext, blobs: BlobStore, render_key: str,
 ) -> dict[str, Any] | None:
     rows = connection.execute(
         """

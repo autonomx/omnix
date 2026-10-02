@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
 type ReleaseAvailability = {

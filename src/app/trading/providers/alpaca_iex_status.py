@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import inspect
 import json
-import os
 import ssl
 import threading
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import certifi
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
-
-from fastapi import FastAPI
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_IEX_STREAM_URL = "wss://stream.data.alpaca.markets/v2/iex"
@@ -23,13 +23,12 @@ _STATE_KEY = "_omnix_alpaca_iex_status_monitor"
 _HALT_CODES = {"2", "H", "P"}
 _RESUME_CODES = {"3", "Q", "T"}
 _HISTORY_LIMIT_PER_SYMBOL = 256
-_ET = ZoneInfo("America/New_York")
 _EXTENDED_SESSION_OPEN = time(4, 0)
 
 
 def _stored_credentials() -> dict[str, str]:
     try:
-        from app.persistence.provider_secret_store import load_trading_provider_secrets
+        from app.security.provider_secret_store import load_trading_provider_secrets
 
         return dict(load_trading_provider_secrets().get("alpaca_iex") or {})
     except Exception:
@@ -38,8 +37,8 @@ def _stored_credentials() -> dict[str, str]:
 
 def _api_key() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_KEY_ID")
-        or os.environ.get("APCA_API_KEY_ID")
+        environment().get("OMNIX_ALPACA_API_KEY_ID")
+        or environment().get("APCA_API_KEY_ID")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("api_key_id", "").strip()
@@ -47,15 +46,15 @@ def _api_key() -> str:
 
 def _api_secret() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_SECRET_KEY")
-        or os.environ.get("APCA_API_SECRET_KEY")
+        environment().get("OMNIX_ALPACA_API_SECRET_KEY")
+        or environment().get("APCA_API_SECRET_KEY")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("secret_key", "").strip()
 
 
 def _enabled() -> bool:
-    value = os.environ.get("OMNIX_ALPACA_STATUS_STREAM", "1").strip().lower()
+    value = environment().get("OMNIX_ALPACA_STATUS_STREAM", "1").strip().lower()
     return value in {"1", "true", "yes", "on"} and bool(_api_key() and _api_secret())
 
 
@@ -297,7 +296,7 @@ def _status_stream_connect_kwargs(connect: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         supports_proxy = False
     if supports_proxy:
-        connect_kwargs["proxy"] = os.getenv("OMNIX_ALPACA_WS_PROXY") or None
+        connect_kwargs["proxy"] = env_str("OMNIX_ALPACA_WS_PROXY") or None
     return connect_kwargs
 
 
@@ -320,6 +319,11 @@ class AlpacaIexStatusMonitor:
     def start(self) -> None:
         if self._task is None:
             self._task = asyncio.create_task(self._loop())
+
+    def run_once(self) -> None:
+        """Keep the reconnecting status stream under its scheduler task lock."""
+        if _enabled():
+            self.start()
 
     async def stop(self) -> None:
         task = self._task
@@ -350,7 +354,7 @@ class AlpacaIexStatusMonitor:
         except ImportError as exc:
             raise RuntimeError("Alpaca IEX status stream requires the websockets package") from exc
 
-        url = os.environ.get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
+        url = environment().get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
         connect_kwargs = _status_stream_connect_kwargs(websockets.connect)
         connect_kwargs["ssl"] = _status_stream_ssl_context()
         async with websockets.connect(url, **connect_kwargs) as socket:
@@ -421,12 +425,13 @@ class AlpacaIexStatusMonitor:
         }
 
 
-def register_alpaca_iex_status_monitor(gateway: FastAPI) -> AlpacaIexStatusMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_alpaca_iex_status_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, AlpacaIexStatusMonitor):
-        return existing
+        return None
     monitor = AlpacaIexStatusMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if _enabled():
@@ -435,7 +440,6 @@ def register_alpaca_iex_status_monitor(gateway: FastAPI) -> AlpacaIexStatusMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )

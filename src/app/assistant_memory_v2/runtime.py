@@ -34,6 +34,14 @@ from .retrieval import UnifiedMemoryV2Retriever
 from .search_index import PostgresMemoryV2SearchIndex
 
 
+
+
+def _embedding_index(database: PostgresDatabase):
+    # Imported on use: the embedding stack is not needed to compose the gateway.
+    from .embedding_index import PostgresMemoryV2EmbeddingIndex
+
+    return PostgresMemoryV2EmbeddingIndex(database)
+
 class MemoryV2RuntimeError(RuntimeError):
     pass
 
@@ -129,6 +137,7 @@ class PostgresMemoryV2Runtime:
             index_graph_revision_provider=self.search_index.index_graph_revision,
             search_index=self.search_index,
             derived_store=self.derived_store,
+            embedding_index=_embedding_index(self.database),
         )
         self.federated_retriever = FederatedMemoryV2Retriever(
             local_retriever=self.local_retriever,

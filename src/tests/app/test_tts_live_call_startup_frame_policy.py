@@ -6,14 +6,13 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_live_call_startup_frame_policy import (
+from app.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_FIRST_CHUNK_MAX_INITIAL_SILENCE_MS,
     TTS_LIVE_CALL_INITIAL_SILENCE_THRESHOLD,
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
-    install_tts_live_call_startup_frame_policy,
     live_call_max_initial_silence_ms_for_first_chunk,
 )
-from app.gateway.tts_stream_contract import (
+from app.conversation.tts_stream_contract import (
     STREAM_INITIAL_FALLBACK_THRESHOLD,
     STREAM_MAX_INITIAL_SILENCE_MS,
 )
@@ -48,10 +47,14 @@ class EmptyJobStore:
         return []
 
 
-def _patch_live_tts_test_runtime(monkeypatch, provider: Any) -> None:
-    from app.gateway import tts_live_call_websocket
+def _patch_live_tts_test_runtime(monkeypatch, provider: Any, app) -> None:
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
+    monkeypatch.setattr(
+        app.state.live_voice_tts_provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
     monkeypatch.setattr(
         tts_live_call_websocket,
         "diagnostics_log_path",
@@ -62,8 +65,8 @@ def _patch_live_tts_test_runtime(monkeypatch, provider: Any) -> None:
     monkeypatch.setattr(tts_live_call_websocket, "end_stream", lambda stream_id, **details: 0)
 
 
-def test_gateway_import_installs_startup_frame_policy() -> None:
-    from app.gateway import tts_live_call_websocket
+def test_live_voice_transport_uses_startup_frame_policy() -> None:
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     create_gateway_app(job_store_factory=lambda: EmptyJobStore())
     assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == 3_840
@@ -82,40 +85,39 @@ def test_two_step_chunk_gets_first_chunk_onset_window() -> None:
 
 
 def test_gateway_composition_binds_warmed_live_tts_provider() -> None:
-    from app.gateway import tts_live_call_websocket
-    from app.gateway.live_voice_runtime_offload import get_cached_live_tts_provider
+    from app.live_voice.speech import runtime_offload
 
-    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    assert tts_live_call_websocket.get_tts_provider is get_cached_live_tts_provider
+    app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    assert (
+        app.state.live_voice_tts_provider_resolver
+        is runtime_offload._PROVIDER_RESOLVER
+    )
 
 
 def test_gateway_composition_preserves_explicit_provider_injection(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
-
     provider = BlockingAfterTwoStepQwenChunkProvider()
     def lookup():
         return provider
 
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lookup)
-    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    assert tts_live_call_websocket.get_tts_provider is lookup
-    assert tts_live_call_websocket.get_tts_provider() is provider
+    app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    resolver = app.state.live_voice_tts_provider_resolver
+    monkeypatch.setattr(resolver, "get", lambda _provider_name=None: lookup())
+    assert resolver.get() is provider
 
 
 def test_four_step_qwen_chunk_hands_off_two_160ms_frames_before_provider_resumes(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = BlockingAfterInitialQwenChunkProvider()
-    _patch_live_tts_test_runtime(monkeypatch, provider)
-    monkeypatch.setattr(tts_live_call_websocket, "TTS_PCM_FRAME_SAMPLES", 2_400)
-
-    previous = install_tts_live_call_startup_frame_policy()
-    assert previous == 2_400
+    app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    _patch_live_tts_test_runtime(monkeypatch, provider, app)
     assert tts_live_call_websocket.TTS_PCM_FRAME_SAMPLES == TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES
 
-    app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    )
     stream_id = "chat-live-startup-frame-p1"
 
     with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
@@ -153,10 +155,13 @@ def test_four_step_qwen_chunk_hands_off_two_160ms_frames_before_provider_resumes
 
 def test_two_step_qwen_chunk_hands_off_first_160ms_frame_before_provider_resumes(monkeypatch) -> None:
     provider = BlockingAfterTwoStepQwenChunkProvider()
-    _patch_live_tts_test_runtime(monkeypatch, provider)
-
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    _patch_live_tts_test_runtime(monkeypatch, provider, app)
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    )
     stream_id = "chat-live-one-step-startup-p0"
 
     with client.websocket_connect("/api/tts/live-call/websocket") as websocket:

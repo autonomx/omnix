@@ -7,20 +7,22 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     BackgroundWorker, BackgroundOwnershipUnavailable, GatewayBackgroundRuntime,
     register_background_worker,
 )
+from app.gateway.background_runtime import GatewayBackgroundRegistryAdapter
 from app.gateway.feature_registry import FeatureLifecycle, register_feature_lifecycle
 from app.gateway.lifecycle import gateway_lifespan
-from app.runtime_config import RuntimeConfig, GatewayRole
-from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+from app.runtime.config import RuntimeConfig, GatewayRole
+from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
 
 
 def application(config):
     return SimpleNamespace(state=SimpleNamespace(
         runtime_config=config, runtime_capabilities=RuntimeCapabilities.from_config(config),
-        feature_lifecycles=[], runtime_started=False,
+        feature_lifecycles=[], runtime_started=False, runtime_services=None,
+        background_registry=None, started_monotonic=0.0,
     ), router=SimpleNamespace(on_startup=[], on_shutdown=[]))
 
 
@@ -31,23 +33,23 @@ def test_api_rejects_worker_only_feature_lifecycle():
     assert app.state.feature_lifecycles == []
 
 
-def test_gateway_rejects_undeclared_startup_hooks_before_api_can_run_them(monkeypatch):
-    from app.gateway import feature_registry
-    app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-    def registrar(gateway):
-        gateway.router.on_startup.append(lambda: pytest.fail('undeclared worker startup ran'))
-    monkeypatch.setattr(feature_registry, 'FEATURES', (feature_registry.GatewayFeature('test.feature', 'register'),))
-    monkeypatch.setattr(feature_registry, 'import_module', lambda _: SimpleNamespace(register=registrar))
-    with pytest.raises(RuntimeError, match='must declare lifecycle callbacks'):
-        feature_registry.register_gateway_features(app)
-    assert not getattr(app.state, 'features_registered', False)
+def test_feature_modules_do_not_use_transitional_router_hosts():
+    root = Path(__file__).resolve().parents[3] / "src" / "app"
+    for feature_path in root.glob("*/feature.py"):
+        source = feature_path.read_text(encoding="utf-8")
+        assert "APIRouterHost" not in source, feature_path
+        assert "compose_registrar_router" not in source, feature_path
 
 
 def test_api_lifespan_never_runs_recovery_or_worker_hooks():
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
+    app.state.background_registry = GatewayBackgroundRegistryAdapter(app)
     calls = []
     monitor = SimpleNamespace(start=lambda: calls.append('worker'))
-    register_background_worker(app, BackgroundWorker('worker', monitor, (monitor.start,), ()))
+    register_background_worker(
+        app.state.background_registry,
+        BackgroundWorker('worker', monitor, (monitor.start,), ()),
+    )
     with pytest.raises(BackgroundOwnershipUnavailable):
         monitor.start()
 
@@ -57,6 +59,12 @@ def test_api_lifespan_never_runs_recovery_or_worker_hooks():
             assert app.state.runtime_started
     asyncio.run(run())
     assert calls == []
+
+
+def test_gateway_background_registry_adapter_implements_runtime_contract():
+    from app.runtime.background import BackgroundRegistry
+
+    assert issubclass(GatewayBackgroundRegistryAdapter, BackgroundRegistry)
 
 
 def test_feature_startup_shutdown_order_and_partial_failure():
@@ -80,22 +88,31 @@ def test_background_connection_loss_stops_workers_and_latches_authority(monkeypa
     calls = []
     owner = GatewayBackgroundRuntime(object(), 'test', poll_seconds=.01)
     owner.register('test', object(), (lambda: calls.append('started'),), (lambda: calls.append('stopped'),))
-    owner.connection = SimpleNamespace(execute=lambda *_: (_ for _ in ()).throw(OSError('private credentials')))
+    probes = []
+
+    def execute(*_):
+        probes.append('checked')
+        if len(probes) > 1:
+            raise OSError('private credentials')
+        return SimpleNamespace(fetchone=lambda: (1,))
+
+    owner.connection = SimpleNamespace(execute=execute, commit=lambda: None)
     owner.healthy = True
-    # Startup probes the authority before invoking callbacks.
+    # Startup probes the authority before invoking callbacks; later loss stops them.
+    asyncio.run(owner.startup())
+    assert calls == ['started']
     with pytest.raises(BackgroundOwnershipUnavailable):
-        asyncio.run(owner.startup())
+        owner.require_live()
     assert owner.healthy is False
     asyncio.run(owner.shutdown())
-    assert calls == ['stopped']
+    assert calls == ['started', 'stopped']
     with pytest.raises(BackgroundOwnershipUnavailable):
         owner.require_live()
 
 
 def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
-    from app.platform.runtime_diagnostics import RequestMetrics, runtime_diagnostics
+    from app.platform.runtime_diagnostics import runtime_diagnostics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-    app.state.runtime_metrics = RequestMetrics()
     @contextmanager
     def connection():
         raise OSError('postgresql://user:secret@host/database')
@@ -103,19 +120,25 @@ def test_runtime_diagnostics_redacts_database_errors_and_reports_api_policy():
     app.state.runtime_services = SimpleNamespace(jobs=SimpleNamespace(
         database=SimpleNamespace(connection=connection), context=SimpleNamespace(workspace_id='test'),
     ))
-    payload = runtime_diagnostics(app).model_dump()
+    scheduler_metrics = {
+        'registered_tasks': ['platform.probe'],
+        'tasks': {'platform.probe': {'failure_count': 1, 'last_lag_seconds': 0.25}},
+    }
+    app.state.scheduler_runtime = SimpleNamespace(
+        diagnostics=lambda: scheduler_metrics,
+    )
+    payload = runtime_diagnostics(app.state).model_dump()
     assert payload['postgresql'] == {'connectivity': False, 'error_class': 'OSError'}
     assert payload['tts']['mode'] == 'worker_routed'
     assert 'secret' not in json.dumps(payload)
     assert payload['background']['owns_lock'] is False
+    assert payload['scheduler'] == scheduler_metrics
 
 
 def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monkeypatch):
-    from app.gateway.workers import WorkerHealthPayload
+    from app.runtime.worker_health import WorkerHealthPayload
     from app.platform import diagnostics
-    from app.platform.runtime_diagnostics import RequestMetrics
     app = application(RuntimeConfig(gateway_role=GatewayRole.API))
-    app.state.runtime_metrics = RequestMetrics()
     @contextmanager
     def connection():
         raise OSError('postgresql://user:private@host/db')
@@ -124,14 +147,14 @@ def test_diagnostics_surface_survives_database_loss_without_fallback_reads(monke
         database=SimpleNamespace(connection=connection), context=SimpleNamespace(workspace_id='test'),
     ))
     monkeypatch.setattr(diagnostics, 'get_worker_health_payload', lambda: WorkerHealthPayload())
-    payload = diagnostics.get_runtime_diagnostics_payload(app, model_residency_store_factory=lambda: pytest.fail('retried unavailable persistence'))
+    payload = diagnostics.get_runtime_diagnostics_payload(app.state, model_residency_store_factory=lambda: pytest.fail('retried unavailable persistence'))
     assert payload.runtime.postgresql['connectivity'] is False
     assert payload.runtime.process['gateway_role'] == 'api'
     assert payload.model_residency.status == 'unavailable' and not payload.ok
     assert 'private' not in payload.model_dump_json()
 
 
-def test_only_legacy_export_can_import_sqlite_and_runtime_installer_cannot_patch_modules():
+def test_only_legacy_export_can_import_sqlite_and_runtime_installer_is_retired():
     import ast
     root = Path(__file__).resolve().parents[2] / 'app'
     sqlite_modules = []
@@ -141,8 +164,8 @@ def test_only_legacy_export_can_import_sqlite_and_runtime_installer_cannot_patch
                or isinstance(node, ast.ImportFrom) and node.module == 'sqlite3' for node in ast.walk(tree)):
             sqlite_modules.append(path.relative_to(root).as_posix())
     assert sqlite_modules == ['persistence/legacy_export.py']
-    installer = (root / 'persistence/runtime_install.py').read_text(encoding='utf-8')
-    assert 'sys.modules' not in installer and 'setattr(' not in installer and 'sqlite3.connect =' not in installer
+    assert not (root / 'persistence/runtime_install.py').exists()
+    assert not (root / 'persistence/runtime_document_compat.py').exists()
 
 
 def test_compatibility_modules_are_allowlisted():
@@ -155,7 +178,7 @@ def test_compatibility_modules_are_allowlisted():
 def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
     import logging
     from app.platform.diagnostics import redact_diagnostics
-    from app.runtime_logging import runtime_transition
+    from app.runtime.logging import runtime_transition
     value = {'nested': [{'api_key': 'private', 'password': 'private',
                          'endpoint': 'postgresql://user:private@host/db'}]}
     assert 'private' not in json.dumps(redact_diagnostics(value))
@@ -168,7 +191,7 @@ def test_diagnostics_and_transition_logs_do_not_expose_nested_secrets(caplog):
 
 
 def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
-    from app import runtime_config
+    from app.runtime import config as runtime_config
     from app.rpg.session.genesis import async_coordinator as genesis
     runtime_config.install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
     monkeypatch.setattr(genesis, 'campaign_genesis_async_enabled', lambda: True)
@@ -179,9 +202,13 @@ def test_api_cannot_kick_campaign_genesis_worker(monkeypatch):
 def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monkeypatch):
     from app.rpg.session.genesis import async_coordinator as genesis
     from app.persistence.background_authority import require_background_owner
+    from app.runtime import config as runtime_config
+    # Campaign genesis runs on job-worker processes (WP-6.1).
+    job_worker = RuntimeConfig(gateway_role=GatewayRole.JOB_WORKER)
+    monkeypatch.setattr(runtime_config, "get_runtime_config", lambda: job_worker)
     checks = []
     class Owner:
-        capabilities = RuntimeCapabilities.from_config(RuntimeConfig())
+        capabilities = RuntimeCapabilities.from_config(job_worker)
         def require_live(self):
             checks.append('checked')
             if len(checks) > 4:
@@ -205,7 +232,7 @@ def test_genesis_worker_preserves_background_authority_and_stops_after_loss(monk
 
 
 def test_runtime_tts_success_metrics_only_count_completed_audio(monkeypatch):
-    from app.gateway import tts_stream_diagnostics as streams
+    from app.observability import tts_stream_diagnostics as streams
     monkeypatch.setattr(streams, '_LAST_PCM_SUCCESS_AT', None)
     monkeypatch.setattr(streams, '_COMPLETED_PCM_STREAMS', 0)
     streams.stream_log('test', 'server', 'done_control_sent', sent_frames=0)

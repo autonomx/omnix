@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from app.jobs import default_job_store
-from app.jobs.adapters import enqueue_image_job
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_jobs import canonical_hash
@@ -910,7 +909,7 @@ def read_world_image_targets(
     database: Any | None = None,
 ) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _upsert_targets(work, context, world_id, _desired_targets(detail))
@@ -944,11 +943,13 @@ def generate_world_images(
     height: int = 768,
     style: str = "",
     no_cache: bool = False,
-    database: Any | None = None,
+    database: Any | None = None, target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
-    materialized = read_world_image_targets(world_id, database=database)
+    from .world_image_jobs import create_world_image_job
+
+    materialized = target_reader(world_id, database=database)
     selected = _selected_targets(materialized["targets"], target_ids)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     jobs: list[dict[str, Any]] = []
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
@@ -965,8 +966,7 @@ def generate_world_images(
             else:
                 target_width = 1024 if target["role"] in {"banner", "map"} else width
                 target_height = 576 if target["role"] == "banner" else 768 if target["role"] == "map" else height
-            job = enqueue_image_job(
-                default_job_store(),
+            job = create_world_image_job(
                 # Job ownership is a user foreign key.  The workspace ID scopes
                 # the record separately in the PostgreSQL job store, but is not
                 # itself a valid job owner.
@@ -987,6 +987,7 @@ def generate_world_images(
                         "source_content_hash": target["source_content_hash"],
                     },
                 },
+                job_store=default_job_store(),
             )
             work.connection.execute(
                 "INSERT INTO omnix_rpg_world_image_attempts (workspace_id, "
@@ -1032,11 +1033,11 @@ def update_world_image_target(
     review_state: str | None = None,
     active_asset_id: str | None = None,
     suggested_prompt: str | None = None,
-    database: Any | None = None,
+    database: Any | None = None, target_reader: Callable[..., dict[str, Any]] = read_world_image_targets,
 ) -> dict[str, Any]:
     if review_state is not None and review_state not in {"pending", "approved", "rejected"}:
         raise ValueError(f"invalid_image_review_state:{review_state}")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         row = work.connection.execute(
@@ -1099,13 +1100,11 @@ def update_world_image_target(
                 ),
             )
         work.commit()
-    return read_world_image_targets(world_id, database=database)
+    return target_reader(world_id, database=database)
 
 
 def approved_world_asset_bindings(
-    work: Any,
-    context: Any,
-    world_id: str,
+    work: Any, context: Any, world_id: str
 ) -> dict[str, Any]:
     rows = work.connection.execute(
         "SELECT target_id, target_type, entity_id, role, source_content_hash, "

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from app.trading.finviz_gapper_discovery import FINVIZ_ATOMIC_SOURCE_LOCATOR
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.providers.errors import ProviderDataUnavailableError
-from app.trading.strategies.gap_pullback import evaluate_gap_pullback
+from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategies.models import GapPullbackConfig
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 from app.trading import strategy_universe_archiver as archiver

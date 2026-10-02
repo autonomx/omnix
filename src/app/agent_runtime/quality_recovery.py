@@ -8,14 +8,17 @@ reviewer how to recover.
 """
 from __future__ import annotations
 
-import os
+from .event_queries import events_of_types
+from .exception_logging import log_recovered_exception
+from app.config.env import env_str as _env_str
+
 import threading
 from typing import Any
 
 from app.persistence.unit_of_work import unit_of_work
 
 from .coding_quality_repository import PostgresCodingQualityRepository
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 from .repository import AgentLeaseConflict, PostgresAgentRunRepository
 from .review_orchestration import (
     reconcile_review_progress_in_repository,
@@ -26,8 +29,17 @@ from .review_runtime import latest_reviewer_text, review_payload_is_protocol_val
 _TERMINAL = {"completed", "failed", "cancelled"}
 
 
+def _queue_acceptance_recovery(service: Any, run_id: str, revision: int) -> None:
+    """Retry acceptance through its durable promotion job."""
+
+    enqueue = getattr(service, "_enqueue_promote_job", None)
+    trigger_id = f"quality-recovery:{revision}"
+    if not callable(enqueue) or not enqueue(run_id, trigger_id=trigger_id):
+        raise RuntimeError("durable agent promotion jobs are required for acceptance recovery")
+
+
 def _lease_heartbeat_interval_seconds() -> float:
-    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS", "20") or "20").strip()
+    raw = str(_env_str("OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS", "20") or "20").strip()
     try:
         value = float(raw)
     except ValueError:
@@ -36,7 +48,7 @@ def _lease_heartbeat_interval_seconds() -> float:
 
 
 def _lease_heartbeat_ttl_seconds() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS", "90") or "90").strip()
+    raw = str(_env_str("OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS", "90") or "90").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -106,7 +118,8 @@ def _renew_owned_leases(service: Any) -> None:
             )
             try:
                 service.runtime.close_run(run_id)
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("quality lease cleanup", exc)
                 pass
         except Exception as exc:
             # A transient database failure is not ownership loss. The next
@@ -229,7 +242,7 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
             ):
                 continue
             text = latest_reviewer_text(
-                repository.list_events(child.run_id, after_sequence=0, limit=5000)
+                events_of_types(repository, child.run_id, {"model.message"})
             )
             get_attempt = getattr(quality, "get_review_attempt_by_reviewer", None)
             attempt = get_attempt(child.run_id) if callable(get_attempt) else None
@@ -259,7 +272,8 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
     for child_run_id in promoted:
         try:
             service._close_terminal_runtime(child_run_id)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("quality command dispatch", exc)
             pass
     return promoted
 
@@ -288,7 +302,9 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
 
     reconciled: list[str] = []
     launch_actions: list[tuple[str, str, int]] = []
+    promotion_actions: list[tuple[str, int]] = []
     for run_id in run_ids:
+        acceptance_revision: int | None = None
         _promote_protocol_complete_reviewers(service, run_id)
         with unit_of_work(service.database) as work:
             # Normal reviewer callbacks may be finishing the same parent. Do not
@@ -316,10 +332,10 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
                 and latest.desired_state == "running"
                 and str(stage.get("stage") or "") == "acceptance"
             ):
-                # Acceptance itself is server-authoritative and idempotent under
-                # this parent row lock. Re-enter it after a crash that occurred
-                # after the quality stage was durably advanced.
-                service._finalize_acceptance(repository, latest)
+                # Re-enter acceptance through the durable promotion queue after
+                # releasing the row lock. This keeps recovery work in the same
+                # execution plane as normal run.settled promotion.
+                acceptance_revision = latest.revision
                 action = None
             else:
                 action = reconcile_review_progress_in_repository(
@@ -330,20 +346,28 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
             latest = repository.get_run(run_id)
             work.commit()
         reconciled.append(run_id)
+        if acceptance_revision is not None:
+            _queue_acceptance_recovery(service, run_id, acceptance_revision)
         if action is not None and action[0] == "launch_reviews":
             launch_actions.append((run_id, str(action[1]), int(action[2])))
+        elif action is not None and action[0] == "promote_acceptance":
+            promotion_actions.append((run_id, int(action[1])))
         # A substantive review finding may have queued the durable repair outbox.
         # Dispatch only after releasing the parent row lock/transaction.
         try:
             service._dispatch_pending_quality_commands(run_id)
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("terminal quality runtime cleanup", exc)
             pass
         if latest is not None and latest.status in {"failed", "cancelled", "completed"}:
             try:
                 service._close_terminal_runtime(run_id)
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("reconciled quality runtime cleanup", exc)
                 pass
 
     for parent_run_id, snapshot_id, count in launch_actions:
         service._launch_reviewer_children(parent_run_id, snapshot_id, count)
+    for parent_run_id, revision in promotion_actions:
+        _queue_acceptance_recovery(service, parent_run_id, revision)
     return reconciled

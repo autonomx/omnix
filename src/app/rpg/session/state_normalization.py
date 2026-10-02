@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 from app.rpg.ai.grounding_settings import normalize_grounding_settings
 from app.rpg.economy.currency import currency_to_copper_value, normalize_currency
@@ -35,18 +36,18 @@ _FAST_TURN_DEFAULTS = {
 _MAX_NPC_REACTION_RECORDS = 64
 _MAX_INTERACTION_REACTION_STATE = 16
 
-DEFAULT_NPC_PROFILE_SETTINGS: Dict[str, Any] = {
+DEFAULT_NPC_PROFILE_SETTINGS: dict[str, Any] = {
     "auto_create_on_introduction": True,
     "allow_manual_create": True,
     "draft_with_llm_on_create": False,
 }
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
@@ -58,10 +59,27 @@ def _safe_str(value: Any) -> str:
     return str(value)
 
 
-def _copy_dict(value: Any) -> Dict[str, Any]:
+def _copy_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _merge_stepped_simulation_state(
+    authoritative_state: dict[str, Any],
+    stepped_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge stepped world state over the authoritative turn state."""
+
+    authoritative_state = _ensure_simulation_state(_safe_dict(authoritative_state))
+    stepped_state = _safe_dict(stepped_state)
+    if not stepped_state:
+        return authoritative_state
+
+    merged_state = deepcopy(authoritative_state)
+    for key, value in stepped_state.items():
+        merged_state[key] = deepcopy(value)
+    return _ensure_simulation_state(merged_state)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -84,7 +102,7 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
         return default
 
 
-def npc_profile_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+def npc_profile_settings(settings: dict[str, Any]) -> dict[str, Any]:
     configured = _safe_dict(settings.get("npc_profile_generation"))
     return {
         "auto_create_on_introduction": bool(
@@ -104,7 +122,7 @@ def _normalize_final_narration_text(text: str) -> str:
     if not text:
         return ""
 
-    normalized_lines: List[str] = []
+    normalized_lines: list[str] = []
     for raw_line in text.splitlines():
         line = " ".join(_safe_str(raw_line).split()).strip()
         if line:
@@ -118,10 +136,10 @@ def _normalize_final_narration_text(text: str) -> str:
     return text
 
 
-def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_runtime_settings(value: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(value, dict):
         value = {}
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     result["mode"] = _safe_str(value.get("mode") or "live").strip().lower() or "live"
     interaction_duration_mode = _safe_str(
         value.get("interaction_duration_mode") or "until_next_command"
@@ -183,7 +201,7 @@ def _normalize_runtime_settings(value: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _normalize_story_policy(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_story_policy(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _safe_dict(runtime_state)
     raw = runtime_state.get("story_policy")
     if not isinstance(raw, dict):
@@ -195,19 +213,19 @@ def _normalize_story_policy(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _story_policy_record_replay_artifacts(runtime_state: Dict[str, Any]) -> bool:
+def _story_policy_record_replay_artifacts(runtime_state: dict[str, Any]) -> bool:
     return bool(_normalize_story_policy(runtime_state).get("record_replay_artifacts", False))
 
 
-def _story_policy_strict_replay(runtime_state: Dict[str, Any]) -> bool:
+def _story_policy_strict_replay(runtime_state: dict[str, Any]) -> bool:
     return bool(_normalize_story_policy(runtime_state).get("strict_replay", False))
 
 
-def _story_policy_save_load_stable(runtime_state: Dict[str, Any]) -> bool:
+def _story_policy_save_load_stable(runtime_state: dict[str, Any]) -> bool:
     return bool(_normalize_story_policy(runtime_state).get("save_load_stable", True))
 
 
-def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_performance_settings(runtime_state: dict[str, Any]) -> dict[str, Any]:
     perf = {}
     if isinstance(runtime_state, dict):
         perf = dict(runtime_state.get("performance") or {})
@@ -221,7 +239,7 @@ def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, 
         "enable_continuity_grounding": True,
         "compact_save": False,
     }
-    result: Dict[str, Any] = {"fast_turn_mode": fast}
+    result: dict[str, Any] = {"fast_turn_mode": fast}
     for key, default_val in defaults.items():
         val = perf.get(key)
         result[key] = bool(val) if val is not None else default_val
@@ -231,14 +249,14 @@ def _normalize_performance_settings(runtime_state: Dict[str, Any]) -> Dict[str, 
     return result
 
 
-def _ensure_semantic_action_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_semantic_action_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("semantic_action_records", [])
     runtime_state.setdefault("semantic_action_index", {})
     return runtime_state
 
 
-def _ensure_npc_reaction_runtime_state(runtime_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_npc_reaction_runtime_state(runtime_state: dict[str, Any]) -> dict[str, Any]:
     runtime_state = _copy_dict(runtime_state)
     runtime_state.setdefault("npc_reaction_records", [])
     runtime_state.setdefault("interaction_reaction_state", [])
@@ -249,15 +267,15 @@ def _ensure_npc_reaction_runtime_state(runtime_state: Dict[str, Any]) -> Dict[st
     return runtime_state
 
 
-def _ensure_active_interactions(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_active_interactions(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _safe_dict(simulation_state)
     interactions = _safe_list(simulation_state.get("active_interactions"))
     simulation_state["active_interactions"] = interactions
     return simulation_state
 
 
-def _normalize_social_axes(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+def _normalize_social_axes(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     seen: set[tuple[str, int]] = set()
     for item in _safe_list(items)[:4]:
         item = _safe_dict(item)
@@ -277,7 +295,7 @@ def _normalize_social_axes(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
-def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[str, Any]:
+def _normalize_structured_action(action: Any, player_input: str = "") -> dict[str, Any]:
     normalized = _safe_dict(action)
     if not normalized:
         raw_input = _safe_str(player_input).strip()
@@ -337,9 +355,9 @@ def _normalize_structured_action(action: Any, player_input: str = "") -> Dict[st
     return normalized
 
 
-def _coerce_starting_inventory_items(resources: Dict[str, Any]) -> list[Dict[str, Any]]:
+def _coerce_starting_inventory_items(resources: dict[str, Any]) -> list[dict[str, Any]]:
     resources = _safe_dict(resources)
-    items: list[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
 
     for key, raw_value in sorted(resources.items()):
         qty = int(raw_value or 0)
@@ -362,9 +380,9 @@ def _coerce_starting_inventory_items(resources: Dict[str, Any]) -> list[Dict[str
 
 
 def _apply_starting_resources_to_player_state(
-    simulation_state: Dict[str, Any],
-    setup_payload: Dict[str, Any],
-) -> Dict[str, Any]:
+    simulation_state: dict[str, Any],
+    setup_payload: dict[str, Any],
+) -> dict[str, Any]:
     simulation_state = _copy_dict(simulation_state)
     setup_payload = _safe_dict(setup_payload)
 
@@ -405,7 +423,7 @@ def _apply_starting_resources_to_player_state(
     return simulation_state
 
 
-def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_simulation_state(simulation_state: dict[str, Any]) -> dict[str, Any]:
     simulation_state = _copy_dict(simulation_state)
     simulation_state = ensure_player_state(simulation_state)
     simulation_state = ensure_player_party(simulation_state)
@@ -426,9 +444,9 @@ def _ensure_simulation_state(simulation_state: Dict[str, Any]) -> Dict[str, Any]
 
 
 def _normalize_active_interactions(
-    simulation_state: Dict[str, Any],
-    runtime_state: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    simulation_state: dict[str, Any],
+    runtime_state: dict[str, Any],
+) -> list[dict[str, Any]]:
     simulation_state = _safe_dict(simulation_state)
     runtime_state = _safe_dict(runtime_state)
 
@@ -441,7 +459,7 @@ def _normalize_active_interactions(
         if single:
             raw_items = [single]
 
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for item in raw_items:
         item = _safe_dict(item)
         if not item:

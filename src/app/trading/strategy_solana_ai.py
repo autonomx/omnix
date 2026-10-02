@@ -70,9 +70,9 @@ class SolanaAIResult(BaseModel):
 
 
 def _default_provider():
-    from app import shared
+    from app.providers import service as provider_service
 
-    return shared.get_provider()
+    return provider_service.get_provider()
 
 
 def _strip_json_fence(value: str) -> str:

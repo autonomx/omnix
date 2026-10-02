@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useEffect, useRef, useState } from 'react';
 import type { Live2DModelCatalogItem } from './characterAvatarClient';
 import {

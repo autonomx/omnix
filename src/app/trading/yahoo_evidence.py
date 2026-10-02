@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import logging
+
+from app.config.env import env_str, environment
+
+logger = logging.getLogger(__name__)
+
 """Durable Yahoo evidence and same-feed relative-volume authority.
 
 Yahoo is useful free market evidence, but it is not represented as consolidated
@@ -23,21 +29,20 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import AdjustmentMode, MarketBar
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 def _default_root() -> Path:
-    configured = os.getenv("OMNIX_TRADING_YAHOO_EVIDENCE_DIR", "").strip()
+    configured = env_str("OMNIX_TRADING_YAHOO_EVIDENCE_DIR", "").strip()
     if configured:
         return Path(configured)
-    if os.getenv("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return Path(tempfile.gettempdir()) / f"omnix-yahoo-evidence-test-{os.getpid()}"
     return Path("resources/trading/yahoo_evidence")
 
@@ -477,6 +482,7 @@ class YahooEvidenceStore:
                 close = Decimal(str(values["close"]))
                 volume = Decimal(str(values["volume"] or 0))
             except Exception:
+                logger.debug("suppressed error in %s", "YahooEvidenceStore.persist_chart_result", exc_info=True)
                 continue
             if end > cutoff_utc:
                 continue
@@ -635,6 +641,7 @@ class YahooEvidenceStore:
                         )
                     )
                 except Exception:
+                    logger.debug("suppressed error in %s", "YahooEvidenceStore.load_market_bars", exc_info=True)
                     continue
             current += timedelta(days=1)
         output.sort(key=lambda bar: bar.start_time)
@@ -700,6 +707,7 @@ class YahooEvidenceStore:
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:
+                    logger.debug("suppressed error in %s", "YahooEvidenceStore.premarket_relative_volume.session_totals", exc_info=True)
                     continue
                 if start.timetz().replace(tzinfo=None) > cutoff:
                     continue

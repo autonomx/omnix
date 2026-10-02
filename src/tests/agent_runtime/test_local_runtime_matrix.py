@@ -696,9 +696,9 @@ def test_chat_boundary_uses_selected_provider_default_for_blank_session_model(mo
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
     monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
 
-    import app.shared as shared
+    
 
-    monkeypatch.setattr(shared, "get_provider", lambda provider_id: provider)
+    monkeypatch.setattr(chat_bridge, "get_provider", lambda provider_id: provider)
     result = route_typed_chat_turn(
         _session(provider_id="chatgpt_codex", model_id=""),
         _message("/agent review router.py"),
@@ -734,10 +734,8 @@ def test_chat_boundary_model_selection_sets_its_matching_provider(monkeypatch, t
 
 def test_suite_does_not_require_default_llm_provider(monkeypatch) -> None:
     """Guard the intended local-test contract against accidental provider coupling."""
-    import app.shared as shared
-
     monkeypatch.setattr(
-        shared,
+        chat_bridge,
         "get_provider",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
             AssertionError("local Agent Runtime matrix must not call the default LLM provider")

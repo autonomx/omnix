@@ -117,8 +117,8 @@ Images should be committed under `docs/images` and referenced from a guide with 
 The full setup, including PostgreSQL and optional workers, is in [SETUP.md](SETUP.md). The shortest development path is:
 
 ```bash
-# Python dependencies
-pip install -r requirements.txt
+# Python dependencies (Python 3.11)
+python -m pip install --require-hashes -r requirements.txt
 
 # Frontend dependencies
 npm install

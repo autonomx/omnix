@@ -1,7 +1,8 @@
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from app.audiobook.repository import PostgresAudiobookRepository
+from app.audiobook.repository import PostgresAudiobookRepository, cancel_render_run_jobs
 from app.audiobook.worker import run_ingest_once
 from app.persistence.tenant import local_tenant_context
 
@@ -22,6 +23,16 @@ class Connection:
             return (self.latest,) if self.latest else None
         return self.current
 
+    def fetchall(self):
+        if "FROM omnix_jobs AS jobs" not in self.sql or not self.latest:
+            return []
+        now = datetime.now(timezone.utc)
+        return [(
+            self.latest, "workspace", None, "audiobook", "audiobook.ingest",
+            "queued", "cpu", 0, {}, [], {}, None, 0, 3, now, None, None,
+            None, None, None, None, now, now, {}, None,
+        )]
+
 
 def test_only_latest_requested_ingest_can_publish():
     context = local_tenant_context()
@@ -39,6 +50,29 @@ def test_legacy_ingest_without_pointer_uses_latest_durable_request():
     context = local_tenant_context()
     assert not repository.is_current_ingest(context, project_id="book", job_id="old-job")
     assert repository.is_current_ingest(context, project_id="book", job_id="new-job")
+
+
+def test_render_cancellation_pages_through_all_matching_jobs():
+    context = local_tenant_context()
+    first_page = [
+        {"id": f"job:{index:03}", "created_at": "2026-09-01T00:00:00+00:00"}
+        for index in range(100)
+    ]
+    second_page = [{"id": "job:100", "created_at": "2026-09-01T00:01:00+00:00"}]
+    calls = []
+    canceled = []
+
+    def query_jobs(_context, **kwargs):
+        calls.append(kwargs)
+        return first_page if len(calls) == 1 else second_page
+
+    jobs = SimpleNamespace(query_jobs=query_jobs, request_cancel=lambda _context, job_id: canceled.append(job_id))
+    cancel_render_run_jobs(jobs, context, "render:active")
+
+    assert len(canceled) == 101
+    assert calls[0]["after_created"] is None
+    assert calls[1]["after_created"] == (first_page[-1]["created_at"], first_page[-1]["id"])
+    assert all(call["limit"] == 100 and call["for_update"] for call in calls)
 
 
 def test_reclaimed_superseded_ingest_is_canceled_before_extraction(monkeypatch):

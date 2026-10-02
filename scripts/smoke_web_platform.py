@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -29,6 +30,14 @@ def _run(command: list[str], *, cwd: Path) -> dict[str, Any]:
     }
 
 
+def _route_paths(app: Any) -> set[str]:
+    try:  # FastAPI >= 0.141 includes routers lazily.
+        from fastapi.routing import iter_route_contexts
+    except ImportError:
+        return {str(getattr(route, "path", "")) for route in app.routes}
+    return {str(context.path or getattr(context.original_route, "path", "")) for context in iter_route_contexts(app.routes)}
+
+
 def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
     src_dir = root / "src"
     if str(src_dir) not in sys.path:
@@ -40,7 +49,10 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
     from fastapi.testclient import TestClient
 
     from app.gateway.main import create_gateway_app
+    from app.persistence.startup import bootstrap_status_payload
 
+    # Mirror production startup: persistence bootstrap installs the tenant context.
+    bootstrap_status_payload()
     app = create_gateway_app()
     client = TestClient(app, raise_server_exceptions=False)
     checks: list[dict[str, Any]] = []
@@ -67,12 +79,16 @@ def _gateway_smoke(root: Path) -> list[dict[str, Any]]:
     checks.append(
         {
             "name": "event-stream-route-registered",
-            "ok": any(getattr(route, "path", "") == "/events" for route in app.routes),
+            # Included routers are lazy in FastAPI >= 0.141; resolve effective paths.
+            "ok": "/events" in _route_paths(app),
         }
     )
 
     checked_in_schema = json.loads((root / "src/apps/web/src/api/generated/openapi.json").read_text(encoding="utf-8"))
-    live_schema = create_gateway_app().openapi()
+    from export_gateway_openapi import export_schema
+
+    # Compare with the exporter's normalized document, which is what is checked in.
+    live_schema = export_schema()
     checks.append(
         {
             "name": "openapi-schema-matches",

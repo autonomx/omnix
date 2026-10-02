@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.launcher.runtime_control_app import build_runtime_service_specs
 
 
@@ -23,7 +25,7 @@ def test_launcher_starts_lightweight_image_service_without_preload(monkeypatch):
     assert image.env["OMNIX_IMAGE_URL"] == ""
     assert "app.image_service_app:app" in image.command
 
-    assert gateway.command[1].endswith("scripts\\run_omnix_gateway.py")
+    assert Path(gateway.command[1]).parts[-2:] == ("scripts", "run_omnix_gateway.py")
     assert gateway.command[gateway.command.index("--app") + 1] == "app.gateway.runtime_app:app"
     assert gateway.env["OMNIX_IMAGE_ENABLED"] == "1"
     assert gateway.env["OMNIX_IMAGE_URL"] == "http://127.0.0.1:5301"

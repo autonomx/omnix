@@ -6,14 +6,26 @@ from app.characters.interaction import (
 )
 from app.characters.models import CharacterProfileSnapshot, InteractionSelection
 from app.chat import prompt_assembly as prompt_assembly_module
+from app.chat.contracts import (
+    normal_chat_prompt_window_enabled,
+    normal_chat_recent_message_limit,
+)
 from app.chat.models import ChatMessage, ChatSession
 from app.chat.prompt_assembly import build_prompt_assembly
 from app.chat.prompt_rendering import render_prompt_assembly
-from app.gateway.live_chat_prompt_window import _build_prompt_assembly_with_window
+from app.live_voice.prompt.window import build_prompt_assembly_with_window
 
 _NOW = "2026-08-04T00:00:00+00:00"
 _CHARACTER_PERSONALITY = """You are Jinx from Arcane: brilliant, chaotic, theatrical, and dangerous.
 Stay in character. Never act like a generic personal assistant."""
+
+
+def test_prompt_window_policy_is_exposed_by_chat_contracts(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_CHAT_PROMPT_WINDOW_ENABLED", raising=False)
+    monkeypatch.delenv("OMNIX_CHAT_PROMPT_RECENT_MESSAGE_LIMIT", raising=False)
+
+    assert normal_chat_prompt_window_enabled() is True
+    assert normal_chat_recent_message_limit() == 24
 
 
 def _message(index: int, *, segment_id: str = "segment:main") -> ChatMessage:
@@ -50,7 +62,7 @@ def _build(
     *,
     session_summary: str | None = None,
 ):
-    return _build_prompt_assembly_with_window(
+    return build_prompt_assembly_with_window(
         build_prompt_assembly,
         session,
         current,

@@ -7,17 +7,20 @@ Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
 
-from functools import lru_cache
+from .event_queries import all_events, events_of_types, latest_event
+from .exception_logging import log_recovered_exception
+from app.config.env import env_str as _env_str
+
+from app.caching.bounded_cache import bounded_lru_cache
 import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
 
-from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
-from .capabilities import browser_capability_ids
+from app.capabilities import browser_capability_ids
 from .coding_quality import (
     CODING_INDEPENDENT_REVIEW_PHASE_ENABLED,
     CODING_VALIDATION_PHASE_ENABLED,
@@ -53,7 +56,7 @@ from .contracts import (
     SelfReviewResult,
     TaskRevision,
 )
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
 from .evidence import EvidenceCompilationError, evaluate_evidence_set
 from .model_fidelity import resolve_run_model_fidelity
 from .planning_acceptance import evaluate_planning_acceptance
@@ -67,22 +70,47 @@ from .review_orchestration import (
     review_snapshot_id_from_child,
 )
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
-from .semantic_task_parser import default_semantic_task_parser
-from .workspace import WorkspaceAuthority
 from .run_change_set import run_change_set_from_artifact
 from .workspace_promotion import WorkspacePromotionError
-from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
     _acceptance_failures_retryable,
     _acceptance_retry_count as _acceptance_retry_count,
 )
-from .subagents import derive_child_spec
 from .task_revision_quality import (
     hydrate_task_revision,
     hydrate_task_revisions,
     persist_task_revision_contract,
 )
+from app.prompts import prompt_template
+
+
+REQUEST_IMPLEMENTATION_CONTINUATION_TEMPLATE = prompt_template(
+    'agent_runtime.service.request_implementation_continuation', "1",
+    (
+        'Omnix does not yet have a reviewable implementation candidate for quality attempt '
+        '{attempt}. Authoritative objective: {effective_objective}\n'
+        'Candidate gate failures: {failures}\n'
+        'Do not self-review or declare completion. Re-read the authoritative objective, inspect '
+        'the actual target surface and current diff, and carry out the requested implementation '
+        'now. Make only task-scoped changes. If this is a user-visible UI task, locate the exact '
+        'control/surface and verify the requested visible outcome with governed browser '
+        'evidence. Then inspect the complete diff and run the required final-state validation '
+        'before settling.'
+    ),
+)
+
+REQUEST_VALIDATION_REPAIR_TEMPLATE = prompt_template(
+    'agent_runtime.service.request_validation_repair', "1",
+    (
+        'The exact candidate failed required validation. Treat this as implementation evidence, '
+        'not a reason to rerun the same candidate indefinitely. Diagnose and repair the cause. '
+        'The repair must produce a new WorkspaceState before Omnix will authorize fresh '
+        'validation.\n'
+        'Validation failures JSON: {failure_rows}'
+    ),
+)
+
 
 
 _TERMINAL = {"completed", "failed", "cancelled"}
@@ -224,7 +252,7 @@ def _self_review_payload_is_protocol_valid(text: str, revision: TaskRevision) ->
 
 
 def _self_review_protocol_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_SELF_REVIEW_PROTOCOL_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -294,7 +322,7 @@ def _self_review_protocol_retry_count(
 
 
 def _validation_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_VALIDATION_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_VALIDATION_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -357,7 +385,7 @@ def _validation_failure_fingerprint(rows) -> str:
 
 
 def _implementation_candidate_retry_limit() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "2") or "2").strip()
+    raw = str(_env_str("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -545,33 +573,8 @@ def _self_review_response_from_repository(
     return response if marker_seen else ""
 
 
-def _sync_core_compat() -> None:
-    """Keep Phase 1-19 patch/test seams anchored at the public service module.
-
-    Before the quality facade existed, tests and local integrations patched
-    ``app.agent_runtime.service.unit_of_work``, repository/workspace authority,
-    and the semantic parser directly. The implementation now lives in
-    ``service_core``; mirror the public facade's current bindings before
-    executing inherited code so the split is behaviorally transparent rather
-    than a compatibility break.
-    """
-
-    _service_core.unit_of_work = unit_of_work
-    _service_core.PostgresAgentRunRepository = PostgresAgentRunRepository
-    _service_core.WorkspaceAuthority = WorkspaceAuthority
-    _service_core.default_semantic_task_parser = default_semantic_task_parser
-
-
 class AgentRunService(_CoreAgentRunService):
     """Durable generalized Agent service with coding completion acceptance."""
-
-    def __getattribute__(self, name: str):
-        # Synchronize on every public/inherited method lookup. This also covers
-        # tests that construct the service with object.__new__ and therefore do
-        # not run __init__ before exercising a recovery helper.
-        if name not in {"__class__", "__dict__", "__getattribute__"}:
-            _sync_core_compat()
-        return super().__getattribute__(name)
 
     @staticmethod
     def _quality_enabled(spec: AgentRunSpec) -> bool:
@@ -618,74 +621,33 @@ class AgentRunService(_CoreAgentRunService):
         reconcile_orphaned_quality_reviews(self)
         super()._supervise_once()
 
-    def start_with_context(
-        self,
-        spec: AgentRunSpec,
-        *,
-        reference_context: str = "",
-        reference_images: list[dict[str, str]] | None = None,
-    ) -> AgentRunSnapshot:
+    def _prepare_start_spec(self, spec: AgentRunSpec) -> AgentRunSpec:
         # Resolve provider/model/reasoning before the durable RunSpec is written,
         # so observability and recovery see the exact configuration Pi receives.
-        resolved = resolve_run_model_fidelity(_quality_sized_run_spec(spec))
-        return super().start_with_context(
-            resolved,
-            reference_context=reference_context,
-            reference_images=reference_images,
+        return resolve_run_model_fidelity(_quality_sized_run_spec(spec))
+
+    def _reserve_child_start(self, repository, parent, child_spec: AgentRunSpec) -> None:
+        parent_usage = repository.get_usage(parent.run_id)
+        grants = PostgresResourceGrantRepository(repository.connection, self.context)
+        protected_fraction = (
+            parent.spec.quality_reserve_fraction
+            if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
+            else 0.0
+        )
+        grants.assert_can_grant(
+            parent,
+            child_spec.limits,
+            parent_usage=parent_usage,
+            protected_fraction=protected_fraction,
         )
 
-    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
-        """Start a narrowed child under a durable parent resource grant."""
-
-        self._ensure_supervisor()
-        initial_parent = self.get(parent_run_id)
-        if initial_parent is None:
-            raise KeyError(parent_run_id)
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
-            locked = work.connection.execute(
-                """
-                SELECT run_id
-                  FROM omnix_agent_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                 FOR UPDATE
-                """,
-                (self.context.workspace_id, parent_run_id),
-            ).fetchone()
-            if locked is None:
-                raise KeyError(parent_run_id)
-            parent = repository.get_run(parent_run_id)
-            if parent is None:
-                raise KeyError(parent_run_id)
-            if parent.status in _TERMINAL:
-                raise ValueError("cannot start child from terminal parent")
-            child_spec = derive_child_spec(parent, request)
-            self._validate_run_spec_authority(child_spec)
-            self._validate_evidence_authority(child_spec)
-            parent_usage = repository.get_usage(parent_run_id)
-            grants = PostgresResourceGrantRepository(work.connection, self.context)
-            protected_fraction = (
-                parent.spec.quality_reserve_fraction
-                if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
-                else 0.0
-            )
-            grants.assert_can_grant(
-                parent,
-                child_spec.limits,
-                parent_usage=parent_usage,
-                protected_fraction=protected_fraction,
-            )
-            issued = self._prepare_workspace(
-                self._bind_github_repository_authority(child_spec)
-            )
-            snapshot = self._persist_starting_run(repository, issued)
-            grants.add_grant(
-                parent_run_id=parent_run_id,
-                child_run_id=issued.run_id,
-                limits=issued.limits,
-            )
-            work.commit()
-        return self._launch_runtime(issued, snapshot)
+    def _record_child_grant(self, repository, parent, child_spec: AgentRunSpec) -> None:
+        grants = PostgresResourceGrantRepository(repository.connection, self.context)
+        grants.add_grant(
+            parent_run_id=parent.run_id,
+            child_run_id=child_spec.run_id,
+            limits=child_spec.limits,
+        )
 
     def _persist_starting_run(
         self,
@@ -711,7 +673,7 @@ class AgentRunService(_CoreAgentRunService):
             )
             persist_task_revision_contract(repository.connection, self.context, revision)
             if self._quality_enabled(issued):
-                quality = PostgresCodingQualityRepository(repository.connection, self.context)
+                quality = self.quality_repository_factory(repository.connection, self.context)
                 quality.set_stage(
                     issued.run_id,
                     stage="implementing",
@@ -736,8 +698,8 @@ class AgentRunService(_CoreAgentRunService):
         if snapshot is None:
             return None
         try:
-            with unit_of_work(self.database) as work:
-                quality = PostgresCodingQualityRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                quality = self.quality_repository_factory(work.connection, self.context)
                 stage = quality.get_stage(run_id)
                 work.rollback()
         except Exception:
@@ -753,8 +715,8 @@ class AgentRunService(_CoreAgentRunService):
         )
 
     def task_revisions(self, run_id: str) -> list[TaskRevision]:
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             rows = hydrate_task_revisions(
                 work.connection,
                 self.context,
@@ -764,42 +726,42 @@ class AgentRunService(_CoreAgentRunService):
         return rows
 
     def quality_state(self, run_id: str) -> dict[str, object] | None:
-        with unit_of_work(self.database) as work:
-            if PostgresAgentRunRepository(work.connection, self.context).get_run(run_id) is None:
+        with self.unit_of_work(self.database) as work:
+            if self.repository_factory(work.connection, self.context).get_run(run_id) is None:
                 work.rollback()
                 raise KeyError(run_id)
-            row = PostgresCodingQualityRepository(work.connection, self.context).get_stage(run_id)
+            row = self.quality_repository_factory(work.connection, self.context).get_stage(run_id)
             work.rollback()
         return row
 
     def validation_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_validation_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_validation_results(run_id)
             work.rollback()
         return rows
 
     def self_review_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_self_review_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_self_review_results(run_id)
             work.rollback()
         return rows
 
     def review_results(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_results(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_review_results(run_id)
             work.rollback()
         return rows
 
     def review_attempts(self, run_id: str):
-        with unit_of_work(self.database) as work:
-            rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_attempts(run_id)
+        with self.unit_of_work(self.database) as work:
+            rows = self.quality_repository_factory(work.connection, self.context).list_review_attempts(run_id)
             work.rollback()
         return rows
 
     def run_change_set(self, run_id: str) -> tuple[RunChangeSet, str]:
         """Return the one authoritative run-owned subject for parent or reviewer."""
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(run_id)
             if current is None:
                 work.rollback()
@@ -810,7 +772,7 @@ class AgentRunService(_CoreAgentRunService):
                 if not snapshot_id:
                     work.rollback()
                     raise RuntimeError("review_run_change_set_snapshot_unavailable")
-                quality = PostgresCodingQualityRepository(work.connection, self.context)
+                quality = self.quality_repository_factory(work.connection, self.context)
                 review_snapshot = quality.get_review_snapshot(current.spec.parent_run_id, snapshot_id)
                 if review_snapshot is None or not review_snapshot.run_change_set_id:
                     work.rollback()
@@ -833,7 +795,7 @@ class AgentRunService(_CoreAgentRunService):
                 if state is None:
                     work.rollback()
                     raise RuntimeError("agent_run_change_set_workspace_unavailable")
-                PostgresCodingQualityRepository(work.connection, self.context).add_workspace_state(state)
+                self.quality_repository_factory(work.connection, self.context).add_workspace_state(state)
                 change_set = self._capture_diff(
                     repository,
                     current.spec,
@@ -869,8 +831,8 @@ class AgentRunService(_CoreAgentRunService):
             return result
 
         stale_reviewers: list[str] = []
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(command.run_id)
             revision = repository.latest_task_revision(command.run_id)
             if current is not None and revision is not None:
@@ -889,7 +851,7 @@ class AgentRunService(_CoreAgentRunService):
                 )
                 persist_task_revision_contract(work.connection, self.context, revision)
                 if self._quality_enabled(current.spec) and current.status not in _TERMINAL:
-                    quality = PostgresCodingQualityRepository(work.connection, self.context)
+                    quality = self.quality_repository_factory(work.connection, self.context)
                     quality.set_stage(
                         current.run_id,
                         stage="implementing",
@@ -925,9 +887,10 @@ class AgentRunService(_CoreAgentRunService):
                         idempotency_key=f"quality-stale-reviewer:{command.run_id}:{child_id}",
                     )
                 )
-            except Exception:
+            except Exception as exc:
                 # Stale review evidence is revision-bound and cannot pass even
                 # if best-effort cancellation loses a race with completion.
+                log_recovered_exception("stale reviewer cancellation", exc)
                 pass
         current_result = self.get(result.run_id) or result
         self._dispatch_pending_quality_commands(command.run_id, include_parent=True)
@@ -986,7 +949,7 @@ class AgentRunService(_CoreAgentRunService):
                 "reason": reason,
             },
         )
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         quality.set_stage(
             run_id,
             stage=stage,
@@ -1041,8 +1004,8 @@ class AgentRunService(_CoreAgentRunService):
                 fields={"reason": "missing_tool_call_id"},
             )
             return
-        with unit_of_work(self.database) as work:
-            repository = PostgresAgentRunRepository(work.connection, self.context)
+        with self.unit_of_work(self.database) as work:
+            repository = self.repository_factory(work.connection, self.context)
             current = repository.get_run(event.run_id)
             if current is None or current.status in _TERMINAL or not self._quality_enabled(current.spec):
                 log_agent_activity(
@@ -1058,21 +1021,14 @@ class AgentRunService(_CoreAgentRunService):
                 )
                 work.rollback()
                 return
-            events = repository.list_events(event.run_id, after_sequence=0, limit=5000)
-            started = next(
-                (
-                    item
-                    for item in reversed(events)
-                    if item.event_type == "tool.started"
-                    and str(item.payload.get("tool_call_id") or "") == call_id
-                ),
-                None,
+            started = latest_event(
+                repository, event.run_id, "tool.started", payload_contains={"tool_call_id": call_id}
             )
             tool = str(event.payload.get("tool") or (started.payload.get("tool") if started else "") or "")
             args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
             command = str(args.get("command") or "")
             capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
-            quality = PostgresCodingQualityRepository(work.connection, self.context)
+            quality = self.quality_repository_factory(work.connection, self.context)
             mutating_or_validation = (
                 tool in {"edit", "write", "bash", "powershell"}
                 or validation_kind_for_command(command) is not None
@@ -1189,7 +1145,7 @@ class AgentRunService(_CoreAgentRunService):
             for item in existing
             if item.validation_id == "final-diff-review"
         }
-        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        events = events_of_types(repository, current.run_id, {"tool.started", "tool.completed"})
         started_by_call_id = {
             str(item.payload.get("tool_call_id") or ""): item
             for item in events
@@ -1267,10 +1223,10 @@ class AgentRunService(_CoreAgentRunService):
         )
         quality_message_settle = False
         if _is_terminal_self_review_message(event):
-            with unit_of_work(self.database) as probe:
-                current = PostgresAgentRunRepository(probe.connection, self.context).get_run(event.run_id)
+            with self.unit_of_work(self.database) as probe:
+                current = self.repository_factory(probe.connection, self.context).get_run(event.run_id)
                 if current is not None and self._quality_enabled(current.spec):
-                    stage = PostgresCodingQualityRepository(probe.connection, self.context).get_stage(event.run_id)
+                    stage = self.quality_repository_factory(probe.connection, self.context).get_stage(event.run_id)
                     quality_message_settle = _terminal_message_settles_quality_stage(
                         event,
                         str((stage or {}).get("stage") or ""),
@@ -1284,18 +1240,18 @@ class AgentRunService(_CoreAgentRunService):
             self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
             return
 
-        with unit_of_work(self.database) as probe:
-            current = PostgresAgentRunRepository(probe.connection, self.context).get_run(event.run_id)
+        with self.unit_of_work(self.database) as probe:
+            current = self.repository_factory(probe.connection, self.context).get_run(event.run_id)
             probe.rollback()
         if current is None or not self._quality_enabled(current.spec):
             super()._persist_runtime_event(event)
             self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
             return
 
-        post_action: tuple | None = None
-        with self._lock:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+        promote = False
+        with self._run_lock(event.run_id):
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 current = repository.get_run(event.run_id)
                 if current is None:
                     work.rollback()
@@ -1312,14 +1268,42 @@ class AgentRunService(_CoreAgentRunService):
                     if current.status in _TERMINAL:
                         self._close_terminal_runtime(event.run_id)
                     return
-                post_action = self._advance_quality_on_settle(repository, current)
-                latest = repository.get_run(event.run_id)
-                terminal_runtime = latest is not None and latest.status in _TERMINAL
+                repository.update_state(
+                    event.run_id,
+                    expected_revision=current.revision,
+                    status="waiting_for_children",
+                    worker_id=self.worker_id,
+                )
+                promote = True
                 work.commit()
-                if terminal_runtime:
-                    self._close_terminal_runtime(event.run_id)
-        self._execute_quality_action(post_action)
-        self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
+        if promote:
+            try:
+                queued = self._enqueue_promote_job(
+                    event.run_id,
+                    trigger_id=event.event_id,
+                )
+                if not queued:
+                    with self.unit_of_work(self.database) as work:
+                        repository = self.repository_factory(work.connection, self.context)
+                        current = repository.get_run(event.run_id)
+                        post_action = (
+                            self._advance_quality_on_settle(repository, current)
+                            if current is not None and current.status not in _TERMINAL
+                            else None
+                        )
+                        work.commit()
+                    self._execute_quality_action(post_action)
+                    self._dispatch_pending_quality_commands(event.run_id, include_parent=True)
+            except Exception as exc:
+                log_agent_activity(
+                    "service.quality_settle.enqueue_failed",
+                    category="quality",
+                    level="error",
+                    run_id=event.run_id,
+                    fields={"trigger_id": event.event_id},
+                    error=exc,
+                    include_traceback=True,
+                )
 
     def _queue_quality_resume(
         self,
@@ -1414,14 +1398,11 @@ class AgentRunService(_CoreAgentRunService):
             reason=f"implementation_candidate_not_ready_{continuation}",
         )
         prompt = (
-            f"Omnix does not yet have a reviewable implementation candidate for quality attempt {attempt}. "
-            f"Authoritative objective: {revision.effective_objective}\n"
-            f"Candidate gate failures: {', '.join(failures)}\n"
-            "Do not self-review or declare completion. Re-read the authoritative objective, inspect the actual "
-            "target surface and current diff, and carry out the requested implementation now. Make only task-scoped "
-            "changes. If this is a user-visible UI task, locate the exact control/surface and verify the requested "
-            "visible outcome with governed browser evidence. Then inspect the complete diff and run the required "
-            "final-state validation before settling."
+            REQUEST_IMPLEMENTATION_CONTINUATION_TEMPLATE.format(
+                attempt=attempt,
+                effective_objective=revision.effective_objective,
+                failures=', '.join(failures),
+            )
         )
         return self._queue_quality_resume(
             repository,
@@ -1743,10 +1724,9 @@ class AgentRunService(_CoreAgentRunService):
             for item in failures
         ]
         prompt = (
-            "The exact candidate failed required validation. Treat this as implementation evidence, not a reason to "
-            "rerun the same candidate indefinitely. Diagnose and repair the cause. The repair must produce a new "
-            "WorkspaceState before Omnix will authorize fresh validation.\n"
-            f"Validation failures JSON: {json.dumps(failure_rows, ensure_ascii=False)}"
+            REQUEST_VALIDATION_REPAIR_TEMPLATE.format(
+                failure_rows=json.dumps(failure_rows, ensure_ascii=False),
+            )
         )
         return self._queue_quality_resume(
             repository,
@@ -1774,7 +1754,7 @@ class AgentRunService(_CoreAgentRunService):
                 last_error="quality_task_revision_unavailable",
             )
             return None
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage_state = quality.get_stage(current.run_id) or {
             "stage": "inspect",
             "attempt": 1,
@@ -2027,7 +2007,7 @@ class AgentRunService(_CoreAgentRunService):
         change_set = run_change_set_from_artifact(diff_artifact)
         if change_set is None:
             return self._quality_fail(repository, current, "quality_run_change_set_unavailable")
-        review_root = os.environ.get(
+        review_root = _env_str(
             "OMNIX_AGENT_REVIEW_ROOT",
             _default_review_root(current.spec),
         )
@@ -2099,7 +2079,8 @@ class AgentRunService(_CoreAgentRunService):
             _, command = action
             try:
                 self.command(command)
-            except Exception:
+            except Exception as exc:
+                log_recovered_exception("quality command dispatch", exc)
                 pass
             return
         if action[0] == "launch_reviews":
@@ -2110,8 +2091,8 @@ class AgentRunService(_CoreAgentRunService):
         targets: list[str] = []
         pending: list[AgentRunCommand] = []
         try:
-            with unit_of_work(self.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, self.context)
+            with self.unit_of_work(self.database) as work:
+                repository = self.repository_factory(work.connection, self.context)
                 snapshot = repository.get_run(run_id)
                 if snapshot is not None:
                     targets.append(snapshot.run_id)
@@ -2126,7 +2107,8 @@ class AgentRunService(_CoreAgentRunService):
                         ):
                             pending.append(command)
                 work.rollback()
-        except Exception:
+        except Exception as exc:
+            log_recovered_exception("pending quality command lookup", exc)
             return
 
         seen: set[str] = set()
@@ -2164,7 +2146,7 @@ class AgentRunService(_CoreAgentRunService):
         if revision is None or revision.revision_id != snapshot.task_revision_id:
             return None
         text = latest_reviewer_text(
-            repository.list_events(child.run_id, after_sequence=0, limit=5000)
+            events_of_types(repository, child.run_id, {"model.message"})
         )
         if not review_payload_is_protocol_valid(text, revision):
             return None
@@ -2207,7 +2189,7 @@ class AgentRunService(_CoreAgentRunService):
         bounded repair loop.
         """
 
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage = quality.get_stage(current.run_id) or {"attempt": 1}
         attempt = max(1, int(stage.get("attempt") or 1))
         validations = quality.list_validation_results(
@@ -2275,7 +2257,7 @@ class AgentRunService(_CoreAgentRunService):
         *,
         failures: list[str],
     ) -> tuple | None:
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         stage = quality.get_stage(current.run_id) or {"attempt": 1, "workspace_state_id": None}
         attempt = max(1, int(stage.get("attempt") or 1))
         if attempt >= quality_attempt_limit():
@@ -2397,7 +2379,7 @@ class AgentRunService(_CoreAgentRunService):
                 payload={"source": "omnix", "task_revision_id": revision_id},
             )
         )
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
@@ -2408,10 +2390,10 @@ class AgentRunService(_CoreAgentRunService):
             task_revision_id=revision_id,
             workspace_state_id=state.state_id if state else None,
         )
-        all_events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        run_events = all_events(repository, current.run_id)
         all_artifacts = repository.list_artifacts(current.run_id)
         all_receipts = repository.list_evidence_receipts(current.run_id)
-        events = self._events_for_revision(all_events, revision)
+        events = self._events_for_revision(run_events, revision)
         artifacts = self._artifacts_for_revision(all_artifacts, revision)
         receipts = self._receipts_for_revision(all_receipts, revision)
         effective_policy = revision.evidence_decision.policy if revision is not None else current.spec.evidence_policy
@@ -2424,7 +2406,7 @@ class AgentRunService(_CoreAgentRunService):
             evidence_set=evidence_set,
         )
 
-        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        quality = self.quality_repository_factory(repository.connection, self.context)
         acceptance_stage = quality.get_stage(current.run_id) or {}
         reviewed_workspace_state_id = (
             str(acceptance_stage.get("workspace_state_id") or "").strip() or None
@@ -2639,6 +2621,12 @@ class AgentRunService(_CoreAgentRunService):
         )
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_agent_run_service() -> AgentRunService:
-    return AgentRunService()
+    from app.jobs.store import default_job_store
+
+    try:
+        jobs = default_job_store()
+    except RuntimeError:
+        jobs = None
+    return AgentRunService(job_store=jobs)

@@ -4,6 +4,7 @@ Canonical Omnix FastAPI entrypoint.
 This file is named launch.py specifically to avoid module name collision with src/app package.
 """
 
+import logging
 import os
 import socket
 import subprocess
@@ -16,6 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 import uvicorn
 
 from main import HOST, PORT, app
+from app.config.env import env_bool
+from app.runtime.net import bind_host
+
+logger = logging.getLogger(__name__)
 
 
 def create_app():
@@ -23,8 +28,9 @@ def create_app():
 
 
 def _is_port_available(host: str, port: int) -> bool:
-    probe_host = "0.0.0.0" if host in {"0.0.0.0", "::"} else host
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    probe_host = bind_host(host)
+    family = socket.AF_INET6 if ":" in probe_host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((probe_host, int(port)))
@@ -34,7 +40,7 @@ def _is_port_available(host: str, port: int) -> bool:
 
 
 def _launcher_auto_kill_enabled() -> bool:
-    return os.environ.get("OMNIX_LAUNCHER_KILL_PORT", "").strip().lower() in {"1", "true", "yes", "on"}
+    return env_bool("OMNIX_LAUNCHER_KILL_PORT", False)
 
 
 def _find_port_owner_pids(port: int) -> list[int]:
@@ -82,6 +88,7 @@ def _kill_processes_for_port(port: int) -> list[int]:
                 timeout=5,
             )
         except Exception:
+            logger.debug("suppressed error in %s", "_kill_processes_for_port", exc_info=True)
             continue
         killed.append(pid)
     return killed
@@ -121,6 +128,9 @@ if __name__ == "__main__":
         _print_port_conflict_help(HOST, PORT)
         raise SystemExit(1)
 
+    from app.security.service_credentials import initialize_service_token
+    initialize_service_token()
+
     print("\n" + "=" * 50)
     print("Omnix Web Gateway")
     print("=" * 50)
@@ -128,6 +138,9 @@ if __name__ == "__main__":
     print(f"API docs: http://{HOST}:{PORT}/docs")
     print("=" * 50 + "\n")
 
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     uvicorn.run(
         app,
         host=HOST,

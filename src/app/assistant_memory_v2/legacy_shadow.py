@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.assistant_memory.models import MemoryRecord
+from app.memory_contracts import MemoryRecord
 from app.persistence.database import PostgresDatabase, default_database
 
 from .contracts import (

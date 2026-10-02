@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
+
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from .gapper_dataset import GapperCandidate
 from .historical_gapper_reconstruction import _alpaca_bars
@@ -12,9 +13,9 @@ from .providers.errors import ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategy_replay_reliability import historical_replay_http_runtime
 from .us_equity_calendar import early_close_time
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
+logger = logging.getLogger(__name__)
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -89,6 +90,7 @@ def alpaca_historical_session_bars(
                 open_value, high, low, close = (Decimal(str(value)) for value in values)
                 volume = Decimal(str(item.get("v") or 0))
             except Exception:
+                logger.debug("suppressed error in %s", "alpaca_historical_session_bars", exc_info=True)
                 continue
             bars.append(
                 MarketBar(

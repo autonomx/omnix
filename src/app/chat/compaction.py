@@ -5,8 +5,9 @@ summary repository defined here; no SQLite schema remains.
 """
 from __future__ import annotations
 
+from app.config.env import environment
+
 import hashlib
-import os
 import threading
 from copy import deepcopy
 from pathlib import Path
@@ -14,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory.settings import load_memory_runtime_settings
+from app.assistant_memory.contracts import load_memory_runtime_settings
 from app.jobs import CompleteJobRequest, CreateJobRequest, JobRecord, ResourceClass, default_job_store
 
 from .models import MessageContentPurpose, project_message_content
@@ -58,7 +59,7 @@ def compaction_enabled() -> bool:
 
 def compaction_threshold() -> int:
     try:
-        return max(4, int(os.environ.get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
+        return max(4, int(environment().get("OMNIX_CHAT_COMPACTION_THRESHOLD", DEFAULT_COMPACTION_THRESHOLD)))
     except ValueError:
         return DEFAULT_COMPACTION_THRESHOLD
 
@@ -166,7 +167,7 @@ def enqueue_compaction_job(session: Any, *, job_store: Any | None = None) -> Job
     through = messages[-DEFAULT_RECENT_MESSAGE_LIMIT - 1]
     key = compaction_idempotency_key(session.id, through.id)
     store = job_store or default_job_store()
-    for job in store.list_jobs():
+    for job in store.iter_jobs(job_types=(HISTORY_COMPACT_JOB_TYPE,)):
         if job.type == HISTORY_COMPACT_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
     return store.create_job(

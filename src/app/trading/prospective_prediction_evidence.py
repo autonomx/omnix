@@ -14,14 +14,13 @@ import math
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import AdjustmentMode, MarketBar
 from .us_equity_calendar import early_close_time
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 
 PREMARKET_EVIDENCE_SCHEMA_VERSION = "premarket-evidence-v1"
 FEATURE_SCHEMA_VERSION = "prospective-gap-features-v1"
@@ -61,9 +60,6 @@ def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("timestamp_must_be_timezone_aware")
     return value.astimezone(timezone.utc)
-
-
-
 
 
 def _regular_session_end(session_date: date) -> datetime:

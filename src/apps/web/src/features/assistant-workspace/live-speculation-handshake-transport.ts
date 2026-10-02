@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const INSTALLED_KEY = '__omnixLiveSpeculationHandshakeTransportInstalled';

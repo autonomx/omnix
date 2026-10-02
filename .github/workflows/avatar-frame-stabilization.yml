@@ -7,7 +7,7 @@ on:
       - "src/app/characters/avatar_viseme_generation.py"
       - "src/app/characters/live2d_avatar.py"
       - "src/app/assistant_context/__init__.py"
-      - "src/app/jobs/image_inline.py"
+      - "src/app/image/jobs.py"
       - "src/tests/unit/characters/test_avatar_frame_stabilization.py"
       - "src/tests/unit/characters/test_avatar_viseme_generation.py"
       - "src/tests/unit/characters/test_live2d_avatar_api.py"
@@ -40,18 +40,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: pip
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install focused Python dependencies
-        run: >-
-          python -m pip install
-          ruff pytest pillow pydantic fastapi httpx requests python-multipart
+        run: |
+          python -m pip install --require-hashes -r requirements/dev.lock.txt
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
       - name: Lint avatar code
         run: |
           ruff check \
@@ -62,7 +61,7 @@ jobs:
             src/tests/unit/characters/test_avatar_viseme_generation.py \
             src/tests/unit/characters/test_live2d_avatar_api.py
       - name: Compile image-job integration
-        run: python -m py_compile src/app/jobs/image_inline.py
+        run: python -m py_compile src/app/image/jobs.py
       - name: Verify avatar backend behavior
         run: >-
           pytest -q

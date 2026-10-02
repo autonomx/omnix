@@ -1,4 +1,5 @@
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from './live-accepted-final';
+import { streamingSttUrl, type SpeechLocation } from './stt-url';
 
 export type StreamingSttReady = {
   type: 'ready';
@@ -126,7 +127,7 @@ export type StreamingSttSocketLike = {
   onmessage: ((event: { data: string }) => void) | null;
   onerror: ((event: unknown) => void) | null;
   onclose: (() => void) | null;
-  send(data: string): void;
+  send(data: string | ArrayBuffer): void;
   close(): void;
 };
 
@@ -180,7 +181,7 @@ type PendingAudioFrame = {
 type PendingSegmentFrame = {
   sampleStart: number;
   sampleEnd: number;
-  encodedAudio: string;
+  pcm: Uint8Array;
 };
 
 type PendingSegment = {
@@ -213,43 +214,21 @@ const DEFAULT_STT_CONFIG_VERSION = 'legacy-default';
 const DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_RECONNECT_DELAY_MS = 300;
 const DEFAULT_MAX_PENDING_CHUNKS = 250;
-const DEFAULT_STT_WEBSOCKET_PORT = '5201';
 const DEFAULT_HARD_SEGMENT_MS = 10_000;
 const DEFAULT_OVERLAP_MS = 300;
 const DEFAULT_MAX_FINAL_RESULT_AGE_MS = 8_000;
 const SEGMENTED_PROTOCOL = 'segmented-v1';
 const CAP_CLIENT_AUDIO_REPLAY = 'client_audio_replay';
 const CAP_AUTHORITATIVE_PREVIEW = 'authoritative_preview';
+// Audio as binary frames: uint32 LE header length, JSON header, PCM16 bytes.
+const CAP_BINARY_AUDIO_FRAMES = 'binary_audio_frames';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export function getDefaultStreamingSttWebSocketUrl(
-  locationLike: Pick<Location, 'protocol' | 'hostname'> = globalThis.location,
+  locationLike: SpeechLocation = globalThis.location,
   sttServiceUrl?: string,
 ): string {
-  if (sttServiceUrl?.trim()) return toStreamingSttWebSocketUrl(sttServiceUrl, locationLike);
-  const wsProtocol = locationLike.protocol === 'https:' ? 'wss:' : 'ws:';
-  const hostname = localServiceHostname(locationLike.hostname);
-  return `${wsProtocol}//${hostname}:${DEFAULT_STT_WEBSOCKET_PORT}/ws/transcribe`;
-}
-
-function localServiceHostname(hostname: string): string {
-  const normalized = hostname.trim().toLowerCase();
-  return normalized === 'localhost' || normalized === '::1' || normalized === '[::1]' ? '127.0.0.1' : hostname;
-}
-
-function toStreamingSttWebSocketUrl(value: string, locationLike: Pick<Location, 'protocol' | 'hostname'>): string {
-  const baseUrl = `${locationLike.protocol}//${locationLike.hostname}`;
-  const url = new URL(value.trim(), baseUrl);
-  const language = url.searchParams.get('language')?.trim();
-  url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
-  const normalizedPath = url.pathname.replace(/\/+$/, '');
-  if (normalizedPath.endsWith('/ws/transcribe')) url.pathname = normalizedPath;
-  else if (normalizedPath.endsWith('/transcribe')) url.pathname = `${normalizedPath.slice(0, -'/transcribe'.length)}/ws/transcribe`;
-  else url.pathname = `${normalizedPath}/ws/transcribe`.replace(/\/{2,}/g, '/');
-  url.search = '';
-  if (language) url.searchParams.set('language', language);
-  url.hash = '';
-  return url.toString();
+  return streamingSttUrl(sttServiceUrl?.trim() || '/api/stt', locationLike).toString();
 }
 
 function dispatchSttDiagnostic(stage: string, detail: Record<string, unknown>): void {
@@ -328,10 +307,27 @@ export function downsampleFloat32To16Khz(
   return resampleFloat32(audio, sourceSampleRate, targetSampleRate);
 }
 
-export function encodePcm16Base64(audio: Float32Array): string {
+export function encodePcm16(audio: Float32Array): Uint8Array {
   const int16 = new Int16Array(audio.length);
   for (let i = 0; i < audio.length; i += 1) int16[i] = Math.max(-1, Math.min(1, audio[i])) * 32767;
-  const bytes = new Uint8Array(int16.buffer);
+  return new Uint8Array(int16.buffer);
+}
+
+export function encodePcm16Base64(audio: Float32Array): string {
+  return bytesToBase64(encodePcm16(audio));
+}
+
+/** One binary audio message: uint32 LE header length, UTF-8 JSON header, PCM16 bytes. */
+export function encodeBinaryAudioFrame(header: Record<string, unknown>, pcm: Uint8Array): ArrayBuffer {
+  const encodedHeader = new TextEncoder().encode(JSON.stringify(header));
+  const frame = new Uint8Array(4 + encodedHeader.length + pcm.length);
+  new DataView(frame.buffer).setUint32(0, encodedHeader.length, true);
+  frame.set(encodedHeader, 4);
+  frame.set(pcm, 4 + encodedHeader.length);
+  return frame.buffer;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
@@ -643,6 +639,16 @@ export class StreamingSttWebSocketClient {
     return this.negotiation?.capabilities.includes(CAP_AUTHORITATIVE_PREVIEW) ?? false;
   }
 
+  private get binaryAudioSupported(): boolean {
+    return this.negotiation?.capabilities.includes(CAP_BINARY_AUDIO_FRAMES) ?? false;
+  }
+
+  private sendAudioMessage(header: Record<string, unknown>, pcm: Uint8Array): void {
+    if (!this.socket) return;
+    if (this.binaryAudioSupported) this.socket.send(encodeBinaryAudioFrame(header, pcm));
+    else this.socket.send(JSON.stringify({ type: 'audio', ...header, data: bytesToBase64(pcm) }));
+  }
+
   private sendPreparedAudio(frame: PendingAudioFrame): void {
     const resampled = this.resampler.transform(frame.audio, frame.sourceSampleRate, this.targetSampleRate);
     if (!resampled.length) return;
@@ -692,7 +698,7 @@ export class StreamingSttWebSocketClient {
   }
 
   private sendLegacyAudio(audio: Float32Array): void {
-    this.socket?.send(JSON.stringify({ type: 'audio', sampleRate: this.targetSampleRate, data: encodePcm16Base64(audio) }));
+    this.sendAudioMessage({ sampleRate: this.targetSampleRate }, encodePcm16(audio));
   }
 
   private ensureActiveSegment(): PendingSegment {
@@ -736,7 +742,7 @@ export class StreamingSttWebSocketClient {
     const frame: PendingSegmentFrame = {
       sampleStart,
       sampleEnd: sampleStart + audio.length,
-      encodedAudio: encodePcm16Base64(audio),
+      pcm: encodePcm16(audio),
     };
     segment.frames.push(frame);
     this.sendFrame(segment, frame);
@@ -744,8 +750,7 @@ export class StreamingSttWebSocketClient {
 
   private sendFrame(segment: PendingSegment, frame: PendingSegmentFrame): void {
     if (!this.socket || this.socket.readyState !== this.options.webSocketCtor.OPEN || !this.serverReady || this.awaitingSessionReady) return;
-    this.socket.send(JSON.stringify({
-      type: 'audio',
+    this.sendAudioMessage({
       protocol: SEGMENTED_PROTOCOL,
       sessionId: this.sessionId,
       captureEpoch: this.captureEpoch,
@@ -756,8 +761,7 @@ export class StreamingSttWebSocketClient {
       sampleStart: frame.sampleStart,
       sampleEnd: frame.sampleEnd,
       sampleRate: this.targetSampleRate,
-      data: frame.encodedAudio,
-    }));
+    }, frame.pcm);
   }
 
   private finalizeActiveSegment(): string | null {

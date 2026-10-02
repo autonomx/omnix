@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import json
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import CampaignTopicNode
 from app.rpg.session.genesis.world_forge_generation import GeneratedTopic, WorldForgeTopicGenerator
@@ -295,7 +295,7 @@ def _history(work: Any, context: Any, world_id: str, topic_id: str, entity_id: s
 
 
 def read_world_entity(world_id: str, topic_id: str, entity_id: str, *, database: Any | None = None) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         topic = work.world_generation.get_topic(context, world_id=world_id, topic_id=topic_id)
@@ -322,7 +322,7 @@ def _store_replacement(
     metadata: Mapping[str, Any] | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,
@@ -477,7 +477,7 @@ def regenerate_world_entity(
     generator: WorldForgeTopicGenerator | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,

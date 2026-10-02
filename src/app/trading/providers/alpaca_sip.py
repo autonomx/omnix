@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 """Research-only consolidated Alpaca SIP evidence adapter.
 
@@ -6,12 +7,10 @@ This adapter exists solely for retrospective/formal scoring. It is intentionally
 not registered as an execution provider and never produces execution authority.
 """
 
-import os
 from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -23,10 +22,10 @@ from app.trading.us_equity_calendar import us_equity_session
 from .alpaca_iex import alpaca_iex_auth_headers
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
-_ET = ZoneInfo("America/New_York")
 _REGULAR_SALE_CODES = {"@"}
 _ODD_LOT_CODES = {"I"}
 _AUCTION_CODES = {"O", "6", "M", "Q"}
@@ -92,7 +91,7 @@ class AlpacaSipResearchProvider:
         )
         self.data_url = (
             data_url
-            or os.environ.get("OMNIX_ALPACA_DATA_URL")
+            or _env_str("OMNIX_ALPACA_DATA_URL")
             or ALPACA_DATA_URL
         ).rstrip("/")
         self.clock = clock or (lambda: datetime.now(timezone.utc))

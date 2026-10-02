@@ -1,6 +1,8 @@
 """Built-in profiles compiled into immutable RunSpec authority."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 import re
 
 from pydantic import BaseModel, ConfigDict
@@ -15,6 +17,9 @@ class AgentProfile(BaseModel):
     optional_external_capabilities: tuple[str, ...] = ()
     context_sources: tuple[str, ...] = ()
     requires_workspace: bool = False
+    approval_policy: str = "ask_sensitive"
+    allowed_paths: tuple[str, ...] = ("**",)
+    isolation_policy: str = "supervised_worktree"
 
 
 _READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff", "workspace.run_change_set")
@@ -60,6 +65,7 @@ _PROFILES = {
         description="Read-only independent review of an immutable coding snapshot.",
         capabilities=_READ,
         requires_workspace=True,
+        isolation_policy="immutable_review_snapshot",
     ),
     "house": AgentProfile(id="house", description="Semantic smart-home inspection and governed control.", external_capabilities=("home.list_devices", "home.get_state", "home.set_state", "home.get_energy", "home.apply_scene")),
     "research": AgentProfile(
@@ -106,11 +112,12 @@ def profile_external_ceiling(profile: AgentProfile) -> set[str]:
     ceiling = set(profile.external_capabilities) | set(profile.optional_external_capabilities)
     if profile.id == "coding":
         try:
-            from .mcp_policy import configured_mcp_capability_ids
+            from app.capabilities.mcp_policy import configured_mcp_capability_ids
 
             ceiling.update(configured_mcp_capability_ids())
-        except Exception:
+        except Exception as exc:
             # Invalid/unreadable MCP policy fails closed.
+            log_recovered_exception("MCP capability policy load", exc)
             pass
     return ceiling
 

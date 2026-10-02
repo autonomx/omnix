@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Runtime provider-payload normalization for RPG presentation.
 
 This module is intentionally small and dependency-light so both runtime and
@@ -109,6 +113,7 @@ def extract_json_object(text: Any) -> Tuple[Dict[str, Any], str]:
                 method = "json" if candidate == _strip_fences(_safe_str(text)) else "json_repaired_or_substring"
                 return value, method
         except Exception:
+            logger.debug("suppressed error in %s", "extract_json_object", exc_info=True)
             continue
     return {}, ""
 

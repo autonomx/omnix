@@ -73,24 +73,42 @@ def _stabilize_equivalent_io_schemas(schema: dict[str, object]) -> None:
     schemas[output_name] = copy.deepcopy(value)
     del schemas[canonical_name]
 
+    canonical_ref = f"#/components/schemas/{canonical_name}"
+
+    def rewrite(value: object, *, request: bool = False) -> None:
+        if isinstance(value, list):
+            for item in value:
+                rewrite(item, request=request)
+        elif isinstance(value, dict):
+            if value.get("$ref") == canonical_ref:
+                value["$ref"] = f"#/components/schemas/{input_name if request else output_name}"
+            for key, item in value.items():
+                rewrite(item, request=request or key == "requestBody")
+
+    rewrite(schema)
+
+
+def export_schema() -> dict[str, object]:
+    """Return the gateway OpenAPI document exactly as the web contract stores it."""
+    src_dir = _repo_root() / "src"
+    if str(src_dir) not in sys.path:
+        sys.path.insert(0, str(src_dir))
+
+    from app.gateway.main import create_gateway_app
+
+    schema = create_gateway_app().openapi()
+    _stabilize_equivalent_io_schemas(schema)
+    return _stabilize_integral_json_numbers(schema)
+
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: python scripts/export_gateway_openapi.py <output-json>", file=sys.stderr)
         return 2
 
-    root = _repo_root()
-    src_dir = root / "src"
-    if str(src_dir) not in sys.path:
-        sys.path.insert(0, str(src_dir))
-
-    from app.gateway.main import create_gateway_app
-
-    output_path = (root / argv[1]).resolve()
+    output_path = (_repo_root() / argv[1]).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    schema = create_gateway_app().openapi()
-    _stabilize_equivalent_io_schemas(schema)
-    schema = _stabilize_integral_json_numbers(schema)
+    schema = export_schema()
     output_path.write_text(
         json.dumps(schema, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

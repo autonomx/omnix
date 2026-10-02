@@ -7,42 +7,43 @@ failures later in the session do not erase already-observed evidence.
 
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import CandidateLifecycleState
 from .strategy_dynamic_discovery_repository import DynamicDiscoveryEventRepository
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_yahoo_acquisition_monitor"
 _SESSION_OPEN = time(4, 0)
 _SESSION_CLOSE = time(16, 5)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def yahoo_acquisition_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_YAHOO_ACQUISITION", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_YAHOO_ACQUISITION_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(15.0, value)
@@ -215,14 +216,13 @@ class TradingYahooAcquisitionMonitor:
         }
 
 
-def register_trading_yahoo_acquisition_monitor(
-    gateway: FastAPI,
-) -> TradingYahooAcquisitionMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_yahoo_acquisition_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingYahooAcquisitionMonitor):
-        return existing
+        return None
     monitor = TradingYahooAcquisitionMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if yahoo_acquisition_monitor_enabled():
@@ -231,14 +231,13 @@ def register_trading_yahoo_acquisition_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingYahooAcquisitionMonitor",
-    "register_trading_yahoo_acquisition_monitor",
+    "create_trading_yahoo_acquisition_monitor_worker",
     "yahoo_acquisition_monitor_enabled",
 ]

@@ -10,10 +10,10 @@ from app.assistant_memory.owner_repository import OwnerAwareInMemoryMemoryReposi
 
 
 def test_default_memory_service_does_not_cache_prebootstrap(monkeypatch) -> None:
-    from app.persistence import runtime_install
+    from app.persistence import runtime
 
     clear_default_memory_repository_factory()
-    monkeypatch.setattr(runtime_install, "runtime_adapters_installed", lambda: False)
+    monkeypatch.setattr(runtime, "uses_postgresql_runtime", lambda: False)
 
     first = default_memory_service()
     second = default_memory_service()

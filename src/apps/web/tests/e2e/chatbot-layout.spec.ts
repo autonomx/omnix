@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { expect, test, type Page } from '@playwright/test';
 
 async function installChatbotMocks(page: Page): Promise<void> {
@@ -23,7 +24,7 @@ async function installChatbotMocks(page: Page): Promise<void> {
       }),
     });
   });
-  await page.route('**/api/assets', async (route) => {
+  await page.route(/\/api\/assets(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({ assets: [] }),

@@ -1,3 +1,4 @@
+/* eslint-disable omnix/no-app-direct-feature-dynamic-import -- baseline WP-9.x */
 import type { QueryClient } from '@tanstack/react-query';
 import type { OmnixModuleId } from './modules';
 

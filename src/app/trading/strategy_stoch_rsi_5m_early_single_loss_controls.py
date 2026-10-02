@@ -18,7 +18,6 @@ from __future__ import annotations
 from datetime import time
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from .indicator_signals import _stochastic_rsi_aligned
 from .indicators.engine import exponential_moving_average
@@ -27,9 +26,9 @@ from .strategies.gap_pullback import session_vwap
 from .strategies.models import StochRsi5mConfig
 from .strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
 from .strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _PRE_ENTRY_RANGE_CAP_PCT = Decimal("150")
 _GUARDED_EMA_PERIOD = 50
 _GUARDED_EMA_SLOPE_LOOKBACK_BARS = 3

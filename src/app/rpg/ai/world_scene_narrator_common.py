@@ -48,7 +48,8 @@ from app.rpg.player import build_encounter_view
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE_NARRATIONS = set()
+# Compatibility export for the retired single-process narration guard.
+_ACTIVE_NARRATIONS = frozenset()
 
 NARRATION_JSON_FORMAT_VERSION = "rpg_narration_v2"
 
@@ -99,7 +100,11 @@ def _extract_llm_text(response):
 
 def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
     """Call the LLM gateway and return the response as a clean string."""
-    logger.info("[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s", len(prompt), list(context.keys()) if context else [])
+    logger.info(
+        "[RPG LLM GATEWAY] Calling LLM with prompt length: %d, context keys: %s",
+        len(prompt),
+        list(context.keys()) if context else [],
+    )
     gateway_call = getattr(llm_gateway, "call", None)
     gateway_generate = getattr(llm_gateway, "generate", None)
     gateway_generate_stream = getattr(llm_gateway, "generate_stream", None)
@@ -125,7 +130,9 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
             return _extract_llm_text("".join(chunks).strip())
         except Exception as exc:
             print("[RPG][LLM] stream failed:", repr(exc))
-            logger.exception("[RPG LLM GATEWAY] Streaming failed, falling back to non-streaming")
+            logger.exception(
+                "[RPG LLM GATEWAY] Streaming failed, falling back to non-streaming"
+            )
             if chunks:
                 return _extract_llm_text("".join(chunks).strip())
 
@@ -147,7 +154,11 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
         else:
             raise AttributeError("gateway has no generate or call interface")
         print("[RPG][LLM] raw response:", repr(response)[:500])
-        logger.info("[RPG LLM GATEWAY] Received response type: %s, length: %d", type(response), len(str(response)) if response else 0)
+        logger.info(
+            "[RPG LLM GATEWAY] Received response type: %s, length: %d",
+            type(response),
+            len(str(response)) if response else 0,
+        )
     except Exception as exc:
         print("[RPG][LLM] generate failed:", repr(exc))
         logger.exception("[RPG LLM GATEWAY] LLM call failed")
@@ -170,8 +181,7 @@ def _attach_social_context(scene, simulation_state):
     social_state = simulation_state.get("social_state") or {}
 
     scene["active_rumors"] = [
-        dict(item)
-        for item in (simulation_state.get("active_rumors") or [])[:3]
+        dict(item) for item in (simulation_state.get("active_rumors") or [])[:3]
     ]
     scene["active_alliances"] = [
         dict(item)
@@ -188,6 +198,7 @@ def _attach_social_context(scene, simulation_state):
 # ---------------------------------------------------------------------------
 # Phase 6 — NPC mind context helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_str_p6(value):
     if value is None:
@@ -206,7 +217,7 @@ def _attach_npc_mind_context(actor, simulation_state):
 
     if isinstance(mind, dict):
         actor["memory_summary"] = ((mind.get("memory") or {}).get("entries") or [])[:5]
-        actor["belief_summary"] = ((mind.get("beliefs") or {}).get("beliefs") or {})
+        actor["belief_summary"] = (mind.get("beliefs") or {}).get("beliefs") or {}
         actor["active_goals"] = ((mind.get("goals") or {}).get("goals") or [])[:5]
         actor["last_decision"] = mind.get("last_decision") or {}
 
@@ -220,11 +231,11 @@ def _safe_str(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
-def _safe_dict(value: Any) -> Dict[str, Any]:
+def _safe_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _safe_list(value: Any) -> List[Any]:
+def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
@@ -235,7 +246,7 @@ def _title_case_token(value: Any) -> str:
     return text.replace("_", " ").strip().title()
 
 
-def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
+def _force_live_llm_required(narration_context: dict[str, Any]) -> bool:
     narration_context = _safe_dict(narration_context)
     runtime_settings = _safe_dict(narration_context.get("runtime_settings"))
     performance = _safe_dict(narration_context.get("performance"))
@@ -245,4 +256,43 @@ def _force_live_llm_required(narration_context: Dict[str, Any]) -> bool:
         or performance.get("require_live_llm_narration")
     )
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+
+__all__ = (
+    'annotations',
+    'json',
+    'logging',
+    're',
+    'traceback',
+    'dataclass',
+    'field',
+    'Any',
+    'Callable',
+    'Dict',
+    'List',
+    'Optional',
+    'normalize_grounding_settings',
+    'select_grounded_narration_candidate',
+    'memory_reference_is_backed',
+    'build_runtime_npc_response_architecture',
+    'build_runtime_current_turn_prompt_contract',
+    'format_runtime_prompt_contract_block',
+    'build_runtime_presentation_guardrails_block',
+    'sanitize_unsupported_combat_payload',
+    'parse_runtime_provider_payload',
+    'build_encounter_view',
+    'logger',
+    '_ACTIVE_NARRATIONS',
+    'NARRATION_JSON_FORMAT_VERSION',
+    'NARRATION_JSON_SCHEMA_HINT',
+    '_extract_llm_text',
+    '_llm_text',
+    '_attach_social_context',
+    '_safe_str_p6',
+    '_attach_npc_mind_context',
+    '_NARRATION_MAX_MARKDOWN',
+    '_safe_str',
+    '_safe_dict',
+    '_safe_list',
+    '_title_case_token',
+    '_force_live_llm_required',
+)

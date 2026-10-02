@@ -1,6 +1,8 @@
 """Contract tests for the unified provider facade."""
 from __future__ import annotations
 
+from tests.support.routers import effective_routes
+
 import asyncio
 import sys
 from pathlib import Path
@@ -98,14 +100,16 @@ def test_gateway_provider_payload_is_offloaded_from_event_loop(monkeypatch) -> N
         settings_loader=lambda: {},
     )
     app = main.create_gateway_app(provider_facade_factory=lambda: facade)
-    route = next(route for route in app.routes if route.path == "/api/providers")
+    route = next(route for route in effective_routes(app) if route.path == "/api/providers")
     calls = []
 
     async def fake_to_thread(func, *args, **kwargs):
         calls.append(func)
         return func(*args, **kwargs)
 
-    monkeypatch.setattr(main.asyncio, "to_thread", fake_to_thread)
+    from app.gateway import kernel_routes
+
+    monkeypatch.setattr(kernel_routes.asyncio, "to_thread", fake_to_thread)
     payload = asyncio.run(route.endpoint())
 
     assert payload.providers == []

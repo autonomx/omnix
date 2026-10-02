@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import json
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_dossier_quality import validate_dossier_quality
 from app.rpg.session.genesis.world_forge_dossiers import (
@@ -92,7 +92,7 @@ def _store_editorial_replacement(
     if issues:
         raise ValueError("world_entity_dossier_invalid:" + ",".join(issues))
     summary = compact_summary(short_summary)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,
@@ -261,7 +261,7 @@ def regenerate_world_entity_dossier(
     generator: WorldForgeTopicGenerator | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,

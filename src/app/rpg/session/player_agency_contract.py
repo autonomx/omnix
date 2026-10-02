@@ -269,6 +269,9 @@ def _json_obj(value: Any) -> dict[str, Any]:
 def _provider_payload(provider: Any, prompt: str, context: Mapping[str, Any]) -> dict[str, Any]:
     if provider is None:
         return {}
+    from app.rpg.ai.llm_gateway_adapter import adapt_base_provider
+
+    provider = adapt_base_provider(provider)
     if hasattr(provider, "generate"):
         return _json_obj(provider.generate(prompt, context=dict(context), timeout_s=20.0))
     if hasattr(provider, "complete_json"):

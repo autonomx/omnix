@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { useEffect, useState } from 'react';
 import type { RpgStoryMessagePreview } from './rpgUiState';
 import {

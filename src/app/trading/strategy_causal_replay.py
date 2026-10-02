@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Causal intraday evidence recovery and deterministic V2 replay.
 
 The strategy monitor persists overlapping finalized one-minute bar windows on
@@ -8,14 +12,13 @@ post-hoc chart interpretation, reports any gaps, and can replay the existing
 versioned evaluator over prefixes to locate the first causal entry signal.
 """
 
-from datetime import timedelta
 from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .gapper_dataset import GapperCandidate
 from .models import MarketBar
-from .strategies.gap_pullback import evaluate_gap_pullback
+from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
 from .strategy_repository import StrategyEvent
 
@@ -60,6 +63,7 @@ def recover_causal_1m_bars(
             try:
                 bar = MarketBar.model_validate(raw)
             except Exception:
+                logger.debug("suppressed error in %s", "recover_causal_1m_bars", exc_info=True)
                 continue
             if bar.interval != "1m" or not bar.is_final or bar.session != "regular":
                 continue

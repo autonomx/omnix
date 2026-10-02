@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import os
 from dataclasses import dataclass
@@ -30,7 +32,7 @@ class HermesPlanner:
             from app.assist_core.hermes_client import HermesSidecarClient
             from app.assist_core.hermes_status import hermes_runtime_config
             config = hermes_runtime_config()
-            client = HermesSidecarClient(base_url=config.base_url, api_key=os.environ.get("HERMES_API_KEY") or None, timeout=config.timeout_seconds)
+            client = HermesSidecarClient(base_url=config.base_url, api_key=environment().get("HERMES_API_KEY") or None, timeout=config.timeout_seconds)
         self.client = client
 
     def next_action(self, request: TradingResearchRequest, context: TradingHermesContext) -> Any:
@@ -46,14 +48,14 @@ class SafeStopPlanner:
 
 def hermes_trading_research_enabled() -> bool:
     def flag(name: str) -> bool:
-        return os.environ.get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
+        return environment().get(name, "0").strip().lower() in {"1", "true", "yes", "on"}
 
     if not flag("HERMES_ENABLED"):
         return False
     # Trading research is read-only. Reuse the same Hermes switch as chat when
     # no trading-specific override was supplied; an explicit false still
     # provides a safe opt-out for deployments that want Hermes chat only.
-    if "OMNIX_TRADING_HERMES_RESEARCH_ENABLED" in os.environ:
+    if "OMNIX_TRADING_HERMES_RESEARCH_ENABLED" in environment():
         return flag("OMNIX_TRADING_HERMES_RESEARCH_ENABLED")
     return True
 

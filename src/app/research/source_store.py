@@ -1,9 +1,9 @@
 """Durable source, retrieval snapshot, and citation-manifest storage."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .contracts import ResearchSource, ResearchSourceSnapshot
 from .extraction import ExtractedPage
@@ -252,7 +252,7 @@ def stable_source_record_id(
 
 
 def default_research_source_store_path() -> Path:
-    override = os.environ.get("OMNIX_RESEARCH_SOURCE_STORE_PATH")
+    override = _env_str("OMNIX_RESEARCH_SOURCE_STORE_PATH")
     return Path(override) if override else resources_data_root() / "research_sources.json"
 
 

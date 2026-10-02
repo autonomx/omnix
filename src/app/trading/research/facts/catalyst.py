@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
 from ..contracts import CatalystFactSet, TradingEvidence
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
 _SUPPLY_ONLY_FORMS = {"S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"}
 
 

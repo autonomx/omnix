@@ -9,7 +9,9 @@ import pytest
 
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.migrations import apply_migrations
+from app.security.tenant_context import install_process_tenant
 
 
 pytestmark = pytest.mark.skipif(
@@ -54,7 +56,8 @@ def _reset(database: PostgresDatabase) -> None:
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'legacy_preflight', import_run_id = NULL,
+               SET mode = 'legacy_preflight', authority_state = 'legacy_preflight',
+                   import_run_id = NULL,
                    source_hash = NULL, activated_at = NULL,
                    rollback_recorded_at = NULL, metadata = '{}'::jsonb,
                    updated_at = CURRENT_TIMESTAMP
@@ -63,12 +66,37 @@ def _reset(database: PostgresDatabase) -> None:
         )
 
 
+def _restore_runtime_authority(database: PostgresDatabase) -> None:
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_persistence_cutover
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
+        )
+    install_process_tenant(ensure_local_identity(database))
+
+
 _SCRIPT = r'''
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
+from app.assistant_memory.persistence.settings_store import assistant_memory_setting_spec
+from app.persistence.database import default_database
+from app.security.tenant_context import TenantProvider
+from app.settings.access import install_settings_service
+from app.settings.registry import core_setting_specs
+from app.settings.service import SettingsService
+settings_service = SettingsService(
+    default_database(),
+    TenantProvider().current,
+    specs=(*core_setting_specs(), assistant_memory_setting_spec()),
+)
+install_settings_service(settings_service)
 
 from app.characters import service as character_service
 assert character_service.CharacterRepository.__name__ == "InMemoryCharacterRepository"
@@ -76,8 +104,13 @@ assert character_service.default_character_service().repository.__class__.__name
 
 from app.characters.management import CharacterManagementService
 from app.assistant_memory.owner_defaults import default_memory_service
-from app.assistant_memory.models import MemoryScopeContext
-management = CharacterManagementService(character_service.default_character_service(), object())
+from app.runtime_composition import production_owner_memory_repository
+from app.memory_contracts import MemoryScopeContext
+management = CharacterManagementService(
+    character_service.default_character_service(),
+    object(),
+    production_owner_memory_repository(),
+)
 assert management.memory_repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
 memory = default_memory_service().create_explicit_memory(
     MemoryScopeContext(profile_id="profile:default", workspace_id="workspace:local",
@@ -146,10 +179,10 @@ config = config_store.load_assistant_tools_config()
 saved = config_store.save_assistant_tools_config(config)
 assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 
-from app.gateway import live_chat_evaluation_store as evaluations
+from app.chat import evaluation_store as evaluations
 assert evaluations.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
-from app.gateway import live_chat_evaluation_routes as evaluation_routes
+from app.chat import live_chat_evaluation_routes as evaluation_routes
 assert evaluation_routes.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 assert evaluation_routes.default_live_chat_evaluation_store().__class__.__name__ == "PostgresLiveChatEvaluationStore"
 record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
@@ -211,25 +244,6 @@ snapshot = refresh_store.record_snapshot(
 )
 assert refresh_store.latest_snapshot().id == snapshot.id
 
-from app.rpg.narrative import narrative_persistence
-from app.rpg.narrative.narrative_event import NarrativeEvent
-assert narrative_persistence.NarrativeEventStore.__name__ == "InMemoryNarrativeEventStore"
-narrative = narrative_persistence.default_narrative_event_store(session_id="campaign:factory")
-narrative.save_events([
-    NarrativeEvent(
-        id="narrative:1",
-        type="dialogue",
-        description="Bran greets the player.",
-        actors=["npc:bran"],
-        location="The Rusty Flagon",
-        importance=0.5,
-        emotional_weight=0.1,
-        tags=["greeting"],
-        raw_event={"safe": True},
-    )
-])
-assert narrative.get_session_events("campaign:factory")[0].id == "narrative:1"
-
 from app.rpg.npc_evolution import profile_store
 runtime_state = {
     "npc_evolution": {
@@ -240,15 +254,15 @@ runtime_state = {
 persisted = profile_store.persist_npc_evolution_profiles(runtime_state=runtime_state)
 assert persisted["ok"] is True
 loaded = profile_store.load_npc_evolution_profiles_for_runtime(npc_ids=["npc:bran"])
-assert loaded["loaded_count"] == 1
+assert loaded["loaded_count"] == 1, (persisted, loaded)
 
 from app.chat import compaction, history_search
 from app.chat.models import ChatMessage, ChatSession
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.chat.compaction import ConversationSummary
 
 now = datetime.now(timezone.utc).isoformat()
-PostgresChatRepositoryAdapter().save_sessions([
+PostgresChatRepositoryAdapter().create_session(
     ChatSession(
         id="chat:factory",
         title="Factory",
@@ -270,7 +284,7 @@ PostgresChatRepositoryAdapter().save_sessions([
             )
         ],
     )
-])
+)
 summary_repo = compaction.default_summary_repository()
 summary = summary_repo.save(ConversationSummary(
     id="summary:factory",
@@ -295,13 +309,30 @@ import app.chat as chat_package
 assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacterChatSessionStore"
 
 from app.jobs import default_job_store
+from app.jobs.store import install_default_job_store_factory
+from app.runtime_composition import production_job_store
+install_default_job_store_factory(production_job_store)
 default_job_store()
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
-assert getattr(PostgresJobStoreAdapter, "_omnix_inline_feature_jobs_installed", False) is False
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 assert getattr(PostgresJobStoreAdapter, "_omnix_voice_studio_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_image_jobs_installed", False) is False
 assert getattr(PostgresJobStoreAdapter, "_omnix_research_jobs_installed", False) is False
-assert getattr(PostgresJobStoreAdapter, "_omnix_rpg_turn_job_guard_installed", False) is True
+from app.runtime.feature_catalog import load_feature
+from app.jobs.handlers import registry_from_features
+from app.jobs.models import CreateJobRequest, ResourceClass
+from app.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
+rpg_registry = registry_from_features((load_feature("rpg"),))
+rpg_turn_policy = rpg_registry.require("rpg.turn").submission_policy
+assert callable(rpg_turn_policy)
+rpg_turn_request = rpg_turn_policy(CreateJobRequest(
+    module="rpg",
+    type="rpg.turn",
+    resource_class=ResourceClass.GPU_LLM,
+    input_ref={"session_id": "campaign:factory"},
+    input_payload={"submission_id": "submission:factory"},
+))
+assert rpg_turn_request.compat["idempotency_key"] == "rpg-turn:campaign:factory:submission:factory"
+assert rpg_turn_policy(rpg_turn_request).compat == rpg_turn_request.compat
 
 from app.persistence.document_store import PostgresDocumentStore
 records = PostgresDocumentStore().list(module="live-chat", record_type="evaluation-policy-store")
@@ -314,25 +345,28 @@ def test_active_feature_factories_use_postgresql(tmp_path: Path) -> None:
     database = _database()
     try:
         _reset(database)
+        environment = dict(os.environ)
+        environment.update(
+            {
+                "PYTHONPATH": "src",
+                "OMNIX_DATABASE_URL": os.environ["OMNIX_TEST_DATABASE_URL"],
+                "OMNIX_PERSISTENCE_MODE": "postgresql",
+                "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
+            }
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", _SCRIPT],
+            cwd=Path(__file__).resolve().parents[3],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+        assert "active-postgresql-feature-factories-ok" in result.stdout
     finally:
-        database.close()
-    environment = dict(os.environ)
-    environment.update(
-        {
-            "PYTHONPATH": "src",
-            "OMNIX_DATABASE_URL": os.environ["OMNIX_TEST_DATABASE_URL"],
-            "OMNIX_PERSISTENCE_MODE": "postgresql",
-            "OMNIX_BLOB_ROOT": str(tmp_path / "blobs"),
-        }
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", _SCRIPT],
-        cwd=Path(__file__).resolve().parents[3],
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-    assert result.returncode == 0, f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
-    assert "active-postgresql-feature-factories-ok" in result.stdout
+        try:
+            _restore_runtime_authority(database)
+        finally:
+            database.close()

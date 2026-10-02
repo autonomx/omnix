@@ -284,7 +284,7 @@ def create_trading_strategy_operations_router(
     router = APIRouter(prefix="/api/trading/strategy-operations", tags=["trading-strategy-operations"])
 
     @router.get("/status", response_model=StrategyOperationsStatus)
-    async def strategy_operations_status(request: Request) -> StrategyOperationsStatus:
+    def strategy_operations_status(request: Request) -> StrategyOperationsStatus:
         state = request.app.state
         return StrategyOperationsStatus(
             observed_at=datetime.now(timezone.utc),
@@ -418,9 +418,8 @@ def create_trading_strategy_operations_router(
     @router.get(
         "/yahoo-acquisition-status",
         response_model=StrategyRuntimeMonitorStatus,
-        include_in_schema=False,
     )
-    async def yahoo_acquisition_operations_status(
+    def yahoo_acquisition_operations_status(
         request: Request,
     ) -> StrategyRuntimeMonitorStatus:
         return _monitor_status(
@@ -441,9 +440,8 @@ def create_trading_strategy_operations_router(
     @router.get(
         "/interday-status",
         response_model=InterdayMonitorOperationsStatus,
-        include_in_schema=False,
     )
-    async def interday_monitor_operations_status(request: Request) -> InterdayMonitorOperationsStatus:
+    def interday_monitor_operations_status(request: Request) -> InterdayMonitorOperationsStatus:
         # This is an operator/Codex diagnostic endpoint rather than a public UI
         # contract. Keeping it out of shared OpenAPI avoids coupling generated
         # clients to monitor-internal counters while preserving direct runtime

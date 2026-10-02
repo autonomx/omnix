@@ -3,14 +3,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
 from .contracts import ResearchEvidence, ResearchSource, ResearchSourceSnapshot
 from .deep_manifest import create_deep_research_manifest, update_snapshot_citation_label
 from .extraction import ReadablePageExtractor
-from .jobs import DeepResearchJobInput
 from .planner import (
     ResearchPlan,
     ResearchPlanner,
@@ -19,6 +18,10 @@ from .planner import (
     enforce_research_plan_budget,
 )
 from .source_store import ResearchSourceStore, default_research_source_store
+
+if TYPE_CHECKING:
+    # jobs imports this module at runtime; the input model is annotation-only here.
+    from .jobs import DeepResearchJobInput
 
 ResearchExecutionStatus = Literal["completed", "partial", "canceled"]
 
@@ -226,10 +229,15 @@ class DeepResearchExecutor:
         stop_reason = state.stop_reason or (
             "evidence_collected" if state.sources else "no_reliable_sources"
         )
-        if not state.sources and stop_reason in {
-            "planner_stop",
-            "Planner operations completed.",
-            "Stop when the evidence is sufficient or the hard budget is exhausted.",
+        # Without sources, a planner-chosen stop reason (any wording) must not
+        # read as a completed run; keep only cancellation and budget reasons.
+        if not state.sources and stop_reason not in {
+            "canceled",
+            "step_budget_exhausted",
+            "query_budget_exhausted",
+            "source_budget_exhausted",
+            "extract_budget_exhausted",
+            "duplicate_saturation",
         }:
             stop_reason = "no_reliable_sources"
         state.stop_reason = stop_reason

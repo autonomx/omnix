@@ -349,7 +349,7 @@ def _pdf_with_text() -> bytes:
 
 
 def test_pdf_source_extracts_text() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     revision = extract_source(project_id="book:pdf", content=_pdf_with_text(), source_format="pdf")
 
     assert "Chapter 1" in revision.chapters[0].canonical_text
@@ -357,10 +357,15 @@ def test_pdf_source_extracts_text() -> None:
 
 
 def test_pdf_with_spelled_chapter_numbers_creates_each_chapter() -> None:
-    pytest.importorskip("PyPDF2")
-    fixture = Path(__file__).resolve().parents[4] / "resources" / "data" / "audiobooks" / "the_gold_cart_merchant.pdf"
+    pytest.importorskip("pypdf")
     revision = extract_source(
-        project_id="book:gold-cart-merchant", content=fixture.read_bytes(), source_format="pdf",
+        project_id="book:gold-cart-merchant",
+        content=_pdf_with_pages((
+            "THE GOLD CART MERCHANT\n\nChapter One: The Cart Beyond the Castle\nThe cart reaches the market.",
+            "Chapter Two: Daniel's Marvels and Sundries\nDaniel displays unusual wares.",
+            "Chapter Three: The Sale That Saved the Market\nThe merchants make a careful sale.",
+        )),
+        source_format="pdf",
     )
 
     assert [chapter.title for chapter in revision.chapters] == [
@@ -371,23 +376,39 @@ def test_pdf_with_spelled_chapter_numbers_creates_each_chapter() -> None:
     assert "THE GOLD CART MERCHANT" in revision.chapters[0].canonical_text
 
 
-def _pdf_with_pages() -> bytes:
-    page_text = ["Title page.", "Chapter 1. Main text.", "References page."]
-    page_objects: list[bytes] = []
-    for page_number, text in enumerate(page_text):
-        content_id = (4, 7, 9)[page_number]
-        stream = f"BT /F1 18 Tf 72 720 Td ({text}) Tj ET\n".encode()
-        page_objects.extend([
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents {content_id} 0 R >>".encode(),
-            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream",
-        ])
+def _pdf_with_pages(
+    page_text: tuple[str, ...] = ("Title page.", "Chapter 1. Main text.", "References page."),
+) -> bytes:
+    page_ids = [3 + page_number * 2 for page_number in range(len(page_text))]
+    font_id = 3 + len(page_text) * 2
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R 6 0 R 8 0 R] /Count 3 >>",
-        page_objects[0], page_objects[1],
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        page_objects[2], page_objects[3], page_objects[4], page_objects[5],
+        (
+            f"<< /Type /Pages /Kids [{' '.join(f'{page_id} 0 R' for page_id in page_ids)}] "
+            f"/Count {len(page_text)} >>"
+        ).encode(),
     ]
+    for page_number, text in enumerate(page_text):
+        page_id = page_ids[page_number]
+        content_id = page_id + 1
+        page = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+        ).encode()
+        lines = text.splitlines() or [""]
+        commands = ["BT /F1 18 Tf 72 720 Td"]
+        for line_index, line in enumerate(lines):
+            if line_index:
+                commands.append("0 -24 Td")
+            escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            commands.append(f"({escaped}) Tj")
+        commands.append("ET\n")
+        stream = " ".join(commands).encode()
+        content = b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream"
+        objects.extend([page, content])
+    objects.append(
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
+    )
     output = bytearray(b"%PDF-1.4\n")
     offsets = [0]
     for number, body in enumerate(objects, start=1):
@@ -405,7 +426,7 @@ def _pdf_with_pages() -> bytes:
 
 
 def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     content = _pdf_with_pages()
     complete = extract_source(project_id="book:pdf-pages", content=content, source_format="pdf")
     filtered = extract_source(
@@ -426,7 +447,7 @@ def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
 
 
 def test_pdf_outline_headings_create_chapters_after_front_matter_exclusion() -> None:
-    pdf = pytest.importorskip("PyPDF2")
+    pdf = pytest.importorskip("pypdf")
     writer = pdf.PdfWriter()
     for page in pdf.PdfReader(BytesIO(_pdf_with_pages())).pages:
         writer.add_page(page)
@@ -454,7 +475,7 @@ def test_pdf_page_exclusions_validate_ranges() -> None:
 
 
 def test_pdf_page_exclusions_reject_ranges_past_document() -> None:
-    pytest.importorskip("PyPDF2")
+    pytest.importorskip("pypdf")
     with pytest.raises(UnsupportedSource, match="3 pages"):
         extract_source(
             project_id="book:pdf-pages", content=_pdf_with_pages(), source_format="pdf",
@@ -474,7 +495,11 @@ def test_docx_source_extracts_paragraphs_and_metadata() -> None:
 
     revision = extract_source(project_id="book:docx", content=content.getvalue(), source_format="docx")
 
-    assert revision.metadata == {"title": "DOCX Book", "creator": "A Writer"}
+    assert revision.metadata["title"] == "DOCX Book"
+    assert revision.metadata["creator"] == "A Writer"
+    style_blocks = revision.metadata["docx_style_blocks"]
+    assert [block["text"] for block in style_blocks] == ["Chapter 1", "DOCX text."]
+    assert [block["style"] for block in style_blocks] == ["Heading 1", "Normal"]
     assert "DOCX text." in revision.chapters[0].canonical_text
 
 

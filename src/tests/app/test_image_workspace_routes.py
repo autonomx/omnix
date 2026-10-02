@@ -5,16 +5,16 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore as CompatibleSharedAssetStore
+from app.assets import AssetRecord, AssetType
 from app.assets.store import SharedAssetStore
-import app.gateway.image_workspace_routes as image_workspace_routes
+from app.image.routes.workspace import create_image_workspace_router
 import app.image.asset_store as legacy_image_store
-from app.jobs import CompleteJobRequest, CreateJobRequest, ResourceClass, SQLiteJobStore
+from app.jobs import CompleteJobRequest, CreateJobRequest, ResourceClass
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     jobs.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -90,10 +90,8 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
         )
     )
 
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
     app = FastAPI()
-    image_workspace_routes.register_image_workspace_routes(app)
+    app.include_router(create_image_workspace_router(jobs, assets))
     client = TestClient(app)
 
     job_response = client.get("/api/image-generation/jobs?limit=1")
@@ -106,11 +104,10 @@ def test_image_workspace_routes_are_filtered_and_bounded(tmp_path, monkeypatch) 
 
 
 def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
     image_file = tmp_path / "generated.png"
     image_file.write_bytes(b"png")
     assets = SharedAssetStore(tmp_path / "assets.json")
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     job = jobs.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -135,10 +132,8 @@ def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) 
         )
     )
 
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
     app = FastAPI()
-    image_workspace_routes.register_image_workspace_routes(app)
+    app.include_router(create_image_workspace_router(jobs, assets))
     client = TestClient(app)
 
     response = client.post("/api/image-generation/assets/image%3Agenerated/delete", json={})
@@ -156,8 +151,7 @@ def test_image_workspace_deletes_manifest_asset_and_file(tmp_path, monkeypatch) 
 
 
 def test_image_workspace_jobs_prunes_deleted_image_result_jobs(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_INLINE_IMAGE_JOB_EXECUTOR", "0")
-    jobs = SQLiteJobStore(tmp_path / "jobs.sqlite")
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     job = jobs.create_job(
         CreateJobRequest(
             module="image-generation",
@@ -172,10 +166,8 @@ def test_image_workspace_jobs_prunes_deleted_image_result_jobs(tmp_path, monkeyp
     )
     assets = SharedAssetStore(tmp_path / "assets.json")
 
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", lambda: jobs)
     app = FastAPI()
-    image_workspace_routes.register_image_workspace_routes(app)
+    app.include_router(create_image_workspace_router(jobs, assets))
     client = TestClient(app)
 
     response = client.get("/api/image-generation/jobs")
@@ -209,10 +201,33 @@ def test_image_workspace_deletes_legacy_image_manifest_asset(tmp_path, monkeypat
     monkeypatch.setattr(legacy_image_store, "ASSET_DIR", str(legacy_dir))
     monkeypatch.setattr(legacy_image_store, "MANIFEST_PATH", str(legacy_manifest))
 
-    assets = CompatibleSharedAssetStore(tmp_path / "shared-assets.json")
-    monkeypatch.setattr(image_workspace_routes, "default_asset_store", lambda: assets)
+    def delete_legacy_image_asset(asset_id: str, *, delete_file: bool = True):
+        payload = json.loads(legacy_manifest.read_text(encoding="utf-8"))
+        legacy = payload["assets"].pop(asset_id, None)
+        legacy_manifest.write_text(json.dumps(payload), encoding="utf-8")
+        file_deleted = False
+        if legacy and delete_file:
+            legacy_file.unlink(missing_ok=True)
+            file_deleted = True
+        return {"deleted": legacy is not None, "file_deleted": file_deleted}
+
+    monkeypatch.setattr(legacy_image_store, "delete_image_asset", delete_legacy_image_asset)
+
+    assets = SharedAssetStore(tmp_path / "shared-assets.json")
+    assets.upsert_asset(
+        AssetRecord(
+            id="image:legacy-one",
+            module="image-generation",
+            type=AssetType.IMAGE,
+            mime_type="image/png",
+            storage_path=str(legacy_file),
+            created_at="2026-01-02T00:00:00+00:00",
+            compat={"legacy_asset_id": "legacy-one"},
+        )
+    )
+    jobs = InMemoryJobStore(tmp_path / "jobs.sqlite")
     app = FastAPI()
-    image_workspace_routes.register_image_workspace_routes(app)
+    app.include_router(create_image_workspace_router(jobs, assets))
     client = TestClient(app)
 
     response = client.delete("/api/image-generation/assets/image%3Alegacy-one")
@@ -224,14 +239,15 @@ def test_image_workspace_deletes_legacy_image_manifest_asset(tmp_path, monkeypat
     assert json.loads(legacy_manifest.read_text(encoding="utf-8"))["assets"] == {}
 
 
-def test_image_workspace_jobs_tolerates_store_read_failure(monkeypatch) -> None:
+def test_image_workspace_jobs_tolerates_store_read_failure(tmp_path) -> None:
     class BrokenStore:
         def list_jobs(self) -> list[object]:
             raise OSError("transient disk read failure")
 
-    monkeypatch.setattr(image_workspace_routes, "default_job_store", BrokenStore)
+    jobs = BrokenStore()
+    assets = SharedAssetStore(tmp_path / "assets.json")
     app = FastAPI()
-    image_workspace_routes.register_image_workspace_routes(app)
+    app.include_router(create_image_workspace_router(jobs, assets))
     client = TestClient(app)
 
     response = client.get("/api/image-generation/jobs")

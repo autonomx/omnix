@@ -6,8 +6,9 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.gateway import live_chat_postgres_fast_path as fast_path
-from app.persistence import chat_runtime_compat
+from app.chat.persistence import chat_runtime as fast_path
+from app.chat.persistence import chat_runtime
+from app.chat.persistence.chat_store import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
 
 
 NOW = "2026-07-18T00:00:00+00:00"
@@ -49,7 +50,7 @@ def test_load_single_session_avoids_workspace_scan(monkeypatch) -> None:
         ) -> list[dict[str, Any]]:
             self.list_message_calls += 1
             assert session_id == session.id
-            assert limit == 500
+            assert limit == _MESSAGE_PAGE_SIZE
             assert after_position == -1
             return []
 
@@ -74,6 +75,10 @@ def test_load_single_session_avoids_workspace_scan(monkeypatch) -> None:
         database=object(),
         context=object(),
         _to_session=lambda record, messages: session,
+    )
+    # The real paged transcript loader, over the fake repository.
+    adapter._list_all_messages = lambda work, session_id: PostgresChatRepositoryAdapter._list_all_messages(
+        adapter, work, session_id
     )
     store = SimpleNamespace(_repository=adapter)
     monkeypatch.setattr(fast_path, "unit_of_work", fake_unit_of_work)
@@ -115,7 +120,10 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
         current: ChatSession,
         message: object,
         request: SendChatMessageRequest,
+        *,
+        streaming: bool = False,
     ) -> FakeTurn:
+        assert streaming is False
         turn = FakeTurn()
         message.metadata.update(
             {
@@ -135,14 +143,25 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     request = SendChatMessageRequest(
         content="Hello from live voice",
         provider_id="llm:lmstudio",
-        model_id="llm:lmstudio:qwen",
         user_turn_id="voice-user-turn:test",
         speech_segment_id="voice-segment:test",
         workspace_root="F:/LLM/omnix",
     )
     store = SimpleNamespace()
 
-    result = fast_path._begin_user_message_fast(store, session.id, request)
+    route_metadata = {
+        "provider_id": "llm:lmstudio",
+        "model_id": None,
+        "provider_explicit": True,
+        "model_explicit": False,
+        "execution_lane": "session",
+    }
+    result = fast_path._begin_user_message_fast(
+        store,
+        session.id,
+        request,
+        route_metadata=route_metadata,
+    )
 
     assert result is not None
     returned_session, message = result
@@ -151,14 +170,20 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     assert persisted[0] == (session, message)
     assert session.title == "Hello from live voice"
     assert session.provider_id == "llm:lmstudio"
-    assert session.model_id == "llm:lmstudio:qwen"
+    assert session.model_id is None
     assert session.message_count == 1
     assert message.metadata["generation_status"] == "running"
     assert message.metadata["segment_id"] == "segment:test"
     assert message.metadata["assistant_turn_id"] == "assistant-turn:test"
     assert message.metadata["workspace_root"] == "F:/LLM/omnix"
+    assert message.metadata["omnix_provider_route"] == route_metadata
 
-    duplicate = fast_path._begin_user_message_fast(store, session.id, request)
+    duplicate = fast_path._begin_user_message_fast(
+        store,
+        session.id,
+        request,
+        route_metadata=route_metadata,
+    )
 
     assert duplicate is not None
     assert duplicate[0] is session
@@ -346,7 +371,7 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     monkeypatch.setattr(
         fast_path,
         "default_assistant_turn_coordinator",
-        lambda: coordinator,
+        lambda *_args: coordinator,
     )
     monkeypatch.setattr(
         fast_path,
@@ -377,29 +402,73 @@ def test_complete_streamed_reply_avoids_compatibility_save(monkeypatch) -> None:
     assert events == ["live_chat_assistant_completion_fast_path_completed"]
 
 
-def test_live_session_mutation_allows_different_sessions_to_proceed() -> None:
-    """The PostgreSQL path must not inherit the file-store global mutex."""
-    import threading
+def test_durable_session_mutation_locks_only_the_requested_row(monkeypatch) -> None:
+    from contextlib import contextmanager
 
-    first_entered = threading.Event()
-    release_first = threading.Event()
-    second_entered = threading.Event()
+    class FakeConnection:
+        statement = ""
+        params = ()
 
-    def hold_first() -> None:
-        with fast_path._live_session_mutation("chat:first"):
-            first_entered.set()
-            assert release_first.wait(timeout=1)
+        def execute(self, statement: str, params: tuple[Any, ...]) -> None:
+            self.statement = statement
+            self.params = params
 
-    thread = threading.Thread(target=hold_first)
-    thread.start()
-    assert first_entered.wait(timeout=1)
-    with fast_path._live_session_mutation("chat:second"):
-        second_entered.set()
-    release_first.set()
-    thread.join(timeout=1)
+    class FakeWork:
+        def __init__(self) -> None:
+            self.connection = FakeConnection()
+            self.commits = 0
 
-    assert second_entered.is_set()
-    assert not thread.is_alive()
+        def commit(self) -> None:
+            self.commits += 1
+
+    work = FakeWork()
+
+    @contextmanager
+    def fake_unit_of_work(database: object):
+        yield work
+
+    @contextmanager
+    def fake_share_transaction(current_work: object):
+        assert current_work is work
+        yield
+
+    monkeypatch.setattr(fast_path, "unit_of_work", fake_unit_of_work)
+    monkeypatch.setattr(fast_path, "share_transaction", fake_share_transaction)
+    store = SimpleNamespace(
+        _repository=SimpleNamespace(
+            database=object(),
+            context=SimpleNamespace(workspace_id="workspace:test"),
+        )
+    )
+
+    with fast_path._durable_session_mutation(store, "chat:target"):
+        pass
+
+    assert "WHERE id = %s AND workspace_id = %s FOR UPDATE" in work.connection.statement
+    assert work.connection.params == ("chat:target", "workspace:test")
+    assert work.commits == 1
+
+
+def test_durable_store_does_not_depend_on_the_process_chat_lock(monkeypatch) -> None:
+    from app.chat import concurrency
+
+    class ForbiddenLock:
+        def __enter__(self):
+            raise AssertionError("durable chat writes must use PostgreSQL row locks")
+
+        def __exit__(self, *_args):
+            return False
+
+    class DurableStore:
+        _durable_chat_mutations = True
+
+    monkeypatch.setattr(concurrency, "CHAT_MUTATION_LOCK", ForbiddenLock())
+
+    @concurrency.serialized_chat_mutation
+    def mutate(store):
+        return store._durable_chat_mutations
+
+    assert mutate(DurableStore()) is True
 
 
 def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> None:
@@ -411,27 +480,39 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
             created_history.append(self)
 
     class FakeChatStore:
-        def __init__(self, *, history_search_factory) -> None:
+        def __init__(
+            self,
+            *,
+            history_search_factory,
+            memory_service_factory,
+            memory_settings_factory,
+            job_service,
+            live_agent_planner,
+        ) -> None:
             self.history_search_factory = history_search_factory
+            self.memory_service_factory = memory_service_factory
+            self.memory_settings_factory = memory_settings_factory
+            self.job_service = job_service
+            self.live_agent_planner = live_agent_planner
             created_stores.append(self)
 
-    chat_runtime_compat.reset_default_chat_runtime_caches()
+    chat_runtime.reset_default_chat_runtime_caches()
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresHistorySearchService",
         FakeHistorySearchService,
     )
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresCharacterChatSessionStore",
         FakeChatStore,
     )
 
     try:
-        first_history = chat_runtime_compat.default_history_search_service()
-        second_history = chat_runtime_compat.default_history_search_service()
-        first_store = chat_runtime_compat.default_chat_store()
-        second_store = chat_runtime_compat.default_chat_store()
+        first_history = chat_runtime.default_history_search_service()
+        second_history = chat_runtime.default_history_search_service()
+        first_store = chat_runtime.default_chat_store()
+        second_store = chat_runtime.default_chat_store()
 
         assert first_history is second_history
         assert first_store is second_store
@@ -439,4 +520,4 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
         assert created_history == [first_history]
         assert created_stores == [first_store]
     finally:
-        chat_runtime_compat.reset_default_chat_runtime_caches()
+        chat_runtime.reset_default_chat_runtime_caches()

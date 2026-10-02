@@ -1,8 +1,12 @@
 """Request-scoped deadlines shared by Chat routing entry points."""
 from __future__ import annotations
 
+import logging
+
 import math
 from time import monotonic
+
+logger = logging.getLogger(__name__)
 
 
 def _provider_key(value: str | None) -> str:
@@ -36,9 +40,9 @@ def provider_turn_deadline(
     if not resolved_id:
         return None
     try:
-        from app import shared
+        from app.providers import service as provider_service
 
-        provider = shared.get_provider(resolved_id)
+        provider = provider_service.get_provider(resolved_id)
         configured = getattr(getattr(provider, "config", None), "timeout", None)
         timeout = float(configured)
     except (TypeError, ValueError, AttributeError):
@@ -47,6 +51,7 @@ def provider_turn_deadline(
         # Provider discovery is an optional input to routing. A registry or
         # configuration failure must not turn a Chat turn into a 500 before
         # SemanticTask v2 can apply its deterministic fail-closed behavior.
+        logger.debug("suppressed error in %s", "provider_turn_deadline", exc_info=True)
         return None
     if not math.isfinite(timeout) or timeout <= 0:
         return None

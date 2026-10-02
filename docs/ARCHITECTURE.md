@@ -2,7 +2,7 @@
 
 ## Hardened runtime composition
 
-Production binds one immutable [RuntimeConfig](../src/app/runtime_config.py), derives [process capabilities](../src/app/runtime_capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
+Production binds one immutable [RuntimeConfig](../src/app/runtime/config.py), derives [process capabilities](../src/app/runtime/capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
 
 PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
 
@@ -244,6 +244,8 @@ A job can carry:
 - cancellation/retry information.
 
 Common resource classes include CPU plus GPU classes for LLM, TTS, STT, and image work. Feature workspaces can show filtered job subsets, while `/jobs` exposes the shared operational view.
+
+Standalone job-worker processes claim registered job types through independently bounded resource pools. PostgreSQL `SKIP LOCKED` claims and per-attempt lease tokens let workers run on any host without gateway singleton ownership. Each pool reports readiness and Prometheus metrics separately.
 
 Representative staged workflows:
 
@@ -488,6 +490,7 @@ Before adding a new feature, verify that the change preserves these rules:
 - Add typed API contracts instead of feature-specific transport hacks.
 - Use the shared provider/model registry.
 - Use the shared job system for long-running work.
+- Run durable job execution in standalone resource pools; keep the gateway worker role responsible for singleton schedulers and recovery.
 - Store outputs through the shared asset/artifact model.
 - Use the shared event transport.
 - Register settings in the settings infrastructure with an explicit persistence owner.

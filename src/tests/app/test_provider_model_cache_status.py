@@ -10,7 +10,8 @@ from app.providers.cache_status import (
     ProviderModelCachePayload,
     ProviderModelCacheStatusService,
     ProviderModelRefreshRequest,
-    SQLiteProviderModelRefreshStore,
+    InMemoryProviderModelRefreshStore,
+    clear_provider_refresh_history,
     create_provider_model_refresh_handlers,
     create_provider_model_refresh_job_request,
 )
@@ -20,6 +21,7 @@ from app.providers.facade import (
     ProviderFacadePayload,
     ProviderSummary,
 )
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _provider_payload() -> ProviderFacadePayload:
@@ -171,9 +173,9 @@ def test_provider_model_refresh_job_request_is_cpu_bound_and_event_visible() -> 
     assert job_request.compat["contract"] == "provider_model_refresh_v1"
 
 
-def test_provider_model_refresh_store_persists_snapshots(tmp_path: Path) -> None:
-    db_path = tmp_path / "provider-model-refresh.sqlite"
-    store = SQLiteProviderModelRefreshStore(db_path)
+def test_in_memory_provider_model_refresh_store_shares_snapshots(tmp_path: Path) -> None:
+    db_path = tmp_path / "provider-model-refresh"
+    store = InMemoryProviderModelRefreshStore(db_path)
 
     snapshot = store.record_snapshot(
         scope="all",
@@ -182,7 +184,7 @@ def test_provider_model_refresh_store_persists_snapshots(tmp_path: Path) -> None
         cache_payload=_cache_payload("degraded"),
     )
 
-    next_store = SQLiteProviderModelRefreshStore(db_path)
+    next_store = InMemoryProviderModelRefreshStore(db_path)
     history = next_store.history()
     latest = next_store.latest_snapshot()
 
@@ -198,12 +200,36 @@ def test_provider_model_refresh_store_persists_snapshots(tmp_path: Path) -> None
     assert history.snapshots[0].id == snapshot.id
 
 
-@pytest.mark.asyncio
-async def test_provider_model_refresh_handler_completes_job_and_records_snapshot(tmp_path: Path) -> None:
-    from app.jobs import LocalJobExecutor, SQLiteJobStore
+def test_provider_refresh_fallback_history_is_bounded_and_clearable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers import cache_status
 
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    refresh_store = SQLiteProviderModelRefreshStore(tmp_path / "refresh.sqlite")
+    clear_provider_refresh_history()
+    monkeypatch.setattr(cache_status, "MAX_REFRESH_HISTORY_KEYS", 1)
+    first = InMemoryProviderModelRefreshStore(tmp_path / "first")
+    second = InMemoryProviderModelRefreshStore(tmp_path / "second")
+    for store in (first, second):
+        store.record_snapshot(
+            scope="all",
+            reason=None,
+            provider_payload=_provider_payload(),
+            cache_payload=_cache_payload(),
+        )
+
+    assert first.list_snapshots() == []
+    assert len(second.list_snapshots()) == 1
+    clear_provider_refresh_history()
+    assert second.list_snapshots() == []
+
+
+@pytest.mark.anyio
+async def test_provider_model_refresh_handler_completes_job_and_records_snapshot(tmp_path: Path) -> None:
+    from app.jobs import LocalJobExecutor
+
+    job_store = InMemoryJobStore(tmp_path / "jobs")
+    refresh_store = InMemoryProviderModelRefreshStore(tmp_path / "refresh")
     job = job_store.create_job(
         create_provider_model_refresh_job_request(
             ProviderModelRefreshRequest(scope="models", reason="button-click", priority=4)
@@ -245,16 +271,16 @@ async def test_provider_model_refresh_handler_completes_job_and_records_snapshot
     assert events[-1].event_type == "job.completed"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_provider_model_refresh_handler_failure_uses_shared_failed_event(tmp_path: Path) -> None:
-    from app.jobs import LocalJobExecutor, SQLiteJobStore
+    from app.jobs import LocalJobExecutor
 
     class BrokenFacade:
         def payload(self) -> ProviderFacadePayload:
             raise RuntimeError("discovery failed")
 
-    job_store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-    refresh_store = SQLiteProviderModelRefreshStore(tmp_path / "refresh.sqlite")
+    job_store = InMemoryJobStore(tmp_path / "jobs")
+    refresh_store = InMemoryProviderModelRefreshStore(tmp_path / "refresh")
     job = job_store.create_job(
         create_provider_model_refresh_job_request(ProviderModelRefreshRequest(scope="providers"))
     )

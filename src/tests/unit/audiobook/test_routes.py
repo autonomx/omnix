@@ -15,18 +15,11 @@ from app.gateway.main import create_gateway_app
 
 def test_audiobook_api_is_registered_on_gateway() -> None:
     gateway = create_gateway_app()
-    paths = {
-        route.path for route in gateway.routes
-        if hasattr(route, "path")
-    }
+    paths = set(gateway.openapi()["paths"])
     assert "/api/audiobook/projects" in paths
     assert "/api/audiobook/source-library" in paths
     assert "/api/audiobook/projects/{project_id}" in paths
-    assert any(
-        "DELETE" in (getattr(route, "methods", None) or set())
-        for route in gateway.routes
-        if getattr(route, "path", None) == "/api/audiobook/projects/{project_id}"
-    )
+    assert "delete" in gateway.openapi()["paths"]["/api/audiobook/projects/{project_id}"]
     assert "/api/audiobook/projects/{project_id}/assets/{asset_id}" in paths
     assert "/api/audiobook/projects/{project_id}/source" in paths
     assert "/api/audiobook/projects/{project_id}/source/library" in paths
@@ -119,7 +112,7 @@ def test_source_download_accepts_unicode_filename(tmp_path, monkeypatch) -> None
     ))
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).get("/api/audiobook/projects/book-one/source/download")
 
@@ -137,7 +130,7 @@ def test_export_reports_missing_blob_as_conflict(monkeypatch) -> None:
     )
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).post(
         "/api/audiobook/projects/book-one/exports", json={"format": "m4b"}
@@ -155,7 +148,7 @@ def test_audiobook_asset_delete_is_project_scoped(monkeypatch) -> None:
     )
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).delete(
         "/api/audiobook/projects/book-one/assets/asset-export",
@@ -176,7 +169,7 @@ def test_audiobook_asset_delete_protects_manuscript(monkeypatch) -> None:
     )
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).delete(
         "/api/audiobook/projects/book-one/assets/asset-source",
@@ -195,7 +188,7 @@ def test_audiobook_reclassify_queues_current_source_analysis(monkeypatch) -> Non
     )
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).post(
         "/api/audiobook/projects/book-one/reclassify",
@@ -216,7 +209,7 @@ def test_classification_rules_are_forwarded_and_bounded(monkeypatch) -> None:
     service = SimpleNamespace(reclassify_source=reclassify)
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
     client = TestClient(gateway)
     rules = "Character quotes can also be in speaker: quote format."
     assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": rules}).status_code == 202
@@ -237,7 +230,7 @@ def test_saved_classification_rules_endpoint_and_default_reclassification(monkey
         SimpleNamespace(save_classification_rules=save, reclassify_source=reclassify), None,
     ))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
     client = TestClient(gateway)
     path = "/api/audiobook/projects/book/classification-rules"
     assert client.post(path, json={"custom_rules": "Speaker: quote"}).json() == {"classification_rules": "Speaker: quote"}
@@ -259,7 +252,7 @@ def test_span_speech_removal_and_restore_routes(monkeypatch) -> None:
         SimpleNamespace(exclude_span_text=exclude, restore_span_text=restore), None,
     ))
     app = FastAPI()
-    audiobook_routes.register_audiobook_routes(app)
+    app.include_router(audiobook_routes.create_audiobook_router())
     client = TestClient(app)
     data = {"start_offset": 5, "end_offset": 12, "source_text": "Testing"}
     assert client.post("/api/audiobook/projects/book/spans/span/speech-exclusions", json=data).json() == {"id": "exclusion"}
@@ -275,7 +268,7 @@ def test_extract_quotes_route_requests_extraction_without_classification(monkeyp
     ))
     monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
     response = TestClient(gateway).post(
         "/api/audiobook/projects/book/extract-quotes",
         json={"custom_rules": "Dialogue may use speaker: quote."},
@@ -310,7 +303,7 @@ def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) ->
         audiobook_routes, "_service_and_context", lambda: (service, None)
     )
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
     client = TestClient(gateway)
 
     mode = client.patch(
@@ -351,7 +344,7 @@ def test_reject_detected_speaker_route_delegates(monkeypatch) -> None:
         audiobook_routes, "_service_and_context", lambda: (service, None)
     )
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).post(
         "/api/audiobook/projects/book-one/speakers/speaker-one/reject"
@@ -371,7 +364,7 @@ def test_cover_upload_rejects_oversized_body_without_content_length(monkeypatch)
         audiobook_routes, "_service_and_context", lambda: (service, None)
     )
     gateway = FastAPI()
-    audiobook_routes.register_audiobook_routes(gateway)
+    gateway.include_router(audiobook_routes.create_audiobook_router())
 
     response = TestClient(gateway).post(
         "/api/audiobook/projects/book-one/cover?filename=cover.png",

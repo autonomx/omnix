@@ -1,12 +1,10 @@
-from fastapi import FastAPI
-
-from app.gateway.hermes_routes import register_hermes_routes
+from tests.support.routers import effective_routes
+from app.gateway.app_factory import create_gateway_app
+from app.runtime.config import RuntimeConfig
 
 
 def test_gateway_registers_approved_rpg_ledger_route() -> None:
-    app = FastAPI()
+    app = create_gateway_app(runtime_config=RuntimeConfig())
 
-    register_hermes_routes(app)
-
-    paths = {route.path for route in app.routes}
+    paths = {route.path for route in effective_routes(app)}
     assert "/api/hermes/rpg/approved-flow/ledger" in paths

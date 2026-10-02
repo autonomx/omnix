@@ -59,6 +59,7 @@ parakeet-tdt-0.6b-v2/
 /resources/data/rpg_npc_profiles/*.tmp
 
 # Bad legacy runtime-data locations
+/src/app/data/*.json
 /src/data/
 /src/resources/
 

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 

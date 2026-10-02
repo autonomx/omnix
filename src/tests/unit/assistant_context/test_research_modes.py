@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from app.assistant_context.models import AssistantContextChatRequest
 from app.research import normalize_research_mode, resolve_research_mode
 from app.research.compatibility import (
+    record_legacy_research_aliases,
     research_compatibility_status,
     reset_research_compatibility_telemetry,
 )
@@ -71,6 +72,23 @@ def test_temporary_server_aliases_are_normalized_warned_and_counted(monkeypatch)
     assert status.alias_counts["web_search_mode"] == 1
     assert status.alias_counts["web_search_requested"] == 1
     assert status.alias_counts["mode:automatic"] == 1
+
+
+def test_research_compatibility_telemetry_has_fixed_keys_and_expires(monkeypatch) -> None:
+    import app.research.compatibility as compatibility
+
+    now = {"value": 10.0}
+    monkeypatch.setattr(compatibility.time, "monotonic", lambda: now["value"])
+    monkeypatch.setattr(compatibility, "_COMPATIBILITY_TTL_SECONDS", 5.0)
+    reset_research_compatibility_telemetry()
+    record_legacy_research_aliases([f"untrusted:{index}" for index in range(1000)])
+    record_legacy_research_aliases(["web_search_mode", "mode:automatic"])
+    assert research_compatibility_status().total_legacy_requests == 1
+
+    now["value"] = 20.0
+    status = research_compatibility_status()
+    assert status.total_legacy_requests == 0
+    assert status.alias_counts["web_search_mode"] == 0
 
 
 def test_server_aliases_can_be_disabled_without_affecting_canonical_requests(monkeypatch) -> None:

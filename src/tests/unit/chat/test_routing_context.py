@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
 from app.chat.context_budget import PromptBudget
 from app.chat.history_search import InMemoryHistorySearchService, build_history_recall_query
@@ -14,6 +14,10 @@ from app.chat.prompt_assembly import (
 )
 from app.chat.repository import InMemoryChatRepository
 from app.chat.routing_context import build_chat_routing_context
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_routing_context_reuses_prompt_assembly_sections_without_external_authority() -> None:
@@ -223,7 +227,7 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
     monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
     monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     store = _CountingStore(tmp_path / "chat.json")
     session = store.create_session(CreateChatSessionRequest(title="Cache"))
     current = ChatMessage(
@@ -261,7 +265,7 @@ def test_expanded_ambiguous_history_query_keeps_recent_fallback_semantics(tmp_pa
             ),
         ],
     )
-    repository.save_sessions([old])
+    repository.save_session(old)
     service = InMemoryHistorySearchService(db)
     expanded = build_history_recall_query(
         "fix it",
@@ -315,7 +319,7 @@ def test_ambiguous_cross_session_reference_falls_back_to_recent_scoped_history(t
             ),
         ],
     )
-    repository.save_sessions([old])
+    repository.save_session(old)
     service = InMemoryHistorySearchService(db)
 
     result = service.search(

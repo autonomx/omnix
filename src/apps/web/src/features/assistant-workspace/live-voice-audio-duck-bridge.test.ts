@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { initializeLiveVoiceAudioDuckBridge } from './live-voice-audio-duck-bridge';

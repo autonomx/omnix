@@ -140,6 +140,21 @@ def test_rebuild_projects_active_graph_and_searches_by_scope() -> None:
             visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
         )
         assert hidden == []
+        # A full question matches on any of its words, not all of them (the old
+        # all-words query found nothing for a natural question).
+        asked = index.search(
+            space,
+            "Do you remember which Cyberpunk game I finished?",
+            visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
+        )
+        assert [item.ref_id for item in asked] == ["assert:cyberpunk"]
+        # Any-word matching still never reaches a memory outside the visible scopes.
+        broad = index.search(
+            space,
+            "Is Skyrim the game I play most?",
+            visible_scopes=(VisibilityScope(kind="global", scope_id="global"),),
+        )
+        assert "assert:project-only" not in [item.ref_id for item in broad]
     finally:
         database.close()
 

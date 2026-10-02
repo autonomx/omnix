@@ -3,7 +3,6 @@ from __future__ import annotations
 from app.assist_core.hermes_rpg_approved_config import FEATURE_FLAG
 from app.assist_core.hermes_sequence_approved_executor import hermes_rpg_sequence_execute_step_payload
 from app.assist_core.hermes_sequence_checkpoint_policy import hermes_sequence_checkpoint_policy
-from app.assist_core.hermes_sequence_job_contract import hermes_sequence_job_progress
 from app.assist_core.hermes_sequence_loop_guard import hermes_sequence_loop_guard
 from app.assist_core.hermes_sequence_state import build_hermes_sequence_state
 
@@ -42,6 +41,10 @@ def _ready_state(sequence: dict) -> dict:
     )
 
 
+def _done_count(state: dict) -> int:
+    return sum(item.get("status") in {"done", "completed"} for item in state.get("item_statuses", []))
+
+
 def test_hermes_sequence_endurance_runs_25_steps_with_resume_progress() -> None:
     state = _ready_state(_safe_sequence_25())
     writes: list[dict] = []
@@ -78,15 +81,10 @@ def test_hermes_sequence_endurance_runs_25_steps_with_resume_progress() -> None:
         assert result["item_index"] == expected_index
         assert result["state_changed"] is True
         assert writes[-1]["current_item_index"] == expected_index + 1
-        progress = hermes_sequence_job_progress(writes[-1], job_status="paused" if expected_index == 12 else "running")
-        assert progress["item_count"] == 25
-        assert progress["done_count"] == expected_index + 1
-        assert progress["status"] in {"running", "paused", "completed"}
+        assert len(writes[-1]["sequence"]["items"]) == 25
+        assert _done_count(writes[-1]) == expected_index + 1
 
-    final_progress = hermes_sequence_job_progress(state, job_status="running")
-    assert final_progress["status"] == "completed"
-    assert final_progress["progress_percent"] == 100
-    assert final_progress["done_count"] == 25
+    assert _done_count(state) == 25
 
     completed = hermes_rpg_sequence_execute_step_payload({"session_id": "session-25"}, state_loader=load_state)
     assert completed["ok"] is True

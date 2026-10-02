@@ -1,8 +1,8 @@
 from __future__ import annotations
+from app.config.env import environment_copy as _process_environment
 
 import argparse
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -11,11 +11,12 @@ from typing import Any, NoReturn, Sequence
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .blob_store import LocalBlobStore
-from .config import DatabaseSettings, database_settings
+from .config import DatabaseSettings, database_settings, migration_database_settings
 from .coordinated_recovery import CoordinatedRecoveryRepository
 from .cutover_state import PostgresCutoverStateRepository
 from .database import PostgresDatabase
 from .migrations import apply_migrations, migration_status
+from .tenant_scope import system_scope
 
 
 _SECRET_KEY_PARTS = (
@@ -73,7 +74,7 @@ def _tool_database_arguments(settings: DatabaseSettings) -> tuple[str, dict[str,
     user = f"{username}@" if username else ""
     port = f":{parsed.port}" if parsed.port else ""
     safe_url = urlunsplit((parsed.scheme, f"{user}{hostname}{port}", parsed.path, parsed.query, ""))
-    environment = dict(os.environ)
+    environment = _process_environment()
     environment.pop("OMNIX_DATABASE_URL", None)
     if parsed.password is not None:
         environment["PGPASSWORD"] = unquote(parsed.password)
@@ -106,9 +107,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser = JsonArgumentParser(description="Omnix PostgreSQL operations")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("health", help="Check PostgreSQL connectivity")
-    subparsers.add_parser("migrate", help="Apply pending migrations")
-    subparsers.add_parser("status", help="Show migration state")
+    migrate = subparsers.add_parser("migrate", help="Apply pending migrations")
+    migrate.add_argument("--allow-out-of-order", action="store_true")
+    status = subparsers.add_parser("status", help="Show migration state as JSON")
+    status.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the machine-readable JSON migration report (the default output).",
+    )
     subparsers.add_parser("verify", help="Require healthy PostgreSQL and zero migration drift")
+    retention = subparsers.add_parser(
+        "retention", help="Run every enabled retention policy, including maintenance-only ones (audit)"
+    )
+    retention.add_argument("--batch-size", type=int, default=5000)
 
     backup = subparsers.add_parser("backup", help="Create a pg_dump custom-format backup")
     backup.add_argument("output", type=Path)
@@ -275,14 +286,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     database: PostgresDatabase | None = None
     try:
         args = build_parser().parse_args(list(argv) if argv is not None else None)
-        settings = database_settings()
+        settings = (
+            migration_database_settings()
+            # Backups read every workspace and restores recreate the schema, so
+            # both use the DDL owner like migrations (row-level security, WP-4.4).
+            if args.command in {"migrate", "status", "verify", "backup", "restore", "retention"}
+            else database_settings()
+        )
         database = PostgresDatabase(settings)
         if args.command == "health":
             report = database.health()
             _render(report)
             return 0 if report.get("ok") is True else 1
         if args.command == "migrate":
-            report = apply_migrations(database)
+            report = apply_migrations(database, allow_out_of_order=args.allow_out_of_order)
             _render(report)
             return 0 if report.get("ok") is True else 1
         if args.command == "status":
@@ -298,6 +315,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             ok = status.get("ok") is True and status.get("pending") == []
             _render({"ok": ok, "health": health, "migrations": status})
             return 0 if ok else 1
+        if args.command == "retention":
+            from .retention import RetentionWorker
+
+            outcome = RetentionWorker(database, batch_size=args.batch_size).run_once(include_maintenance=True)
+            _render({"ok": True, "run_id": outcome.run_id, "deleted": outcome.deleted, "skipped": outcome.skipped})
+            return 0
         if args.command in {"backup", "restore"}:
             safe_url, environment = _tool_database_arguments(settings)
             if args.command == "backup":
@@ -330,12 +353,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 report = {"ok": True, "restored": str(args.input.resolve())}
             _render(report)
             return 0
-        if args.command == "cutover":
-            report = _cutover_command(args, database)
-        elif args.command == "recovery":
-            report = _recovery_command(args, database)
-        else:  # pragma: no cover
-            raise RuntimeError(f"unsupported command: {args.command}")
+        with system_scope("operator.cli"):
+            if args.command == "cutover":
+                report = _cutover_command(args, database)
+            elif args.command == "recovery":
+                report = _recovery_command(args, database)
+            else:  # pragma: no cover
+                raise RuntimeError(f"unsupported command: {args.command}")
         _render(report)
         return 0 if report.get("ok") is True else 1
     except Exception as exc:

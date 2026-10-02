@@ -1,8 +1,8 @@
 """Production provider adapter for typed RPG narrative generation."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from time import monotonic, perf_counter
@@ -104,7 +104,7 @@ class NarrativeProviderConfig:
         cls,
         environ: Mapping[str, str] | None = None,
     ) -> "NarrativeProviderConfig":
-        env = environ or os.environ
+        env = environ or _environment()
         return cls(
             mode=str(env.get("OMNIX_RPG_NARRATIVE_WRITER_MODE") or "auto")
             .strip()

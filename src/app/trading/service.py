@@ -6,7 +6,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
@@ -36,6 +35,7 @@ from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
+from app.trading.us_equity_calendar import EASTERN
 
 
 def _coalesced_gap_ranges(starts: set[datetime], step):
@@ -206,7 +206,7 @@ class TradingMarketDataService:
         yahoo_repair_attempted = False
         yahoo_repaired_count = 0
         if yahoo_intraday:
-            et = ZoneInfo("America/New_York")
+            et = EASTERN
             session_open = datetime.combine(
                 session_date, time(9, 30), tzinfo=et
             ).astimezone(timezone.utc)

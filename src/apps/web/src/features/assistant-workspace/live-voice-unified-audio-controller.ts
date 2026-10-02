@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 import {
   createLiveCallDiagnosticsReporter,
@@ -686,6 +687,7 @@ async function ensureSharedAudioSession(
   }, 'controller');
   const sessionPromise = createLiveVoicePcmSession(traceId, voiceId, reporter, {
     sessionScoped: true,
+    affinityKey: sessionId,
   });
   const state: SharedLiveAudioSession = {
     sessionId,

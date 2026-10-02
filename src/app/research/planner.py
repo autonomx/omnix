@@ -1,14 +1,25 @@
 """Dedicated declarative planning for Deep Research."""
 from __future__ import annotations
 
+from app.config.env import environment
+
 import json
-import os
 import re
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+from app.providers.structured import (
+    ProviderEmptyResponse,
+    StructuredContract,
+    StructuredOutputError,
+    StructuredOutputExhausted,
+    StructuredOutputGateway,
+    StructuredRetryBudget,
+    StructuredSemanticError,
+)
 
 ResearchOperationType = Literal["web_search", "web_extract", "evaluate_evidence", "stop"]
 
@@ -153,10 +164,10 @@ class ResearchPlanner:
         )
 
     def _provider_plan(self, request: ResearchPlanningRequest) -> ResearchPlan:
-        from app import shared
+        from app.providers import service as provider_service
         from app.providers import ChatMessage
 
-        provider = shared.get_provider(_provider_key(self.provider_id))
+        provider = provider_service.get_provider(_provider_key(self.provider_id))
         if provider is None:
             raise RuntimeError("research_planner_provider_unavailable")
         messages = [
@@ -177,32 +188,20 @@ class ResearchPlanner:
             ),
         ]
         try:
-            response = provider.chat_completion(
-                messages=messages,
+            return StructuredOutputGateway(provider).generate(
+                messages,
+                contract=_PROVIDER_PLAN_CONTRACT,
                 model=_model_key(self.model_id),
-                stream=False,
-                request_timeout_seconds=30,
-                temperature=0,
-                max_tokens=1_400,
+                retry_budget=_PROVIDER_PLAN_BUDGET,
+                provider_options={"request_timeout_seconds": 30},
             )
-        except TypeError:
-            response = provider.chat_completion(
-                messages=messages,
-                model=_model_key(self.model_id),
-                stream=False,
-            )
-        content = str(getattr(response, "content", "") or "").strip()
-        if not content:
-            raise RuntimeError("research_planner_provider_returned_no_text")
-        try:
-            plan = ResearchPlan.model_validate(json.loads(_strip_json_fence(content)))
-            if not any(
-                operation.operation == "web_search" and bool(operation.query)
-                for operation in plan.operations
-            ):
-                raise RuntimeError("research_planner_provider_returned_no_search_operations")
-            return plan
-        except Exception as exc:
+        except StructuredOutputExhausted as exc:
+            if isinstance(exc.last_error, ProviderEmptyResponse):
+                raise RuntimeError("research_planner_provider_returned_no_text") from exc
+            if exc.last_error is not None:
+                raise exc.last_error from None
+            raise RuntimeError("research_planner_provider_returned_invalid_plan") from exc
+        except StructuredOutputError as exc:
             raise RuntimeError("research_planner_provider_returned_invalid_plan") from exc
 
 
@@ -301,13 +300,29 @@ def _provider_key(value: str | None) -> str | None:
     return text.split(":", 1)[1] if text.startswith("llm:") else text or None
 
 
-def _strip_json_fence(content: str) -> str:
-    text = str(content or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    return text
+def _require_search_operation(plan: ResearchPlan) -> None:
+    if not any(operation.operation == "web_search" and bool(operation.query) for operation in plan.operations):
+        raise StructuredSemanticError("research_planner_provider_returned_no_search_operations")
+
+
+_PROVIDER_PLAN_CONTRACT = StructuredContract(
+    contract_id="research.provider_plan",
+    version=1,
+    output_model=ResearchPlan,
+    semantic_validator=_require_search_operation,
+    temperature=0.0,
+    max_tokens=1_400,
+    regenerate_on_semantic_failure=False,
+)
+# A second call only if the provider rejects its preferred JSON format; an
+# invalid plan falls back to the local planner instead of regenerating.
+_PROVIDER_PLAN_BUDGET = StructuredRetryBudget(
+    max_provider_calls=2,
+    max_transport_retries=0,
+    max_format_downgrades=1,
+    max_validation_regenerations=0,
+    deadline_seconds=35.0,
+)
 
 
 def _default_hermes_client() -> Any:
@@ -317,14 +332,14 @@ def _default_hermes_client() -> Any:
     config = hermes_runtime_config()
     return HermesSidecarClient(
         base_url=config.base_url,
-        api_key=os.environ.get("HERMES_API_KEY") or None,
+        api_key=environment().get("HERMES_API_KEY") or None,
         timeout=config.timeout_seconds,
     )
 
 
 def _hermes_planner_enabled() -> bool:
-    enabled = os.environ.get("HERMES_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
-    research = os.environ.get("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "0").strip().lower() in {
+    enabled = environment().get("HERMES_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+    research = environment().get("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "0").strip().lower() in {
         "1", "true", "yes", "on"
     }
     return enabled and research

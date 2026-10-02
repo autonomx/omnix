@@ -4,6 +4,7 @@ Llama.cpp Installation Manager
 Handles automatic installation of precompiled llama.cpp wheels and binaries.
 Provides both Python wheel installation and binary download capabilities.
 """
+import logging
 
 import json
 import os
@@ -17,6 +18,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
@@ -46,7 +49,7 @@ def detect_gpu():
             if result.returncode == 0:
                 gpu_type = "nvidia"
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "detect_gpu", exc_info=True)
 
         if gpu_type == "cpu":
             try:
@@ -54,7 +57,7 @@ def detect_gpu():
                 if result.returncode == 0:
                     gpu_type = "amd"
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "detect_gpu", exc_info=True)
 
     elif os_name == "mac":
         gpu_type = "metal"
@@ -425,8 +428,10 @@ class LlamaCppInstaller:
     def is_server_running(self) -> bool:
         """Check if the llama.cpp server is running."""
         try:
-            import requests
-            response = requests.get("http://localhost:8080/v1/models", timeout=2)
+            from app.runtime.http_client import shared_http_client
+            response = shared_http_client("llamacpp-server").get(
+                "http://localhost:8080/v1/models", timeout=2, retry=False
+            )
             return response.status_code == 200
         except:
             return False
@@ -497,7 +502,10 @@ class LlamaCppInstaller:
         try:
             from huggingface_hub import hf_hub_download
         except ImportError:
-            return {"success": False, "error": "huggingface_hub not installed. Install with: pip install huggingface_hub"}
+            return {
+                "success": False,
+                "error": "huggingface_hub is missing from the locked image runtime; rerun setup.bat or setup.sh",
+            }
         
         try:
             if progress_callback:
@@ -615,6 +623,7 @@ class LlamaCppInstaller:
                     "size_formatted": self._format_size(size)
                 })
             except Exception:
+                logger.debug("suppressed error in %s", "LlamaCppInstaller.get_available_models", exc_info=True)
                 continue
         
         return models

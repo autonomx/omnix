@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import httpx
+import pytest
+import secrets
+
+from tests.support.http import mock_http_client
 from app.providers.audio_plugins import (
     DEFAULT_PARAKEET_BASE_URL,
     ParakeetSTT,
     _parakeet_base_url,
 )
+
+
+@pytest.fixture(autouse=True)
+def issued_service_token(monkeypatch):
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
 
 
 def test_legacy_gateway_url_migrates_to_dedicated_stt_service(monkeypatch) -> None:
@@ -25,23 +35,23 @@ def test_transcribe_posts_to_dedicated_parakeet_route(tmp_path, monkeypatch) -> 
     sample.write_bytes(b"audio")
     captured: dict[str, str] = {}
 
-    class _Response:
-        status_code = 200
-
-        @staticmethod
-        def json() -> dict[str, object]:
-            return {"success": True, "text": "A working transcript.", "segments": []}
-
-    def fake_post(url: str, **kwargs):
-        del kwargs
-        captured["url"] = url
-        return _Response()
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert request.headers["X-Omnix-Client"] == "gateway"
+        captured["url"] = str(request.url)
+        return httpx.Response(200, json={"success": True, "text": "A working transcript.", "segments": []})
 
     monkeypatch.delenv("OMNIX_STT_URL", raising=False)
-    monkeypatch.setattr("app.providers.audio_plugins.requests.post", fake_post)
+    monkeypatch.setattr("app.providers.audio_plugins._stt_http", lambda: mock_http_client(handle))
 
     result = ParakeetSTT(config={"base_url": "http://localhost:8000"}).transcribe(str(sample))
 
     assert captured["url"] == "http://127.0.0.1:5201/transcribe"
     assert result["success"] is True
     assert result["text"] == "A working transcript."
+
+
+def test_provider_setting_cannot_choose_a_service_credential_audience(monkeypatch):
+    monkeypatch.delenv("OMNIX_STT_URL", raising=False)
+    monkeypatch.setattr("app.providers.audio_plugins._stt_http", lambda: pytest.fail("untrusted target contacted"))
+    with pytest.raises(RuntimeError, match="stt_service_endpoint_not_configured"):
+        _parakeet_base_url({"base_url": "http://evil.test/transcribe"})

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from app.config.env import environment
+
 import asyncio
-import os
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .strategy_universe_archiver import archive_daily_universe_if_due
@@ -18,18 +19,18 @@ _STATE_KEY = "_omnix_trading_strategy_universe_archive_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_universe_archive_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
@@ -106,19 +107,12 @@ class TradingStrategyUniverseArchiveMonitor:
                 )
             await asyncio.sleep(self.interval_seconds)
 
-
-def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> TradingStrategyUniverseArchiveMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
-    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
-        return existing
-    monitor = TradingStrategyUniverseArchiveMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
-
-    async def startup() -> None:
+    async def prepare_for_scheduled_execution(self) -> None:
+        """Run startup-only late recovery before periodic archive passes."""
         if not strategy_universe_archive_monitor_enabled():
             return
         try:
-            recovered = await monitor.run_once(allow_late_recovery=True)
+            recovered = await self.run_once(allow_late_recovery=True)
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation",
@@ -129,7 +123,7 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
         except Exception as exc:
             # Reconciliation is best-effort. A provider/database problem at boot
             # must not prevent the normal periodic monitor from starting.
-            monitor.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
+            self.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
             trade_log(
                 "auto_trading",
                 "daily_universe_archive_startup_reconciliation_error",
@@ -138,19 +132,31 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
                 detail=str(exc),
                 execution_authority=False,
             )
-        monitor.start()
+
+
+def create_trading_strategy_universe_archive_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
+    if isinstance(existing, TradingStrategyUniverseArchiveMonitor):
+        return None
+    monitor = TradingStrategyUniverseArchiveMonitor()
+    setattr(state, _STATE_KEY, monitor)
+
+    async def startup() -> None:
+        await monitor.prepare_for_scheduled_execution()
+        if strategy_universe_archive_monitor_enabled():
+            monitor.start()
 
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingStrategyUniverseArchiveMonitor",
-    "register_trading_strategy_universe_archive_monitor",
+    "create_trading_strategy_universe_archive_monitor_worker",
     "strategy_universe_archive_monitor_enabled",
 ]

@@ -1,18 +1,30 @@
 """Split helpers for RPG world scene narration."""
+
 from __future__ import annotations
 
-# ruff: noqa: F401,F403,F405
-from app.rpg.ai.world_scene_narrator_common import *
+from app.rpg.ai.world_scene_narrator_common import (
+    annotations as annotations, json as json, logging as logging, re as re, traceback as traceback, dataclass as dataclass, field as field, Any as Any, Callable as Callable,
+    Dict as Dict, List as List, Optional as Optional, normalize_grounding_settings as normalize_grounding_settings,
+    select_grounded_narration_candidate as select_grounded_narration_candidate, memory_reference_is_backed as memory_reference_is_backed,
+    build_runtime_npc_response_architecture as build_runtime_npc_response_architecture, build_runtime_current_turn_prompt_contract as build_runtime_current_turn_prompt_contract,
+    format_runtime_prompt_contract_block as format_runtime_prompt_contract_block, build_runtime_presentation_guardrails_block as build_runtime_presentation_guardrails_block,
+    sanitize_unsupported_combat_payload as sanitize_unsupported_combat_payload, parse_runtime_provider_payload as parse_runtime_provider_payload,
+    build_encounter_view as build_encounter_view, logger as logger, _ACTIVE_NARRATIONS as _ACTIVE_NARRATIONS, NARRATION_JSON_FORMAT_VERSION as NARRATION_JSON_FORMAT_VERSION,
+    NARRATION_JSON_SCHEMA_HINT as NARRATION_JSON_SCHEMA_HINT, _extract_llm_text as _extract_llm_text, _llm_text as _llm_text, _attach_social_context as _attach_social_context,
+    _safe_str_p6 as _safe_str_p6, _attach_npc_mind_context as _attach_npc_mind_context, _NARRATION_MAX_MARKDOWN as _NARRATION_MAX_MARKDOWN, _safe_str as _safe_str,
+    _safe_dict as _safe_dict, _safe_list as _safe_list, _title_case_token as _title_case_token, _force_live_llm_required as _force_live_llm_required,
+)
+from app.rpg.ai.world_scene_narrator_dialogue_grounding import _bound_text as _bound_text
 
 _AMBIENT_TEMPLATES = {
-    "npc_to_player": "{speaker_name} turns to you: \"{text}\"",
-    "npc_to_npc": "{speaker_name} speaks to {target_name}: \"{text}\"",
-    "npc_reaction": "{speaker_name} reacts: \"{text}\"",
-    "companion_comment": "{speaker_name} says: \"{text}\"",
-    "warning": "{speaker_name} warns: \"{text}\"",
-    "demand": "{speaker_name} demands: \"{text}\"",
-    "taunt": "{speaker_name} taunts: \"{text}\"",
-    "gossip": "{speaker_name} mutters: \"{text}\"",
+    "npc_to_player": '{speaker_name} turns to you: "{text}"',
+    "npc_to_npc": '{speaker_name} speaks to {target_name}: "{text}"',
+    "npc_reaction": '{speaker_name} reacts: "{text}"',
+    "companion_comment": '{speaker_name} says: "{text}"',
+    "warning": '{speaker_name} warns: "{text}"',
+    "demand": '{speaker_name} demands: "{text}"',
+    "taunt": '{speaker_name} taunts: "{text}"',
+    "gossip": '{speaker_name} mutters: "{text}"',
     "world_event": "{text}",
     "arrival": "{text}",
     "departure": "{text}",
@@ -90,7 +102,9 @@ def narrate_ambient_update(
     emotion = _safe_str(ambient_update.get("emotion")) or "neutral"
 
     # Build scene context summary for LLM prompt
-    scene_summary = _safe_str(current_scene.get("summary") or current_scene.get("scene"))
+    scene_summary = _safe_str(
+        current_scene.get("summary") or current_scene.get("scene")
+    )
     context = scene_summary[:200] if scene_summary else "The world stirs."
 
     used_llm = False
@@ -114,6 +128,7 @@ def narrate_ambient_update(
                 raw_llm_narrative = llm_response
                 used_llm = True
         except Exception:
+            logger.debug("suppressed error in %s", "narrate_ambient_update", exc_info=True)
             pass  # Fall through to template
 
     # Template fallback
@@ -127,14 +142,25 @@ def narrate_ambient_update(
 
     # Build speaker turns for dialogue rendering
     speaker_turns: List[Dict[str, Any]] = []
-    if speaker_id and kind in ("npc_to_player", "npc_to_npc", "companion_comment", "warning", "demand", "taunt", "gossip", "npc_reaction"):
-        speaker_turns.append({
-            "speaker_id": speaker_id,
-            "name": speaker_name,
-            "text": narrated_text,
-            "emotion": emotion,
-            "ambient": True,
-        })
+    if speaker_id and kind in (
+        "npc_to_player",
+        "npc_to_npc",
+        "companion_comment",
+        "warning",
+        "demand",
+        "taunt",
+        "gossip",
+        "npc_reaction",
+    ):
+        speaker_turns.append(
+            {
+                "speaker_id": speaker_id,
+                "name": speaker_name,
+                "text": narrated_text,
+                "emotion": emotion,
+                "ambient": True,
+            }
+        )
 
     return {
         "text": narrated_text,
@@ -151,4 +177,46 @@ def narrate_ambient_update(
         },
     }
 
-__all__ = [name for name in globals() if not name.startswith("__")]
+
+__all__ = (
+    'annotations',
+    'json',
+    'logging',
+    're',
+    'traceback',
+    'dataclass',
+    'field',
+    'Any',
+    'Callable',
+    'Dict',
+    'List',
+    'Optional',
+    'normalize_grounding_settings',
+    'select_grounded_narration_candidate',
+    'memory_reference_is_backed',
+    'build_runtime_npc_response_architecture',
+    'build_runtime_current_turn_prompt_contract',
+    'format_runtime_prompt_contract_block',
+    'build_runtime_presentation_guardrails_block',
+    'sanitize_unsupported_combat_payload',
+    'parse_runtime_provider_payload',
+    'build_encounter_view',
+    'logger',
+    '_ACTIVE_NARRATIONS',
+    'NARRATION_JSON_FORMAT_VERSION',
+    'NARRATION_JSON_SCHEMA_HINT',
+    '_extract_llm_text',
+    '_llm_text',
+    '_attach_social_context',
+    '_safe_str_p6',
+    '_attach_npc_mind_context',
+    '_NARRATION_MAX_MARKDOWN',
+    '_safe_str',
+    '_safe_dict',
+    '_safe_list',
+    '_title_case_token',
+    '_force_live_llm_required',
+    '_AMBIENT_TEMPLATES',
+    '_AMBIENT_PROMPTS',
+    'narrate_ambient_update',
+)

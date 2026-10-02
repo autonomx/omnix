@@ -43,11 +43,10 @@ class EmptyJobStore:
 
 
 def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = BlockingAfterFirstChunkTtsProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(
         tts_live_call_websocket,
         "diagnostics_log_path",
@@ -64,7 +63,16 @@ def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
     monkeypatch.setattr(tts_live_call_websocket, "end_stream", lambda stream_id, **details: 0)
 
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    monkeypatch.setattr(
+        app.state.live_voice_tts_provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    )
     stream_id = "chat-live-latency-p0"
 
     with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
@@ -146,11 +154,10 @@ def test_first_pcm_frame_is_sent_before_provider_finishes(monkeypatch) -> None:
 
 
 def test_promoted_speculative_runway_is_sent_in_one_browser_message(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = ThreeFrameSpeculativeCacheProvider()
     logged_events: list[tuple[str, str, str, dict[str, Any]]] = []
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(
         tts_live_call_websocket,
         "diagnostics_log_path",
@@ -167,7 +174,16 @@ def test_promoted_speculative_runway_is_sent_in_one_browser_message(monkeypatch)
     monkeypatch.setattr(tts_live_call_websocket, "end_stream", lambda stream_id, **details: 0)
 
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    monkeypatch.setattr(
+        app.state.live_voice_tts_provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
+    client = TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"Host": "127.0.0.1", "X-Omnix-Client": "test"},
+    )
 
     with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
         websocket.send_json(

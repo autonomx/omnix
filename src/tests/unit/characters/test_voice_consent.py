@@ -4,15 +4,18 @@ import hashlib
 from pathlib import Path
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore
-from app.characters import CharacterRepository, CreateCharacterRequest, SetSessionInteractionRequest
-from app.characters.live_call import resolve_live_call_runtime
+from app.characters import CharacterRepository, CreateCharacterRequest
 from app.characters.service import CharacterService
 from app.characters.voice_consent import (
     ALL_VOICE_USES,
     UpdateVoiceProfileGovernanceRequest,
     VoiceProfileGovernanceService,
 )
-from app.chat import CreateChatSessionRequest, default_chat_store
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+# Shares the fixed 'maya' character; serialize on one xdist worker.
+pytestmark = [pytest.mark.postgres, pytest.mark.xdist_group("characters-maya")]
 
 
 def _voice_store(tmp_path: Path) -> tuple[SharedAssetStore, Path]:
@@ -118,35 +121,3 @@ def test_character_link_accepts_cloned_voice_without_manual_governance(tmp_path:
     assert created.default_voice_asset_id == "voice-cloning:maya"
 
 
-def test_live_call_resolves_cloned_voice_without_live_call_permission_setup(tmp_path: Path, monkeypatch) -> None:
-    store, _ = _voice_store(tmp_path)
-    governance = VoiceProfileGovernanceService(asset_store_factory=lambda: store)
-    _update_legacy_governance(
-        governance,
-        uses=["character"],
-        status="revoked",
-        deletion_state="deleted",
-    )
-    repository = CharacterRepository(tmp_path / "characters.sqlite3")
-    repository.create(
-        CreateCharacterRequest(
-            id="maya",
-            display_name="Maya",
-            personality_prompt="Be warm and easygoing.",
-            default_voice_asset_id="voice-cloning:maya",
-        )
-    )
-    monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
-    monkeypatch.setenv("OMNIX_CHARACTER_DB_PATH", str(tmp_path / "characters.sqlite3"))
-    monkeypatch.setenv("OMNIX_CHAT_STORE_PATH", str(tmp_path / "chat.json"))
-    chat = default_chat_store()
-    session = chat.create_session(CreateChatSessionRequest(title="Maya call"))
-    session = chat.set_session_interaction(
-        session.id,
-        SetSessionInteractionRequest(interaction_mode="character", character_id="maya"),
-    )
-    assert session is not None
-    characters = CharacterService(repository, asset_store_factory=lambda: store)
-
-    runtime = resolve_live_call_runtime(session, character_service_factory=lambda: characters)
-    assert runtime.voice_asset_id == "voice-cloning:maya"

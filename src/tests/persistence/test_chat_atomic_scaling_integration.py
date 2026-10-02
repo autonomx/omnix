@@ -14,7 +14,7 @@ from app.chat.generation_jobs import (
     _run_chat_generation_job,
 )
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     GatewayBackgroundRuntime,
     BackgroundOwnershipUnavailable,
 )
@@ -24,10 +24,9 @@ from app.jobs.models import (
     ResourceClass,
     JobStatus,
 )
-from app.persistence.chat_compat import PostgresChatRepositoryAdapter
-from app.persistence.chat_runtime_compat import PostgresCharacterChatSessionStore
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
 from src.tests.persistence import test_chat_execution_ownership_integration as ownership
@@ -42,23 +41,25 @@ def scaling_runtime():
 
 
 def chat_store(database, store, monkeypatch):
-    from app.gateway import live_chat_postgres_fast_path as fast
-    from app.gateway import _install_required_rpg_turn_hooks
-
-    _install_required_rpg_turn_hooks()
+    from app.chat.persistence import chat_runtime as fast
     monkeypatch.setattr(
         fast,
         "default_assistant_turn_coordinator",
-        lambda: SimpleNamespace(get=lambda _: None),
+        lambda *_args: SimpleNamespace(get=lambda _: None),
     )
 
-    def begin(session, message, request):
+    def begin(session, message, request, **_kwargs):
         message.metadata["user_turn_id"] = request.user_turn_id
 
     monkeypatch.setattr(fast, "_start_assistant_turn", begin)
-    chat = PostgresCharacterChatSessionStore.__new__(PostgresCharacterChatSessionStore)
+    chat = fast.PostgresCharacterChatSessionStore.__new__(
+        fast.PostgresCharacterChatSessionStore
+    )
     chat._repository = PostgresChatRepositoryAdapter(database)
     chat._repository.context = store.context
+    from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+
+    chat.memory_settings_factory = AssistantMemoryRuntimeSettings
     chat._run_post_turn_maintenance = lambda *args: None
     chat._generate_reply = lambda *args, **kwargs: {
         "content": "A durable reply",
@@ -80,11 +81,43 @@ def test_targeted_creation_preserves_concurrent_transcripts_and_large_workspace(
     database, store, _ = runtime
     adapter = PostgresChatRepositoryAdapter(database)
     adapter.context = store.context
-    # Exceed the sidebar's 200-row page to catch snapshot-driven deletion.
+    # Put a real session beyond the first two bounded sidebar pages.
+    oldest_id = f"chat:{uuid.uuid4().hex}"
     with unit_of_work(database) as work:
-        for index in range(205):
+        work.chats.create_session(
+            store.context,
+            {"id": oldest_id, "title": "Oldest chat"},
+        )
+        for index in range(204):
             work.chats.create_session(store.context, {"id": f"chat:{uuid.uuid4().hex}", "title": str(index)})
+        work.connection.execute(
+            "UPDATE omnix_chat_sessions SET updated_at = '2000-01-01T00:00:00Z' WHERE id = %s",
+            (oldest_id,),
+        )
         work.commit()
+
+    cursor = None
+    listed_ids = []
+    while True:
+        summaries, cursor = adapter.list_session_summaries(limit=100, cursor=cursor)
+        listed_ids.extend(item.id for item in summaries)
+        if cursor is None:
+            break
+    assert oldest_id in listed_ids[200:]
+    oldest = adapter.get_session(oldest_id)
+    assert oldest is not None
+    oldest.messages.append(
+        ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="user",
+            content="Still mutable after 200 sessions",
+            created_at="2026-09-26T00:00:00+00:00",
+        )
+    )
+    oldest.message_count = len(oldest.messages)
+    adapter.save_session(oldest)
+    assert adapter.get_session(oldest_id).messages[-1].content == "Still mutable after 200 sessions"
+
     barrier = threading.Barrier(2)
 
     def create(index):
@@ -120,6 +153,72 @@ def test_targeted_delete_is_scoped_idempotent_and_preserves_neighbors(runtime):
     assert dict(rows) == {target: 'deleted', neighbor: 'active', foreign: 'active'}
 
 
+def test_targeted_message_delete_and_stale_session_write_are_fenced(runtime):
+    database, store, _ = runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    now = "2026-09-26T00:00:00+00:00"
+    session = ChatSession(
+        id=f"chat:{uuid.uuid4().hex}",
+        title="Targeted mutation",
+        created_at=now,
+        updated_at=now,
+        messages=[
+            ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="user",
+                content="Keep this user turn",
+                created_at=now,
+            ),
+            ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content="Remove only this reply",
+                created_at=now,
+                metadata={"reply_to_message_id": "turn:target"},
+            ),
+        ],
+    )
+    adapter.create_session(session)
+    current = adapter.get_session(session.id)
+    stale = adapter.get_session(session.id)
+    assert current is not None and stale is not None
+
+    current.title = "Current writer"
+    adapter.save_session(current)
+    stale.title = "Stale writer"
+    with pytest.raises(RuntimeError, match="changed after it was loaded"):
+        adapter.save_session(stale)
+
+    loaded = adapter.get_session(session.id)
+    assert loaded is not None
+    assistant_id = loaded.messages[-1].id
+    assert adapter.delete_messages(session.id, [assistant_id]) == 1
+    after_delete = adapter.get_session(session.id)
+    assert after_delete is not None
+    assert after_delete.title == "Current writer"
+    assert [message.content for message in after_delete.messages] == ["Keep this user turn"]
+    assert after_delete.message_count == 1
+
+    after_delete.messages.append(
+        ChatMessage(
+            id=f"msg:{uuid.uuid4().hex}",
+            role="assistant",
+            content="A later reply keeps append order",
+            created_at=now,
+            metadata={"reply_to_message_id": "turn:target"},
+        )
+    )
+    after_delete.message_count = len(after_delete.messages)
+    adapter.save_session(after_delete)
+    final = adapter.get_session(session.id)
+    assert final is not None
+    assert [message.content for message in final.messages] == [
+        "Keep this user turn",
+        "A later reply keeps append order",
+    ]
+
+
 def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
     database, store, _ = runtime
     adapter = PostgresChatRepositoryAdapter(database)
@@ -127,7 +226,7 @@ def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
     now = '2026-09-26T00:00:00+00:00'
     value = ChatSession(id=f'chat:{uuid.uuid4().hex}', title='Rollback', created_at=now,
                         updated_at=now, messages=[ChatMessage(id='msg:test', role='system', content='hello', created_at=now)])
-    from app.persistence.conversation_repositories import PostgresChatRepository
+    from app.chat.persistence.repository import PostgresChatRepository
 
     monkeypatch.setattr(PostgresChatRepository, 'append_message', lambda *args: (_ for _ in ()).throw(RuntimeError('greeting failed')))
     with pytest.raises(RuntimeError, match='greeting failed'):
@@ -137,24 +236,34 @@ def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
 
 def test_runtime_schema_verification_does_not_acquire_migration_lock_in_chat_transaction(runtime, monkeypatch):
     from app.persistence import migrations
+    from app.persistence.runtime import ensure_postgresql_runtime_ready
 
     database, _, _ = runtime
-    monkeypatch.setattr(migrations, '_acquire_migration_lock', lambda _: (_ for _ in ()).throw(AssertionError('migration lock in domain transaction')))
+    monkeypatch.setattr(
+        migrations,
+        "apply_migrations",
+        lambda *_args, **_kwargs: pytest.fail("runtime readiness attempted schema mutation"),
+    )
     with unit_of_work(database) as work:
         with share_transaction(work):
-            assert migrations.apply_migrations(database)['applied_now'] == []
+            status = ensure_postgresql_runtime_ready(
+                database,
+                auto_initialize_fresh_install=False,
+                apply_schema_changes=False,
+            )
+            assert status.ready is True
         work.rollback()
 
 
 def test_independent_turn_records_are_atomic_with_chat_transaction(runtime, monkeypatch):
-    from app.persistence import runtime_document_compat as compat
+    from app.chat.persistence import assistant_turn_store
     from app.persistence.document_store import PostgresDocumentStore
 
     database, store, _ = runtime
     documents = PostgresDocumentStore(database)
     documents.context = store.context
-    monkeypatch.setattr(compat, 'PostgresDocumentStore', lambda: documents)
-    coordinator_type = compat.postgres_assistant_turn_coordinator_class()
+    monkeypatch.setattr(assistant_turn_store, 'PostgresDocumentStore', lambda: documents)
+    coordinator_type = assistant_turn_store.PostgresAssistantTurnCoordinator
     first, second = coordinator_type(), coordinator_type()
     one = first.start(session_id='chat:1', user_message_id='msg:1', user_turn_id='turn:1')
     two = second.start(session_id='chat:2', user_message_id='msg:2', user_turn_id='turn:2')

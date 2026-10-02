@@ -1,11 +1,14 @@
 """Background execution for accepted Chat generation jobs."""
 from __future__ import annotations
 
+import contextvars
+import inspect
 import logging
 import queue
 import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, MutableMapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 import time
 from dataclasses import dataclass
@@ -14,6 +17,10 @@ from weakref import WeakValueDictionary
 
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
+from app.observability.logging import log_context
+from app.persistence.device_permits import device_permit_slot
+from app.providers.base import provider_turn_owner
+from app.runtime.cancellation import CancellationToken
 
 from .models import ChatMessage, ChatSession, SendChatMessageRequest
 
@@ -24,6 +31,12 @@ CompletionHook = Callable[[Any, str, str, list[dict[str, Any]], dict[str, Any]],
 
 _CHAT_WORKER_COUNT = 4
 _CHAT_OUTSTANDING_LIMIT = 128
+# Provider calls run on a fixed pool. It is larger than the worker count so an
+# interrupted call that is still unwinding does not hold back the next turn.
+_CHAT_PROVIDER_CALL_LIMIT = 2 * _CHAT_WORKER_COUNT
+# In-process cancellation wakes a turn at once; a cancel recorded by another
+# gateway process is seen through the job store at this interval.
+_CROSS_PROCESS_CANCEL_POLL_SECONDS = 1.0
 _ACTIVE_JOB_STATUSES = {
     JobStatus.QUEUED,
     JobStatus.LEASED,
@@ -34,10 +47,9 @@ _ACTIVE_JOB_STATUSES = {
 _registry_guard = threading.Lock()
 _submission_locks = WeakValueDictionary()
 _job_commit_locks = WeakValueDictionary()
-_job_cancel_events: dict[str, threading.Event] = {}
+_job_cancel_events: dict[str, CancellationToken] = {}
 _active_chat_providers: dict[str, Any] = {}
 _execution_registry_lock = threading.Lock()
-_provider_slots = threading.BoundedSemaphore(_CHAT_WORKER_COUNT)
 
 
 class _ChatGenerationInterrupted(Exception):
@@ -62,11 +74,17 @@ class _ChatGenerationDispatcher:
     """Bound local execution while preserving turn order within each session."""
 
     def __init__(self, worker_count: int = _CHAT_WORKER_COUNT,
-                 outstanding_limit: int = _CHAT_OUTSTANDING_LIMIT) -> None:
+                 outstanding_limit: int = _CHAT_OUTSTANDING_LIMIT,
+                 provider_call_limit: int = _CHAT_PROVIDER_CALL_LIMIT) -> None:
         if worker_count < 1 or outstanding_limit < worker_count:
             raise ValueError("outstanding limit must accommodate all Chat workers")
+        if provider_call_limit < worker_count:
+            raise ValueError("provider call limit must accommodate all Chat workers")
         self._worker_count = worker_count
         self._outstanding_limit = outstanding_limit
+        self._provider_call_limit = provider_call_limit
+        self._provider_pool: ThreadPoolExecutor | None = None
+        self._provider_calls = 0
         self._outstanding = 0
         self._ready_sessions: queue.Queue[str] = queue.Queue()
         self._pending: dict[str, deque[_ChatGenerationWork]] = defaultdict(deque)
@@ -84,7 +102,30 @@ class _ChatGenerationDispatcher:
                     "queued_dispatches": sum(len(items) for items in self._pending.values()),
                     "outstanding_limit": self._outstanding_limit,
                     "admission_rejection_count": self._admission_rejections,
+                    "provider_calls_in_flight": self._provider_calls,
+                    "provider_call_limit": self._provider_call_limit,
                     "closing": self._closing}
+
+    def submit_provider_call(self, call: Callable[[], Any]) -> Future:
+        """Run one provider call on the bounded pool; excess calls wait in its queue."""
+        with self._lock:
+            if self._closing:
+                raise ChatQueueFull("Chat execution is shutting down. Retry on an available gateway.")
+            if self._provider_pool is None:
+                self._provider_pool = ThreadPoolExecutor(
+                    max_workers=self._provider_call_limit,
+                    thread_name_prefix="omnix-chat-provider",
+                )
+            self._provider_calls += 1
+            # The call runs in the submitter's context: job log ids, turn owner, tenant.
+            future = self._provider_pool.submit(contextvars.copy_context().run, call)
+
+        def finished(_future: Future) -> None:
+            with self._lock:
+                self._provider_calls -= 1
+
+        future.add_done_callback(finished)
+        return future
 
     def submit(self, work: _ChatGenerationWork) -> None:
         session_id = str((work.job.input_payload or {}).get("session_id") or "").strip()
@@ -131,6 +172,11 @@ class _ChatGenerationDispatcher:
         deadline = time.monotonic() + timeout
         for thread in self._threads:
             thread.join(max(0, deadline - time.monotonic()))
+        with self._lock:
+            pool, self._provider_pool = self._provider_pool, None
+        if pool is not None:
+            # Queued calls are dropped; running ones were interrupted above.
+            pool.shutdown(wait=False, cancel_futures=True)
         return sum(thread.is_alive() for thread in self._threads)
 
     def _worker(self) -> None:
@@ -173,14 +219,18 @@ class _ChatGenerationDispatcher:
                     }:
                         _drop_job_cancel_event(work.job.id)
                         continue
-                    _run_chat_generation_job(
-                        chat_store=work.chat_store,
-                        job_store=work.job_store,
-                        job=started,
-                        request=work.request,
-                        context_builder=work.context_builder,
-                        completion_hook=work.completion_hook,
-                    )
+                    with log_context(
+                        job_id=started.id, feature="chat",
+                        request_id=getattr(started, "correlation_id", None),
+                    ):
+                        _run_chat_generation_job(
+                            chat_store=work.chat_store,
+                            job_store=work.job_store,
+                            job=started,
+                            request=work.request,
+                            context_builder=work.context_builder,
+                            completion_hook=work.completion_hook,
+                        )
             except Exception:
                 logger.exception(
                     "Unhandled Chat generation worker failure for job %s; worker will continue",
@@ -213,11 +263,11 @@ def _registry_lock(registry: MutableMapping[Any, threading.RLock], key: Any) -> 
         return registry.setdefault(key, threading.RLock())
 
 
-def _job_cancel_event(job_id: str, *, create: bool = False) -> threading.Event | None:
+def _job_cancel_event(job_id: str, *, create: bool = False) -> CancellationToken | None:
     with _execution_registry_lock:
         event = _job_cancel_events.get(job_id)
         if event is None and create:
-            event = threading.Event()
+            event = CancellationToken()
             _job_cancel_events[job_id] = event
         return event
 
@@ -246,6 +296,9 @@ def _interrupt_active_chat_provider(job_id: str) -> bool:
     if not callable(interrupt):
         return False
     try:
+        # Name the job so a shared provider interrupts only this job's turn.
+        if "owner" in inspect.signature(interrupt).parameters:
+            return bool(interrupt(owner=job_id))
         return bool(interrupt())
     except Exception:
         logger.warning("Could not interrupt Chat provider for job %s", job_id, exc_info=True)
@@ -291,7 +344,7 @@ def find_chat_generation_job(
             session_id=session_id,
             submission_id=submission_id,
         )
-    for job in job_store.list_jobs(limit=500):
+    for job in job_store.iter_jobs(job_types=("chat.generate",)):
         if (
             job.type == "chat.generate"
             and isinstance(job.input_ref, dict)
@@ -383,7 +436,7 @@ def active_chat_generation_jobs(
     if callable(lookup):
         return lookup(session_id)
     active = []
-    for job in job_store.list_jobs(limit=500):
+    for job in job_store.iter_jobs(job_types=("chat.generate",)):
         if job.type != "chat.generate" or job.status not in _ACTIVE_JOB_STATUSES:
             continue
         payload = job.input_payload or {}
@@ -529,21 +582,47 @@ def recover_abandoned_chat_generation_jobs(chat_store: Any, job_store: Any) -> i
     return recovered
 
 
-def _resolve_chat_provider(session: ChatSession, request: SendChatMessageRequest) -> Any | None:
-    provider_id = str(
-        request.provider_id or getattr(session, "provider_id", None) or ""
-    ).strip()
-    if provider_id.startswith("llm:"):
-        provider_id = provider_id.split(":", 1)[1]
+def _resolve_chat_provider(
+    session: ChatSession,
+    request: SendChatMessageRequest,
+    user_message: ChatMessage | None = None,
+) -> Any | None:
+    provider_id = _chat_provider_id(session, request, user_message)
     if not provider_id:
         return None
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        return shared.get_provider(provider_id)
+        return get_provider(provider_id)
     except Exception:
         logger.warning("Could not resolve Chat provider for active cancellation", exc_info=True)
         return None
+
+
+def _chat_provider_id(
+    session: ChatSession,
+    request: SendChatMessageRequest,
+    user_message: ChatMessage | None,
+) -> str:
+    metadata = getattr(user_message, "metadata", None)
+    route = metadata.get("omnix_provider_route") if isinstance(metadata, dict) else None
+    routed_provider = route.get("provider_id") if isinstance(route, dict) else None
+    return str(
+        routed_provider
+        or request.provider_id
+        or getattr(session, "provider_id", None)
+        or ""
+    ).strip().casefold().removeprefix("llm:")
+
+
+def _chat_provider_slot(provider_id: str):
+    if provider_id.casefold() in {"lmstudio", "ollama", "local", "vllm"}:
+        return device_permit_slot(
+            "llm-local",
+            priority="interactive",
+            timeout_seconds=5.0,
+        )
+    return nullcontext()
 
 
 def _generate_reply_with_interrupt(
@@ -556,56 +635,45 @@ def _generate_reply_with_interrupt(
     context_items: list[dict[str, Any]],
     job: JobRecord,
 ) -> dict[str, Any] | None:
-    """Run provider work off the session worker so cancellation can release it."""
+    """Run provider work on the bounded pool so cancellation can release the worker.
 
-    result: dict[str, Any] = {}
-    completed = threading.Event()
-    provider_slots = _provider_slots
-    while not provider_slots.acquire(timeout=.1):
-        if _cancel_requested(job_store, job.id):
-            raise _ChatGenerationInterrupted()
+    The worker wakes when the call finishes or the job's token is cancelled.
+    A cancel recorded by another process is read from the job store every
+    ``_CROSS_PROCESS_CANCEL_POLL_SECONDS``.
+    """
+
     if _cancel_requested(job_store, job.id):
-        provider_slots.release()
         raise _ChatGenerationInterrupted()
+    provider_id = _chat_provider_id(session, request, user_message)
+    token = _job_cancel_event(job.id, create=True)
 
-    def invoke() -> None:
-        try:
-            result["value"] = _generate_reply(
+    def invoke() -> dict[str, Any] | None:
+        if token.cancelled:  # cancelled while queued behind other calls
+            return None
+        with _chat_provider_slot(provider_id), provider_turn_owner(job.id):
+            return _generate_reply(
                 chat_store,
                 session,
                 user_message,
                 request=request,
                 context_items=context_items,
             )
-        except Exception as exc:
-            result["error"] = exc
-        finally:
-            provider_slots.release()
-            completed.set()
 
-    threading.Thread(
-        target=invoke,
-        name=f"omnix-chat-generation-{job.id}",
-        daemon=True,
-    ).start()
-    cancel_event = _job_cancel_event(job.id, create=True)
-    provider_interrupt_sent = False
-    while not completed.wait(timeout=0.1):
-        canceled = bool(cancel_event and cancel_event.is_set()) or _cancel_requested(
-            job_store,
-            job.id,
-        )
-        if not canceled:
-            continue
-        if not provider_interrupt_sent:
-            _interrupt_active_chat_provider(job.id)
-            provider_interrupt_sent = True
+    future = _dispatcher.submit_provider_call(invoke)
+    wake = threading.Event()
+    future.add_done_callback(lambda _future: wake.set())
+    stop_waking = token.on_cancel(wake.set)
+    try:
+        while not wake.wait(timeout=_CROSS_PROCESS_CANCEL_POLL_SECONDS):
+            if _cancel_requested(job_store, job.id):
+                break
+    finally:
+        stop_waking()
+    if not future.done() or token.cancelled:
+        future.cancel()
+        _interrupt_active_chat_provider(job.id)
         raise _ChatGenerationInterrupted()
-    if "error" in result:
-        error = result["error"]
-        if isinstance(error, Exception):
-            raise error
-    return result.get("value")
+    return future.result()
 
 
 def _run_chat_generation_job(
@@ -687,7 +755,7 @@ def _run_chat_generation_job(
 
         _mark_assistant_turn_streaming(user_message)
         _update_progress(job_store, job.id, "Generating response")
-        provider = _resolve_chat_provider(session, request)
+        provider = _resolve_chat_provider(session, request, user_message)
         if provider is not None:
             _register_active_chat_provider(job.id, provider)
         try:
@@ -707,68 +775,95 @@ def _run_chat_generation_job(
         content = str(answer.get("content") or "").strip()
         metadata = dict(answer.get("metadata") or {})
         metadata["reply_to_message_id"] = message_id
-        atomic_completion = getattr(job_store, 'chat_completion', None)
-        transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
-        with transaction, chat_job_commit_lock(job.id):
-            if _cancel_requested(job_store, job.id):
-                _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
-                return
-            require_owner = getattr(job_store, "require_chat_execution_owner", None)
-            if callable(require_owner):
-                require_owner(job.id)
+
+        def before_commit() -> None:
             _persist_routing_metadata(chat_store, session, user_message)
             if context_items:
                 metadata["context_sources"] = _context_source_summaries(context_items)
                 metadata["context_diagnostics"] = context_diagnostics
-            completed = chat_store.complete_streamed_reply(
-                session_id,
-                message_id,
-                content,
-                metadata,
-            )
-            if completed is None:
-                raise RuntimeError("Chat response could not be persisted.")
-            if completion_hook is not None:
-                try:
-                    completion_hook(
-                        chat_store,
-                        session_id,
-                        message_id,
-                        context_items,
-                        context_diagnostics,
-                    )
-                except Exception:
-                    if not callable(atomic_completion):
-                        _remove_assistant_reply(chat_store, session_id, message_id)
-                    raise
-            completed_job = job_store.complete_job(
-                job.id,
-                CompleteJobRequest(
-                    output_refs=[
-                        {
-                            "type": "chat_response",
-                            "module": "chatbot",
-                            "session_id": session_id,
-                            "message_id": message_id,
-                            "content": content,
-                        }
-                    ],
-                    logs=[
-                        {
-                            "level": "info",
-                            "message": "Chat response generated and persisted.",
-                            "session_id": session_id,
-                            "message_id": message_id,
-                        }
-                    ],
-                ),
-            )
-            if completed_job is None:
-                raise RuntimeError("Chat generation completed but its job disappeared.")
+
+        hook = None
+        if completion_hook is not None:
+            def hook() -> None:
+                completion_hook(chat_store, session_id, message_id, context_items, context_diagnostics)
+
+        _commit_chat_reply(
+            chat_store, job_store, job, session_id=session_id, message_id=message_id,
+            content=content, metadata=metadata, before_commit=before_commit, completion_hook=hook,
+        )
     except _ChatGenerationInterrupted:
         _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
     except Exception as exc:  # pragma: no cover - exercised through job state
         _fail_job(chat_store, job_store, job, exc, session_id=session_id, message_id=message_id)
+
+
+def _commit_chat_reply(
+    chat_store: Any,
+    job_store: Any,
+    job: JobRecord,
+    *,
+    session_id: str,
+    message_id: str,
+    content: str,
+    metadata: dict[str, Any],
+    before_commit: Callable[[], None] | None = None,
+    completion_hook: Callable[[], None] | None = None,
+) -> ChatSession | None:
+    """Persist a reply and complete its job atomically, unless the turn was canceled.
+
+    Returns the updated session, or ``None`` when a cancellation won the race.
+    """
+    atomic_completion = getattr(job_store, 'chat_completion', None)
+    transaction = atomic_completion(chat_store, job.id) if callable(atomic_completion) else nullcontext()
+    with transaction, chat_job_commit_lock(job.id):
+        if _cancel_requested(job_store, job.id):
+            _cancel_chat_turn(chat_store, job_store, job, session_id, message_id)
+            return None
+        require_owner = getattr(job_store, "require_chat_execution_owner", None)
+        if callable(require_owner):
+            require_owner(job.id)
+        if before_commit is not None:
+            before_commit()
+        completed = chat_store.complete_streamed_reply(
+            session_id,
+            message_id,
+            content,
+            metadata,
+        )
+        if completed is None:
+            raise RuntimeError("Chat response could not be persisted.")
+        if completion_hook is not None:
+            try:
+                completion_hook()
+            except Exception:
+                if not callable(atomic_completion):
+                    _remove_assistant_reply(chat_store, session_id, message_id)
+                raise
+        completed_job = job_store.complete_job(
+            job.id,
+            CompleteJobRequest(
+                output_refs=[
+                    {
+                        "type": "chat_response",
+                        "module": "chatbot",
+                        "session_id": session_id,
+                        "message_id": message_id,
+                        "content": content,
+                    }
+                ],
+                logs=[
+                    {
+                        "level": "info",
+                        "message": "Chat response generated and persisted.",
+                        "session_id": session_id,
+                        "message_id": message_id,
+                    }
+                ],
+            ),
+        )
+        if completed_job is None:
+            raise RuntimeError("Chat generation completed but its job disappeared.")
+    return completed
 
 
 def _fail_job(
@@ -944,22 +1039,23 @@ def _remove_assistant_reply(chat_store: Any, session_id: str, message_id: str) -
     if callable(remove):
         remove(session_id, message_id)
         return
-    sessions = chat_store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        session.messages = [
-            item
-            for item in session.messages
-            if not (
-                item.role == "assistant"
-                and item.metadata.get("reply_to_message_id") == message_id
-            )
-        ]
-        session.message_count = len(session.messages)
-        sessions[index] = session
-        chat_store._save_sessions(sessions)
+    session = chat_store.get_session(session_id)
+    if session is None:
         return
+    reply_ids = [
+        item.id
+        for item in session.messages
+        if item.role == "assistant"
+        and item.metadata.get("reply_to_message_id") == message_id
+    ]
+    delete_messages = getattr(chat_store, "delete_messages", None)
+    if callable(delete_messages):
+        delete_messages(session_id, reply_ids)
+        return
+    delete_ids = set(reply_ids)
+    session.messages = [item for item in session.messages if item.id not in delete_ids]
+    session.message_count = len(session.messages)
+    chat_store._save_session(session)
 
 
 def _generate_reply(
@@ -1048,17 +1144,18 @@ def _patch_user_message_metadata(
     if callable(update):
         update(session_id=session_id, message_id=message_id, metadata=metadata)
         return
-    sessions = chat_store._load_sessions()
-    for index, session in enumerate(sessions):
-        if session.id != session_id:
-            continue
-        for message in session.messages:
-            if message.id == message_id:
-                message.metadata.update(metadata)
-                break
-        sessions[index] = session
-        chat_store._save_sessions(sessions)
+    update = getattr(chat_store, "update_message_metadata", None)
+    if callable(update):
+        update(session_id=session_id, message_id=message_id, metadata=metadata)
         return
+    session = chat_store.get_session(session_id)
+    if session is None:
+        return
+    message = next((item for item in session.messages if item.id == message_id), None)
+    if message is None:
+        return
+    message.metadata.update(metadata)
+    chat_store._save_session(session)
 
 
 def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[str, str]]:

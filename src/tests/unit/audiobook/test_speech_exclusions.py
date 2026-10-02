@@ -36,7 +36,8 @@ def test_service_validates_selected_occurrence_and_invalidates_current_audio(mon
     @contextmanager
     def work(_database):
         yield SimpleNamespace(connection=Connection(), commit=lambda: committed.append(True),
-                              jobs=SimpleNamespace(request_cancel=lambda _context, job_id: canceled.append(job_id)))
+                              jobs=SimpleNamespace(request_cancel=lambda _context, job_id: canceled.append(job_id),
+                                                   query_jobs=lambda *_args, **_kwargs: [{"id": "job"}]))
     monkeypatch.setattr("app.audiobook.service.unit_of_work", work)
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")

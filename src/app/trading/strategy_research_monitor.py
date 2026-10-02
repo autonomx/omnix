@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from contextlib import suppress
 from datetime import datetime, time, timezone
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import default_research_repository
@@ -16,24 +17,24 @@ from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET=ZoneInfo("America/New_York")
 _STATE_KEY="_omnix_trading_strategy_research_monitor"
 
 
-def _flag(name: str,default: str="1") -> bool: return os.environ.get(name,default).strip().lower() in {"1","true","yes","on"}
+def _flag(name: str,default: str="1") -> bool: return environment().get(name,default).strip().lower() in {"1","true","yes","on"}
 
 def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
-    try: value=int(os.environ.get(name,str(default)))
+    try: value=int(environment().get(name,str(default)))
     except ValueError: value=default
     return max(minimum,min(maximum,value))
 
 def strategy_research_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
+    if environment().get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
     return _flag("OMNIX_TRADING_RESEARCH_MONITOR","1")
 
 def _interval_seconds() -> float:
-    try:value=float(os.environ.get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
+    try:value=float(environment().get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
     except ValueError:value=60.0
     return max(15.0,value)
 
@@ -128,17 +129,17 @@ class TradingStrategyResearchMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_trading_strategy_research_monitor(gateway:FastAPI)->TradingStrategyResearchMonitor:
-    existing=getattr(gateway.state,_STATE_KEY,None)
-    if isinstance(existing,TradingStrategyResearchMonitor):return existing
-    monitor=TradingStrategyResearchMonitor();setattr(gateway.state,_STATE_KEY,monitor)
+def create_trading_strategy_research_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing=getattr(state,_STATE_KEY,None)
+    if isinstance(existing,TradingStrategyResearchMonitor):return None
+    monitor=TradingStrategyResearchMonitor();setattr(state,_STATE_KEY,monitor)
     async def startup():
         if strategy_research_monitor_enabled():monitor.start()
     async def shutdown():await monitor.stop()
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
-__all__=["TradingStrategyResearchMonitor","register_trading_strategy_research_monitor","strategy_research_monitor_enabled"]
+__all__=["TradingStrategyResearchMonitor","create_trading_strategy_research_monitor_worker","strategy_research_monitor_enabled"]

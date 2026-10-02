@@ -1,7 +1,7 @@
-from app.jobs.inline_execution_compat import mark_inline_execution
+from app.jobs.inline_execution import mark_inline_execution
 from app.jobs.models import CreateJobRequest, JobProgress, JobStatus, ResourceClass
-from app.persistence.job_compat import PostgresJobStoreAdapter
-from app.persistence.job_runtime_compat import PostgresJobStoreAdapter as RuntimePostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
+from app.chat.persistence.job_store import PostgresJobStoreAdapter as RuntimePostgresJobStoreAdapter
 
 
 def test_mark_inline_execution_preserves_existing_compatibility_flags() -> None:
@@ -124,14 +124,14 @@ def test_postgres_compat_reads_fractional_render_progress() -> None:
     assert JobProgress(current=1, total=2).model_dump()["current"] == 1
 
 
-def test_postgres_compat_mark_running_is_idempotent_for_inline_jobs() -> None:
+def test_postgres_compat_rechecks_inline_owner_on_idempotent_mark_running(monkeypatch) -> None:
     adapter = object.__new__(PostgresJobStoreAdapter)
     running = adapter._record(
         {
             "id": "job:inline-running",
             "owner_user_id": "user:local",
-            "module": "assistant",
-            "job_type": "assistant.deep_research",
+            "module": "chat",
+            "job_type": "chat.generate",
             "status": "running",
             "resource_class": "network",
             "priority": 0,
@@ -150,9 +150,43 @@ def test_postgres_compat_mark_running_is_idempotent_for_inline_jobs() -> None:
         }
     )
     adapter.get_job = lambda job_id: running  # type: ignore[method-assign]
+    adapter._record = lambda record: running  # type: ignore[method-assign]
+    adapter.database = object()
+    adapter.context = type("Context", (), {"workspace_id": "workspace:test"})()
+    adapter.chat_execution_owner = type("Owner", (), {"node_id": "gateway:test"})()
+    adapter.handler_registry = None
+    calls = []
+
+    class Jobs:
+        def mark_record_only_running(self, context, **kwargs):
+            calls.append((context.workspace_id, kwargs))
+            return {"id": running.id}
+
+        def list_job_logs(self, context, *, job_id):
+            return []
+
+    class Work:
+        jobs = Jobs()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def commit(self):
+            pass
+
+    monkeypatch.setattr(
+        "app.persistence.job_store.unit_of_work", lambda _database: Work()
+    )
 
     assert running.status == JobStatus.RUNNING
     assert adapter.mark_running(running.id) is running
+    assert calls == [(
+        "workspace:test",
+        {"job_id": running.id, "execution_owner": "gateway:test", "submission_claim_token": None},
+    )]
 
 
 def test_postgres_runtime_progress_preserves_the_active_stage(monkeypatch) -> None:
@@ -199,11 +233,15 @@ def test_postgres_runtime_progress_preserves_the_active_stage(monkeypatch) -> No
         }
     )
     persisted: dict[str, object] = {}
-    monkeypatch.setattr(PostgresJobStoreAdapter, "update_progress", lambda self, job_id, progress: running)
+    monkeypatch.setattr(
+        PostgresJobStoreAdapter,
+        "update_progress",
+        lambda self, job_id, progress, **kwargs: running,
+    )
     monkeypatch.setattr(
         adapter,
         "update_job_stages",
-        lambda job_id, stages: persisted.update(stages=stages) or running,
+        lambda job_id, stages, **kwargs: persisted.update(stages=stages) or running,
     )
 
     updated = adapter.update_progress(
@@ -211,6 +249,8 @@ def test_postgres_runtime_progress_preserves_the_active_stage(monkeypatch) -> No
         JobProgress(current=1, total=6, message="Searching current sources"),
         stage_id="searching",
         stage_status=JobStatus.RUNNING,
+        worker_id="worker:test",
+        lease_token="lease:test",
     )
 
     assert updated is running

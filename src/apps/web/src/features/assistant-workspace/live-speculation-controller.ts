@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,

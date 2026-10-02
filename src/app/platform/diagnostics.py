@@ -1,13 +1,57 @@
 """Gateway diagnostics summary for platform contracts."""
 from __future__ import annotations
 
+from dataclasses import asdict
 from pydantic import BaseModel, Field
 import re
+from typing import Any
 
-from app.gateway.workers import WorkerHealthPayload, get_worker_health_payload
+from app.runtime.worker_health import WorkerHealthPayload, get_worker_health_payload
 from app.jobs import ModelResidencyDiagnostics, ModelResidencyRecord, get_model_residency_diagnostics
 from app.providers.cache_status import ProviderModelCachePayload, get_provider_model_cache_status
-from .runtime_diagnostics import RuntimeDiagnostics
+from app.persistence.device_permits import default_device_permit_service
+
+
+class EventReaderDiagnostics(BaseModel):
+    """Live job events in this process (WP-5.4)."""
+
+    readers: int = 0
+    subscribers: int = 0
+    queries: int = 0
+    listeners_alive: int = 0
+
+
+class RetentionRunDiagnostics(BaseModel):
+    """The newest retention run; the error is reported by class only."""
+
+    status: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    deleted: dict[str, int] = Field(default_factory=dict)
+    error_class: str | None = None
+
+
+class VersionDiagnostics(BaseModel):
+    build_revision: str | None = None
+    application_schema: str
+
+
+class RuntimeDiagnostics(BaseModel):
+    """One process's runtime view (WP-10.9); sections are documented in docs/operations/DIAGNOSTICS.md."""
+
+    schema_version: int = 2
+    version: VersionDiagnostics | None = None
+    features: list[str] = Field(default_factory=list)
+    events: EventReaderDiagnostics = Field(default_factory=EventReaderDiagnostics)
+    retention: RetentionRunDiagnostics | None = None
+    process: dict[str, Any] = Field(default_factory=dict)
+    postgresql: dict[str, Any] = Field(default_factory=dict)
+    background: dict[str, Any] = Field(default_factory=dict)
+    jobs: dict[str, Any] = Field(default_factory=dict)
+    chat: dict[str, Any] = Field(default_factory=dict)
+    scheduler: dict[str, Any] = Field(default_factory=dict)
+    tts: dict[str, Any] = Field(default_factory=dict)
+    replicas: dict[str, Any] = Field(default_factory=dict)
 
 
 class DiagnosticsPayload(BaseModel):
@@ -16,6 +60,7 @@ class DiagnosticsPayload(BaseModel):
     workers: WorkerHealthPayload
     event_stream: dict[str, str] = Field(default_factory=dict)
     model_residency: ModelResidencyDiagnostics = Field(default_factory=get_model_residency_diagnostics)
+    device_permits: list[dict[str, Any]] = Field(default_factory=list)
     provider_model_cache: ProviderModelCachePayload = Field(default_factory=get_provider_model_cache_status)
     logs: list[dict[str, str]] = Field(default_factory=list)
     runtime: RuntimeDiagnostics | None = None
@@ -23,6 +68,25 @@ class DiagnosticsPayload(BaseModel):
 
 def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] | None = None) -> DiagnosticsPayload:
     workers = get_worker_health_payload()
+    device_permits: list[dict[str, Any]] = []
+    permit_service = default_device_permit_service()
+    if permit_service is not None:
+        try:
+            device_permits = [asdict(item) for item in permit_service.diagnostics()]
+        except Exception as exc:
+            device_permits = [{"status": "unavailable", "error_class": type(exc).__name__}]
+    try:
+        provider_model_cache = get_provider_model_cache_status()
+    except Exception as exc:
+        provider_model_cache = ProviderModelCachePayload(
+            status="unavailable",
+            diagnostics=[
+                {
+                    "code": "provider_model_cache_unavailable",
+                    "error_class": type(exc).__name__,
+                }
+            ],
+        )
     return DiagnosticsPayload(
         ok=workers.ok,
         status="ready" if workers.ok else "degraded",
@@ -33,7 +97,8 @@ def get_diagnostics_payload(model_residency_records: list[ModelResidencyRecord] 
             "status": "available",
         },
         model_residency=get_model_residency_diagnostics(model_residency_records),
-        provider_model_cache=get_provider_model_cache_status(),
+        device_permits=device_permits,
+        provider_model_cache=provider_model_cache,
         logs=[],
     )
 
@@ -51,15 +116,20 @@ def redact_diagnostics(value, key=''):
     return value
 
 
-def get_runtime_diagnostics_payload(gateway, *, model_residency_store_factory) -> DiagnosticsPayload:
+def get_runtime_diagnostics_payload(
+    state,
+    *,
+    model_residency_store_factory,
+    allow_offline_store: bool = False,
+) -> DiagnosticsPayload:
     """Keep local ownership diagnostics available when durable reads fail."""
     from app.jobs.residency import GpuResidencyPolicy
     from .runtime_diagnostics import runtime_diagnostics
 
-    runtime = runtime_diagnostics(gateway)
+    runtime = runtime_diagnostics(state)
     error_class = runtime.postgresql.get('error_class')
     payload = None
-    if runtime.postgresql.get('connectivity') is not False:
+    if runtime.postgresql.get("connectivity") is not False or allow_offline_store:
         try:
             payload = get_diagnostics_payload(model_residency_store_factory().list_records())
         except Exception as exc:

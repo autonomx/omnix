@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import hashlib
 from typing import Any, Dict, List
 
@@ -8,6 +10,8 @@ from app.rpg.social.state import (
     ensure_relationship,
     ensure_social_state,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_dict(value: Any) -> Dict[str, Any]:
@@ -137,7 +141,7 @@ def validate_leverage(
                     "bonus": 0,
                 }
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "validate_leverage", exc_info=True)
 
     if not _source_memory_exists(
         simulation_state,

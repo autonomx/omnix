@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.gateway.live_material_context import (
+from app.chat.live_material_context import (
     LiveMaterialAppendRequest,
     LiveMaterialConflictError,
     LiveMaterialStore,
-    register_live_material_context_routes,
+    create_live_material_context_router,
 )
 
 
@@ -78,7 +78,7 @@ def test_material_compaction_and_explicit_promotion_are_bounded() -> None:
 
 def test_material_routes_support_non_generating_append_and_clear() -> None:
     app = FastAPI()
-    register_live_material_context_routes(app)
+    app.include_router(create_live_material_context_router())
     client = TestClient(app)
     session_id = "route-test-session"
 

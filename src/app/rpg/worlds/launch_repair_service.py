@@ -5,7 +5,7 @@ from collections import Counter
 from dataclasses import replace
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.canon_audit import CanonAuditReport
 from app.rpg.session.genesis.canon_compiler import compile_campaign_bible
@@ -161,7 +161,7 @@ def _existing_ready_promotion(
     starting_location_id: str,
     database: Any | None,
 ) -> dict[str, Any] | None:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         revisions = work.world_library.list_world_revisions(context, world_id)
         releases = work.world_library.list_world_releases(context, world_id)
@@ -211,7 +211,7 @@ def _publish_repaired_world(
     starting_location_id: str,
     database: Any | None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id, for_update=True)
         if world is None:
@@ -324,7 +324,7 @@ def repair_world_for_launch(
     if not starting_location_id.strip():
         raise ValueError("world_launch_repair_starting_location_required")
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         scenario = next(
             (
@@ -451,7 +451,7 @@ def prepare_opening_scenarios_for_launch(
     if not openings:
         raise ValueError("world_opening_scenarios_not_found")
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         runs = work.world_library.list_generation_runs(context, world_id=world_id, limit=1)
         existing_ids = {

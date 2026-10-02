@@ -6,7 +6,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatMessage, ChatSession
-from app.gateway import live_chat_speculation as speculation
+from app.chat import live_chat_speculation as speculation
+from app.live_voice.chat_integration import create_live_voice_chat_port
+from app.providers import service as provider_service
+from tests.support.routers import include_router_registrar
 
 
 class _FakeProvider:
@@ -21,6 +24,7 @@ class _FakeProvider:
 
 class _FakeStore:
     def __init__(self) -> None:
+        self.live_voice_chat_port = create_live_voice_chat_port()
         self.begin_calls = 0
         self.complete_calls = 0
         self.get_session_calls = 0
@@ -39,7 +43,6 @@ class _FakeStore:
     def get_session(self, session_id: str):
         self.get_session_calls += 1
         return self.session if session_id == self.session.id else None
-
     def build_provider_prompt(self, _session, user_message, _context_items):
         self.last_prompt_metadata = dict(user_message.metadata)
         rendered = SimpleNamespace(
@@ -83,6 +86,31 @@ class _FakeStore:
         return self.session
 
 
+def test_session_singleflight_registry_is_bounded_expiring_and_invalidatable(monkeypatch):
+    monkeypatch.setattr(speculation, "_MAX_SESSION_LOADS", 2)
+    monkeypatch.setattr(speculation, "_SESSION_LOAD_TTL_SECONDS", 5.0)
+    speculation.clear_live_speculation_session_cache()
+
+    with speculation._SPECULATION_LOCK:
+        first, owns_first = speculation._session_load_locked("session-a", 10.0)
+        second, owns_second = speculation._session_load_locked("session-b", 10.0)
+        third, owns_third = speculation._session_load_locked("session-c", 10.0)
+    assert owns_first and owns_second and owns_third
+    assert first.event.is_set()
+    assert len(speculation._SESSION_LOADS) == 2
+
+    with speculation._SPECULATION_LOCK:
+        fourth, owns_fourth = speculation._session_load_locked("session-d", 16.0)
+    assert owns_fourth
+    assert second.event.is_set()
+    assert third.event.is_set()
+    assert len(speculation._SESSION_LOADS) == 1
+
+    speculation.clear_live_speculation_session_cache()
+    assert not speculation._SESSION_LOADS
+    assert fourth.event.is_set()
+
+
 def _event_payloads(body: str) -> list[dict]:
     payloads = []
     for block in body.split("\n\n"):
@@ -115,13 +143,14 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
     speculation.clear_live_speculation_session_cache()
     store = _FakeStore()
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: _FakeProvider(),
     )
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(
+    include_router_registrar(
         app,
+        speculation.register_live_chat_speculation_routes,
         chat_store_factory=lambda: store,
     )
     client = TestClient(app)
@@ -152,7 +181,7 @@ def test_generation_has_no_persistence_until_final_accept(monkeypatch) -> None:
         payload.get("text", "")
         for payload in payloads
         if payload.get("type") == "text_chunk"
-    ) == "Hello there."
+    ) == "Hello there.", stream_response.text
     assert store.last_prompt_metadata["side_effects_allowed"] is False
     assert store.last_prompt_metadata["tools_allowed"] is False
     assert store.last_prompt_metadata["memory_writes_allowed"] is False
@@ -205,13 +234,14 @@ def test_primed_session_avoids_speculation_reload(monkeypatch) -> None:
     store = _FakeStore()
     speculation.prime_live_speculation_session(store.session)
     monkeypatch.setattr(
-        speculation.shared,
+        provider_service,
         "get_provider",
         lambda _provider_id: _FakeProvider(),
     )
     app = FastAPI()
-    speculation.register_live_chat_speculation_routes(
+    include_router_registrar(
         app,
+        speculation.register_live_chat_speculation_routes,
         chat_store_factory=lambda: store,
     )
     client = TestClient(app)

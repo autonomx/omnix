@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
+from app.caching.bounded_cache import bounded_lru_cache
 from typing import Iterable
 
 from app.rpg.map_contracts import MapContractError, MapDefinition
@@ -61,6 +61,6 @@ class MapDefinitionRepository:
                     raise MapContractError("missing_child_map_definition", item.child_map_id)
 
 
-@lru_cache(maxsize=1)
+@bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def default_map_repository() -> MapDefinitionRepository:
     return MapDefinitionRepository(hierarchical_starter_map_definitions())

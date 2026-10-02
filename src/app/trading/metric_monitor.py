@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import os
+from app.config.env import environment
+
 import asyncio
 from typing import Any
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .catalog import INSTRUMENTS, bindings_for_instrument
 from .metric_data import TradingMetricDataService, default_metric_data_service
@@ -16,11 +17,11 @@ _MONITOR_STATE_KEY = "_omnix_trading_metric_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_liquidation_collector_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR", "1")
 
@@ -54,10 +55,16 @@ class TradingMetricMonitor:
             service.binance.liquidation_buffer.ensure_started(symbol)
         self.started_symbols = symbols
 
+    def run_once(self) -> int:
+        """Reconcile stream collectors owned by this scheduled task."""
+        self.start()
+        return len(self.started_symbols)
+
     def diagnostics(self) -> dict[str, Any]:
         service = self.service
         return {
             "enabled": trading_liquidation_collector_enabled(),
+            "running": bool(self.started_symbols),
             "started_symbols": list(self.started_symbols),
             "collecting": {
                 symbol: bool(
@@ -74,18 +81,18 @@ class TradingMetricMonitor:
         self.started_symbols = ()
 
 
-def register_trading_metric_monitor(gateway: FastAPI) -> TradingMetricMonitor:
-    existing = getattr(gateway.state, _MONITOR_STATE_KEY, None)
+def create_trading_metric_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _MONITOR_STATE_KEY, None)
     if isinstance(existing, TradingMetricMonitor):
-        return existing
+        return None
     monitor = TradingMetricMonitor()
-    setattr(gateway.state, _MONITOR_STATE_KEY, monitor)
+    setattr(state, _MONITOR_STATE_KEY, monitor)
 
     async def startup() -> None:
         if trading_liquidation_collector_enabled():
             monitor.start()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(monitor.stop,),
-    ))
-    return monitor
+    )

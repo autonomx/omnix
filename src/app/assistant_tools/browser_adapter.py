@@ -17,13 +17,17 @@ run-scoped sessions and Omnix's navigation/resource allowlist.
 """
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str, environment as _environment
+
 import atexit
+from collections import OrderedDict
 from dataclasses import dataclass, field
 import hashlib
 import importlib.util
 import json
 import os
-from queue import Queue
+from queue import Full, Queue
 import re
 import shutil
 import signal
@@ -37,7 +41,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .models import AssistantToolRequest, AssistantToolResult
-from app.agent_runtime.process_environment import bounded_process_environment
+from app.runtime.process_environment import bounded_process_environment
+
+logger = logging.getLogger(__name__)
 
 _BROWSER_ACTIONS = {
     "browser.open",
@@ -93,6 +99,13 @@ _SAFE_ENV_KEYS = (
 _SELECTOR = re.compile(r"^.{1,1024}$", re.S)
 _MAX_VALUE_CHARS = 16_000
 _MAX_OUTPUT_CHARS = 50_000
+_MAX_BROWSER_SESSION_GENERATIONS = 4096
+_BROWSER_SESSION_GENERATION_TTL_SECONDS = 3600.0
+_MAX_PLAYWRIGHT_SESSIONS = 64
+_PLAYWRIGHT_SESSION_TTL_SECONDS = 1800.0
+_MAX_PLAYWRIGHT_COMMANDS_PER_SESSION = 64
+_MAX_PREVIEW_ENTRIES = 64
+_MAX_PREVIEW_TTL_SECONDS = 1800.0
 _PREVIEW_PACKAGE_PATH = "src/apps/web"
 _PREVIEW_ROUTE = re.compile(r"^/[^\r\n\x00]{0,2047}$", re.S)
 # Some Windows hosts reject Chrome's out-of-process GPU child with
@@ -114,11 +127,15 @@ class _PlaywrightCommand:
 @dataclass
 class _PlaywrightSession:
     name: str
-    commands: Queue[_PlaywrightCommand] = field(default_factory=Queue)
+    commands: Queue[_PlaywrightCommand] = field(
+        default_factory=lambda: Queue(maxsize=_MAX_PLAYWRIGHT_COMMANDS_PER_SESSION)
+    )
     ready: threading.Event = field(default_factory=threading.Event)
     stopped: threading.Event = field(default_factory=threading.Event)
     startup_error: BaseException | None = None
     thread: threading.Thread | None = None
+    idle_timer: threading.Timer | None = None
+    expires_at: float = 0.0
 
 
 @dataclass
@@ -127,25 +144,26 @@ class _WorkspacePreview:
     url: str
     port: int
     timer: threading.Timer | None = None
+    expires_at: float = 0.0
 
 
 _PREVIEW_LOCK = threading.RLock()
-_PREVIEWS: dict[str, _WorkspacePreview] = {}
+_PREVIEWS: OrderedDict[str, _WorkspacePreview] = OrderedDict()
 _BROWSER_SESSION_LOCK = threading.RLock()
-_BROWSER_SESSION_GENERATIONS: dict[str, int] = {}
+_BROWSER_SESSION_GENERATIONS: OrderedDict[str, tuple[int, float]] = OrderedDict()
 _PLAYWRIGHT_LOCK = threading.RLock()
 _PLAYWRIGHT_SESSIONS: dict[str, _PlaywrightSession] = {}
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = _env_str(name)
     if value is None:
         return default
     return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def agent_browser_command() -> str:
-    configured = os.environ.get("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
+    configured = _env_str("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
     if configured:
         return configured
     repo_root = Path(__file__).resolve().parents[3]
@@ -165,7 +183,7 @@ def _playwright_available() -> bool:
 
 
 def _browser_backend() -> str:
-    configured = os.environ.get("OMNIX_AGENT_BROWSER_BACKEND", "").strip().casefold()
+    configured = _env_str("OMNIX_AGENT_BROWSER_BACKEND", "").strip().casefold()
     if configured in {"agent-browser", "playwright"}:
         return configured
     # The native agent-browser Windows daemon currently loses its CDP channel
@@ -177,13 +195,13 @@ def _browser_backend() -> str:
 
 
 def _playwright_executable() -> str | None:
-    configured = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    configured = _env_str("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
     if configured and Path(configured).is_file():
         return configured
     roots = [
-        os.environ.get("PROGRAMFILES", ""),
-        os.environ.get("PROGRAMFILES(X86)", ""),
-        os.environ.get("LOCALAPPDATA", ""),
+        _env_str("PROGRAMFILES", ""),
+        _env_str("PROGRAMFILES(X86)", ""),
+        _env_str("LOCALAPPDATA", ""),
     ]
     relative = Path("Google") / "Chrome" / "Application" / "chrome.exe"
     for root in roots:
@@ -206,7 +224,7 @@ def browser_available() -> bool:
 
 
 def browser_allowed_domains() -> tuple[str, ...]:
-    raw = os.environ.get("OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS", "").strip()
+    raw = _env_str("OMNIX_AGENT_BROWSER_ALLOWED_DOMAINS", "").strip()
     if not raw:
         return _DEFAULT_ALLOWED_DOMAINS
     values: list[str]
@@ -269,10 +287,26 @@ def _browser_session_key(session_id: str | None, proposal_id: object = None) -> 
 def _session_name(session_id: str | None, *, proposal_id: object = None) -> str:
     key = _browser_session_key(session_id, proposal_id)
     with _BROWSER_SESSION_LOCK:
-        generation = _BROWSER_SESSION_GENERATIONS.get(key, 0)
+        generation = _browser_session_generation_locked(key, time.monotonic())
     identity = f"{key}:{generation}" if generation else key
     digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
     return f"omnix-{digest}"
+
+
+def _browser_session_generation_locked(key: str, now: float) -> int:
+    expired = [
+        name
+        for name, (_generation, touched) in _BROWSER_SESSION_GENERATIONS.items()
+        if now - touched > _BROWSER_SESSION_GENERATION_TTL_SECONDS
+    ]
+    for name in expired:
+        _BROWSER_SESSION_GENERATIONS.pop(name, None)
+    entry = _BROWSER_SESSION_GENERATIONS.get(key)
+    if entry is None:
+        return 0
+    _BROWSER_SESSION_GENERATIONS.move_to_end(key)
+    generation, _touched = entry
+    return generation
 
 
 def _safe_text(value: object, *, field: str, max_chars: int = _MAX_VALUE_CHARS) -> str:
@@ -291,29 +325,35 @@ def _safe_selector(value: object) -> str:
 
 def _timeout_seconds() -> int:
     try:
-        return max(5, min(int(os.environ.get("OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS", "45")), 180))
+        return max(5, min(int(_env_str("OMNIX_AGENT_BROWSER_TIMEOUT_SECONDS", "45")), 180))
     except ValueError:
         return 45
 
 
 def _preview_start_timeout_seconds() -> int:
     try:
-        return max(3, min(int(os.environ.get("OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS", "20")), 60))
+        return max(3, min(int(_env_str("OMNIX_AGENT_PREVIEW_START_TIMEOUT_SECONDS", "20")), 60))
     except ValueError:
         return 20
 
 
 def _preview_ttl_seconds() -> int:
     try:
-        return max(30, min(int(os.environ.get("OMNIX_AGENT_PREVIEW_TTL_SECONDS", "300")), 1800))
+        return max(
+            30,
+            min(
+                int(_env_str("OMNIX_AGENT_PREVIEW_TTL_SECONDS", "300")),
+                int(_MAX_PREVIEW_TTL_SECONDS),
+            ),
+        )
     except ValueError:
         return 300
 
 
 def _minimal_environment() -> dict[str, str]:
-    source = os.environ
+    source = _environment()
     env = bounded_process_environment(source, _SAFE_ENV_KEYS)
-    executable = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
+    executable = _env_str("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
     if executable:
         env["AGENT_BROWSER_EXECUTABLE_PATH"] = executable
     if os.name == "nt":
@@ -323,7 +363,7 @@ def _minimal_environment() -> dict[str, str]:
 
 def _preview_environment() -> dict[str, str]:
     env = _minimal_environment()
-    for key, value in os.environ.items():
+    for key, value in _environment().items():
         # VITE_* values are deliberately browser-public configuration. Do not
         # leak arbitrary Omnix/backend environment variables into repository
         # code executed by the preview process.
@@ -380,7 +420,7 @@ def _playwright_snapshot(page: Any, timeout_ms: int) -> str:
 
 def _log_playwright_worker_event(session: _PlaywrightSession, event: str) -> None:
     try:
-        from app.agent_runtime.debug_logging import log_agent_activity
+        from app.observability.agent_logging import log_agent_activity
 
         log_agent_activity(
             event,
@@ -388,7 +428,7 @@ def _log_playwright_worker_event(session: _PlaywrightSession, event: str) -> Non
             fields={"backend": "playwright", "session": session.name},
         )
     except Exception:
-        pass
+        logger.debug("suppressed error in %s", "_log_playwright_worker_event", exc_info=True)
 
 
 def _playwright_action(
@@ -543,7 +583,7 @@ def _playwright_worker(session: _PlaywrightSession) -> None:
             try:
                 playwright.stop()
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         return
 
     session.ready.set()
@@ -581,19 +621,22 @@ def _playwright_worker(session: _PlaywrightSession) -> None:
             if context is not None:
                 context.close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         try:
             if browser is not None:
                 browser.close()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         try:
             if playwright is not None:
                 playwright.stop()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "_playwright_worker", exc_info=True)
         session.stopped.set()
         with _PLAYWRIGHT_LOCK:
+            if session.idle_timer is not None:
+                session.idle_timer.cancel()
+                session.idle_timer = None
             if _PLAYWRIGHT_SESSIONS.get(session.name) is session:
                 _PLAYWRIGHT_SESSIONS.pop(session.name, None)
 
@@ -603,7 +646,14 @@ def _playwright_session(request: AssistantToolRequest) -> _PlaywrightSession:
     with _PLAYWRIGHT_LOCK:
         current = _PLAYWRIGHT_SESSIONS.get(name)
         if current is not None and current.thread is not None and current.thread.is_alive():
+            _schedule_playwright_session_expiry_locked(current)
             return current
+        if current is not None:
+            _PLAYWRIGHT_SESSIONS.pop(name, None)
+            if current.idle_timer is not None:
+                current.idle_timer.cancel()
+        if len(_PLAYWRIGHT_SESSIONS) >= _MAX_PLAYWRIGHT_SESSIONS:
+            raise RuntimeError("browser session capacity is full")
         session = _PlaywrightSession(name=name)
         session.thread = threading.Thread(
             target=_playwright_worker,
@@ -613,7 +663,49 @@ def _playwright_session(request: AssistantToolRequest) -> _PlaywrightSession:
         )
         _PLAYWRIGHT_SESSIONS[name] = session
         session.thread.start()
+        _schedule_playwright_session_expiry_locked(session)
         return session
+
+
+def _schedule_playwright_session_expiry_locked(session: _PlaywrightSession) -> None:
+    if session.idle_timer is not None:
+        session.idle_timer.cancel()
+    session.expires_at = time.monotonic() + _PLAYWRIGHT_SESSION_TTL_SECONDS
+    timer = threading.Timer(
+        _PLAYWRIGHT_SESSION_TTL_SECONDS,
+        _expire_playwright_session,
+        args=(session.name, session, session.expires_at),
+    )
+    timer.daemon = True
+    session.idle_timer = timer
+    timer.start()
+
+
+def _expire_playwright_session(
+    name: str,
+    session: _PlaywrightSession,
+    expected_expiry: float,
+) -> None:
+    with _PLAYWRIGHT_LOCK:
+        if (
+            _PLAYWRIGHT_SESSIONS.get(name) is not session
+            or session.expires_at != expected_expiry
+        ):
+            return
+        remaining = session.expires_at - time.monotonic()
+        if remaining > 0:
+            timer = threading.Timer(
+                remaining,
+                _expire_playwright_session,
+                args=(name, session, expected_expiry),
+            )
+            timer.daemon = True
+            session.idle_timer = timer
+            timer.start()
+            return
+        _PLAYWRIGHT_SESSIONS.pop(name, None)
+        session.idle_timer = None
+    _stop_playwright_session(session)
 
 
 def _playwright_request_for_command(
@@ -651,7 +743,11 @@ def _run_playwright_command(
         argv=argv,
         metadata=metadata,
     )
-    session.commands.put(command)
+    try:
+        session.commands.put(command, timeout=timeout)
+    except Full:
+        _stop_playwright_session(session)
+        raise subprocess.TimeoutExpired(argv, timeout)
     if not command.done.wait(timeout=timeout):
         _stop_playwright_session(session)
         with _PLAYWRIGHT_LOCK:
@@ -664,6 +760,10 @@ def _run_playwright_command(
 
 
 def _stop_playwright_session(session: _PlaywrightSession) -> None:
+    with _PLAYWRIGHT_LOCK:
+        if session.idle_timer is not None:
+            session.idle_timer.cancel()
+            session.idle_timer = None
     if session.thread is None or not session.thread.is_alive() or not session.ready.is_set():
         return
     close = _PlaywrightCommand(
@@ -682,6 +782,11 @@ def _stop_playwright_session(session: _PlaywrightSession) -> None:
 def _stop_all_playwright_sessions() -> None:
     with _PLAYWRIGHT_LOCK:
         sessions = list(_PLAYWRIGHT_SESSIONS.values())
+        _PLAYWRIGHT_SESSIONS.clear()
+        for session in sessions:
+            if session.idle_timer is not None:
+                session.idle_timer.cancel()
+                session.idle_timer = None
     for session in sessions:
         _stop_playwright_session(session)
 
@@ -695,7 +800,7 @@ def _log_browser_activity(
     error: BaseException | str | None = None,
 ) -> None:
     try:
-        from app.agent_runtime.debug_logging import log_agent_activity
+        from app.observability.agent_logging import log_agent_activity
 
         fields: dict[str, Any] = {
             "action_id": request.action_id,
@@ -714,7 +819,7 @@ def _log_browser_activity(
         )
     except Exception:
         # Browser diagnostics must never change capability behavior.
-        pass
+        logger.debug("suppressed error in %s", "_log_browser_activity", exc_info=True)
 
 
 def _run_browser_command(
@@ -847,7 +952,7 @@ def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path]:
 
 
 def _preview_npm_command() -> str:
-    configured = os.environ.get("OMNIX_AGENT_PREVIEW_NPM_COMMAND", "").strip()
+    configured = _env_str("OMNIX_AGENT_PREVIEW_NPM_COMMAND", "").strip()
     if configured:
         candidate = Path(configured)
         if candidate.is_file():
@@ -942,6 +1047,22 @@ def _expire_workspace_preview(run_id: str, pid: int) -> None:
     _terminate_preview_process(preview.process)
 
 
+def _prune_expired_workspace_previews() -> None:
+    now = time.monotonic()
+    with _PREVIEW_LOCK:
+        expired = [
+            (run_id, preview)
+            for run_id, preview in _PREVIEWS.items()
+            if preview.expires_at and now >= preview.expires_at
+        ]
+        for run_id, _preview in expired:
+            _PREVIEWS.pop(run_id, None)
+    for _run_id, preview in expired:
+        if preview.timer is not None:
+            preview.timer.cancel()
+        _terminate_preview_process(preview.process)
+
+
 def _stop_workspace_preview(request: AssistantToolRequest) -> bool:
     run_id = _run_id_from_request(request)
     if not run_id:
@@ -976,6 +1097,7 @@ def _start_workspace_preview(
         raise ValueError("workspace preview path must be a bounded absolute browser route")
 
     _stop_workspace_preview(request)
+    _prune_expired_workspace_previews()
     npm = _preview_npm_command()
     last_error = "workspace preview failed to become ready"
     for _attempt in range(3):
@@ -1024,15 +1146,23 @@ def _start_workspace_preview(
         base_url = f"http://127.0.0.1:{port}"
         url = f"{base_url}{route}"
         preview = _WorkspacePreview(process=process, url=base_url, port=port)
+        preview_ttl = _preview_ttl_seconds()
+        preview.expires_at = time.monotonic() + preview_ttl
         timer = threading.Timer(
-            _preview_ttl_seconds(),
+            preview_ttl,
             _expire_workspace_preview,
             args=(run_id, process.pid),
         )
         timer.daemon = True
         preview.timer = timer
         with _PREVIEW_LOCK:
-            _PREVIEWS[run_id] = preview
+            capacity_reached = len(_PREVIEWS) >= _MAX_PREVIEW_ENTRIES
+            if not capacity_reached:
+                _PREVIEWS[run_id] = preview
+        if capacity_reached:
+            timer.cancel()
+            _terminate_preview_process(process)
+            raise ValueError("workspace preview capacity is full")
         timer.start()
         return url, {
             "workspace_preview": True,
@@ -1083,7 +1213,14 @@ def _clear_browser_session_generation(request: AssistantToolRequest) -> None:
 def _rotate_browser_session(request: AssistantToolRequest) -> None:
     key = _browser_session_key(request.session_id, request.proposal_id)
     with _BROWSER_SESSION_LOCK:
-        _BROWSER_SESSION_GENERATIONS[key] = _BROWSER_SESSION_GENERATIONS.get(key, 0) + 1
+        generation = _browser_session_generation_locked(key, time.monotonic()) + 1
+        _BROWSER_SESSION_GENERATIONS[key] = (
+            generation,
+            time.monotonic(),
+        )
+        _BROWSER_SESSION_GENERATIONS.move_to_end(key)
+        while len(_BROWSER_SESSION_GENERATIONS) > _MAX_BROWSER_SESSION_GENERATIONS:
+            _BROWSER_SESSION_GENERATIONS.popitem(last=False)
 
 
 def _reset_failed_workspace_preview(request: AssistantToolRequest) -> None:

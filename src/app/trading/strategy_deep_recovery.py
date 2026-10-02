@@ -28,6 +28,9 @@ DEEP_RECOVERY_MINIMUM_SELLOFF_PCT = Decimal("5")
 DEEP_RECOVERY_TRIGGER_PCT = Decimal("30")
 DEEP_RECOVERY_BREAKOUT_LOOKBACK = 3
 DEEP_RECOVERY_STOP_LOOKBACK = 5
+DEEP_RECOVERY_MAX_RISK_PCT = Decimal("8")
+DEEP_RECOVERY_MAX_VWAP_EXTENSION_PCT = Decimal("12")
+DEEP_RECOVERY_RISK_OVERLAY_VERSION = "deep-recovery-risk-overlay-v1"
 
 DeepRecoveryState = Literal[
     "hard_gate_rejected",
@@ -84,6 +87,41 @@ def _evaluation(
         hard_gate_features=hard_gate_features,
         **values,
     )
+
+
+def apply_deep_recovery_risk_policy(
+    evaluation: DeepRecoveryShadowEvaluation,
+) -> DeepRecoveryShadowEvaluation:
+    if not evaluation.signal_ready:
+        return evaluation
+    risk_pct = evaluation.research_risk_pct
+    vwap_extension = evaluation.vwap_distance_pct
+    features = dict(evaluation.hard_gate_features)
+    features["deep_recovery_risk_overlay"] = {
+        "version": DEEP_RECOVERY_RISK_OVERLAY_VERSION,
+        "max_research_risk_pct": str(DEEP_RECOVERY_MAX_RISK_PCT),
+        "max_vwap_extension_pct": str(DEEP_RECOVERY_MAX_VWAP_EXTENSION_PCT),
+    }
+    if risk_pct is None or risk_pct > DEEP_RECOVERY_MAX_RISK_PCT:
+        return evaluation.model_copy(
+            update={
+                "state": "waiting_breakout",
+                "reason_code": "DEEP_RECOVERY_RISK_TOO_WIDE",
+                "hard_gate_features": features,
+            }
+        )
+    if (
+        vwap_extension is None
+        or vwap_extension > DEEP_RECOVERY_MAX_VWAP_EXTENSION_PCT
+    ):
+        return evaluation.model_copy(
+            update={
+                "state": "waiting_breakout",
+                "reason_code": "DEEP_RECOVERY_EXTENSION_TOO_HIGH",
+                "hard_gate_features": features,
+            }
+        )
+    return evaluation.model_copy(update={"hard_gate_features": features})
 
 
 def evaluate_deep_recovery_shadow(
@@ -246,9 +284,11 @@ def evaluate_deep_recovery_shadow(
             **common,
         )
 
-    return _evaluation(
-        state="signal_ready",
-        reason_code="DEEP_RECOVERY_30PCT_CONTINUATION_SHADOW",
-        hard_gate_features=hard_features,
-        **common,
+    return apply_deep_recovery_risk_policy(
+        _evaluation(
+            state="signal_ready",
+            reason_code="DEEP_RECOVERY_30PCT_CONTINUATION_SHADOW",
+            hard_gate_features=hard_features,
+            **common,
+        )
     )

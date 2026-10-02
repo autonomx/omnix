@@ -34,10 +34,15 @@ Key Features:
 
 from __future__ import annotations
 
-import random
+import logging
+
 from typing import Any, Callable, Dict, List, Optional
 
-from rpg.core.npc_state import NPCState
+from app.rpg.core.determinism import rng_for, rng_seed_from_session_id
+from app.rpg.core.probabilistic_executor import ProbabilisticActionExecutor
+from app.rpg.core.npc_state import NPCState
+
+logger = logging.getLogger(__name__)
 
 # Default passive event probabilities
 PASSIVE_EVENT_PROBABILITIES: Dict[str, float] = {
@@ -101,6 +106,7 @@ class WorldSimulationLoop:
         tick_max: int = 3,
         passive_events: Optional[Dict[str, float]] = None,
         tick_callback: Optional[Callable[["WorldSimulationLoop"], None]] = None,
+        session_seed: int | None = None,
     ):
         """Initialize WorldSimulationLoop.
         
@@ -130,6 +136,9 @@ class WorldSimulationLoop:
         self.arc_manager = arc_manager
         self.director = director
         self.session = session
+        self.session_seed = (
+            session_seed if session_seed is not None else self._seed_from_session(session)
+        )
         self.tick = 0
         self.tick_min = tick_min
         self.tick_max = tick_max
@@ -139,7 +148,7 @@ class WorldSimulationLoop:
         # Async NPC scheduling: npc_id → next tick they can act
         self.next_action_ticks: Dict[str, int] = {}
         for npc_id in self.npcs:
-            self.next_action_ticks[npc_id] = self._schedule_next_tick()
+            self.next_action_ticks[npc_id] = self._schedule_next_tick(npc_id)
             
         # Tick result
         self._last_tick_result: Dict[str, Any] = {}
@@ -231,6 +240,20 @@ class WorldSimulationLoop:
         }
         self._last_tick_result = result
         return result
+
+    @staticmethod
+    def _seed_from_session(session: Any) -> int:
+        if isinstance(session, dict):
+            value = session.get("rng_seed")
+            if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 2**64:
+                return value
+            session_id = session.get("session_id", session.get("id"))
+            if session_id:
+                return rng_seed_from_session_id(str(session_id))
+        return 0
+
+    def _rng(self, purpose: str, sub_index: int = 0):
+        return rng_for(self.session_seed, max(0, self.tick), purpose, sub_index)
         
     # ---------------------------------------------------------------
     # Pipeline step implementations
@@ -290,7 +313,7 @@ class WorldSimulationLoop:
                 actions.append(action)
                 
             # Reschedule this NPC's next action tick
-            self.next_action_ticks[npc_id] = self.tick + self._schedule_next_tick()
+            self.next_action_ticks[npc_id] = self.tick + self._schedule_next_tick(npc_id)
             
         # Director actions (always act every tick)
         if self.director:
@@ -304,7 +327,7 @@ class WorldSimulationLoop:
                         action["source"] = "director"
                         actions.append(action)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "WorldSimulationLoop._step_plan", exc_info=True)
                 
         return actions
         
@@ -339,7 +362,15 @@ class WorldSimulationLoop:
         results = []
         for action in actions:
             if self.executor and hasattr(self.executor, "execute_with_uncertainty"):
-                result = self.executor.execute_with_uncertainty(action)
+                if isinstance(self.executor, ProbabilisticActionExecutor):
+                    result = self.executor.execute_with_uncertainty(
+                        action,
+                        rng=self._rng(
+                            f"npc_uncertainty:{action.get('npc_id', 'unknown')}:{action.get('action', 'unknown')}"
+                        ),
+                    )
+                else:
+                    result = self.executor.execute_with_uncertainty(action)
             else:
                 result = {
                     "success": True,
@@ -370,7 +401,7 @@ class WorldSimulationLoop:
             try:
                 self.director.update(self.session, events)
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "WorldSimulationLoop._step_arcs_update", exc_info=True)
         return updates
         
     def _step_memory_store(self, events: List[Dict[str, Any]]) -> None:
@@ -390,7 +421,7 @@ class WorldSimulationLoop:
         """
         triggered = []
         for event_name, probability in self.passive_events.items():
-            if random.random() < probability:
+            if self._rng(f"passive_event:{event_name}").random() < probability:
                 event = {
                     "type": "passive_event",
                     "sub_type": event_name,
@@ -412,34 +443,39 @@ class WorldSimulationLoop:
         data: Dict[str, Any] = {}
         if event_name == "weather_change":
             weathers = ["clear", "rain", "storm", "fog", "snow"]
-            data["new_weather"] = random.choice(weathers)
+            data["new_weather"] = self._rng(f"text:weather:{event_name}").choice(weathers)
         elif event_name == "resource_spawn":
-            data["resource_type"] = random.choice(["herb", "ore", "wood"])
-            data["quantity"] = random.randint(1, 5)
+            rng = self._rng(f"text:resource:{event_name}")
+            data["resource_type"] = rng.choice(["herb", "ore", "wood"])
+            data["quantity"] = rng.randint(1, 5)
         elif event_name == "stranger_encounter":
-            data["stranger_type"] = random.choice(["merchant", "traveler", "refugee"])
+            data["stranger_type"] = self._rng(f"text:stranger:{event_name}").choice(
+                ["merchant", "traveler", "refugee"]
+            )
         elif event_name == "rumor_spread":
-            data["rumor"] = random.choice([
+            data["rumor"] = self._rng(f"text:rumor:{event_name}").choice([
                 "bandits on the road",
                 "treasure in the ruins",
                 "plague in the north",
                 "new king crowned",
             ])
         elif event_name == "environmental_hazard":
-            data["hazard"] = random.choice(["landslide", "flood", "fire", "quake"])
+            data["hazard"] = self._rng(f"text:hazard:{event_name}").choice(
+                ["landslide", "flood", "fire", "quake"]
+            )
         return data
         
     # ---------------------------------------------------------------
     # STEP 4: Async NPC scheduling
     # ---------------------------------------------------------------
         
-    def _schedule_next_tick(self) -> int:
+    def _schedule_next_tick(self, npc_id: str = "world") -> int:
         """Schedule next tick for an NPC.
         
         Returns:
             Number of ticks until NPC acts again.
         """
-        return random.randint(self.tick_min, self.tick_max)
+        return self._rng(f"npc_schedule:{npc_id}").randint(self.tick_min, self.tick_max)
         
     def _get_active_npc_ids(self) -> List[str]:
         """Get list of NPCs that can act this tick.
@@ -464,7 +500,7 @@ class WorldSimulationLoop:
             npc_state: NPCState instance.
         """
         self.npcs[npc_id] = npc_state
-        self.next_action_ticks[npc_id] = self.tick + self._schedule_next_tick()
+        self.next_action_ticks[npc_id] = self.tick + self._schedule_next_tick(npc_id)
         
     def remove_npc(self, npc_id: str) -> None:
         """Remove an NPC from the simulation."""

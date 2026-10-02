@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
+pytestmark = pytest.mark.playwright
+
 
 class TestPageLoad:
     """Verify the main page loads correctly."""

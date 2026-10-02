@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import { useSyncExternalStore } from 'react';
 
 import type { LiveConversationProfile } from '../chatbot/liveConversationProfileClient';

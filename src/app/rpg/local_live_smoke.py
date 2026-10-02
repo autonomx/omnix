@@ -1,9 +1,9 @@
 """Local-only live smoke runner for the interactive RPG response pipeline."""
 from __future__ import annotations
+from app.config.env import environment as _environment
 
 import argparse
 import json
-import os
 import statistics
 import sys
 import time
@@ -47,7 +47,7 @@ class SmokeResult:
 
 
 def assert_live_smoke_allowed(env: Mapping[str, str] | None = None) -> None:
-    values = env or os.environ
+    values = env or _environment()
     if str(values.get("CI") or "").strip().casefold() in _TRUTHY:
         raise RuntimeError("live RPG smoke is local-only and must not run in CI")
     if str(values.get(LOCAL_LIVE_SMOKE_ENV) or "").strip() != "1":

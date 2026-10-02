@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import hashlib
 
-from app.persistence.blob_store import LocalBlobStore
+from app.persistence.blob_store import default_blob_store
+from app.persistence.contracts import BlobStore
 
 from .backtest import BacktestArtifactReference, BacktestRunResult
 from .replay_repository import TradingReplayRepository
 
 
 class TradingReplayRuntimeRepository(TradingReplayRepository):
-    def __init__(self, *args, blob_store: LocalBlobStore | None = None, **kwargs) -> None:
+    def __init__(self, *args, blob_store: BlobStore | None = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.blob_store = blob_store or LocalBlobStore()
+        self.blob_store = blob_store or default_blob_store()
 
     def _artifact_key(self, run_id: str) -> str:
         workspace = hashlib.sha256(

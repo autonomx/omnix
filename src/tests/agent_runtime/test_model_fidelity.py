@@ -34,10 +34,9 @@ def test_operator_reasoning_override_remains_authoritative(monkeypatch) -> None:
 
 def test_chat_agent_reasoning_reads_selected_provider_setting(monkeypatch) -> None:
     from types import SimpleNamespace
-    from app import shared
     from app.agent_runtime import chat_bridge
     monkeypatch.delenv("OMNIX_AGENT_REASONING_EFFORT", raising=False)
-    monkeypatch.setattr(shared, "get_provider", lambda _provider_id: SimpleNamespace(reasoning_effort="max"))
+    monkeypatch.setattr(chat_bridge, "get_provider", lambda _provider_id: SimpleNamespace(reasoning_effort="max"))
     assert chat_bridge._agent_reasoning_effort("chatgpt_codex") == "max"
 
 

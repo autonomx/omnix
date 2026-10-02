@@ -4,12 +4,21 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from app.shared import load_settings
+from app.settings.access import load_settings
 
+from .settings_profile_experience import AgentRunSettingsProfile
 from .settings_profile_models import SettingsProfile
 from .settings_profile_repository import load_settings_profile
+from app.prompts import prompt_template
 
-_LEGACY_CHAT_DEFAULT_PROMPT = "You are Omnix Assistant. Be helpful, clear, and practical."
+
+LEGACY_CHAT_DEFAULT_PROMPT_TEMPLATE = prompt_template(
+    'platform.effective_defaults.legacy_chat_default_prompt', "1",
+    'You are Omnix Assistant. Be helpful, clear, and practical.',
+)
+
+
+_LEGACY_CHAT_DEFAULT_PROMPT = LEGACY_CHAT_DEFAULT_PROMPT_TEMPLATE.text
 _LEGACY_STORY_TONE = "Cozy"
 _LEGACY_STORY_STYLE = "Lyrical & Descriptive"
 _LEGACY_PODCAST_DEFAULTS: dict[str, Any] = {
@@ -30,7 +39,12 @@ _PERSONALITY_PROMPTS = {
 
 
 def load_effective_profile() -> SettingsProfile:
-    return load_settings_profile(load_settings())
+    return load_settings_profile(load_settings(allow_defaults_without_service=True))
+
+
+def agent_run_settings() -> AgentRunSettingsProfile:
+    """Default agent run limits and provider prices from the saved settings."""
+    return load_effective_profile().agent_runs
 
 
 def _text(value: Any) -> str:

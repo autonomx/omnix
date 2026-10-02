@@ -10,7 +10,7 @@ from app.agent_runtime.contracts import AgentRunSpec, ModelRef, TaskRevision
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.persistence.identity_service import ensure_local_identity
 from app.persistence.unit_of_work import unit_of_work
 
 
@@ -34,7 +34,7 @@ def _database() -> PostgresDatabase:
 @pytest.mark.skipif(not DATABASE_URL, reason="requires PostgreSQL integration database")
 def test_evidence_query_reservations_are_idempotent_and_aggregate_bounded() -> None:
     database = _database()
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     run_id = f"evidence-budget-{uuid.uuid4().hex}"
     spec = AgentRunSpec(
         run_id=run_id,
@@ -103,7 +103,7 @@ def test_evidence_query_reservations_are_idempotent_and_aggregate_bounded() -> N
 @pytest.mark.skipif(not DATABASE_URL, reason="requires PostgreSQL integration database")
 def test_stale_read_capability_execution_can_be_reclaimed() -> None:
     database = _database()
-    context = bootstrap_local_tenant(database)
+    context = ensure_local_identity(database)
     run_id = f"read-reclaim-{uuid.uuid4().hex}"
     spec = AgentRunSpec(
         run_id=run_id,

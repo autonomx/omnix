@@ -6,12 +6,17 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 import threading
-from typing import Any
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from .database import PostgresDatabase
+    from .unit_of_work import PostgresUnitOfWork
 
 
 @dataclass(frozen=True)
 class TransactionBinding:
-    work: Any
+    work: PostgresUnitOfWork
     thread_id: int
 
 
@@ -20,7 +25,7 @@ _BINDING: ContextVar[TransactionBinding | None] = ContextVar(
 )
 
 
-def shared_work(database):
+def shared_work(database: PostgresDatabase) -> PostgresUnitOfWork | None:
     binding = _BINDING.get()
     if binding is None:
         return None
@@ -35,7 +40,7 @@ def shared_work(database):
 
 
 @contextmanager
-def share_transaction(work):
+def share_transaction(work: PostgresUnitOfWork) -> Iterator[None]:
     work._require_connection()
     token = _BINDING.set(TransactionBinding(work, threading.get_ident()))
     try:
@@ -44,7 +49,7 @@ def share_transaction(work):
         _BINDING.reset(token)
 
 
-def after_commit(database, callback):
+def after_commit(database: PostgresDatabase, callback: Callable[[], Any]) -> None:
     work = shared_work(database)
     if work is None:
         callback()

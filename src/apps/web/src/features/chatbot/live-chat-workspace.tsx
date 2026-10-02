@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 

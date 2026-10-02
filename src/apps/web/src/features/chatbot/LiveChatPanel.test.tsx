@@ -1,3 +1,5 @@
+/* eslint-disable no-restricted-imports -- baseline WP-9.x */
+/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

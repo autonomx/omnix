@@ -4,10 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-try:
-    from app import shared
-except Exception:  # pragma: no cover
-    shared = None
+from app.runtime.paths import resources_data_root
 
 DEFAULT_HOUSE_STATE = {
     "rooms": {
@@ -22,8 +19,7 @@ DEFAULT_HOUSE_STATE = {
 
 
 def assist_data_root() -> Path:
-    base = Path(getattr(shared, "DATA_DIR", "resources/data")) if shared else Path("resources/data")
-    path = base / "assist_core"
+    path = resources_data_root() / "assist_core"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -35,8 +31,8 @@ def house_state_path() -> Path:
 def load_house_state() -> dict[str, Any]:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().load_house_state()
+        from app.assist_core.persistence.house_state import load_house_state_postgres
+        return load_house_state_postgres()
     path = house_state_path()
     if not path.exists():
         save_house_state(DEFAULT_HOUSE_STATE)
@@ -50,8 +46,8 @@ def load_house_state() -> dict[str, Any]:
 def save_house_state(state: dict[str, Any]) -> None:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.runtime_document_services import production_document_services
-        return production_document_services().save_house_state(state)
+        from app.assist_core.persistence.house_state import save_house_state_postgres
+        return save_house_state_postgres(state)
     house_state_path().write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
 
 

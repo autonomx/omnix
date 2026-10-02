@@ -6,17 +6,18 @@ The authoritative allowlist is [gateway-route-policy.json](../../deploy/gateway-
 
 | Route class | Target |
 | --- | --- |
-| Chat session create/read/update/delete, attachments, messages and message stream | API pool; PostgreSQL protects admission and transcript ownership |
+| Chat session create/read/update/delete, attachments, and non-streaming messages | API pool; PostgreSQL protects admission and transcript ownership |
+| Message stream and `/api/tts/live-call/websocket` | Worker unless shared remote TTS and a call-affinity key are present; then consistent hash to the same API replica |
 | GET/HEAD job list/detail, `/events`, trading bars/quotes | API pool |
 | Speech WebSocket/SSE | Worker by default; API pool only when every API uses the shared remote TTS endpoint |
 | All unclassified API routes and writes, trading control, RPG control | Worker/control process |
 | `/health`, `/ready` | Worker through the public ingress; probe each private API origin separately |
 | Static paths | Built web app with SPA fallback |
 
-`X-Omnix-Gateway-Affinity: worker` forces worker routing for existing clients. Otherwise API selection uses least connections. Selection happens once per request/upgrade; Nginx holds that upstream for the entire WebSocket/SSE connection. `proxy_next_upstream off` disables replay, including after a transport failure. Clients may explicitly retry only with the endpoint's durable idempotency contract.
+`X-Omnix-Gateway-Affinity: worker` remains an explicit worker-routing override. Live-call chat requests carry `X-Omnix-Call-Id`; the persistent browser WebSocket carries the same key in the `omnix_call_affinity` cookie. When remote TTS is enabled and the key is present, Nginx and the Vite development proxy consistently hash it so the chat stream and WebSocket reach the same API replica. Live traffic without the key stays on the worker. Other API requests use least connections. Selection happens once per request/upgrade; Nginx holds that upstream for the entire WebSocket/SSE connection. `proxy_next_upstream off` disables replay, including after a transport failure. Clients may explicitly retry only with the endpoint's durable idempotency contract.
 
 Install `deploy/nginx/omnix.conf` within Nginx's `http` context, replace loopback upstreams and `/srv/omnix/web`, and run `nginx -t` before reloading. Build the web app with `npm --prefix src/apps/web run build`. This example listens on 8080; terminate HTTPS using the deployment's normal ingress configuration. Gateway listeners should be private to that ingress.
 
-The example defaults to two API origins at 8001/8002 and worker 8000. Set the speech map's default to `1` only after configuring `OMNIX_TTS_URL` on every API process and verifying required-worker readiness. With no API replicas, route the API upstream to the worker. `OMNIX_GATEWAY_API_ORIGINS` is the runtime diagnostics/developer topology input; it does not dynamically rewrite Nginx configuration.
+The example defaults to two API origins at 8001/8002 and worker 8000. Set the speech map's default to `1` only after configuring `OMNIX_TTS_URL` on every API process and verifying required-worker readiness. This enables live-call WebSocket and live chat call-ID routing to the affinity-hashed API pool. With no API replicas, route the API upstream to the worker. `OMNIX_GATEWAY_API_ORIGINS` is the runtime diagnostics/developer topology input; it does not dynamically rewrite Nginx configuration.
 
 Open-source Nginx's example uses passive upstream health. Deployment supervision must probe private `/ready` endpoints before admitting/replacing replicas; `/health` alone does not establish PostgreSQL or execution authority. A worker losing ownership remains unready and must restart with a fresh identity. Healthy APIs retain request-serving responsibility subject to their own database/owner readiness. No alternate persistence authority is selected during outages.

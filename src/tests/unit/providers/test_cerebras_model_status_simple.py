@@ -1,14 +1,49 @@
 """Simple test for Cerebras model status and connection using settings.json API key."""
 
-import json
 import os
-import tempfile
-from unittest.mock import Mock, patch
 
+import httpx
 import pytest
 
 from app.providers import CerebrasProvider, ModelInfo, ProviderConfig
 from app.providers.base import AuthenticationError
+from tests.support.http import install_provider_http
+
+
+
+_MODELS = {
+    "data": [
+        {
+            "id": "llama-3.3-70b-versatile",
+            "name": "Llama 3.3 70B Versatile",
+            "owned_by": "cerebras",
+            "context_length": 128000,
+            "description": "General-purpose model",
+        },
+        {
+            "id": "llama-3.1-8b-instruct",
+            "name": "Llama 3.1 8B Instruct",
+            "owned_by": "cerebras",
+            "context_length": 128000,
+            "description": "Instruction-tuned model",
+        },
+    ]
+}
+
+
+def _provider_with_http(reply, *, api_key="test-key", model=None):
+    """A Cerebras provider whose HTTP calls all get ``reply`` (a response or an error)."""
+    calls: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if isinstance(reply, Exception):
+            raise reply
+        return httpx.Response(reply.status_code, headers=reply.headers, content=reply.content)
+
+    provider = CerebrasProvider(ProviderConfig(provider_type="cerebras", api_key=api_key, model=model))
+    install_provider_http(provider, handle)
+    return provider, calls
 
 
 class TestCerebrasModelStatusSimple:
@@ -61,258 +96,121 @@ class TestCerebrasModelStatusSimple:
         provider = CerebrasProvider(config)
         assert provider.requires_api_key() is True
     
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_get_models_success(self, mock_request):
+    def test_cerebras_get_models_success(self):
         """Test successful retrieval of models from Cerebras."""
-        # Mock successful response with models
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'data': [
-                {
-                    'id': 'llama-3.3-70b-versatile',
-                    'name': 'Llama 3.3 70B Versatile',
-                    'owned_by': 'cerebras',
-                    'context_length': 128000,
-                    'description': 'General-purpose model'
-                },
-                {
-                    'id': 'llama-3.1-8b-instruct',
-                    'name': 'Llama 3.1 8B Instruct',
-                    'owned_by': 'cerebras',
-                    'context_length': 128000,
-                    'description': 'Instruction-tuned model'
-                }
-            ]
-        }
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key'
-        )
-        provider = CerebrasProvider(config)
-        
+        provider, calls = _provider_with_http(httpx.Response(200, json=_MODELS))
+
         models = provider.get_models()
-        
+
         assert len(models) == 2
         assert isinstance(models[0], ModelInfo)
-        assert models[0].id == 'llama-3.3-70b-versatile'
-        assert models[0].name == 'Llama 3.3 70B Versatile'
-        assert models[0].provider == 'cerebras'
+        assert models[0].id == "llama-3.3-70b-versatile"
+        assert models[0].name == "Llama 3.3 70B Versatile"
+        assert models[0].provider == "cerebras"
         assert models[0].context_length == 128000
-        assert models[0].description == 'General-purpose model'
-        
-        # Verify the request was made correctly
-        mock_request.assert_called_once()
-        call_args = mock_request.call_args
-        assert call_args[0][0] == 'get'  # HTTP method
-        assert call_args[0][1] == 'https://api.cerebras.ai/v1/models'  # URL
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_get_models_empty_response(self, mock_request):
+        assert models[0].description == "General-purpose model"
+        assert len(calls) == 1
+        assert calls[0].method == "GET"
+        assert str(calls[0].url) == "https://api.cerebras.ai/v1/models"
+
+    def test_cerebras_get_models_empty_response(self):
         """Test handling of empty models response."""
-        # Mock response with empty data
-        mock_response = Mock()
-        mock_response.json.return_value = {'data': []}
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key'
-        )
-        provider = CerebrasProvider(config)
-        
-        models = provider.get_models()
-        assert models == []
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_chat_completion_non_streaming(self, mock_request):
+        provider, _calls = _provider_with_http(httpx.Response(200, json={"data": []}))
+
+        assert provider.get_models() == []
+
+    def test_cerebras_chat_completion_non_streaming(self):
         """Test non-streaming chat completion."""
-        # Mock successful response
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'choices': [{
-                'message': {
-                    'content': 'Hello! How can I help you?',
-                    'reasoning': 'Analyzing user request...'
-                },
-                'finish_reason': 'stop'
+        provider, _calls = _provider_with_http(httpx.Response(200, json={
+            "choices": [{
+                "message": {"content": "Hello! How can I help you?", "reasoning": "Analyzing user request..."},
+                "finish_reason": "stop",
             }],
-            'model': 'llama-3.3-70b-versatile',
-            'usage': {'total_tokens': 15}
-        }
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key',
-            model='llama-3.3-70b-versatile'
-        )
-        provider = CerebrasProvider(config)
-        
+            "model": "llama-3.3-70b-versatile",
+            "usage": {"total_tokens": 15},
+        }), model="llama-3.3-70b-versatile")
+
         from app.providers import ChatMessage
-        messages = [ChatMessage(role='user', content='Hello')]
-        
-        response = provider.chat_completion(messages, stream=False)
-        
-        assert response.content == 'Hello! How can I help you?'
-        assert response.model == 'llama-3.3-70b-versatile'
-        assert response.thinking == 'Analyzing user request...'
-        assert response.finish_reason == 'stop'
-        assert response.usage == {'total_tokens': 15}
-    
-    @patch('app.providers.cerebras_provider.requests.request')
-    def test_cerebras_chat_completion_streaming(self, mock_request):
+        response = provider.chat_completion([ChatMessage(role="user", content="Hello")], stream=False)
+
+        assert response.content == "Hello! How can I help you?"
+        assert response.model == "llama-3.3-70b-versatile"
+        assert response.thinking == "Analyzing user request..."
+        assert response.finish_reason == "stop"
+        assert response.usage == {"total_tokens": 15}
+
+    def test_cerebras_chat_completion_streaming(self):
         """Test streaming chat completion."""
-        # Mock streaming response
-        mock_response = Mock()
-        mock_response.iter_lines.return_value = [
-            b'data: {"choices":[{"delta":{"content":"Hello"}}]}',
-            b'data: {"choices":[{"delta":{"content":"!"}}]}',
-            b'data: [DONE]'
-        ]
-        mock_request.return_value = mock_response
-        
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-key',
-            model='llama-3.3-70b-versatile'
+        body = (
+            b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'
+            b'data: {"choices":[{"delta":{"content":"!"}}]}\n\n'
+            b"data: [DONE]\n\n"
         )
-        provider = CerebrasProvider(config)
-        
+        provider, _calls = _provider_with_http(httpx.Response(200, content=body), model="llama-3.3-70b-versatile")
+
         from app.providers import ChatMessage
-        messages = [ChatMessage(role='user', content='Hello')]
-        
-        responses = list(provider.chat_completion(messages, stream=True))
-        
-        assert len(responses) == 2
-        assert responses[0].content == 'Hello'
-        assert responses[1].content == '!'
-    
+        responses = list(provider.chat_completion([ChatMessage(role="user", content="Hello")], stream=True))
+
+        assert [response.content for response in responses] == ["Hello", "!"]
+
     def test_cerebras_make_request_with_authorization(self):
         """Test that _make_request adds proper authorization headers."""
-        config = ProviderConfig(
-            provider_type='cerebras',
-            api_key='test-api-key'
+        provider, calls = _provider_with_http(httpx.Response(200), api_key="test-api-key")
+
+        provider._make_request("get", "/test/endpoint")
+
+        assert calls[0].headers["Authorization"] == "Bearer test-api-key"
+        assert calls[0].headers["Content-Type"] == "application/json"
+
+
+class TestCerebrasProviderServiceSettings:
+    """Provider construction uses typed settings and the secret-store port."""
+
+    def _install(self, monkeypatch, settings, secrets):
+        from app.providers import service as provider_service
+
+        monkeypatch.setattr(provider_service, "load_settings", lambda: settings)
+        monkeypatch.setattr(provider_service, "load_secrets", lambda: secrets)
+        provider_service.invalidate_provider_cache()
+        return provider_service
+
+    def test_provider_uses_settings_and_secret_store(self, monkeypatch):
+        settings = {
+            "provider": "cerebras",
+            "cerebras": {"model": "llama-3.3-70b-versatile"},
+        }
+        provider_service = self._install(
+            monkeypatch,
+            settings,
+            {"api_keys": {"cerebras": "test-api-key-from-secret-store"}},
         )
-        provider = CerebrasProvider(config)
-        
-        with patch('app.providers.cerebras_provider.requests.request') as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_request.return_value = mock_response
-            
-            provider._make_request('get', '/test/endpoint')
-            
-            # Verify authorization header was added
-            call_args = mock_request.call_args
-            headers = call_args[1]['headers']
-            assert headers['Authorization'] == 'Bearer test-api-key'
-            assert headers['Content-Type'] == 'application/json'
 
+        provider = provider_service.get_provider()
 
-class TestCerebrasIntegrationWithSettings:
-    """Integration tests for Cerebras provider using settings.json."""
-    
-    def setup_method(self):
-        """Setup for integration tests."""
-        # Create a temporary settings file
-        self.temp_settings_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-        self.temp_settings_path = self.temp_settings_file.name
-        self.temp_settings_file.close()
-        
-        # Store original environment
-        self.original_env = os.environ.get('SETTINGS_FILE_PATH')
-        os.environ['SETTINGS_FILE_PATH'] = self.temp_settings_path
-    
-    def teardown_method(self):
-        """Cleanup after integration tests."""
-        # Clean up temporary file
-        if os.path.exists(self.temp_settings_path):
-            os.unlink(self.temp_settings_path)
-        
-        # Restore original environment
-        if self.original_env:
-            os.environ['SETTINGS_FILE_PATH'] = self.original_env
-        elif 'SETTINGS_FILE_PATH' in os.environ:
-            del os.environ['SETTINGS_FILE_PATH']
-    
-    def test_cerebras_provider_from_settings(self):
-        """Test creating Cerebras provider from settings.json."""
-        # Create test settings
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'api_key': 'test-api-key-from-settings',
-                'model': 'llama-3.3-70b-versatile'
-            }
-        }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        # Import shared module to test settings loading
-        import app.shared as shared
-        
-        # Mock the load_settings function to use our test file
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            assert settings['provider'] == 'cerebras'
-            assert settings['cerebras']['api_key'] == 'test-api-key-from-settings'
-            assert settings['cerebras']['model'] == 'llama-3.3-70b-versatile'
-            
-            # Test creating provider from settings
-            provider = shared.get_provider()
-            assert provider is not None
-            assert provider.provider_name == 'cerebras'
-            assert provider.config.api_key == 'test-api-key-from-settings'
-            assert provider.config.model == 'llama-3.3-70b-versatile'
-    
-    def test_cerebras_provider_with_missing_api_key_in_settings(self):
-        """Test handling of missing API key in settings.json."""
-        # Create test settings without API key
-        test_settings = {
-            'provider': 'cerebras',
-            'cerebras': {
-                'model': 'llama-3.3-70b-versatile'
-                # Missing api_key
-            }
-        }
-        
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
-        
-        import app.shared as shared
-        
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            # This should not raise an error during provider creation
-            # but the provider should be None or handle the missing key gracefully
-            provider = shared.get_provider()
-            # The exact behavior depends on the implementation, but it should not crash
-            assert provider is None or provider.config.api_key == ''
-    
-    def test_cerebras_provider_with_empty_settings(self):
-        """Test Cerebras provider with empty settings.json."""
-        # Create empty settings
-        test_settings = {}
+        assert provider is not None
+        assert provider.provider_name == "cerebras"
+        assert provider.config.api_key == "test-api-key-from-secret-store"
+        assert provider.config.model == "llama-3.3-70b-versatile"
 
-        with open(self.temp_settings_path, 'w') as f:
-            json.dump(test_settings, f)
+    def test_missing_secret_does_not_read_a_fallback_file(self, monkeypatch):
+        from app.providers.exceptions import ProviderRegistrationError
 
-        import app.shared as shared
+        provider_service = self._install(
+            monkeypatch,
+            {"provider": "cerebras", "cerebras": {"model": "llama-3.3-70b-versatile"}},
+            {"api_keys": {}},
+        )
 
-        with patch.object(shared, 'SETTINGS_FILE', self.temp_settings_path):
-            settings = shared.load_settings()
-            # Should return default settings
-            assert 'provider' in settings
-            assert 'cerebras' in settings
-            
-            # Creating provider should work but may not be functional
-            # Note: When settings are empty, it defaults to 'lmstudio'
-            provider = shared.get_provider()
-            assert provider is not None
-            # The provider will be 'lmstudio' by default, not 'cerebras'
-            assert provider.provider_name in ['lmstudio', 'cerebras']
+        with pytest.raises(ProviderRegistrationError, match="Cerebras requires an API key"):
+            provider_service.get_provider()
+
+    def test_empty_settings_use_kernel_defaults(self, monkeypatch):
+        provider_service = self._install(monkeypatch, {}, {"api_keys": {}})
+
+        provider = provider_service.get_provider()
+
+        assert provider is not None
+        assert provider.provider_name == "lmstudio"
 
 
 class TestCerebrasModelStatusEndToEnd:

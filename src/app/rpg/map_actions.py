@@ -84,6 +84,13 @@ def apply_map_action(
     if capability and not capability.enabled:
         reason = _authoritative_route_reason(session, capability.route_id) or capability.disabled_reason or "map_action_disabled"
         raise MapActionError(reason, reason=reason, status_code=409)
+    if request.action == "travel" and request.route_id:
+        route = next((item for item in overlay.routes if item.route_id == request.route_id), None)
+        if route is None:
+            raise MapActionError("route_unknown", status_code=409)
+        reason = _route_block_reason(route)
+        if reason:
+            raise MapActionError(reason, reason=reason, status_code=409)
 
     updated = deepcopy(dict(session))
     state = updated.get("state") if isinstance(updated.get("state"), dict) else {}
@@ -205,6 +212,17 @@ def _authoritative_route_reason(session: Mapping[str, object], route_id: str | N
     route_states = map_state.get("route_states") if isinstance(map_state.get("route_states"), Mapping) else {}
     route_state = route_states.get(route_id) if isinstance(route_states.get(route_id), Mapping) else {}
     return str(route_state.get("reason") or "").strip()
+
+
+def _route_block_reason(route: object) -> str:
+    if not bool(getattr(route, "known", False)):
+        return "route_unknown"
+    status = str(getattr(route, "status", "unknown"))
+    if status != "open":
+        return str(getattr(route, "reason", "") or f"route_{status}")
+    if not bool(getattr(route, "safe", False)):
+        return str(getattr(route, "reason", "") or "route_requires_encounter_check")
+    return ""
 
 
 def _sync_world_graph_location(state: dict[str, object], location_id: str) -> None:

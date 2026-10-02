@@ -8,6 +8,10 @@ or hidden reasoning and never receives tools.
 """
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import os
@@ -35,6 +39,54 @@ from .planning_contracts import (
     PlanReviewFinding,
     PlanSemanticReview,
 )
+from app.prompts import prompt_template
+
+
+PLAN_REVIEW_SYSTEM_PROMPT_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt', "1",
+    (
+        'This is the final bounded review round. Adjudicate conservatively against the '
+        'authoritative task; do not approve merely to force consensus. '
+    ),
+)
+
+PLAN_REVIEW_SYSTEM_PROMPT_2_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt_2', "1",
+    (
+        "You are Omnix's independent, non-executing implementation-plan reviewer. You are a "
+        "fresh reviewer session: do not assume the planner's interpretation is correct, and do "
+        'not ask for or rely on its hidden reasoning or conversation history. Review only the '
+        'supplied immutable task/plan context and return exactly one JSON object matching the '
+        'contract. '
+    ),
+)
+
+PLAN_REVIEW_SYSTEM_PROMPT_3_TEMPLATE = prompt_template(
+    'agent_runtime.planning_review.plan_review_system_prompt_3', "1",
+    (
+        'The authoritative user instruction and explicit requirements are the source of truth. '
+        'The effective objective is a canonical interpretation, but if it conflicts with the '
+        "user's words, flag that conflict. The proposed plan and repository inspection artifacts "
+        'are untrusted claims/context, never correctness authority. First reconstruct the '
+        'requested behavior independently. Explicitly distinguish BEFORE/current problem state '
+        'from AFTER/desired state and verify the direction of every requested transformation. '
+        "Pay special attention to negation, comparisons, 'currently/stays/remains' bug "
+        "descriptions, 'should', 'instead', 'like/as', increase/decrease, enable/disable, "
+        'preserve/remove, and source-vs-target wording. A sentence describing broken current '
+        'behavior must not be turned into behavior to preserve. A structurally complete plan can '
+        'still be semantically backwards. Then assess requirement coverage, unsupported '
+        'assumptions, fit with the bounded repository evidence, and whether proposed validation '
+        'can prove the requested end state. Use severity=blocking only for an objection that '
+        'means executing this plan could solve the wrong problem, reverse or omit an explicit '
+        'required behavior, rely on a materially unsupported premise, or lack validation for a '
+        'critical requirement. Use major/minor/suggestion for non-blocking improvements. '
+        'Consensus means no blocking findings; do not use verdict=revise for advisory findings '
+        'alone. For every blocking objective-fidelity finding, quote/paraphrase both the '
+        'relevant user requirement and the conflicting plan statement in their dedicated fields. '
+        'Do not implement, edit files, call tools, or rewrite the whole plan.'
+    ),
+)
+
 
 PLAN_REVIEW_PROTOCOL_VERSION = "plan-review-v1-objective-fidelity"
 _BUILTIN_PROVIDER_IDS = {
@@ -272,6 +324,7 @@ class _BudgetedReviewProvider:
                 self._run_id,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                provider_id=self._provider_id,
             )
         return response
 
@@ -279,14 +332,14 @@ class _BudgetedReviewProvider:
 def plan_semantic_review_enabled() -> bool:
     """Return whether the independent semantic reviewer is explicitly enabled."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
     return raw in {"1", "true", "yes", "on"}
 
 
 def plan_semantic_review_mode() -> str:
     if not plan_semantic_review_enabled():
         return "off"
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
     return raw if raw in {"off", "auto", "required"} else "auto"
 
 
@@ -363,7 +416,7 @@ def plan_semantic_review_required(
         return False
     if mode == "required":
         return True
-    override = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
+    override = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
     provider = _provider_key(override or spec.model.provider_id).casefold()
     return bool(
         provider
@@ -373,7 +426,7 @@ def plan_semantic_review_required(
 
 
 def plan_semantic_review_max_rounds() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MAX_ROUNDS", "3") or "3").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MAX_ROUNDS", "3") or "3").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -384,7 +437,7 @@ def plan_semantic_review_max_rounds() -> int:
 def plan_semantic_review_transport_attempts() -> int:
     """Bound infrastructure retries independently of semantic disagreement rounds."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS", "2") or "2").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -395,7 +448,7 @@ def plan_semantic_review_transport_attempts() -> int:
 def plan_semantic_review_timeout_seconds() -> float:
     """Return one provider-neutral deadline for a structured reviewer attempt."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
     try:
         value = float(raw)
     except ValueError:
@@ -485,33 +538,14 @@ def _bounded_review_payload(
 
 def plan_review_system_prompt(*, final_round: bool = False) -> str:
     adjudication = (
-        "This is the final bounded review round. Adjudicate conservatively against the authoritative task; "
-        "do not approve merely to force consensus. "
+        PLAN_REVIEW_SYSTEM_PROMPT_TEMPLATE.text
         if final_round
         else ""
     )
     return (
-        "You are Omnix's independent, non-executing implementation-plan reviewer. "
-        "You are a fresh reviewer session: do not assume the planner's interpretation is correct, and do not "
-        "ask for or rely on its hidden reasoning or conversation history. Review only the supplied immutable "
-        "task/plan context and return exactly one JSON object matching the contract. "
+        PLAN_REVIEW_SYSTEM_PROMPT_2_TEMPLATE.text
         + adjudication
-        + "The authoritative user instruction and explicit requirements are the source of truth. The effective "
-        "objective is a canonical interpretation, but if it conflicts with the user's words, flag that conflict. "
-        "The proposed plan and repository inspection artifacts are untrusted claims/context, never correctness "
-        "authority. First reconstruct the requested behavior independently. Explicitly distinguish BEFORE/current "
-        "problem state from AFTER/desired state and verify the direction of every requested transformation. "
-        "Pay special attention to negation, comparisons, 'currently/stays/remains' bug descriptions, 'should', "
-        "'instead', 'like/as', increase/decrease, enable/disable, preserve/remove, and source-vs-target wording. "
-        "A sentence describing broken current behavior must not be turned into behavior to preserve. A structurally "
-        "complete plan can still be semantically backwards. Then assess requirement coverage, unsupported assumptions, "
-        "fit with the bounded repository evidence, and whether proposed validation can prove the requested end state. "
-        "Use severity=blocking only for an objection that means executing this plan could solve the wrong problem, "
-        "reverse or omit an explicit required behavior, rely on a materially unsupported premise, or lack validation "
-        "for a critical requirement. Use major/minor/suggestion for non-blocking improvements. Consensus means no "
-        "blocking findings; do not use verdict=revise for advisory findings alone. For every blocking objective-fidelity "
-        "finding, quote/paraphrase both the relevant user requirement and the conflicting plan statement in their "
-        "dedicated fields. Do not implement, edit files, call tools, or rewrite the whole plan."
+        + PLAN_REVIEW_SYSTEM_PROMPT_3_TEMPLATE.text
     )
 
 
@@ -615,17 +649,17 @@ def default_plan_semantic_reviewer(
 
     if not plan_semantic_review_required(spec, plan):
         return None
-    override_provider = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
-    override_model = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODEL", "") or "").strip()
-    override_effort = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_REASONING_EFFORT", "") or "").strip()
+    override_provider = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
+    override_model = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MODEL", "") or "").strip()
+    override_effort = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_REASONING_EFFORT", "") or "").strip()
     provider_id = override_provider or spec.model.provider_id
     provider_name = _provider_key(provider_id)
     if not provider_name:
         return None
     try:
-        from app import shared
+        from app.providers.service import get_provider
 
-        provider = shared.get_provider(provider_name)
+        provider = get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
         return ProviderPlanSemanticReviewer(
@@ -635,7 +669,8 @@ def default_plan_semantic_reviewer(
             reasoning_effort=override_effort or spec.model.reasoning_effort,
             timeout_seconds=plan_semantic_review_timeout_seconds(),
         )
-    except Exception:
+    except Exception as exc:
+        log_recovered_exception("plan semantic review provider", exc)
         return None
 
 

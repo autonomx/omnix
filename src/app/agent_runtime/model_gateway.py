@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import queue
 import threading
 import time
 from typing import Any
@@ -18,7 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.providers.base import ChatMessage, ChatResponse
-from app.shared import get_provider
+from app.providers.service import get_provider
 
 from .budget import AgentBudgetError, default_agent_budget_manager
 from .service import default_agent_run_service
@@ -28,6 +27,7 @@ router = APIRouter(prefix="/api/agent-model/v1", tags=["agent-model"])
 _STREAM_END = object()
 _STREAM_ITEM = object()
 _STREAM_ERROR = object()
+_STREAM_BUFFER = 32
 
 
 def normalize_llm_provider_id(provider_id: str) -> str:
@@ -63,18 +63,26 @@ async def _stream_responses(iterator: Any):
     yields. Dispatching each ``next()`` independently through the shared
     asyncio worker pool can resume the generator on a different thread and
     make its context manager release a lock that thread did not acquire.
+
+    The thread hands items to the event loop directly (WP-7.1): waiting for
+    the next chunk parks no executor thread. ``capacity`` bounds the items in
+    flight, so a slow client applies backpressure to the provider.
     """
 
-    bridge: queue.Queue[tuple[object, Any]] = queue.Queue(maxsize=32)
+    loop = asyncio.get_running_loop()
+    bridge: asyncio.Queue[tuple[object, Any]] = asyncio.Queue()
+    capacity = threading.Semaphore(_STREAM_BUFFER)
     stopped = threading.Event()
 
     def publish(kind: object, value: Any) -> bool:
         while not stopped.is_set():
-            try:
-                bridge.put((kind, value), timeout=0.1)
-                return True
-            except queue.Full:
+            if not capacity.acquire(timeout=0.1):
                 continue
+            try:
+                loop.call_soon_threadsafe(bridge.put_nowait, (kind, value))
+            except RuntimeError:  # the event loop has closed
+                return False
+            return True
         return False
 
     def consume() -> None:
@@ -94,7 +102,8 @@ async def _stream_responses(iterator: Any):
     ).start()
     try:
         while True:
-            kind, value = await asyncio.to_thread(bridge.get)
+            kind, value = await bridge.get()
+            capacity.release()
             if kind is _STREAM_END:
                 return
             if kind is _STREAM_ERROR:
@@ -441,6 +450,7 @@ async def agent_chat_completion(
                     x_omnix_agent_run_id,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
+                    provider_id=provider_id,
                 )
             except AgentBudgetError as exc:
                 raise _budget_http_exception(str(exc)) from exc
@@ -526,6 +536,7 @@ async def agent_chat_completion(
                         x_omnix_agent_run_id,
                         input_tokens=observed_input_tokens,
                         output_tokens=observed_output_tokens,
+                        provider_id=provider_id,
                     )
                 except AgentBudgetError as exc:
                     payload = _budget_stream_error(str(exc))

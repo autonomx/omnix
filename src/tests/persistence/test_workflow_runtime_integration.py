@@ -117,9 +117,12 @@ def test_workflow_versions_idempotency_and_stale_step_recovery() -> None:
         database.close()
 
 
-def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries() -> None:
+def test_workflow_supervisor_resumes_completed_and_pending_safe_boundaries(monkeypatch) -> None:
     database = _database()
     runtime = PostgresWorkflowRuntime(database)
+    # This test explicitly drives _supervise_once below. A second automatic
+    # supervisor must not claim its steps while arranging the recovery state.
+    monkeypatch.setattr(runtime, "_ensure_supervisor", lambda: None)
     suffix = uuid.uuid4().hex[:10]
     try:
         definition = WorkflowDefinition(
@@ -465,6 +468,57 @@ def test_workflow_event_stream_is_durable_ordered_and_resumable() -> None:
             ]
         finally:
             restarted._supervisor_stop.set()
+    finally:
+        runtime._supervisor_stop.set()
+        database.close()
+
+
+def test_approved_step_executes_under_the_approving_principal() -> None:
+    """The approver is recorded and the capability runs under their grant (WP-4.5)."""
+    from types import SimpleNamespace
+
+    from app.assistant_tools.models import AssistantToolResult
+
+    database = _database()
+    grants = []
+
+    def execute(grant, request, *, user_request=""):
+        grants.append(grant)
+        return SimpleNamespace(execution_result=AssistantToolResult(
+            tool_id=request.tool_id, action_id=request.action_id, session_id=request.session_id,
+            state_changed=True, result_summary="done",
+        ))
+
+    runtime = PostgresWorkflowRuntime(database, capability_executor=execute)
+    suffix = uuid.uuid4().hex[:10]
+    try:
+        definition = WorkflowDefinition(
+            id=f"approved-{suffix}",
+            version=1,
+            name="Approved mutation",
+            steps=[
+                WorkflowStepDefinition(
+                    id="set-state",
+                    capability_id="home.set_state",
+                    input_template={"target": "Desk", "state": "off"},
+                )
+            ],
+        )
+        runtime.register(definition)
+        run_id = runtime.start(definition.id, {})
+        assert runtime.get_status(run_id)["status"] == "waiting_for_approval"
+        assert grants == []
+
+        runtime.approve(run_id, "set-state", approved_by="user:alice")
+        assert [grant.approved_by for grant in grants] == ["user:alice"]
+        assert grants[0].source == "workflow"
+        approved = [event for event in runtime.stream_events(run_id) if event.event_type == "workflow.approval.approved"]
+        assert approved[0].payload == {"step_id": "set-state", "approved_by": "user:alice"}
+
+        rejected_run = runtime.start(definition.id, {})
+        runtime.reject(rejected_run, "set-state")
+        assert runtime.get_status(rejected_run)["status"] == "cancelled"
+        assert len(grants) == 1
     finally:
         runtime._supervisor_stop.set()
         database.close()

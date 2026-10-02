@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.chat import ChatSession
-from app.gateway import live_call_prewarm as prewarm
+from app.chat import live_call_prewarm as prewarm
+from tests.support.routers import include_router_registrar
 from app.providers import CerebrasProvider, ProviderConfig
 
 
@@ -98,8 +99,9 @@ class _FakeTtsProvider:
 
 def _client(store: _FakeStore) -> TestClient:
     app = FastAPI()
-    prewarm.register_live_call_prewarm_routes(
+    include_router_registrar(
         app,
+        prewarm.register_live_call_prewarm_routes,
         chat_store_factory=lambda: store,
     )
     return TestClient(app)
@@ -112,13 +114,41 @@ def _fake_provider_settings() -> dict[str, object]:
     }
 
 
+def test_live_call_prewarm_inflight_registry_is_bounded_expiring_and_clearable(
+    monkeypatch,
+) -> None:
+    prewarm.clear_live_call_prewarm_state()
+    now = 100.0
+    monkeypatch.setattr(prewarm, "_MAX_PREWARM_ENTRIES", 1)
+    monkeypatch.setattr(prewarm, "_prewarm_now", lambda: now)
+
+    owner, cached, first_event = prewarm._claim_prewarm("first")
+    assert owner is True
+    assert cached is False
+    assert first_event is not None
+    assert prewarm._claim_prewarm("second") == (False, False, None)
+    assert len(prewarm._PREWARM_INFLIGHT) == 1
+
+    now += prewarm._PREWARM_INFLIGHT_TTL_SECONDS + 1
+    owner, cached, second_event = prewarm._claim_prewarm("second")
+    assert owner is True
+    assert cached is False
+    assert second_event is not None
+    assert first_event.is_set()
+    assert set(prewarm._PREWARM_INFLIGHT) == {"second"}
+
+    prewarm.clear_live_call_prewarm_state()
+    assert second_event.is_set()
+    assert not prewarm._PREWARM_INFLIGHT
+
+
 def test_live_call_prewarm_warms_real_prompt_prefix_and_tts_once(monkeypatch) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()
     llm = _FakeLlmProvider()
     tts = _FakeTtsProvider()
-    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
-    monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: llm)
+    monkeypatch.setattr(prewarm, "load_settings", _fake_provider_settings)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", lambda _provider_id: llm)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
     client = _client(store)
 
@@ -165,13 +195,13 @@ def test_live_call_prewarm_uses_settings_provider_over_stale_session_provider(
     tts = _FakeTtsProvider()
     requested_provider_ids: list[str | None] = []
 
-    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
+    monkeypatch.setattr(prewarm, "load_settings", _fake_provider_settings)
 
     def fake_get_provider(provider_id: str | None):
         requested_provider_ids.append(provider_id)
         return llm
 
-    monkeypatch.setattr(prewarm.shared, "get_provider", fake_get_provider)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", fake_get_provider)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
     client = _client(store)
 
@@ -207,7 +237,7 @@ def test_cerebras_live_call_prewarm_omits_unsupported_template_kwargs(monkeypatc
         return iter([SimpleNamespace(content="ready")])
 
     monkeypatch.setattr(provider, "_stream_completion", fake_stream_completion)
-    monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: provider)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", lambda _provider_id: provider)
 
     result = prewarm._warm_llm(store, store.session)
 
@@ -222,8 +252,8 @@ def test_live_call_prewarm_does_not_cache_partial_success(monkeypatch) -> None:
     store = _FakeStore()
     llm = _FailingLlmProvider()
     tts = _FakeTtsProvider()
-    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
-    monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: llm)
+    monkeypatch.setattr(prewarm, "load_settings", _fake_provider_settings)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", lambda _provider_id: llm)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: tts)
     client = _client(store)
 
@@ -258,8 +288,8 @@ def test_live_call_prewarm_is_best_effort_when_providers_are_unavailable(
 ) -> None:
     prewarm.clear_live_call_prewarm_state()
     store = _FakeStore()
-    monkeypatch.setattr(prewarm.shared, "load_settings", _fake_provider_settings)
-    monkeypatch.setattr(prewarm.shared, "get_provider", lambda _provider_id: None)
+    monkeypatch.setattr(prewarm, "load_settings", _fake_provider_settings)
+    monkeypatch.setattr(prewarm.provider_service, "get_provider", lambda _provider_id: None)
     monkeypatch.setattr(prewarm, "get_tts_provider", lambda: None)
     client = _client(store)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from uuid import uuid4
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,10 +14,39 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
-def _client() -> TestClient:
-    from app.gateway.main import create_gateway_app
+def _client(settings_service=None) -> TestClient:
+    app = _test_gateway_app()
 
-    return TestClient(create_gateway_app(), raise_server_exceptions=False)
+    if settings_service is not None:
+        app.state.runtime_services.settings = settings_service
+    return TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
+    )
+
+
+def _test_gateway_app(**kwargs):
+    from app.chat import InMemoryChatSessionStore
+    from app.gateway.main import create_gateway_app
+    from app.jobs import InMemoryModelResidencyStore
+    from tests.support.in_memory_jobs import InMemoryJobStore
+
+    test_id = uuid4().hex
+    kwargs.setdefault(
+        "chat_store_factory",
+        lambda: InMemoryChatSessionStore(f":memory:platform-{test_id}:chat"),
+    )
+    kwargs.setdefault(
+        "job_store_factory",
+        lambda: InMemoryJobStore(f":memory:platform-{test_id}:jobs"),
+    )
+    kwargs.setdefault(
+        "model_residency_store_factory",
+        lambda: InMemoryModelResidencyStore(f":memory:platform-{test_id}:residency"),
+    )
+    return create_gateway_app(**kwargs)
 
 
 def test_platform_openapi_covers_contract_hardening_surfaces() -> None:
@@ -44,7 +74,6 @@ def test_platform_openapi_covers_contract_hardening_surfaces() -> None:
 
 
 def test_gateway_diagnostics_reads_persisted_model_residency(tmp_path: Path) -> None:
-    from app.gateway.main import create_gateway_app
     from app.jobs import ModelResidencyRecord, InMemoryModelResidencyStore
 
     store = InMemoryModelResidencyStore(tmp_path / "residency-test")
@@ -63,8 +92,10 @@ def test_gateway_diagnostics_reads_persisted_model_residency(tmp_path: Path) -> 
         )
     )
     client = TestClient(
-        create_gateway_app(model_residency_store_factory=lambda: store),
+        _test_gateway_app(model_residency_store_factory=lambda: store),
+        base_url="http://127.0.0.1",
         raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
     )
 
     diagnostics = client.get("/api/diagnostics").json()
@@ -74,13 +105,14 @@ def test_gateway_diagnostics_reads_persisted_model_residency(tmp_path: Path) -> 
 
 
 def test_gateway_model_residency_report_endpoint_updates_store(tmp_path: Path) -> None:
-    from app.gateway.main import create_gateway_app
     from app.jobs import InMemoryModelResidencyStore
 
     store = InMemoryModelResidencyStore(tmp_path / "residency-test")
     client = TestClient(
-        create_gateway_app(model_residency_store_factory=lambda: store),
+        _test_gateway_app(model_residency_store_factory=lambda: store),
+        base_url="http://127.0.0.1",
         raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
     )
 
     report = {
@@ -115,11 +147,15 @@ def test_gateway_model_residency_report_endpoint_updates_store(tmp_path: Path) -
 
 
 def test_gateway_provider_model_refresh_enqueues_shared_job(tmp_path: Path) -> None:
-    from app.gateway.main import create_gateway_app
-    from app.jobs import InMemoryJobStore
+    from tests.support.in_memory_jobs import InMemoryJobStore
 
     store = InMemoryJobStore(tmp_path / "jobs-test")
-    client = TestClient(create_gateway_app(job_store_factory=lambda: store), raise_server_exceptions=False)
+    client = TestClient(
+        _test_gateway_app(job_store_factory=lambda: store),
+        base_url="http://127.0.0.1",
+        raise_server_exceptions=False,
+        headers={"X-Omnix-Client": "test"},
+    )
 
     response = client.post("/api/models/refresh", json={"scope": "models", "reason": "test-refresh", "priority": 4})
 
@@ -141,87 +177,59 @@ def test_gateway_provider_model_refresh_enqueues_shared_job(tmp_path: Path) -> N
     assert events[-1].job_id == payload["id"]
 
 
-def test_gateway_settings_endpoint_returns_sanitized_summary() -> None:
-    with patch(
-        "app.shared.load_settings",
-        return_value={
-            "provider": "lmstudio",
-            "audio_provider_tts": "faster-qwen3-tts",
-            "audio_provider_stt": "parakeet",
-            "openrouter": {"api_key": "secret"},
-            "image": {"enabled": True},
-            "rpg_visual": {"enabled": False},
-        },
-    ):
-        response = _client().get("/api/settings")
-
+def test_gateway_settings_endpoint_returns_typed_non_secret_summary() -> None:
+    response = _client().get("/api/settings")
     assert response.status_code == 200
     payload = response.json()
     assert payload["provider"] == "lmstudio"
-    assert payload["image_enabled"] is True
-    assert "api_key" not in payload
-    assert "openrouter" not in payload
+    assert isinstance(payload["settings"], dict)
+    assert "api_key" not in str(payload)
 
 
-def test_gateway_settings_endpoint_keeps_legacy_success_envelope_with_masked_keys() -> None:
-    with (
-        patch(
-            "app.shared.load_settings",
-            return_value={
-                "provider": "openrouter",
-                "openrouter": {"model": "openai/gpt-4o-mini"},
-                "cerebras": {"api_key": "abc"},
-                "image": {"enabled": False},
-                "rpg_visual": {"enabled": True},
-            },
-        ),
-        patch("app.shared.load_secrets", return_value={"api_keys": {"openrouter": "sk-live-secret"}}),
-    ):
-        response = _client().get("/api/settings")
-
+def test_gateway_settings_endpoint_does_not_load_provider_secrets() -> None:
+    response = _client().get("/api/settings")
     assert response.status_code == 200
     payload = response.json()
     assert payload["success"] is True
-    assert payload["settings"]["provider"] == "openrouter"
-    assert payload["settings"]["openrouter"]["api_key"] == "***cret"
-    assert payload["settings"]["cerebras"]["api_key"] == "****"
+    assert "secrets" not in payload
+    assert "api_keys" not in payload
 
 
-def test_gateway_settings_post_preserves_legacy_mutation_semantics() -> None:
-    saved_settings = {}
-    saved_secrets = {}
+def test_gateway_settings_post_uses_revisioned_typed_patch() -> None:
+    from app.settings.service import SettingRevisionConflict
 
-    with (
-        patch(
-            "app.platform.settings_control.load_settings",
-            return_value={
-                "provider": "lmstudio",
-                "lmstudio": {"base_url": "http://localhost:1234"},
-                "openrouter": {"model": "old"},
-                "cerebras": {},
-                "llamacpp": {},
-            },
-        ),
-        patch("app.platform.settings_control.load_secrets", return_value={"api_keys": {}}),
-        patch("app.platform.settings_control.save_settings", side_effect=lambda settings: saved_settings.update(settings)),
-        patch("app.platform.settings_control.save_secrets", side_effect=lambda secrets: saved_secrets.update(secrets)),
-    ):
-        response = _client().post(
-            "/api/settings",
-            json={
-                "provider": "openrouter",
-                "openrouter": {"api_key": "sk-new-key", "model": "openai/gpt-4o-mini"},
-                "lmstudio": {"base_url": "http://localhost:5678"},
-            },
-        )
+    class FakeSettingsService:
+        def __init__(self, conflict: bool = False):
+            self.patch_value = None
+            self.conflict = conflict
 
+        def get(self, _key):
+            return None
+
+        def register_specs(self, _specs):
+            return None
+
+        def patch(self, patch_value):
+            self.patch_value = patch_value
+            if self.conflict:
+                raise SettingRevisionConflict("revision conflict")
+
+    service = FakeSettingsService()
+    response = _client(service).post(
+        "/api/settings",
+        json={"values": {"provider": "openrouter"}, "revisions": {"provider": 0}},
+    )
     assert response.status_code == 200
     assert response.json() == {"success": True}
-    assert saved_settings["provider"] == "openrouter"
-    assert saved_settings["openrouter"]["model"] == "openai/gpt-4o-mini"
-    assert "api_key" not in saved_settings["openrouter"]
-    assert saved_settings["lmstudio"]["base_url"] == "http://localhost:5678"
-    assert saved_secrets["api_keys"]["openrouter"] == "sk-new-key"
+    assert service.patch_value.values == {"provider": "openrouter"}
+    assert service.patch_value.revisions == {"provider": 0}
+
+    conflict = _client(FakeSettingsService(conflict=True)).post(
+        "/api/settings",
+        json={"values": {"provider": "openrouter"}, "revisions": {"provider": 0}},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"] == "settings_revision_conflict"
 
 
 def test_gateway_reports_endpoint_lists_artifacts(tmp_path: Path) -> None:

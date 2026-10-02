@@ -5,7 +5,7 @@ from dataclasses import replace
 import json
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_dossier_quality import validate_dossier_quality
 from app.rpg.session.genesis.world_forge_dossiers import (
@@ -34,7 +34,7 @@ def preview_world_entity_dossier_regeneration(
 ) -> dict[str, Any]:
     """Return candidate prose while preserving the current topic unchanged."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,

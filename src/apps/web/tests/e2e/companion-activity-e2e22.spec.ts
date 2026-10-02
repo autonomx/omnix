@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const -- baseline WP-9.x */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';

@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .models import MemoryCategory, MemoryKind, MemoryScope
+from app.memory_contracts import MemoryCategory, MemoryKind, MemoryScope
 from .structured_provider import StructuredProposalProvider
 from .typed_memory import validate_typed_payload
 

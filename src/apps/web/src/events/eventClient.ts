@@ -39,6 +39,13 @@ const DEFAULT_INITIAL_RECONNECT_DELAY_MS = 500;
 const DEFAULT_MAX_RECONNECT_DELAY_MS = 15_000;
 const DEFAULT_RECONNECT_JITTER_RATIO = 0.25;
 
+/**
+ * Sent by the server before it closes a stream that fell too far behind.
+ * The client drops its cursor, reconnects at the live tail, and subscribers
+ * to this event refetch their state.
+ */
+export const RESYNC_EVENT = 'resync';
+
 export class OmnixEventClient {
   private readonly endpoint: string;
   private readonly eventSourceFactory: (endpoint: string) => OmnixEventSource;
@@ -70,6 +77,10 @@ export class OmnixEventClient {
       state: 'open',
       reconnectAttempt: 0,
     });
+  };
+
+  private readonly handleResync: EventListener = () => {
+    this.lastEventId = null;
   };
 
   private readonly handleError: EventListener = (event) => {
@@ -186,6 +197,7 @@ export class OmnixEventClient {
     this.source = this.eventSourceFactory(this.connectionEndpoint());
     this.source.addEventListener('open', this.handleOpen);
     this.source.addEventListener('error', this.handleError);
+    this.source.addEventListener(RESYNC_EVENT, this.handleResync);
 
     for (const eventName of this.handlers.keys()) {
       this.bindEventName(eventName);
@@ -241,7 +253,9 @@ export class OmnixEventClient {
       const message = event as MessageEvent<string>;
       let payload: unknown;
 
-      this.rememberEventId(message.lastEventId);
+      if (eventName !== RESYNC_EVENT) {
+        this.rememberEventId(message.lastEventId);
+      }
 
       try {
         payload = JSON.parse(message.data);
@@ -328,6 +342,7 @@ export class OmnixEventClient {
 
     this.source.removeEventListener('open', this.handleOpen);
     this.source.removeEventListener('error', this.handleError);
+    this.source.removeEventListener(RESYNC_EVENT, this.handleResync);
 
     for (const [eventName, listener] of this.sourceEventListeners) {
       this.source.removeEventListener(eventName, listener);

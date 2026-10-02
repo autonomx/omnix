@@ -5,6 +5,7 @@ those records are trusted only when signed by this application. Provider- or
 client-supplied provenance is stripped before a new server attestation is created.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import hmac
@@ -121,14 +122,14 @@ def _canonical_json(value: Any) -> str:
 
 
 def _key_path() -> Path:
-    configured = str(os.environ.get("OMNIX_RPG_AUTHORSHIP_KEY_FILE") or "").strip()
+    configured = str(_env_str("OMNIX_RPG_AUTHORSHIP_KEY_FILE") or "").strip()
     if configured:
         return Path(configured).expanduser()
     return Path.home() / ".omnix" / "world_forge_authorship.key"
 
 
 def _signing_key() -> bytes:
-    configured = str(os.environ.get("OMNIX_RPG_AUTHORSHIP_SIGNING_KEY") or "")
+    configured = str(_env_str("OMNIX_RPG_AUTHORSHIP_SIGNING_KEY") or "")
     if configured:
         return configured.encode("utf-8")
     if deterministic_world_forge_test_mode():

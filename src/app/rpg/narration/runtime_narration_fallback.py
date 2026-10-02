@@ -1,6 +1,8 @@
 """Deterministic fallback narration helpers."""
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Dict, List
 
 from app.rpg.dialogue_state import get_dialogue_context, update_dialogue_state
@@ -9,7 +11,7 @@ from app.rpg.npc_dialogue.intelligence import (
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
 )
-from app.shared import get_provider
+from app.providers.service import get_provider
 
 from .runtime_narration_common import (
     NARRATION_FORMAT_VERSION,
@@ -18,6 +20,8 @@ from .runtime_narration_common import (
     _safe_list,
     _safe_str,
 )
+
+logger = logging.getLogger(__name__)
 
 def _recent_npc_lines(simulation_state: Dict[str, Any], speaker: str, *, limit: int = 8) -> List[str]:
     simulation_state = _safe_dict(simulation_state)
@@ -370,7 +374,7 @@ def build_deterministic_narration_payload(
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "build_deterministic_narration_payload", exc_info=True)
 
         if not npc_line:
             npc_line = _fallback_npc_line(
@@ -407,7 +411,7 @@ def build_deterministic_narration_payload(
             if not npc_line_is_invalid(npc_intel.get("line", ""), recent_lines):
                 npc_line = npc_intel["line"]
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "build_deterministic_narration_payload", exc_info=True)
 
         if not npc_line:
             npc_line = _fallback_npc_line(
@@ -442,7 +446,7 @@ def build_deterministic_narration_payload(
             })
             simulation_state["recent_turns"] = recent_turns[-8:]
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "build_deterministic_narration_payload", exc_info=True)
 
     dialogue_state_update = _build_dialogue_state_update_payload(
         simulation_state=simulation_state,

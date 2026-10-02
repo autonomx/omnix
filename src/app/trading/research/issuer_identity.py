@@ -1,7 +1,7 @@
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
-import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,7 +34,7 @@ class SecIssuerIdentityResolver:
     @staticmethod
     def _headers() -> dict[str, str]:
         return {
-            "User-Agent": os.environ.get(
+            "User-Agent": _env_str(
                 "OMNIX_SEC_USER_AGENT",
                 "OmnixTradingResearch/1.0 local-research contact=local@localhost",
             ),

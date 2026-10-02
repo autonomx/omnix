@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 import uuid
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from app.persistence.outbox_repository import PostgresOutboxRepository
@@ -22,7 +23,10 @@ from .contracts import (
     TaskRevision,
     WorkerLease,
 )
-from .debug_logging import log_agent_activity
+from app.observability.agent_logging import log_agent_activity
+
+# Events read per page when walking a whole run (WP-7.4).
+EVENT_PAGE_SIZE = 1000
 
 
 def _json_default(value: Any) -> Any:
@@ -51,9 +55,16 @@ class AgentLeaseConflict(RuntimeError):
 
 
 class PostgresAgentRunRepository:
-    def __init__(self, connection: Any, context: TenantContext) -> None:
+    def __init__(
+        self,
+        connection: Any,
+        context: TenantContext,
+        *,
+        lease_token_provider=None,
+    ) -> None:
         self.connection = connection
         self.context = context
+        self.lease_token_provider = lease_token_provider
         self.outbox = PostgresOutboxRepository(connection)
 
     def create_run(self, spec: AgentRunSpec) -> AgentRunSnapshot:
@@ -152,6 +163,39 @@ class PostgresAgentRunRepository:
             created_at=row[14],
             updated_at=row[15],
         )
+
+    def update_spec(
+        self,
+        run_id: str,
+        *,
+        expected_revision: int,
+        spec: AgentRunSpec,
+    ) -> AgentRunSnapshot:
+        """Persist a worker-prepared specification with optimistic fencing."""
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_runs
+               SET spec = %s::jsonb, revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND revision = %s
+               AND status = 'queued'
+            RETURNING revision
+            """,
+            (_json(spec), self.context.workspace_id, run_id, expected_revision),
+        ).fetchone()
+        if row is None:
+            raise AgentRunConcurrencyError("agent run spec revision mismatch")
+        snapshot = self.get_run(run_id)
+        if snapshot is None:
+            raise KeyError(run_id)
+        self.append_event(
+            AgentEvent(
+                run_id=run_id,
+                event_type="run.status",
+                payload={"status": snapshot.status, "workspace_prepared": True},
+            )
+        )
+        return snapshot
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
         self.connection.execute(
@@ -403,8 +447,13 @@ class PostgresAgentRunRepository:
         status: str | None = None,
         desired_state: str | None = None,
         worker_id: str | None = None,
+        lease_token: str | None = None,
         last_error: str | None = None,
     ) -> AgentRunSnapshot:
+        if worker_id is not None and lease_token is None and callable(self.lease_token_provider):
+            lease_token = self.lease_token_provider(run_id)
+        if bool(worker_id) != bool(lease_token):
+            raise AgentLeaseConflict("worker state updates require matching lease credentials")
         current = self.get_run(run_id)
         if current is None:
             raise KeyError(run_id)
@@ -424,6 +473,18 @@ class PostgresAgentRunRepository:
                    last_error = %s, started_at = %s, completed_at = %s,
                    revision = revision + 1, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s AND revision = %s
+               AND (
+                    %s
+                    OR EXISTS (
+                        SELECT 1
+                          FROM omnix_agent_worker_leases AS lease
+                         WHERE lease.workspace_id = omnix_agent_runs.workspace_id
+                           AND lease.run_id = omnix_agent_runs.run_id
+                           AND lease.worker_id = %s
+                           AND lease.lease_token = %s
+                           AND lease.lease_expires_at > CURRENT_TIMESTAMP
+                    )
+               )
             RETURNING revision
             """,
             (
@@ -436,9 +497,20 @@ class PostgresAgentRunRepository:
                 self.context.workspace_id,
                 run_id,
                 expected_revision,
+                worker_id is None,
+                worker_id,
+                lease_token,
             ),
         ).fetchone()
         if row is None:
+            # A concurrent writer that won the revision race is not a lease
+            # failure; only report the lease when the revision still matched.
+            latest = self.connection.execute(
+                "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s",
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if worker_id is not None and latest is not None and latest[0] == expected_revision:
+                raise AgentLeaseConflict("agent run lease token is stale or expired")
             raise AgentRunConcurrencyError("agent run revision mismatch")
         updated = self.get_run(run_id)
         assert updated is not None
@@ -498,21 +570,29 @@ class PostgresAgentRunRepository:
         return stored
 
     def _append_event(self, event: AgentEvent) -> AgentEvent:
-        # Lock the run row so MAX(sequence)+1 remains deterministic under concurrent writers.
-        locked = self.connection.execute(
-            "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s FOR UPDATE",
-            (self.context.workspace_id, event.run_id),
-        ).fetchone()
-        if locked is None:
-            raise KeyError(event.run_id)
+        # The run's counter row orders its appends (WP-7.4) without locking
+        # the run row. GREATEST with the indexed MAX lets the counter catch up
+        # with events written by code that predates it.
         row = self.connection.execute(
             """
-            SELECT COALESCE(MAX(sequence), 0) + 1
-              FROM omnix_agent_run_events
-             WHERE workspace_id = %s AND run_id = %s
+            INSERT INTO omnix_agent_run_event_counters AS counter (workspace_id, run_id, last_sequence)
+            SELECT run.workspace_id, run.run_id,
+                   COALESCE((SELECT MAX(sequence) FROM omnix_agent_run_events AS event
+                              WHERE event.workspace_id = run.workspace_id AND event.run_id = run.run_id), 0) + 1
+              FROM omnix_agent_runs AS run
+             WHERE run.workspace_id = %s AND run.run_id = %s
+            ON CONFLICT (workspace_id, run_id) DO UPDATE
+               SET last_sequence = GREATEST(
+                       counter.last_sequence,
+                       COALESCE((SELECT MAX(sequence) FROM omnix_agent_run_events AS event
+                                  WHERE event.workspace_id = counter.workspace_id AND event.run_id = counter.run_id), 0)
+                   ) + 1
+            RETURNING last_sequence
             """,
             (self.context.workspace_id, event.run_id),
         ).fetchone()
+        if row is None:
+            raise KeyError(event.run_id)
         sequence = int(row[0])
         stored = event.model_copy(update={"sequence": sequence})
         self.connection.execute(
@@ -548,16 +628,75 @@ class PostgresAgentRunRepository:
         return stored
 
     def list_events(self, run_id: str, *, after_sequence: int = 0, limit: int = 500) -> list[AgentEvent]:
+        return self._event_page(run_id, after_sequence=after_sequence, limit=max(1, min(limit, 5000)))
+
+    def iter_events(
+        self,
+        run_id: str,
+        *,
+        event_types: Iterable[str] | None = None,
+        page_size: int = EVENT_PAGE_SIZE,
+    ) -> Iterator[AgentEvent]:
+        """Every event of a run (optionally of some types), read in pages (WP-7.4)."""
+        types = sorted(set(event_types)) if event_types is not None else None
+        after = 0
+        while True:
+            page = self._event_page(run_id, after_sequence=after, limit=page_size, event_types=types)
+            yield from page
+            if len(page) < page_size:
+                return
+            after = int(page[-1].sequence or after)
+
+    def latest_event(
+        self,
+        run_id: str,
+        event_type: str,
+        *,
+        payload_contains: dict[str, Any] | None = None,
+    ) -> AgentEvent | None:
+        """The run's most recent event of ``event_type`` (whose payload contains ``payload_contains``)."""
+        rows = self.connection.execute(
+            """
+            SELECT event_id, sequence, event_type, payload, correlation_id, causation_id, created_at
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s AND run_id = %s AND event_type = %s
+               AND (%s::jsonb IS NULL OR payload @> %s::jsonb)
+             ORDER BY sequence DESC
+             LIMIT 1
+            """,
+            (
+                self.context.workspace_id,
+                run_id,
+                event_type,
+                _json(payload_contains) if payload_contains is not None else None,
+                _json(payload_contains) if payload_contains is not None else None,
+            ),
+        ).fetchall()
+        return self._events_from_rows(run_id, rows)[0] if rows else None
+
+    def _event_page(
+        self,
+        run_id: str,
+        *,
+        after_sequence: int,
+        limit: int,
+        event_types: list[str] | None = None,
+    ) -> list[AgentEvent]:
         rows = self.connection.execute(
             """
             SELECT event_id, sequence, event_type, payload, correlation_id, causation_id, created_at
               FROM omnix_agent_run_events
              WHERE workspace_id = %s AND run_id = %s AND sequence > %s
+               AND (%s::text[] IS NULL OR event_type = ANY(%s::text[]))
              ORDER BY sequence
              LIMIT %s
             """,
-            (self.context.workspace_id, run_id, max(0, after_sequence), max(1, min(limit, 5000))),
+            (self.context.workspace_id, run_id, max(0, after_sequence), event_types, event_types, limit),
         ).fetchall()
+        return self._events_from_rows(run_id, rows)
+
+    @staticmethod
+    def _events_from_rows(run_id: str, rows: list[Any]) -> list[AgentEvent]:
         return [
             AgentEvent(
                 event_id=str(row[0]),
@@ -804,6 +943,41 @@ class PostgresAgentRunRepository:
         )
         self.append_event(AgentEvent(run_id=approval.run_id, event_type="approval.requested", payload={"approval_id": approval.approval_id, "capability_id": approval.capability_id}))
         return approval
+
+    def workspace_approval(
+        self, run_id: str, capability_id: str, request_payload: dict[str, Any],
+    ) -> AgentApproval:
+        """Deduplicate an exact workspace action without deriving its approval ID.
+
+        The run row serializes concurrent proposals. The caller commits both the
+        approval and any run state change in the same transaction.
+        """
+        run = self.connection.execute(
+            """
+            SELECT run_id FROM omnix_agent_runs
+             WHERE workspace_id = %s AND run_id = %s FOR UPDATE
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if run is None:
+            raise KeyError(run_id)
+        row = self.connection.execute(
+            """
+            SELECT approval_id FROM omnix_agent_approvals
+             WHERE workspace_id = %s AND run_id = %s AND capability_id = %s
+               AND request_payload = %s::jsonb
+             ORDER BY created_at DESC, approval_id LIMIT 1
+            """,
+            (self.context.workspace_id, run_id, capability_id, _json(request_payload)),
+        ).fetchone()
+        if row is not None:
+            approval = self.get_approval(run_id, str(row[0]))
+            if approval is None:
+                raise AgentRunConcurrencyError("workspace approval disappeared")
+            return approval
+        return self.add_approval(AgentApproval(
+            run_id=run_id, capability_id=capability_id, request_payload=request_payload,
+        ))
 
     def get_approval(self, run_id: str, approval_id: str) -> AgentApproval | None:
         row = self.connection.execute(
@@ -1364,6 +1538,27 @@ class PostgresAgentRunRepository:
         ).fetchone()
         if row is None:
             raise AgentLeaseConflict(f"run {run_id} is leased by another worker")
+        return WorkerLease(
+            run_id=run_id,
+            worker_id=str(row[0]),
+            lease_token=str(row[1]),
+            lease_expires_at=row[2],
+            heartbeat_at=row[3],
+            revision=int(row[4]),
+        )
+
+    def get_active_lease(self, run_id: str) -> WorkerLease | None:
+        row = self.connection.execute(
+            """
+            SELECT worker_id, lease_token, lease_expires_at, heartbeat_at, revision
+              FROM omnix_agent_worker_leases
+             WHERE workspace_id = %s AND run_id = %s
+               AND lease_expires_at > CURRENT_TIMESTAMP
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            return None
         return WorkerLease(
             run_id=run_id,
             worker_id=str(row[0]),

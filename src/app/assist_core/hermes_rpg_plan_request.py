@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Protocol
 
@@ -24,7 +26,7 @@ def request_hermes_rpg_plan(
         return _inactive("hermes_disabled")
     active_client = client or HermesSidecarClient(
         base_url=config.base_url,
-        api_key=os.environ.get("HERMES_API_KEY") or None,
+        api_key=environment().get("HERMES_API_KEY") or None,
         timeout=config.timeout_seconds,
     )
     try:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import time
+from collections import OrderedDict
 from decimal import Decimal
 from threading import RLock
 
@@ -412,8 +414,10 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
 )
 
 _catalog_lock = RLock()
-_dynamic_instruments: dict[str, CanonicalInstrument] = {}
-_dynamic_bindings: dict[str, ProviderBinding] = {}
+MAX_DYNAMIC_CATALOG_ENTRIES = 4096
+DYNAMIC_CATALOG_TTL_SECONDS = 24 * 60 * 60.0
+_dynamic_instruments: OrderedDict[str, tuple[CanonicalInstrument, float]] = OrderedDict()
+_dynamic_bindings: OrderedDict[str, tuple[ProviderBinding, float]] = OrderedDict()
 _CANONICAL_EQUITY_TOKEN = re.compile(r"^[A-Z0-9._^=-]+$")
 _CANONICAL_CRYPTO_TOKEN = re.compile(r"^[A-Z0-9]+$")
 _CANONICAL_COMMODITY_TOKEN = re.compile(r"^[A-Z0-9._=^/-]+$")
@@ -534,29 +538,55 @@ def register_instrument(
     instrument: CanonicalInstrument,
     bindings: tuple[ProviderBinding, ...] = (),
 ) -> CanonicalInstrument:
-    """Register provider-discovered metadata for the lifetime of this process."""
+    """Cache provider-discovered metadata for bounded restoration and lookup."""
+    expires_at = time.monotonic() + DYNAMIC_CATALOG_TTL_SECONDS
     with _catalog_lock:
+        _prune_dynamic_catalog_locked(time.monotonic())
         if not any(item.instrument_id == instrument.instrument_id for item in INSTRUMENTS):
-            _dynamic_instruments[instrument.instrument_id] = instrument
+            _dynamic_instruments[instrument.instrument_id] = (instrument, expires_at)
+            _dynamic_instruments.move_to_end(instrument.instrument_id)
         for binding in bindings:
             if binding.instrument_id != instrument.instrument_id:
                 raise ValueError("binding instrument_id must match the registered instrument")
-            _dynamic_bindings[binding.binding_id] = binding
+            _dynamic_bindings[binding.binding_id] = (binding, expires_at)
+            _dynamic_bindings.move_to_end(binding.binding_id)
+        _prune_dynamic_catalog_locked(time.monotonic())
     return instrument
+
+
+def clear_dynamic_catalog_cache() -> None:
+    """Invalidate provider-discovered catalog entries."""
+
+    with _catalog_lock:
+        _dynamic_instruments.clear()
+        _dynamic_bindings.clear()
+
+
+def _prune_dynamic_catalog_locked(now: float) -> None:
+    for cache in (_dynamic_instruments, _dynamic_bindings):
+        for key, (_value, expires_at) in list(cache.items()):
+            if expires_at <= now:
+                cache.pop(key, None)
+        while len(cache) > MAX_DYNAMIC_CATALOG_ENTRIES:
+            cache.popitem(last=False)
 
 
 def all_instruments() -> list[CanonicalInstrument]:
     with _catalog_lock:
-        return [*INSTRUMENTS, *_dynamic_instruments.values()]
+        _prune_dynamic_catalog_locked(time.monotonic())
+        return [*INSTRUMENTS, *(item[0] for item in _dynamic_instruments.values())]
 
 
 def all_bindings() -> list[ProviderBinding]:
     with _catalog_lock:
+        _prune_dynamic_catalog_locked(time.monotonic())
         # Provider discovery can re-register a symbol that is already present in
         # the built-in catalog. Keep the first-seen ordering while letting the
         # discovered binding refresh the static entry's metadata.
         bindings_by_id = {binding.binding_id: binding for binding in BINDINGS}
-        bindings_by_id.update(_dynamic_bindings)
+        bindings_by_id.update(
+            (binding_id, value[0]) for binding_id, value in _dynamic_bindings.items()
+        )
         return list(bindings_by_id.values())
 
 
@@ -575,8 +605,12 @@ def search_instruments(query: str = "") -> list[CanonicalInstrument]:
 
 
 def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
-    if instrument_id in _dynamic_instruments:
-        return _dynamic_instruments[instrument_id]
+    with _catalog_lock:
+        _prune_dynamic_catalog_locked(time.monotonic())
+        dynamic = _dynamic_instruments.get(instrument_id)
+        if dynamic is not None:
+            _dynamic_instruments.move_to_end(instrument_id)
+            return dynamic[0]
     static = next((item for item in INSTRUMENTS if item.instrument_id == instrument_id), None)
     if static is not None:
         return static
@@ -588,8 +622,12 @@ def instrument_by_id(instrument_id: str) -> CanonicalInstrument | None:
 
 
 def binding_by_id(binding_id: str) -> ProviderBinding | None:
-    if binding_id in _dynamic_bindings:
-        return _dynamic_bindings[binding_id]
+    with _catalog_lock:
+        _prune_dynamic_catalog_locked(time.monotonic())
+        dynamic = _dynamic_bindings.get(binding_id)
+        if dynamic is not None:
+            _dynamic_bindings.move_to_end(binding_id)
+            return dynamic[0]
     binding = next((item for item in BINDINGS if item.binding_id == binding_id), None)
     if binding is not None:
         return binding
@@ -605,7 +643,10 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
             _restore_dynamic_equity(parts[2])
     elif len(parts) == 3 and parts[0] == "binance":
         _restore_dynamic_crypto(parts[2])
-    return _dynamic_bindings.get(binding_id)
+    with _catalog_lock:
+        _prune_dynamic_catalog_locked(time.monotonic())
+        dynamic = _dynamic_bindings.get(binding_id)
+        return dynamic[0] if dynamic is not None else None
 
 
 def bindings_for_instrument(instrument_id: str) -> list[ProviderBinding]:

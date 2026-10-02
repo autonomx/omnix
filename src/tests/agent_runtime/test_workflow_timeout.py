@@ -21,4 +21,4 @@ def test_timeout_reports_unknown_outcome_and_is_not_safe_to_retry() -> None:
         condition="input.ok",
         timeout_seconds=1,
     )
-    assert runtime._execute_with_timeout("run", step, {"input": {"ok": True}}, approved=False) == {"ok": True}
+    assert runtime._execute_with_timeout("run", step, {"input": {"ok": True}}, approved_by=None) == {"ok": True}

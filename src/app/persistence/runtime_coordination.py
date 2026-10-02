@@ -4,6 +4,10 @@ import json
 from typing import Any
 
 
+# Far above any cohort size; keeps node reads bounded (WP-5.5).
+MAX_NODES_PER_READ = 1000
+
+
 class RuntimeNodeConflict(RuntimeError):
     pass
 
@@ -112,10 +116,16 @@ class PostgresRuntimeCoordinationRepository:
             """
             UPDATE omnix_runtime_nodes
                SET status = 'stale'
-             WHERE status IN ('active', 'draining')
-               AND lease_expires_at <= CURRENT_TIMESTAMP
+             WHERE id IN (
+                   SELECT id FROM omnix_runtime_nodes
+                    WHERE status IN ('active', 'draining')
+                      AND lease_expires_at <= CURRENT_TIMESTAMP
+                    ORDER BY lease_expires_at, id
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED)
             RETURNING id
-            """
+            """,
+            (MAX_NODES_PER_READ,),
         ).fetchall()
         return [str(row[0]) for row in rows]
 
@@ -129,8 +139,9 @@ class PostgresRuntimeCoordinationRepository:
                AND lease_expires_at > CURRENT_TIMESTAMP
                AND (%s::text IS NULL OR node_type = %s::text)
              ORDER BY node_type, id
+             LIMIT %s
             """,
-            (node_type, node_type),
+            (node_type, node_type, MAX_NODES_PER_READ),
         ).fetchall()
         return [self._record(row) for row in rows]
 

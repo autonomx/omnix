@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
-import os
 from contextlib import suppress
 from datetime import datetime, time, timezone
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_dynamic_discovery import AttributionEvent, INTERDAY_TRADING_STRATEGY_ID
@@ -26,17 +27,19 @@ from .strategy_interday_postclose import (
 )
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-_ET = ZoneInfo("America/New_York")
+logger = logging.getLogger(__name__)
+
 _STATE_KEY = "_omnix_interday_learning_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def interday_learning_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_INTERDAY_LEARNING", "1")
 
@@ -44,7 +47,7 @@ def interday_learning_monitor_enabled() -> bool:
 def _interval_seconds() -> float:
     try:
         value = float(
-            os.environ.get("OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS", "300")
+            _env_str("OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS", "300")
         )
     except ValueError:
         value = 300.0
@@ -55,7 +58,7 @@ def _same_session(event_time: datetime, session_date) -> bool:
     return event_time.astimezone(_ET).date() == session_date
 
 
-async def run_interday_learning_once(
+async def _run_interday_learning_once_core(
     *,
     now: datetime | None = None,
     repository: TradingStrategyRepository | None = None,
@@ -174,6 +177,7 @@ async def run_interday_learning_once(
         try:
             attribution.append(AttributionEvent.model_validate(event.payload))
         except Exception:
+            logger.debug("suppressed error in %s", "_run_interday_learning_once_core", exc_info=True)
             continue
     report = build_daily_discovery_report(
         session_date=session_date,
@@ -214,6 +218,25 @@ async def run_interday_learning_once(
         "labeled": labeled,
         "qualified": bool(qualification_persisted),
     }
+
+
+async def run_interday_learning_once(
+    *,
+    now: datetime | None = None,
+    repository: TradingStrategyRepository | None = None,
+    market_service: TradingMarketDataService | None = None,
+) -> dict[str, int | bool]:
+    """Run interday lifecycle work and append complete post-close evidence."""
+
+    from .strategy_dynamic_discovery_runtime import (
+        _run_interday_learning_once_complete,
+    )
+
+    return await _run_interday_learning_once_complete(
+        now=now,
+        repository=repository,
+        market_service=market_service,
+    )
 
 
 class InterdayLearningMonitor:
@@ -268,12 +291,13 @@ class InterdayLearningMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_interday_learning_monitor(gateway: FastAPI) -> InterdayLearningMonitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_interday_learning_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, InterdayLearningMonitor):
-        return existing
+        return None
     monitor = InterdayLearningMonitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if interday_learning_monitor_enabled():
@@ -282,15 +306,14 @@ def register_interday_learning_monitor(gateway: FastAPI) -> InterdayLearningMoni
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "InterdayLearningMonitor",
     "interday_learning_monitor_enabled",
-    "register_interday_learning_monitor",
+    "create_interday_learning_monitor_worker",
     "run_interday_learning_once",
 ]

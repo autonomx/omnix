@@ -10,11 +10,11 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_memory.settings import load_memory_runtime_settings
+from app.assistant_memory.contracts import load_memory_runtime_settings
 
 from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
-from .repository import InMemoryChatRepository, default_chat_db_path
+from .repository import InMemoryChatRepository
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
 
@@ -97,7 +97,7 @@ def history_recall_enabled() -> bool:
 
 class InMemoryHistorySearchService:
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else default_chat_db_path()
+        self.db_path = Path(db_path) if db_path is not None else None
 
     @staticmethod
     def _status_for_sessions(sessions: list[object]) -> HistorySearchStatus:
@@ -216,6 +216,6 @@ class InMemoryHistorySearchService:
 def default_history_search_service() -> InMemoryHistorySearchService:
     from app.persistence.runtime import uses_postgresql_runtime
     if uses_postgresql_runtime():
-        from app.persistence.chat_runtime_compat import default_history_search_service as factory
+        from app.chat.persistence.chat_runtime import default_history_search_service as factory
         return factory()
     return InMemoryHistorySearchService()

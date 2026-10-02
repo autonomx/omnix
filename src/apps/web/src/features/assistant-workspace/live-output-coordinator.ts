@@ -259,6 +259,7 @@ export class LiveOutputCoordinator {
       reporter,
       {
         sessionScoped: true,
+        affinityKey: sessionId,
         onWorkletEvent: (event) => this.handleWorkletEvent(event),
       },
     ).then((session) => {

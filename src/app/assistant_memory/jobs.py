@@ -9,13 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.jobs import (
     CompleteJobRequest,
     CreateJobRequest,
-    InMemoryJobStore,
     JobRecord,
     ResourceClass,
     default_job_store,
 )
 
-from .models import MemoryCandidate, MemoryRecord
+from app.memory_contracts import MemoryCandidate, MemoryRecord
 from .owner_defaults import default_memory_service
 from .rollout import companion_rollout_policy
 from .scope import resolve_session_memory_scope
@@ -26,7 +25,7 @@ from .structured_extraction import extract_structured_memory_proposals
 from .structured_provider import StructuredProposalProvider
 
 if TYPE_CHECKING:
-    from app.chat import ChatSessionStore
+    from app.conversation.contracts import TranscriptReader
 
 MEMORY_SUGGEST_JOB_TYPE = "assistant.memory.suggest"
 MEMORY_IMPORT_JOB_TYPE = "assistant.memory.import"
@@ -87,7 +86,7 @@ def enqueue_memory_suggestion_job(
     session_id: str,
     user_message_id: str,
     *,
-    job_store: InMemoryJobStore | None = None,
+    job_store: Any | None = None,
 ) -> JobRecord | None:
     if not memory_suggestions_enabled():
         return None
@@ -99,7 +98,7 @@ def enqueue_memory_suggestion_job(
             create_memory_suggestion_job_request(session_id, user_message_id),
             idempotency_key=key,
         )
-    for job in store.list_jobs():
+    for job in store.iter_jobs(job_types=(MEMORY_SUGGEST_JOB_TYPE,)):
         if job.type == MEMORY_SUGGEST_JOB_TYPE and job.compat.get("idempotency_key") == key:
             return job
     return store.create_job(create_memory_suggestion_job_request(session_id, user_message_id))
@@ -118,7 +117,7 @@ def extract_memory_candidates(content: str) -> tuple[list[dict[str, Any]], list[
 def _complete_result(
     result: MemorySuggestionJobResult,
     *,
-    store: InMemoryJobStore,
+    store: Any,
 ) -> None:
     output_refs = [
         {"type": "memory_candidate", "id": candidate_id}
@@ -148,16 +147,21 @@ def _complete_result(
 def process_memory_suggestion_job(
     job: JobRecord,
     *,
-    chat_store: ChatSessionStore,
+    chat_store: TranscriptReader,
     memory_service: MemoryService | None = None,
-    job_store: InMemoryJobStore | None = None,
+    job_store: Any | None = None,
     proposal_provider: StructuredProposalProvider | None = None,
+    already_claimed: bool = False,
 ) -> MemorySuggestionJobResult:
     if job.type != MEMORY_SUGGEST_JOB_TYPE:
         raise ValueError(f"unsupported memory job type: {job.type}")
-    from app.persistence.memory_job_execution import MemoryJobExecution
+    from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
 
-    with MemoryJobExecution(job_store or default_job_store(), job) as execution:
+    with MemoryJobExecution(
+        job_store or default_job_store(),
+        job,
+        already_claimed=already_claimed,
+    ) as execution:
         if not execution.claimed:
             return MemorySuggestionJobResult(
                 job_id=job.id, skipped_reasons=["job_not_claimable"],
@@ -171,7 +175,7 @@ def process_memory_suggestion_job(
 def _process_claimed_memory_job(
     job, *, chat_store, memory_service, proposal_provider, execution,
 ) -> MemorySuggestionJobResult:
-    from app.chat.retention_policy import automatic_memory_derivation_allowed
+    from app.conversation.privacy import automatic_memory_derivation_allowed
 
     payload = MemorySuggestionJobInput.model_validate(job.input_payload or {})
     session = chat_store.get_session(payload.session_id)

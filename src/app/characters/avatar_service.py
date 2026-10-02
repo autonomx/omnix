@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 
-from app.assets import AssetType, SharedAssetStore, default_asset_store
+from app.assets.content import asset_available
+from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 
 from .avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from .avatar_repository import CharacterAvatarRepository
@@ -80,22 +80,22 @@ class CharacterAvatarService:
         }
         if request.renderer == "sprite" and not image_asset_ids:
             raise CharacterAvatarAssetError("sprite avatar pack requires at least one image asset")
-        assets = {asset.id: asset for asset in self.asset_store_factory().list_assets().assets}
+        store = self.asset_store_factory()
         for asset_id in sorted(image_asset_ids):
-            asset = assets.get(asset_id)
+            asset = store.get_asset(asset_id)
             if asset is None:
                 raise CharacterAvatarAssetError(f"avatar image asset not found: {asset_id}")
             if asset.type != AssetType.IMAGE:
                 raise CharacterAvatarAssetError(
                     f"avatar asset is not an image: {asset_id} ({asset.type.value})"
                 )
-            _require_file(asset_id, asset.storage_path, "avatar image")
+            _require_file(asset, "avatar image")
 
         if request.renderer != "sprite":
             rig_asset_id = request.rig_asset_id
             if not rig_asset_id:
                 raise CharacterAvatarAssetError("rigged avatar pack requires a rig asset")
-            rig_asset = assets.get(rig_asset_id)
+            rig_asset = store.get_asset(rig_asset_id)
             if rig_asset is None:
                 raise CharacterAvatarAssetError(f"avatar rig asset not found: {rig_asset_id}")
             allowed_rig_types = {AssetType.EXPORT, AssetType.SETTINGS_ARTIFACT}
@@ -103,16 +103,16 @@ class CharacterAvatarService:
                 raise CharacterAvatarAssetError(
                     f"avatar rig asset has unsupported type: {rig_asset_id} ({rig_asset.type.value})"
                 )
-            _require_file(rig_asset_id, rig_asset.storage_path, "avatar rig")
+            _require_file(rig_asset, "avatar rig")
 
 
-def _require_file(asset_id: str, storage_path: str, label: str) -> None:
+def _require_file(asset: AssetRecord, label: str) -> None:
     try:
-        available = Path(storage_path).is_file()
+        available = asset_available(asset)
     except OSError:
         available = False
     if not available:
-        raise CharacterAvatarAssetError(f"{label} file is missing: {asset_id}")
+        raise CharacterAvatarAssetError(f"{label} file is missing: {asset.id}")
 
 
 def default_character_avatar_service() -> CharacterAvatarService:

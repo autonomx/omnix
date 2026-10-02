@@ -3,8 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-
-_ET = ZoneInfo("America/New_York")
+# The one Eastern-time definition for trading (WP-8.3): import EASTERN from here
+# instead of building another ZoneInfo.
+EASTERN_TIMEZONE = "America/New_York"
+EASTERN = ZoneInfo(EASTERN_TIMEZONE)
+_ET = EASTERN
 
 
 def _observed(day: date) -> date:

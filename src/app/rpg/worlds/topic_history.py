@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .lifecycle_service import require_world_writable
@@ -34,7 +34,7 @@ def list_world_topic_history(
     latest_per_topic: bool = False,
     database: Any | None = None,
 ) -> list[dict[str, Any]]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         if work.world_scenarios.get_world(context, world_id) is None:
             raise KeyError(f"world_not_found:{world_id}")
@@ -77,7 +77,7 @@ def restore_world_topic_draft(
 ) -> dict[str, Any]:
     """Copy one historical draft into a new current draft revision."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         current_revision = int(world["draft_revision"])

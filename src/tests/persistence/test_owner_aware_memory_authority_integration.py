@@ -44,7 +44,8 @@ def _reset(database: PostgresDatabase) -> None:
         connection.execute(
             """
             UPDATE omnix_persistence_cutover
-               SET mode = 'postgresql', import_run_id = NULL,
+               SET mode = 'postgresql', authority_state = 'postgresql_stabilized',
+                   import_run_id = NULL,
                    source_hash = NULL, rollback_recorded_at = NULL,
                    metadata = '{}'::jsonb, updated_at = CURRENT_TIMESTAMP
              WHERE singleton = TRUE
@@ -56,7 +57,7 @@ _WRITE_SCRIPT = r"""
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_defaults import (
     default_memory_service,
     reset_default_memory_service,
@@ -123,7 +124,7 @@ _READ_SCRIPT = r"""
 from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
-from app.assistant_memory.models import MemoryScopeContext
+from app.memory_contracts import MemoryScopeContext
 from app.assistant_memory.owner_defaults import default_memory_service
 
 system = MemoryScopeContext(

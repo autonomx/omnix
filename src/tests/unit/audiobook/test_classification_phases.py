@@ -61,7 +61,8 @@ def test_classification_uses_reviewed_spans_and_changed_rules_require_extraction
     @contextmanager
     def work(_database):
         yield SimpleNamespace(connection=Connection(), commit=lambda: None,
-                              jobs=SimpleNamespace(create_job=lambda _context, payload: queued.append(payload)))
+                              jobs=SimpleNamespace(create_job=lambda _context, payload: queued.append(payload),
+                                                   query_jobs=lambda *_args, **_kwargs: []))
     monkeypatch.setattr("app.audiobook.service.unit_of_work", work)
     service = AudiobookService(None, None)
     context = SimpleNamespace(workspace_id="workspace")

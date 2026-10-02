@@ -86,10 +86,11 @@ def test_durable_resume_rehydrates_missing_runtime_before_consumption(monkeypatc
     service = object.__new__(core_module.AgentRunService)
     service.database = object()
     service.context = object()
+    service.worker_id = "agent-worker:test"
     service.runtime = runtime
 
-    monkeypatch.setattr(core_module, "unit_of_work", lambda _database: _Work())
-    monkeypatch.setattr(core_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _Work()
+    service.repository_factory = Repository
 
     resume = AgentRunCommand(
         run_id=spec.run_id,
@@ -156,12 +157,12 @@ def test_stall_supervisor_recovers_stranded_resume_requested(monkeypatch) -> Non
     service.worker_id = "worker-1"
     service.runtime = runtime
     import threading
-    service._lock = threading.RLock()
+    service._run_lock = lambda _run_id: threading.RLock()
     service._cancel_descendants = MagicMock()
 
     monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
-    monkeypatch.setattr(core_module, "unit_of_work", lambda _database: _Work())
-    monkeypatch.setattr(core_module, "PostgresAgentRunRepository", Repository)
+    service.unit_of_work = lambda _database: _Work()
+    service.repository_factory = Repository
 
     service._supervise_stalled_run(spec.run_id)
 
@@ -245,7 +246,7 @@ def test_post_review_workspace_drift_refreshes_same_quality_attempt(monkeypatch)
     service._request_quality_repair = MagicMock(return_value=None)
     service._quality_fail = MagicMock(return_value=None)
 
-    monkeypatch.setattr(service_module, "PostgresCodingQualityRepository", Quality)
+    service.quality_repository_factory = Quality
     monkeypatch.setattr(service_module, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
     monkeypatch.setattr(
         service_module,
@@ -331,7 +332,7 @@ def test_enforced_post_review_workspace_drift_fails_integrity_not_quality_repair
     service._request_quality_repair = MagicMock(return_value=None)
     service._quality_fail = MagicMock(return_value=None)
 
-    monkeypatch.setattr(service_module, "PostgresCodingQualityRepository", Quality)
+    service.quality_repository_factory = Quality
     monkeypatch.setattr(service_module, "capture_workspace_state", lambda *_args, **_kwargs: current_state)
     monkeypatch.setattr(service_module, "evaluate_acceptance", lambda *_args, **_kwargs: AcceptanceResult(passed=True))
     monkeypatch.setattr(service_module, "evaluate_evidence_set", lambda *_args, **_kwargs: EvidenceSet(run_id=spec.run_id))

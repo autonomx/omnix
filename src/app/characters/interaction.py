@@ -1,9 +1,9 @@
 """Pure server-side Character Mode identity resolution."""
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
 import hashlib
 import json
-import os
 
 from .models import (
     SYSTEM_ASSISTANT_ID,
@@ -13,12 +13,22 @@ from .models import (
     InteractionSelection,
     ResolvedInteractionContext,
 )
+from app.prompts import prompt_template
+
+
+LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE = prompt_template(
+    'characters.interaction.legacy_maya_system_prompt', "1",
+    (
+        'You are Maya, a warm, friendly, emotionally aware AI. Keep responses short (1-3 '
+        "sentences for voice, 5 for text), match the user's emotional tone, avoid filler and "
+        'tangents. Be clear and concise, admit uncertainty when needed, and maintain a natural, '
+        'human-like presence.'
+    ),
+)
+
 
 LEGACY_MAYA_SYSTEM_PROMPT = (
-    "You are Maya, a warm, friendly, emotionally aware AI. Keep responses short "
-    "(1-3 sentences for voice, 5 for text), match the user's emotional tone, avoid "
-    "filler and tangents. Be clear and concise, admit uncertainty when needed, and "
-    "maintain a natural, human-like presence."
+    LEGACY_MAYA_SYSTEM_PROMPT_TEMPLATE.text
 )
 _ALLOWED_SHARED_CATEGORIES = {"preference", "fact", "project", "relationship", "instruction"}
 
@@ -36,7 +46,7 @@ class CharacterResolutionError(CharacterInteractionError):
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
-    return (os.environ.get(name) or default).strip().lower() in {"1", "true", "yes", "on"}
+    return (_env_str(name) or default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def character_mode_enabled() -> bool:

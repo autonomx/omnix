@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.assets.canonical_voice_clones as canonical_voice_clones
-from app.gateway.voice_library_routes import register_voice_library_route
+from tests.support.routers import include_router_registrar
+from app.voice.voice_library_routes import register_voice_library_route
 
 
 def test_direct_voice_library_route_reads_canonical_clone_folder(tmp_path, monkeypatch) -> None:
@@ -17,7 +18,7 @@ def test_direct_voice_library_route_reads_canonical_clone_folder(tmp_path, monke
     monkeypatch.setattr(canonical_voice_clones, "resources_root", lambda: resources)
 
     gateway = FastAPI()
-    register_voice_library_route(gateway)
+    include_router_registrar(gateway, register_voice_library_route)
     response = TestClient(gateway).get("/api/voice-library")
 
     assert response.status_code == 200

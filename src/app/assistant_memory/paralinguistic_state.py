@@ -8,6 +8,54 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.prompts import prompt_template
+
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive', "1",
+    'Keep the opening brief and yield room for the user to continue.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_2_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_2', "1",
+    'Use a gentle, unhurried response without claiming to know how the user feels.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_3_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_3', "1",
+    'Leave conversational space and avoid rushing into a long answer.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_4_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_4', "1",
+    'Use patient wording and make it easy for the user to clarify or continue.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_5_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_5', "1",
+    'Acknowledge uncertainty without treating it as a durable fact.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_6_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_6', "1",
+    "A light response is appropriate, but do not overstate the user's mood.",
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_7_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_7', "1",
+    'Match the energy subtly while staying clear and grounded.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_8_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_8', "1",
+    'An immediate conversational signal may be present for this turn.',
+)
+
+PARALINGUISTIC_PROMPT_DIRECTIVE_9_TEMPLATE = prompt_template(
+    'assistant_memory.paralinguistic_state.paralinguistic_prompt_directive_9', "1",
+    'Treat the signal as uncertain and ephemeral; never assert an emotion diagnosis.',
+)
+
 
 ParalinguisticSignalKind = Literal[
     "laughter",
@@ -254,19 +302,19 @@ def paralinguistic_prompt_directive(
         key=lambda item: (priority.get(item.kind, 0), item.confidence),
     )
     guidance = {
-        "interruption_attempt": "Keep the opening brief and yield room for the user to continue.",
-        "sigh": "Use a gentle, unhurried response without claiming to know how the user feels.",
-        "reflective_pause": "Leave conversational space and avoid rushing into a long answer.",
-        "hesitation": "Use patient wording and make it easy for the user to clarify or continue.",
-        "uncertain_delivery": "Acknowledge uncertainty without treating it as a durable fact.",
-        "laughter": "A light response is appropriate, but do not overstate the user's mood.",
-        "excited_delivery": "Match the energy subtly while staying clear and grounded.",
+        "interruption_attempt": PARALINGUISTIC_PROMPT_DIRECTIVE_TEMPLATE.text,
+        "sigh": PARALINGUISTIC_PROMPT_DIRECTIVE_2_TEMPLATE.text,
+        "reflective_pause": PARALINGUISTIC_PROMPT_DIRECTIVE_3_TEMPLATE.text,
+        "hesitation": PARALINGUISTIC_PROMPT_DIRECTIVE_4_TEMPLATE.text,
+        "uncertain_delivery": PARALINGUISTIC_PROMPT_DIRECTIVE_5_TEMPLATE.text,
+        "laughter": PARALINGUISTIC_PROMPT_DIRECTIVE_6_TEMPLATE.text,
+        "excited_delivery": PARALINGUISTIC_PROMPT_DIRECTIVE_7_TEMPLATE.text,
     }[signal.kind]
     return "\n".join(
         [
-            "An immediate conversational signal may be present for this turn.",
+            PARALINGUISTIC_PROMPT_DIRECTIVE_8_TEMPLATE.text,
             guidance,
-            "Treat the signal as uncertain and ephemeral; never assert an emotion diagnosis.",
+            PARALINGUISTIC_PROMPT_DIRECTIVE_9_TEMPLATE.text,
         ]
     )
 

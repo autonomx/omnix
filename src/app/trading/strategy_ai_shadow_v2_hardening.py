@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 """Correctness hardening for the AI Shadow v2 research experiment.
 
 The v2 experiment deliberately keeps alpha, risk and execution separate. This
@@ -18,18 +22,17 @@ checks.
 """
 
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
-from . import strategy_ai_shadow_v2_monitor as monitor
-from .strategy_ai_shadow_v2 import AIShadowV2AlphaDecision, CatalystIntelligenceSnapshot
+from .strategy_ai_shadow_v2 import (
+    AI_SHADOW_V2_POLICY_VERSION,
+    AIShadowV2AlphaDecision,
+    CatalystIntelligenceSnapshot,
+    deterministic_risk_geometry as _BASE_RISK_GEOMETRY,
+)
 from .strategy_repository import StrategyEvent
 
-_INSTALLED = False
-_ORIGINAL_REFRESH_CATALYST = monitor.TradingAIShadowV2Monitor._refresh_catalyst
-_ORIGINAL_RUN_ARM = monitor.TradingAIShadowV2Monitor._run_arm
-_ORIGINAL_SUMMARY = monitor.TradingAIShadowV2Monitor._summary
-_ORIGINAL_RISK_GEOMETRY = monitor.deterministic_risk_geometry
 _OBSERVED_SPREAD_BPS: ContextVar[dict[str, Decimal]] = ContextVar(
     "ai_shadow_v2_observed_spread_bps",
     default={},
@@ -53,6 +56,7 @@ def _morning_snapshot(
     try:
         return CatalystIntelligenceSnapshot.model_validate(earliest.payload["snapshot"])
     except Exception:
+        logger.debug("suppressed error in %s", "_morning_snapshot", exc_info=True)
         return None
 
 
@@ -84,12 +88,13 @@ def _sanitized_alpha_feature(
     return projected
 
 
-def _risk_geometry_with_observed_spread(
+def risk_geometry_with_observed_spread(
     decision,
     *,
     entry_reference: Decimal,
     estimated_cost_bps: Decimal,
     minimum_net_r: Decimal,
+    original=_BASE_RISK_GEOMETRY,
 ):
     """Use point-in-time spread for R math while keeping the hard spread cap.
 
@@ -107,7 +112,7 @@ def _risk_geometry_with_observed_spread(
         if observed is not None and observed >= 0
         else estimated_cost_bps
     )
-    return _ORIGINAL_RISK_GEOMETRY(
+    return original(
         decision,
         entry_reference=entry_reference,
         estimated_cost_bps=effective_cost,
@@ -153,6 +158,7 @@ def _active_stop_price(
     try:
         return Decimal(str(geometry["invalidation_price"]))
     except Exception:
+        logger.debug("suppressed error in %s", "_active_stop_price", exc_info=True)
         return None
 
 
@@ -182,13 +188,26 @@ def _episode_reference_event(group: list[StrategyEvent]) -> StrategyEvent:
 
 
 def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]:
-    rows = [
-        event.payload["outcome"]
+    from .strategy_outcome_quality import outcome_is_valid_compat
+
+    relevant = [
+        event
         for event in events
         if event.event_type == "ai_v2_opportunity_episode"
         and event.payload.get("arm") == arm
-        and isinstance(event.payload.get("outcome"), dict)
     ]
+    rows = [
+        event.payload["outcome"]
+        for event in relevant
+        if event.payload.get("policy_version") == AI_SHADOW_V2_POLICY_VERSION
+        and isinstance(event.payload.get("outcome"), dict)
+        and outcome_is_valid_compat(event.payload["outcome"])
+    ]
+    excluded = sum(
+        isinstance(event.payload.get("outcome"), dict)
+        and not outcome_is_valid_compat(event.payload["outcome"])
+        for event in relevant
+    )
     positive = [row for row in rows if row.get("positive_opportunity") is True]
     entered = [row for row in rows if row.get("entered") is True]
     captured = [row for row in positive if row.get("entered") is True]
@@ -223,6 +242,7 @@ def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]
             else None
         ),
         "false_entry_count": len(false_entries),
+        "data_quality_excluded_episode_count": excluded,
     }
 
 
@@ -233,7 +253,23 @@ def _metric_delta(catalyst: dict[str, object], control: dict[str, object], field
     try:
         return str(Decimal(str(left)) - Decimal(str(right)))
     except Exception:
+        logger.debug("suppressed error in %s", "_metric_delta", exc_info=True)
         return None
+
+
+def _decision_schedule(events: list[StrategyEvent], arm: str) -> set[tuple[str, str]]:
+    return {
+        (
+            event.instrument_id,
+            event.observed_at.astimezone(timezone.utc).isoformat(),
+        )
+        for event in events
+        if event.event_type == "ai_v2_decision"
+        and event.payload.get("arm") == arm
+        and isinstance(event.payload.get("feature_snapshot"), dict)
+        and event.payload["feature_snapshot"].get("experiment_policy_version")
+        == AI_SHADOW_V2_POLICY_VERSION
+    }
 
 
 def _lift_metrics(events: list[StrategyEvent]) -> dict[str, object]:
@@ -264,10 +300,23 @@ def _lift_metrics(events: list[StrategyEvent]) -> dict[str, object]:
                 ),
             },
         }
+        valid = _decision_schedule(events, control_arm) == _decision_schedule(events, catalyst_arm)
+        comparison = output[name]
+        assert isinstance(comparison, dict)
+        comparison["comparison_valid"] = valid
+        comparison["requires_same_decision_schedule"] = True
+        if not valid:
+            delta = comparison.get("catalyst_minus_control")
+            if isinstance(delta, dict):
+                for key in list(delta):
+                    delta[key] = None
+            comparison["comparison_note"] = (
+                "Episode metrics are descriptive only because catalyst/control decision observations were not fully paired."
+            )
     return output
 
 
-async def _refresh_catalyst_hardened(
+async def refresh_catalyst_with_morning_freeze(
     self,
     *,
     candidate,
@@ -277,9 +326,11 @@ async def _refresh_catalyst_hardened(
     events,
     now,
     history,
+    original,
 ):
-    snapshot = await _ORIGINAL_REFRESH_CATALYST(
-        self,
+    from . import strategy_ai_shadow_v2_monitor as monitor
+
+    snapshot = await original(
         candidate=candidate,
         config=config,
         strategy_repository=strategy_repository,
@@ -310,7 +361,7 @@ async def _refresh_catalyst_hardened(
     return snapshot
 
 
-async def _run_arm_hardened(
+async def run_arm_with_risk_guards(
     self,
     *,
     arm,
@@ -318,7 +369,10 @@ async def _run_arm_hardened(
     config,
     repository,
     events,
+    original,
 ):
+    from . import strategy_ai_shadow_v2_monitor as monitor
+
     prepared: list[dict[str, object]] = []
     observed_spreads: dict[str, Decimal] = {}
     for source in rows:
@@ -335,7 +389,7 @@ async def _run_arm_hardened(
                 if spread >= 0:
                     observed_spreads[instrument_id] = spread
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "run_arm_with_risk_guards", exc_info=True)
 
         frozen = _morning_snapshot(events, instrument_id) if arm == "morning_catalyst" else None
         feature = _sanitized_alpha_feature(feature, frozen_catalyst=frozen)
@@ -378,8 +432,7 @@ async def _run_arm_hardened(
         return None
     token = _OBSERVED_SPREAD_BPS.set(observed_spreads)
     try:
-        return await _ORIGINAL_RUN_ARM(
-            self,
+        return await original(
             arm=arm,
             rows=prepared,
             config=config,
@@ -390,7 +443,7 @@ async def _run_arm_hardened(
         _OBSERVED_SPREAD_BPS.reset(token)
 
 
-async def _label_episodes_hardened(
+async def label_opportunity_episodes(
     self,
     *,
     rows,
@@ -399,6 +452,8 @@ async def _label_episodes_hardened(
     events,
     now,
 ):
+    from . import strategy_ai_shadow_v2_monitor as monitor
+
     if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
         return
     existing = {
@@ -444,6 +499,7 @@ async def _label_episodes_hardened(
                 try:
                     structure = monitor.MarketStructureSnapshot.model_validate(structure_payload)
                 except Exception:
+                    logger.debug("suppressed error in %s", "label_opportunity_episodes", exc_info=True)
                     continue
                 episode_id = monitor._key(arm, instrument_id, first.observed_at.isoformat(), index)[:28]
                 if episode_id in existing:
@@ -480,6 +536,7 @@ async def _label_episodes_hardened(
                         catalyst_persistence_class=persistence,
                     )
                 except Exception:
+                    logger.debug("suppressed error in %s", "label_opportunity_episodes", exc_info=True)
                     continue
                 if await self._append(
                     repository,
@@ -503,7 +560,7 @@ async def _label_episodes_hardened(
                     self.episode_count += 1
 
 
-async def _summary_hardened(
+async def write_catalyst_lift_summary(
     self,
     *,
     config,
@@ -511,9 +568,11 @@ async def _summary_hardened(
     events,
     session_date,
     now,
+    original,
 ):
-    await _ORIGINAL_SUMMARY(
-        self,
+    from . import strategy_ai_shadow_v2_monitor as monitor
+
+    await original(
         config=config,
         repository=repository,
         events=events,
@@ -545,29 +604,3 @@ async def _summary_hardened(
         },
         identity=(session_date.isoformat(), monitor._key(lift), "catalyst-lift"),
     )
-
-
-def install_ai_shadow_v2_hardening() -> None:
-    global _INSTALLED
-    if _INSTALLED:
-        return
-    monitor._EVENT_TYPES = tuple(
-        dict.fromkeys(
-            (
-                *monitor._EVENT_TYPES,
-                "ai_v2_catalyst_freeze",
-                "ai_v2_catalyst_lift_summary",
-            )
-        )
-    )
-    monitor.deterministic_risk_geometry = _risk_geometry_with_observed_spread
-    monitor.TradingAIShadowV2Monitor._refresh_catalyst = _refresh_catalyst_hardened
-    monitor.TradingAIShadowV2Monitor._run_arm = _run_arm_hardened
-    monitor.TradingAIShadowV2Monitor._label_episodes = _label_episodes_hardened
-    monitor.TradingAIShadowV2Monitor._summary = _summary_hardened
-    _INSTALLED = True
-
-
-__all__ = [
-    "install_ai_shadow_v2_hardening",
-]

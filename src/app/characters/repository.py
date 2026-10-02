@@ -4,8 +4,8 @@ PostgreSQL is installed for production. Provider-free tests use a deterministic
 in-memory repository; no SQLite schema or connection remains.
 """
 from __future__ import annotations
+from app.config.env import env_str as _env_str
 
-import os
 import re
 import threading
 import uuid
@@ -57,7 +57,7 @@ def default_character_db_path() -> Path:
     it never reads or writes the path.
     """
 
-    override = (os.environ.get("OMNIX_CHARACTER_DB_PATH") or "").strip()
+    override = (_env_str("OMNIX_CHARACTER_DB_PATH") or "").strip()
     return Path(override) if override else Path(":memory:characters")
 
 

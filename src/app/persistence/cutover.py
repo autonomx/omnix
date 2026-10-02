@@ -8,13 +8,20 @@ from pathlib import Path
 from typing import Any
 
 from .authority import AuthorityOperation
-from .blob_store import LocalBlobStore
+from .blob_store import default_blob_store
+from .contracts import BlobStore
 from .database import PostgresDatabase
 from .errors import PersistenceError
-from .migrations import apply_migrations
-from .rpg_repository import canonical_json, state_hash
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def state_hash(state: dict[str, Any]) -> str:
+    return hashlib.sha256(canonical_json(state).encode("utf-8")).hexdigest()
 
 
 LEGACY_BUNDLE_FORMAT = "omnix_legacy_bundle_v1"
@@ -181,10 +188,10 @@ class PostgresLegacyImporter:
         self,
         database: PostgresDatabase,
         *,
-        blob_store: LocalBlobStore | None = None,
+        blob_store: BlobStore | None = None,
     ) -> None:
         self.database = database
-        self.blob_store = blob_store or LocalBlobStore()
+        self.blob_store = blob_store or default_blob_store()
 
     def import_bundle(
         self,
@@ -193,7 +200,6 @@ class PostgresLegacyImporter:
         *,
         dry_run: bool = False,
     ) -> dict[str, Any]:
-        apply_migrations(self.database)
         preflight = preflight_bundle(bundle)
         if not preflight["ok"]:
             raise LegacyBundleError("; ".join(preflight["errors"]))
@@ -317,6 +323,7 @@ class PostgresLegacyImporter:
                   FROM omnix_legacy_import_items
                  WHERE import_run_id = %s
                  GROUP BY entity_type, status
+                 LIMIT 1000
                 """,
                 (run_id,),
             ).fetchall()
@@ -513,39 +520,7 @@ class PostgresLegacyImporter:
                 work.chats.append_message(context, stable_id, dict(message))
             return "omnix_chat_sessions", stable_id, None
         if entity_type == "jobs":
-            job = work.jobs.create_job(
-                context,
-                {
-                    "id": stable_id,
-                    "module": item.get("module", "legacy"),
-                    "job_type": item.get("job_type") or item.get("type") or "legacy",
-                    "resource_class": item.get("resource_class", "cpu"),
-                    "priority": item.get("priority", 0),
-                    "max_attempts": item.get("max_attempts", 3),
-                    "input_payload": item.get("input_payload") or {},
-                    "metadata": {**dict(item.get("metadata") or {}), "legacy_import": True},
-                },
-            )
-            status = str(item.get("status") or "queued")
-            work.connection.execute(
-                """
-                UPDATE omnix_jobs SET status = %s, output_refs = %s::jsonb,
-                    progress = %s::jsonb, error = %s::jsonb,
-                    attempt_count = %s, completed_at = %s::timestamptz,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = %s AND workspace_id = %s
-                """,
-                (
-                    status,
-                    _canonical(item.get("output_refs") or []),
-                    _canonical(item.get("progress") or {}),
-                    _canonical(item.get("error")) if item.get("error") is not None else None,
-                    int(item.get("attempt_count", 0)),
-                    item.get("completed_at"),
-                    job["id"],
-                    context.workspace_id,
-                ),
-            )
+            work.jobs.import_job(context, job_id=stable_id, item=item)
             return "omnix_jobs", stable_id, None
         if entity_type == "rpg_campaigns":
             state = dict(item.get("state") or {})

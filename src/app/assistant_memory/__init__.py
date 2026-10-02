@@ -1,7 +1,7 @@
 """Backend-owned curated memory contracts, persistence, and policy."""
 
 from .lifecycle import MemorySnapshotView, MemorySnapshotViewItem, resolve_snapshot_view
-from .models import (
+from app.memory_contracts import (
     SYSTEM_MEMORY_OWNER_ID,
     MemoryCandidate,
     MemoryCategory,
@@ -39,6 +39,13 @@ from .scope import (
     scope_id_for,
 )
 from .selection import MemorySelection, MemorySelectionDiagnostics, select_memory_records
+from .session import (
+    RefreshSessionMemoryRequest,
+    SessionMemoryConflictError,
+    SessionMemoryState,
+    get_session_memory_state,
+    refresh_session_memory,
+)
 from .service import MemoryPolicyError, MemoryService, normalize_memory_content
 
 __all__ = [
@@ -65,10 +72,14 @@ __all__ = [
     "OwnerAwareInMemoryMemoryRepository",
     "OwnerAwareMemoryService",
     "SYSTEM_MEMORY_OWNER_ID",
+    "RefreshSessionMemoryRequest",
+    "SessionMemoryConflictError",
+    "SessionMemoryState",
     "candidate_acceptance",
     "default_memory_db_path",
     "default_memory_service",
     "explicit_save_decision",
+    "get_session_memory_state",
     "is_expired",
     "is_visible_in_scope",
     "move_scope_decision",
@@ -77,6 +88,7 @@ __all__ = [
     "resolve_chat_scope",
     "resolve_session_memory_scope",
     "resolve_snapshot_view",
+    "refresh_session_memory",
     "scope_id_for",
     "select_memory_records",
     "source_requires_approval",

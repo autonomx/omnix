@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import logging
+
+from app.config.env import env_str, environment
+
+logger = logging.getLogger(__name__)
+
 """End-to-end authority runtime for the prospective Top-10 gap experiment.
 
 The runtime owns machine-readable persistence and phase transitions. External
@@ -19,7 +25,6 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Literal, Sequence
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -124,9 +129,9 @@ from .prospective_prediction_v4 import (
 )
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.models import GapPullbackConfig
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 RUNTIME_VERSION = "prospective-gap-runtime-v1"
 PORTFOLIO_E_POLICY_VERSION = "prospective-gap-portfolio-e-v1"
 
@@ -547,7 +552,7 @@ class ProspectiveGapRuntime:
     ) -> SchedulerPremarketHandoff | None:
         """Read the scheduler inbox from GitHub without mutating the working tree."""
 
-        if os.getenv(
+        if env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX",
             "1",
         ).strip().lower() not in {"1", "true", "yes", "on"}:
@@ -555,11 +560,11 @@ class ProspectiveGapRuntime:
         gh = shutil.which("gh")
         if not gh:
             raise RuntimeError("prospective_gap_remote_inbox_requires_github_cli")
-        repository = os.getenv(
+        repository = env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY",
             "autonomx/omnix",
         ).strip()
-        ref = os.getenv(
+        ref = env_str(
             "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF",
             "main",
         ).strip()
@@ -1651,6 +1656,7 @@ class ProspectiveGapRuntime:
         try:
             observation = self.market_service.execution_observation(candidate.instrument_id)
         except Exception:
+            logger.debug("suppressed error in %s", "ProspectiveGapRuntime._execution_cost", exc_info=True)
             return None
         if (
             not observation.paper_fill_eligible

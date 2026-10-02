@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.runtime.tenant_context import current_tenant
+
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
 import threading
@@ -47,56 +49,113 @@ def test_package_create_app_uses_production_composition(monkeypatch):
 
 def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app import production
-    from app.persistence import startup
+    from app.persistence import startup, database as database_module, identity_service
     from app.gateway import main
-    from app import live_voice_hardware_policy
-    from app import assets, chat, jobs
-    from app.runtime_config import RuntimeConfig, GatewayRole, get_runtime_config
+    from app import runtime_composition
+    from app.live_voice import hardware_policy as live_voice_hardware_policy
+    from app import assets, jobs
+    from app.security import tenant_context
+    from app.settings import access as settings_access
+    from app.runtime.config import RuntimeConfig, GatewayRole, get_runtime_config
 
     config = RuntimeConfig(gateway_role=GatewayRole.API)
     calls = []
     stores = [SimpleNamespace() for _ in range(4)]
-    stores[0].database = object()
-    stores[0].context = SimpleNamespace(workspace_id="test-workspace")
-    monkeypatch.setattr(jobs, "default_job_store", lambda: stores[0])
+    fake_database = object()
+    stores[0].database = fake_database
+    stores[0].context = SimpleNamespace(
+        workspace_id="test-workspace", user_id="test-user"
+    )
+    def production_job_store_factory(
+        *, database, context, chat_execution_owner, chat_dispatcher
+    ):
+        assert database is fake_database
+        # Request-serving stores follow each request's tenant (WP-4.2); the
+        # runtime owner stays on the process tenant.
+        assert context is None
+        assert chat_execution_owner.workspace_id == current_tenant().workspace_id
+        assert chat_execution_owner.database is fake_database
+        assert chat_dispatcher is not None
+        return stores[0]
+
+    monkeypatch.setattr(runtime_composition, "production_job_store", production_job_store_factory)
     monkeypatch.setattr(assets, "default_asset_store", lambda: stores[1])
-    monkeypatch.setattr(chat, "default_chat_store", lambda: stores[2])
+
+    def production_chat_store_factory(*, job_service, live_agent_planner):
+        assert job_service is stores[0]
+        assert live_agent_planner is not None
+        return stores[2]
+
+    monkeypatch.setattr(runtime_composition, "production_chat_store", production_chat_store_factory)
     monkeypatch.setattr(jobs, "default_model_residency_store", lambda: stores[3])
+    monkeypatch.setattr(runtime_composition, "production_model_residency_store", lambda: stores[3])
+    monkeypatch.setattr(database_module, "default_database", lambda: fake_database)
     monkeypatch.setattr(
-        startup,
-        "bootstrap_status_payload",
-        lambda: calls.append("bootstrap") or {"ready": True, "backend": "postgresql"},
+        identity_service,
+        "ensure_local_identity",
+        lambda _database: stores[0].context,
     )
     monkeypatch.setattr(
+        tenant_context,
+        "install_process_tenant",
+        lambda context: calls.append(("tenant", context.workspace_id)),
+    )
+    monkeypatch.setattr(
+        settings_access,
+        "install_settings_service",
+        lambda _service: calls.append("settings"),
+    )
+    def bootstrap():
+        calls.append("bootstrap")
+        tenant = identity_service.ensure_local_identity(fake_database)
+        tenant_context.install_process_tenant(tenant)
+        return {"ready": True, "backend": "postgresql"}
+
+    monkeypatch.setattr(startup, "bootstrap_status_payload", bootstrap)
+    monkeypatch.setattr(
         live_voice_hardware_policy,
-        "install_live_voice_hardware_policy",
+        "apply_live_voice_process_defaults",
         lambda: calls.append("policy"),
     )
 
     def compose(**kwargs):
         calls.append("compose")
         assert callable(kwargs["job_store_factory"])
-        assert (
-            kwargs["job_store_factory"]() is kwargs["job_store_factory"]() is stores[0]
-        )
-        assert (
-            kwargs["asset_store_factory"]()
-            is kwargs["asset_store_factory"]()
-            is stores[1]
-        )
+        assert kwargs["job_store_factory"]() is stores[0]
+        assert kwargs["asset_store_factory"]() is stores[1]
         assert callable(kwargs["readiness_check"])
-        assert callable(kwargs['runtime_lifecycle'])
-        assert kwargs['background_runtime'].database is stores[0].database
-        assert kwargs['background_runtime'].config is config
-        assert kwargs['runtime_config'] is config
+        assert callable(kwargs["runtime_lifecycle"])
+        assert kwargs["background_runtime"].database is stores[0].database
+        assert kwargs["background_runtime"].config is config
+        assert kwargs["runtime_config"] is config
+        assert kwargs["runtime_services"].database is fake_database
         assert get_runtime_config() is config
         return SimpleNamespace(
-            state=SimpleNamespace(background_runtime=kwargs["background_runtime"])
+            state=SimpleNamespace(
+                background_runtime=kwargs["background_runtime"],
+                job_handler_registry=object(),
+            )
         )
 
+    from app.persistence import device_permits
+
+    permit_databases = []
+    monkeypatch.setattr(
+        device_permits,
+        "configure_default_device_permit_service",
+        lambda database, **_kwargs: permit_databases.append(database),
+    )
     monkeypatch.setattr(main, "create_gateway_app", compose)
     gateway = production.create_production_app(config)
-    assert calls == ["bootstrap", "policy", "compose"]
+    assert permit_databases == [fake_database]
+    assert calls[:4] == [
+        "bootstrap",
+        ("tenant", "test-workspace"),
+        "settings",
+        "policy",
+    ]
+    assert "compose" in calls
+    assert not hasattr(gateway.state, "durable_feature_job_worker")
     assert gateway.state.persistence_startup["backend"] == "postgresql"
     assert gateway.state.runtime_config is config
 
@@ -117,6 +176,7 @@ def test_production_rejects_legacy_backend(monkeypatch):
 def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
     from pathlib import Path
     import runpy
+    import secrets
     import sys
     import uvicorn
     from app.persistence import startup
@@ -126,6 +186,9 @@ def test_reload_launcher_defers_bootstrap_to_serving_process(monkeypatch):
 
     monkeypatch.setattr(startup, "bootstrap_status_payload", forbidden)
     calls = []
+    # Runtime launch inherits an explicit ephemeral token; never access the
+    # operator's protected credential store from this bootstrap unit test.
+    monkeypatch.setenv("OMNIX_SERVICE_TOKEN", secrets.token_urlsafe(32))
     monkeypatch.setattr(
         uvicorn, "run", lambda *args, **kwargs: calls.append((args, kwargs))
     )
@@ -157,7 +220,8 @@ def test_production_application_composes_once_for_concurrent_requests(monkeypatc
     async def run():
         gateway = production.ProductionApplication()
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=gateway), base_url="http://test"
+            transport=httpx.ASGITransport(app=gateway), base_url="http://127.0.0.1",
+            headers={"X-Omnix-Client": "test"},
         ) as client:
             responses = await asyncio.gather(
                 client.get("/health"), client.get("/health")
@@ -171,6 +235,7 @@ def test_production_application_composes_once_for_concurrent_requests(monkeypatc
 
 def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeypatch):
     from app.gateway import main
+    from app.gateway import app_factory
 
     calls = []
     lifecycle = []
@@ -190,7 +255,7 @@ def test_gateway_lifespan_marks_ready_after_hooks_and_clears_on_shutdown(monkeyp
         calls.append(threading.get_ident())
         return 0
 
-    monkeypatch.setattr(main, "recover_abandoned_chat_generation_jobs", recover)
+    monkeypatch.setattr(app_factory, "recover_abandoned_chat_generation_jobs", recover)
     gateway = main.create_gateway_app(
         chat_store_factory=object,
         job_store_factory=object,
@@ -251,7 +316,7 @@ def test_readiness_is_separate_from_liveness_and_redacts_errors():
         raise RuntimeError("postgresql://user:secret@private-host/db")
 
     gateway = create_gateway_app(readiness_check=probe)
-    client = TestClient(gateway)
+    client = TestClient(gateway, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/health").status_code == 200
     assert client.get("/ready").status_code == 503
     gateway.state.runtime_started = True
@@ -266,7 +331,7 @@ def test_ready_probe_reports_status_without_changing_health():
     payload = {"ready": True, "backend": "postgresql"}
     gateway = create_gateway_app(readiness_check=lambda: payload)
     gateway.state.runtime_started = True
-    client = TestClient(gateway)
+    client = TestClient(gateway, base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     assert client.get("/ready").json() == payload
     assert client.get("/ready").status_code == 200
     payload["ready"] = False
@@ -289,8 +354,12 @@ def test_job_read_does_not_block_health():
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=gateway), base_url="http://test"
+            transport=httpx.ASGITransport(app=gateway), base_url="http://127.0.0.1",
+            headers={"X-Omnix-Client": "test"},
         ) as client:
+            # FastAPI builds its route state on the first request; warm it so
+            # the timing below measures the blocking job read, not cold start.
+            assert (await client.get("/health")).status_code == 200
             job = asyncio.create_task(client.get("/api/jobs/missing"))
             try:
                 assert await asyncio.to_thread(entered.wait, 2)
@@ -305,7 +374,7 @@ def test_job_read_does_not_block_health():
 
 
 def test_sse_store_poll_runs_outside_event_loop_thread():
-    from app.gateway.main import _live_job_event_stream
+    from app.gateway.kernel_routes.live_event_stream import resilient_live_job_event_stream
 
     threads = []
 
@@ -315,7 +384,7 @@ def test_sse_store_poll_runs_outside_event_loop_thread():
             return []
 
     async def run():
-        stream = _live_job_event_stream(Store())
+        stream = resilient_live_job_event_stream(Store())
         await anext(stream)
         try:
             assert "heartbeat" in await anext(stream)
@@ -335,7 +404,6 @@ def test_readiness_does_not_migrate_or_initialize_authority(monkeypatch):
     monkeypatch.setattr(
         runtime, "persistence_mode", lambda: runtime.PersistenceMode.POSTGRESQL
     )
-    monkeypatch.setattr(runtime, "apply_migrations", forbidden)
     monkeypatch.setattr(runtime, "initialize_fresh_install_authority", forbidden)
 
     def status(db, **kwargs):
@@ -377,7 +445,7 @@ def test_readiness_does_not_migrate_or_initialize_authority(monkeypatch):
 def test_required_worker_failure_and_missing_worker_gate_readiness(monkeypatch):
     from app import production
     from app.persistence import runtime
-    from app.gateway import workers
+    from app.runtime import worker_health as workers
 
     monkeypatch.setattr(
         runtime,
@@ -406,7 +474,7 @@ def test_required_worker_failure_and_missing_worker_gate_readiness(monkeypatch):
 
 
 def test_worker_health_probes_run_concurrently_and_keep_discovery_order(monkeypatch):
-    from app.gateway import workers
+    from app.runtime import worker_health as workers
 
     barrier = threading.Barrier(3)
     specs = [
@@ -425,3 +493,108 @@ def test_worker_health_probes_run_concurrently_and_keep_discovery_order(monkeypa
     payload = workers.get_worker_health_payload({})
     assert [worker.id for worker in payload.workers] == ["tts", "stt", "image"]
     assert payload.ok
+
+
+def test_request_paths_do_not_apply_migrations_or_bootstrap_identity(
+    monkeypatch, tmp_path
+):
+    from app.persistence import identity_service, migrations
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("request paths must not migrate or bootstrap identity")
+
+    monkeypatch.setattr(migrations, "apply_migrations", forbidden)
+    monkeypatch.setattr(identity_service, "ensure_local_identity", forbidden)
+    monkeypatch.setattr("app.persistence.apply_migrations", forbidden)
+
+    from app.rpg.api.feature_routes import rpg_world_library_routes
+    from app.rpg.session import service as rpg_session_service
+
+    monkeypatch.setattr(
+        rpg_world_library_routes,
+        "read_world_library",
+        lambda **_kwargs: {
+            "ok": True,
+            "worlds": [],
+            "scenarios": [],
+            "campaigns": [],
+            "generation_runs": [],
+        },
+    )
+    monkeypatch.setattr(rpg_session_service, "load_session", lambda _session_id: None)
+
+    from app.characters import feature as character_feature
+    from app.characters.models import CharacterListResponse
+
+    original_register_character_routes = character_feature.register_character_routes
+
+    def register_test_character_routes(router):
+        original_register_character_routes(
+            router,
+            service_factory=lambda: SimpleNamespace(
+                list=lambda **_kwargs: CharacterListResponse(characters=[])
+            ),
+        )
+
+    monkeypatch.setattr(
+        character_feature, "register_character_routes", register_test_character_routes
+    )
+
+    from app.gateway.main import create_gateway_app
+    from fastapi.testclient import TestClient
+
+    client = TestClient(
+        create_gateway_app(),
+        base_url="http://127.0.0.1:5173",
+        headers={"X-Omnix-Client": "test"},
+    )
+
+    turn = client.post(
+        "/api/rpg/sessions/missing-session/turn",
+        json={"command": "look around"},
+    )
+    world_library = client.get("/api/rpg/world-library")
+    prompt = client.post(
+        "/api/prompts/render",
+        json={
+            "template": {
+                "id": "chat.reply",
+                "version": "v1",
+                "module": "chat",
+                "text": "Reply to {message}.",
+            },
+            "variables": {"message": "hello"},
+        },
+    )
+    characters = client.get("/api/characters")
+
+    assert turn.status_code == 404
+    assert world_library.status_code == 200
+    assert prompt.status_code == 200
+    assert prompt.json()["rendered_text"] == "Reply to hello."
+    assert characters.status_code == 200
+    assert characters.json()["characters"] == []
+
+
+def test_disabled_features_are_not_imported():
+    """Composing without RPG and trading imports neither package (WP-7.7)."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[3]
+    script = (
+        "import sys\n"
+        "from app.config.runtime import RuntimeConfig\n"
+        "from app.gateway.main import create_gateway_app\n"
+        "create_gateway_app(runtime_config=RuntimeConfig(disabled_features=('rpg', 'trading', 'hermes')))\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith(('app.rpg', 'app.trading')))\n"
+        "print(len(loaded), loaded[:5])\n"
+    )
+    environment = {**os.environ, "PYTHONPATH": str(src), "OMNIX_ALLOWED_HOSTS": "localhost"}
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=src, env=environment, capture_output=True, text=True, timeout=180
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert result.stdout.strip().splitlines()[-1] == "0 []"

@@ -4,6 +4,16 @@ from pathlib import Path
 
 from app.assets import AssetType, SharedAssetStore
 from app.assets import voice_clone_assets as voice_discovery
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_resources_root(tmp_path, monkeypatch):
+    # Discovery always scans resources_root()/voice_clones; never the operator's.
+    root = tmp_path / "resources"
+    for owner in ("app.assets.canonical_voice_clones", "app.assets.voice_clone_assets"):
+        monkeypatch.setattr(f"{owner}.resources_root", lambda: root)
+    return root
 
 
 def test_voice_library_scans_flat_resources_directory(tmp_path, monkeypatch) -> None:

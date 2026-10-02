@@ -21,7 +21,6 @@ from collections import Counter
 from datetime import datetime, time
 from decimal import Decimal
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,9 +28,8 @@ from . import strategy_leader_momentum_continuation as leader
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
 
-
-_ET = ZoneInfo("America/New_York")
 
 DiagnosticCadence = Literal["decision_3m", "research_1m"]
 TransitionKind = Literal[

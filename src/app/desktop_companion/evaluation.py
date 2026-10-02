@@ -1,6 +1,8 @@
 """Content-free evaluation evidence and rollout gates for Desktop Companion."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import math
@@ -12,7 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 GateStatus = Literal["pass", "fail", "insufficient"]
 RolloutStage = Literal["disabled", "shadow", "text", "speech"]
@@ -115,6 +117,14 @@ class DesktopCompanionEvaluationRecord(DesktopCompanionEvaluationCreate):
     evaluation_id: str
     created_at: str
     updated_at: str
+
+
+class DesktopCompanionEvaluationExport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    format_version: int
+    generated_at: str
+    evaluations: list[DesktopCompanionEvaluationRecord]
 
 
 class DesktopCompanionGateMetric(BaseModel):
@@ -226,7 +236,7 @@ class DesktopCompanionEvaluationStore:
 
 
 def default_desktop_companion_evaluation_path() -> Path:
-    configured = os.getenv("OMNIX_DESKTOP_COMPANION_EVALUATION_PATH", "").strip()
+    configured = env_str("OMNIX_DESKTOP_COMPANION_EVALUATION_PATH", "").strip()
     return Path(configured) if configured else resources_data_root() / "desktop_companion_evaluations.json"
 
 

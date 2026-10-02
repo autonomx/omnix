@@ -324,18 +324,18 @@ def build_app_llm_gateway() -> Optional[AppLLMGateway]:
     """Build an RPG gateway from the application's centralized provider layer."""
 
     try:
-        import app.shared as shared
+        from app.providers import service as provider_service
 
-        provider = shared.get_provider()
+        provider = provider_service.get_provider()
         if not provider:
             logger.debug(
-                "RPG LLM gateway unavailable: app.shared.get_provider() returned no provider"
+                "RPG LLM gateway unavailable: app.provider_service.get_provider() returned no provider"
             )
             return None
         logger.debug("RPG LLM gateway created using centralized app provider")
         global_system_prompt = ""
         try:
-            global_system_prompt = shared.get_global_system_prompt() or ""
+            global_system_prompt = provider_service.get_global_system_prompt() or ""
         except Exception:
             logger.debug("No global system prompt available", exc_info=True)
         return AppLLMGateway(

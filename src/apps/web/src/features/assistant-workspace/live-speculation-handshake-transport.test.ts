@@ -5,7 +5,7 @@ import {
   liveChatDirectGatewayEnabled,
   resolveDirectLiveChatUrl,
   resolveDirectSpeculationUrl,
-  withLiveVoiceWorkerAffinity,
+  withLiveVoiceCallAffinity,
 } from './live-speculation-direct-gateway-transport';
 import { bridgeLiveSpeculationHandshakeRequest } from './live-speculation-handshake-transport';
 
@@ -73,15 +73,16 @@ describe('live speculation direct gateway transport', () => {
     )).toBeNull();
   });
 
-  it('pins same-origin live voice to the worker without changing manual Chat', () => {
+  it('attaches stable call affinity without changing manual Chat', () => {
     const init = { method: 'POST', body: liveChatBody(), headers: { 'Content-Type': 'application/json' } };
-    const pinned = withLiveVoiceWorkerAffinity('/api/chat/sessions/a/messages/stream', init);
-    expect(new Headers(pinned?.headers).get('X-Omnix-Gateway-Affinity')).toBe('worker');
+    const pinned = withLiveVoiceCallAffinity('/api/chat/sessions/a/messages/stream', init);
+    expect(new Headers(pinned?.headers).get('X-Omnix-Call-Id')).toBe('a');
+    expect(new Headers(pinned?.headers).has('X-Omnix-Gateway-Affinity')).toBe(false);
     expect(new Headers(pinned?.headers).get('Content-Type')).toBe('application/json');
     expect(pinned?.body).toBe(init.body);
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
     const manual = { method: 'POST', body: JSON.stringify({ content: 'manual' }) };
-    expect(withLiveVoiceWorkerAffinity('/api/chat/sessions/a/messages/stream', manual)).toBe(manual);
+    expect(withLiveVoiceCallAffinity('/api/chat/sessions/a/messages/stream', manual)).toBe(manual);
   });
 
   it('honors accepted-live direct origin and opt-out independently of speculation', () => {

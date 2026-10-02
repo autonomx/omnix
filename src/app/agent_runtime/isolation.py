@@ -6,6 +6,9 @@ operator; otherwise the launch fails closed.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+from app.security.run_tokens import TOKEN_ENVIRONMENT_KEY as RUN_TOKEN_ENVIRONMENT_KEY
+
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -62,13 +65,13 @@ class DockerStrongIsolation:
         limits: IsolationLimits | None = None,
     ) -> None:
         self.docker = shutil.which("docker")
-        self.image = image or os.environ.get("OMNIX_AGENT_DOCKER_IMAGE")
-        self.network = network or os.environ.get("OMNIX_AGENT_DOCKER_NETWORK")
+        self.image = image or environment().get("OMNIX_AGENT_DOCKER_IMAGE")
+        self.network = network or environment().get("OMNIX_AGENT_DOCKER_NETWORK")
         self.limits = limits or IsolationLimits(
-            memory=os.environ.get("OMNIX_AGENT_DOCKER_MEMORY", "4g"),
-            cpus=os.environ.get("OMNIX_AGENT_DOCKER_CPUS", "2"),
-            pids=int(os.environ.get("OMNIX_AGENT_DOCKER_PIDS", "256")),
-            tmpfs_size=os.environ.get("OMNIX_AGENT_DOCKER_TMPFS", "256m"),
+            memory=environment().get("OMNIX_AGENT_DOCKER_MEMORY", "4g"),
+            cpus=environment().get("OMNIX_AGENT_DOCKER_CPUS", "2"),
+            pids=int(environment().get("OMNIX_AGENT_DOCKER_PIDS", "256")),
+            tmpfs_size=environment().get("OMNIX_AGENT_DOCKER_TMPFS", "256m"),
         )
 
     def validate(self) -> None:
@@ -117,13 +120,20 @@ class DockerStrongIsolation:
         ]
         container_env = self._container_env(spec, env)
         for key, value in sorted(container_env.items()):
+            if key == RUN_TOKEN_ENVIRONMENT_KEY:
+                # Passed by name: docker reads the value from its own
+                # environment, so the token stays out of the process list.
+                command.extend(["--env", key])
+                continue
             command.extend(["--env", f"{key}={value}"])
         command.extend([str(self.image), *rewritten])
         return command
 
     def launch(self, spec: AgentRunSpec, *, argv: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen[str]:
         command = self.build_command(spec, argv=argv, cwd=cwd, env=env)
-        host_env = {"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")}
+        host_env = {"PATH": environment().get("PATH", ""), "SYSTEMROOT": environment().get("SYSTEMROOT", "")}
+        if RUN_TOKEN_ENVIRONMENT_KEY in env:
+            host_env[RUN_TOKEN_ENVIRONMENT_KEY] = env[RUN_TOKEN_ENVIRONMENT_KEY]
         return _popen(command, cwd=cwd, env=host_env)
 
     @staticmethod
@@ -162,10 +172,10 @@ class DockerStrongIsolation:
             if key.startswith("OMNIX_AGENT_") or key in explicit
         }
         allowed["OMNIX_AGENT_WORKSPACE"] = "/workspace"
-        if os.environ.get("OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL"):
-            allowed["OMNIX_AGENT_MODEL_GATEWAY_URL"] = os.environ["OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL"]
-        if os.environ.get("OMNIX_AGENT_CONTAINER_BROKER_URL"):
-            allowed["OMNIX_AGENT_BROKER_URL"] = os.environ["OMNIX_AGENT_CONTAINER_BROKER_URL"]
+        if environment().get("OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL"):
+            allowed["OMNIX_AGENT_MODEL_GATEWAY_URL"] = environment()["OMNIX_AGENT_CONTAINER_MODEL_GATEWAY_URL"]
+        if environment().get("OMNIX_AGENT_CONTAINER_BROKER_URL"):
+            allowed["OMNIX_AGENT_BROKER_URL"] = environment()["OMNIX_AGENT_CONTAINER_BROKER_URL"]
         return allowed
 
 

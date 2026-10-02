@@ -1,30 +1,55 @@
 from __future__ import annotations
 
+import logging
+
 import base64
+import asyncio
 import io
 import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import uuid
 import wave
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
-from app.shared import VOICE_CLONES_DIR
+from app.config.env import env_bool, env_int, env_str, environment
+from app.config.runtime import DevicePermitSettings
+from app.persistence.database import default_database
+from app.persistence.device_permits import (
+    DevicePermitError,
+    DevicePermitUnavailable,
+    configure_default_device_permit_service,
+    device_permit_slot,
+)
+from app.runtime.model_executor import ModelExecutor
+from app.runtime.paths import VOICE_CLONES_DIR
+from app.runtime.net import bind_host
+from app.security.model_service import ModelServiceMiddleware
 from app.voice_debug import text_fingerprint, voice_debug_log, voice_debug_log_path
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Omnix TTS Service", version="1.0")
+app.add_middleware(ModelServiceMiddleware)
+
+
+# One request synthesizes at most this much text (about 25 minutes of speech);
+# longer work is split by the caller (audiobook render units, live phrases).
+MAX_TTS_TEXT_CHARS = 20_000
 
 
 class TtsGenerateRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
     speaker: str = "default"
     language: str = "en"
     speed: float = 1.0
@@ -34,7 +59,7 @@ class TtsGenerateRequest(BaseModel):
 
 
 class TtsGenerateStreamRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_TTS_TEXT_CHARS)
     speaker: str = "default"
     language: str = "en"
     chunk_size: int = 6
@@ -47,6 +72,9 @@ class TtsGenerateStreamRequest(BaseModel):
     trace_id: str = ""
 
 
+_MAX_VOICE_CLONE_BYTES = 25 * 1024 * 1024
+
+
 class TtsVoiceCloneRequest(BaseModel):
     voice_id: str
     gender: str = "neutral"
@@ -57,6 +85,7 @@ class TtsVoiceCloneRequest(BaseModel):
 _TTS_PROVIDER: Any = None
 _TTS_PROVIDER_ERROR: str = ""
 _TTS_PROVIDER_NAME: str = "qwen3_tts"
+_TTS_MODEL_OWNER_GUARD: Any = None
 
 
 def _provider_payload_ok(details: Dict[str, Any] | None = None) -> Dict[str, Any]:
@@ -78,15 +107,13 @@ def _provider_payload_fail(error: str, details: Dict[str, Any] | None = None) ->
 
 
 def _normalize_bind_host(host: str) -> str:
-    host = str(host or "").strip() or "127.0.0.1"
-    if host in {"0.0.0.0", "::"}:
-        return "127.0.0.1"
-    return host
+    return bind_host(str(host or "").strip() or None)
 
 
 def _can_bind_port(host: str, port: int) -> bool:
     bind_host = _normalize_bind_host(host)
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((bind_host, int(port)))
@@ -147,6 +174,7 @@ def _kill_windows_port_owners(port: int) -> List[int]:
             )
             killed.append(pid)
         except Exception:
+            logger.debug("suppressed error in %s", "_kill_windows_port_owners", exc_info=True)
             continue
     return killed
 
@@ -155,12 +183,12 @@ def _preflight_tts_port(host: str, port: int) -> bool:
     if _can_bind_port(host, port):
         return True
 
-    should_kill = os.environ.get("OMNIX_LAUNCHER_KILL_PORT", "").strip().lower() in {"1", "true", "yes", "on"}
+    should_kill = env_bool("OMNIX_LAUNCHER_KILL_PORT", False)
     if should_kill and os.name == "nt":
         killed = _kill_windows_port_owners(port)
         if killed:
             print(f"[TTS SERVER] stopped stale process(es) on port {port}: {', '.join(map(str, killed))}")
-        wait_timeout_s = float(os.environ.get("OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT", "8") or 8)
+        wait_timeout_s = float(env_str("OMNIX_LAUNCHER_PORT_RELEASE_TIMEOUT", "8") or 8)
         if _wait_for_port_release(host, port, timeout_s=wait_timeout_s):
             return True
         remaining = _windows_port_owner_pids(port)
@@ -190,7 +218,7 @@ def _preflight_tts_port(host: str, port: int) -> bool:
 def _load_qwen3_provider() -> Any:
     """Load the dedicated TTS provider while keeping failures local."""
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
-    from app.shared import load_settings
+    from app.settings.access import load_settings
 
     settings = load_settings() or {}
     provider_settings = dict(settings.get("faster-qwen3-tts") or {})
@@ -220,7 +248,7 @@ def initialize_tts_provider() -> Dict[str, Any]:
             if startup_result:
                 details["startup"] = startup_result
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "initialize_tts_provider", exc_info=True)
         return _provider_payload_ok(details)
     except Exception as exc:
         _TTS_PROVIDER = None
@@ -229,6 +257,39 @@ def initialize_tts_provider() -> Dict[str, Any]:
             _TTS_PROVIDER_ERROR,
             {"traceback": traceback.format_exc(limit=8)},
         )
+
+
+def _claim_tts_model_owner() -> None:
+    global _TTS_MODEL_OWNER_GUARD
+    permit_config = DevicePermitSettings.from_environment(environment())
+    service = configure_default_device_permit_service(
+        default_database(),
+        device_id=permit_config.device_id,
+        capacities={
+            model_class: (capacity, reserved)
+            for model_class, capacity, reserved in permit_config.capacities
+        },
+        lease_seconds=permit_config.lease_seconds,
+        tts_model_owner=permit_config.tts_model_owner,
+    )
+    if _TTS_MODEL_OWNER_GUARD is None:
+        _TTS_MODEL_OWNER_GUARD = service.hold_model_owner(
+            "tts",
+            holder_id=f"tts-server:{os.getpid()}",
+            process_role="tts-server",
+        )
+
+
+def _handle_tts_model_owner_loss(provider: Any, guard: Any) -> None:
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_MODEL_OWNER_GUARD
+    stop = getattr(provider, "stop", None)
+    if callable(stop):
+        stop()
+    if _TTS_PROVIDER is provider:
+        _TTS_PROVIDER = None
+        _TTS_PROVIDER_ERROR = "local TTS model-owner lease was lost"
+    if _TTS_MODEL_OWNER_GUARD is guard:
+        _TTS_MODEL_OWNER_GUARD = None
 
 
 def get_tts_service_status() -> Dict[str, Any]:
@@ -242,7 +303,7 @@ def get_tts_service_status() -> Dict[str, Any]:
             if hasattr(_TTS_PROVIDER, "get_runtime_status"):
                 details["runtime_status"] = _TTS_PROVIDER.get_runtime_status()
         except Exception:
-            pass
+            logger.debug("suppressed error in %s", "get_tts_service_status", exc_info=True)
         return _provider_payload_ok(details)
     return _provider_payload_fail(_TTS_PROVIDER_ERROR or "provider_not_initialized")
 
@@ -314,9 +375,64 @@ def _trace_response(response: Response, trace_id: str) -> Response:
     return response
 
 
+_SYNTHESIS: ModelExecutor | None = None
+
+
+def _synthesis() -> ModelExecutor:
+    """Model calls run on their own pool (WP-7.1); device permits still gate the GPU."""
+    global _SYNTHESIS
+    if _SYNTHESIS is None:
+        _SYNTHESIS = ModelExecutor(
+            "tts-synthesis",
+            env_int("OMNIX_TTS_SYNTHESIS_WORKERS", 8, minimum=1, maximum=64),
+        )
+    return _SYNTHESIS
+
+
+async def _enter_device_permit(permit: Any) -> None:
+    """Acquire without leaking a late grant if the request is cancelled."""
+    acquire_task = asyncio.create_task(asyncio.to_thread(permit.__enter__))
+    try:
+        await asyncio.shield(acquire_task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.shield(acquire_task)
+        except Exception as exc:
+            # No permit was granted, so there is nothing to release.
+            voice_debug_log(
+                "tts",
+                "tts_device_permit_cancelled_acquire_failed",
+                error_type=type(exc).__name__,
+            )
+        else:
+            await asyncio.shield(asyncio.to_thread(permit.__exit__, None, None, None))
+        raise
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
-    status = initialize_tts_provider()
+    global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_MODEL_OWNER_GUARD
+    try:
+        _claim_tts_model_owner()
+        status = initialize_tts_provider()
+        if status.get("ok") and _TTS_MODEL_OWNER_GUARD is not None:
+            provider = _TTS_PROVIDER
+            guard = _TTS_MODEL_OWNER_GUARD
+            if not guard.set_on_lost(
+                lambda: _handle_tts_model_owner_loss(provider, guard)
+            ):
+                status = get_tts_service_status()
+        if not status.get("ok"):
+            guard, _TTS_MODEL_OWNER_GUARD = _TTS_MODEL_OWNER_GUARD, None
+            if guard is not None:
+                guard.close()
+    except Exception as exc:
+        _TTS_PROVIDER = None
+        _TTS_PROVIDER_ERROR = f"{type(exc).__name__}: {exc}"
+        guard, _TTS_MODEL_OWNER_GUARD = _TTS_MODEL_OWNER_GUARD, None
+        if guard is not None:
+            guard.close()
+        status = _provider_payload_fail(_TTS_PROVIDER_ERROR)
     voice_debug_log(
         "tts",
         "tts_service_started",
@@ -333,20 +449,41 @@ async def on_startup() -> None:
         print(f"[TTS SERVER] NOT READY provider={_TTS_PROVIDER_NAME} error={status.get('error')}")
 
 
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    global _TTS_PROVIDER, _TTS_MODEL_OWNER_GUARD, _SYNTHESIS
+    synthesis, _SYNTHESIS = _SYNTHESIS, None
+    if synthesis is not None:
+        synthesis.shutdown()
+    provider, _TTS_PROVIDER = _TTS_PROVIDER, None
+    stop = getattr(provider, "stop", None)
+    if callable(stop):
+        stop()
+    guard, _TTS_MODEL_OWNER_GUARD = _TTS_MODEL_OWNER_GUARD, None
+    if guard is not None:
+        guard.close()
+
+
 @app.get("/health")
-async def health() -> Dict[str, Any]:
+def health() -> Dict[str, Any]:
     status = get_tts_service_status()
     return {
         "ok": status["ok"],
         "provider": status["provider"],
-        "error": status["error"],
+        "error": "" if status["ok"] else "model_unavailable",
         "status": "ready" if status["ok"] else "not_ready",
-        "details": status["details"],
+        "details": {key: status["details"][key] for key in
+                    ("provider_class", "provider_name", "configured_model", "configured_device")
+                    if key in status["details"]},
     }
 
 
 @app.get("/api/tts/speakers")
 async def speakers() -> Dict[str, Any]:
+    return await _synthesis().run(_speakers)
+
+
+def _speakers() -> dict[str, Any]:
     trace_id = _request_trace_id("", "tts-speakers")
     try:
         provider = _require_provider()
@@ -380,16 +517,30 @@ async def speakers() -> Dict[str, Any]:
             trace_id=trace_id,
             error=exc,
         )
-        return {
-            "success": False,
-            "provider": _TTS_PROVIDER_NAME,
-            "speakers": [],
-            "error": str(exc),
-        }
+        raise HTTPException(status_code=503, detail="model_unavailable") from exc
 
 
 @app.post("/api/tts/generate_audio")
-async def generate_audio(request: TtsGenerateRequest):
+async def generate_audio(
+    request: TtsGenerateRequest,
+    accept: Annotated[str | None, Header()] = None,
+):
+    """Synthesise one utterance. ``Accept: audio/wav`` returns the WAV bytes
+    (WP-7.3); otherwise the JSON result carries them base64-encoded."""
+    wants_wav = "audio/wav" in (accept or "").lower()
+    return await _synthesis().run(_generate_audio, request, wants_wav)
+
+
+def _wav_result_response(result: dict[str, Any], trace_id: str) -> Response:
+    encoded = result.get("audio_base64") or result.get("audio") or ""
+    headers = {"X-Omnix-Voice-Trace": trace_id}
+    for header, key in (("X-Omnix-Sample-Rate", "sample_rate"), ("X-Omnix-Duration", "duration")):
+        if result.get(key) is not None:
+            headers[header] = str(result[key])
+    return Response(content=base64.b64decode(encoded), media_type="audio/wav", headers=headers)
+
+
+def _generate_audio(request: TtsGenerateRequest, wants_wav: bool = False):
     trace_id = _request_trace_id(request.trace_id, "tts-audio")
     started_at = time.perf_counter()
     snapshot = _voice_reference_snapshot(request.speaker)
@@ -464,6 +615,8 @@ async def generate_audio(request: TtsGenerateRequest):
                 headers={"X-Omnix-Voice-Trace": trace_id},
             )
 
+        if isinstance(result, dict) and wants_wav:
+            return _wav_result_response(result, trace_id)
         if isinstance(result, dict):
             result = {**result, "trace_id": trace_id}
         return result
@@ -481,7 +634,7 @@ async def generate_audio(request: TtsGenerateRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -491,6 +644,10 @@ async def generate_audio(request: TtsGenerateRequest):
 
 @app.post("/api/tts/generate_stream_audio")
 async def generate_stream_audio(request: TtsGenerateStreamRequest):
+    return await _synthesis().run(_generate_stream_audio, request)
+
+
+def _generate_stream_audio(request: TtsGenerateStreamRequest):
     trace_id = _request_trace_id(request.trace_id, "tts-stream")
     started_at = time.perf_counter()
     snapshot = _voice_reference_snapshot(request.speaker)
@@ -579,8 +736,7 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
-                "traceback": traceback.format_exc(limit=12),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -588,8 +744,132 @@ async def generate_stream_audio(request: TtsGenerateStreamRequest):
         )
 
 
+@app.post("/api/tts/live-call/stream")
+async def generate_live_call_stream(request: TtsGenerateStreamRequest):
+    """Stream little-endian PCM16 while holding admission through disconnect."""
+    trace_id = _request_trace_id(request.trace_id, "tts-live-stream")
+    provider = _require_provider()
+    if not hasattr(provider, "generate_audio_stream"):
+        return JSONResponse(
+            {"success": False, "error": "provider_missing_generate_audio_stream", "trace_id": trace_id},
+            status_code=503,
+            headers={"X-Omnix-Voice-Trace": trace_id},
+        )
+
+    permit = device_permit_slot("tts", priority="realtime", timeout_seconds=1.0)
+    try:
+        await _enter_device_permit(permit)
+    except DevicePermitUnavailable:
+        return JSONResponse(
+            {"success": False, "error": "tts_capacity_saturated", "trace_id": trace_id},
+            status_code=429,
+            headers={"Retry-After": "1", "X-Omnix-Voice-Trace": trace_id},
+        )
+    except DevicePermitError:
+        return JSONResponse(
+            {"success": False, "error": "tts_admission_unavailable", "trace_id": trace_id},
+            status_code=503,
+            headers={"X-Omnix-Voice-Trace": trace_id},
+        )
+
+    try:
+        stream = provider.generate_audio_stream(
+            text=request.text,
+            speaker=request.speaker,
+            language=request.language,
+            chunk_size=request.chunk_size,
+            temperature=request.temperature,
+            top_k=request.top_k,
+            top_p=request.top_p,
+            repetition_penalty=request.repetition_penalty,
+            append_silence=request.append_silence,
+            max_new_tokens=request.max_new_tokens,
+            voice_trace_id=trace_id,
+            _device_permit_held=True,
+        )
+    except Exception:
+        await asyncio.to_thread(permit.__exit__, None, None, None)
+        return JSONResponse(
+            {"success": False, "error": "tts_provider_unavailable", "trace_id": trace_id},
+            status_code=503,
+            headers={"X-Omnix-Voice-Trace": trace_id},
+        )
+
+    release_lock = threading.Lock()
+    permit_released = False
+
+    def release_device_permit() -> None:
+        nonlocal permit_released
+        with release_lock:
+            if permit_released:
+                return
+            permit_released = True
+        permit.__exit__(None, None, None)
+
+    finalization_lock = threading.Lock()
+    stream_finalized = False
+
+    def finalize_stream() -> None:
+        nonlocal stream_finalized
+        with finalization_lock:
+            if stream_finalized:
+                return
+            stream_finalized = True
+        try:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                close()
+        finally:
+            release_device_permit()
+
+    def pcm_chunks():
+        try:
+            for audio_chunk, _sample_rate, _timing in stream:
+                if audio_chunk is None:
+                    continue
+                import numpy as np
+
+                pcm = np.asarray(audio_chunk, dtype=np.float32).reshape(-1)
+                yield (np.clip(pcm, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+        finally:
+            finalize_stream()
+
+    return StreamingResponse(
+        pcm_chunks(),
+        media_type="application/x-omnix-pcm16",
+        headers={
+            "X-Omnix-Audio-Format": "pcm_s16le",
+            "X-Omnix-Sample-Rate": str(getattr(provider, "sample_rate", 24_000)),
+            "X-Omnix-Channels": "1",
+            "X-Omnix-Voice-Trace": trace_id,
+        },
+        background=BackgroundTask(finalize_stream),
+    )
+
+
 @app.post("/api/tts/voice_clone")
-async def voice_clone(request: TtsVoiceCloneRequest):
+async def voice_clone(
+    voice_id: Annotated[str, Form()],
+    file: Annotated[UploadFile, File()],
+    gender: Annotated[str, Form()] = "neutral",
+    language: Annotated[str, Form()] = "en",
+    ref_text: Annotated[str, Form()] = "",
+):
+    """Multipart upload: the reference audio plus its fields (WP-7.3).
+
+    The gateway client always sent multipart; the endpoint used to expect a
+    JSON body without the audio, so cloning over HTTP could not succeed.
+    """
+    audio = await file.read(_MAX_VOICE_CLONE_BYTES + 1)
+    if len(audio) > _MAX_VOICE_CLONE_BYTES:
+        raise HTTPException(status_code=413, detail="reference_audio_too_large")
+    if not audio:
+        raise HTTPException(status_code=422, detail="reference_audio_required")
+    request = TtsVoiceCloneRequest(voice_id=voice_id, gender=gender, language=language, ref_text=ref_text)
+    return await _synthesis().run(_voice_clone, request, audio)
+
+
+def _voice_clone(request: TtsVoiceCloneRequest, audio_data: bytes):
     trace_id = _request_trace_id("", "tts-clone")
     voice_debug_log(
         "tts",
@@ -611,9 +891,8 @@ async def voice_clone(request: TtsVoiceCloneRequest):
 
         result = provider.voice_clone(
             voice_id=request.voice_id,
-            gender=request.gender,
-            language=request.language,
-            ref_text=request.ref_text,
+            audio_data=audio_data,
+            ref_text=request.ref_text or None,
         )
         voice_debug_log(
             "tts",
@@ -624,6 +903,11 @@ async def voice_clone(request: TtsVoiceCloneRequest):
             error=result.get("error") if isinstance(result, dict) else None,
             **_voice_reference_snapshot(request.voice_id),
         )
+        if isinstance(result, dict) and not result.get("success", False):
+            return JSONResponse(
+                {"success": False, "error": str(result.get("error") or "voice_clone_failed"), "trace_id": trace_id},
+                status_code=503,
+            )
         return result
     except Exception as exc:
         voice_debug_log(
@@ -637,7 +921,7 @@ async def voice_clone(request: TtsVoiceCloneRequest):
             {
                 "success": False,
                 "provider": _TTS_PROVIDER_NAME,
-                "error": str(exc),
+                "error": "model_service_error",
                 "trace_id": trace_id,
             },
             status_code=500,
@@ -647,8 +931,11 @@ async def voice_clone(request: TtsVoiceCloneRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    host = os.environ.get("OMNIX_TTS_HOST", "127.0.0.1")
-    port = int(os.environ.get("OMNIX_TTS_PORT", "5101"))
+    from app.observability.logging import configure_logging
+
+    configure_logging()
+    host = bind_host()
+    port = env_int("OMNIX_TTS_PORT", 5101, minimum=1, maximum=65535)
     if not _preflight_tts_port(host, port):
         sys.exit(1)
     uvicorn.run(app, host=host, port=port)

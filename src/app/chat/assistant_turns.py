@@ -1,8 +1,9 @@
 """Authoritative lifecycle coordination for streamed assistant turns."""
 from __future__ import annotations
 
+import logging
+
 import json
-import os
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -11,7 +12,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.runtime_paths import resources_data_root
+from app.config.env import env_str
+
+from app.runtime.paths import resources_data_root
+
+logger = logging.getLogger(__name__)
 
 AssistantLifecycle = Literal[
     "created",
@@ -48,7 +53,7 @@ def _utcnow() -> str:
 
 
 def default_assistant_turn_store_path() -> Path:
-    override = os.environ.get("OMNIX_ASSISTANT_TURN_STORE_PATH")
+    override = env_str("OMNIX_ASSISTANT_TURN_STORE_PATH", "")
     return Path(override) if override else resources_data_root() / "assistant_turns.json"
 
 
@@ -106,6 +111,43 @@ class AssistantTurnCoordinator:
                 user_message_id=user_message_id,
                 user_turn_id=user_turn_id,
                 speech_segment_id=speech_segment_id,
+            )
+            self._records[record.assistant_turn_id] = record
+            self._save()
+            return record.model_copy(deep=True)
+
+    def start_streaming(
+        self,
+        *,
+        session_id: str,
+        user_message_id: str,
+        user_turn_id: str,
+        speech_segment_id: str | None = None,
+    ) -> AssistantTurnRecord:
+        """Persist a directly streamed turn as running in its initial write."""
+        with self._lock:
+            existing = self.find_by_user_turn(session_id, user_turn_id)
+            if existing is not None:
+                record = self._records[existing.assistant_turn_id]
+                if record.terminal:
+                    return record.model_copy(deep=True)
+                if (
+                    record.lifecycle != "streaming"
+                    or record.provider_execution != "running"
+                ):
+                    record.lifecycle = "streaming"
+                    record.provider_execution = "running"
+                    record.updated_at = _utcnow()
+                    self._save()
+                return record.model_copy(deep=True)
+            record = AssistantTurnRecord(
+                assistant_turn_id=f"assistant-turn:{uuid.uuid4().hex}",
+                session_id=session_id,
+                user_message_id=user_message_id,
+                user_turn_id=user_turn_id,
+                speech_segment_id=speech_segment_id,
+                lifecycle="streaming",
+                provider_execution="running",
             )
             self._records[record.assistant_turn_id] = record
             self._save()
@@ -273,6 +315,7 @@ class AssistantTurnCoordinator:
             try:
                 record = AssistantTurnRecord.model_validate(item)
             except Exception:
+                logger.debug("suppressed error in %s", "AssistantTurnCoordinator._load", exc_info=True)
                 continue
             records[record.assistant_turn_id] = record
         return records
@@ -291,16 +334,26 @@ _default_coordinator: AssistantTurnCoordinator | None = None
 _default_lock = threading.Lock()
 
 
-def default_assistant_turn_coordinator() -> AssistantTurnCoordinator:
+def default_assistant_turn_coordinator(database=None) -> AssistantTurnCoordinator:
+    """Return a coordinator bound to the caller's durable database authority."""
     global _default_coordinator
+    if database is not None:
+        with _default_lock:
+            coordinator = getattr(database, "_assistant_turn_coordinator", None)
+            if coordinator is None:
+                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+
+                coordinator = PostgresAssistantTurnCoordinator(database=database)
+                database._assistant_turn_coordinator = coordinator
+            return coordinator
     if _default_coordinator is not None:
         return _default_coordinator
     with _default_lock:
         if _default_coordinator is None:
             from app.persistence.runtime import uses_postgresql_runtime
             if uses_postgresql_runtime():
-                from app.persistence.runtime_document_compat import postgres_assistant_turn_coordinator_class
-                _default_coordinator = postgres_assistant_turn_coordinator_class()()
+                from app.chat.persistence.assistant_turn_store import PostgresAssistantTurnCoordinator
+                _default_coordinator = PostgresAssistantTurnCoordinator()
             else:
                 _default_coordinator = AssistantTurnCoordinator()
     return _default_coordinator

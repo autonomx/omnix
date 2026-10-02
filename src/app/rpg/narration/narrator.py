@@ -176,8 +176,8 @@ Narrative:"""
             return sentences[0]
             
         result = sentences[0]
-        for sentence in sentences[1:]:
-            result += f" {self._transition()}{sentence[0].lower()}{sentence[1:]}"
+        for index, sentence in enumerate(sentences[1:]):
+            result += f" {self._transition(index)}{sentence[0].lower()}{sentence[1:]}"
             
         return result
     
@@ -322,15 +322,16 @@ Narrative:"""
         else:
             return str(event)
     
-    def _transition(self) -> str:
+    def _transition(self, sub_index: int = 0) -> str:
         """Get a narrative transition word.
         
         Returns:
             Transition string for joining sentences.
         """
-        import random
+        from app.rpg.core.determinism import rng_for_current_turn
+
         transitions = ["Then, ", "Meanwhile, ", "Suddenly, ", "Moments later, ", ""]
-        return random.choice(transitions)
+        return rng_for_current_turn("text:narrator_transition", sub_index).choice(transitions)
     
     def narrate_turn(
         self,

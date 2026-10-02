@@ -5,6 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+from app.live_voice import diagnostics as live_voice_stream_diagnostics
 
 
 class EmptyJobStore:
@@ -12,8 +13,29 @@ class EmptyJobStore:
         return []
 
 
+def test_delivery_checkpoint_is_persisted_through_injected_chat_port(monkeypatch) -> None:
+    details = {
+        "assistant_turn_id": "turn:one",
+        "generated_phrase_count": 2,
+        "audio_delivered_phrase_count": 1,
+    }
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        live_voice_stream_diagnostics,
+        "_DELIVERY_CHECKPOINT_RECORDER",
+        None,
+    )
+    live_voice_stream_diagnostics.configure_delivery_checkpoint_recorder(
+        lambda value: recorded.append(dict(value))
+    )
+
+    live_voice_stream_diagnostics.persist_delivery_checkpoint(details)
+
+    assert recorded == [details]
+
+
 def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -> None:
-    from app.gateway import live_voice_diagnostics_routes
+    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     records: list[tuple[str, str, str, dict[str, Any]]] = []
     monkeypatch.setattr(
@@ -27,7 +49,11 @@ def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -
         lambda: "/tmp/live-call-streaming.log",
     )
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        base_url="http://localhost",
+        headers={"x-omnix-client": "test"},
+    )
 
     response = client.post(
         "/api/tts/live-call/diagnostics",
@@ -77,7 +103,7 @@ def test_live_voice_diagnostics_route_persists_correlated_batches(monkeypatch) -
 
 
 def test_live_voice_diagnostics_status_returns_log_path(monkeypatch) -> None:
-    from app.gateway import live_voice_diagnostics_routes
+    from app.live_voice.transport import diagnostics_routes as live_voice_diagnostics_routes
 
     monkeypatch.setattr(
         live_voice_diagnostics_routes,
@@ -85,9 +111,12 @@ def test_live_voice_diagnostics_status_returns_log_path(monkeypatch) -> None:
         lambda: "/tmp/live-call-streaming.log",
     )
     app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://localhost")
 
     response = client.get("/api/tts/live-call/diagnostics/status")
 
     assert response.status_code == 200
-    assert response.json() == {"ready": True, "log_path": "/tmp/live-call-streaming.log"}
+    payload = response.json()
+    assert payload["ready"] is True
+    assert payload["log_path"] == "/tmp/live-call-streaming.log"
+    assert set(payload["capacity"]) == {"active", "available", "maximum", "saturated"}

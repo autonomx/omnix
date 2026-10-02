@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import re
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 _MAX_DIRECT_BEATS = 12
 _MAX_THREADS = 32
@@ -11,7 +11,7 @@ _DEFAULT_FOCUS_TIMEOUT_TICKS = 8
 _GENERIC_NPC_IDS = {"", "npc", "npc:npc", "npc:unknown", "unknown"}
 
 
-def _d(value: Any) -> Dict[str, Any]:
+def _d(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
 
 
@@ -43,8 +43,8 @@ def _dedupe(values: Iterable[Any]) -> list[str]:
     return result
 
 
-def _npc_rows(source: Mapping[str, Any]) -> list[Dict[str, Any]]:
-    rows: list[Dict[str, Any]] = []
+def _npc_rows(source: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     for key in ("npc_index", "npcs", "known_npcs", "nearby_npcs", "characters", "actor_states", "npc_states", "actors"):
         value = source.get(key)
         if isinstance(value, Mapping):
@@ -60,8 +60,8 @@ def _npc_rows(source: Mapping[str, Any]) -> list[Dict[str, Any]]:
     return rows
 
 
-def _npc_catalog(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any]) -> Dict[str, Dict[str, str]]:
-    catalog: Dict[str, Dict[str, str]] = {}
+def _npc_catalog(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any]) -> dict[str, dict[str, str]]:
+    catalog: dict[str, dict[str, str]] = {}
     for source in (simulation_state, runtime_state):
         for row in _npc_rows(source):
             npc_id = _s(row.get("id") or row.get("npc_id") or row.get("actor_id"))
@@ -72,8 +72,8 @@ def _npc_catalog(simulation_state: Mapping[str, Any], runtime_state: Mapping[str
     return catalog
 
 
-def _alias_map(catalog: Mapping[str, Mapping[str, str]]) -> Dict[str, str]:
-    aliases: Dict[str, str] = {}
+def _alias_map(catalog: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
+    aliases: dict[str, str] = {}
     for npc_id, row in catalog.items():
         for value in (npc_id, npc_id.replace("npc:", ""), row.get("name")):
             alias = _norm(value)
@@ -120,7 +120,7 @@ def _scene_id(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, A
     return _s(scene.get("scene_id") or scene.get("id"))
 
 
-def _thread_state(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any]) -> Dict[str, Any]:
+def _thread_state(simulation_state: Mapping[str, Any], runtime_state: Mapping[str, Any]) -> dict[str, Any]:
     return _d(
         _d(simulation_state).get("conversation_thread_state")
         or _d(runtime_state).get("conversation_thread_state")
@@ -131,7 +131,7 @@ def _thread_id(thread: Mapping[str, Any]) -> str:
     return _s(thread.get("thread_id") or thread.get("id"))
 
 
-def _thread_beats(thread: Mapping[str, Any]) -> list[Dict[str, Any]]:
+def _thread_beats(thread: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [_d(row) for row in _l(thread.get("beats")) if isinstance(row, Mapping)]
 
 
@@ -168,8 +168,8 @@ def _thread_is_fresh(thread: Mapping[str, Any], tick: int, timeout_ticks: int) -
     return not updated_tick or tick - updated_tick <= timeout_ticks
 
 
-def _exact_turns(thread: Mapping[str, Any]) -> list[Dict[str, Any]]:
-    turns: list[Dict[str, Any]] = []
+def _exact_turns(thread: Mapping[str, Any]) -> list[dict[str, Any]]:
+    turns: list[dict[str, Any]] = []
     for beat in _thread_beats(thread)[-_MAX_DIRECT_BEATS:]:
         speaker_id = _s(beat.get("speaker_id"))
         target_id = _s(beat.get("target_id") or beat.get("listener_id"))
@@ -192,7 +192,7 @@ def _exact_turns(thread: Mapping[str, Any]) -> list[Dict[str, Any]]:
     return turns
 
 
-def _latest_directed_npc_beat(thread: Mapping[str, Any]) -> Dict[str, Any]:
+def _latest_directed_npc_beat(thread: Mapping[str, Any]) -> dict[str, Any]:
     for beat in reversed(_thread_beats(thread)):
         speaker_id = _s(beat.get("speaker_id"))
         target_id = _s(beat.get("target_id") or beat.get("listener_id"))
@@ -206,7 +206,7 @@ def _thread_resolution_candidates(
     *,
     catalog: Mapping[str, Mapping[str, str]],
     present: set[str],
-) -> tuple[list[str], Dict[str, Any]]:
+) -> tuple[list[str], dict[str, Any]]:
     explicit = _canonical_npc_id(
         thread.get("default_target_id")
         or thread.get("active_target_id")
@@ -232,7 +232,7 @@ def _thread_resolution_candidates(
     return candidates, latest_directed
 
 
-def _active_threads(state: Mapping[str, Any], *, location_id: str, tick: int, timeout_ticks: int) -> list[Dict[str, Any]]:
+def _active_threads(state: Mapping[str, Any], *, location_id: str, tick: int, timeout_ticks: int) -> list[dict[str, Any]]:
     threads = {_thread_id(row): _d(row) for row in _l(state.get("threads")) if _thread_id(_d(row))}
     ordered_ids = _dedupe(
         [
@@ -241,7 +241,7 @@ def _active_threads(state: Mapping[str, Any], *, location_id: str, tick: int, ti
             *reversed(_l(state.get("active_thread_ids"))),
         ]
     )
-    selected: list[Dict[str, Any]] = []
+    selected: list[dict[str, Any]] = []
     for thread_id in ordered_ids:
         thread = threads.get(thread_id)
         if not thread or not _is_player_thread(thread):
@@ -281,7 +281,7 @@ def _resolution(
     confidence: float = 0.0,
     ambiguous: bool = False,
     location_id: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     thread = _d(thread)
     reply_to_beat = _d(reply_to_beat)
     candidate_ids = _dedupe(candidates)
@@ -315,7 +315,7 @@ def resolve_dialogue_target(
     simulation_state: Mapping[str, Any],
     runtime_state: Mapping[str, Any],
     candidate_action: Mapping[str, Any] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Resolve a durable target without interpreting arbitrary utterance meaning."""
 
     sim = _d(simulation_state)
@@ -416,7 +416,7 @@ def resolve_dialogue_target(
     )
 
 
-def _result_resolution(result: Mapping[str, Any]) -> Dict[str, Any]:
+def _result_resolution(result: Mapping[str, Any]) -> dict[str, Any]:
     resolved = _d(result.get("resolved_result") or result.get("result"))
     direct = _d(result.get("dialogue_resolution") or resolved.get("dialogue_resolution"))
     if direct:
@@ -460,7 +460,7 @@ def _resolved_target(result: Mapping[str, Any], catalog: Mapping[str, Mapping[st
     return target_id, target_name
 
 
-def _ensure_state(session: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+def _ensure_state(session: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     simulation_state = _d(session.get("simulation_state"))
     runtime_state = _d(session.get("runtime_state"))
     state = _d(simulation_state.get("conversation_thread_state"))
@@ -476,7 +476,7 @@ def _ensure_state(session: Dict[str, Any]) -> tuple[Dict[str, Any], Dict[str, An
     return simulation_state, runtime_state, state
 
 
-def _append_beat(thread: Dict[str, Any], beat: Dict[str, Any]) -> None:
+def _append_beat(thread: dict[str, Any], beat: dict[str, Any]) -> None:
     beats = [_d(row) for row in _l(thread.get("beats"))]
     beat_id = _s(beat.get("beat_id"))
     if beat_id and any(_s(row.get("beat_id")) == beat_id for row in beats):
@@ -487,13 +487,13 @@ def _append_beat(thread: Dict[str, Any], beat: Dict[str, Any]) -> None:
 
 def record_direct_dialogue_exchange(
     *,
-    session: Dict[str, Any],
+    session: dict[str, Any],
     player_input: str,
-    result: Dict[str, Any],
+    result: dict[str, Any],
     tick: int = 0,
     turn_id: str = "",
     persist: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Record the exact directed exchange and persist its derived focus."""
 
     if not isinstance(session, dict) or not isinstance(result, dict) or result.get("ok") is not True:
@@ -643,9 +643,9 @@ def record_direct_dialogue_exchange(
     persist_error = ""
     if persist:
         try:
-            from app.rpg.session import runtime as canonical_runtime
+            from app.rpg.session.session_runtime_store import save_runtime_session
 
-            canonical_runtime.save_runtime_session(session)
+            save_runtime_session(session)
             persisted = True
         except Exception as exc:  # pragma: no cover - persistence is best effort here
             persist_error = f"{type(exc).__name__}: {exc}"

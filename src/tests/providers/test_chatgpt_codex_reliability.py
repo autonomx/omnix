@@ -5,7 +5,6 @@ import time
 import pytest
 
 from app.providers import ChatGPTCodexProvider, ChatMessage, ProviderConfig
-from app.providers import codex_reliability as reliability
 
 
 def _provider() -> ChatGPTCodexProvider:
@@ -26,22 +25,26 @@ def _provider() -> ChatGPTCodexProvider:
 def _install_fake_transport(monkeypatch, provider, events, captured_turns):
     monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
     monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-1")
-
-    def fake_request(_self, method, params, *args, **kwargs):
-        del args, kwargs
-        if method == "turn/start":
-            captured_turns.append(dict(params))
-            return {"turn": {"id": "turn-1"}}
-        return {}
-
     iterator = iter(events)
+    replies = []
 
-    def fake_next_event(_self, _timeout, *args, **kwargs):
-        del args, kwargs
+    def fake_write_message(payload):
+        if payload.get("method") == "turn/start":
+            captured_turns.append(dict(payload["params"]))
+            replies.append(
+                {
+                    "id": payload["id"],
+                    "result": {"turn": {"id": "turn-1"}},
+                }
+            )
+
+    def fake_next_message(_timeout):
+        if replies:
+            return replies.pop(0)
         return next(iterator)
 
-    monkeypatch.setattr(reliability, "_ORIGINAL_REQUEST", fake_request)
-    monkeypatch.setattr(reliability, "_ORIGINAL_NEXT_EVENT", fake_next_event)
+    monkeypatch.setattr(provider, "_write_message", fake_write_message)
+    monkeypatch.setattr(provider, "_next_message", fake_next_message)
 
 
 def test_retryable_codex_error_notification_does_not_abort_turn(monkeypatch):
@@ -174,6 +177,56 @@ def test_json_schema_is_sent_as_native_turn_output_schema(monkeypatch):
         provider.close()
 
     assert response.content == '{"decision":"hold"}'
+    assert captured_turns[0]["outputSchema"] == schema
+
+
+def test_streaming_json_schema_is_sent_as_native_turn_output_schema(monkeypatch):
+    provider = _provider()
+    captured_turns = []
+    schema = {
+        "type": "object",
+        "properties": {"decision": {"type": "string"}},
+        "required": ["decision"],
+        "additionalProperties": False,
+    }
+    _install_fake_transport(
+        monkeypatch,
+        provider,
+        [
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "delta": '{"decision":"hold"}',
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": {"id": "turn-1"},
+                },
+            },
+        ],
+        captured_turns,
+    )
+    try:
+        chunks = list(
+            provider.chat_completion(
+                [ChatMessage(role="user", content="Choose")],
+                stream=True,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "decision", "schema": schema},
+                },
+            )
+        )
+    finally:
+        provider._process = None
+        provider.close()
+
+    assert "".join(chunk.content for chunk in chunks) == '{"decision":"hold"}'
     assert captured_turns[0]["outputSchema"] == schema
 
 

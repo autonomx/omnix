@@ -4,14 +4,15 @@ import threading
 import time
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+from types import SimpleNamespace
 
-from app.gateway import live_voice_speculative_tts as speculative_tts
-from app.gateway.live_voice_execution_lane import (
+from app.live_voice.speech import speculative_tts
+from app.live_voice.speech.tts_lane import (
     reset_live_voice_execution_lane_for_tests,
 )
-from app.gateway.live_voice_speculative_tts import (
+from app.live_voice.speech.speculative_tts import (
     _accept_entry,
     _claim_entry,
     _LiveLaneProviderProxy,
@@ -21,7 +22,7 @@ from app.gateway.live_voice_speculative_tts import (
     register_live_voice_execution_lane_routes,
     speculative_tts_cache_snapshot,
 )
-from app.gateway.tts_stream_contract import TtsStreamRequest
+from app.conversation.tts_stream_contract import TtsStreamRequest
 
 
 class _BlockingProvider:
@@ -363,8 +364,10 @@ def test_prefetch_route_uses_warmed_provider_and_reports_hot_path_timing(monkeyp
         "stream_log",
         lambda _stream_id, _source, event, **fields: logs.append((event, fields)),
     )
+    router = APIRouter()
+    register_live_voice_execution_lane_routes(router, SimpleNamespace())
     app = FastAPI()
-    register_live_voice_execution_lane_routes(app)
+    app.include_router(router)
 
     try:
         response = TestClient(app).post(
@@ -398,8 +401,10 @@ def test_execution_lane_status_reports_dedicated_configuration(monkeypatch) -> N
     monkeypatch.setenv("OMNIX_LIVE_VOICE_MODEL_ID", "qwen-live-fast")
     monkeypatch.setenv("OMNIX_LIVE_TTS_DEDICATED", "true")
     monkeypatch.setenv("OMNIX_LIVE_TTS_PROVIDER_NAME", "faster-qwen3-tts")
+    router = APIRouter()
+    register_live_voice_execution_lane_routes(router, SimpleNamespace())
     app = FastAPI()
-    register_live_voice_execution_lane_routes(app)
+    app.include_router(router)
 
     response = TestClient(app).get("/api/live/voice/execution-lane")
 

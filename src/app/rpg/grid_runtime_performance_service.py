@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .grid_runtime_performance import (
@@ -28,7 +28,7 @@ def profile_campaign_grid_runtime(
     budget: GridRuntimeBudget | None = None,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         stored_instance = work.map_instances.get_instance(context, map_instance_id)
         if stored_instance is None:

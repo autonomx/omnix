@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from datetime import datetime, time, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from .catalyst_discovery import discover_yahoo_catalyst_headlines
 from .catalyst_repository import TradingCatalystRepository
@@ -19,9 +18,9 @@ from .strategy_evaluability import assess_session_evaluability
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_CLOSE_ET = time(16, 0)
 
 

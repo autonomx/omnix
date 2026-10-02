@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .models import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.runtime.pagination import bounded_count
 
 
 class MemoryConflictError(RuntimeError):
@@ -88,7 +89,7 @@ class InMemoryMemoryRepository:
             ]
             values.sort(key=lambda item: (not item.pinned, item.updated_at, item.id))
             start = max(0, int(offset))
-            return deepcopy(values[start : start + max(0, min(int(limit), 500))])
+            return deepcopy(values[start : start + bounded_count(limit, maximum=10_000)])
 
     def update_record(self, record: MemoryRecord, *, expected_revision: int) -> MemoryRecord:
         with self._state.lock:
@@ -148,11 +149,12 @@ class InMemoryMemoryRepository:
             value = self._state.candidates.get(candidate_id)
             return deepcopy(value) if value is not None else None
 
-    def list_candidates(self, *, status: str = "pending", limit: int = 100) -> list[MemoryCandidate]:
+    def list_candidates(self, *, status: str = "pending", limit: int = 100, offset: int = 0) -> list[MemoryCandidate]:
         with self._state.lock:
             values = [item for item in self._state.candidates.values() if item.status == status]
             values.sort(key=lambda item: (item.created_at, item.id))
-            return deepcopy(values[: max(0, min(int(limit), 500))])
+            start = max(0, int(offset))
+            return deepcopy(values[start : start + bounded_count(limit, maximum=10_000)])
 
     def reject_candidate(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
         return self._resolve_candidate(candidate_id, "rejected", resolved_at)

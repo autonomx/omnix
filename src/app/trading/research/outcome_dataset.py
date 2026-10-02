@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 import hashlib
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from .contracts import ResearchOutcome, StrategyResearchFeatures, fingerprint
+
+logger = logging.getLogger(__name__)
 
 
 def research_context_as_of(
@@ -243,6 +247,7 @@ def _decimal(value: Any) -> Decimal | None:
     try:
         return None if value is None else Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 

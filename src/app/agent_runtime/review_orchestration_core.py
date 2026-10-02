@@ -6,6 +6,9 @@ execution/recovery semantics shared without creating a service import cycle.
 """
 from __future__ import annotations
 
+from .event_queries import events_of_types
+from .exception_logging import log_recovered_exception
+
 import hashlib
 import json
 import re
@@ -38,6 +41,29 @@ from .review_runtime import (
     results_by_slot,
 )
 from .subagents import ChildRunRequest, default_reviewer_limits, derive_child_spec
+from app.prompts import prompt_template
+
+
+REVIEW_PROMPT_WITH_CONTEXT_TEMPLATE = prompt_template(
+    'agent_runtime.review_orchestration_core.review_prompt_with_context', "1",
+    (
+        '\n'
+        '\n'
+        'REVIEW PROTOCOL V2:\n'
+        'Pass A — blind correctness: call the Omnix Run Change Set tool, inspect that '
+        'authoritative run-owned subject plus changed source, callers/contracts, and raw '
+        'validation evidence first. Form your own correctness judgment before using '
+        'implementation planning claims. Do not infer correctness from an approved plan or from '
+        'prior agent conclusions.\n'
+        'Pass B — coverage reconciliation: after the blind pass, compare your independent '
+        'understanding against the following durable planning/evidence artifacts. Treat them as '
+        'implementation-produced claims that may be incomplete or wrong; use them to find missed '
+        'impact, not to anchor approval.\n'
+        'UNTRUSTED_PLANNING_CONTEXT_JSON={planning_context}\n'
+        'Return the same single structured JSON verdict required above.'
+    ),
+)
+
 
 _REVIEW_MARKER = re.compile(r"REVIEW_SNAPSHOT_ID=([a-f0-9]+)")
 _REVIEW_SLOT_MARKER = re.compile(r"REVIEW_SLOT=(\d+)")
@@ -140,16 +166,7 @@ def _review_prompt_with_context(
     )
     return (
         base
-        + "\n\nREVIEW PROTOCOL V2:\n"
-        "Pass A — blind correctness: call the Omnix Run Change Set tool, inspect that authoritative run-owned "
-        "subject plus changed source, callers/contracts, and raw "
-        "validation evidence first. Form your own correctness judgment before using implementation planning "
-        "claims. Do not infer correctness from an approved plan or from prior agent conclusions.\n"
-        "Pass B — coverage reconciliation: after the blind pass, compare your independent understanding against "
-        "the following durable planning/evidence artifacts. Treat them as implementation-produced claims that may "
-        "be incomplete or wrong; use them to find missed impact, not to anchor approval.\n"
-        f"UNTRUSTED_PLANNING_CONTEXT_JSON={planning_context}\n"
-        "Return the same single structured JSON verdict required above."
+        + REVIEW_PROMPT_WITH_CONTEXT_TEMPLATE.format(planning_context=planning_context)
     )
 
 
@@ -187,11 +204,9 @@ def launch_reviewer_children(
     required = max(1, int(count))
     while True:
         launch: tuple[AgentRunSpec, AgentRunSnapshot] | None = None
-        with service._lock:
-            from app.persistence.unit_of_work import unit_of_work
-
-            with unit_of_work(service.database) as work:
-                repository = PostgresAgentRunRepository(work.connection, service.context)
+        with service._run_lock(parent_run_id):
+            with service.unit_of_work(service.database) as work:
+                repository = service.repository_factory(work.connection, service.context)
                 locked = work.connection.execute(
                     """
                     SELECT run_id
@@ -212,7 +227,7 @@ def launch_reviewer_children(
                 ):
                     work.rollback()
                     return
-                quality = PostgresCodingQualityRepository(work.connection, service.context)
+                quality = service.quality_repository_factory(work.connection, service.context)
                 snapshot = quality.get_review_snapshot(parent_run_id, snapshot_id)
                 revision = service._current_revision(repository, parent_run_id)
                 stage = quality.get_stage(parent_run_id) or {}
@@ -344,7 +359,8 @@ def launch_reviewer_children(
                     if existing.status not in _TERMINAL and service.runtime.get_status(existing.run_id) is None:
                         try:
                             service.runtime.start(existing.spec)
-                        except Exception:
+                        except Exception as exc:
+                            log_recovered_exception("reviewer runtime rehydration", exc)
                             pass
                     continue
 
@@ -487,8 +503,7 @@ def consume_terminal_reviewer_in_repository(
     if attempt.status != "running":
         return None
 
-    events = repository.list_events(child.run_id, after_sequence=0, limit=5000)
-    text = latest_reviewer_text(events)
+    text = latest_reviewer_text(events_of_types(repository, child.run_id, {"model.message"}))
     result: ReviewResult | None = None
     if child.status != "completed":
         finished = finish_runtime_failed_attempt(attempt, child)
@@ -601,10 +616,10 @@ def reconcile_review_progress_in_repository(
     service: Any,
     repository: PostgresAgentRunRepository,
     parent_run_id: str,
-) -> tuple[str, str, int] | None:
+) -> tuple[str, str, int] | tuple[str, int] | None:
     """Consume terminal attempts and advance one review-stage parent.
 
-    Returns a launch action when retry/missing reviewer slots need execution.
+    Returns an action when a reviewer retry or acceptance job needs execution.
     Runtime/protocol failure never invokes implementation repair.
     """
 
@@ -616,7 +631,7 @@ def reconcile_review_progress_in_repository(
         or not service._quality_enabled(parent.spec)
     ):
         return None
-    quality = PostgresCodingQualityRepository(repository.connection, service.context)
+    quality = service.quality_repository_factory(repository.connection, service.context)
     stage = quality.get_stage(parent_run_id)
     if stage is None or str(stage.get("stage") or "") != "reviewing":
         return None
@@ -647,7 +662,7 @@ def reconcile_review_progress_in_repository(
             and review_snapshot_id_from_child(child) == snapshot.snapshot_id
             and child.status in _TERMINAL
         ):
-            consume_terminal_reviewer_in_repository(
+            service.terminal_reviewer_consumer(
                 service,
                 repository,
                 child,
@@ -743,8 +758,7 @@ def reconcile_review_progress_in_repository(
                 status="running",
                 worker_id=service.worker_id,
             )
-        service._finalize_acceptance(repository, latest)
-        return None
+        return ("promote_acceptance", latest.revision)
 
     # Only a *valid structured substantive verdict* reaches this repair path.
     # Reviewer runtime/protocol failures have already been handled above.

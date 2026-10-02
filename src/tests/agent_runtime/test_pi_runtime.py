@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from collections import deque
 from io import StringIO
 from pathlib import Path
 import threading
 
-from app.agent_runtime.contracts import AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
+from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.pi_runtime import PiAgentRuntime, PiRpcSession, normalize_pi_event, pi_rpc_argv
 from app.agent_runtime.pi_runtime_core import _assistant_text_delta
 
@@ -520,6 +521,50 @@ def test_pi_session_without_workspace_uses_and_cleans_ephemeral_cwd(tmp_path: Pa
     assert not cwd.exists()
 
 
+def test_pi_session_uses_injected_argv_builder_and_event_normalizer() -> None:
+    captured: dict[str, object] = {}
+    normalized = threading.Event()
+    process = _IdleProcess()
+    process.stdout = StringIO('{"type":"agent_start"}\n')
+
+    def argv_builder(spec, *, pi_path):
+        captured["argv_spec"] = spec
+        captured["pi_path"] = pi_path
+        return [pi_path, "injected"]
+
+    def event_normalizer(run_id, payload, *, task_revision_id=None):
+        captured["payload"] = payload
+        captured["task_revision_id"] = task_revision_id
+        normalized.set()
+        return AgentEvent(run_id=run_id, event_type="run.started")
+
+    def process_factory(argv, **_kwargs):
+        captured["argv"] = argv
+        return process
+
+    spec = AgentRunSpec(
+        run_id="run-injected-pi",
+        task="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    session = PiRpcSession(
+        spec,
+        pi_path="custom-pi",
+        process_factory=process_factory,
+        argv_builder=argv_builder,
+        event_normalizer=event_normalizer,
+    )
+
+    assert normalized.wait(timeout=1)
+    assert captured["argv_spec"] is spec
+    assert captured["pi_path"] == "custom-pi"
+    assert captured["argv"] == ["custom-pi", "injected"]
+    assert captured["payload"] == {"type": "agent_start"}
+    assert captured["task_revision_id"] is None
+    assert session.events()[0].event_type == "run.started"
+    session.close()
+
+
 def test_pi_session_emits_failure_when_process_exits_without_terminal_event() -> None:
     received = []
     done = threading.Event()
@@ -557,6 +602,7 @@ def test_pi_stdout_reader_survives_event_sink_failure() -> None:
     session.process = type("Process", (), {"stdout": StringIO('{"type":"agent_start"}\n')})()
     session._task_revision_id = None
     session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
     session._terminal_seen = False
     session._turn_active = False
     session._assistant_text_parts = []
@@ -586,6 +632,7 @@ def test_pi_stdout_reader_recovers_terminal_text_from_deltas() -> None:
     session.process = type("Process", (), {"stdout": StringIO("\n".join(lines) + "\n")})()
     session._task_revision_id = "revision-1"
     session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
     session._events = deque()
     session._stderr = deque(maxlen=10)
     session._assistant_text_parts = []
@@ -749,3 +796,61 @@ def test_coding_prompt_treats_listed_governed_capabilities_as_already_issued() -
     assert "capabilities listed under `Issued governed external capabilities` are already issued" in prompt
     assert "invoke it through `omnix_capability`" in prompt
 
+
+
+def test_pi_session_launches_with_the_issued_run_token() -> None:
+    """The run token reaches Pi through its environment only (WP-4.6)."""
+    captured: dict[str, object] = {}
+
+    def factory(argv, **kwargs):
+        captured["argv"] = argv
+        captured["env"] = kwargs["env"]
+        return _IdleProcess()
+
+    spec = AgentRunSpec(
+        run_id="run-token",
+        task="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=None,
+    )
+    session = PiRpcSession(
+        spec, pi_path="pi", process_factory=factory, run_token_issuer=lambda issued: f"token-for-{issued.run_id}",
+    )
+    try:
+        assert captured["env"]["OMNIX_AGENT_RUN_TOKEN"] == "token-for-run-token"
+        assert "token-for-run-token" not in " ".join(captured["argv"])
+    finally:
+        session.close()
+
+
+def test_token_deltas_are_sampled_not_each_persisted():
+    session = PiRpcSession.__new__(PiRpcSession)
+    session.spec = type("Spec", (), {"run_id": "agent-run:deltas"})()
+    deltas = [f"word{index} " for index in range(200)]
+    lines = ['{"type":"turn_start"}']
+    lines += [
+        json.dumps({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": delta}})
+        for delta in deltas
+    ]
+    lines.append('{"type":"agent_settled"}')
+    session.process = type("Process", (), {"stdout": StringIO("\n".join(lines) + "\n")})()
+    session._task_revision_id = "revision-1"
+    session._tool_revision_ids = {}
+    session._event_normalizer = normalize_pi_event
+    session._events = deque()
+    session._stderr = deque(maxlen=10)
+    session._assistant_text_parts = []
+    session._terminal_assistant_text_emitted = False
+    session._turn_active = False
+    session._terminal_seen = False
+    session.on_event = None
+
+    session._read_stdout()
+
+    updates = [
+        event for event in session._events
+        if event.event_type == "model.message" and event.payload.get("phase") == "message_update"
+    ]
+    assert len(updates) == 1  # 200 deltas arrive within a second
+    recovered = next(event for event in session._events if event.payload.get("recovered_from_text_deltas"))
+    assert recovered.payload["text"] == "".join(deltas).strip()

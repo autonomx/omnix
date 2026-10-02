@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.conversation.contracts import AssistantContextItem
 from app.research import ResearchMode, normalize_research_mode
 from app.research.compatibility import (
     LEGACY_RESEARCH_FIELDS,
@@ -29,14 +30,6 @@ class LiveConversationRepairContext(BaseModel):
     instruction: str = Field(min_length=1, max_length=280)
     source_reason: str = Field(min_length=1, max_length=120)
     confidence: float = Field(default=1.0, ge=0, le=1)
-
-
-class AssistantContextItem(BaseModel):
-    source_id: Literal["web_search", "desktop_vision", "live_repair"]
-    title: str
-    content: str
-    url: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AssistantContextChatRequest(BaseModel):

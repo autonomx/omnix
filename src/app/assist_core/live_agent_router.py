@@ -1,6 +1,8 @@
 """Deterministic, feature-gated routing between live chat and Live Agent."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import re
 from typing import Literal
@@ -176,7 +178,7 @@ def _is_live_voice_turn(user_turn_id: str | None, speech_segment_id: str | None)
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
@@ -184,7 +186,7 @@ def _flag(name: str, default: bool = False) -> bool:
 
 def _float(name: str, default: float, minimum: float, maximum: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)))
+        value = float(environment().get(name, str(default)))
     except ValueError:
         return default
     return max(minimum, min(maximum, value))

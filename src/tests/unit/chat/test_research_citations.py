@@ -1,5 +1,9 @@
 from app.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
 from app.chat.research_citations import validate_completed_research_reply
+import pytest
+
+# Uses the PostgreSQL-backed runtime; runs in the test-postgres job.
+pytestmark = pytest.mark.postgres
 
 
 def test_completed_quick_reply_persists_validation_and_manifest(tmp_path) -> None:
@@ -19,7 +23,7 @@ def test_completed_quick_reply_persists_validation_and_manifest(tmp_path) -> Non
     )
     session.messages.extend((user, assistant))
     session.message_count = len(session.messages)
-    store._save_sessions([session])  # noqa: SLF001 - persistence fixture
+    store._save_session(session)  # noqa: SLF001 - persistence fixture
 
     context_items = [
         {

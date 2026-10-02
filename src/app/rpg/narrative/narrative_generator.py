@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
+from app.rpg.core.determinism import rng_for_current_turn
 from .narrative_event import NarrativeEvent
 
 # Style prompts for different narrative moods
@@ -404,15 +405,17 @@ Narrative:"""
         Returns:
             Joined paragraph with transitions.
         """
-        import random
         transitions = [" Then,", " Meanwhile,", " Suddenly,", " And yet,", ""]
         
         if len(sentences) <= 1:
             return " ".join(sentences)
         
         result = sentences[0]
-        for sentence in sentences[1:]:
-            transition = random.choice(transitions)
+        for index, sentence in enumerate(sentences[1:]):
+            transition = rng_for_current_turn(
+                "text:narrative_sentence_transition",
+                index,
+            ).choice(transitions)
             first_lower = sentence[0].lower() + sentence[1:]
             result += f"{transition}{first_lower}"
         

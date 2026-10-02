@@ -5,7 +5,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
-from app.gateway.tts_live_call_startup_frame_policy import (
+from app.live_voice.speech.startup_frame_policy import (
     TTS_LIVE_CALL_STARTUP_FRAME_SAMPLES,
 )
 
@@ -32,8 +32,20 @@ class FakeTtsProvider:
 
 
 class EmptyJobStore:
+    def list_jobs(self, limit: int | None = None):
+        return []
+
     def list_events(self, after_id: int, limit: int):
         return []
+
+
+def _app():
+    from app.chat import InMemoryChatSessionStore
+
+    return create_gateway_app(
+        chat_store_factory=InMemoryChatSessionStore,
+        job_store_factory=EmptyJobStore,
+    )
 
 
 def _item_request(output_id: str, generation_epoch: int, output_order: int) -> dict[str, Any]:
@@ -62,20 +74,30 @@ def _item_request(output_id: str, generation_epoch: int, output_order: int) -> d
 
 
 def test_item_cancellation_preserves_unrelated_persistent_tts_output(monkeypatch) -> None:
-    from app.gateway import tts_live_call_websocket
+    from app.live_voice.transport import websocket as tts_live_call_websocket
 
     provider = FakeTtsProvider()
-    monkeypatch.setattr(tts_live_call_websocket, "get_tts_provider", lambda: provider)
     monkeypatch.setattr(tts_live_call_websocket, "diagnostics_log_path", lambda: "/tmp/live-acceptance.log")
     monkeypatch.setattr(tts_live_call_websocket, "stream_log", lambda *args, **kwargs: None)
     monkeypatch.setattr(tts_live_call_websocket, "begin_stream", lambda *args, **kwargs: 1)
     monkeypatch.setattr(tts_live_call_websocket, "end_stream", lambda *args, **kwargs: 0)
+    app = _app()
+    monkeypatch.setattr(
+        app.state.live_voice_tts_provider_resolver,
+        "get",
+        lambda provider_name=None: provider,
+    )
     client = TestClient(
-        create_gateway_app(job_store_factory=lambda: EmptyJobStore()),
+        app,
         raise_server_exceptions=False,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
     )
 
-    with client.websocket_connect("/api/tts/live-call/websocket") as websocket:
+    with client.websocket_connect(
+        "/api/tts/live-call/websocket",
+        headers={"Host": "127.0.0.1"},
+    ) as websocket:
         websocket.send_json(
             {
                 "type": "cancel",
@@ -121,13 +143,18 @@ def test_item_cancellation_preserves_unrelated_persistent_tts_output(monkeypatch
 
 
 def test_material_reconnect_is_ordered_idempotent_and_rejects_gaps() -> None:
-    from app.gateway.live_material_context import live_material_store
+    from app.chat.live_material_context import live_material_store
 
     session_id = "full-duplex-reconnect-acceptance"
     live_material_store.clear(session_id)
-    app = create_gateway_app(job_store_factory=lambda: EmptyJobStore())
+    app = _app()
 
-    with TestClient(app, raise_server_exceptions=False) as first_client:
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+        raise_server_exceptions=False,
+    ) as first_client:
         first = first_client.post(
             f"/api/chat/sessions/{session_id}/live/material",
             json={
@@ -143,7 +170,12 @@ def test_material_reconnect_is_ordered_idempotent_and_rejects_gaps() -> None:
         assert first.json()["accepted_sequence"] == 0
         assert first.json()["context_version"] == 1
 
-    with TestClient(app, raise_server_exceptions=False) as reconnected_client:
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        headers={"X-Omnix-Client": "test"},
+        raise_server_exceptions=False,
+    ) as reconnected_client:
         second_payload = {
             "segment_id": "segment-1",
             "sequence": 1,

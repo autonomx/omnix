@@ -4,6 +4,7 @@ Vendored Qwen3-TTS model loader with caching.
 This is the only module that imports directly from the vendored TTS package.
 All other code should use this loader interface.
 """
+from app.config.env import env_str as _env_str
 # Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
 import os
 import platform
@@ -64,8 +65,8 @@ def _find_env_model_override(model_name: str) -> Optional[Path]:
       - OMNIX_QWEN3_TTS_MODEL_DIR
     """
     candidates = [
-        os.environ.get("OMNIX_TTS_MODEL_DIR", "").strip(),
-        os.environ.get("OMNIX_QWEN3_TTS_MODEL_DIR", "").strip(),
+        _env_str("OMNIX_TTS_MODEL_DIR", "").strip(),
+        _env_str("OMNIX_QWEN3_TTS_MODEL_DIR", "").strip(),
     ]
     for raw in candidates:
         if not raw:

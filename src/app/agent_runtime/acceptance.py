@@ -1,6 +1,8 @@
 """Omnix-authoritative acceptance checks for agent completion."""
 from __future__ import annotations
 
+from .exception_logging import log_recovered_exception
+
 from pathlib import Path
 import re
 import shlex
@@ -375,9 +377,10 @@ def _authoritative_diff_text(
                 forbidden_paths=list(spec.workspace.forbidden_paths),
             )
             return authority.git_diff(modified_paths if modified_paths else None)
-        except Exception:
+        except Exception as exc:
             # Runtime-created diff artifacts are produced from the authoritative
             # workspace and retain a bounded preview for acceptance fallback.
+            log_recovered_exception("acceptance diff artifact fallback", exc, level="DEBUG")
             pass
     previews = [
         str(item.metadata.get("preview") or "")

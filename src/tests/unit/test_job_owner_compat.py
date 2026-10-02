@@ -1,5 +1,5 @@
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.jobs.rpg_turn_job_guard import _normalize_durable_job_owner
+from app.rpg.jobs.turn_job_guard import rpg_turn_submission_policy
 
 
 def test_character_job_owner_maps_to_local_user_and_preserves_subject() -> None:
@@ -11,7 +11,7 @@ def test_character_job_owner_maps_to_local_user_and_preserves_subject() -> None:
         compat={"character_id": "anaka"},
     )
 
-    normalized = _normalize_durable_job_owner(request)
+    normalized = rpg_turn_submission_policy(request)
 
     assert normalized.owner_id == "user:local"
     assert normalized.compat == {
@@ -30,4 +30,7 @@ def test_user_job_owner_remains_unchanged() -> None:
         resource_class=ResourceClass.GPU_IMAGE,
     )
 
-    assert _normalize_durable_job_owner(request) is request
+    normalized = rpg_turn_submission_policy(request)
+
+    assert normalized.owner_id == request.owner_id
+    assert normalized.compat == request.compat

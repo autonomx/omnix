@@ -6,7 +6,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from .models import (
+from app.memory_contracts import (
     MemoryCandidate,
     MemoryCandidateStatus,
     MemoryCategory,
@@ -387,11 +387,8 @@ class MemoryService:
 def _default_legacy_write_guard() -> None:
     """Block direct default-service v1 writes after production v2 cutover."""
 
-    try:
-        from app.persistence.runtime_install import runtime_adapters_installed
-    except ImportError:
-        return
-    if not runtime_adapters_installed():
+    from app.persistence.runtime import uses_postgresql_runtime
+    if not uses_postgresql_runtime():
         return
     from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
 

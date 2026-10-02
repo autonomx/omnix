@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from app.persistence.tenant import TenantContext, local_tenant_context
+from app.security.tenant_context import RequestTenant, TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .strategy_repository import StrategyEvent
@@ -26,6 +26,7 @@ class SolanaAIStrategyRepository:
     those tables validate a GapPullbackConfig and require a paper-account parent,
     neither of which belongs to this research-only crypto strategy.
     """
+    context = RequestTenant()
 
     def __init__(
         self,
@@ -33,7 +34,7 @@ class SolanaAIStrategyRepository:
         context: TenantContext | None = None,
         uow_factory=unit_of_work,
     ) -> None:
-        self.context = context or local_tenant_context()
+        self.context = context
         self.uow_factory = uow_factory
 
     def _upsert_strategy(self, connection, *, enabled: bool) -> None:

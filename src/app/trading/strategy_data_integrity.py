@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from datetime import time
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
 from .gapper_dataset import GapperUniverseSnapshot
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
-_ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 FINVIZ_ATOMIC_FIRST_PAGE_MAX = 20
 FINVIZ_ATOMIC_FIRST_PAGE_TAG = "omnix-atomic-first-page-v1"

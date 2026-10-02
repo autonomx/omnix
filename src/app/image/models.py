@@ -32,6 +32,10 @@ class ImageGenerationResponse:
     error: str = ""
     asset_url: str = ""
     local_path: str = ""
+    # Shared blob-store copy, for gateways that cannot read the image
+    # service's local disk (multi-host deployments with S3 storage).
+    blob_key: str = ""
+    checksum_sha256: str = ""
     seed: Optional[int] = None
     width: Optional[int] = None
     height: Optional[int] = None

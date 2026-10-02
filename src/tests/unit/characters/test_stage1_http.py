@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 import pytest
 
-from app.characters.stage1_http import HttpStage1Gateway, TTS_PCM_WEBSOCKET_PATH
-from app.characters.stage1_preflight import Stage1PrepareConfig
+from tests.rehearsal.characters.stage1_http import HttpStage1Gateway, TTS_PCM_WEBSOCKET_PATH
+from tests.rehearsal.characters.stage1_preflight import Stage1PrepareConfig
 
 
 class FakeWebsocket:
@@ -32,6 +31,11 @@ class FakeWebsocket:
 
 def test_stage1_defaults_to_launcher_gateway() -> None:
     assert Stage1PrepareConfig().base_url == "http://127.0.0.1:8000"
+
+
+def test_rehearsal_http_session_sends_client_header() -> None:
+    gateway = HttpStage1Gateway("http://127.0.0.1:8000")
+    assert gateway.session.headers["X-Omnix-Client"] == "rehearsal"
 
 
 def test_websocket_url_uses_gateway_origin_and_scheme() -> None:

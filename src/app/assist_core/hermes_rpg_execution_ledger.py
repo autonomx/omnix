@@ -2,10 +2,22 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import time
+import uuid
 from typing import Any
 
-_LEDGER: list[dict[str, Any]] = []
+_LEDGER: list[tuple[float, dict[str, Any]]] = []
 _MAX_LEDGER_ITEMS = 200
+_LEDGER_TTL_SECONDS = 24 * 60 * 60
+
+
+def _ledger_now() -> float:
+    return time.monotonic()
+
+
+def _prune_ledger(now: float) -> None:
+    while _LEDGER and _LEDGER[0][0] <= now:
+        _LEDGER.pop(0)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -29,6 +41,8 @@ def hermes_rpg_execution_ledger_record(
     flow: dict[str, Any],
     readout: dict[str, Any],
 ) -> dict[str, Any]:
+    now = _ledger_now()
+    _prune_ledger(now)
     user_step = _mapping(payload.get("user_step"))
     replay_entry = _mapping(payload.get("replay_entry"))
     context = _mapping(payload.get("context"))
@@ -47,7 +61,7 @@ def hermes_rpg_execution_ledger_record(
     entry = {
         "ok": flow.get("ok") is True,
         "source": "hermes_rpg_execution_ledger",
-        "execution_id": f"hermes-rpg-{len(_LEDGER) + 1}",
+        "execution_id": f"hermes-rpg-{uuid.uuid4().hex}",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "session_id": session_id,
         "context_hash": context_hash,
@@ -64,17 +78,18 @@ def hermes_rpg_execution_ledger_record(
         "result_summary": _text(rpg_result.get("narration")) or _text(rpg_result.get("summary")) or _text(readout.get("status")),
         "error": readout.get("error") or flow_error,
     }
-    _LEDGER.append(entry)
+    _LEDGER.append((now + _LEDGER_TTL_SECONDS, entry))
     if len(_LEDGER) > _MAX_LEDGER_ITEMS:
         del _LEDGER[:-_MAX_LEDGER_ITEMS]
     return deepcopy(entry)
 
 
 def hermes_rpg_execution_ledger_recent(limit: int = 20, *, session_id: str | None = None, sequence_id: str | None = None) -> dict[str, Any]:
+    _prune_ledger(_ledger_now())
     safe_limit = min(max(int(limit or 20), 1), _MAX_LEDGER_ITEMS)
     filtered = [
         item
-        for item in _LEDGER
+        for _expires_at, item in _LEDGER
         if (not session_id or item.get("session_id") == session_id)
         and (not sequence_id or item.get("sequence_id") == sequence_id)
     ]

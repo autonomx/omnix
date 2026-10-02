@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Sequence
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
@@ -197,15 +197,16 @@ def _active_world_topic_progresses(
     if not run_id:
         return []
     try:
-        context = bootstrap_local_tenant(database)
+        context = current_tenant()
         with unit_of_work(database) as work:
             progresses = [
                 _record(job.get("progress"))
-                for job in work.jobs.list_jobs(context, limit=500)
-                if _text(job.get("job_type")) == WORLD_TOPIC_JOB_TYPE
-                and _text(_record(job.get("metadata")).get("run_id")) == run_id
-                and _text(job.get("status"))
-                in {"leased", "running", "cancel_requested"}
+                for job in work.jobs.iter_jobs(
+                    context,
+                    job_types=(WORLD_TOPIC_JOB_TYPE,),
+                    statuses=("leased", "running", "cancel_requested"),
+                )
+                if _text(_record(job.get("metadata")).get("run_id")) == run_id
             ]
             work.rollback()
         return progresses
@@ -336,7 +337,7 @@ def _image_section_status(
 ) -> tuple[str, int]:
     """Summarize the durable image targets shown on the Images page."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         rows = work.connection.execute(
             "SELECT status, COUNT(*) FROM omnix_rpg_world_image_targets "
@@ -739,7 +740,7 @@ def update_world_metadata(
     changes: Mapping[str, Any],
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         current_revision = int(world["draft_revision"])

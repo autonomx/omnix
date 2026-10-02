@@ -28,7 +28,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.assistant_memory.models import MemoryRecord
+from app.memory_contracts import MemoryRecord
 from app.assistant_memory_v2 import (
     AffectObservation,
     Episode,

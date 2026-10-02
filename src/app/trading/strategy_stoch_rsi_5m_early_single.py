@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
@@ -24,10 +23,10 @@ from .strategy_stoch_rsi_5m import (
     evaluate_stoch_rsi_5m,
 )
 from .strategy_timeframes import resample_final_bars
+from app.trading.us_equity_calendar import EASTERN as _ET
 
 
 PRE_ENTRY_RANGE_CAP_PCT = Decimal("150")
-_ET = ZoneInfo("America/New_York")
 
 
 def _completed_pre_entry_bars(

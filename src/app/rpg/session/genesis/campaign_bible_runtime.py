@@ -1,9 +1,13 @@
 """Load the authoritative Campaign Bible for turn-time narrative grounding."""
 from __future__ import annotations
 
+import logging
+
 from typing import Any, Mapping
 
 from app.rpg.narrative_engine import CampaignBibleSnapshot
+
+logger = logging.getLogger(__name__)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -56,11 +60,11 @@ def _portable_snapshot(
 
 def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
     try:
-        from app.persistence.tenant import local_tenant_context
+        from app.security.tenant_context import current_tenant
         from app.persistence.unit_of_work import unit_of_work
 
         with unit_of_work() as work:
-            record = work.campaign_bibles.get(local_tenant_context(), campaign_id)
+            record = work.campaign_bibles.get(current_tenant(), campaign_id)
             work.rollback()
         if record is not None:
             snapshot = CampaignBibleSnapshot.from_record(record)
@@ -74,6 +78,7 @@ def _postgres_snapshot(campaign_id: str) -> CampaignBibleSnapshot | None:
                 completeness=snapshot.completeness,
             )
     except Exception:
+        logger.debug("suppressed error in %s", "_postgres_snapshot", exc_info=True)
         return None
     return None
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
+from app.chat import CreateChatSessionRequest
+
 from types import SimpleNamespace
 
-from app import shared
+from app.providers import service as provider_service
 from app.chat import ChatMessage, ChatSession, ChatSessionStore
 from app.chat.context_budget import PromptBudget
 from app.chat.prompt_assembly import PromptMemoryItem, build_prompt_assembly
@@ -27,7 +31,7 @@ def session_with_history() -> ChatSession:
 
 
 def test_memory_disabled_prompt_matches_legacy_payload(monkeypatch):
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     session = session_with_history()
     current = ChatMessage(id="msg:current", role="user", content="Current question", created_at=NOW)
     context = [
@@ -85,6 +89,7 @@ def test_approved_memory_and_external_context_keep_distinct_trust_sections():
     assert "Use the rpg branch." not in user_message.content
 
 
+@pytest.mark.postgres
 def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch, tmp_path):
     class RecordingProvider:
         def __init__(self):
@@ -97,12 +102,12 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
             return SimpleNamespace(content="Regular answer.", model=model, usage={})
 
     provider = RecordingProvider()
-    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
-    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    monkeypatch.setattr(provider_service, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(provider_service, "get_global_system_prompt", lambda: "System prompt")
     context = [{"source_id": "desktop", "title": "Desktop", "content": "A window is open."}]
 
     regular = ChatSessionStore(tmp_path / "regular.json")
-    regular_session = regular.create_session(SimpleNamespace(
+    regular_session = regular.create_session(CreateChatSessionRequest(
         title="New chat",
         provider_id="llm:lmstudio",
         model_id="llm:lmstudio:test-model",
@@ -118,7 +123,7 @@ def test_streaming_and_non_streaming_use_identical_serialized_prompt(monkeypatch
     )
 
     streaming = ChatSessionStore(tmp_path / "streaming.json")
-    streaming_session = streaming.create_session(SimpleNamespace(
+    streaming_session = streaming.create_session(CreateChatSessionRequest(
         title="New chat",
         provider_id="llm:lmstudio",
         model_id="llm:lmstudio:test-model",

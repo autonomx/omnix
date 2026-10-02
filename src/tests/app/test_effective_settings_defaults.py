@@ -4,6 +4,13 @@ from copy import deepcopy
 
 from app.chat.models import CreateChatSessionRequest
 from app.jobs.models import CreateJobRequest, ResourceClass
+from app.jobs.handlers import registry_from_features
+from app.runtime.feature_catalog import load_feature
+
+
+def _registered_submission(feature_id: str, request: CreateJobRequest) -> CreateJobRequest:
+    registry = registry_from_features((load_feature(feature_id),))
+    return registry.validate_submission(request)
 
 
 def _settings() -> dict:
@@ -100,7 +107,7 @@ def _install(monkeypatch) -> None:
     import app.platform.effective_defaults as defaults
 
     settings = _settings()
-    monkeypatch.setattr(defaults, "load_settings", lambda: deepcopy(settings))
+    monkeypatch.setattr(defaults, "load_settings", lambda **_kwargs: deepcopy(settings))
 
 
 def test_new_chat_uses_central_route_personality_and_voice(monkeypatch) -> None:
@@ -140,7 +147,7 @@ def test_chat_session_falls_back_to_selected_provider_model(monkeypatch) -> None
     }
     import app.platform.effective_defaults as defaults
 
-    monkeypatch.setattr(defaults, "load_settings", lambda: deepcopy(settings))
+    monkeypatch.setattr(defaults, "load_settings", lambda **_kwargs: deepcopy(settings))
 
     request = CreateChatSessionRequest(title="Codex default")
 
@@ -151,30 +158,30 @@ def test_chat_session_falls_back_to_selected_provider_model(monkeypatch) -> None
 def test_storyteller_job_uses_task_route_and_central_creative_defaults(monkeypatch) -> None:
     _install(monkeypatch)
 
-    request = CreateJobRequest(
+    request = _registered_submission("story", CreateJobRequest(
         module="storyteller",
         type="story.generate",
         resource_class=ResourceClass.GPU_LLM,
         input_payload={
+            "premise": "A detective discovers a hidden city.",
             "provider_id": None,
             "model_id": None,
             "tone": "Cozy",
             "writing_style": "Lyrical & Descriptive",
         },
-    )
+    ))
 
-    assert request.input_payload == {
-        "provider_id": "openrouter",
-        "model_id": "story-override",
-        "tone": "Noir",
-        "writing_style": "Sparse",
-    }
+    assert request.input_payload["provider_id"] == "openrouter"
+    assert request.input_payload["model_id"] == "story-override"
+    assert request.input_payload["tone"] == "Noir"
+    assert request.input_payload["writing_style"] == "Sparse"
+    assert request.input_payload["premise"] == "A detective discovers a hidden city."
 
 
 def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypatch) -> None:
     _install(monkeypatch)
 
-    podcast = CreateJobRequest(
+    podcast = _registered_submission("voice", CreateJobRequest(
         module="podcast",
         type="tts.multi_speaker_synthesize",
         resource_class=ResourceClass.GPU_TTS,
@@ -187,7 +194,7 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
             "output_settings": {"stability": 0.72, "similarity": 0.78},
             "audio_effects": ["Compression", "De-esser"],
         },
-    )
+    ))
     assert podcast.input_payload["format"] == "interview"
     assert podcast.input_payload["duration_minutes"] == 30
     assert podcast.input_payload["tone"] == "Conversational"
@@ -195,23 +202,23 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
     assert podcast.input_payload["output_settings"] == {"stability": 0.6, "similarity": 0.7}
     assert podcast.input_payload["audio_effects"] == ["Compression"]
 
-    voice = CreateJobRequest(
+    voice = _registered_submission("voice", CreateJobRequest(
         module="voice",
         type="tts.synthesize",
         resource_class=ResourceClass.GPU_TTS,
         input_payload={"text": "bonjour"},
-    )
+    ))
     assert voice.input_payload["provider_id"] == "faster-qwen3-tts"
     assert voice.input_payload["language"] == "French"
     assert voice.input_payload["output_settings"]["speed"] == 1.2
     assert voice.input_payload["audio_effects"] == ["De-esser"]
 
-    cloning = CreateJobRequest(
+    cloning = _registered_submission("voice", CreateJobRequest(
         module="voice-cloning",
         type="voice-cloning.create-profile",
         resource_class=ResourceClass.GPU_TTS,
         input_payload={"profile_name": "Maya"},
-    )
+    ))
     assert cloning.input_payload == {
         "profile_name": "Maya",
         "provider_id": "clone-provider",
@@ -219,12 +226,14 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
         "quality": "Studio",
     }
 
-    stt = CreateJobRequest(
+    from app.voice.feature import voice_submission_defaults
+
+    stt = voice_submission_defaults(CreateJobRequest(
         module="stt",
         type="stt.transcribe",
         resource_class=ResourceClass.GPU_STT,
         input_payload={},
-    )
+    ))
     assert stt.input_payload == {
         "provider_id": "parakeet",
         "language": "fr",
@@ -232,23 +241,23 @@ def test_podcast_voice_cloning_stt_and_image_jobs_adopt_field_defaults(monkeypat
         "save_transcript": False,
     }
 
-    image = CreateJobRequest(
+    image = _registered_submission("image", CreateJobRequest(
         module="image-generation",
         type="image.generate",
         resource_class=ResourceClass.GPU_IMAGE,
         input_payload={"prompt": "mountains"},
-    )
+    ))
     assert image.input_payload["provider_id"] == "image:flux_klein"
     assert image.input_payload["width"] == 1024
     assert image.input_payload["height"] == 640
     assert image.input_payload["unload_after_generation"] is False
 
-    avatar = CreateJobRequest(
+    avatar = _registered_submission("image", CreateJobRequest(
         module="character-avatar",
         type="image.generate",
         resource_class=ResourceClass.GPU_IMAGE,
         input_payload={"prompt": "front-facing portrait"},
-    )
+    ))
     assert avatar.input_payload["provider_id"] == "image:flux_klein"
     assert avatar.input_payload["width"] == 1024
     assert avatar.input_payload["height"] == 640

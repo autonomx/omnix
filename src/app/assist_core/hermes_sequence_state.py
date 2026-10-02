@@ -6,10 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:
-    from app import shared
-except Exception:  # pragma: no cover - import fallback for isolated helper tests
-    shared = None  # type: ignore[assignment]
+from app.runtime.paths import resources_data_root
 
 SOURCE = "hermes_sequence_state_store"
 STATE_VERSION = "hermes_sequence_state_v1"
@@ -33,8 +30,7 @@ def _list(value: Any) -> list[Any]:
 
 
 def _default_store_path() -> Path:
-    base = Path(getattr(shared, "DATA_DIR", "resources/data")) if shared else Path("resources/data")
-    return base / "hermes_rpg_sequences.json"
+    return resources_data_root() / "hermes_rpg_sequences.json"
 
 
 def _read_store(path: Path) -> list[dict[str, Any]]:

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from array import array
 from types import SimpleNamespace
+
+from fastapi import FastAPI, WebSocket
+from fastapi.testclient import TestClient
 
 from app.providers.live_stt_contracts import (
     CAP_AUTHORITATIVE_EOU,
@@ -361,3 +365,51 @@ def test_live_stt_circuit_breaker_opens_immediately_for_non_transient_failure() 
     breaker = LiveSttCircuitBreaker()
 
     breaker.record_failure(transient=False)
+
+
+def _binary_frame(header: dict, pcm: bytes) -> bytes:
+    encoded = json.dumps(header).encode("utf-8")
+    return len(encoded).to_bytes(4, "little") + encoded + pcm
+
+
+def test_binary_audio_frames_and_json_messages_read_the_same_way() -> None:
+    import base64
+
+    from app.providers.live_stt_contracts import audio_message_pcm, receive_client_message
+
+    received: list[dict] = []
+    app = FastAPI()
+
+    @app.websocket("/stt")
+    async def stt(websocket: WebSocket) -> None:
+        await websocket.accept()
+        for _ in range(3):
+            try:
+                message = await receive_client_message(websocket)
+            except ValueError as exc:
+                await websocket.send_json({"error": str(exc)})
+                continue
+            received.append(message)
+            await websocket.send_json({"pcm": audio_message_pcm(message).hex()})
+
+    pcm = b"\x01\x00\xff\x7f"
+    with TestClient(app).websocket_connect("/stt") as socket:
+        socket.send_bytes(_binary_frame({"segmentId": "s1", "sampleStart": 0}, pcm))
+        assert socket.receive_json() == {"pcm": pcm.hex()}
+        socket.send_json({"type": "audio", "segmentId": "s1", "data": base64.b64encode(pcm).decode()})
+        assert socket.receive_json() == {"pcm": pcm.hex()}
+        socket.send_bytes(b"\xff\xff\xff\xff{}")
+        assert "malformed" in socket.receive_json()["error"]
+
+    assert received[0]["type"] == "audio"
+    assert received[0]["segmentId"] == "s1"
+    assert received[1]["segmentId"] == "s1"
+
+
+def test_live_stt_servers_advertise_binary_audio_frames() -> None:
+    from app.providers.live_stt_contracts import CAP_BINARY_AUDIO_FRAMES
+    from app.providers.nemotron_eou_live_websocket import HYBRID_NEGOTIATION
+    from app.providers.stt_live_websocket import PARAKEET_NEGOTIATION
+
+    assert CAP_BINARY_AUDIO_FRAMES in PARAKEET_NEGOTIATION.capabilities
+    assert CAP_BINARY_AUDIO_FRAMES in HYBRID_NEGOTIATION.capabilities

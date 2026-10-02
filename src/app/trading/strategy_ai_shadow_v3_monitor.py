@@ -6,19 +6,20 @@ monkey patches. It is SHADOW-only and has no paper/order repository dependency.
 
 from __future__ import annotations
 
+import logging
+from app.config.env import env_str as _env_str
+
 import asyncio
 import hashlib
-import os
 import time as monotonic_time
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
-from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker
+from app.runtime.features import FeatureContext
 
-from fastapi import FastAPI
 
 from .execution_observation_plane import (
     ExecutionObservationPlane,
@@ -60,9 +61,11 @@ from .trigger_plan import (
     evaluate_armed_trigger,
     transition_trigger_plan,
 )
+from app.trading.us_equity_calendar import EASTERN as _ET
+
+logger = logging.getLogger(__name__)
 
 
-_ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_v3_monitor"
 _EVENT_TYPES = (
     "ai_v3_decision",
@@ -76,18 +79,18 @@ _LAST_ENTRY_ET = time(15, 30)
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return _env_str(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ai_shadow_v3_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if _env_str("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_AI_SHADOW_V3_MONITOR_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_AI_SHADOW_V3_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_AI_SHADOW_V3_INTERVAL_SECONDS", "15"))
+        value = float(_env_str("OMNIX_TRADING_AI_SHADOW_V3_INTERVAL_SECONDS", "15"))
     except ValueError:
         value = 15.0
     return max(5.0, value)
@@ -115,6 +118,7 @@ def _decimal(value: object) -> Decimal | None:
     try:
         return Decimal(str(value))
     except Exception:
+        logger.debug("suppressed error in %s", "_decimal", exc_info=True)
         return None
 
 
@@ -824,7 +828,7 @@ class TradingAIShadowV3Monitor:
             try:
                 provider, model = analyzer.identity()
             except Exception:
-                pass
+                logger.debug("suppressed error in %s", "TradingAIShadowV3Monitor._run_config", exc_info=True)
         self.reliability.scheduled(provider, model, len(prepared))
         self.reliability.attempt(provider, model)
         started = monotonic_time.monotonic()
@@ -1099,14 +1103,13 @@ class TradingAIShadowV3Monitor:
                 await task
 
 
-def register_trading_ai_shadow_v3_monitor(
-    gateway: FastAPI,
-) -> TradingAIShadowV3Monitor:
-    existing = getattr(gateway.state, _STATE_KEY, None)
+def create_trading_ai_shadow_v3_monitor_worker(context: FeatureContext) -> BackgroundWorker | None:
+    state = context.runtime_state
+    existing = getattr(state, _STATE_KEY, None)
     if isinstance(existing, TradingAIShadowV3Monitor):
-        return existing
+        return None
     monitor = TradingAIShadowV3Monitor()
-    setattr(gateway.state, _STATE_KEY, monitor)
+    setattr(state, _STATE_KEY, monitor)
 
     async def startup() -> None:
         if ai_shadow_v3_monitor_enabled():
@@ -1115,14 +1118,13 @@ def register_trading_ai_shadow_v3_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    return BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-    ))
-    return monitor
+    )
 
 
 __all__ = [
     "TradingAIShadowV3Monitor",
     "ai_shadow_v3_monitor_enabled",
-    "register_trading_ai_shadow_v3_monitor",
+    "create_trading_ai_shadow_v3_monitor_worker",
 ]

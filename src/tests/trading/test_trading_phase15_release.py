@@ -114,7 +114,7 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
     }
     assert required <= paths
 
-    gateway = Path("src/app/gateway/trading_routes.py").read_text(encoding="utf-8")
+    gateway = Path("src/app/trading/route_registration.py").read_text(encoding="utf-8")
     for registration in (
         "create_trading_router",
         "create_trading_execution_router",
@@ -126,9 +126,9 @@ def test_all_trading_product_routes_are_registered_in_openapi() -> None:
         "create_trading_strategy_router",
         "create_trading_catalyst_router",
         "create_trading_model_router",
-        "register_trading_alert_monitor",
-        "register_trading_paper_monitor",
-        "register_trading_strategy_monitor",
+        "create_trading_alert_monitor_worker",
+        "create_trading_paper_monitor_worker",
+        "create_trading_strategy_monitor_worker",
     ):
         assert registration in gateway
 
@@ -186,7 +186,9 @@ def test_no_live_broker_or_ai_mutation_surface_exists() -> None:
     ):
         assert forbidden not in trading_source
 
-    research = Path("src/app/trading/research.py").read_text(encoding="utf-8").lower()
+    research = Path(
+        "src/app/trading/research/market_research.py"
+    ).read_text(encoding="utf-8").lower()
     for forbidden in (
         "place_order",
         "create_alert",

@@ -19,14 +19,14 @@ afterEach(() => {
 
 describe('Voice Studio bounded job list guard', () => {
   it('uses the bounded summary endpoint on the Voice Studio route', async () => {
-    const responsePayload = { jobs: [] };
+    const responsePayload = { jobs: [], has_more: false };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(responsePayload), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     }));
     vi.stubGlobal('fetch', fetchMock);
     const { omnixApiClient } = await import('../../api/client');
-    const originalListJobs = vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue({ jobs: [] });
+    const originalListJobs = vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue({ jobs: [], has_more: false });
 
     await import('./voiceJobListGuard');
     const result = await omnixApiClient.listJobs();
@@ -44,7 +44,7 @@ describe('Voice Studio bounded job list guard', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const { omnixApiClient } = await import('../../api/client');
-    const expected = { jobs: [] };
+    const expected = { jobs: [], has_more: false };
     const originalListJobs = vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue(expected);
 
     await import('./voiceJobListGuard');
@@ -60,12 +60,12 @@ describe('Voice Studio bounded job list guard', () => {
     vi.stubGlobal('fetch', fetchMock);
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { omnixApiClient } = await import('../../api/client');
-    const originalListJobs = vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue({ jobs: [] });
+    const originalListJobs = vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue({ jobs: [], has_more: false });
 
     await import('./voiceJobListGuard');
     const result = await omnixApiClient.listJobs();
 
-    expect(result).toEqual({ jobs: [] });
+    expect(result).toEqual({ jobs: [], has_more: false });
     expect(originalListJobs).not.toHaveBeenCalled();
     expect(consoleError).toHaveBeenCalled();
   });
