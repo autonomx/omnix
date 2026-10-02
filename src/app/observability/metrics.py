@@ -30,7 +30,7 @@ _metrics: dict[str, Any] | None = None
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
     "auth_rejections", "rate_limited", "retention_deleted", "job_duration",
-    "sse_subscribers", "sse_delivered", "sse_resyncs", "speech_turn",
+    "sse_subscribers", "sse_delivered", "sse_resyncs", "speech_turn", "db_hold",
 )
 
 
@@ -92,6 +92,11 @@ def _build() -> dict[str, Any]:
             "omnix_speech_turn_seconds",
             "Live speech turn latency from the end of the user's speech, by stage.",
             ("stage",), buckets=_SPEECH_BUCKETS, registry=registry,
+        ),
+        "db_hold": Histogram(
+            "omnix_db_connection_hold_seconds",
+            "How long work held a pooled PostgreSQL connection (one transaction or unit of work), by statement class.",
+            ("statement_class",), buckets=_LATENCY_BUCKETS, registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -221,6 +226,10 @@ def record_sse_delivered(stream: str, phase: str) -> None:
 def record_sse_resync(stream: str, reason: str) -> None:
     """A stream closed with ``event: resync``: ``replay_limit`` or ``overflow`` (the subscriber fell behind)."""
     _get()["sse_resyncs"].labels(stream, reason).inc()
+
+
+def record_db_connection_hold(statement_class: str, seconds: float) -> None:
+    _get()["db_hold"].labels(statement_class).observe(seconds)
 
 
 def record_speech_turn(stage: str, seconds: float) -> None:
@@ -476,7 +485,8 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 __all__ = [
     "CapacityCollector", "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
-    "event_loop_lag_monitor", "exposition", "record_job_execution", "record_retention_deleted",
+    "event_loop_lag_monitor", "exposition", "record_db_connection_hold", "record_job_execution",
+    "record_retention_deleted",
     "record_speech_turn", "record_sse_delivered", "record_sse_resync", "sse_subscriber", "TtsStreamCollector",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",

@@ -38,7 +38,7 @@ def test_requests_are_labelled_by_route_template_and_status_class() -> None:
 
     text = _text()
     assert 'route="/metrics-probe/{item_id}"' in text
-    assert "one" not in text and "raw-path-123" not in text
+    assert "/metrics-probe/one" not in text and "raw-path-123" not in text
     assert 'route="unmatched"' in text and 'status_class="4xx"' in text
     assert request_snapshot()["request_count"] - before == 4
 

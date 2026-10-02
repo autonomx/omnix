@@ -29,6 +29,11 @@ def statement_class(name: str) -> Iterator[None]:
         _CLASS.reset(token)
 
 
+def current_statement_class() -> str:
+    """The class code marked with ``statement_class``; ``default`` when unmarked (requests)."""
+    return _CLASS.get() or "default"
+
+
 def statement_timeout_ms(session_default_ms: int) -> int | None:
     """The current class's limit, or ``None`` when it is the session default."""
     name = _CLASS.get()
@@ -51,4 +56,4 @@ def apply_statement_class(connection: Any, session_default_ms: int) -> None:
         connection.execute("SELECT set_config('statement_timeout', %s, true)", (str(timeout),))
 
 
-__all__ = ["apply_statement_class", "statement_class", "statement_timeout_ms"]
+__all__ = ["apply_statement_class", "current_statement_class", "statement_class", "statement_timeout_ms"]

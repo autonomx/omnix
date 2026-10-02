@@ -127,6 +127,7 @@ processes to compare with `max_connections`.
 | `omnix_db_pool_request_wait_seconds_total` | counter | Time callers spent waiting for a connection; divide its rate by the request rate for the mean wait. |
 | `omnix_db_pool_request_errors_total` | counter | Connection requests that timed out or failed. |
 | `omnix_db_pool_connections_lost_total` | counter | Pooled connections found broken. |
+| `omnix_db_connection_hold_seconds` | histogram | How long work held a pooled connection: one transaction or unit of work, including the time between its statements. Label `statement_class`: `job`, `maintenance`, or `default` (requests and unmarked work). |
 
 `GET /api/diagnostics` reports the same totals per process
 (`active_requests`, `request_count`, `error_count`).

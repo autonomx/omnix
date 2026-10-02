@@ -170,6 +170,9 @@ class PostgresDatabase:
 
     @contextmanager
     def connection(self) -> Iterator[Any]:
+        from app.observability.metrics import record_db_connection_hold
+        from app.runtime.statement_class import current_statement_class
+
         from .transaction_binding import shared_work
         from .background_authority import require_background_owner
         from .tenant_scope import apply_session_scope
@@ -183,9 +186,13 @@ class PostgresDatabase:
         assert self._pool is not None
         try:
             with self._pool.connection() as connection:
-                # Row-level security follows the tenant of this checkout (WP-4.4).
-                apply_session_scope(connection)
-                yield connection
+                held = perf_counter()
+                try:
+                    # Row-level security follows the tenant of this checkout (WP-4.4).
+                    apply_session_scope(connection)
+                    yield connection
+                finally:
+                    record_db_connection_hold(current_statement_class(), perf_counter() - held)
         except Exception as exc:
             if exc.__class__.__module__.startswith("psycopg"):
                 raise _classified_postgres_error(exc) from exc

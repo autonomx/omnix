@@ -80,3 +80,24 @@ def test_metrics_read_the_pool_jobs_and_outbox_of_a_postgresql_runtime(store) ->
     assert f'omnix_jobs_active{{job_type="{module}.probe",status="queued"}} 1.0' in text
     assert "omnix_outbox_unpublished" in text
     assert "omnix_db_pool_in_use" in text and "omnix_db_pool_requests_total" in text
+
+
+def test_connection_hold_time_is_recorded_by_statement_class(store) -> None:
+    from app.observability.metrics import exposition
+    from app.runtime.statement_class import statement_class
+
+    adapter, _module = store
+
+    def held(statement: str) -> float:
+        prefix = f'omnix_db_connection_hold_seconds_count{{statement_class="{statement}"}} '
+        lines = [line for line in exposition()[0].decode().splitlines() if line.startswith(prefix)]
+        return float(lines[0].split()[-1]) if lines else 0.0
+
+    jobs, defaults = held("job"), held("default")
+    with statement_class("job"), adapter.database.transaction() as connection:
+        connection.execute("SELECT 1")
+    with adapter.database.transaction() as connection:
+        connection.execute("SELECT 1")
+
+    assert held("job") - jobs == 1
+    assert held("default") - defaults == 1
