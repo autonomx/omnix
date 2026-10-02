@@ -3,6 +3,21 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
+
+from app.providers import ChatMessage
+from app.providers.base import ChatResponse
+from app.providers.structured import (
+    ProviderEmptyResponse,
+    ProviderTruncatedResponse,
+    StructuredCapabilities,
+    StructuredContract,
+    StructuredMode,
+    StructuredOutputError,
+    StructuredOutputExhausted,
+    StructuredOutputGateway,
+    StructuredRetryBudget,
+)
 from app.runtime.http_client import shared_http_client
 
 from .core import AssistantRequest, AssistantResult
@@ -46,6 +61,59 @@ class HermesSidecarError(RuntimeError):
     pass
 
 
+class _JsonObject(BaseModel):
+    """One JSON object, checked further by the caller."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class _HermesChatProvider:
+    """The sidecar's chat endpoint as a provider for the structured-output gateway.
+
+    The request is the one the client sent before the gateway: model
+    ``hermes-agent``, no temperature, and ``response_format`` JSON object only
+    for the calls that asked for it.
+    """
+
+    provider_name = "hermes"
+    config = None
+
+    def __init__(self, client: "HermesSidecarClient", *, json_mode: bool, timeout: float) -> None:
+        self._client = client
+        self._json_mode = json_mode
+        self._timeout = timeout
+
+    def get_structured_capabilities(self, model: str | None = None) -> StructuredCapabilities:
+        mode = StructuredMode.JSON_OBJECT if self._json_mode else StructuredMode.TEXT_JSON
+        return StructuredCapabilities(preferred_modes=(mode,))
+
+    def chat_completion(self, messages: list[ChatMessage], **kwargs: Any) -> ChatResponse:
+        payload: dict[str, Any] = {
+            "model": "hermes-agent",
+            "stream": False,
+            "messages": [{"role": message.role, "content": message.content} for message in messages],
+        }
+        if self._json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        timeout = min(self._timeout, float(kwargs.get("request_timeout_seconds") or self._timeout))
+        response = self._client.http.post(
+            f"{self._client.base_url}/v1/chat/completions",
+            headers=self._client._headers(),
+            data=json.dumps(payload),
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = self._client._extract_content(data)
+        choice = data["choices"][0] if isinstance(data.get("choices"), list) and data["choices"] else {}
+        return ChatResponse(
+            content=content if isinstance(content, str) else "",
+            model=str(data.get("model") or "hermes-agent"),
+            usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
+            finish_reason=choice.get("finish_reason") if isinstance(choice, dict) else None,
+        )
+
+
 class HermesSidecarClient:
     """Small HTTP client for the Hermes sidecar API.
 
@@ -76,26 +144,26 @@ class HermesSidecarClient:
     def plan_research(self, request: Any) -> Any:
         from app.research.planner import ResearchPlan, ResearchPlanningRequest, research_planning_payload
         validated_request=ResearchPlanningRequest.model_validate(request)
-        payload={"model":"hermes-agent","stream":False,"messages":[
-            {"role":"system","content":"Return only valid JSON matching the supplied research schema. Do not execute operations and do not propose operations outside the allowlist."},
-            {"role":"user","content":json.dumps(research_planning_payload(validated_request),sort_keys=True)}]}
-        response=self.http.post(f"{self.base_url}/v1/chat/completions",headers=self._headers(),data=json.dumps(payload),timeout=self.timeout);response.raise_for_status();content=self._extract_content(response.json())
-        try:return ResearchPlan.model_validate(json.loads(_strip_json_fence(content)))
-        except Exception as exc:raise HermesSidecarError("Hermes did not return a valid research plan") from exc
+        return self._structured(
+            [ChatMessage(role="system", content="Return only valid JSON matching the supplied research schema. Do not execute operations and do not propose operations outside the allowlist."),
+             ChatMessage(role="user", content=json.dumps(research_planning_payload(validated_request), sort_keys=True))],
+            output_model=ResearchPlan, contract_id="hermes.research_plan", json_mode=False,
+            timeout=self.timeout, error="Hermes did not return a valid research plan",
+        )
 
     def plan_trading_research_next(self, request: Any, context: Any) -> Any:
         """Return exactly one proposal-only semantic trading research action."""
         from app.trading.research.contracts import TradingResearchRequest
         from app.trading.research.hermes_contract import TradingHermesContext, TradingHermesNextActionDecision, trading_next_action_payload
         validated_request=TradingResearchRequest.model_validate(request); validated_context=TradingHermesContext.model_validate(context)
-        payload={"model":"hermes-agent","stream":False,"response_format":{"type":"json_object"},"messages":[
-            {"role":"system","content":("You are a non-executing trading research next-action planner. Return exactly one JSON action matching the supplied schema. "
+        return self._structured(
+            [ChatMessage(role="system", content=("You are a non-executing trading research next-action planner. Return exactly one JSON action matching the supplied schema. "
                 "Never execute anything. Never propose orders, position sizing, broker actions, strategy mutation, shell, files, GitHub, or unlisted operations. "
-                "Use the evidence summary to decide the single highest-value unresolved follow-up, or stop.")},
-            {"role":"user","content":json.dumps(trading_next_action_payload(validated_request,validated_context),sort_keys=True,default=str)}]}
-        response=self.http.post(f"{self.base_url}/v1/chat/completions",headers=self._headers(),data=json.dumps(payload),timeout=self.timeout);response.raise_for_status();content=self._extract_content(response.json())
-        try:return TradingHermesNextActionDecision.model_validate(json.loads(_strip_json_fence(content)))
-        except Exception as exc:raise HermesSidecarError("Hermes did not return a valid trading next-action proposal") from exc
+                "Use the evidence summary to decide the single highest-value unresolved follow-up, or stop.")),
+             ChatMessage(role="user", content=json.dumps(trading_next_action_payload(validated_request, validated_context), sort_keys=True, default=str))],
+            output_model=TradingHermesNextActionDecision, contract_id="hermes.trading_next_action", json_mode=True,
+            timeout=self.timeout, error="Hermes did not return a valid trading next-action proposal",
+        )
 
     def classify_agent_evidence(self, task: str, profile_id: str) -> dict[str, Any]:
         """Proposal-only semantic evidence classification for ambiguous Agent tasks.
@@ -124,49 +192,86 @@ class HermesSidecarClient:
             "confidence": "number 0..1",
             "reason": "short string",
         }
-        payload = {
-            "model": "hermes-agent",
-            "stream": False,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
+        decision = self._structured(
+            [
+                ChatMessage(
+                    role="system",
+                    content=(
                         "You are a non-executing evidence-policy adviser. Return one JSON object "
                         "matching the supplied schema. Determine whether the task needs external "
                         "evidence, what semantic source classes are required, freshness/trust, and "
                         "attribution. Never execute tools, never name unlisted source classes, and "
                         "never grant capabilities."
                     ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
+                ),
+                ChatMessage(
+                    role="user",
+                    content=json.dumps(
                         {"task": task, "profile": profile_id, "schema": schema},
                         sort_keys=True,
                     ),
-                },
+                ),
             ],
-        }
-        response = self.http.post(
-            f"{self.base_url}/v1/chat/completions",
-            headers=self._headers(),
-            data=json.dumps(payload),
+            output_model=_JsonObject,
+            contract_id="hermes.evidence_decision",
+            json_mode=True,
             timeout=min(self.timeout, 15.0),
+            error="Hermes did not return a valid evidence decision",
         )
-        response.raise_for_status()
-        content = self._extract_content(response.json())
-        try:
-            parsed = json.loads(_strip_json_fence(content))
-        except Exception as exc:
-            raise HermesSidecarError("Hermes did not return a valid evidence decision") from exc
-        if not isinstance(parsed, dict):
-            raise HermesSidecarError("Hermes evidence decision was not an object")
-        return parsed
+        return decision.model_dump()
 
     def plan(self, request: AssistantRequest) -> AssistantResult:
-        prompt=self._planner_prompt(request);payload={"model":"hermes-agent","stream":False,"response_format":{"type":"json_object"},"messages":[{"role":"system","content":_PROPOSAL_ONLY_SYSTEM_PROMPT},{"role":"user","content":prompt}]}
-        response=self.http.post(f"{self.base_url}/v1/chat/completions",headers=self._headers(),data=json.dumps(payload),timeout=self.timeout);response.raise_for_status();return self._parse_plan(self._extract_content(response.json()),request)
+        plan = self._structured(
+            [ChatMessage(role="system", content=_PROPOSAL_ONLY_SYSTEM_PROMPT),
+             ChatMessage(role="user", content=self._planner_prompt(request))],
+            output_model=_JsonObject, contract_id="hermes.assistant_plan", json_mode=True,
+            timeout=self.timeout, error="Hermes did not return valid planner JSON",
+        )
+        normalized=normalize_hermes_response(plan.model_dump(),fallback_domain=request.domain)
+        return AssistantResult(success=normalized.state!="rejected" and not normalized.error,response=normalized.response,domain=normalized.domain,
+            tool_calls=tool_calls_from_hermes(normalized),requires_confirmation=normalized.requires_review,error=normalized.error)
+
+    def _structured(
+        self,
+        messages: list[ChatMessage],
+        *,
+        output_model: type[BaseModel],
+        contract_id: str,
+        json_mode: bool,
+        timeout: float,
+        error: str,
+    ) -> Any:
+        """One sidecar call for a JSON object validated against ``output_model``.
+
+        Unusable output raises ``HermesSidecarError(error)``; a transport or HTTP
+        failure is raised unchanged, as before the gateway.
+        """
+        contract = StructuredContract(
+            contract_id=contract_id,
+            version=1,
+            output_model=output_model,
+            regenerate_on_semantic_failure=False,
+        )
+        budget = StructuredRetryBudget(
+            max_provider_calls=1,
+            max_transport_retries=0,
+            max_format_downgrades=0,
+            max_validation_regenerations=0,
+            deadline_seconds=timeout + 5.0,
+        )
+        provider = _HermesChatProvider(self, json_mode=json_mode, timeout=timeout)
+        try:
+            return StructuredOutputGateway(provider).generate(
+                messages, contract=contract, retry_budget=budget,
+                provider_options={"request_timeout_seconds": timeout},
+            )
+        except StructuredOutputExhausted as exc:
+            cause = exc.last_error
+            if cause is not None and not isinstance(cause, (ProviderEmptyResponse, ProviderTruncatedResponse)):
+                raise cause from None
+            raise HermesSidecarError(error) from exc
+        except StructuredOutputError as exc:
+            raise HermesSidecarError(error) from exc
 
     def _planner_prompt(self, request: AssistantRequest) -> str:
         contract_request=hermes_request_from_assistant(request,available_tools=hermes_catalog_specs())
@@ -175,18 +280,3 @@ class HermesSidecarClient:
     def _extract_content(self, data: dict[str, Any]) -> str:
         try:return data["choices"][0]["message"]["content"]
         except Exception as exc:raise HermesSidecarError("Hermes response did not include message content") from exc
-
-    def _parse_plan(self, content: str, request: AssistantRequest) -> AssistantResult:
-        try:plan=json.loads(_strip_json_fence(content))
-        except json.JSONDecodeError as exc:raise HermesSidecarError("Hermes did not return valid planner JSON") from exc
-        normalized=normalize_hermes_response(plan,fallback_domain=request.domain)
-        return AssistantResult(success=normalized.state!="rejected" and not normalized.error,response=normalized.response,domain=normalized.domain,
-            tool_calls=tool_calls_from_hermes(normalized),requires_confirmation=normalized.requires_review,error=normalized.error)
-
-
-def _strip_json_fence(content: str) -> str:
-    text=str(content or "").strip()
-    if text.startswith("```"):
-        text=text.strip("`")
-        if text.lower().startswith("json"):text=text[4:].strip()
-    return text
