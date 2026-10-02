@@ -134,6 +134,9 @@ if __name__ == "__main__":
     print(f"API docs: http://{HOST}:{PORT}/docs")
     print("=" * 50 + "\n")
 
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     uvicorn.run(
         app,
         host=HOST,

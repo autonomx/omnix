@@ -125,6 +125,9 @@ async def _serve(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    from app.observability.logging import configure_logging
+
+    configure_logging()
     try:
         parse_pools(args.pools)
         return asyncio.run(_serve(args))

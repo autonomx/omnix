@@ -94,6 +94,10 @@ def _install_request_middleware(gateway: FastAPI, auth_service, membership_resol
     # Outermost of all: every response, including drain and auth refusals,
     # carries the security headers (WP-4.10).
     gateway.add_middleware(SecurityHeadersMiddleware)
+    from app.observability.logging import RequestContextMiddleware
+
+    # Around everything: each request's log lines and response carry its id (WP-10.2).
+    gateway.add_middleware(RequestContextMiddleware)
 
 
 def _docs_permission(connection: HTTPConnection) -> None:

@@ -1176,10 +1176,24 @@
     "type": "string"
   },
   {
-    "default": "info",
-    "description": "Controls log level for worker.",
-    "feature": "worker",
+    "default": "text",
+    "description": "Controls log format for observability.",
+    "feature": "observability",
+    "name": "OMNIX_LOG_FORMAT",
+    "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls log level for observability, worker.",
+    "feature": "observability, worker",
     "name": "OMNIX_LOG_LEVEL",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls log levels for observability.",
+    "feature": "observability",
+    "name": "OMNIX_LOG_LEVELS",
     "type": "string"
   },
   {

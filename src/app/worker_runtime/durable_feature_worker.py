@@ -10,6 +10,7 @@ import uuid
 from typing import Any
 
 from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry, RetryPolicyJobStore
+from app.observability.logging import log_context
 from app.runtime.statement_class import statement_class
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus
 from app.persistence.execution_repositories import JobClaimConflict
@@ -327,7 +328,8 @@ class DurableFeatureJobWorker:
 
     def _run_claimed(self, job: JobRecord, cancellation: threading.Event) -> None:
         try:
-            with statement_class("job"):
+            attempt = max(1, int(getattr(job, "_attempt_count", 0) or job.attempts or 1))
+            with statement_class("job"), log_context(job_id=job.id, attempt=attempt, feature=job.module):
                 self._execute_claimed(job, cancellation)
         finally:
             with self._active_lock:

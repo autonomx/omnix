@@ -160,6 +160,9 @@
 <h3 id="windows-launcher-mode">Windows launcher mode</h3>
 <p>start_all.bat can coordinate PostgreSQL, the gateway, optional workers, Hermes, and the browser. Treat workstation-specific Python/Conda paths in that script as operator configuration. The portable contract is the service URLs and environment variables, not a particular absolute path.</p>
 <p>Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.</p>
+<h2 id="logs-and-request-ids">Logs and request ids</h2>
+<p>The gateway (<code>src/main.py</code>, <code>src/launch.py</code>) and the worker process configure one structured log handler on stderr. <code>OMNIX_LOG_FORMAT=json</code> writes one JSON object per line (use it in containers); the default <code>text</code> appends the bound ids in brackets. <code>OMNIX_LOG_LEVEL</code> sets the root level and <code>OMNIX_LOG_LEVELS</code> per-logger levels, for example <code>uvicorn.access=WARNING,omnix.tts=DEBUG</code>.</p>
+<p>Every gateway request and WebSocket gets a request id: a valid inbound <code>X-Request-ID</code> (8–128 of <code>A-Z a-z 0-9 . _ : -</code>) is kept, otherwise one is generated, and it is returned in the <code>X-Request-ID</code> response header. Log lines written while handling the request carry <code>request_id</code>; lines written while a job runs carry <code>job_id</code> (and <code>attempt</code> and <code>feature</code> for durable worker jobs), including lines from the provider call made for a Chat turn. Quote the response&#x27;s <code>X-Request-ID</code> when reporting a failed request.</p>
 <h2 id="health-and-readiness-checks">Health and readiness checks</h2>
 <p>Health means different things at different layers.</p>
 <div class="table-wrap"><table><thead><tr>

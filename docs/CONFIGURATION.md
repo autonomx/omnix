@@ -172,7 +172,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_LIVE_VOICE_EXECUTION_MODE` | string | — | kernel | Controls live voice execution mode for kernel. |
 | `OMNIX_LIVE_VOICE_MODEL_ID` | string | — | kernel | Controls live voice model id for kernel. |
 | `OMNIX_LIVE_VOICE_PROVIDER_ID` | string | — | kernel | Controls live voice provider id for kernel. |
-| `OMNIX_LOG_LEVEL` | string | `info` | worker | Controls log level for worker. |
+| `OMNIX_LOG_FORMAT` | string | `text` | observability | Controls log format for observability. |
+| `OMNIX_LOG_LEVEL` | string | — | observability, worker | Controls log level for observability, worker. |
+| `OMNIX_LOG_LEVELS` | string | — | observability | Controls log levels for observability. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE` | string | — | assistant-memory | Controls memory structured extraction mode for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL` | string | — | assistant-memory | Controls memory structured extraction model for assistant-memory. |
 | `OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER` | string | — | assistant-memory | Controls memory structured extraction provider for assistant-memory. |

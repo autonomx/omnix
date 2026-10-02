@@ -1,6 +1,7 @@
 """Background execution for accepted Chat generation jobs."""
 from __future__ import annotations
 
+import contextvars
 import inspect
 import logging
 import queue
@@ -16,6 +17,7 @@ from weakref import WeakValueDictionary
 
 from app.jobs import CancelJobRequest, CompleteJobRequest, FailJobRequest
 from app.jobs.models import JobRecord, JobStatus
+from app.observability.logging import log_context
 from app.persistence.device_permits import device_permit_slot
 from app.providers.base import provider_turn_owner
 from app.runtime.cancellation import CancellationToken
@@ -115,7 +117,8 @@ class _ChatGenerationDispatcher:
                     thread_name_prefix="omnix-chat-provider",
                 )
             self._provider_calls += 1
-            future = self._provider_pool.submit(call)
+            # The call runs in the submitter's context: job log ids, turn owner, tenant.
+            future = self._provider_pool.submit(contextvars.copy_context().run, call)
 
         def finished(_future: Future) -> None:
             with self._lock:
@@ -216,14 +219,15 @@ class _ChatGenerationDispatcher:
                     }:
                         _drop_job_cancel_event(work.job.id)
                         continue
-                    _run_chat_generation_job(
-                        chat_store=work.chat_store,
-                        job_store=work.job_store,
-                        job=started,
-                        request=work.request,
-                        context_builder=work.context_builder,
-                        completion_hook=work.completion_hook,
-                    )
+                    with log_context(job_id=started.id, feature="chat"):
+                        _run_chat_generation_job(
+                            chat_store=work.chat_store,
+                            job_store=work.job_store,
+                            job=started,
+                            request=work.request,
+                            context_builder=work.context_builder,
+                            completion_hook=work.completion_hook,
+                        )
             except Exception:
                 logger.exception(
                     "Unhandled Chat generation worker failure for job %s; worker will continue",

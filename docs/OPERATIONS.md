@@ -99,6 +99,22 @@ start_all.bat can coordinate PostgreSQL, the gateway, optional workers, Hermes, 
 
 Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.
 
+## Logs and request ids
+
+The gateway (`src/main.py`, `src/launch.py`) and the worker process configure one
+structured log handler on stderr. `OMNIX_LOG_FORMAT=json` writes one JSON object
+per line (use it in containers); the default `text` appends the bound ids in
+brackets. `OMNIX_LOG_LEVEL` sets the root level and `OMNIX_LOG_LEVELS` per-logger
+levels, for example `uvicorn.access=WARNING,omnix.tts=DEBUG`.
+
+Every gateway request and WebSocket gets a request id: a valid inbound
+`X-Request-ID` (8–128 of `A-Z a-z 0-9 . _ : -`) is kept, otherwise one is
+generated, and it is returned in the `X-Request-ID` response header. Log lines
+written while handling the request carry `request_id`; lines written while a
+job runs carry `job_id` (and `attempt` and `feature` for durable worker jobs),
+including lines from the provider call made for a Chat turn. Quote the
+response's `X-Request-ID` when reporting a failed request.
+
 ## Health and readiness checks
 
 Health means different things at different layers.

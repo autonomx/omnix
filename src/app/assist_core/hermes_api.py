@@ -6,12 +6,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from .hermes_adapter_contract import hermes_adapter_preview_payload
-from .hermes_candidate import hermes_demo_candidate
-from .hermes_diagnostics import (
-    HermesDiagnosticsTestRequest,
-    hermes_diagnostics_status_payload,
-    hermes_diagnostics_test_payload,
-)
 from .hermes_rpg_context import hermes_rpg_context_payload
 from .hermes_rpg_plan import hermes_rpg_plan_payload
 from .hermes_rpg_suggestions import hermes_rpg_suggestions_payload
@@ -68,11 +62,16 @@ class HermesRpgPlanRequest(BaseModel):
 
 @router.get("/status")
 def hermes_status() -> dict[str, Any]:
+    from .hermes_diagnostics import hermes_diagnostics_status_payload
+
     return hermes_diagnostics_status_payload()
 
 
 @router.post("/test")
 def hermes_test(request: HermesTestRequest | None = None) -> dict[str, Any]:
+    # Imported on use: diagnostics are not needed to compose the gateway.
+    from .hermes_diagnostics import HermesDiagnosticsTestRequest, hermes_diagnostics_test_payload
+
     payload = request or HermesTestRequest()
     return hermes_diagnostics_test_payload(
         HermesDiagnosticsTestRequest(
@@ -106,6 +105,8 @@ def hermes_route_decision(mode: str | None = None) -> dict[str, Any]:
 
 @router.get("/candidate/demo")
 def hermes_candidate_demo(note: str = "ready") -> dict[str, Any]:
+    from .hermes_candidate import hermes_demo_candidate
+
     return hermes_demo_candidate(note=note)
 
 

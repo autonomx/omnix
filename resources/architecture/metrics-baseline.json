@@ -3124,7 +3124,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 49,
+        "line": 51,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This holds references only for currently executing jobs; the durable job store owns job status, leases, and cancellation authority, and terminal execution removes each reference.",
         "symbol": "_active_chat_providers"
@@ -3133,7 +3133,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 50,
+        "line": 52,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_execution_registry_lock"
@@ -3142,7 +3142,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "container",
-        "line": 48,
+        "line": 50,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "These are local wakeup handles for active workers; cancellation status is persisted in the durable job store and the handles are removed when execution ends.",
         "symbol": "_job_cancel_events"
@@ -3151,7 +3151,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 45,
+        "line": 47,
         "path": "src/app/chat/generation_jobs.py",
         "reason": "This process-local mutex protects only the provider-free fallback or active execution references; PostgreSQL remains the production authority for the corresponding records and leases.",
         "symbol": "_registry_guard"
@@ -7202,7 +7202,7 @@
     "boot_imported_modules": {
       "direction": "lower",
       "target": "ratchet",
-      "value": 2257
+      "value": 2256
     },
     "bootstrap_calls_outside_startup": {
       "direction": "lower",
@@ -7442,5 +7442,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "5792a9a16c68c2a86f464363c00090fa44af7448fe4f1d22774767b02b259603"
+  "source_digest": "cacbfe42f358da3e88ac054c6a562b9e136fab4041040a80341668f6df0e03b7"
 }
