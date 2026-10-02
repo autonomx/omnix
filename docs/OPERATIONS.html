@@ -276,6 +276,7 @@ docker compose -f docker-compose.multihost-test.yml down -v</code></pre></div>
 </ul>
 <p>It then runs a mixed load and writes p50/p95/p99 latency and throughput to <code>artifacts/multihost-topology.json</code>. The nightly <code>multihost-topology</code> job runs it. When you re-run <code>up --build</code> against an existing stack, recreate Nginx (<code>--force-recreate</code>): it resolves replica addresses only at startup.</p>
 <h2 id="triage-decision-tree">Triage decision tree</h2>
+<p>For alerts and recurring incidents, follow the <a href="operations/runbooks/README.html">runbooks</a>: worker ownership lost, stuck jobs, PostgreSQL outage, GPU saturation, provider outage, sign-in outage, disk full, secret rotation, rolling upgrade and rollback, and restore. The steps below cover first-run and development problems.</p>
 <h3 id="1-the-page-does-not-open">1. The page does not open</h3>
 <ul>
 <li>Confirm the Vite process is running on port 5173.</li>

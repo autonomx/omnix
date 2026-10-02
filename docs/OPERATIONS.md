@@ -243,6 +243,12 @@ it. When you re-run `up --build` against an existing stack, recreate Nginx
 
 ## Triage decision tree
 
+For alerts and recurring incidents, follow the [runbooks](operations/runbooks/README.md):
+worker ownership lost, stuck jobs, PostgreSQL outage, GPU saturation, provider
+outage, sign-in outage, disk full, secret rotation, rolling upgrade and
+rollback, and restore. The steps below cover first-run and development
+problems.
+
 ### 1. The page does not open
 
 - Confirm the Vite process is running on port 5173.

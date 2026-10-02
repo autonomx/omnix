@@ -14,6 +14,7 @@ groups:
           severity: page
         annotations:
           summary: "5xx ratio is spending the availability budget 14x too fast"
+          runbook: docs/operations/runbooks/postgresql-outage.md
           description: "Over the last hour more than 7.2% of requests failed (budget 0.5%)."
       - alert: OmnixErrorBudgetSlowBurn
         expr: |
@@ -24,6 +25,7 @@ groups:
           severity: ticket
         annotations:
           summary: "5xx ratio is spending the availability budget 6x too fast"
+          runbook: docs/operations/runbooks/postgresql-outage.md
           description: "Over six hours more than 3% of requests failed."
       - alert: OmnixChatAdmissionSlow
         expr: |
@@ -34,6 +36,7 @@ groups:
           severity: ticket
         annotations:
           summary: "Chat admission p95 is above 50 ms"
+          runbook: docs/operations/runbooks/stuck-jobs.md
       - alert: OmnixEventLoopLagging
         expr: |
           histogram_quantile(0.95, sum by (le, instance) (rate(omnix_event_loop_lag_seconds_bucket[5m]))) > 0.25
@@ -42,6 +45,7 @@ groups:
           severity: ticket
         annotations:
           summary: "A gateway event loop is blocked for more than 250 ms at p95"
+          runbook: docs/operations/runbooks/stuck-jobs.md
           description: "Blocking code runs on the event loop of {{ $labels.instance }}."
 
   - name: omnix-jobs-and-events
@@ -53,6 +57,7 @@ groups:
           severity: page
         annotations:
           summary: "The gateway cannot read the job queue from PostgreSQL"
+          runbook: docs/operations/runbooks/postgresql-outage.md
       - alert: OmnixInteractiveQueueStalled
         expr: max(omnix_jobs_oldest_waiting_age_seconds{job_type="chat.generate"}) > 30
         for: 5m
@@ -60,6 +65,7 @@ groups:
           severity: page
         annotations:
           summary: "A Chat turn has waited more than 30 s to start"
+          runbook: docs/operations/runbooks/stuck-jobs.md
       - alert: OmnixBackgroundQueueStalled
         expr: max by (job_type) (omnix_jobs_oldest_waiting_age_seconds) > 300
         for: 15m
@@ -67,6 +73,7 @@ groups:
           severity: ticket
         annotations:
           summary: "{{ $labels.job_type }} jobs have waited more than 5 minutes"
+          runbook: docs/operations/runbooks/stuck-jobs.md
       - alert: OmnixExpiredLeasesNotRecovered
         expr: max by (job_type) (omnix_jobs_expired_leases) > 0
         for: 10m
@@ -74,6 +81,7 @@ groups:
           severity: ticket
         annotations:
           summary: "{{ $labels.job_type }} jobs hold expired leases that recovery has not released"
+          runbook: docs/operations/runbooks/stuck-jobs.md
       - alert: OmnixDeadLetters
         expr: max(omnix_job_dead_letters) > 0
         for: 30m
@@ -81,6 +89,7 @@ groups:
           severity: ticket
         annotations:
           summary: "Dead-lettered jobs are waiting for review"
+          runbook: docs/operations/runbooks/stuck-jobs.md
       - alert: OmnixOutboxLagging
         expr: max(omnix_outbox_oldest_unpublished_age_seconds) > 30
         for: 5m
@@ -88,6 +97,7 @@ groups:
           severity: page
         annotations:
           summary: "Outbox events are not being delivered (oldest older than 30 s)"
+          runbook: docs/operations/runbooks/worker-ownership-lost.md
       - alert: OmnixEventStreamResyncs
         expr: sum(rate(omnix_sse_resyncs_total[15m])) * 900 > 20
         for: 15m
@@ -95,6 +105,7 @@ groups:
           severity: ticket
         annotations:
           summary: "Event stream subscribers keep falling behind and resyncing"
+          runbook: docs/operations/runbooks/stuck-jobs.md
 
   - name: omnix-dependencies
     rules:
@@ -105,6 +116,7 @@ groups:
           severity: ticket
         annotations:
           summary: "{{ $labels.instance }} uses more than 90% of its PostgreSQL pool"
+          runbook: docs/operations/runbooks/postgresql-outage.md
       - alert: OmnixDatabasePoolWaiting
         expr: max by (instance) (omnix_db_pool_requests_waiting) > 0
         for: 5m
@@ -112,6 +124,7 @@ groups:
           severity: ticket
         annotations:
           summary: "Requests on {{ $labels.instance }} wait for a database connection"
+          runbook: docs/operations/runbooks/postgresql-outage.md
       - alert: OmnixProviderFailing
         expr: |
           sum by (client) (rate(omnix_provider_calls_total{outcome=~"5xx|transport_error|circuit_open"}[10m]))
@@ -121,6 +134,7 @@ groups:
           severity: ticket
         annotations:
           summary: "More than 20% of {{ $labels.client }} calls fail"
+          runbook: docs/operations/runbooks/provider-outage.md
       - alert: OmnixProviderCircuitOpen
         expr: sum by (client) (increase(omnix_provider_calls_total{outcome="circuit_open"}[5m])) > 0
         for: 5m
@@ -128,6 +142,7 @@ groups:
           severity: ticket
         annotations:
           summary: "The {{ $labels.client }} circuit breaker is refusing calls"
+          runbook: docs/operations/runbooks/provider-outage.md
       - alert: OmnixDevicePermitStarvation
         expr: max by (device, model_class) (omnix_device_permit_waiting_requests) > 0
           and max by (device, model_class) (omnix_device_permit_held_units)
@@ -137,6 +152,7 @@ groups:
           severity: ticket
         annotations:
           summary: "{{ $labels.model_class }} calls on {{ $labels.device }} wait for a full device"
+          runbook: docs/operations/runbooks/gpu-saturation.md
 
   - name: omnix-maintenance-and-security
     rules:
@@ -147,6 +163,7 @@ groups:
           severity: ticket
         annotations:
           summary: "Scheduled task {{ $labels.task }} failed in the last hour"
+          runbook: docs/operations/runbooks/disk-full.md
       - alert: OmnixAuthRejectionSpike
         expr: sum(rate(omnix_auth_rejections_total{reason=~"authentication_required|invalid_credential|csrf_failed"}[10m])) * 600 > 100
         for: 10m
@@ -154,6 +171,7 @@ groups:
           severity: ticket
         annotations:
           summary: "More than 100 refused sign-ins in 10 minutes"
+          runbook: docs/operations/runbooks/auth-outage.md
       - alert: OmnixAuthUnavailable
         expr: sum(increase(omnix_auth_rejections_total{reason="authentication_unavailable"}[5m])) > 0
         for: 5m
@@ -161,3 +179,4 @@ groups:
           severity: page
         annotations:
           summary: "Sign-in cannot reach its session or identity store"
+          runbook: docs/operations/runbooks/auth-outage.md

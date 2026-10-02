@@ -56,6 +56,7 @@ def test_alert_rules_are_well_formed() -> None:
         assert set(rule) <= {"alert", "expr", "for", "labels", "annotations"}, rule["alert"]
         assert rule["labels"]["severity"] in {"page", "ticket"}, rule["alert"]
         assert rule["annotations"]["summary"], rule["alert"]
+        assert (ROOT / rule["annotations"]["runbook"]).is_file(), rule["alert"]
         assert _DURATION.fullmatch(rule["for"]), rule["alert"]
         assert _balanced(rule["expr"]), rule["alert"]
 
