@@ -1,8 +1,9 @@
-import logging
 """
 Provider Registry - the LLM providers listed in ``app.providers.catalog``,
 plus a factory for creating provider instances.
 """
+
+import logging
 
 from typing import Any, Dict, List, Optional, Type
 

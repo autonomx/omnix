@@ -1,10 +1,11 @@
-import logging
 """
 Audio Provider Registry - Factory for Audio Providers
 
 This module implements a registry that automatically discovers audio provider plugins
 and provides a factory for creating TTS and STT provider instances.
 """
+
+import logging
 
 from typing import Any, Dict, List, Optional, Type
 
