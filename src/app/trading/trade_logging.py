@@ -6,6 +6,7 @@ from app.config.env import environment
 import json
 import logging
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -52,8 +53,20 @@ def trade_log_path(channel: TradeLogChannel) -> Path:
     override = environment().get(override_name, "").strip()
     if override:
         return Path(override)
-    filename = "auto_trading.jsonl" if channel == "auto_trading" else "backtest.jsonl"
-    return trade_log_dir() / filename
+    # One file per process: the gateway and worker processes each rotate their
+    # own file, so a rotation never renames a file another process writes.
+    return trade_log_dir() / f"{channel}.{trade_log_process_name()}.jsonl"
+
+
+def trade_log_process_name() -> str:
+    """``OMNIX_INSTANCE_NAME`` when set (one per replica), else the process role."""
+    raw = (
+        environment().get("OMNIX_INSTANCE_NAME", "")
+        or environment().get("OMNIX_GATEWAY_BACKGROUND_ROLE", "")
+        or "worker"
+    ).strip()
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip(".-")
+    return name[:64] or "worker"
 
 
 def trade_audit_logging_enabled() -> bool:
@@ -156,4 +169,5 @@ __all__ = [
     "trade_log",
     "trade_log_dir",
     "trade_log_path",
+    "trade_log_process_name",
 ]

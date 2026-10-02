@@ -124,7 +124,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_EOU_RIGHT_CONTEXT` | integer | `1` | providers | Controls eou right context for providers. |
 | `OMNIX_EVENT_LOOP_LAG_MONITOR` | boolean | `1` | gateway | Controls event loop lag monitor for gateway. |
 | `OMNIX_FFMPEG` | string | — | audiobook, tooling | Controls ffmpeg for audiobook, tooling. |
-| `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | `worker` | kernel | Controls gateway background role for kernel. |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE` | string | — | kernel, trading | Controls gateway background role for kernel, trading. |
 | `OMNIX_GATEWAY_PORT` | string | — | gateway, kernel | Controls gateway port for gateway, kernel. |
 | `OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` | string | — | launcher | Controls gateway startup timeout seconds for launcher. |
 | `OMNIX_IBKR_CLIENT_ID` | string | — | trading | Controls ibkr client id for trading. |
@@ -143,6 +143,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_IMAGE_URL` | string | — | image-http-client.py | Controls image url for image-http-client.py. |
 | `OMNIX_IMAGE_WARMUP` | string | `0` | image-service-runtime.py, launcher | Controls image warmup for image-service-runtime.py, launcher. |
 | `OMNIX_INLINE_RESEARCH_JOB_EXECUTOR` | string | `1` | research | Controls inline research job executor for research. |
+| `OMNIX_INSTANCE_NAME` | string | — | trading | Controls instance name for trading. |
 | `OMNIX_JOB_PRIORITY_AGING_SECONDS` | integer | `60` | kernel | Controls job priority aging seconds for kernel. |
 | `OMNIX_JOB_WORKER_METRICS_HOST` | string | `127.0.0.1` | worker | Controls job worker metrics host for worker. |
 | `OMNIX_JOB_WORKER_METRICS_PORT` | integer | `8090` | worker | Controls job worker metrics port for worker. |

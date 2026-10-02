@@ -143,7 +143,9 @@ def serve_cluster(args, count: int) -> int:
                 [sys.executable, str(runner), "--app", args.app, "--host", args.host,
                  "--port", str(port), "--api-replicas", "0", "--managed-stdin"],
                 cwd=runner.parent.parent,
-                env={**child_environment(role), "OMNIX_LOCAL_JOB_WORKER": "0"},
+                # A stable name per replica: its own trade log file, across restarts.
+                env={**child_environment(role), "OMNIX_LOCAL_JOB_WORKER": "0",
+                     "OMNIX_INSTANCE_NAME": f"{role}-{port}"},
                 stdin=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",

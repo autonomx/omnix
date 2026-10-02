@@ -840,9 +840,9 @@
     "type": "string"
   },
   {
-    "default": "worker",
-    "description": "Controls gateway background role for kernel.",
-    "feature": "kernel",
+    "default": null,
+    "description": "Controls gateway background role for kernel, trading.",
+    "feature": "kernel, trading",
     "name": "OMNIX_GATEWAY_BACKGROUND_ROLE",
     "type": "string"
   },
@@ -970,6 +970,13 @@
     "description": "Controls inline research job executor for research.",
     "feature": "research",
     "name": "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR",
+    "type": "string"
+  },
+  {
+    "default": "",
+    "description": "Controls instance name for trading.",
+    "feature": "trading",
+    "name": "OMNIX_INSTANCE_NAME",
     "type": "string"
   },
   {
