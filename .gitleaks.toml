@@ -24,7 +24,7 @@ regexes = ['''Authorization: Bearer local-dev-only''']
 description = "Transformers import misidentified as an API key"
 targetRules = ["generic-api-key"]
 condition = "AND"
-paths = ['''(?:^|/)src/app/image/flux_pipeline_compat\.py$''']
+paths = ['''(?:^|/)src/app/image/flux_pipeline_loading\.py$''']
 regexTarget = "match"
 regexes = ['''AutoTokenizer, Qwen3ForCausalLM''']
 
