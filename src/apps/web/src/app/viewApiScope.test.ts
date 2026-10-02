@@ -107,14 +107,30 @@ describe('view API scope', () => {
     expect(headers.get('X-Omnix-Client')).toBe('web');
   });
 
-  it('does not add headers to foreign-origin mutations or safe reads', async () => {
+  it('does not add headers to foreign-origin mutations; safe reads get only a request id', async () => {
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
     installViewApiFirewall();
     await window.fetch('https://external.example/api/chat/sessions', { method: 'POST' });
     await window.fetch('/api/chat/sessions');
-    expect(new Headers(delegate.mock.calls[0][1]?.headers).has('X-Omnix-Client')).toBe(false);
-    expect(delegate.mock.calls[1][1]).toBeUndefined();
+    const foreign = new Headers(delegate.mock.calls[0][1]?.headers);
+    expect(foreign.has('X-Omnix-Client')).toBe(false);
+    expect(foreign.has('X-Request-ID')).toBe(false);
+    const read = new Headers(delegate.mock.calls[1][1]?.headers);
+    expect(read.has('X-Omnix-Client')).toBe(false);
+    expect(read.get('X-Request-ID')).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('gives each gateway call its own request id and keeps a caller-supplied one', async () => {
+    const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    window.fetch = delegate;
+    installViewApiFirewall();
+    await window.fetch('/api/chat/sessions', { method: 'POST' });
+    await window.fetch('/api/chat/sessions', { method: 'POST' });
+    await window.fetch('/api/chat/sessions', { headers: { 'X-Request-ID': 'caller-request-0001' } });
+    const ids = delegate.mock.calls.map((call) => new Headers(call[1]?.headers).get('X-Request-ID'));
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(ids[2]).toBe('caller-request-0001');
   });
 
   it('adds headers when trading bypasses assistant wrappers', async () => {
@@ -152,7 +168,7 @@ describe('view API scope sign-in integration', () => {
     await window.fetch('/api/chat/sessions');
     expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-CSRF')).toBe('csrf-123');
     expect(new Headers(delegate.mock.calls[1][1]?.headers).has('X-Omnix-CSRF')).toBe(false);
-    expect(delegate.mock.calls[2][1]).toBeUndefined();
+    expect(new Headers(delegate.mock.calls[2][1]?.headers).has('X-Omnix-CSRF')).toBe(false);
   });
 
   it('refuses ambiguous duplicate CSRF cookies', () => {

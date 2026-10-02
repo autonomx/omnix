@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { OmnixApiClient } from './client';
+import { ApiError, OmnixApiClient } from './client';
 
 test('chat session listing follows summary cursors until the workspace is complete', async () => {
   const requested: string[] = [];
@@ -49,4 +49,20 @@ test('asset listing follows page cursors and passes the type filter', async () =
     '/api/assets?limit=200&type=image',
     '/api/assets?limit=200&type=image&cursor=page-2',
   ]);
+});
+
+test('a failed call keeps the gateway request id for error reports', async () => {
+  const fetchImpl = vi.fn(async () => Response.json(
+    { error: 'model_unavailable', request_id: 'gateway-req-0001' },
+    { status: 503, headers: { 'X-Request-ID': 'gateway-req-0001' } },
+  ));
+  const client = new OmnixApiClient({ fetchImpl: fetchImpl as typeof fetch });
+
+  const error = await client.listChatSessions().catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(ApiError);
+  expect((error as ApiError).requestId).toBe('gateway-req-0001');
+  expect((error as ApiError).message).toBe(
+    'Omnix API request failed with status 503: model_unavailable (request id gateway-req-0001)',
+  );
 });

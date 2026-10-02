@@ -127,6 +127,9 @@ and log under it, so a gateway line and a model-service line for the same call
 share one `request_id`. The model services configure the same handler, so
 `OMNIX_LOG_FORMAT` and the level settings apply to them too.
 
+The web app sends its own id with every gateway call, and its API error
+messages end with `(request id …)`: search the gateway logs for that id.
+
 ## Health and readiness checks
 
 Health means different things at different layers.

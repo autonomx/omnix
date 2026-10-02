@@ -365,8 +365,10 @@ const MAX_ASSET_PAGES = 200;
 export class ApiError extends Error {
   readonly status: number;
   readonly body: string;
+  /** The gateway's X-Request-ID for the failed call; its log lines carry it. */
+  readonly requestId: string | undefined;
 
-  constructor(status: number, body: string) {
+  constructor(status: number, body: string, requestId?: string) {
     let detail = '';
     try {
       const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
@@ -379,10 +381,12 @@ export class ApiError extends Error {
     } catch {
       detail = body.trim();
     }
-    super(`Omnix API request failed with status ${status}${detail ? `: ${detail}` : ''}`);
+    // The id lets a user's report be matched to the gateway's log lines.
+    super(`Omnix API request failed with status ${status}${detail ? `: ${detail}` : ''}${requestId ? ` (request id ${requestId})` : ''}`);
     this.name = 'ApiError';
     this.status = status;
     this.body = body;
+    this.requestId = requestId;
   }
 }
 
@@ -1028,7 +1032,8 @@ export class OmnixApiClient {
       const text = await response.text();
 
       if (!response.ok) {
-        throw new ApiError(response.status, text);
+        // Test doubles may omit headers.
+        throw new ApiError(response.status, text, response.headers?.get('x-request-id') ?? undefined);
       }
 
       if (!text) {

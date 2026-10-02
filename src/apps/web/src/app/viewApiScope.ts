@@ -154,17 +154,28 @@ function redirectWhenUnauthenticated(input: RequestInfo | URL, response: Respons
   return response;
 }
 
+// 32 hex characters. getRandomValues, unlike randomUUID, also exists on
+// plain-HTTP LAN origins.
+function newRequestId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function withClientHeader(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
   const request = typeof Request !== 'undefined' && input instanceof Request ? input : undefined;
-  const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return init;
   const url = requestUrl(input);
   if (url.origin !== window.location.origin || !isGatewayPath(url.pathname)) return init;
   const headers = new Headers(init?.headers ?? request?.headers);
-  headers.set('X-Omnix-Client', 'web');
-  // Double-submit CSRF token for cookie-authenticated sessions (WP-4.1).
-  const csrf = readCookie(CSRF_COOKIE);
-  if (csrf) headers.set('X-Omnix-CSRF', csrf);
+  // The gateway logs the call under this id and returns it (WP-10.2).
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', newRequestId());
+  const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    headers.set('X-Omnix-Client', 'web');
+    // Double-submit CSRF token for cookie-authenticated sessions (WP-4.1).
+    const csrf = readCookie(CSRF_COOKIE);
+    if (csrf) headers.set('X-Omnix-CSRF', csrf);
+  }
   return { ...init, headers };
 }
 
