@@ -245,9 +245,10 @@ def create_gateway_app(
     gateway.state.background_registry = GatewayBackgroundRegistryAdapter(gateway)
     gateway.state.scheduler_registry = GatewaySchedulerRegistryAdapter(gateway)
     gateway.state.feature_lifecycles = []
-    from app.observability.metrics import HttpMetricsMiddleware
+    from app.observability.metrics import HttpMetricsMiddleware, install_provider_metrics
 
     gateway.state.started_monotonic = time.monotonic()
+    install_provider_metrics()
     from app.observability.tts_stream_diagnostics import runtime_stream_snapshot
 
     gateway.state.tts_stream_snapshot = runtime_stream_snapshot

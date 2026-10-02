@@ -24,7 +24,7 @@ import time
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import httpx
 
@@ -32,6 +32,32 @@ from app.caching.bounded_cache import bounded_lru_cache
 from app.runtime.cancellation import CancellationToken, OperationCancelled
 
 IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# Told about each attempt; the gateway installs its metrics recorder here
+# (WP-10.3). ``status`` is the response status, "transport_error" or
+# "circuit_open"; ``seconds`` is the time to the response headers.
+_attempt_observer: Callable[[str, int | str, float | None], None] | None = None
+_retry_observer: Callable[[str], None] | None = None
+
+
+def set_attempt_observers(
+    on_attempt: Callable[[str, int | str, float | None], None] | None,
+    on_retry: Callable[[str], None] | None,
+) -> None:
+    """Install (or, with ``None``, remove) this process's attempt observers."""
+    global _attempt_observer, _retry_observer
+    _attempt_observer, _retry_observer = on_attempt, on_retry
+
+
+def _observe_attempt(client: str, status: int | str, seconds: float | None = None) -> None:
+    observer = _attempt_observer
+    if observer is not None:
+        observer(client, status, seconds)
+
+
+def _observe_retry(client: str) -> None:
+    observer = _retry_observer
+    if observer is not None:
+        observer(client)
 _RETRY_ANY_METHOD = frozenset({429, 503})
 _RETRY_IDEMPOTENT = frozenset({500, 502, 504}) | _RETRY_ANY_METHOD
 
@@ -263,19 +289,27 @@ class PooledHttpClient:
         while True:
             if cancel is not None:
                 cancel.raise_if_cancelled()
-            self.circuit.before_call(self.name)
+            try:
+                self.circuit.before_call(self.name)
+            except CircuitOpenError:
+                _observe_attempt(self.name, "circuit_open")
+                raise
             request = self._client.build_request(method, url, timeout=timeout, **kwargs)
+            sent = time.perf_counter()
             try:
                 response = self._client.send(request, stream=True)
             except httpx.TransportError:
+                _observe_attempt(self.name, "transport_error", time.perf_counter() - sent)
                 self.circuit.record_failure()
                 if not idempotent or attempt >= max_retries:
                     raise
+                _observe_retry(self.name)
                 self._pause(self._backoff(attempt), cancel)
                 attempt += 1
                 continue
 
             status = response.status_code
+            _observe_attempt(self.name, status, time.perf_counter() - sent)
             retryable = status in (_RETRY_IDEMPOTENT if idempotent else _RETRY_ANY_METHOD)
             if status >= 500 or status == 429:
                 self.circuit.record_failure()
@@ -285,6 +319,7 @@ class PooledHttpClient:
                 delay = self._backoff(attempt)
                 retry_after = _retry_after_seconds(response)
                 if retry_after is None or retry_after <= self.policy.max_retry_after_seconds:
+                    _observe_retry(self.name)
                     response.close()
                     self._pause(max(delay, retry_after or 0.0), cancel)
                     attempt += 1
@@ -324,5 +359,6 @@ __all__ = [
     "IDEMPOTENT_METHODS",
     "OpenStream",
     "PooledHttpClient",
+    "set_attempt_observers",
     "shared_http_client",
 ]

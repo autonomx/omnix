@@ -25,6 +25,11 @@ _lock = threading.Lock()
 _metrics: dict[str, Any] | None = None
 
 
+_METRIC_NAMES = (
+    "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
+)
+
+
 def _build() -> dict[str, Any]:
     from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
@@ -40,6 +45,19 @@ def _build() -> dict[str, Any]:
             ("route", "method"), buckets=_LATENCY_BUCKETS, registry=registry,
         ),
         "in_flight": Gauge("omnix_http_requests_in_flight", "HTTP requests being handled.", registry=registry),
+        "provider_calls": Counter(
+            "omnix_provider_calls", "Provider and model-service HTTP attempts by client and outcome.",
+            ("client", "outcome"), registry=registry,
+        ),
+        "provider_latency": Histogram(
+            "omnix_provider_response_seconds",
+            "Time from sending a provider request to its response headers, by client.",
+            ("client",), buckets=_LATENCY_BUCKETS, registry=registry,
+        ),
+        "provider_retries": Counter(
+            "omnix_provider_retries", "Provider requests sent again after a retryable failure.",
+            ("client",), registry=registry,
+        ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
             buckets=_LOOP_LAG_BUCKETS, registry=registry,
@@ -47,12 +65,39 @@ def _build() -> dict[str, Any]:
     }
 
 
+class _Unrecorded:
+    """Stands in for every metric where ``prometheus_client`` is not installed.
+
+    The TTS and STT service environments do not lock it; their outbound
+    pooled calls must not fail for want of a metrics library.
+    """
+
+    def labels(self, *_values: str) -> _Unrecorded:
+        return self
+
+    def inc(self, *_args: float) -> None:
+        return None
+
+    def dec(self, *_args: float) -> None:
+        return None
+
+    def observe(self, *_args: float) -> None:
+        return None
+
+    def collect(self) -> list[Any]:
+        return []
+
+
 def _get() -> dict[str, Any]:
     global _metrics
     if _metrics is None:
         with _lock:
             if _metrics is None:
-                _metrics = _build()
+                try:
+                    _metrics = _build()
+                except ImportError:
+                    logger.info("prometheus_client is not installed; metrics are not recorded")
+                    _metrics = {"registry": None, **{name: _Unrecorded() for name in _METRIC_NAMES}}
     return _metrics
 
 
@@ -93,6 +138,26 @@ class HttpMetricsMiddleware:
             route, method = route_template(scope), str(scope.get("method", ""))
             metrics["requests"].labels(route, method, status_class(status)).inc()
             metrics["latency"].labels(route, method).observe(time.perf_counter() - started)
+
+
+def record_provider_attempt(client: str, status: int | str, seconds: float | None = None) -> None:
+    """One HTTP attempt by a pooled client: a response status, ``transport_error`` or ``circuit_open``."""
+    metrics = _get()
+    outcome = status_class(status) if isinstance(status, int) else status
+    metrics["provider_calls"].labels(client, outcome).inc()
+    if seconds is not None:
+        metrics["provider_latency"].labels(client).observe(seconds)
+
+
+def record_provider_retry(client: str) -> None:
+    _get()["provider_retries"].labels(client).inc()
+
+
+def install_provider_metrics() -> None:
+    """Record every pooled provider and model-service call in this process."""
+    from app.runtime.http_client import set_attempt_observers
+
+    set_attempt_observers(record_provider_attempt, record_provider_retry)
 
 
 @contextlib.asynccontextmanager
@@ -247,5 +312,6 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 __all__ = [
     "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "event_loop_lag_monitor", "exposition",
-    "request_snapshot", "route_template", "status_class",
+    "install_provider_metrics", "record_provider_attempt", "record_provider_retry", "request_snapshot",
+    "route_template", "status_class",
 ]

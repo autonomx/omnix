@@ -18,6 +18,21 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
 | `omnix_event_loop_lag_seconds` | histogram | — | How late the gateway's event loop woke a task sleeping 0.5 s, sampled twice a second: time spent in blocking code instead of serving requests. Buckets: 1 ms to 5 s. |
 
+### Providers and model services
+
+Recorded by the pooled HTTP client every LLM provider and model-service call
+goes through, once per attempt (a retried call counts each attempt). The
+gateway installs the recorder; calls made in the worker process are not
+recorded until the worker serves metrics. `client`
+is the provider's name (`lmstudio`, `openrouter`, ...) or the service
+(`tts-service`, `stt-service`, `hermes`, ...), a fixed set.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_provider_calls_total` | counter | `client`, `outcome` | Attempts by outcome: a status class (`2xx` ... `5xx`), `transport_error` (no response: refused, reset, timed out) or `circuit_open` (refused by the circuit breaker without being sent). |
+| `omnix_provider_response_seconds` | histogram | `client` | Time from sending to the response headers (to the first byte of a stream, not its end). |
+| `omnix_provider_retries_total` | counter | `client` | Attempts sent again after a retryable failure. |
+
 ### Job queue and outbox
 
 Read from PostgreSQL on each scrape (one indexed query over the workspace's
@@ -69,7 +84,6 @@ the route and are counted.
 |---|---|
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
 | Jobs | claims, retries and execution duration by type (recorded in the worker process, which serves no metrics yet) |
-| Providers | call latency, errors, circuit state, retries by provider |
 | Speech | TTS first-audio latency; live calls active; STT latency |
 | Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
 | Maintenance | retention rows deleted, run duration; scheduler task duration, failures, lag |

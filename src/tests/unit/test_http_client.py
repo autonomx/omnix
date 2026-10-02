@@ -153,3 +153,79 @@ def test_a_cancel_stops_a_stalled_stream_within_200_ms() -> None:
 
     assert received == [b"data 1"]
     assert stopped_after < 0.2
+
+
+def _provider_samples(client: str) -> dict[tuple[str, str], float]:
+    from app.observability.metrics import exposition
+
+    samples: dict[tuple[str, str], float] = {}
+    for line in exposition()[0].decode().splitlines():
+        for metric in ("omnix_provider_calls_total", "omnix_provider_retries_total", "omnix_provider_response_seconds_count"):
+            if line.startswith(metric + "{") and f'client="{client}"' in line:
+                outcome = line.split('outcome="')[1].split('"')[0] if 'outcome="' in line else ""
+                samples[(metric, outcome)] = float(line.split()[-1])
+    return samples
+
+
+@pytest.fixture
+def provider_metrics():
+    from app.observability.metrics import install_provider_metrics
+    from app.runtime.http_client import set_attempt_observers
+
+    install_provider_metrics()
+    yield
+    set_attempt_observers(None, None)
+
+
+def test_without_observers_attempts_are_not_reported() -> None:
+    from app.runtime.http_client import set_attempt_observers
+
+    set_attempt_observers(None, None)
+    handle, _ = _scripted(200)
+    PooledHttpClient("metrics-unobserved", FAST, transport=httpx.MockTransport(handle)).get("http://provider/")
+
+    assert _provider_samples("metrics-unobserved") == {}
+
+
+def test_attempts_retries_and_latency_are_recorded_per_client(provider_metrics) -> None:
+    handle, _ = _scripted(503, 200, httpx.ConnectError("refused"))
+    client = PooledHttpClient("metrics-probe", FAST, transport=httpx.MockTransport(handle))
+
+    client.post("http://provider/v1/chat", json={})
+    with pytest.raises(httpx.ConnectError):
+        client.post("http://provider/v1/chat", json={})
+
+    samples = _provider_samples("metrics-probe")
+    assert samples[("omnix_provider_calls_total", "5xx")] == 1
+    assert samples[("omnix_provider_calls_total", "2xx")] == 1
+    assert samples[("omnix_provider_calls_total", "transport_error")] == 1
+    assert samples[("omnix_provider_retries_total", "")] == 1
+    assert samples[("omnix_provider_response_seconds_count", "")] == 3
+
+
+def test_a_call_refused_by_the_open_circuit_is_counted(provider_metrics) -> None:
+    handle, _ = _scripted(500)
+    client = PooledHttpClient(
+        "metrics-circuit", HttpPolicy(max_retries=0, circuit_failures=1, circuit_cooldown_seconds=60),
+        transport=httpx.MockTransport(handle),
+    )
+    client.post("http://provider/v1/chat", json={})
+
+    with pytest.raises(CircuitOpenError):
+        client.post("http://provider/v1/chat", json={})
+
+    assert _provider_samples("metrics-circuit")[("omnix_provider_calls_total", "circuit_open")] == 1
+
+
+def test_recording_is_a_no_op_without_prometheus_client(monkeypatch) -> None:
+    from app.observability import metrics
+
+    def missing():
+        raise ImportError("prometheus_client")
+
+    monkeypatch.setattr(metrics, "_metrics", None)
+    monkeypatch.setattr(metrics, "_build", missing)
+
+    metrics.record_provider_attempt("tts-service", "2xx", 0.1)
+    metrics.record_provider_retry("tts-service")
+    assert metrics.request_snapshot() == {"active_requests": 0, "request_count": 0, "error_count": 0}

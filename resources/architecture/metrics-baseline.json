@@ -4239,7 +4239,7 @@
         "category": "cache",
         "invalidation": "shared_http_client.cache_clear",
         "kind": "function_cache",
-        "line": 311,
+        "line": 346,
         "max_entries": 64,
         "maxsize": 64,
         "path": "src/app/runtime/http_client.py",
@@ -7466,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "8d2dd179db1ebdc0bb2273a95115707687945cdee2c62ee8edd4a149e7ee1aa2"
+  "source_digest": "e9e4b1342e947aac32720fdd3ef997eb460db2a698c69befcf938dcbae6118f0"
 }
