@@ -540,3 +540,35 @@ def test_live_fake_tts_load_scales_with_device_capacity_and_returns_429(monkeypa
         path = Path(artifact_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(encoded, encoding="utf-8")
+
+
+@pytest.mark.skipif(
+    not os.environ.get("OMNIX_TEST_DATABASE_URL"),
+    reason="requires disposable PostgreSQL",
+)
+@pytest.mark.postgres
+def test_capacity_metrics_read_held_units_without_writing():
+    from app.observability.metrics import CapacityCollector, exposition
+    from app.persistence.config import DatabaseSettings
+    from app.persistence.database import PostgresDatabase
+    from app.persistence.device_permits import PostgresDevicePermitService
+
+    database = PostgresDatabase(DatabaseSettings(url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=2))
+    device_id = f"permit-metrics:{uuid.uuid4().hex}"
+    service = PostgresDevicePermitService(database, device_id=device_id, lease_seconds=30)
+    try:
+        service.configure_capacity("image", capacity=2)
+        lease = service.acquire("image", holder_id="metrics-holder")
+        assert lease is not None
+
+        snapshot = service.metrics_snapshot()
+        text = exposition(CapacityCollector(service.metrics_snapshot))[0].decode()
+
+        assert snapshot == [{"device_id": device_id, "model_class": "image", "capacity": 2,
+                             "held_units": 1, "waiting": 0}]
+        assert f'omnix_device_permit_held_units{{device="{device_id}",model_class="image"}} 1.0' in text
+        service.release(lease)
+        assert service.metrics_snapshot()[0]["held_units"] == 0
+    finally:
+        _cleanup_device(database, device_id)
+        database.close()

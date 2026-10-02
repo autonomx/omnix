@@ -8,7 +8,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal
 from uuid import uuid4
 
 from app.persistence.database import PostgresDatabase
@@ -425,6 +425,36 @@ class PostgresDevicePermitService:
             ).fetchone()
             work.commit()
         return bool(row[0])
+
+    def metrics_snapshot(self) -> list[dict[str, Any]]:
+        """Capacity, held units and waiting requests per model class, read-only (WP-10.3).
+
+        Unlike ``diagnostics`` it deletes nothing: expired leases and requests
+        are excluded by their expiry, so a metrics scrape never writes.
+        """
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """SELECT capacity.model_class, capacity.capacity,
+                          COALESCE((SELECT sum(permit.units) FROM omnix_device_permits AS permit
+                                     WHERE permit.device_id = capacity.device_id
+                                       AND permit.model_class = capacity.model_class
+                                       AND permit.lease_expires_at > clock_timestamp()), 0),
+                          (SELECT count(*) FROM omnix_device_permit_requests AS request
+                            WHERE request.device_id = capacity.device_id
+                              AND request.model_class = capacity.model_class
+                              AND request.expires_at > clock_timestamp())
+                     FROM omnix_device_capacity AS capacity
+                    WHERE capacity.device_id = %s
+                    ORDER BY capacity.model_class
+                    LIMIT 64""",
+                (self.device_id,),
+            ).fetchall()
+            work.rollback()
+        return [
+            {"device_id": self.device_id, "model_class": str(row[0]), "capacity": int(row[1]),
+             "held_units": int(row[2]), "waiting": int(row[3])}
+            for row in rows
+        ]
 
     def diagnostics(self) -> tuple[DevicePermitCapacity, ...]:
         with unit_of_work(self.database) as work:

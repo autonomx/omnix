@@ -224,6 +224,38 @@ class SchedulerCollector:
         yield from (runs, failures, timeouts, duration, lag)
 
 
+class CapacityCollector:
+    """Device permits per model class on this host, read at scrape time.
+
+    Every process on the host shares the device, so they report the same
+    values: aggregate with ``max``.
+    """
+
+    def __init__(self, snapshot: Callable[[], list[dict[str, Any]]]) -> None:
+        self.snapshot = snapshot
+
+    def collect(self) -> Iterator[Any]:
+        from prometheus_client.core import GaugeMetricFamily
+
+        try:
+            rows = self.snapshot()
+        except Exception as exc:
+            logger.warning("device permit metrics failed error_type=%s", type(exc).__name__)
+            return
+        labels = ["device", "model_class"]
+        capacity = GaugeMetricFamily("omnix_device_permit_capacity_units", "Permit units the device offers.", labels=labels)
+        held = GaugeMetricFamily("omnix_device_permit_held_units", "Permit units held by running model calls.", labels=labels)
+        waiting = GaugeMetricFamily(
+            "omnix_device_permit_waiting_requests", "Model calls waiting for a permit.", labels=labels,
+        )
+        for row in rows:
+            key = [row["device_id"], row["model_class"]]
+            capacity.add_metric(key, row["capacity"])
+            held.add_metric(key, row["held_units"])
+            waiting.add_metric(key, row["waiting"])
+        yield from (capacity, held, waiting)
+
+
 def install_provider_metrics() -> None:
     """Record every pooled provider and model-service call in this process."""
     from app.runtime.http_client import set_attempt_observers
@@ -382,7 +414,7 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 
 __all__ = [
-    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
+    "CapacityCollector", "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
     "event_loop_lag_monitor", "exposition", "record_job_execution", "record_retention_deleted",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",

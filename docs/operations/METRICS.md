@@ -18,6 +18,19 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
 | `omnix_event_loop_lag_seconds` | histogram | — | How late the gateway's event loop woke a task sleeping 0.5 s, sampled twice a second: time spent in blocking code instead of serving requests. Buckets: 1 ms to 5 s. |
 
+### Capacity
+
+GPU and model device permits on this host, read from PostgreSQL on each scrape
+without changing anything (expired leases and requests are excluded, not
+deleted). Every process on the host reports the same values: aggregate with
+`max`.
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_device_permit_capacity_units` | gauge | `device`, `model_class` | Permit units the device offers to a model class. |
+| `omnix_device_permit_held_units` | gauge | `device`, `model_class` | Units held by running model calls. |
+| `omnix_device_permit_waiting_requests` | gauge | `device`, `model_class` | Model calls waiting for a permit. |
+
 ### Maintenance
 
 Scheduled tasks run in the process that owns the background lock; read these
@@ -123,4 +136,3 @@ process registry: the provider metrics above for calls its jobs make, and
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
 | Speech | TTS first-audio latency; live calls active; STT latency |
 | Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
-| Capacity | device permits held and waiting by class |

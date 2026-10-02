@@ -3815,7 +3815,7 @@
         "approved": true,
         "category": "cache",
         "kind": "lock",
-        "line": 653,
+        "line": 683,
         "path": "src/app/persistence/device_permits.py",
         "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas.",
         "symbol": "_DEFAULT_LOCK"
@@ -7466,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "239734a02e44de46fceadb807a97c57b5055484c5f642e69feac25d181a9ef4d"
+  "source_digest": "6dd40da6fb078d7ee6571c497581471e910f76adf64e73969d2a462d6a050b5f"
 }

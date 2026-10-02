@@ -312,7 +312,10 @@ def create_kernel_router(
     @router.get("/metrics", response_class=Response, tags=["diagnostics"])
     def metrics() -> Response:
         """Prometheus metrics (WP-10.3); needs ``admin:metrics``."""
-        from app.observability.metrics import DurableStateCollector, PoolCollector, SchedulerCollector, exposition
+        from app.observability.metrics import (
+            CapacityCollector, DurableStateCollector, PoolCollector, SchedulerCollector, exposition,
+        )
+        from app.persistence.device_permits import default_device_permit_service
 
         services = getattr(state, "runtime_services", None)
         database = getattr(getattr(services, "jobs", None), "database", None)
@@ -320,6 +323,9 @@ def create_kernel_router(
         scheduler = getattr(state, "scheduler_runtime", None)
         if scheduler is not None:
             collectors.append(SchedulerCollector(scheduler.diagnostics))
+        permits = default_device_permit_service()
+        if permits is not None:
+            collectors.append(CapacityCollector(permits.metrics_snapshot))
         if database is not None:
             # In-memory runtimes (tests, benchmarks) have no pool or durable queue.
             from app.platform.runtime_diagnostics import durable_metrics_snapshot
