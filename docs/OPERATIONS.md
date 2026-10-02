@@ -130,6 +130,16 @@ share one `request_id`. The model services configure the same handler, so
 The web app sends its own id with every gateway call, and its API error
 messages end with `(request id …)`: search the gateway logs for that id.
 
+### Error responses
+
+Gateway errors answer with `application/problem+json` (RFC 9457): `type`,
+`title`, `status`, `detail`, `instance` (the request path), `request_id` and
+`code`, a stable machine code (`session_not_found`, `rate_limited`,
+`permission_denied`, `invalid_request`, `internal_error`, or the status name).
+`detail` is the value the route has always returned, so existing clients read
+it unchanged. An unhandled exception answers 500 with a generic detail and the
+request id; the stack trace is logged under that request id, never returned.
+
 ## Metrics
 
 `GET /metrics` serves Prometheus metrics for the process that answers (it

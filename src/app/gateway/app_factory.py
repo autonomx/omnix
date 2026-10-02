@@ -55,6 +55,10 @@ def _gateway_lifespan(app, *, get_chat_store, get_job_store):
 
 def _install_request_middleware(gateway: FastAPI, auth_service, membership_resolver=None) -> None:
     """Install request middleware; each one added wraps the ones before it."""
+    from app.errors import install_error_envelope
+
+    # Errors answer with problem details carrying the request id (WP-10.5).
+    install_error_envelope(gateway)
     from app.runtime.net import allowed_origins
     from app.security.request_guard import RequestGuardMiddleware
     from fastapi.middleware.cors import CORSMiddleware

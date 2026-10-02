@@ -3803,7 +3803,7 @@
         "category": "cache",
         "invalidation": "default_database.cache_clear",
         "kind": "function_cache",
-        "line": 285,
+        "line": 292,
         "max_entries": 1,
         "maxsize": 1,
         "path": "src/app/persistence/database.py",
@@ -7466,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "7cbea574a58dd77a03bc84a2746ff350463de679f8bd4032a0cdc166716b3cff"
+  "source_digest": "0180e46ad4f0b7cb1e8fe0e04163561075a27fe4dfb8e838f88085cd8e072bea"
 }
