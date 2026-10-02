@@ -17,12 +17,12 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_request_duration_seconds` | histogram | `route`, `method` | Time from the request passing sign-in to the end of the response, including streamed bodies. Buckets: 5 ms to 30 s. |
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
 
-### Job queue
+### Job queue and outbox
 
 Read from PostgreSQL on each scrape (one indexed query over the workspace's
-active jobs, and a count of unresolved dead letters). They describe the
-workspace's queue, not the process: every gateway process reports the same
-values, so aggregate them with `max`, never `sum`.
+active jobs, a count of unresolved dead letters, and the outbox relay lag).
+They describe the workspace, not the process: every gateway process reports
+the same values, so aggregate them with `max`, never `sum`.
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
@@ -32,7 +32,27 @@ values, so aggregate them with `max`, never `sum`.
 | `omnix_jobs_expired_leases` | gauge | `job_type` | Active jobs whose lease has expired and not yet been recovered. |
 | `omnix_job_dead_letters` | gauge | — | Unresolved dead-lettered jobs. |
 
+| `omnix_outbox_unpublished` | gauge | — | Outbox events the relay has not delivered yet. |
+| `omnix_outbox_oldest_unpublished_age_seconds` | gauge | — | Age of the oldest undelivered outbox event. |
+| `omnix_outbox_dead_letters` | gauge | — | Outbox events the relay gave up on. |
+
 `job_type` values are the registered job types, a fixed set.
+
+### Database pool
+
+This process's PostgreSQL pool (psycopg_pool statistics); sum them across
+processes to compare with `max_connections`.
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `omnix_db_pool_size` | gauge | Connections the pool holds. |
+| `omnix_db_pool_in_use` | gauge | Connections lent out. |
+| `omnix_db_pool_max` | gauge | Connections the pool may hold (`OMNIX_DATABASE_POOL_MAX` or the role default). |
+| `omnix_db_pool_requests_waiting` | gauge | Callers waiting for a connection. |
+| `omnix_db_pool_requests_total` | counter | Connection requests. |
+| `omnix_db_pool_request_wait_seconds_total` | counter | Time callers spent waiting for a connection; divide its rate by the request rate for the mean wait. |
+| `omnix_db_pool_request_errors_total` | counter | Connection requests that timed out or failed. |
+| `omnix_db_pool_connections_lost_total` | counter | Pooled connections found broken. |
 
 `GET /api/diagnostics` reports the same totals per process
 (`active_requests`, `request_count`, `error_count`).
@@ -47,11 +67,11 @@ the route and are counted.
 | Area | Metrics |
 |---|---|
 | Runtime | event-loop lag histogram |
-| Database | pool size, in use, wait-time histogram, statement duration by repository method (sampled) |
+| Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
 | Jobs | claims, retries and execution duration by type (recorded in the worker process, which serves no metrics yet) |
 | Providers | call latency, errors, circuit state, retries by provider |
 | Speech | TTS first-audio latency; live calls active; STT latency |
-| Events and outbox | SSE subscribers, events delivered, resyncs; outbox lag and publish rate |
+| Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
 | Maintenance | retention rows deleted, run duration; scheduler task duration, failures, lag |
 | Capacity | device permits held and waiting by class |
 | Security | auth failures, rate-limit rejections |

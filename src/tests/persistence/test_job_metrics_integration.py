@@ -59,3 +59,24 @@ def test_the_snapshot_counts_active_jobs_by_type_and_status(store) -> None:
     assert rows[0]["oldest_waiting_age_seconds"] >= 0
     assert rows[0]["expired_leases"] == 0
     assert snapshot["dead_letter_count"] >= 0
+
+
+def test_metrics_read_the_pool_jobs_and_outbox_of_a_postgresql_runtime(store) -> None:
+    from types import SimpleNamespace
+
+    from app.observability.metrics import DurableStateCollector, PoolCollector, exposition
+    from app.platform.runtime_diagnostics import durable_metrics_snapshot
+
+    adapter, module = store
+    adapter.create_job(CreateJobRequest(module=module, type=f"{module}.probe", resource_class=ResourceClass.CPU))
+    services = SimpleNamespace(jobs=adapter)
+
+    text = exposition(
+        PoolCollector(adapter.database.pool_statistics),
+        DurableStateCollector(lambda: durable_metrics_snapshot(services)),
+    )[0].decode()
+
+    assert "omnix_jobs_snapshot_up 1.0" in text
+    assert f'omnix_jobs_active{{job_type="{module}.probe",status="queued"}} 1.0' in text
+    assert "omnix_outbox_unpublished" in text
+    assert "omnix_db_pool_in_use" in text and "omnix_db_pool_requests_total" in text

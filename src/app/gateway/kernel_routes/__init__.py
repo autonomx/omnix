@@ -312,14 +312,17 @@ def create_kernel_router(
     @router.get("/metrics", response_class=Response, tags=["diagnostics"])
     def metrics() -> Response:
         """Prometheus metrics (WP-10.3); needs ``admin:metrics``."""
-        from app.observability.metrics import JobQueueCollector, exposition
+        from app.observability.metrics import DurableStateCollector, PoolCollector, exposition
 
         services = getattr(state, "runtime_services", None)
+        database = getattr(getattr(services, "jobs", None), "database", None)
         collectors = []
-        if services is not None:
-            from app.platform.runtime_diagnostics import job_metrics_snapshot
+        if database is not None:
+            # In-memory runtimes (tests, benchmarks) have no pool or durable queue.
+            from app.platform.runtime_diagnostics import durable_metrics_snapshot
 
-            collectors.append(JobQueueCollector(lambda: job_metrics_snapshot(services)))
+            collectors.append(PoolCollector(database.pool_statistics))
+            collectors.append(DurableStateCollector(lambda: durable_metrics_snapshot(services)))
         body, content_type = exposition(*collectors)
         return Response(body, media_type=content_type)
 

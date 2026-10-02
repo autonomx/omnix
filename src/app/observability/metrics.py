@@ -101,10 +101,10 @@ def request_snapshot() -> dict[str, int]:
     return {"active_requests": int(in_flight), "request_count": int(handled), "error_count": int(errors)}
 
 
-class JobQueueCollector:
-    """Job queue gauges read at scrape time from ``snapshot`` (a database read).
+class DurableStateCollector:
+    """Job queue and outbox gauges read at scrape time from ``snapshot`` (a database read).
 
-    The values describe the workspace's queue, not this process: every gateway
+    The values describe the workspace, not this process: every gateway
     process reports the same numbers, so aggregate them with ``max``.
     """
 
@@ -148,6 +148,56 @@ class JobQueueCollector:
         dead = GaugeMetricFamily("omnix_job_dead_letters", "Unresolved dead-lettered jobs.")
         dead.add_metric([], data["dead_letter_count"])
         yield from (active, oldest, expired, dead)
+        outbox = data.get("outbox")
+        if outbox is not None:
+            for name, key, help_text in _OUTBOX_GAUGES:
+                family = GaugeMetricFamily(name, help_text)
+                family.add_metric([], outbox[key])
+                yield family
+
+
+_OUTBOX_GAUGES = (
+    ("omnix_outbox_unpublished", "unpublished", "Outbox events not yet delivered by the relay."),
+    ("omnix_outbox_oldest_unpublished_age_seconds", "oldest_unpublished_age_seconds",
+     "Age of the oldest undelivered outbox event."),
+    ("omnix_outbox_dead_letters", "dead_letters", "Outbox events the relay gave up on."),
+)
+# psycopg_pool statistics: cumulative counters (nothing calls pop_stats) and
+# current gauges.
+_POOL_GAUGES = (
+    ("omnix_db_pool_size", "pool_size", "Connections the pool holds."),
+    ("omnix_db_pool_in_use", "pool_used", "Connections lent out."),
+    ("omnix_db_pool_max", "pool_max", "Connections the pool may hold."),
+    ("omnix_db_pool_requests_waiting", "requests_waiting", "Callers waiting for a connection."),
+)
+_POOL_COUNTERS = (
+    ("omnix_db_pool_requests", "requests_num", 1.0, "Connection requests."),
+    ("omnix_db_pool_request_wait_seconds", "requests_wait_ms", 0.001, "Time callers spent waiting for a connection."),
+    ("omnix_db_pool_request_errors", "requests_errors", 1.0, "Connection requests that timed out or failed."),
+    ("omnix_db_pool_connections_lost", "connections_lost", 1.0, "Pooled connections found broken."),
+)
+
+
+class PoolCollector:
+    """This process's PostgreSQL pool, read from ``stats`` at scrape time."""
+
+    def __init__(self, stats: Callable[[], dict[str, Any]]) -> None:
+        self.stats = stats
+
+    def collect(self) -> Iterator[Any]:
+        from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+
+        stats = self.stats()
+        if not stats:
+            return
+        for name, key, help_text in _POOL_GAUGES:
+            family = GaugeMetricFamily(name, help_text)
+            family.add_metric([], float(stats.get(key, 0)))
+            yield family
+        for name, key, scale, help_text in _POOL_COUNTERS:
+            counter = CounterMetricFamily(name, help_text)
+            counter.add_metric([], float(stats.get(key, 0)) * scale)
+            yield counter
 
 
 def exposition(*collectors: Any) -> tuple[bytes, str]:
@@ -163,5 +213,6 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 
 __all__ = [
-    "HttpMetricsMiddleware", "JobQueueCollector", "exposition", "request_snapshot", "route_template", "status_class",
+    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "exposition", "request_snapshot",
+    "route_template", "status_class",
 ]

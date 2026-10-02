@@ -68,7 +68,7 @@ def test_the_gateway_serves_the_catalog_to_metrics_admins(tmp_path: Path, monkey
 
 
 def test_job_queue_gauges_come_from_the_snapshot() -> None:
-    from app.observability.metrics import JobQueueCollector
+    from app.observability.metrics import DurableStateCollector
 
     snapshot = {
         "active": [
@@ -78,9 +78,10 @@ def test_job_queue_gauges_come_from_the_snapshot() -> None:
              "oldest_waiting_age_seconds": 0.0, "expired_leases": 1},
         ],
         "dead_letter_count": 2,
+        "outbox": {"unpublished": 4, "oldest_unpublished_age_seconds": 1.5, "dead_letters": 0},
     }
 
-    body, _ = exposition(JobQueueCollector(lambda: snapshot))
+    body, _ = exposition(DurableStateCollector(lambda: snapshot))
     text = body.decode()
 
     assert "omnix_jobs_snapshot_up 1.0" in text
@@ -88,16 +89,34 @@ def test_job_queue_gauges_come_from_the_snapshot() -> None:
     assert 'omnix_jobs_oldest_waiting_age_seconds{job_type="image.generate"} 42.5' in text
     assert 'omnix_jobs_expired_leases{job_type="image.generate"} 1.0' in text
     assert "omnix_job_dead_letters 2.0" in text
+    assert "omnix_outbox_unpublished 4.0" in text
+    assert "omnix_outbox_oldest_unpublished_age_seconds 1.5" in text
     assert "omnix_http_requests_in_flight" in text
 
 
 def test_a_failed_job_snapshot_reports_down_without_the_error_text(caplog) -> None:
-    from app.observability.metrics import JobQueueCollector
+    from app.observability.metrics import DurableStateCollector
 
     def unavailable():
         raise OSError("postgresql://user:secret@db/omnix")
 
-    body, _ = exposition(JobQueueCollector(unavailable))
+    body, _ = exposition(DurableStateCollector(unavailable))
 
     assert "omnix_jobs_snapshot_up 0.0" in body.decode()
     assert "secret" not in body.decode() and "secret" not in caplog.text
+
+
+def test_pool_metrics_are_this_process_gauges_and_counters() -> None:
+    from app.observability.metrics import PoolCollector
+
+    stats = {"pool_size": 4, "pool_used": 3, "pool_max": 10, "requests_waiting": 1,
+             "requests_num": 120, "requests_wait_ms": 2500, "requests_errors": 2, "connections_lost": 0}
+
+    text = exposition(PoolCollector(lambda: stats))[0].decode()
+
+    assert "omnix_db_pool_in_use 3.0" in text
+    assert "omnix_db_pool_requests_waiting 1.0" in text
+    assert "omnix_db_pool_requests_total 120.0" in text
+    assert "omnix_db_pool_request_wait_seconds_total 2.5" in text
+    assert "omnix_db_pool_request_errors_total 2.0" in text
+    assert "omnix_db_pool_size" not in exposition(PoolCollector(dict))[0].decode()
