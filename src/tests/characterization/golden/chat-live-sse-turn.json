@@ -126,6 +126,90 @@
       "type": "user_message"
     },
     {
+      "job": {
+        "cancel": {
+          "acknowledged_at": "<timestamp>",
+          "reason": null,
+          "requested": false,
+          "requested_at": "<timestamp>"
+        },
+        "compat": {
+          "contract": "chat_session_v1",
+          "inline_execution": true
+        },
+        "completed_at": "<timestamp>",
+        "created_at": "<timestamp>",
+        "error": null,
+        "id": "job:<uuid:7>",
+        "input_payload": {
+          "message_id": "msg:<uuid:1>",
+          "model_id": "fixture-model",
+          "provider_id": "fixture",
+          "request": {
+            "agent_mode": false,
+            "coding_approval_policy": "ask_sensitive",
+            "content": "Summarize the current request.",
+            "dry_run": false,
+            "image_data_url": null,
+            "image_data_urls": [],
+            "model_id": "fixture-model",
+            "provider_id": "fixture",
+            "research_mode": null,
+            "speech_segment_id": null,
+            "text_attachment": null,
+            "user_turn_id": null,
+            "workspace_root": null
+          },
+          "session_id": "chat:<uuid:3>",
+          "submission_id": null
+        },
+        "input_ref": {
+          "message_id": "msg:<uuid:1>",
+          "session_id": "chat:<uuid:3>"
+        },
+        "lease": null,
+        "logs": [],
+        "module": "chatbot",
+        "output_refs": [],
+        "owner_id": null,
+        "priority": 0,
+        "progress": {
+          "current": 0,
+          "message": null,
+          "total": 1
+        },
+        "resource_class": "gpu:llm",
+        "stages": [
+          {
+            "checkpoint_ref": null,
+            "completed_at": "<timestamp>",
+            "error": null,
+            "id": "run",
+            "label": "chat.generate",
+            "output_refs": [],
+            "progress": {
+              "current": 0,
+              "message": null,
+              "total": 1
+            },
+            "resource_class": "gpu:llm",
+            "retry": {
+              "attempts": 0,
+              "max_attempts": 0,
+              "policy": "none"
+            },
+            "started_at": "<timestamp>",
+            "status": "queued"
+          }
+        ],
+        "started_at": "<timestamp>",
+        "status": "queued",
+        "type": "chat.generate",
+        "updated_at": "<timestamp>"
+      },
+      "type": "job"
+    },
+    {
       "text": "The request is ready. ",
       "type": "text_chunk"
     },
