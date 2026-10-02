@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from app.observability.metrics import record_auth_rejection
 from app.security.rate_limit import rate_limited
 
 from .oidc import safe_redirect_path
@@ -121,6 +122,7 @@ def create_auth_router(get_service: Callable[[], AuthService | None]) -> APIRout
         service = service_for(AuthMode.LOCAL)
         issued = service.login_with_install_credential(body.credential, user_agent=_user_agent(request))
         if issued is None:
+            record_auth_rejection("invalid_credential")
             raise HTTPException(status_code=401, detail="invalid_credential")
         revoke_presented(service, request)
         _set_session_cookies(response, issued, secure=service.settings.cookie_secure)

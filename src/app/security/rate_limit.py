@@ -20,6 +20,7 @@ from typing import Literal
 from fastapi import HTTPException, Request
 
 from app.config.env import env_str
+from app.observability.metrics import record_rate_limit_rejection
 
 MAX_KEYS = 10_000
 _LIMITS: MappingProxyType[str, tuple[str, int]] = MappingProxyType({
@@ -99,6 +100,7 @@ def rate_limited(name: Literal["login", "approvals"]) -> Callable[[Request], Awa
     async def dependency(request: Request) -> None:
         wait = _bucket(request, name).take(key_of(request))
         if wait > 0:
+            record_rate_limit_rejection(name)
             raise HTTPException(
                 status_code=429,
                 detail={"error": "rate_limited", "limit": name},

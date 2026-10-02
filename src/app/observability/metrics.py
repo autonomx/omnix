@@ -27,6 +27,7 @@ _metrics: dict[str, Any] | None = None
 
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
+    "auth_rejections", "rate_limited",
 )
 
 
@@ -57,6 +58,13 @@ def _build() -> dict[str, Any]:
         "provider_retries": Counter(
             "omnix_provider_retries", "Provider requests sent again after a retryable failure.",
             ("client",), registry=registry,
+        ),
+        "auth_rejections": Counter(
+            "omnix_auth_rejections", "Requests refused by sign-in, CSRF or permission checks, by reason.",
+            ("reason",), registry=registry,
+        ),
+        "rate_limited": Counter(
+            "omnix_rate_limit_rejections", "Requests refused by a rate limit, by limit.", ("limit",), registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -151,6 +159,15 @@ def record_provider_attempt(client: str, status: int | str, seconds: float | Non
 
 def record_provider_retry(client: str) -> None:
     _get()["provider_retries"].labels(client).inc()
+
+
+def record_auth_rejection(reason: str) -> None:
+    """A refusal by sign-in, CSRF or a permission check; ``reason`` is the response's fixed code."""
+    _get()["auth_rejections"].labels(reason).inc()
+
+
+def record_rate_limit_rejection(limit: str) -> None:
+    _get()["rate_limited"].labels(limit).inc()
 
 
 def install_provider_metrics() -> None:
@@ -312,6 +329,6 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 __all__ = [
     "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "event_loop_lag_monitor", "exposition",
-    "install_provider_metrics", "record_provider_attempt", "record_provider_retry", "request_snapshot",
-    "route_template", "status_class",
+    "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
+    "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

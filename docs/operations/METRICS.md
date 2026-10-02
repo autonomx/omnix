@@ -18,6 +18,16 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
 | `omnix_event_loop_lag_seconds` | histogram | — | How late the gateway's event loop woke a task sleeping 0.5 s, sampled twice a second: time spent in blocking code instead of serving requests. Buckets: 1 ms to 5 s. |
 
+### Security
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_auth_rejections_total` | counter | `reason` | Requests refused by sign-in (`authentication_required`, `run_token_required`, `authentication_unavailable`), the CSRF check (`csrf_failed`), a failed local login (`invalid_credential`) or a permission check (`permission_denied`). |
+| `omnix_rate_limit_rejections_total` | counter | `limit` | Requests refused by a rate limit (`login`, `approvals`). |
+
+These refusals happen before routing or in route dependencies, so the HTTP
+request metrics above do not show them by route.
+
 ### Providers and model services
 
 Recorded by the pooled HTTP client every LLM provider and model-service call
@@ -75,8 +85,8 @@ processes to compare with `max_connections`.
 
 Requests refused before routing (draining, host and CSRF checks, CORS, sign-in)
 are not counted, since no route template exists for them yet; the security
-metrics below will cover them. Permission refusals and rate limits happen at
-the route and are counted.
+metrics below count sign-in and CSRF refusals. Permission refusals and rate
+limits happen at the route and are counted in both.
 
 ## Planned (WP-10.3)
 
@@ -88,4 +98,3 @@ the route and are counted.
 | Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
 | Maintenance | retention rows deleted, run duration; scheduler task duration, failures, lag |
 | Capacity | device permits held and waiting by class |
-| Security | auth failures, rate-limit rejections |

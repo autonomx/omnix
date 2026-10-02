@@ -24,6 +24,7 @@ from fastapi import HTTPException, WebSocketException
 from starlette.requests import HTTPConnection
 
 from app.config.env import env_str
+from app.observability.metrics import record_auth_rejection
 from app.runtime.tenant_context import current_tenant, local_tenant_context
 
 logger = logging.getLogger(__name__)
@@ -278,6 +279,7 @@ def kernel_defaults_for(path: str) -> tuple[str, str] | None | Literal[False]:
 
 
 def _deny(connection: HTTPConnection, permission: str) -> None:
+    record_auth_rejection("permission_denied")
     if connection.scope["type"] == "websocket":
         raise WebSocketException(code=1008, reason="permission_denied")
     raise HTTPException(status_code=403, detail={"error": "permission_denied", "permission": permission})

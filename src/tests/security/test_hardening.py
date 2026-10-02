@@ -49,9 +49,18 @@ def test_token_bucket_forgets_the_oldest_keys() -> None:
     assert list(bucket._buckets) == ["b", "c"]
 
 
+def _counter(name: str, label: str) -> float:
+    from app.observability.metrics import exposition
+
+    prefix = f"{name}{{{label}}} "
+    lines = [line for line in exposition()[0].decode().splitlines() if line.startswith(prefix)]
+    return float(lines[0].split()[-1]) if lines else 0.0
+
+
 def test_login_attempts_are_rate_limited() -> None:
     from app.gateway.main import create_gateway_app
 
+    before = _counter("omnix_rate_limit_rejections_total", 'limit="login"')
     fresh = TestClient(create_gateway_app(), base_url="http://127.0.0.1", headers={"X-Omnix-Client": "test"})
     statuses = [fresh.post("/api/auth/local/login", json={"credential": "x"}).status_code for _ in range(6)]
     assert 429 not in statuses[:5]
@@ -59,6 +68,16 @@ def test_login_attempts_are_rate_limited() -> None:
     limited = fresh.post("/api/auth/local/login", json={"credential": "x"})
     assert limited.json()["detail"] == {"error": "rate_limited", "limit": "login"}
     assert int(limited.headers["retry-after"]) >= 1
+    assert _counter("omnix_rate_limit_rejections_total", 'limit="login"') - before == 2
+
+
+def test_refused_sign_in_is_counted_by_reason(client) -> None:
+    before = _counter("omnix_auth_rejections_total", 'reason="run_token_required"')
+
+    response = client.post("/api/agent-model/v1/chat/completions", json={})
+
+    assert response.status_code == 401
+    assert _counter("omnix_auth_rejections_total", 'reason="run_token_required"') - before == 1
 
 
 def test_approval_calls_are_rate_limited(monkeypatch) -> None:

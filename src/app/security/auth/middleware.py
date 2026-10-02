@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import compile_path
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.observability.metrics import record_auth_rejection
 from app.runtime.tenant_context import LOCAL_USER_ID, LOCAL_WORKSPACE_ID, TenantContext
 from app.security.run_tokens import RunTokenClaims
 from app.security.service_token import valid_service_token
@@ -234,6 +235,7 @@ class AuthenticationMiddleware:
 
     @staticmethod
     async def _reject(scope: Scope, receive: Receive, send: Send, status: int, detail: str) -> None:
+        record_auth_rejection(detail)
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 1008, "reason": detail})
             return
