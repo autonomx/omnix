@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+from app.observability.metrics import record_retention_deleted
+
 from .tenant_scope import system_scope
 
 logger = logging.getLogger(__name__)
@@ -176,6 +178,7 @@ class RetentionWorker:
                     report.skipped.append(policy.record_type)
                     continue
                 report.deleted[policy.record_type] = self._run_policy(handler, policy)
+                record_retention_deleted(policy.record_type, report.deleted[policy.record_type])
         except Exception as exc:
             self._finish(run_id, "failed", report, error=f"{type(exc).__name__}: {exc}"[:2000])
             raise

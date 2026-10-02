@@ -27,7 +27,7 @@ _metrics: dict[str, Any] | None = None
 
 _METRIC_NAMES = (
     "requests", "latency", "in_flight", "provider_calls", "provider_latency", "provider_retries", "loop_lag",
-    "auth_rejections", "rate_limited",
+    "auth_rejections", "rate_limited", "retention_deleted",
 )
 
 
@@ -65,6 +65,10 @@ def _build() -> dict[str, Any]:
         ),
         "rate_limited": Counter(
             "omnix_rate_limit_rejections", "Requests refused by a rate limit, by limit.", ("limit",), registry=registry,
+        ),
+        "retention_deleted": Counter(
+            "omnix_retention_rows_deleted", "Rows deleted by retention, by record type.", ("record_type",),
+            registry=registry,
         ),
         "loop_lag": Histogram(
             "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
@@ -168,6 +172,46 @@ def record_auth_rejection(reason: str) -> None:
 
 def record_rate_limit_rejection(limit: str) -> None:
     _get()["rate_limited"].labels(limit).inc()
+
+
+def record_retention_deleted(record_type: str, rows: int) -> None:
+    _get()["retention_deleted"].labels(record_type).inc(rows)
+
+
+class SchedulerCollector:
+    """This process's scheduled tasks, read from the scheduler's diagnostics at scrape time.
+
+    Only the process that owns the background lock runs tasks; elsewhere the
+    counters stay at zero.
+    """
+
+    def __init__(self, diagnostics: Callable[[], dict[str, Any]]) -> None:
+        self.diagnostics = diagnostics
+
+    def collect(self) -> Iterator[Any]:
+        from prometheus_client.core import CounterMetricFamily, GaugeMetricFamily
+
+        tasks = self.diagnostics().get("tasks") or {}
+        runs = CounterMetricFamily("omnix_scheduler_task_runs", "Scheduled task runs.", labels=["task"])
+        failures = CounterMetricFamily("omnix_scheduler_task_failures", "Scheduled task runs that failed.", labels=["task"])
+        timeouts = CounterMetricFamily(
+            "omnix_scheduler_task_timeouts", "Scheduled task runs stopped at their timeout.", labels=["task"],
+        )
+        duration = GaugeMetricFamily(
+            "omnix_scheduler_task_last_duration_seconds", "Duration of the task's last run.", labels=["task"],
+        )
+        lag = GaugeMetricFamily(
+            "omnix_scheduler_task_last_lag_seconds", "How late the task's last run started.", labels=["task"],
+        )
+        for task, metric in sorted(tasks.items()):
+            runs.add_metric([task], metric.get("run_count") or 0)
+            failures.add_metric([task], metric.get("failure_count") or 0)
+            timeouts.add_metric([task], metric.get("timeout_count") or 0)
+            if metric.get("last_duration_seconds") is not None:
+                duration.add_metric([task], metric["last_duration_seconds"])
+            if metric.get("last_lag_seconds") is not None:
+                lag.add_metric([task], metric["last_lag_seconds"])
+        yield from (runs, failures, timeouts, duration, lag)
 
 
 def install_provider_metrics() -> None:
@@ -328,7 +372,8 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 
 __all__ = [
-    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "event_loop_lag_monitor", "exposition",
+    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "SchedulerCollector",
+    "event_loop_lag_monitor", "exposition", "record_retention_deleted",
     "install_provider_metrics", "record_auth_rejection", "record_provider_attempt", "record_provider_retry",
     "record_rate_limit_rejection", "request_snapshot", "route_template", "status_class",
 ]

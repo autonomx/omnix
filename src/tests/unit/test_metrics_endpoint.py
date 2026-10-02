@@ -148,3 +148,23 @@ def test_the_event_loop_lag_histogram_records_blocking_code() -> None:
 
     assert after_count > before_count
     assert after_sum - before_sum >= 0.15
+
+
+def test_scheduled_task_metrics_come_from_the_scheduler() -> None:
+    from app.observability.metrics import SchedulerCollector
+
+    diagnostics = {"tasks": {
+        "platform.retention": {"run_count": 4, "failure_count": 1, "timeout_count": 0,
+                               "last_duration_seconds": 2.5, "last_lag_seconds": 0.25},
+        "platform.idle": {"run_count": 0, "failure_count": 0, "timeout_count": 0,
+                          "last_duration_seconds": None, "last_lag_seconds": None},
+    }}
+
+    text = exposition(SchedulerCollector(lambda: diagnostics))[0].decode()
+
+    assert 'omnix_scheduler_task_runs_total{task="platform.retention"} 4.0' in text
+    assert 'omnix_scheduler_task_failures_total{task="platform.retention"} 1.0' in text
+    assert 'omnix_scheduler_task_last_duration_seconds{task="platform.retention"} 2.5' in text
+    assert 'omnix_scheduler_task_last_lag_seconds{task="platform.retention"} 0.25' in text
+    assert 'omnix_scheduler_task_runs_total{task="platform.idle"} 0.0' in text
+    assert 'omnix_scheduler_task_last_duration_seconds{task="platform.idle"}' not in text

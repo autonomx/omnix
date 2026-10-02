@@ -18,6 +18,20 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
 | `omnix_event_loop_lag_seconds` | histogram | — | How late the gateway's event loop woke a task sleeping 0.5 s, sampled twice a second: time spent in blocking code instead of serving requests. Buckets: 1 ms to 5 s. |
 
+### Maintenance
+
+Scheduled tasks run in the process that owns the background lock; read these
+from that process (elsewhere the counters stay at zero).
+
+| Metric | Type | Labels | Meaning |
+|---|---|---|---|
+| `omnix_scheduler_task_runs_total` | counter | `task` | Runs of each registered scheduled task. |
+| `omnix_scheduler_task_failures_total` | counter | `task` | Runs that failed. |
+| `omnix_scheduler_task_timeouts_total` | counter | `task` | Runs stopped at the task's timeout. |
+| `omnix_scheduler_task_last_duration_seconds` | gauge | `task` | Duration of the last run (absent before the first). |
+| `omnix_scheduler_task_last_lag_seconds` | gauge | `task` | How late the last run started (absent before the first). |
+| `omnix_retention_rows_deleted_total` | counter | `record_type` | Rows deleted by retention, per policy record type. |
+
 ### Security
 
 | Metric | Type | Labels | Meaning |
@@ -32,8 +46,8 @@ request metrics above do not show them by route.
 
 Recorded by the pooled HTTP client every LLM provider and model-service call
 goes through, once per attempt (a retried call counts each attempt). The
-gateway installs the recorder; calls made in the worker process are not
-recorded until the worker serves metrics. `client`
+gateway installs the recorder; calls made in the job worker process are not
+recorded there yet. `client`
 is the provider's name (`lmstudio`, `openrouter`, ...) or the service
 (`tts-service`, `stt-service`, `hermes`, ...), a fixed set.
 
@@ -88,13 +102,21 @@ are not counted, since no route template exists for them yet; the security
 metrics below count sign-in and CSRF refusals. Permission refusals and rate
 limits happen at the route and are counted in both.
 
+## Job worker
+
+The job worker process (`python -m app.worker`) serves its own `GET /metrics`
+on its private listener (`--metrics-host`, `--metrics-port`), per resource pool:
+`omnix_job_worker_pool_ready`, `omnix_job_worker_pool_active_jobs`,
+`omnix_job_worker_pool_concurrency_limit`, and the counters
+`omnix_job_worker_pool_claimed_total`, `omnix_job_worker_pool_completed_total`
+and `omnix_job_worker_pool_failures_total`.
+
 ## Planned (WP-10.3)
 
 | Area | Metrics |
 |---|---|
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
-| Jobs | claims, retries and execution duration by type (recorded in the worker process, which serves no metrics yet) |
+| Jobs | retries and execution duration by job type in the job worker |
 | Speech | TTS first-audio latency; live calls active; STT latency |
 | Events and outbox | SSE subscribers, events delivered, resyncs; outbox publish rate |
-| Maintenance | retention rows deleted, run duration; scheduler task duration, failures, lag |
 | Capacity | device permits held and waiting by class |

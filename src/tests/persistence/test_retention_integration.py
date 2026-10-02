@@ -100,6 +100,14 @@ def test_agent_run_noise_is_dropped_but_milestones_and_evidence_are_kept(databas
     assert live == 4
 
 
+def _deleted_rows_counted(record_type: str) -> float:
+    from app.observability.metrics import exposition
+
+    prefix = f'omnix_retention_rows_deleted_total{{record_type="{record_type}"}} '
+    lines = [line for line in exposition()[0].decode().splitlines() if line.startswith(prefix)]
+    return float(lines[0].split()[-1]) if lines else 0.0
+
+
 def test_expired_sessions_and_stopped_nodes_are_removed(database) -> None:
     expired, active = f"session-{uuid.uuid4().hex}", f"session-{uuid.uuid4().hex}"
     stopped, live = f"node-{uuid.uuid4().hex}", f"node-{uuid.uuid4().hex}"
@@ -116,7 +124,9 @@ def test_expired_sessions_and_stopped_nodes_are_removed(database) -> None:
                       (%s, 'worker', 'test', 'active', now() + interval '1 minute', NULL)""",
             (stopped, live),
         )
-    RetentionWorker(database).run_once()
+    before = _deleted_rows_counted("auth_sessions")
+    report = RetentionWorker(database).run_once()
+    assert _deleted_rows_counted("auth_sessions") - before == report.deleted["auth_sessions"] >= 1
     with _admin() as admin:
         assert not _exists(admin, "omnix_auth_sessions", "id", expired)
         assert _exists(admin, "omnix_auth_sessions", "id", active)
