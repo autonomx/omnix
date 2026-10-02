@@ -11,17 +11,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
-from app.chat.generation_jobs import (
-    chat_submission_lock,
-    existing_chat_generation_turn,
-    find_chat_generation_job,
-    mark_chat_acceptance_failed,
-    start_chat_generation_job,
-)
+from app.chat.generation_jobs import start_chat_generation_job
 from app.chat.research_citations import validate_completed_research_reply
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.research_release import apply_research_release_decision
-from app.jobs import CreateJobRequest, JobRecord, ResourceClass, default_job_store
+from app.jobs import JobRecord, default_job_store
 from app.research.jobs import start_research_job
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
@@ -231,68 +225,27 @@ def register_assistant_context_routes(
             "research_release_warnings": decision.warnings,
         }
         job_store = job_store_factory()
-        with chat_submission_lock(session_id, send_request.user_turn_id, job_store=job_store, chat_store=chat_store):
-            existing_job = find_chat_generation_job(
-                job_store,
-                session_id=session_id,
-                submission_id=send_request.user_turn_id,
-            )
-            if existing_job is not None:
-                existing_turn = existing_chat_generation_turn(chat_store, existing_job)
-                if existing_turn is not None:
-                    session, user_message = existing_turn
-                    return SendChatMessageResponse(
-                        session=session,
-                        user_message=user_message,
-                        job=existing_job,
-                    )
-                raise HTTPException(
-                    status_code=409,
-                    detail="accepted chat submission is missing its user message",
-                )
-            appended = chat_store.begin_user_message(
-                session_id,
-                send_request,
-                context_diagnostics=queued_context_diagnostics,
-            )
-            if appended is None:
-                raise HTTPException(status_code=404, detail="chat session not found")
-            session, user_message = appended
-            try:
-                job = job_store.create_job(
-                    CreateJobRequest(
-                        module="chatbot",
-                        type="chat.generate",
-                        resource_class=ResourceClass.GPU_LLM,
-                        input_ref={"session_id": session.id, "message_id": user_message.id},
-                        input_payload={
-                            "session_id": session.id,
-                            "message_id": user_message.id,
-                            "submission_id": send_request.user_turn_id,
-                            "provider_id": request.provider_id or session.provider_id,
-                            "model_id": request.model_id or session.model_id,
-                            "request": send_request.model_dump(mode="json"),
-                            "context_status": "queued",
-                            "research_release": decision.model_dump(mode="json"),
-                            "research_compatibility_warnings": request.internal_research_warnings,
-                        },
-                        compat={
-                            "contract": "assistant_context_chat_v1",
-                            "inline_execution": True,
-                        },
-                    )
-                )
-            except Exception as exc:
-                mark_chat_acceptance_failed(
-                    chat_store,
-                    session_id=session.id,
-                    message_id=user_message.id,
-                    error=exc,
-                )
-                raise HTTPException(
-                    status_code=503,
-                    detail="chat generation could not be queued",
-                ) from exc
+        # Imported on first use: admission is not needed to compose the gateway.
+        from app.chat.admission import admit_chat_turn_for_http
+
+        admission = admit_chat_turn_for_http(
+            chat_store,
+            job_store,
+            session_id,
+            send_request,
+            begin_user_message=lambda turn_session_id, turn_request: chat_store.begin_user_message(
+                turn_session_id, turn_request, context_diagnostics=queued_context_diagnostics,
+            ),
+            job_payload={
+                "context_status": "queued",
+                "research_release": decision.model_dump(mode="json"),
+                "research_compatibility_warnings": request.internal_research_warnings,
+            },
+            contract="assistant_context_chat_v1",
+        )
+        session, user_message, job = admission.session, admission.user_message, admission.job
+        if admission.existing:
+            return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
         def build_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             context = context_service_factory().build(request)
@@ -419,55 +372,74 @@ def register_assistant_context_routes(
 
             return StreamingResponse(generate_deep_research_ack(), media_type="text/event-stream")
 
-        context = await asyncio.to_thread(context_service_factory().build, request)
-        context_items = [item.model_dump(mode="json") for item in context.items]
-        context_diagnostics = {
-            **context.diagnostics,
-            "research_requested_mode": decision.requested_mode,
-            "research_effective_mode": decision.effective_mode,
-            "research_release_status": decision.status,
-            "research_release_reason": decision.reason,
-            "research_release_warnings": decision.warnings,
-        }
-        appended = chat_store.begin_user_message(
+        # Imported on first use: admission is not needed to compose the gateway.
+        from app.chat.admission import admit_chat_turn_for_http, stream_chat_turn
+        from app.chat.generation_jobs import find_chat_generation_job
+
+        job_store = job_store_factory()
+        send_request = _send_request(request)
+        context_items: list[dict[str, Any]] = []
+        context_sources: list[str] = []
+        context_diagnostics: dict[str, Any] = {}
+        # A repeated submission returns its accepted turn; do not research again.
+        if await asyncio.to_thread(
+            find_chat_generation_job, job_store, session_id=session_id, submission_id=send_request.user_turn_id,
+        ) is None:
+            context = await asyncio.to_thread(context_service_factory().build, request)
+            context_items = [item.model_dump(mode="json") for item in context.items]
+            context_sources = [item.source_id for item in context.items]
+            context_diagnostics = {
+                **context.diagnostics,
+                "research_requested_mode": decision.requested_mode,
+                "research_effective_mode": decision.effective_mode,
+                "research_release_status": decision.status,
+                "research_release_reason": decision.reason,
+                "research_release_warnings": decision.warnings,
+            }
+        admission = await asyncio.to_thread(
+            admit_chat_turn_for_http,
+            chat_store,
+            job_store,
             session_id,
-            _send_request(request),
-            context_items=context_items,
-            context_diagnostics=context_diagnostics,
+            send_request,
+            begin_user_message=lambda turn_session_id, turn_request: chat_store.begin_user_message(
+                turn_session_id,
+                turn_request,
+                context_items=context_items,
+                context_diagnostics=context_diagnostics,
+            ),
+            job_payload={
+                "research_release": decision.model_dump(mode="json"),
+                "research_compatibility_warnings": request.internal_research_warnings,
+            },
+            contract="assistant_context_chat_v1",
         )
-        if appended is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
-        session, user_message = appended
+
+        def annotate_reply(metadata: dict[str, Any]) -> None:
+            if context_sources:
+                metadata["context_sources"] = context_sources
+            metadata["context_diagnostics"] = context_diagnostics
 
         def generate():
-            yield _sse({"type": "user_message", "message": user_message.model_dump(mode="json")})
-            content = ""
-            metadata: dict[str, Any] = {"generation_status": "completed"}
+            yield _sse({"type": "user_message", "message": admission.user_message.model_dump(mode="json")})
+            yield _sse({"type": "job", "job": admission.job.model_dump(mode="json")})
+            if admission.existing:
+                # A repeated submission reports the turn it already started.
+                yield _sse({"type": "session", "session": admission.session.model_dump(mode="json")})
+                yield _sse({"type": "done"})
+                return
             try:
-                for event in chat_store.stream_provider_reply_chunks(
-                    session,
-                    user_message,
-                    provider_id=request.provider_id or session.provider_id,
-                    model_id=request.model_id or session.model_id,
+                for event in stream_chat_turn(
+                    chat_store,
+                    job_store,
+                    admission,
+                    send_request,
                     context_items=context_items,
+                    annotate_reply=annotate_reply,
                 ):
-                    if event.get("type") == "complete":
-                        content = str(event.get("content") or "").strip()
-                        metadata = event.get("metadata") if isinstance(event.get("metadata"), dict) else metadata
-                        if context_items:
-                            metadata["context_sources"] = [
-                                item.source_id for item in context.items
-                            ]
-                        metadata["context_diagnostics"] = context_diagnostics
                     yield _sse(event)
-                completed = chat_store.complete_streamed_reply(
-                    session.id,
-                    user_message.id,
-                    content,
-                    metadata,
-                )
-                if completed is not None:
-                    yield _sse({"type": "session", "session": completed.model_dump(mode="json")})
+                    if event.get("type") == "interrupted":
+                        return
                 yield _sse({"type": "done"})
             except Exception as exc:
                 yield _sse({"type": "error", "message": str(exc) or "Chat stream failed."})

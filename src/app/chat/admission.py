@@ -12,6 +12,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from fastapi import HTTPException
+
 from app.jobs import CancelJobRequest
 from app.jobs.models import CreateJobRequest, JobRecord, JobStatus, ResourceClass
 
@@ -48,6 +50,21 @@ class ChatAcceptanceFailed(RuntimeError):
     """The turn was appended but its job could not be created."""
 
 
+def admit_chat_turn_for_http(
+    chat_store: Any, job_store: Any, session_id: str, request: SendChatMessageRequest, **options: Any,
+) -> ChatAdmission:
+    """``admit_chat_turn`` for a route: refusals become HTTP errors (409, 503, 404)."""
+    try:
+        admission = admit_chat_turn(chat_store, job_store, session_id, request, **options)
+    except ChatSubmissionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ChatAcceptanceFailed as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if admission is None:
+        raise HTTPException(status_code=404, detail="chat session not found")
+    return admission
+
+
 def admit_chat_turn(
     chat_store: Any,
     job_store: Any,
@@ -55,13 +72,16 @@ def admit_chat_turn(
     request: SendChatMessageRequest,
     *,
     begin_user_message: Callable[[str, SendChatMessageRequest], Any] | None = None,
+    job_payload: dict[str, Any] | None = None,
+    contract: str = "chat_session_v1",
 ) -> ChatAdmission | None:
     """Accept one Chat submission exactly once, for the job and streaming routes.
 
     Under the submission lock, a repeated ``user_turn_id`` returns the turn it
     already created; otherwise older active turns are interrupted, the user
     message is appended and a ``chat.generate`` job records the turn. Returns
-    ``None`` when the session does not exist.
+    ``None`` when the session does not exist. A feature that admits Chat turns
+    (assistant context) adds its own ``job_payload`` fields and ``contract``.
     """
     begin = begin_user_message or chat_store.begin_user_message
     with chat_submission_lock(
@@ -98,8 +118,9 @@ def admit_chat_turn(
                         "provider_id": request.provider_id or session.provider_id,
                         "model_id": request.model_id or session.model_id,
                         "request": request.model_dump(mode="json"),
+                        **(job_payload or {}),
                     },
-                    compat={"contract": "chat_session_v1", "inline_execution": True},
+                    compat={"contract": contract, "inline_execution": True},
                 )
             )
         except Exception as exc:
@@ -115,13 +136,18 @@ def stream_chat_turn(
     job_store: Any,
     admission: ChatAdmission,
     request: SendChatMessageRequest,
+    *,
+    context_items: list[dict[str, Any]] | None = None,
+    annotate_reply: Callable[[dict[str, Any]], None] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Generate an admitted turn on the caller's stream and finish its job.
 
     Yields the provider's events. A newer submission (or a job cancel)
     interrupts the stream between events, exactly as it interrupts a
     dispatched turn; the reply is committed with the job at the provider's
-    completion event, before that event is yielded.
+    completion event, before that event is yielded. ``context_items`` are
+    passed to the provider; ``annotate_reply`` adds to the reply's metadata
+    before it is committed.
     """
     job = admission.job
     session, user_message = admission.session, admission.user_message
@@ -139,11 +165,13 @@ def stream_chat_turn(
         metadata: dict[str, Any] = {"generation_status": "completed"}
         committed = False
         completed = None
+        extra = {} if context_items is None else {"context_items": context_items}
         events = chat_store.stream_provider_reply_chunks(
             session,
             user_message,
             provider_id=request.provider_id or session.provider_id,
             model_id=request.model_id or session.model_id,
+            **extra,
         )
         try:
             for event in events:
@@ -154,6 +182,8 @@ def stream_chat_turn(
                     content = str(event.get("content") or "").strip()
                     if isinstance(event.get("metadata"), dict):
                         metadata = event["metadata"]
+                    if annotate_reply is not None:
+                        annotate_reply(metadata)
                     # Commit at the provider completion boundary: live voice
                     # playback can outlast generation and a later barge-in may
                     # close the HTTP body before the session event is sent.

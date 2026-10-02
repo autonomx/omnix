@@ -40,19 +40,11 @@ def _admit(chat_store, job_store, session_id: str, request: SendChatMessageReque
            *, begin_user_message=None) -> "ChatAdmission":
     """Shared admission for the job and streaming routes, as HTTP errors."""
     # Imported on first use: admission is not needed to compose the gateway.
-    from app.chat.admission import ChatAcceptanceFailed, ChatSubmissionConflict, admit_chat_turn
+    from app.chat.admission import admit_chat_turn_for_http
 
-    try:
-        admission = admit_chat_turn(
-            chat_store, job_store, session_id, request, begin_user_message=begin_user_message,
-        )
-    except ChatSubmissionConflict as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    except ChatAcceptanceFailed as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    if admission is None:
-        raise HTTPException(status_code=404, detail="chat session not found")
-    return admission
+    return admit_chat_turn_for_http(
+        chat_store, job_store, session_id, request, begin_user_message=begin_user_message,
+    )
 
 
 def register_core_chat_routes(router: APIRouter, *, get_chat_store, get_job_store):

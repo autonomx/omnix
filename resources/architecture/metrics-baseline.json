@@ -7305,7 +7305,7 @@
     "functions_over_150_lines": {
       "direction": "lower",
       "target": 20,
-      "value": 386
+      "value": 385
     },
     "inline_prompt_strings": {
       "direction": "lower",
@@ -7485,5 +7485,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "8128897561d2aca488c84cef92960b660cc977b4c93590277077111735bc7ec8"
+  "source_digest": "b32f6b6c86dd11b71e8434c96102e65939e2796a7b01e045c08fcfe109a139d4"
 }
