@@ -42,6 +42,19 @@ def _durable_snapshot(services):
     }, session_owners
 
 
+def job_metrics_snapshot(services):
+    """The workspace's active jobs and dead letters for ``/metrics`` (WP-10.3)."""
+    from app.persistence.authority import AuthorityOperation, require_authority_operation
+    from app.persistence.unit_of_work import unit_of_work
+
+    jobs = services.jobs
+    with unit_of_work(jobs.database, authority_operation=AuthorityOperation.DIAGNOSTIC_READ) as work:
+        require_authority_operation(work.connection, AuthorityOperation.DIAGNOSTIC_READ)
+        snapshot = work.jobs.metrics_snapshot(jobs.context)
+        work.rollback()
+    return snapshot
+
+
 def runtime_diagnostics(state) -> RuntimeDiagnostics:
     from app.observability.metrics import request_snapshot
 

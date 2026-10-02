@@ -65,3 +65,39 @@ def test_the_gateway_serves_the_catalog_to_metrics_admins(tmp_path: Path, monkey
     assert all(name in response.text for name in CATALOG)
     assert 'route="/api/health"' in response.text
     assert kernel_defaults_for("/metrics") == ("admin:metrics", "admin:metrics")
+
+
+def test_job_queue_gauges_come_from_the_snapshot() -> None:
+    from app.observability.metrics import JobQueueCollector
+
+    snapshot = {
+        "active": [
+            {"job_type": "image.generate", "status": "queued", "count": 3,
+             "oldest_waiting_age_seconds": 42.5, "expired_leases": 0},
+            {"job_type": "image.generate", "status": "running", "count": 1,
+             "oldest_waiting_age_seconds": 0.0, "expired_leases": 1},
+        ],
+        "dead_letter_count": 2,
+    }
+
+    body, _ = exposition(JobQueueCollector(lambda: snapshot))
+    text = body.decode()
+
+    assert "omnix_jobs_snapshot_up 1.0" in text
+    assert 'omnix_jobs_active{job_type="image.generate",status="queued"} 3.0' in text
+    assert 'omnix_jobs_oldest_waiting_age_seconds{job_type="image.generate"} 42.5' in text
+    assert 'omnix_jobs_expired_leases{job_type="image.generate"} 1.0' in text
+    assert "omnix_job_dead_letters 2.0" in text
+    assert "omnix_http_requests_in_flight" in text
+
+
+def test_a_failed_job_snapshot_reports_down_without_the_error_text(caplog) -> None:
+    from app.observability.metrics import JobQueueCollector
+
+    def unavailable():
+        raise OSError("postgresql://user:secret@db/omnix")
+
+    body, _ = exposition(JobQueueCollector(unavailable))
+
+    assert "omnix_jobs_snapshot_up 0.0" in body.decode()
+    assert "secret" not in body.decode() and "secret" not in caplog.text

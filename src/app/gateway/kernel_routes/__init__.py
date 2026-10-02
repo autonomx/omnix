@@ -312,9 +312,15 @@ def create_kernel_router(
     @router.get("/metrics", response_class=Response, tags=["diagnostics"])
     def metrics() -> Response:
         """Prometheus metrics (WP-10.3); needs ``admin:metrics``."""
-        from app.observability.metrics import exposition
+        from app.observability.metrics import JobQueueCollector, exposition
 
-        body, content_type = exposition()
+        services = getattr(state, "runtime_services", None)
+        collectors = []
+        if services is not None:
+            from app.platform.runtime_diagnostics import job_metrics_snapshot
+
+            collectors.append(JobQueueCollector(lambda: job_metrics_snapshot(services)))
+        body, content_type = exposition(*collectors)
         return Response(body, media_type=content_type)
 
     @router.get(

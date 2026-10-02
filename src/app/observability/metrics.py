@@ -8,10 +8,13 @@ are classes (``2xx`` ... ``5xx``).
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
+from collections.abc import Callable, Iterator
 from typing import Any
 
+logger = logging.getLogger(__name__)
 _UNMATCHED_ROUTE = "unmatched"
 _LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
 _lock = threading.Lock()
@@ -98,11 +101,67 @@ def request_snapshot() -> dict[str, int]:
     return {"active_requests": int(in_flight), "request_count": int(handled), "error_count": int(errors)}
 
 
-def exposition() -> tuple[bytes, str]:
-    """The registry in the Prometheus text format, with its content type."""
-    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+class JobQueueCollector:
+    """Job queue gauges read at scrape time from ``snapshot`` (a database read).
 
-    return generate_latest(_get()["registry"]), CONTENT_TYPE_LATEST
+    The values describe the workspace's queue, not this process: every gateway
+    process reports the same numbers, so aggregate them with ``max``.
+    """
+
+    def __init__(self, snapshot: Callable[[], dict[str, Any]]) -> None:
+        self.snapshot = snapshot
+
+    def collect(self) -> Iterator[Any]:
+        from prometheus_client.core import GaugeMetricFamily
+
+        up = GaugeMetricFamily("omnix_jobs_snapshot_up", "1 when the job queue snapshot was read, else 0.")
+        try:
+            data = self.snapshot()
+        except Exception as exc:
+            # No exception text: it can carry a database URL.
+            logger.warning("job metrics snapshot failed error_type=%s", type(exc).__name__)
+            up.add_metric([], 0)
+            yield up
+            return
+        up.add_metric([], 1)
+        yield up
+        active = GaugeMetricFamily("omnix_jobs_active", "Active jobs by type and status.", labels=["job_type", "status"])
+        oldest = GaugeMetricFamily(
+            "omnix_jobs_oldest_waiting_age_seconds",
+            "Age of the oldest job waiting to be claimed (queued, waiting or retrying), by type.",
+            labels=["job_type"],
+        )
+        expired = GaugeMetricFamily(
+            "omnix_jobs_expired_leases", "Active jobs whose lease has expired, by type.", labels=["job_type"],
+        )
+        oldest_by_type: dict[str, float] = {}
+        expired_by_type: dict[str, int] = {}
+        for row in data["active"]:
+            job_type = row["job_type"]
+            active.add_metric([job_type, row["status"]], row["count"])
+            oldest_by_type[job_type] = max(oldest_by_type.get(job_type, 0.0), row["oldest_waiting_age_seconds"])
+            expired_by_type[job_type] = expired_by_type.get(job_type, 0) + row["expired_leases"]
+        for job_type, age in sorted(oldest_by_type.items()):
+            oldest.add_metric([job_type], age)
+        for job_type, count in sorted(expired_by_type.items()):
+            expired.add_metric([job_type], count)
+        dead = GaugeMetricFamily("omnix_job_dead_letters", "Unresolved dead-lettered jobs.")
+        dead.add_metric([], data["dead_letter_count"])
+        yield from (active, oldest, expired, dead)
 
 
-__all__ = ["HttpMetricsMiddleware", "exposition", "request_snapshot", "route_template", "status_class"]
+def exposition(*collectors: Any) -> tuple[bytes, str]:
+    """The registry, then each scrape-time collector, in the Prometheus text format."""
+    from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
+
+    body = generate_latest(_get()["registry"])
+    for collector in collectors:
+        scrape = CollectorRegistry(auto_describe=False)
+        scrape.register(collector)
+        body += generate_latest(scrape)
+    return body, CONTENT_TYPE_LATEST
+
+
+__all__ = [
+    "HttpMetricsMiddleware", "JobQueueCollector", "exposition", "request_snapshot", "route_template", "status_class",
+]

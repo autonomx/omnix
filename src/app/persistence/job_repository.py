@@ -262,6 +262,39 @@ class PostgresJobRepository(_BaseJobRepository):
             "dead_letter_count": dead_letters,
         }
 
+    def metrics_snapshot(self, context: TenantContext) -> dict[str, Any]:
+        """Active jobs by type and status, and unresolved dead letters (WP-10.3).
+
+        One row per (type, status): registered types times six statuses is far
+        below the cap, which only bounds metric label cardinality.
+        """
+        active = self.connection.execute(
+            """SELECT job_type, status, count(*),
+                      COALESCE(max(EXTRACT(EPOCH FROM (clock_timestamp() - created_at)))
+                          FILTER (WHERE status IN ('queued', 'waiting', 'retrying')), 0),
+                      count(*) FILTER (WHERE lease_expires_at < clock_timestamp())
+                 FROM omnix_jobs
+                WHERE workspace_id = %s
+                  AND status IN ('queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested')
+                GROUP BY job_type, status
+                ORDER BY job_type, status
+                LIMIT 1000""",
+            (context.workspace_id,),
+        ).fetchall()
+        dead_letters = self.connection.execute(
+            """SELECT count(*) FROM omnix_dead_letters
+                WHERE workspace_id = %s AND resolved_at IS NULL""",
+            (context.workspace_id,),
+        ).fetchone()[0]
+        return {
+            "active": [
+                {"job_type": str(row[0]), "status": str(row[1]), "count": int(row[2]),
+                 "oldest_waiting_age_seconds": float(row[3]), "expired_leases": int(row[4])}
+                for row in active
+            ],
+            "dead_letter_count": int(dead_letters),
+        }
+
     def set_cancel_compat(
         self, context: TenantContext, *, job_id: str, payload: dict[str, Any]
     ) -> None:

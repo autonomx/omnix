@@ -33,7 +33,7 @@ MAX_APPLIED_MIGRATIONS = 100_000
 # Session-scoped migration lock. CLI migration is the only schema mutation path.
 MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 SCHEMA_MIN_CONTRACT = "0100_migration_metadata"
-SCHEMA_KNOWN = "0115_job_correlation_id"
+SCHEMA_KNOWN = "0116_job_metrics_active_index"
 APPLICATION_SCHEMA_MIN = SCHEMA_MIN_CONTRACT
 APPLICATION_SCHEMA_MAX = SCHEMA_KNOWN
 
