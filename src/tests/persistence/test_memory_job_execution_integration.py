@@ -114,7 +114,7 @@ def test_derived_candidate_and_job_result_commit_together(runtime, monkeypatch, 
     database, store = runtime
     from app.assistant_memory.owner_service import OwnerAwareMemoryService
     from app.chat.models import ChatMessage, ChatSession
-    from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
     monkeypatch.setenv("OMNIX_COMPANION_ROLLOUT_STAGE", "review_required")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")

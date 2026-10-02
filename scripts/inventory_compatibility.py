@@ -9,7 +9,6 @@ DISPOSITIONS = {
     'rpg_feature_compat': ('B', 'Legacy NPC projection and narrative event contracts', 'Use typed NPC/narrative repositories and migrate default factories before deleting wrappers.'),
     'image_asset_compat': ('B', 'Legacy image manifest function contracts', 'Move image callers to the shared asset service; retain artifact files outside structured authority.'),
     'configuration_compat': ('B', 'Legacy assistant policy and tool configuration functions', 'Move consumers to typed configuration services; preserve secret-store boundaries.'),
-    'inline_execution_compat': ('A', 'Normalizes the inline execution marker used by durable job admission', 'Keep this stable job contract adapter; rename when its public import paths can be migrated together.'),
 }
 
 
@@ -24,9 +23,6 @@ def main():
         if 'platform' in path.parts:
             default = ('B', 'Gateway payload facade over RPG domain services',
                        'Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade.')
-        elif path.stem == 'flux_pipeline_compat':
-            default = ('A', 'Adapts supported Diffusers/Flux pipeline versions and fallback call signatures',
-                       'Keep while supported compute stacks differ; rename only when both image and RPG visual imports migrate together.')
         category, purpose, prerequisite = DISPOSITIONS.get(path.stem, default)
         pattern = re.compile(r'(?:\.|import\s+)' + re.escape(path.stem) + r'\b')
         callers = [caller.relative_to(ROOT).as_posix() for caller, source in sources.items() if caller != path and pattern.search(source)]

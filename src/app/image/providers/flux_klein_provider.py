@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable
 import torch
 
 from app.image.downloads import get_flux_local_model_status
-from app.image.flux_pipeline_compat import (
+from app.image.flux_pipeline_loading import (
     build_flux_pipeline,
     validate_flux_pipeline_import,
     validate_flux_repo_runtime,

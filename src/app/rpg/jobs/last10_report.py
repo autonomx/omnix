@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
-from app.jobs.inline_execution_compat import require_execution_authority
+from app.jobs.inline_execution import require_execution_authority
 from .last10_report_artifacts import write_rpg_last10_report
 from .last10_report_debug import build_turn_debug_payload
 

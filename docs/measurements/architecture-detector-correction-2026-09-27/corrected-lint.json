@@ -2372,7 +2372,7 @@
     },
     {
       "count": 1,
-      "fingerprint": "<module>:app.image.flux_pipeline_compat",
+      "fingerprint": "<module>:app.image.flux_pipeline_loading",
       "lines": [
         4
       ],
@@ -12240,7 +12240,7 @@
       "lines": [
         553
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12249,7 +12249,7 @@
       "lines": [
         102
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12258,7 +12258,7 @@
       "lines": [
         127
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12268,7 +12268,7 @@
         421,
         440
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12277,7 +12277,7 @@
       "lines": [
         470
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12286,7 +12286,7 @@
       "lines": [
         317
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12296,7 +12296,7 @@
         362,
         376
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12306,7 +12306,7 @@
         396,
         406
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -12315,7 +12315,7 @@
       "lines": [
         339
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL006"
     },
     {
@@ -22592,7 +22592,7 @@
       "lines": [
         30
       ],
-      "path": "src/app/persistence/asset_compat.py",
+      "path": "src/app/persistence/shared_asset_store.py",
       "rule": "AL011"
     },
     {
@@ -22702,7 +22702,7 @@
       "lines": [
         29
       ],
-      "path": "src/app/persistence/asset_compat.py",
+      "path": "src/app/persistence/shared_asset_store.py",
       "rule": "AL012"
     },
     {
@@ -22756,7 +22756,7 @@
       "lines": [
         37
       ],
-      "path": "src/app/persistence/foreground_submission_compat.py",
+      "path": "src/app/persistence/foreground_submissions.py",
       "rule": "AL012"
     },
     {
@@ -22765,7 +22765,7 @@
       "lines": [
         50
       ],
-      "path": "src/app/persistence/job_compat.py",
+      "path": "src/app/persistence/job_store.py",
       "rule": "AL012"
     },
     {

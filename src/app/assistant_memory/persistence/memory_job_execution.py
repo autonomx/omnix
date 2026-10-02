@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from app.jobs import CompleteJobRequest, FailJobRequest
 
 from app.persistence.execution_repositories import JobClaimConflict
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
 from app.persistence.unit_of_work import unit_of_work
 

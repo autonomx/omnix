@@ -55,7 +55,7 @@ class PostgresResearchSourceStore(ResearchSourceStore):
         """Store extracted content as an asset reference, not a mutable side file."""
 
         from app.assets.models import AssetRecord, AssetType
-        from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+        from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
         from app.research.contracts import ResearchSourceSnapshot
 
         with self._lock:

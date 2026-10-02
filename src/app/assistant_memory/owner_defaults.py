@@ -55,7 +55,7 @@ def _runtime_repository_factory() -> RepositoryFactory | None:
     from app.persistence.runtime import uses_postgresql_runtime
     if not uses_postgresql_runtime():
         return None
-    from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
 
     return PostgresOwnerAwareMemoryRepository
 

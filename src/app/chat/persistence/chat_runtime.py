@@ -39,7 +39,7 @@ from app.persistence.transaction_binding import after_commit, share_transaction
 from app.persistence.unit_of_work import unit_of_work
 from app.security.tenant_context import RequestTenant
 
-from .chat_compat import PostgresChatRepositoryAdapter
+from .chat_store import PostgresChatRepositoryAdapter
 
 
 @contextmanager

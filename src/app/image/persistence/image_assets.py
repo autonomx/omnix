@@ -12,7 +12,7 @@ from app.assets.content import asset_location
 from app.assets.models import AssetRecord, AssetType
 from app.assets.paging import iter_assets
 
-from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
 
 
 def _now() -> str:

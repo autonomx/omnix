@@ -8,7 +8,7 @@ import psycopg
 import pytest
 
 from app.assets.paging import iter_assets
-from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
@@ -95,3 +95,25 @@ def test_a_tampered_cursor_is_rejected(store) -> None:
     adapter, _tenant, _module = store
     with pytest.raises(InvalidCursor):
         adapter.list_assets(cursor="not-a-cursor")
+
+
+def test_updating_an_asset_keeps_its_provenance(store) -> None:
+    """One-statement descriptor update that preserves the source job (WP-8.1)."""
+    from app.assets.models import AssetRecord
+
+    adapter, tenant, module = store
+    asset_id = f"{module}:provenance"
+    _insert(tenant, module, [(asset_id, "image", 0)])
+
+    first = adapter.upsert_asset(AssetRecord(
+        id=asset_id, module=module, type="image", mime_type="image/png",
+        metadata={"title": "first"}, source_job_id="job:render-1", created_at="2026-10-01T00:00:00Z",
+    ))
+    second = adapter.upsert_asset(AssetRecord(
+        id=asset_id, module=module, type="image", mime_type="image/png",
+        metadata={"title": "second"}, created_at="2026-10-01T00:00:00Z",
+    ))
+
+    assert first.source_job_id == "job:render-1"
+    assert second.metadata == {"title": "second"}
+    assert second.source_job_id == "job:render-1"  # not erased by an update without one

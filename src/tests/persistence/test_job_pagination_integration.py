@@ -10,7 +10,7 @@ import pytest
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 from app.runtime.tenant_context import install_process_tenant
 from tests.support.database import admin_database_url
 

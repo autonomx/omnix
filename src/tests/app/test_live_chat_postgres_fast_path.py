@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from typing import Any
 
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.chat.persistence import chat_runtime_compat as fast_path
-from app.chat.persistence import chat_runtime_compat
-from app.chat.persistence.chat_compat import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
+from app.chat.persistence import chat_runtime as fast_path
+from app.chat.persistence import chat_runtime
+from app.chat.persistence.chat_store import _MESSAGE_PAGE_SIZE, PostgresChatRepositoryAdapter
 
 
 NOW = "2026-07-18T00:00:00+00:00"
@@ -496,23 +496,23 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
             self.live_agent_planner = live_agent_planner
             created_stores.append(self)
 
-    chat_runtime_compat.reset_default_chat_runtime_caches()
+    chat_runtime.reset_default_chat_runtime_caches()
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresHistorySearchService",
         FakeHistorySearchService,
     )
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresCharacterChatSessionStore",
         FakeChatStore,
     )
 
     try:
-        first_history = chat_runtime_compat.default_history_search_service()
-        second_history = chat_runtime_compat.default_history_search_service()
-        first_store = chat_runtime_compat.default_chat_store()
-        second_store = chat_runtime_compat.default_chat_store()
+        first_history = chat_runtime.default_history_search_service()
+        second_history = chat_runtime.default_history_search_service()
+        first_store = chat_runtime.default_chat_store()
+        second_store = chat_runtime.default_chat_store()
 
         assert first_history is second_history
         assert first_store is second_store
@@ -520,4 +520,4 @@ def test_default_postgres_chat_services_are_process_resident(monkeypatch) -> Non
         assert created_history == [first_history]
         assert created_stores == [first_store]
     finally:
-        chat_runtime_compat.reset_default_chat_runtime_caches()
+        chat_runtime.reset_default_chat_runtime_caches()

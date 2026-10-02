@@ -432,16 +432,16 @@ def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
 
 
 def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
-    from app.chat.persistence import chat_runtime_compat
+    from app.chat.persistence import chat_runtime
 
     repository = object()
     monkeypatch.setattr(
-        chat_runtime_compat,
+        chat_runtime,
         "PostgresChatRepositoryAdapter",
         lambda: repository,
     )
 
-    store = chat_runtime_compat.PostgresCharacterChatSessionStore()
+    store = chat_runtime.PostgresCharacterChatSessionStore()
 
     assert store._prompt_context_cache == {}
     assert store._prompt_context_cache_lock is not None

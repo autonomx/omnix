@@ -3,15 +3,15 @@ from __future__ import annotations
 from contextlib import contextmanager
 from types import SimpleNamespace
 
-from app.chat.persistence import chat_compat
-from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence import chat_store
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 
 
 def test_postgres_chat_adapter_paginates_full_message_history() -> None:
     adapter = object.__new__(PostgresChatRepositoryAdapter)
     adapter.context = object()
 
-    page_size = chat_compat._MESSAGE_PAGE_SIZE
+    page_size = chat_store._MESSAGE_PAGE_SIZE
     first_page = [{"id": f"msg:{index}", "position": index} for index in range(page_size)]
     second_page = [{"id": f"msg:{page_size}", "position": page_size}]
 
@@ -72,7 +72,7 @@ def test_postgres_chat_adapter_lists_summaries_without_loading_messages(monkeypa
         assert database is adapter.database
         yield FakeWork()
 
-    monkeypatch.setattr(chat_compat, "unit_of_work", fake_unit_of_work)
+    monkeypatch.setattr(chat_store, "unit_of_work", fake_unit_of_work)
 
     summaries, next_cursor = adapter.list_session_summaries()
 
@@ -118,7 +118,7 @@ def test_postgres_chat_adapter_gets_only_the_requested_transcript(monkeypatch) -
         def list_messages(self, context, session_id, *, limit: int, after_position: int):
             assert context is adapter.context
             assert session_id == "chat:test"
-            assert limit == chat_compat._MESSAGE_PAGE_SIZE
+            assert limit == chat_store._MESSAGE_PAGE_SIZE
             return [message] if after_position == -1 else []
 
     class FakeWork:
@@ -132,7 +132,7 @@ def test_postgres_chat_adapter_gets_only_the_requested_transcript(monkeypatch) -
         assert database is adapter.database
         yield FakeWork()
 
-    monkeypatch.setattr(chat_compat, "unit_of_work", fake_unit_of_work)
+    monkeypatch.setattr(chat_store, "unit_of_work", fake_unit_of_work)
 
     session = adapter.get_session("chat:test")
 

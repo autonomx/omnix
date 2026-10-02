@@ -234,7 +234,7 @@ for variable in (
     assert not Path(os.environ[variable]).exists(), variable
 
 from app.chat.models import ChatMessage, ChatSession
-from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.runtime.feature_catalog import load_feature
 from app.persistence.repository_registry import install_repository_specs
 
@@ -262,7 +262,7 @@ assert loaded_chat is not None
 assert loaded_chat.messages[0].content == "hello"
 
 from app.characters.models import CreateCharacterRequest
-from app.characters.persistence.character_compat import PostgresCharacterRepositoryAdapter
+from app.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
 
 characters = PostgresCharacterRepositoryAdapter()
 created_character = characters.create(CreateCharacterRequest(
@@ -276,7 +276,7 @@ assert created_character.active_version == 1
 assert characters.get(created_character.id) is not None
 
 from app.memory_contracts import MemoryRecord
-from app.assistant_memory.persistence.memory_compat import PostgresMemoryRepositoryAdapter
+from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
 
 memories = PostgresMemoryRepositoryAdapter()
 record = MemoryRecord(
@@ -304,7 +304,7 @@ memories.create_record(record)
 assert memories.get_record("memory:runtime").content == "PostgreSQL is authoritative"
 
 from app.jobs.models import CreateJobRequest, ResourceClass
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 
 jobs = PostgresJobStoreAdapter()
 job = jobs.create_job(CreateJobRequest(
@@ -316,7 +316,7 @@ job = jobs.create_job(CreateJobRequest(
 assert jobs.get_job(job.id).id == job.id
 
 from app.assets.models import AssetRecord, AssetType
-from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
 
 with tempfile.TemporaryDirectory() as directory:
     source = Path(directory) / "runtime.txt"

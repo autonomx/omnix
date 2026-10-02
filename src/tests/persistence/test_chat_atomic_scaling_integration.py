@@ -24,7 +24,7 @@ from app.jobs.models import (
     ResourceClass,
     JobStatus,
 )
-from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.persistence.execution_repositories import JobClaimConflict
 from app.chat.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.transaction_binding import share_transaction
@@ -41,7 +41,7 @@ def scaling_runtime():
 
 
 def chat_store(database, store, monkeypatch):
-    from app.chat.persistence import chat_runtime_compat as fast
+    from app.chat.persistence import chat_runtime as fast
     monkeypatch.setattr(
         fast,
         "default_assistant_turn_coordinator",

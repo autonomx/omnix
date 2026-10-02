@@ -12,7 +12,7 @@ from app.jobs.models import (
     JobStatus,
 )
 
-from app.persistence.job_compat import PostgresJobStoreAdapter as _PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter as _PostgresJobStoreAdapter
 from app.persistence.unit_of_work import unit_of_work
 from app.chat.persistence.chat_execution import ChatExecutionTransactions
 

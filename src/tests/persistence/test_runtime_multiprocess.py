@@ -771,7 +771,7 @@ def _mutate_chat_process(
     control,
 ):
     from app.chat.models import ChatMessage, ChatSession
-    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.persistence.identity_service import PostgresIdentityRepository
@@ -887,7 +887,7 @@ def test_killed_chat_owner_recovers_once_without_duplicate_assistant_output(chat
 
 
 def test_two_process_chat_mutations_preserve_unrelated_session(chat_runtime):
-    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 
     database, store, _ = chat_runtime
     adapter = PostgresChatRepositoryAdapter(database)

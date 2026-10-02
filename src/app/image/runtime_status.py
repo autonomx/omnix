@@ -9,7 +9,7 @@ from app.image.downloads import (
     get_flux_local_model_status,
     resolve_flux_local_dir_from_settings,
 )
-from app.image.flux_pipeline_compat import (
+from app.image.flux_pipeline_loading import (
     validate_flux_pipeline_import,
     validate_flux_repo_runtime,
 )

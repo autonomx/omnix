@@ -106,7 +106,7 @@ from app.jobs.models import (
     JobRecord,
     JobStatus,
 )
-from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
+from app.jobs.inline_execution import mark_inline_execution, require_execution_authority
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
 _MAX_RESEARCH_THREAD_JOBS = 32

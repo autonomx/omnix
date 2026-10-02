@@ -154,7 +154,7 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
 def test_persisted_audiobook_asset_types_can_be_listed(
     tmp_path: Path, asset_type: str,
 ) -> None:
-    from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+    from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
 
     adapter = object.__new__(PostgresSharedAssetStoreAdapter)
     adapter.blob_store = SimpleNamespace(root=tmp_path)

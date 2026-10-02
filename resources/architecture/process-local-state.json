@@ -529,7 +529,7 @@
       "invalidation": "clear_live_speculation_handshake_state"
     },
     {
-      "path": "src/app/chat/persistence/chat_runtime_compat.py",
+      "path": "src/app/chat/persistence/chat_runtime.py",
       "symbol": "default_chat_store.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",
@@ -538,7 +538,7 @@
       "invalidation": "default_chat_store.cache_clear"
     },
     {
-      "path": "src/app/chat/persistence/chat_runtime_compat.py",
+      "path": "src/app/chat/persistence/chat_runtime.py",
       "symbol": "default_history_search_service.__cache__",
       "category": "cache",
       "reason": "Function result cache has a source-declared positive capacity, expiry, and explicit cache_clear invalidation.",

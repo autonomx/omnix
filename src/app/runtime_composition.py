@@ -43,13 +43,13 @@ def _default_production_job_store():
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)
 def production_asset_store():
-    from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+    from app.persistence.shared_asset_store import PostgresSharedAssetStoreAdapter
     return PostgresSharedAssetStoreAdapter()
 
 
 def production_chat_store(*, job_service=None, live_agent_planner=None):
     _register_feature_repositories("chat")
-    from app.chat.persistence.chat_runtime_compat import (
+    from app.chat.persistence.chat_runtime import (
         PostgresCharacterChatSessionStore,
         default_chat_store,
     )
@@ -88,25 +88,25 @@ def production_provider_refresh_store():
 
 def production_character_repository():
     _register_feature_repositories("characters")
-    from app.characters.persistence.character_compat import PostgresCharacterRepositoryAdapter
+    from app.characters.persistence.character_store import PostgresCharacterRepositoryAdapter
     return PostgresCharacterRepositoryAdapter()
 
 
 def production_avatar_repository():
     _register_feature_repositories("characters")
-    from app.characters.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
+    from app.characters.persistence.avatar_store import PostgresCharacterAvatarRepositoryAdapter
     return PostgresCharacterAvatarRepositoryAdapter()
 
 
 def production_memory_repository():
     _register_feature_repositories("assistant-memory")
-    from app.assistant_memory.persistence.memory_compat import PostgresMemoryRepositoryAdapter
+    from app.assistant_memory.persistence.memory_store import PostgresMemoryRepositoryAdapter
     return PostgresMemoryRepositoryAdapter()
 
 
 def production_owner_memory_repository():
     _register_feature_repositories("assistant-memory")
-    from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
     return PostgresOwnerAwareMemoryRepository()
 
 
@@ -140,7 +140,7 @@ def production_research_source_store():
 
 def production_summary_repository():
     _register_feature_repositories("chat")
-    from app.chat.persistence.chat_runtime_compat import PostgresConversationSummaryRepository
+    from app.chat.persistence.chat_runtime import PostgresConversationSummaryRepository
     return PostgresConversationSummaryRepository()
 
 

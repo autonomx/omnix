@@ -83,34 +83,20 @@ class PostgresSharedAssetStoreAdapter:
         )
 
     def upsert_asset(self, asset: AssetRecord) -> AssetRecord:
+        """Create an asset, or update an existing one's descriptor in one transaction."""
         with unit_of_work(self.database) as work:
-            existing = work.assets.get_asset(self.context, asset.id)
-            work.rollback()
-        if existing is not None:
-            with self.database.transaction() as connection:
-                connection.execute(
-                    """
-                    UPDATE omnix_assets
-                       SET module = %s, asset_type = %s, mime_type = %s,
-                           metadata = %s::jsonb, compat = %s::jsonb,
-                           revision = revision + 1, updated_at = CURRENT_TIMESTAMP
-                     WHERE workspace_id = %s AND id = %s
-                    """,
-                    (
-                        asset.module,
-                        self._enum_value(asset.type),
-                        asset.mime_type,
-                        self._json(asset.metadata),
-                        self._json(asset.compat),
-                        self.context.workspace_id,
-                        asset.id,
-                    ),
-                )
-            with unit_of_work(self.database) as work:
-                record = work.assets.get_asset(self.context, asset.id)
-                work.rollback()
-            if record is None:
-                raise RuntimeError(f"asset update disappeared: {asset.id}")
+            record = work.assets.update_descriptor(
+                self.context,
+                asset.id,
+                module=asset.module,
+                asset_type=self._enum_value(asset.type),
+                mime_type=asset.mime_type,
+                metadata=dict(asset.metadata),
+                compat=dict(asset.compat),
+                generation_job_id=asset.source_job_id,
+            )
+            work.commit()
+        if record is not None:
             return self._asset(record)
 
         source = materialize_asset(asset)  # FileNotFoundError when absent
@@ -129,6 +115,8 @@ class PostgresSharedAssetStoreAdapter:
                         "checksum_sha256": blob["checksum_sha256"],
                         "storage_provider": blob["storage_provider"],
                         "storage_key": blob["storage_key"],
+                        "owner_user_id": asset.owner_id,
+                        "generation_job_id": asset.source_job_id,
                         "metadata": dict(asset.metadata),
                         "compat": {
                             **dict(asset.compat),
@@ -198,6 +186,8 @@ class PostgresSharedAssetStoreAdapter:
         local_path = getattr(self.blob_store, "local_path", None)
         return AssetRecord(
             id=record["id"],
+            owner_id=record.get("owner_user_id"),
+            source_job_id=record.get("generation_job_id"),
             module=record["module"],
             type=record["asset_type"],
             mime_type=record["mime_type"],

@@ -1035,7 +1035,7 @@ Strengths are listed in section 4. Findings not covered above:
 - **PJ1 — Tenant bootstrap everywhere (Critical).** See PERF2. There are 18 `ensure_postgresql_runtime_ready` calls. `database.transaction()` skips the authority check and has 123 call sites. The retry helper `run_transaction` has 0 callers.
 - **PJ2 — Whole-workspace chat save (High).** See CM1.
 - **PJ3 — Job fencing gaps (High).**
-  - `job_compat.complete_job`/`fail_job` read the current owner and lease token from the row, then pass the same values into the fenced repository call, so the check always passes ✔ ([job_compat.py:219-299](../src/app/persistence/job_compat.py#L219-L299)).
+  - `job_compat.complete_job`/`fail_job` read the current owner and lease token from the row, then pass the same values into the fenced repository call, so the check always passes ✔ ([job_compat.py:219-299](../src/app/persistence/job_store.py#L219-L299)).
   - `CompleteJobRequest` has no token field.
   - The durable worker verifies the lease in one transaction and finalizes in another.
   - `update_progress`, `update_job_input`, `update_job_stages`, `finalize_cancel` and `delete_job` are not fenced.

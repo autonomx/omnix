@@ -146,6 +146,46 @@ class PostgresAssetRepository:
         ).fetchall()
         return [_asset(row) for row in rows]
 
+    def update_descriptor(
+        self,
+        context: TenantContext,
+        asset_id: str,
+        *,
+        module: str,
+        asset_type: str,
+        mime_type: str,
+        metadata: dict[str, Any],
+        compat: dict[str, Any],
+        generation_job_id: str | None,
+    ) -> dict[str, Any] | None:
+        """Update an asset's descriptive fields in one statement (WP-8.1).
+
+        Content (storage key, checksum, size) is immutable here; a provided
+        source job replaces the recorded one, otherwise it is kept.
+        """
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_assets
+               SET module = %s, asset_type = %s, mime_type = %s,
+                   metadata = %s::jsonb, compat = %s::jsonb,
+                   generation_job_id = COALESCE(%s, generation_job_id),
+                   revision = revision + 1, updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND id = %s
+            RETURNING {_ASSET_COLUMNS}
+            """,
+            (
+                module,
+                asset_type,
+                mime_type,
+                json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+                json.dumps(compat, sort_keys=True, separators=(",", ":")),
+                generation_job_id,
+                context.workspace_id,
+                asset_id,
+            ),
+        ).fetchone()
+        return _asset(row) if row is not None else None
+
     def mark_deleted(
         self,
         context: TenantContext,

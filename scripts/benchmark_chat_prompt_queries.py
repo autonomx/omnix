@@ -44,8 +44,8 @@ def main() -> int:
     os.environ.setdefault("OMNIX_DATABASE_URL", url)
     import psycopg
 
-    from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
-    from app.chat.persistence.chat_runtime_compat import (
+    from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
+    from app.chat.persistence.chat_runtime import (
         PostgresConversationSummaryRepository,
         PostgresHistorySearchService,
     )

@@ -86,7 +86,7 @@ def _submit_probe(client: TestClient, csrf: str) -> str:
 
 def test_two_users_in_two_workspaces_cannot_see_each_others_jobs(database) -> None:
     from app.gateway.main import create_gateway_app
-    from app.persistence.job_compat import PostgresJobStoreAdapter
+    from app.persistence.job_store import PostgresJobStoreAdapter
 
     alice = _workspace_with_member(database, "alice")
     bob = _workspace_with_member(database, "bob")

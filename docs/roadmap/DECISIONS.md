@@ -4,6 +4,7 @@ Source: [roadmap](../ENTERPRISE_ARCHITECTURE_ROADMAP_2026-09-27.md).
 
 | Date | WP | Decision | Reason |
 |---|---|---|---|
+| 2026-10-02 | WP-8.1 | The 7 remaining compat modules (5 RPG category A, 2 RPG category B) are not renamed. | RPG is being retired; renaming code scheduled for deletion only churns imports. They leave with RPG. |
 | 2026-10-02 | WP-7.6 | The query pass times each list route through the composed app and explains the queries of routes whose time grows with volume, instead of ranking statements with `pg_stat_statements`. | The extension is not in the local PostgreSQL build; the acceptance criterion is route p95, which this measures directly. |
 | 2026-10-02 | WP-7.6 | RPG campaigns are not seeded. | RPG is being retired; its list routes are not part of the platform's supported surface. |
 | 2026-10-01 | WP-7.4 | The event counter takes the greater of its value and the run's indexed `MAX(sequence)`, so it catches up with events written by code that predates it; a mixed-version deploy can still race (old code locks the run row, new code the counter row) and fail one append on the primary key. | Expand-phase coexistence: during a rolling deploy at most one append conflicts and is retried by its caller; once old code is gone the counter alone orders appends. |

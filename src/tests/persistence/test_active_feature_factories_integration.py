@@ -258,7 +258,7 @@ assert loaded["loaded_count"] == 1, (persisted, loaded)
 
 from app.chat import compaction, history_search
 from app.chat.models import ChatMessage, ChatSession
-from app.chat.persistence.chat_compat import PostgresChatRepositoryAdapter
+from app.chat.persistence.chat_store import PostgresChatRepositoryAdapter
 from app.chat.compaction import ConversationSummary
 
 now = datetime.now(timezone.utc).isoformat()

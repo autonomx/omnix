@@ -21,7 +21,7 @@ from app.persistence.blob_store import default_blob_store
 from app.runtime.paths import resources_data_root
 
 from app.jobs.models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
-from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
+from app.jobs.inline_execution import mark_inline_execution, require_execution_authority
 
 VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",

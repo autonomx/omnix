@@ -11,7 +11,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresConstraintError, PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.identity_service import ensure_local_identity
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 from app.persistence.migrations import apply_migrations, discover_migrations
 from app.persistence.unit_of_work import unit_of_work
 

@@ -1,6 +1,6 @@
-from app.jobs.inline_execution_compat import mark_inline_execution
+from app.jobs.inline_execution import mark_inline_execution
 from app.jobs.models import CreateJobRequest, JobProgress, JobStatus, ResourceClass
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence.job_store import PostgresJobStoreAdapter
 from app.chat.persistence.job_store import PostgresJobStoreAdapter as RuntimePostgresJobStoreAdapter
 
 
@@ -178,7 +178,7 @@ def test_postgres_compat_rechecks_inline_owner_on_idempotent_mark_running(monkey
             pass
 
     monkeypatch.setattr(
-        "app.persistence.job_compat.unit_of_work", lambda _database: Work()
+        "app.persistence.job_store.unit_of_work", lambda _database: Work()
     )
 
     assert running.status == JobStatus.RUNNING

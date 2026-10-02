@@ -14,7 +14,7 @@ from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_s
 from app.jobs.models import JobStatus
 from app.runtime.hooks import invoke_runtime_hook
 
-from app.jobs.inline_execution_compat import require_execution_authority
+from app.jobs.inline_execution import require_execution_authority
 from app.jobs.models import (
     CompleteJobRequest,
     CreateJobRequest,

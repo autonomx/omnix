@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
-from app.jobs.inline_execution_compat import require_execution_authority
+from app.jobs.inline_execution import require_execution_authority
 from app.rpg.presentation.visible_response import visible_response_text
 
 def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:

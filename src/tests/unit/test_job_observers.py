@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from app.jobs.handlers import JobHandlerRegistry, registry_from_features
 from app.jobs.models import JobRecord, JobStatus, ResourceClass
-from app.persistence import job_compat
-from app.persistence.job_compat import PostgresJobStoreAdapter
+from app.persistence import job_store
+from app.persistence.job_store import PostgresJobStoreAdapter
 from app.runtime.feature_catalog import load_feature
 from app.runtime_composition import production_job_store
 from app.runtime.tenant_context import local_tenant_context
@@ -191,10 +191,10 @@ def test_created_observer_runs_after_durable_commit(monkeypatch) -> None:
     registry.register_observer(observer)
     store.configure_handler_registry(registry)
     work = Work()
-    monkeypatch.setattr(job_compat, "unit_of_work", lambda _database: work)
+    monkeypatch.setattr(job_store, "unit_of_work", lambda _database: work)
 
     created = store.create_job(
-        job_compat.CreateJobRequest(
+        job_store.CreateJobRequest(
             module="rpg",
             type="rpg.turn",
             resource_class=ResourceClass.GPU_LLM,
