@@ -120,3 +120,31 @@ def test_pool_metrics_are_this_process_gauges_and_counters() -> None:
     assert "omnix_db_pool_request_wait_seconds_total 2.5" in text
     assert "omnix_db_pool_request_errors_total 2.0" in text
     assert "omnix_db_pool_size" not in exposition(PoolCollector(dict))[0].decode()
+
+
+def test_the_event_loop_lag_histogram_records_blocking_code() -> None:
+    import asyncio
+    import time
+
+    from app.observability.metrics import event_loop_lag_monitor
+
+    def lag_samples() -> tuple[float, float]:
+        text = _text()
+        count = next(line for line in text.splitlines() if line.startswith("omnix_event_loop_lag_seconds_count"))
+        total = next(line for line in text.splitlines() if line.startswith("omnix_event_loop_lag_seconds_sum"))
+        return float(count.split()[-1]), float(total.split()[-1])
+
+    async def blocked_loop() -> None:
+        async with event_loop_lag_monitor(interval=0.01):
+            await asyncio.sleep(0.03)
+            deadline = time.perf_counter() + 0.2
+            while time.perf_counter() < deadline:  # blocking code, not a sleep
+                pass
+            await asyncio.sleep(0.03)
+
+    before_count, before_sum = lag_samples()
+    asyncio.run(blocked_loop())
+    after_count, after_sum = lag_samples()
+
+    assert after_count > before_count
+    assert after_sum - before_sum >= 0.15

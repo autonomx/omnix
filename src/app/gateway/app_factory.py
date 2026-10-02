@@ -185,7 +185,10 @@ def create_gateway_app(
 
     @asynccontextmanager
     async def gateway_lifespan(_app: FastAPI):
+        from app.observability.metrics import event_loop_lag_monitor
+
         async with AsyncExitStack() as stack:
+            await stack.enter_async_context(event_loop_lag_monitor())
             if runtime_lifecycle is not None:
                 await stack.enter_async_context(runtime_lifecycle())
             await stack.enter_async_context(

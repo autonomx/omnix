@@ -8,15 +8,19 @@ are classes (``2xx`` ... ``5xx``).
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 logger = logging.getLogger(__name__)
 _UNMATCHED_ROUTE = "unmatched"
 _LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
+_LOOP_LAG_BUCKETS = (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+LOOP_LAG_INTERVAL_SECONDS = 0.5
 _lock = threading.Lock()
 _metrics: dict[str, Any] | None = None
 
@@ -36,6 +40,10 @@ def _build() -> dict[str, Any]:
             ("route", "method"), buckets=_LATENCY_BUCKETS, registry=registry,
         ),
         "in_flight": Gauge("omnix_http_requests_in_flight", "HTTP requests being handled.", registry=registry),
+        "loop_lag": Histogram(
+            "omnix_event_loop_lag_seconds", "How late the event loop woke a sleeping task, sampled twice a second.",
+            buckets=_LOOP_LAG_BUCKETS, registry=registry,
+        ),
     }
 
 
@@ -85,6 +93,31 @@ class HttpMetricsMiddleware:
             route, method = route_template(scope), str(scope.get("method", ""))
             metrics["requests"].labels(route, method, status_class(status)).inc()
             metrics["latency"].labels(route, method).observe(time.perf_counter() - started)
+
+
+@contextlib.asynccontextmanager
+async def event_loop_lag_monitor(interval: float = LOOP_LAG_INTERVAL_SECONDS) -> AsyncIterator[None]:
+    """Sample this event loop's lag while the block runs (the gateway lifespan).
+
+    A task sleeps ``interval`` and records how much later than that it woke:
+    time the loop spent in blocking code instead of serving requests.
+    """
+    histogram = _get()["loop_lag"]
+
+    async def sample() -> None:
+        loop = asyncio.get_running_loop()
+        while True:
+            started = loop.time()
+            await asyncio.sleep(interval)
+            histogram.observe(max(0.0, loop.time() - started - interval))
+
+    task = asyncio.create_task(sample(), name="omnix-event-loop-lag")
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def request_snapshot() -> dict[str, int]:
@@ -213,6 +246,6 @@ def exposition(*collectors: Any) -> tuple[bytes, str]:
 
 
 __all__ = [
-    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "exposition", "request_snapshot",
-    "route_template", "status_class",
+    "DurableStateCollector", "HttpMetricsMiddleware", "PoolCollector", "event_loop_lag_monitor", "exposition",
+    "request_snapshot", "route_template", "status_class",
 ]

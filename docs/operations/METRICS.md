@@ -16,6 +16,7 @@ route share `route="unmatched"`. `status_class` is `1xx` to `5xx`.
 | `omnix_http_requests_total` | counter | `route`, `method`, `status_class` | HTTP requests handled. Errors are `status_class="5xx"`. |
 | `omnix_http_request_duration_seconds` | histogram | `route`, `method` | Time from the request passing sign-in to the end of the response, including streamed bodies. Buckets: 5 ms to 30 s. |
 | `omnix_http_requests_in_flight` | gauge | — | HTTP requests being handled. |
+| `omnix_event_loop_lag_seconds` | histogram | — | How late the gateway's event loop woke a task sleeping 0.5 s, sampled twice a second: time spent in blocking code instead of serving requests. Buckets: 1 ms to 5 s. |
 
 ### Job queue and outbox
 
@@ -66,7 +67,6 @@ the route and are counted.
 
 | Area | Metrics |
 |---|---|
-| Runtime | event-loop lag histogram |
 | Database | statement duration by repository method (sampled); a wait-time histogram (the pool reports only total wait) |
 | Jobs | claims, retries and execution duration by type (recorded in the worker process, which serves no metrics yet) |
 | Providers | call latency, errors, circuit state, retries by provider |

@@ -2494,6 +2494,16 @@
         "call": "asyncio.sleep",
         "line": 127,
         "path": "src/tests/trading/test_trading_paper_execution_cadence.py"
+      },
+      {
+        "call": "asyncio.sleep",
+        "line": 139,
+        "path": "src/tests/unit/test_metrics_endpoint.py"
+      },
+      {
+        "call": "asyncio.sleep",
+        "line": 143,
+        "path": "src/tests/unit/test_metrics_endpoint.py"
       }
     ],
     "package_cycles": [],
@@ -3724,7 +3734,7 @@
         "approved": true,
         "category": "coordination",
         "kind": "lock",
-        "line": 20,
+        "line": 24,
         "path": "src/app/observability/metrics.py",
         "reason": "Serializes the one-time construction of this process's Prometheus registry; metrics are per-process by design (each gateway process is scraped separately) and carry no authority.",
         "symbol": "_lock"
@@ -7456,5 +7466,5 @@
   },
   "schema_version": 1,
   "scope": "tracked_nonvendor_source",
-  "source_digest": "82d4fb40b7cadcc01c750a60230b891edd38338feac94d48db4065dda6d1565e"
+  "source_digest": "8d2dd179db1ebdc0bb2273a95115707687945cdee2c62ee8edd4a149e7ee1aa2"
 }
