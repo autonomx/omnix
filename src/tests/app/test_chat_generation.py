@@ -369,7 +369,6 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
         )
     )
 
-    started_at = time.monotonic()
     response = client.post(
         f"/api/chat/sessions/{session.id}/messages",
         json={
@@ -378,11 +377,12 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
             "model_id": "llm:lmstudio:test-model",
         },
     )
-    elapsed = time.monotonic() - started_at
 
     assert response.status_code == 200
-    assert elapsed < 1.0
     job_id = response.json()["job"]["id"]
+    # The provider holds generation until released, so a response that waited
+    # for it would find the job finished (or failed when the hold timed out).
+    assert job_store.get_job(job_id).status not in {JobStatus.COMPLETED, JobStatus.FAILED}
     assert provider.entered.wait(timeout=1)
     provider.release.set()
     completed = _wait_for_job_status(job_store, job_id, {JobStatus.COMPLETED})
