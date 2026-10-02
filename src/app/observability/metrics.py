@@ -229,7 +229,15 @@ def record_sse_resync(stream: str, reason: str) -> None:
 
 
 def record_db_connection_hold(statement_class: str, seconds: float) -> None:
-    _get()["db_hold"].labels(statement_class).observe(seconds)
+    """Recorded once the registry exists (the lifespan or first request builds it).
+
+    Composing the gateway opens connections; building the registry there
+    would load ``prometheus_client`` on the boot path. Boot-time checkouts
+    are not recorded.
+    """
+    metrics = _metrics
+    if metrics is not None:
+        metrics["db_hold"].labels(statement_class).observe(seconds)
 
 
 def record_speech_turn(stage: str, seconds: float) -> None:

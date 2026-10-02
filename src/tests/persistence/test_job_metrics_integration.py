@@ -93,7 +93,7 @@ def test_connection_hold_time_is_recorded_by_statement_class(store) -> None:
         lines = [line for line in exposition()[0].decode().splitlines() if line.startswith(prefix)]
         return float(lines[0].split()[-1]) if lines else 0.0
 
-    jobs, defaults = held("job"), held("default")
+    jobs, defaults = held("job"), held("default")  # reading the metrics builds the registry
     with statement_class("job"), adapter.database.transaction() as connection:
         connection.execute("SELECT 1")
     with adapter.database.transaction() as connection:
