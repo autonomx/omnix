@@ -34,6 +34,11 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   RPG turn, live speech and agent step spans, with the trace id in log lines.
 - `scripts/backup_omnix.py` and `scripts/restore_rehearsal.py`, with a nightly
   restore rehearsal.
+- Web: a failing workspace shows an error panel with Try again (or Reload when
+  a newer build replaced its code) instead of a blank app, and browser errors
+  are reported to `POST /api/client-errors`.
+- Web: an accessibility check (axe) runs on every workspace in the end-to-end
+  tests.
 
 ### Changed
 
@@ -42,6 +47,11 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Errors that used to be swallowed silently are logged at debug level.
 - Structured outputs from model calls go through one gateway with contracts,
   retries and deadlines.
+- Web: long chat sessions open in seconds and render only the visible
+  messages; the Jobs and Assets views load more on request; the image gallery
+  shows 60 images at a time; Pixi and Live2D load only when an avatar is shown.
+- Web: form fields, controls and labels are named for screen readers, and
+  primary buttons are darker to meet contrast requirements.
 
 ### Removed
 
