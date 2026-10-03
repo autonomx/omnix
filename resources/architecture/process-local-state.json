@@ -940,6 +940,24 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/persistence/document_schemas.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Process-local mutex serializing registration and lookups in the document shape registry; it holds no durable state."
+    },
+    {
+      "path": "src/app/persistence/document_schemas.py",
+      "symbol": "_SCHEMAS",
+      "category": "coordination",
+      "reason": "Registry of the document shapes declared in code (WP-5.9): every process registers the same shapes when it imports the owning modules; bounded by the document kinds in the source and carries no authority."
+    },
+    {
+      "path": "src/app/persistence/document_schemas.py",
+      "symbol": "_WARNED",
+      "category": "coordination",
+      "reason": "Remembers which unregistered document kinds this process already warned about, so the warning is logged once per kind; bounded by the kinds the code writes."
+    },
+    {
       "path": "src/app/persistence/repository_registry.py",
       "symbol": "_LOCK",
       "category": "cache",
