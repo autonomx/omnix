@@ -60,6 +60,8 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Changed
 
+- Chat sizes its prompt to the model's advertised context window instead of
+  a fixed 65,536 tokens (`OMNIX_CHAT_INPUT_TOKEN_BUDGET` still caps it).
 - Feature documents stored in PostgreSQL are checked against their declared
   shape: a wrong write is refused, an old mismatching document is reported
   (`scripts/check_document_shapes.py`).

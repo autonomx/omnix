@@ -76,6 +76,8 @@ def isolated_operator_data_files(monkeypatch, tmp_path):
     monkeypatch.setenv("OMNIX_PROVIDER_SECRETS_PATH", str(tmp_path / "provider-api-keys.dpapi"))
     # A document kind written without a registered shape fails the test (WP-5.9).
     monkeypatch.setenv("OMNIX_DOCUMENT_SCHEMAS_STRICT", "1")
+    # Prompt budgets never ask a real provider for its model list (WP-5.7).
+    monkeypatch.setattr("app.providers.model_catalog._default_provider", lambda _provider_id: None)
 
 
 @pytest.fixture(autouse=True)

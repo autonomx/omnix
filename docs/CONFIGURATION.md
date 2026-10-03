@@ -112,6 +112,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_CHARACTER_MODE_ENABLED` | string | — | characters, launcher | Controls character mode enabled for characters, launcher. |
 | `OMNIX_CHARACTER_SHARED_MEMORY_ENABLED` | boolean | — | characters | Controls character shared memory enabled for characters. |
 | `OMNIX_CHAT_COMPACTION_THRESHOLD` | string | `40` | chat | Controls chat compaction threshold for chat. |
+| `OMNIX_CHAT_INPUT_TOKEN_BUDGET` | string | — | chat | Controls chat input token budget for chat. |
 | `OMNIX_CHAT_PROFILE_ID` | string | — | assistant-memory | Controls chat profile id for assistant-memory. |
 | `OMNIX_CHAT_WORKSPACE_ID` | string | — | assistant-memory | Controls chat workspace id for assistant-memory. |
 | `OMNIX_COMPANION_ROLLOUT_STAGE` | string | — | assistant-memory | Controls companion rollout stage for assistant-memory. |

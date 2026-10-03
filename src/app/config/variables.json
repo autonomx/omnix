@@ -757,6 +757,13 @@
   },
   {
     "default": null,
+    "description": "Controls chat input token budget for chat.",
+    "feature": "chat",
+    "name": "OMNIX_CHAT_INPUT_TOKEN_BUDGET",
+    "type": "string"
+  },
+  {
+    "default": null,
     "description": "Controls chat profile id for assistant-memory.",
     "feature": "assistant-memory",
     "name": "OMNIX_CHAT_PROFILE_ID",

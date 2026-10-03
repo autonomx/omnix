@@ -988,6 +988,27 @@
       "reason": "Process-local mutex serializes threads around the owning module's cache or runtime resource; it does not carry durable state across replicas."
     },
     {
+      "path": "src/app/providers/model_catalog.py",
+      "symbol": "_LOCK",
+      "category": "coordination",
+      "reason": "Process-local mutex serializing the model catalog cache and its in-flight set; it holds no durable state."
+    },
+    {
+      "path": "src/app/providers/model_catalog.py",
+      "symbol": "_REFRESHING",
+      "category": "coordination",
+      "reason": "Provider ids with a model-list refresh in flight in this process, so one refresh runs per provider; each id is removed when its refresh ends."
+    },
+    {
+      "path": "src/app/providers/model_catalog.py",
+      "symbol": "_WINDOWS",
+      "category": "cache",
+      "reason": "Source enforces a positive size cap and TTL and exposes the named invalidation operation; context windows advertised by providers, re-read from the provider after the TTL.",
+      "max_entries_symbol": "MAX_PROVIDERS",
+      "ttl_symbol": "CACHE_SECONDS",
+      "invalidation": "clear_model_catalog"
+    },
+    {
       "path": "src/app/providers/nemotron_eou_live_websocket.py",
       "symbol": "_SESSION_STATES",
       "category": "cache",

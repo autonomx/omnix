@@ -15,7 +15,7 @@ from app.characters.contracts import (
 )
 from app.conversation.contracts import PromptMemoryItem
 
-from .context_budget import PromptBudget, prompt_budget_from_env
+from .context_budget import PromptBudget, prompt_budget_for_model, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
 
 logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ def build_prompt_assembly(
         retrieved_history=retrieved_history or [],
         external_context=external_context,
         current_user_message=PromptTurn(role="user", content=user_message.content, message_id=user_message.id),
-        budget=budget or prompt_budget_from_env(),
+        budget=budget or prompt_budget_for_model(session.provider_id, session.model_id),
         diagnostics={
             "session_id": session.id,
             "active_segment_id": session.active_segment_id,
