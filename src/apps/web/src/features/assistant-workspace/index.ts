@@ -348,6 +348,16 @@ export type {
 
 export { useAvatarPresence } from './live-avatar-presence';
 export type { AvatarPresence, AvatarPresenceCue } from './live-avatar-presence';
-export { liveCallPresentationStore, useLiveCallPresentation } from './live-call-presentation-store';
+export { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from './live-call-presentation-store';
 export { isLiveVoiceControllerInstalled, startLiveVoiceCall, toggleLiveVoiceCall } from './live-voice-controller';
 export { isLiveVoiceUnifiedAudioInstalled } from './live-voice-unified-audio-controller';
+export { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
+export { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+export type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+export { createChatbotActivityEvents, createChatbotFailureEvent } from './chatbot-activity';
+export { assistantContextStore } from './assistant-context-store';
+export { liveChatSubmissionGateway } from './live-chat-submission-gateway';
+export { liveVoiceTranscriptStore, useLiveVoiceTranscript } from './live-voice-transcript-store';
+export { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from './assistant-context-controls';
+export { DesktopCompanionControls } from './desktop-companion-controls';
+export { DesktopCompanionTextSurface } from './desktop-companion-text-surface';
