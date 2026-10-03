@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import type { components } from '../../api/generated/types';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
 import { chatImageDataUrls, chatTextAttachment, formatMessageTime } from './chatMessageModel';
@@ -87,3 +87,21 @@ export const ChatMessageItem = memo(function ChatMessageItem({ message, sessionI
     </article>
   );
 });
+
+/** One stable actions object that calls the latest handlers, so memoized messages do not re-render. */
+export function useStableMessageActions(actions: ChatMessageActions): ChatMessageActions {
+  const latest = useRef(actions);
+  useLayoutEffect(() => {
+    latest.current = actions;
+  });
+  return useMemo<ChatMessageActions>(() => ({
+    toggleFeedback: (messageId, feedback) => latest.current.toggleFeedback(messageId, feedback),
+    copy: (message) => latest.current.copy(message),
+    play: (text) => latest.current.play(text),
+    stream: (message) => latest.current.stream(message),
+    toggleMenu: (messageId) => latest.current.toggleMenu(messageId),
+    closeMenu: () => latest.current.closeMenu(),
+    continueFrom: (message) => latest.current.continueFrom(message),
+    openTools: () => latest.current.openTools(),
+  }), []);
+}

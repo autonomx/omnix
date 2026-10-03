@@ -361,3 +361,5 @@ export { liveVoiceTranscriptStore, useLiveVoiceTranscript } from './live-voice-t
 export { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from './assistant-context-controls';
 export { DesktopCompanionControls } from './desktop-companion-controls';
 export { DesktopCompanionTextSurface } from './desktop-companion-text-surface';
+export type { ChatbotActivitySession } from './chatbot-activity';
+export type { LiveVoiceTranscriptState } from './live-voice-transcript-store';

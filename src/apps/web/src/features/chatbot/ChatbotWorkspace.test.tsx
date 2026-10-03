@@ -5,7 +5,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
-import { ChatbotWorkspace, selectFreshChatSession } from './ChatbotWorkspace';
+import { ChatbotWorkspace } from './ChatbotWorkspace';
+import { selectFreshChatSession } from './chatMessageModel';
 
 function renderChatbot() {
   const queryClient = new QueryClient({

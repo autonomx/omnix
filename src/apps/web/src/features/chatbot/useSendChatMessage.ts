@@ -2,10 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { UseFormReset } from 'react-hook-form';
 import { ApiError, omnixApiClient } from '../../api/client';
-import { assistantContextStore, createChatbotFailureEvent, type AssistantWorkspaceEvent, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
+import { assistantContextStore, createChatbotFailureEvent, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
 import { noteChatMessageSent } from './researchProgressController';
 import {
-  appendWorkspaceEventIfMissing,
   attachmentDefaultMessage,
   chatbotSubmitErrorMessage,
   createPersonalityPrompt,
@@ -15,7 +14,6 @@ import {
   type ChatbotFormValues,
   type PastedChatImage,
   type PastedChatTextFile,
-  createChatbotWorkspaceEventStore,
 } from './chatbotWorkspaceModel';
 
 type SendChatMessageOptions = {
@@ -33,8 +31,8 @@ type SendChatMessageOptions = {
   reset: UseFormReset<ChatbotFormValues>;
   /** Called once a message is queued: clears the voice draft. */
   onSent: () => void;
-  eventStore: ReturnType<typeof createChatbotWorkspaceEventStore>;
-  setActivityEvents: Dispatch<SetStateAction<AssistantWorkspaceEvent[]>>;
+  /** Shows a failed send in the activity panel. */
+  recordActivityEvent: (event: AssistantWorkspaceEvent, filter: AssistantWorkspaceEventStoreFilter) => void;
   markVoiceTurnPerformance: (stage: 'chatSubmitStartedAt' | 'chatResponseReceivedAt') => void;
 };
 
@@ -56,8 +54,7 @@ export function useSendChatMessage({
   setChatJobError,
   reset,
   onSent,
-  eventStore,
-  setActivityEvents,
+  recordActivityEvent,
   markVoiceTurnPerformance,
 }: SendChatMessageOptions) {
   const queryClient = useQueryClient();
@@ -150,8 +147,7 @@ export function useSendChatMessage({
         submittedContent: values.content,
         createdAt: new Date().toISOString(),
       });
-      appendWorkspaceEventIfMissing(eventStore, failureEvent, filter);
-      setActivityEvents(eventStore.list(filter));
+      recordActivityEvent(failureEvent, filter);
     },
   });
 
