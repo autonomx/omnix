@@ -54,6 +54,7 @@ LOWER_TARGETS: dict[str, int | str] = {
     "web_handwritten_api_types": 0, "web_important": 50, "web_hardcoded_colors": 300,
     "web_mutation_observer_files": 2, "web_set_interval_files": 5,
     "web_custom_event_dispatch_files": 0, "web_unreachable_modules": 0,
+    "web_global_css_files": 10,
     "eslint_baseline_disables": 0, "boot_imported_modules": "ratchet",
     "inline_prompt_strings": 10,
 }
@@ -875,6 +876,33 @@ def _reach(graph: dict[str, set[str]], roots: set[str]) -> set[str]:
     return reached
 
 
+def _global_stylesheets(sources: dict[str, str]) -> list[str]:
+    """Stylesheets the app shell loads before any feature: main.tsx's CSS
+    imports, package ones included, and the stylesheets they @import."""
+    entry = "src/apps/web/src/main.tsx"
+    def resolve(base: str, specifier: str) -> str:
+        if not specifier.startswith("."):
+            return specifier
+        parts = list(PurePosixPath(base).parent.parts)
+        for part in specifier.split("/"):
+            if part == ".." and parts:
+                parts.pop()
+            elif part not in (".", ".."):
+                parts.append(part)
+        return str(PurePosixPath(*parts))
+
+    pending = [resolve(entry, spec) for spec in re.findall(r"""(?m)^\s*import\s+["']([^"']+\.css)["']""", sources.get(entry, ""))]
+    found: set[str] = set()
+    while pending:
+        path = pending.pop()
+        if path in found:
+            continue
+        found.add(path)
+        for spec in re.findall(r"""@import\s+(?:url\(\s*)?["']([^"']+\.css)["']""", sources.get(path, "")):
+            pending.append(resolve(path, spec))
+    return sorted(found)
+
+
 def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
     graph = {path: set() for path in sources if path.startswith("src/apps/web/src/") and path.endswith((".ts", ".tsx", ".css")) and not is_test(path)}
     for path in graph:
@@ -1019,6 +1047,8 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     reached = _reach(graph, roots)
     unreachable = sorted(path for path in graph if path.endswith((".ts", ".tsx")) and path not in reached and not path.endswith(".d.ts"))
     values["web_unreachable_modules"] = len(unreachable)
+    global_stylesheets = _global_stylesheets(sources)
+    values["web_global_css_files"] = len(global_stylesheets)
     schema_paths = {_normalize_api_path(path) for path in openapi.get("paths", {})}
     websocket_paths = _documented_websocket_paths(sources)
     matched, prefixes = _api_path_coverage(api_paths, schema_paths | websocket_paths)
@@ -1026,7 +1056,8 @@ def web_metrics(sources: dict[str, str], openapi: dict) -> tuple[dict[str, int |
     denominator = len(calls) + len(dynamic_calls)
     values["web_openapi_path_coverage_pct"] = round(100 * len(matched) / denominator, 6) if denominator else 0
     return dict(values), {
-        "web_unreachable_modules": unreachable, "web_api_paths": sorted(calls),
+        "web_unreachable_modules": unreachable, "web_global_css_files": global_stylesheets,
+        "web_api_paths": sorted(calls),
         "web_api_path_prefixes": sorted(prefixes),
         "web_api_paths_missing_schema": sorted(calls - matched),
         "web_dynamic_fetch_calls": dynamic_calls, "web_route_count": route_count,

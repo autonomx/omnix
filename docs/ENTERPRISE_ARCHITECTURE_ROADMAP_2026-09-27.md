@@ -2544,6 +2544,7 @@ Measure baselines in WP-1.1. Values marked "measure" must be computed then.
 | `web_openapi_path_coverage_pct` | UI-called paths in OpenAPI | 36 | higher | 100 (except documented transport exceptions) |
 | `web_important` | `!important` in CSS | 1,671 | lower | ≤ 50 |
 | `web_hardcoded_colors` | Color literals in CSS/TSX styles | 6,675 | lower | ≤ 300 |
+| `web_global_css_files` | Stylesheets loaded by `main.tsx` (with their `@import`s) | 27 | lower | ≤ 10 |
 | `web_mutation_observer_files` | | 19 | lower | ≤ 2 |
 | `web_set_interval_files` | | 28 | lower | ≤ 5 |
 | `web_custom_event_dispatch_files` | | 61 | lower | 0 |

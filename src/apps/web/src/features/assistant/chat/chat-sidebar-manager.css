@@ -273,3 +273,14 @@
     }
   }
 }
+
+/* Sidebar layout: the session list fills the rail and scrolls on its own. */
+@layer features {
+  .assistant-chat-sidebar > .assistant-chatgpt-sidebar {
+    grid-row: 2 / -1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}

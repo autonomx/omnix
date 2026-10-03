@@ -1,3 +1,4 @@
+import './AudiobookWorkspace.css';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { useAudiobookWorkspace } from './useAudiobookWorkspace';
 import { AudiobookLibraryRail, AudiobookInspectorRail } from './AudiobookRails';

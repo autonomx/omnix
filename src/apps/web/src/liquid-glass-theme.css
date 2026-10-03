@@ -1688,7 +1688,9 @@
   }
 
   :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-meta,
-  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-tools button {
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-tools button,
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-tools button:hover,
+  :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-research-report-tools button:focus-visible {
     color: var(--omnix-muted);
   }
 

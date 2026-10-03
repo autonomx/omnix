@@ -13,7 +13,6 @@ import { createPodcastScriptSession } from './podcastScriptSession';
 import { buildConversationalPodcastSegments } from './scriptBuilder';
 import type { PodcastFormat } from './types';
 import './PodcastWorkspace.css';
-import './PodcastWorkspaceLayoutFix.css';
 import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
 import { jobOutputRefs } from '../../api/schemas/streams';

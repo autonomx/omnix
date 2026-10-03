@@ -1,3 +1,14 @@
+// Chat's stylesheets, in cascade order; they load before the stylesheets of the
+// components imported below.
+import './chat-sidebar-manager.css';
+import './researchProgressController.css';
+import './ChatbotWorkspaceTools.css';
+import './ChatbotWorkspaceUtilityToggle.css';
+import '../workspace/assistant-context-controller.css';
+import '../workspace/desktop-companion-controls.css';
+import '../workspace/desktop-companion-text-surface.css';
+import '../workspace/research-release-controller.css';
+import './ChatbotWorkspaceFullscreen.css';
 import type { OmnixModuleDefinition } from '../../../app/modules';
 import { WorkspacePanel } from '../../../design/primitives';
 import { ToolExecutionPanel } from '../workspace';

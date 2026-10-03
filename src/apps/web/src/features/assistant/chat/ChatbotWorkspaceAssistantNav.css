@@ -1241,10 +1241,7 @@
       flex: 0 0 auto;
     }
 
-    .assistant-voice-controls {
-      grid-template-columns: 1fr;
-    }
-
+    .assistant-voice-controls,
     .assistant-tool-detail-header,
     .assistant-tool-connection-panel > header,
     .assistant-tool-oauth-form,
@@ -1510,10 +1507,7 @@
 @layer overrides {
   .assistant-mode-switch,
   .assistant-workspace-usage,
-  .assistant-sessions-card {
-    display: none;
-  }
-
+  .assistant-sessions-card,
   .assistant-suggestion-row {
     display: none;
   }
@@ -1545,41 +1539,29 @@
     position: static;
   }
 
-  :root[data-omnix-appearance='light'] .assistant-chat-main,
-  :root[data-omnix-appearance='light'] .assistant-live-card,
   :root[data-omnix-appearance='light'] .assistant-tool-sidebar-card,
   :root[data-omnix-appearance='light'] .assistant-view-panel,
+  :root[data-omnix-appearance='light'] .assistant-chat-main,
+  :root[data-omnix-appearance='light'] .assistant-live-card,
+  :root[data-omnix-appearance='light'] .assistant-workspace-activity,
   :root[data-omnix-appearance='light'] .assistant-workspace-dashboard,
-  :root[data-omnix-appearance='light'] .assistant-workspace-activity {
-    background:
-      radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.1), transparent 24rem),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.94));
-    border-color: rgba(86, 102, 145, 0.22);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 1rem 2.4rem rgba(37, 51, 86, 0.1);
-    color: var(--omnix-text);
-  }
-
-  :root[data-omnix-appearance='light'] .assistant-message-actions button,
-  :root[data-omnix-appearance='light'] .assistant-chat-header-actions button,
-  :root[data-omnix-appearance='light'] .assistant-message-action-menu,
   :root[data-omnix-appearance='light'] .assistant-message-action-menu button,
-  :root[data-omnix-appearance='light'] .assistant-live-draft,
-  :root[data-omnix-appearance='light'] .assistant-voice-toggle,
+  :root[data-omnix-appearance='light'] .assistant-message-action-menu,
   :root[data-omnix-appearance='light'] .assistant-voice-input-indicator,
-  :root[data-omnix-appearance='light'] .assistant-audio-devices,
-  :root[data-omnix-appearance='light'] .assistant-audio-devices div,
-  :root[data-omnix-appearance='light'] .assistant-tool-connection-panel,
+  :root[data-omnix-appearance='light'] .assistant-voice-toggle,
+  :root[data-omnix-appearance='light'] .assistant-live-draft,
   :root[data-omnix-appearance='light'] .assistant-tool-action-row,
-  :root[data-omnix-appearance='light'] .assistant-view-panel article,
+  :root[data-omnix-appearance='light'] .assistant-tool-connection-panel,
+  :root[data-omnix-appearance='light'] .assistant-settings-list div,
   :root[data-omnix-appearance='light'] .assistant-tool-config-list article,
-  :root[data-omnix-appearance='light'] .assistant-settings-list div {
-    background: rgba(255, 255, 255, 0.76);
-    border-color: rgba(86, 102, 145, 0.2);
+  :root[data-omnix-appearance='light'] .assistant-view-panel article,
+  :root[data-omnix-appearance='light'] .assistant-audio-devices div,
+  :root[data-omnix-appearance='light'] .assistant-audio-devices,
+  :root[data-omnix-appearance='light'] .assistant-message-actions button,
+  :root[data-omnix-appearance='light'] .assistant-chat-header-actions button {
     color: var(--omnix-text);
   }
 
-  :root[data-omnix-appearance='light'] .assistant-message-input textarea,
-  :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
   :root[data-omnix-appearance='light'] .assistant-tool-oauth-form input,
   :root[data-omnix-appearance='light'] .assistant-tool-policy-select select,
   :root[data-omnix-appearance='light'] .assistant-settings-list select,
@@ -1587,6 +1569,11 @@
   :root[data-omnix-appearance='light'] .assistant-settings-list input {
     background: rgba(255, 255, 255, 0.94);
     border-color: rgba(86, 102, 145, 0.24);
+    color: var(--omnix-text);
+  }
+
+  :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select select,
+  :root[data-omnix-appearance='light'] .assistant-message-input textarea {
     color: var(--omnix-text);
   }
 }

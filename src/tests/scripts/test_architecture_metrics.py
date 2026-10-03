@@ -75,6 +75,7 @@ CASES = [
     ("web_set_interval_files", {WEB + "app/a.ts": "setInterval(one, 1); window.setInterval(two, 1);"}, 1),
     ("web_custom_event_dispatch_files", {WEB + "app/a.ts": "window.dispatchEvent(new CustomEvent('ready'));"}, 1),
     ("web_unreachable_modules", {WEB + "main.tsx": "import './live';", WEB + "live.ts": "", WEB + "dead.ts": ""}, 1),
+    ("web_global_css_files", {WEB + "main.tsx": "import './a.css';\nimport 'pkg/x.css';\nimport './app';", WEB + "a.css": "@import './b.css';", WEB + "b.css": "", WEB + "app.tsx": "import './c.css';", WEB + "c.css": ""}, 3),
     ("web_error_boundaries", {WEB + "app/router.tsx": "createRoute({ errorComponent: ErrorPage });"}, 1),
     ("eslint_baseline_disables", {WEB + "app/a.ts": "// eslint-disable-next-line no-console\nconsole.log('x');"}, 1),
     ("inline_prompt_strings", {APP + "chat/a.py": "SYSTEM_PROMPT = " + repr("You are a careful assistant. Answer only using the evidence in this conversation.")}, 1),
