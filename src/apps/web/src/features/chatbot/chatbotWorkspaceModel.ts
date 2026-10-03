@@ -88,7 +88,6 @@ export const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: 
 ];
 export const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 export const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
-export const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
 export const ASSISTANT_SIDEBAR_STORAGE_KEY = 'omnix.chatbot.assistantSidebarMinimized';
 export const ASSISTANT_SIDE_PANEL_STORAGE_KEY = 'omnix.chatbot.sidePanelMinimized';
 export const STREAMING_TTS_SAMPLE_RATE = 24_000;
@@ -270,7 +269,6 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 export function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY, codingApprovalPolicy: DEFAULT_CODING_APPROVAL_POLICY }; }
 export function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality, liveVoiceSensitivity: clampLiveVoiceSensitivity(parsed.liveVoiceSensitivity), codingApprovalPolicy: isCodingApprovalPolicy(parsed.codingApprovalPolicy) ? parsed.codingApprovalPolicy : fallback.codingApprovalPolicy }; } catch { return fallback; } }
 export function saveAssistantSettings(settings: AssistantSettings): void { try { if (typeof window !== 'undefined') window.localStorage.setItem(ASSISTANT_SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore local storage failures */ } }
-export function loadSelectedSessionId(): string | null { try { if (typeof window === 'undefined') return null; const stored = window.localStorage.getItem(ASSISTANT_SESSION_STORAGE_KEY)?.trim(); return stored || null; } catch { return null; } }
 export function clampLiveVoiceSensitivity(value: unknown): number { const parsed = typeof value === 'number' ? value : Number(value); if (!Number.isFinite(parsed)) return DEFAULT_LIVE_VOICE_SENSITIVITY; return Math.min(100, Math.max(1, Math.round(parsed))); }
 export function isCodingApprovalPolicy(value: unknown): value is CodingApprovalPolicy { return value === 'always_ask' || value === 'ask_sensitive' || value === 'allow_automatic'; }
 export function isPersonalityId(value: unknown): value is PersonalityId { return typeof value === 'string' && personalityOptions.some((option) => option.id === value); }

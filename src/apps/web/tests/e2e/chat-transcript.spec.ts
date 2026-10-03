@@ -38,6 +38,8 @@ test('a 5,000 message transcript keeps a bounded DOM and scrolls end to end', as
   await expect(page.getByText(/^Loading .* workspace…$/)).toHaveCount(0, { timeout: 60_000 });
   const transcript = page.locator('.assistant-chat-messages');
   await expect(transcript.getByText(`Message ${MESSAGE_COUNT - 1}`, { exact: true })).toBeVisible({ timeout: 15_000 });
+  // The open session is in the URL, so the view can be linked to (WP-9.6).
+  await expect(page).toHaveURL(/[?&]session=long-session(&|$)/);
 
   const rendered = await transcript.locator('article.assistant-chat-message').count();
   expect(rendered).toBeGreaterThan(0);

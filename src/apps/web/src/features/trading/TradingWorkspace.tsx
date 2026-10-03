@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useTradingInstrumentLink } from './useTradingInstrumentLink';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { TradingChartGrid } from './TradingChartGrid';
 import { TradingIndicatorManager } from './TradingIndicatorManager';
@@ -157,12 +158,9 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
   const selectedBinding = availableBindings.find((binding) => binding.binding_id === activeChart.bindingId)
     ?? availableBindings[0];
-  const visibleInstruments = useMemo(
-    () => (instruments.data ?? []).filter((instrument) => (
-      instrument.asset_class !== 'crypto' || instrument.venue === 'BINANCE'
-    )),
-    [instruments.data],
-  );
+  const visibleInstruments = useMemo(() => (instruments.data ?? []).filter((instrument) => (
+    instrument.asset_class !== 'crypto' || instrument.venue === 'BINANCE'
+  )), [instruments.data]);
   const activeInstrument = useMemo(
     () => (instruments.data ?? []).find((instrument) => instrument.instrument_id === activeChart.instrumentId),
     [activeChart.instrumentId, instruments.data],
@@ -178,17 +176,19 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
     updateChart(activeChartId, { instrumentId: preferred.instrument_id, bindingId: null });
   }, [activeChart.instrumentId, activeChartId, activeInstrument, instruments.data, updateChart]);
 
+  useTradingInstrumentLink({
+    workspaceHydrated,
+    instruments: instruments.data,
+    activeInstrumentId: activeChart.instrumentId,
+    showInstrument: (instrumentId) => updateChart(activeChartId, { instrumentId, bindingId: null }),
+  });
+
   useEffect(() => {
     if (!selectedBinding || isIntervalAvailable(activeChart.interval, selectedBinding.supported_intervals)) return;
     updateChart(activeChartId, { interval: preferredInterval(selectedBinding, activeChart.interval) });
   }, [activeChart.interval, activeChartId, selectedBinding?.binding_id, updateChart]);
 
-  const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({
-    layout,
-    activeChartId,
-    charts,
-    links,
-  }));
+  const exportWorkspace = () => downloadTradingWorkspaceExport(buildTradingWorkspaceExport({ layout, activeChartId, charts, links }));
 
   useEffect(() => {
     const query = symbolQuery.trim();

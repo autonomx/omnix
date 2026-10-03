@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { LibrarySection, WorkspaceAsset } from './audiobookWorkspaceModel';
+import { useSearchParam } from '../../shared/useSearchParam';
 
 /** The workspace's UI state: selection, open panels, filters, form fields and status. */
 export function useAudiobookState() {
-  const [projectId, setProjectId] = useState<string | null>(null);
+  // The open project is in the URL (?project=), so it can be linked to (WP-9.6).
+  const [projectId, setProjectId] = useSearchParam('project');
   const [ebookLibraryOpen, setEbookLibraryOpen] = useState(false);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);

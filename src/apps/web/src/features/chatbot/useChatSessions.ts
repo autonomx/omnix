@@ -4,13 +4,12 @@ import { omnixApiClient } from '../../api/client';
 import { noteChatSession } from './researchProgressController';
 import { visibleChatSessions } from './sessionTools';
 import {
-  ASSISTANT_SESSION_STORAGE_KEY,
-  loadSelectedSessionId,
   type AssistantView,
   type SessionListEntry,
 } from './chatbotWorkspaceModel';
 import { adoptActiveSession, applySessionResearchMode } from '../assistant-workspace';
 import { emitOmnixEvent } from '../../events/bus';
+import { useSearchParam } from '../../shared/useSearchParam';
 
 type ChatSessionsOptions = {
   setActiveView: (view: AssistantView) => void;
@@ -24,7 +23,8 @@ type ChatSessionsOptions = {
  */
 export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsOptions) {
   const queryClient = useQueryClient();
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => loadSelectedSessionId());
+  // The open session is in the URL (?session=), so it can be linked to (WP-9.6).
+  const [selectedSessionId, setSelectedSessionId] = useSearchParam('session');
   const pendingCreatedSessionIdRef = useRef<string | null>(null);
   const sessionsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'sessions'], queryFn: async () => visibleChatSessions(await omnixApiClient.listChatSessions()) });
   const selectedSessionSummary = sessionsQuery.data?.sessions.find((session) => session.id === selectedSessionId);
@@ -63,14 +63,6 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
     setSelectedSessionId(sessions[0]?.id ?? null);
   }, [selectedSessionId, sessionsQuery.data]);
 
-  useEffect(() => {
-    try {
-      if (selectedSessionId) window.localStorage.setItem(ASSISTANT_SESSION_STORAGE_KEY, selectedSessionId);
-      else window.localStorage.removeItem(ASSISTANT_SESSION_STORAGE_KEY);
-    } catch {
-      // Ignore local storage failures; the server remains the session authority.
-    }
-  }, [selectedSessionId]);
 
   useEffect(() => {
     const session = sessionQuery.data

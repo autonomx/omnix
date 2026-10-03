@@ -131,7 +131,7 @@ test.describe('E2E-22 continuous game/work companion journey', () => {
       sessionId = session.id;
 
       await installCanvasDisplayCapture(page, sessionId);
-      await page.goto('/chatbot');
+      await page.goto(`/chatbot?session=${encodeURIComponent(sessionId)}`);
       await expect(page.getByLabel('Message', { exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('button', { name: 'Character', exact: true })).toHaveAttribute('aria-pressed', 'true');
       await page.getByRole('button', { name: `Codex E2E22 ${suffix}`, exact: true }).click();
@@ -352,7 +352,6 @@ async function installCanvasDisplayCapture(page: Page, sessionId: string): Promi
       __omnixE2E22FrameRequestSupported?: boolean;
       __omnixE2E22FrameRequestCount?: number;
     };
-    localStorage.setItem('omnix.chatbot.activeSession', selectedSessionId);
     const createdVideos: HTMLVideoElement[] = [];
     captureWindow.__omnixE2E22Videos = createdVideos;
     captureWindow.__omnixE2E22VideoDraws = [];

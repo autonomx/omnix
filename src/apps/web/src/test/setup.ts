@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import { afterEach } from 'vitest';
 
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'scrollTo', {
@@ -18,5 +19,12 @@ if (typeof window !== 'undefined') {
       removeEventListener: () => undefined,
       dispatchEvent: () => false,
     }),
+  });
+}
+
+// Selections live in the URL's search parameters (WP-9.6); each test starts without them.
+if (typeof window !== 'undefined') {
+  afterEach(() => {
+    if (window.location.search) window.history.replaceState(window.history.state, '', window.location.pathname);
   });
 }
