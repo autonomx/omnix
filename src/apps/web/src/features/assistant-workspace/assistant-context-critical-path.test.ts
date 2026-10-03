@@ -1,26 +1,20 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-type AssistantContextTestWindow = Window & typeof globalThis & {
-  __omnixAssistantContextInitialized?: boolean;
-};
-
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   document.body.innerHTML = '';
   window.localStorage.clear();
-  delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
 });
 
 describe('assistant context live-chat critical path', () => {
   it('mounts a plus menu that selects the same research modes used by chat requests', async () => {
     vi.resetModules();
-    delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
     document.body.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><label class="assistant-message-input"><textarea></textarea></label><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ settings: {} }), { status: 200 }))) as unknown as typeof fetch);
 
-    await import('./assistant-context-controller');
+    (await import('./assistant-context-controller')).initializeAssistantContextController(document);
 
     const addButton = document.querySelector<HTMLButtonElement>('.assistant-context-add-button');
     const menu = document.querySelector<HTMLElement>('.assistant-context-tool-menu');
@@ -73,7 +67,6 @@ describe('assistant context live-chat critical path', () => {
 
   it('persists Agent mode and forces streamed requests through the Pi route', async () => {
     vi.resetModules();
-    delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
     window.localStorage.clear();
     window.localStorage.setItem('omnix.chat.mode', 'agent');
     document.body.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
@@ -87,7 +80,7 @@ describe('assistant context live-chat critical path', () => {
       return new Response('data: {"type":"done"}\n\n', { status: 200 });
     }) as unknown as typeof fetch);
 
-    await import('./assistant-context-controller');
+    (await import('./assistant-context-controller')).initializeAssistantContextController(document);
 
     expect(window.localStorage.getItem('omnix.chat.mode')).toBe('agent');
     expect(document.querySelector('[data-omnix-context-tool-agent]')).toHaveAttribute('aria-checked', 'true');
@@ -111,7 +104,6 @@ describe('assistant context live-chat critical path', () => {
 
   it('opens the chat response before deferred research-mode persistence completes', async () => {
     vi.resetModules();
-    delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
     document.body.innerHTML = '<main></main>';
 
     let resolvePersistence: (response: Response) => void = () => undefined;

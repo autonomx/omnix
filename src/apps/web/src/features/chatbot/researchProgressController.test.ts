@@ -1,12 +1,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ChatSession, JobRecord } from '../../api/client';
 
-type TestWindow = Window & Record<string, unknown>;
-
 let helpers: typeof import('./researchProgressController');
 
 beforeAll(async () => {
-  (window as unknown as TestWindow).__omnix_research_progress_controller__ = true;
   helpers = await import('./researchProgressController');
 });
 

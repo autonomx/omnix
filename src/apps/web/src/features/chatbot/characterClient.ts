@@ -1,6 +1,4 @@
 import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
-import './liveCharacterVisemeBridge';
-import './live2dCharacterRenderer';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
 export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';

@@ -17,6 +17,7 @@ vi.mock('./live-call-diagnostics-client', () => ({
 
 import {
   LIVE_VOICE_RELEASE_OBSERVATION_EVENT,
+  initializeLiveVoiceReleaseObserver,
   recordLiveVoiceReleaseQuality,
   resetLiveVoiceReleaseObserver,
   type LiveVoiceReleaseObservation,
@@ -43,6 +44,7 @@ describe('live voice release observer', () => {
   let now = 0;
 
   beforeEach(() => {
+    initializeLiveVoiceReleaseObserver();
     mocks.record.mockReset();
     resetLiveVoiceReleaseObserver();
     window.localStorage.clear();

@@ -8,9 +8,11 @@ import {
   visibleChatSidebarSessions,
   writeChatSidebarState,
 } from './chat-sidebar-manager';
+import { installSessionTools } from './sessionTools';
 
 describe('chat sidebar manager', () => {
   let dispose: () => void;
+  let disposeSessionTools: () => void;
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -52,11 +54,13 @@ describe('chat sidebar manager', () => {
       });
     });
     vi.stubGlobal('fetch', fetchMock);
+    disposeSessionTools = installSessionTools();
     dispose = initializeChatSidebarManager();
   });
 
   afterEach(() => {
     dispose?.();
+    disposeSessionTools?.();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     window.localStorage.clear();

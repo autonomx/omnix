@@ -1,5 +1,4 @@
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-const INSTALLED_KEY = '__omnixLiveTtsCapabilityControllerInstalled';
 
 export type LiveTtsCapabilities = {
   ok: boolean;
@@ -19,16 +18,13 @@ export type LiveTtsCapabilities = {
   provider_name?: string | null;
 };
 
-type CapabilityWindow = Window & typeof globalThis & {
-  __omnixLiveTtsCapabilityControllerInstalled?: boolean;
-  __omnixLiveTtsCapabilities?: LiveTtsCapabilities;
-};
+let installed = false;
+let negotiatedCapabilities: LiveTtsCapabilities | null = null;
 
 export function initializeLiveTtsCapabilityController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as CapabilityWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
+  if (installed) return () => undefined;
+  installed = true;
   const abortController = new AbortController();
   void fetch('/api/tts/live-call/capabilities', {
     method: 'GET',
@@ -38,7 +34,7 @@ export function initializeLiveTtsCapabilityController(): () => void {
   }).then(async (response) => {
     if (!response.ok) throw new Error(`Live TTS capability request failed with status ${response.status}.`);
     const capabilities = await response.json() as LiveTtsCapabilities;
-    liveWindow.__omnixLiveTtsCapabilities = capabilities;
+    negotiatedCapabilities = capabilities;
     window.dispatchEvent(new CustomEvent(PERF_EVENT, {
       detail: {
         stage: 'tts_capabilities_negotiated',
@@ -59,12 +55,11 @@ export function initializeLiveTtsCapabilityController(): () => void {
 
   return () => {
     abortController.abort('controller-uninstalled');
-    delete liveWindow.__omnixLiveTtsCapabilities;
-    liveWindow[INSTALLED_KEY] = false;
+    negotiatedCapabilities = null;
+    installed = false;
   };
 }
 
 export function readLiveTtsCapabilities(): LiveTtsCapabilities | null {
-  if (typeof window === 'undefined') return null;
-  return (window as CapabilityWindow).__omnixLiveTtsCapabilities ?? null;
+  return negotiatedCapabilities;
 }

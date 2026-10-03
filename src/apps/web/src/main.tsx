@@ -5,8 +5,6 @@ import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
-import { initializeViewRuntime } from './app/viewRuntime';
-import { moduleIdFromPathname } from './app/viewApiScope';
 import { omnixTheme } from './design/theme';
 import './features/chatbot/chat-sidebar-manager.css';
 import './features/chatbot/chat-sidebar-manager-layout-fix.css';
@@ -43,7 +41,6 @@ const queryClient = new QueryClient({
 });
 
 async function mountApplication(): Promise<void> {
-  void initializeViewRuntime(moduleIdFromPathname(window.location.pathname), queryClient);
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">

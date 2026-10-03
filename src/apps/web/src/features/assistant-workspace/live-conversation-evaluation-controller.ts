@@ -10,6 +10,8 @@ import {
 } from './live-conversation-evaluation';
 import { liveConversationStore } from './live-conversation-store';
 
+let liveConversationEvaluationInstalled = false;
+
 export const LIVE_EVALUATION_UPDATED_EVENT = 'omnix:live-conversation-evaluation-updated';
 export const LIVE_EVALUATION_STORAGE_KEY = 'omnix.liveConversation.evaluation.v1';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -23,10 +25,6 @@ const MAX_EVENTS = 600;
 const MAX_TOPIC_FINGERPRINTS = 12;
 const PROACTIVE_REGRET_WINDOW_MS = 2_500;
 const BACKCHANNEL_COLLISION_WINDOW_MS = 650;
-
-type EvaluationWindow = Window & typeof globalThis & {
-  __omnixLiveConversationEvaluationInstalled?: boolean;
-};
 
 type PerfDetail = Record<string, unknown> & { stage?: unknown };
 
@@ -50,9 +48,8 @@ let previousAssistantSpeaking = false;
 
 export function initializeLiveConversationEvaluationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as EvaluationWindow;
-  if (liveWindow.__omnixLiveConversationEvaluationInstalled) return () => undefined;
-  liveWindow.__omnixLiveConversationEvaluationInstalled = true;
+  if (liveConversationEvaluationInstalled) return () => undefined;
+  liveConversationEvaluationInstalled = true;
   events = readStoredEvents();
 
   const handleCallStart = () => resetLiveConversationEvaluation();
@@ -168,7 +165,7 @@ export function initializeLiveConversationEvaluationController(): () => void {
     window.removeEventListener(LIVE_ASSISTANT_TURN_SUMMARY_EVENT, handleAssistantSummary);
     window.removeEventListener(PERF_EVENT, handlePerf);
     resolveBackchannel(false, false);
-    liveWindow.__omnixLiveConversationEvaluationInstalled = false;
+    liveConversationEvaluationInstalled = false;
   };
 }
 

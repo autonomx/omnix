@@ -11,15 +11,13 @@ import {
   type LiveVoiceReleaseObservation,
 } from './live-voice-release-observer';
 
+let liveDurableEvaluationInstalled = false;
+
 export const LIVE_DURABLE_EVALUATION_SAVED_EVENT = 'omnix:live-conversation-durable-evaluation-saved';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const RELEASE_SCENARIO_KEY = 'omnix.liveCall.releaseScenario';
-
-type DurableEvaluationWindow = Window & typeof globalThis & {
-  __omnixLiveDurableEvaluationInstalled?: boolean;
-};
 
 type ActiveCall = {
   callId: string;
@@ -35,9 +33,8 @@ let activeCall: ActiveCall | null = null;
 
 export function initializeLiveConversationDurableEvaluationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as DurableEvaluationWindow;
-  if (liveWindow.__omnixLiveDurableEvaluationInstalled) return () => undefined;
-  liveWindow.__omnixLiveDurableEvaluationInstalled = true;
+  if (liveDurableEvaluationInstalled) return () => undefined;
+  liveDurableEvaluationInstalled = true;
 
   const handleStart = () => {
     activeCall = createActiveCall();
@@ -87,7 +84,7 @@ export function initializeLiveConversationDurableEvaluationController(): () => v
     window.removeEventListener(PERF_EVENT, handlePerf);
     window.removeEventListener(STOP_EVENT, handleStop);
     activeCall = null;
-    liveWindow.__omnixLiveDurableEvaluationInstalled = false;
+    liveDurableEvaluationInstalled = false;
   };
 }
 

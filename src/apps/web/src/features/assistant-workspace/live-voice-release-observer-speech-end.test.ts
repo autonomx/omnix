@@ -13,7 +13,7 @@ vi.mock('./live-call-diagnostics-client', () => ({
   }),
 }));
 
-import { resetLiveVoiceReleaseObserver } from './live-voice-release-observer';
+import { initializeLiveVoiceReleaseObserver, resetLiveVoiceReleaseObserver } from './live-voice-release-observer';
 import {
   LIVE_VOICE_TURN_TIMELINE_EVENT,
   type LiveVoiceTurnTimelineDetail,
@@ -44,6 +44,7 @@ describe('speech-end release metric', () => {
   let now = 0;
 
   beforeEach(() => {
+    initializeLiveVoiceReleaseObserver();
     mocks.record.mockReset();
     resetLiveVoiceReleaseObserver();
     vi.spyOn(performance, 'now').mockImplementation(() => now);

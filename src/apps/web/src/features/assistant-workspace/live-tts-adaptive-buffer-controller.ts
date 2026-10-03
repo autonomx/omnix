@@ -1,6 +1,7 @@
 import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 
-const INSTALLED_KEY = '__omnixLiveTtsAdaptiveBufferInstalled';
+let liveTtsAdaptiveBufferInstalled = false;
+
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STORAGE_KEY = 'omnix.liveTts.adaptiveBuffer.v3';
 const MAX_TRACKED_ANCILLARY_SEGMENTS = 128;
@@ -20,9 +21,7 @@ export type AncillaryCancellationDecision = {
   reason?: string;
 };
 
-type AdaptiveWindow = Window & typeof globalThis & {
-  __omnixLiveTtsAdaptiveBufferInstalled?: boolean;
-};
+type AdaptiveWindow = Window & typeof globalThis;
 
 type WorkletOutboundMessage = Record<string, unknown> & {
   type?: unknown;
@@ -214,7 +213,7 @@ export function adaptiveBufferWorkletMessage(
 export function initializeLiveTtsAdaptiveBufferController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as AdaptiveWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
+  if (liveTtsAdaptiveBufferInstalled) return () => undefined;
   const NativeAudioWorkletNode = liveWindow.AudioWorkletNode;
   if (!NativeAudioWorkletNode) return () => undefined;
   const originalDescriptor = Object.getOwnPropertyDescriptor(
@@ -367,13 +366,13 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
       value: WrappedAudioWorkletNode,
     });
   } catch (error) {
-    liveWindow[INSTALLED_KEY] = false;
+    liveTtsAdaptiveBufferInstalled = false;
     dispatchPerformance('tts_adaptive_install_failed', {
       error: error instanceof Error ? error.message : String(error),
     });
     return () => undefined;
   }
-  liveWindow[INSTALLED_KEY] = true;
+  liveTtsAdaptiveBufferInstalled = true;
 
   return () => {
     try {
@@ -391,7 +390,7 @@ export function initializeLiveTtsAdaptiveBufferController(): () => void {
         });
       }
     } finally {
-      liveWindow[INSTALLED_KEY] = false;
+      liveTtsAdaptiveBufferInstalled = false;
     }
   };
 }

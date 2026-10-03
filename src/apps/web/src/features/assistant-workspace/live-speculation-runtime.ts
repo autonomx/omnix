@@ -6,12 +6,10 @@ import {
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
 
+let liveSpeculationRuntimeInstalled = false;
+
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const FINALIZED_SEGMENT_LIMIT = 64;
-
-type SpeculationRuntimeWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationRuntimeInstalled?: boolean;
-};
 
 type SpeculationSegmentDetail = {
   segmentId?: string;
@@ -53,9 +51,8 @@ export function liveSubmissionRequestMatches(
  */
 export function initializeLiveSpeculationRuntime(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as SpeculationRuntimeWindow;
-  if (liveWindow.__omnixLiveSpeculationRuntimeInstalled) return () => undefined;
-  liveWindow.__omnixLiveSpeculationRuntimeInstalled = true;
+  if (liveSpeculationRuntimeInstalled) return () => undefined;
+  liveSpeculationRuntimeInstalled = true;
 
   const finalizedSegments = new Map<string, true>();
   const segmentKey = (event: Event): string | null => {
@@ -111,6 +108,6 @@ export function initializeLiveSpeculationRuntime(): () => void {
       true,
     );
     finalizedSegments.clear();
-    liveWindow.__omnixLiveSpeculationRuntimeInstalled = false;
+    liveSpeculationRuntimeInstalled = false;
   };
 }

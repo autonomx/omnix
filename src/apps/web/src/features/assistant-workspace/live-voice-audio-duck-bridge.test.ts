@@ -47,7 +47,6 @@ class FakeAudioWorkletNode {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  delete (window as Window & { __omnixLiveVoiceDuckBridgeInstalled?: boolean }).__omnixLiveVoiceDuckBridgeInstalled;
 });
 
 describe('live voice audio duck bridge', () => {

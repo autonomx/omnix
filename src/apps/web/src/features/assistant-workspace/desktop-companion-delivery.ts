@@ -1,6 +1,8 @@
 import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import { liveConversationStore, type LiveConversationRuntimeState } from './live-conversation-store';
 
+let desktopCompanionDeliveryInstalled = false;
+
 export const DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT = 'omnix:desktop-companion-delivery-request';
 export const DESKTOP_COMPANION_DELIVERY_EVENT = 'omnix:desktop-companion-delivery';
 export const DESKTOP_COMPANION_TEXT_EVENT = 'omnix:desktop-companion-text';
@@ -14,10 +16,6 @@ const DESKTOP_INITIATIVE_COOLDOWN_MS = 4_000;
 
 export type DesktopCompanionPresentation = 'text' | 'speech';
 export type DesktopCompanionExpression = 'neutral' | 'curious' | 'focused' | 'alert';
-
-type DesktopCompanionWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionDeliveryInstalled?: boolean;
-};
 
 export type DesktopCompanionDeliveryRequest = {
   sessionId: string;
@@ -90,9 +88,8 @@ export function decideDesktopCompanionDelivery(
 
 export function initializeDesktopCompanionDeliveryController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const target = window as DesktopCompanionWindow;
-  if (target.__omnixDesktopCompanionDeliveryInstalled) return () => undefined;
-  target.__omnixDesktopCompanionDeliveryInstalled = true;
+  if (desktopCompanionDeliveryInstalled) return () => undefined;
+  desktopCompanionDeliveryInstalled = true;
   assistantSpeaking = isAssistantSpeaking(liveConversationStore.getState());
 
   const handleRequest = (event: Event) => {
@@ -120,7 +117,7 @@ export function initializeDesktopCompanionDeliveryController(): () => void {
     window.removeEventListener(STOP_EVENT, handleStop);
     unsubscribe();
     cancelActive('controller_disposed', false, true);
-    target.__omnixDesktopCompanionDeliveryInstalled = false;
+    desktopCompanionDeliveryInstalled = false;
   };
 }
 

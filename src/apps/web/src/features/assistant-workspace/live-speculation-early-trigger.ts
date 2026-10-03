@@ -5,18 +5,15 @@ import {
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
 
+let liveSpeculationEarlyTriggerInstalled = false;
+
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-const INSTALLED_KEY = '__omnixLiveSpeculationEarlyTriggerInstalled';
 const EARLY_SPECULATION_LONG_PROBABILITY = 0.35;
 const EARLY_SPECULATION_MEDIUM_PROBABILITY = 0.45;
 const EARLY_SPECULATION_SHORT_PROBABILITY = 0.6;
 const EARLY_SPECULATION_SINGLE_WORD_PROBABILITY = 0.9;
 const DUPLICATE_SUPPRESSION_MS = 160;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
-
-type EarlyTriggerWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationEarlyTriggerInstalled?: boolean;
-};
 
 type PerfDetail = Record<string, unknown> & {
   stage?: unknown;
@@ -80,9 +77,8 @@ export function earlySpeculationCandidateEligible(
 
 export function initializeLiveSpeculationEarlyTrigger(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as EarlyTriggerWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
+  if (liveSpeculationEarlyTriggerInstalled) return () => undefined;
+  liveSpeculationEarlyTriggerInstalled = true;
   const lastBySegment = new Map<string, LastDispatch>();
   const partialBySegment = new Map<string, CachedPartial>();
   let authoritativeProvider = '';
@@ -208,7 +204,7 @@ export function initializeLiveSpeculationEarlyTrigger(): () => void {
     window.removeEventListener(PERF_EVENT, handlePerformance);
     resetProviderState();
     authoritativeProvider = '';
-    liveWindow[INSTALLED_KEY] = false;
+    liveSpeculationEarlyTriggerInstalled = false;
   };
 }
 

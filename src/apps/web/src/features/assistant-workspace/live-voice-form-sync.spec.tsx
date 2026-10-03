@@ -1,7 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { useForm } from 'react-hook-form';
-import { describe, expect, it, vi } from 'vitest';
-import './live-voice-form-sync';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { initializeLiveVoiceFormSync } from './live-voice-form-sync';
+
+beforeAll(() => {
+  initializeLiveVoiceFormSync();
+});
 
 type FormValues = { content: string };
 

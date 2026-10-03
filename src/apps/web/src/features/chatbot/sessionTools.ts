@@ -1,10 +1,10 @@
 import { omnixApiClient } from '../../api/client';
 import type { ChatSession, CreateChatSessionRequest } from '../../api/client';
 import './chat-response-metrics-controller.css';
-import { initializeChatResponseMetricsController } from './chat-response-metrics-controller';
 import { characterClient, type SessionInteraction } from './characterClient';
 
-const INSTALLED_KEY = '__omnix_chat_session_tools__';
+let chatSessionToolsInstalled = false;
+
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
 const LIVE_CHAT_SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const CHAT_SESSION_CREATED_EVENT = 'omnix:chat-session-created';
@@ -41,8 +41,6 @@ type SessionSelectionEventDetail = {
 let selectedSessionId: string | null = null;
 let selectedSessionSnapshot: SessionSelectionSnapshot | null = null;
 
-type AnyWindow = Window & Record<string, unknown>;
-
 type ClientPatch = {
   listChatSessions: typeof omnixApiClient.listChatSessions;
 };
@@ -51,12 +49,17 @@ function shouldShowSession(session: { title?: string | null }): boolean {
   return !String(session.title ?? '').trim().startsWith('Podcast script:');
 }
 
-function patchSessionList(): void {
+function patchSessionList(): () => void {
   const client = omnixApiClient as unknown as ClientPatch;
+  const unpatched = client.listChatSessions;
   const original = client.listChatSessions.bind(omnixApiClient);
-  client.listChatSessions = async () => {
+  const patched = async () => {
     const payload = await original();
     return { ...payload, sessions: payload.sessions.filter(shouldShowSession) };
+  };
+  client.listChatSessions = patched;
+  return () => {
+    if (client.listChatSessions === patched) client.listChatSessions = unpatched;
   };
 }
 
@@ -164,12 +167,11 @@ export async function startBlankChat(): Promise<ChatSession> {
   return session;
 }
 
-export function installSessionTools(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const w = window as unknown as AnyWindow;
-  if (w[INSTALLED_KEY]) return;
-  w[INSTALLED_KEY] = true;
-  window.addEventListener(SESSION_SELECTED_EVENT, (event) => {
+export function installSessionTools(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  if (chatSessionToolsInstalled) return () => undefined;
+  chatSessionToolsInstalled = true;
+  const handleSessionSelected = (event: Event) => {
     const detail = (event as CustomEvent<SessionSelectionEventDetail>).detail;
     const nextSessionId = typeof detail?.sessionId === 'string' ? detail.sessionId.trim() : '';
     selectedSessionId = nextSessionId || null;
@@ -177,8 +179,14 @@ export function installSessionTools(): void {
     selectedSessionSnapshot = snapshot && snapshot.id === nextSessionId && hasInteractionSettings(snapshot)
       ? snapshot as SessionSelectionSnapshot
       : selectedSessionSnapshot?.id === nextSessionId ? selectedSessionSnapshot : null;
-  });
-  patchSessionList();
+  };
+  window.addEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
+  const restoreSessionList = patchSessionList();
+  return () => {
+    window.removeEventListener(SESSION_SELECTED_EVENT, handleSessionSelected);
+    restoreSessionList();
+    chatSessionToolsInstalled = false;
+  };
 }
 
 function hasInteractionSettings(
@@ -198,6 +206,3 @@ function hasInteractionSettings(
       && (session.transcript_policy === 'persistent' || session.transcript_policy === 'temporary' || session.transcript_policy === 'none'),
   );
 }
-
-initializeChatResponseMetricsController();
-installSessionTools();

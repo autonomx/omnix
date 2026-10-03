@@ -1,6 +1,8 @@
 import type { DesktopCompanionExpression } from './desktop-companion-delivery';
 import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT } from './desktop-companion-delivery';
 
+let desktopCompanionExpressionEnricherInstalled = false;
+
 const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
 
 type AttentionStatus = {
@@ -14,10 +16,6 @@ type MutableDeliveryRequest = {
   priority?: unknown;
   expression?: DesktopCompanionExpression;
   intensity?: number;
-};
-
-type EnricherWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionExpressionEnricherInstalled?: boolean;
 };
 
 let latest: AttentionStatus = {};
@@ -37,9 +35,8 @@ export function expressionForDesktopAttention(status: AttentionStatus): {
 
 export function initializeDesktopCompanionExpressionEnricher(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const target = window as EnricherWindow;
-  if (target.__omnixDesktopCompanionExpressionEnricherInstalled) return () => undefined;
-  target.__omnixDesktopCompanionExpressionEnricherInstalled = true;
+  if (desktopCompanionExpressionEnricherInstalled) return () => undefined;
+  desktopCompanionExpressionEnricherInstalled = true;
 
   const handleStatus = (event: Event) => {
     latest = (event as CustomEvent<AttentionStatus>).detail ?? {};
@@ -61,6 +58,6 @@ export function initializeDesktopCompanionExpressionEnricher(): () => void {
     window.removeEventListener(DESKTOP_COMPANION_STATUS_EVENT, handleStatus);
     window.removeEventListener(DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, handleRequest);
     latest = {};
-    target.__omnixDesktopCompanionExpressionEnricherInstalled = false;
+    desktopCompanionExpressionEnricherInstalled = false;
   };
 }

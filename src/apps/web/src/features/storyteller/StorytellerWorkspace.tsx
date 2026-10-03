@@ -7,6 +7,8 @@ import { omnixApiClient, type JobRecord, type ProviderFacadePayload } from '../.
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { StoryExtraPanels } from './StoryExtraPanels';
+import { StorytellerToolbox } from './StorytellerToolbox';
 
 interface StorytellerFormValues {
   providerId: string;
@@ -583,6 +585,8 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
             title={storyTitle}
             wordCount={wordCount}
           />
+          <StorytellerToolbox />
+          <StoryExtraPanels />
           <StoryModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
           {workspaceMode === 'story' ? (
             <StoryModePanel

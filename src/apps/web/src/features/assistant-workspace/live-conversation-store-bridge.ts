@@ -12,6 +12,8 @@ import {
 import { liveConversationStore } from './live-conversation-store';
 import type { SpeechDeliveryPlan } from './live-speech-delivery-plan';
 
+let liveConversationStoreBridgeInstalled = false;
+
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
@@ -26,17 +28,12 @@ const EVALUATION_UPDATED_EVENT = 'omnix:live-conversation-evaluation-updated';
 const PROACTIVE_DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
 const PRONUNCIATION_UPDATED_EVENT = 'omnix:live-pronunciation-updated';
 
-type StoreBridgeWindow = Window & typeof globalThis & {
-  __omnixLiveConversationStoreBridgeInstalled?: boolean;
-};
-
 type UnknownDetail = Record<string, unknown>;
 
 export function initializeLiveConversationStoreBridge(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as StoreBridgeWindow;
-  if (liveWindow.__omnixLiveConversationStoreBridgeInstalled) return () => undefined;
-  liveWindow.__omnixLiveConversationStoreBridgeInstalled = true;
+  if (liveConversationStoreBridgeInstalled) return () => undefined;
+  liveConversationStoreBridgeInstalled = true;
 
   const profile = readEffectiveLiveConversationProfile();
   if (profile) liveConversationStore.dispatch({ type: 'profile', profile });
@@ -167,7 +164,7 @@ export function initializeLiveConversationStoreBridge(): () => void {
 
   return () => {
     for (const [name, listener] of listeners) window.removeEventListener(name, listener);
-    liveWindow.__omnixLiveConversationStoreBridgeInstalled = false;
+    liveConversationStoreBridgeInstalled = false;
   };
 }
 

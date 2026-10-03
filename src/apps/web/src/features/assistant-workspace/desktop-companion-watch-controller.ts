@@ -17,6 +17,8 @@ import { DesktopCompanionRuntime, type DesktopCompanionSnapshot } from './deskto
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
 
+let desktopCompanionWatchInstalled = false;
+
 export const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
 export const DESKTOP_COMPANION_EVALUATION_EVENT = 'omnix:desktop-companion-evaluation';
 
@@ -68,10 +70,6 @@ type PreflightResponse = {
   remote: boolean;
   latency_ms: number | null;
   reason: string;
-};
-
-type ControllerWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionWatchInstalled?: boolean;
 };
 
 const runtime = new DesktopCompanionRuntime();
@@ -141,9 +139,8 @@ const tick = createDesktopCompanionTickScheduler(tickOnce);
 
 export function initializeDesktopCompanionWatchController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const target = window as ControllerWindow;
-  if (target.__omnixDesktopCompanionWatchInstalled) return () => undefined;
-  target.__omnixDesktopCompanionWatchInstalled = true;
+  if (desktopCompanionWatchInstalled) return () => undefined;
+  desktopCompanionWatchInstalled = true;
   timerId = window.setInterval(() => void tick(), 500);
   const handleVisibility = () => runtime.handleVisibility(document.visibilityState === 'visible');
   const handleShareChange = () => void tick();
@@ -166,7 +163,7 @@ export function initializeDesktopCompanionWatchController(): () => void {
     document.removeEventListener('visibilitychange', handleVisibility);
     window.removeEventListener('omnix:desktop-share-changed', handleShareChange);
     void stopAndReset('controller_disposed');
-    target.__omnixDesktopCompanionWatchInstalled = false;
+    desktopCompanionWatchInstalled = false;
   };
 }
 

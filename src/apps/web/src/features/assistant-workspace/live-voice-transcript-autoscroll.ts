@@ -40,9 +40,3 @@ export function scrollTranscriptToLatest(transcript: HTMLElement): void {
     transcript.scrollTop = transcript.scrollHeight;
   });
 }
-
-if (typeof window !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initializeLiveVoiceTranscriptAutoscroll(), { once: true });
-  } else initializeLiveVoiceTranscriptAutoscroll();
-}

@@ -29,7 +29,7 @@ import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './
 import { LoginPage } from './LoginPage';
 import { SignOutButton } from './SignOutButton';
 import { LOGIN_PATH, setActiveViewModule } from './viewApiScope';
-import { initializeViewRuntime } from './viewRuntime';
+import { activateViewRuntime } from './viewRuntime';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
@@ -84,7 +84,9 @@ function OmnixShell() {
 
   useEffect(() => {
     setActiveViewModule(activeModule.id);
-    void initializeViewRuntime(activeModule.id, queryClient);
+    // The leaving workspace's runtime is disposed when the route changes (WP-9.1).
+    const runtime = activateViewRuntime(activeModule.id, { queryClient });
+    return () => runtime.dispose();
   }, [activeModule.id, queryClient]);
 
   useEffect(() => {

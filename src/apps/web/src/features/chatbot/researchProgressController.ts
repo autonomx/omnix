@@ -9,7 +9,8 @@ import {
 } from '../../api/client';
 import { renderAssistantMessageHtml } from './markdownRenderer';
 
-const INSTALLED_KEY = '__omnix_research_progress_controller__';
+let researchProgressControllerInstalled = false;
+
 const PANEL_ATTRIBUTE = 'data-omnix-research-progress';
 const MESSAGE_DETAILS_ATTRIBUTE = 'data-omnix-research-message-details';
 const MESSAGE_CONTENT_ATTRIBUTE = 'data-omnix-message-content';
@@ -19,7 +20,6 @@ const POLL_INTERVAL_MS = 1_500;
 const ACTIVE_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
-type AnyWindow = Window & Record<string, unknown>;
 type ChatMessage = NonNullable<ChatSession['messages']>[number];
 type ClientPatch = {
   getChatSession: (sessionId: string) => Promise<ChatSession>;
@@ -35,34 +35,45 @@ let recoveringSessionId: string | null = null;
 let originalGetChatSession: ClientPatch['getChatSession'] | null = null;
 const dismissedJobIds = new Set<string>();
 
-export function installResearchProgressController(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const runtimeWindow = window as unknown as AnyWindow;
-  if (runtimeWindow[INSTALLED_KEY]) return;
-  runtimeWindow[INSTALLED_KEY] = true;
-  patchApiClient();
+export function installResearchProgressController(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  if (researchProgressControllerInstalled) return () => undefined;
+  researchProgressControllerInstalled = true;
+  const restoreClient = patchApiClient();
   const mount = () => renderResearchUi();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
   else mount();
   const observer = new MutationObserver(mount);
   observer.observe(document.body, { childList: true, subtree: true });
   document.addEventListener('click', handleResearchReportAction);
-  window.addEventListener('beforeunload', stopPolling, { once: true });
+  const handleUnload = () => stopPolling();
+  window.addEventListener('beforeunload', handleUnload, { once: true });
+  return () => {
+    observer.disconnect();
+    document.removeEventListener('DOMContentLoaded', mount);
+    document.removeEventListener('click', handleResearchReportAction);
+    window.removeEventListener('beforeunload', handleUnload);
+    stopPolling();
+    restoreClient();
+    researchProgressControllerInstalled = false;
+  };
 }
 
-function patchApiClient(): void {
+function patchApiClient(): () => void {
   const client = omnixApiClient as unknown as ClientPatch;
+  const unpatchedGet = client.getChatSession;
+  const unpatchedSend = client.sendChatMessage;
   originalGetChatSession = client.getChatSession.bind(omnixApiClient);
   const originalSendChatMessage = client.sendChatMessage.bind(omnixApiClient);
 
-  client.getChatSession = async (sessionId: string) => {
+  const patchedGet = async (sessionId: string) => {
     const session = await originalGetChatSession?.(sessionId);
     if (!session) throw new Error('Chat session could not be loaded.');
     captureSession(session);
     return session;
   };
 
-  client.sendChatMessage = async (sessionId: string, request: SendChatMessageRequest) => {
+  const patchedSend = async (sessionId: string, request: SendChatMessageRequest) => {
     const result = await originalSendChatMessage(sessionId, request);
     captureSession(result.session);
     if (result.job?.type === RESEARCH_JOB_TYPE) {
@@ -72,6 +83,12 @@ function patchApiClient(): void {
       startPolling(result.job.id);
     }
     return result;
+  };
+  client.getChatSession = patchedGet;
+  client.sendChatMessage = patchedSend;
+  return () => {
+    if (client.getChatSession === patchedGet) client.getChatSession = unpatchedGet;
+    if (client.sendChatMessage === patchedSend) client.sendChatMessage = unpatchedSend;
   };
 }
 
@@ -907,5 +924,3 @@ function escapeHtml(value: unknown): string {
 function cssEscape(value: string): string {
   return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
-
-installResearchProgressController();

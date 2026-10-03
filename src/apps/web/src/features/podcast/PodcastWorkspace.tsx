@@ -10,6 +10,7 @@ import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { mockPodcastSpeakerProfiles } from '../conversation-production/speakers';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
+import { createPodcastScriptSession } from './podcastScriptSession';
 import { buildConversationalPodcastSegments } from './scriptBuilder';
 import type { PodcastFormat } from './types';
 import './PodcastWorkspace.css';
@@ -114,7 +115,7 @@ function parseSegments(text: string): Segment[] {
 
 async function generateScript(args: { title: string; brief: string; audience: string; duration: string; speakers: SpeakerDraft[] }) {
   try {
-    const session = await omnixApiClient.createChatSession({ title: `Podcast script: ${args.title}`.slice(0, 64), system_prompt: 'Return only valid JSON.' });
+    const session = await createPodcastScriptSession({ title: `Podcast script: ${args.title}`.slice(0, 64), system_prompt: 'Return only valid JSON.' });
     const response = await omnixApiClient.sendChatMessage(session.id, {
       content: `Write a speaker-tagged podcast as JSON with segments. Topic: ${args.title}. Brief: ${args.brief}. Speakers: ${args.speakers.map((speaker) => speaker.name).join(', ')}.`,
     });

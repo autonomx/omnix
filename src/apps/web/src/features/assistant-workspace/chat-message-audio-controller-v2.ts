@@ -7,18 +7,18 @@ import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player'
 import { createLiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
 import { resolvePlaybackVoiceWithDiagnostics } from './voice-resolution-diagnostics';
 
+let chatMessageAudioControllerV2Installed = false;
+
 const STREAM_AUDIO_BUTTON_ATTRIBUTE = 'data-omnix-stream-audio';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const AUDIO_PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
-const INSTALLED_KEY = '__omnixChatMessageAudioControllerV2Installed';
 
 let activeButton: HTMLButtonElement | null = null;
 
 export function initializeChatMessageAudioControllerV2(root: ParentNode = document): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const state = window as typeof window & Record<string, unknown>;
-  if (state[INSTALLED_KEY]) return () => undefined;
-  state[INSTALLED_KEY] = true;
+  if (chatMessageAudioControllerV2Installed) return () => undefined;
+  chatMessageAudioControllerV2Installed = true;
 
   const handleClick = (event: Event): void => {
     const target = event.target;
@@ -107,7 +107,7 @@ export function initializeChatMessageAudioControllerV2(root: ParentNode = docume
   return () => {
     eventTarget.removeEventListener('click', handleClick, true);
     stopActiveButton(root);
-    delete state[INSTALLED_KEY];
+    chatMessageAudioControllerV2Installed = false;
   };
 }
 

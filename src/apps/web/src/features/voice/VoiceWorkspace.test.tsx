@@ -59,7 +59,7 @@ describe('VoiceWorkspace', () => {
       if (path === '/api/providers') return Response.json({ providers: [], models: [] });
       if (path === '/api/assets') return Response.json({ assets: [] });
       if (path === '/api/jobs' && init?.method === 'POST') return Response.json(queuedJob);
-      if (path === '/api/jobs') {
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') {
         return Response.json({ jobs: [
           queuedJob,
           { ...queuedJob, id: 'job:old', status: 'completed', output_refs: [{ title: 'Old speech', data_url: 'data:audio/wav;base64,b2xk' }] },
@@ -161,7 +161,7 @@ describe('VoiceWorkspace', () => {
         return Response.json({ ok: true, asset_id: 'voice-cloning:jinx2', deleted: true, file_deleted: true });
       }
 
-      if (path === '/api/jobs') {
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') {
         return Response.json({
           jobs: [
             {
@@ -326,7 +326,7 @@ describe('VoiceWorkspace', () => {
           progress: { current: 5, total: 5 },
         });
       }
-      if (path === '/api/jobs') return Response.json({ jobs: [] });
+      if (path === '/api/jobs' || path === '/api/jobs/voice-summaries') return Response.json({ jobs: [] });
       if (path === '/api/assets') return Response.json({ assets: [] });
       return new Response('not found', { status: 404 });
     });

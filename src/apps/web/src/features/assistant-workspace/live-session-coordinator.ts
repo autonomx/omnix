@@ -23,6 +23,7 @@ import {
   type LiveTaskContract,
 } from './live-task-contract';
 
+
 export const LIVE_OBSERVATION_CANDIDATE_EVENT = 'omnix:live-observation-candidate';
 export const LIVE_OBSERVATION_SUPERSEDED_EVENT = 'omnix:live-observation-superseded';
 export const LIVE_TASK_CONTRACT_EVENT = 'omnix:live-task-contract';
@@ -355,17 +356,19 @@ export const liveSessionCoordinator = new LiveSessionCoordinator({
 
 let initialized = false;
 
-export function initializeLiveSessionCoordinator(): void {
-  if (initialized || typeof window === 'undefined') return;
-  const liveWindow = window as Window & typeof globalThis & { __omnixLiveSessionCoordinatorInstalled?: boolean };
-  if (liveWindow.__omnixLiveSessionCoordinatorInstalled) return;
+export function initializeLiveSessionCoordinator(): () => void {
+  if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
-  liveWindow.__omnixLiveSessionCoordinatorInstalled = true;
-  window.addEventListener(LIVE_TASK_CONTRACT_EVENT, (event) => {
+  const handleTaskContract = (event: Event) => {
     const detail = (event as CustomEvent<{ instruction?: string; contract?: LiveTaskContract }>).detail;
     if (detail?.contract) liveSessionCoordinator.setTaskContract(detail.contract);
     else if (detail?.instruction?.trim()) liveSessionCoordinator.setTaskInstruction(detail.instruction);
-  });
+  };
+  window.addEventListener(LIVE_TASK_CONTRACT_EVENT, handleTaskContract);
+  return () => {
+    window.removeEventListener(LIVE_TASK_CONTRACT_EVENT, handleTaskContract);
+    initialized = false;
+  };
 }
 
 function assertNever(value: never): never {

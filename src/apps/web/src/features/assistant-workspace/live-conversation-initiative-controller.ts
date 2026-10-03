@@ -9,6 +9,8 @@ import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
 
+let liveConversationInitiativeInstalled = false;
+
 const SESSION_CHANGED_EVENT = 'omnix:live-chat-session-changed';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const CALL_CONNECTED_EVENT = 'omnix:assistant-live-voice-call-connected';
@@ -24,10 +26,6 @@ const DESKTOP_CONTEXT_REFRESH_MS = 5_000;
 const DESKTOP_CONTEXT_MAX_AGE_MS = 120_000;
 const THINKING_PATTERN = /\b(?:give me (?:a )?(?:second|minute|moment)|let me think|one moment|hold on|I need a minute)\b/i;
 const SENSITIVE_PATTERN = /\b(?:password|passcode|pin|account|card number|security code|address|phone number|email address)\b|\b\d{4,}\b/i;
-
-type InitiativeWindow = Window & typeof globalThis & {
-  __omnixLiveConversationInitiativeInstalled?: boolean;
-};
 
 type DesktopContext = {
   session_id: string;
@@ -81,9 +79,8 @@ let desktopContextRequest: Promise<void> | null = null;
 
 export function initializeLiveConversationInitiativeController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const liveWindow = window as InitiativeWindow;
-  if (liveWindow.__omnixLiveConversationInitiativeInstalled) return () => undefined;
-  liveWindow.__omnixLiveConversationInitiativeInstalled = true;
+  if (liveConversationInitiativeInstalled) return () => undefined;
+  liveConversationInitiativeInstalled = true;
   lastActivityAtMs = performance.now();
   selectedSessionId = liveConversationStore.getState().sessionId;
   callConnected = liveConversationStore.getState().conversation.connection === 'connected';
@@ -157,7 +154,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     clearPending('controller-disposed');
     desktopContext = null;
     desktopContextSessionId = null;
-    liveWindow.__omnixLiveConversationInitiativeInstalled = false;
+    liveConversationInitiativeInstalled = false;
   };
 }
 

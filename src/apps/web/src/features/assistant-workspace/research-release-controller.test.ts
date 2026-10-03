@@ -1,11 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
-type TestWindow = Window & Record<string, unknown>;
-
 let helpers: typeof import('./research-release-controller');
 
 beforeAll(async () => {
-  (window as unknown as TestWindow).__omnixResearchReleaseInitialized = true;
   helpers = await import('./research-release-controller');
 });
 

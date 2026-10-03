@@ -71,7 +71,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const appliedSettingsRevision = useRef('');
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs() });
+  // Under ['platform', 'jobs'] so job invalidations refresh it; bounded to voice jobs.
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs', 'voice-summaries'], queryFn: () => omnixApiClient.listVoiceJobSummaries() });
   const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: () => loadSettingsProfile() });
   const moduleDefaults = useMemo(() => voiceStudioDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);

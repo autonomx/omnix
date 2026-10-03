@@ -254,9 +254,3 @@ function decodePathSegment(value: string): string {
     return value;
   }
 }
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => initializeResearchReleaseController(), { once: true });
-} else {
-  initializeResearchReleaseController();
-}

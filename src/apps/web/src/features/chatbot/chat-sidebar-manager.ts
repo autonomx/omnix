@@ -1,6 +1,8 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { startBlankChat } from './sessionTools';
 
+let chatSidebarManagerInstalled = false;
+
 const HOST_ATTRIBUTE = 'data-omnix-chat-sidebar-manager';
 const STORAGE_KEY = 'omnix.chat.sidebar.v1';
 const SESSION_SELECTED_EVENT = 'omnix:chat-session-selected';
@@ -37,10 +39,6 @@ type SidebarEntryState = {
 
 type SidebarState = Record<string, SidebarEntryState>;
 
-type SidebarManagerWindow = Window & typeof globalThis & {
-  __omnixChatSidebarManagerInstalled?: boolean;
-};
-
 let selectedSessionId: string | null = null;
 let openMenuSessionId: string | null = null;
 let refreshTimer: ReturnType<typeof window.setTimeout> | null = null;
@@ -50,9 +48,8 @@ let statusTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 export function initializeChatSidebarManager(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const managerWindow = window as SidebarManagerWindow;
-  if (managerWindow.__omnixChatSidebarManagerInstalled) return () => undefined;
-  managerWindow.__omnixChatSidebarManagerInstalled = true;
+  if (chatSidebarManagerInstalled) return () => undefined;
+  chatSidebarManagerInstalled = true;
 
   const handleSessionSelected = (event: Event): void => {
     selectedSessionId = stringValue((event as CustomEvent<{ sessionId?: unknown }>).detail?.sessionId) || null;
@@ -117,7 +114,7 @@ export function initializeChatSidebarManager(): () => void {
     selectedSessionId = null;
     openMenuSessionId = null;
     sharedSessionFromUrlApplied = false;
-    managerWindow.__omnixChatSidebarManagerInstalled = false;
+    chatSidebarManagerInstalled = false;
   };
 }
 

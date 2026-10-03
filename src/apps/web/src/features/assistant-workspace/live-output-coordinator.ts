@@ -17,6 +17,7 @@ import {
   type LiveVoicePcmSessionOptions,
 } from './live-voice-pcm-session';
 
+
 const LIVE_OBSERVATION_GENERATION_PATH = (sessionId: string): string =>
   `/api/chat/sessions/${encodeURIComponent(sessionId)}/live/observations/generate`;
 
@@ -295,34 +296,44 @@ export const liveOutputCoordinator = new LiveOutputCoordinator({
 
 let initialized = false;
 
-export function initializeLiveOutputCoordinator(): void {
-  if (initialized || typeof window === 'undefined') return;
-  const liveWindow = window as Window & typeof globalThis & { __omnixLiveOutputCoordinatorInstalled?: boolean };
-  if (liveWindow.__omnixLiveOutputCoordinatorInstalled) return;
+export function initializeLiveOutputCoordinator(): () => void {
+  if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
-  liveWindow.__omnixLiveOutputCoordinatorInstalled = true;
-  window.addEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, (event) => {
+  const handleObservation = (event: Event) => {
     const detail = (event as CustomEvent<LiveObservationCandidateDetail>).detail;
     if (detail?.observation) void liveOutputCoordinator.handleObservationCandidate(detail);
-  });
-  window.addEventListener(LIVE_OBSERVATION_SUPERSEDED_EVENT, (event) => {
+  };
+  const handleSuperseded = (event: Event) => {
     const detail = (event as CustomEvent<LiveObservationSupersededDetail>).detail;
     if (detail?.observationIds?.length) {
       void liveOutputCoordinator.cancelObservationIds(detail.observationIds, detail.reason || 'observation_superseded');
     }
-  });
-  window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, (event) => {
+  };
+  const handleInterrupt = (event: Event) => {
     const detail = (event as CustomEvent<{ intent?: string }>).detail;
     void liveOutputCoordinator.interrupt(detail?.intent || 'live_interrupt');
-  });
+  };
+  const handleUnload = () => {
+    void liveOutputCoordinator.stop('page_unload');
+  };
   let observedSessionId = liveConversationStore.getState().sessionId;
-  liveConversationStore.subscribe(() => {
+  const unsubscribe = liveConversationStore.subscribe(() => {
     const nextSessionId = liveConversationStore.getState().sessionId;
     if (nextSessionId === observedSessionId) return;
     observedSessionId = nextSessionId;
     void liveOutputCoordinator.stop('live_session_changed');
   });
-  window.addEventListener('beforeunload', () => {
-    void liveOutputCoordinator.stop('page_unload');
-  });
+  window.addEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, handleObservation);
+  window.addEventListener(LIVE_OBSERVATION_SUPERSEDED_EVENT, handleSuperseded);
+  window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+  window.addEventListener('beforeunload', handleUnload);
+  return () => {
+    window.removeEventListener(LIVE_OBSERVATION_CANDIDATE_EVENT, handleObservation);
+    window.removeEventListener(LIVE_OBSERVATION_SUPERSEDED_EVENT, handleSuperseded);
+    window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, handleInterrupt);
+    window.removeEventListener('beforeunload', handleUnload);
+    unsubscribe();
+    void liveOutputCoordinator.stop('runtime_disposed');
+    initialized = false;
+  };
 }

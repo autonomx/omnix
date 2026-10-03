@@ -673,6 +673,11 @@ export class OmnixApiClient {
     return this.get<JobListResponse>(`/api/jobs${suffix}`);
   }
 
+  /** Voice Studio's bounded job history: recent voice and voice-cloning jobs only. */
+  async listVoiceJobSummaries(limit = 40): Promise<JobListResponse> {
+    return this.get<JobListResponse>(`/api/jobs/voice-summaries?limit=${encodeURIComponent(String(limit))}`);
+  }
+
   async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
     const foregroundTurn = await this.createForegroundRpgTurnJob(request);
     if (foregroundTurn) {

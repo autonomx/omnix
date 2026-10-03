@@ -1,11 +1,9 @@
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
 import { DESKTOP_COMPANION_STATUS_EVENT } from './desktop-companion-watch-controller';
 
-const ATTRIBUTE = 'data-omnix-desktop-companion-controls';
+let desktopCompanionControlsInstalled = false;
 
-type ControlsWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionControlsInstalled?: boolean;
-};
+const ATTRIBUTE = 'data-omnix-desktop-companion-controls';
 
 type StatusDetail = {
   phase?: string;
@@ -17,9 +15,8 @@ let latestStatus: StatusDetail = { phase: 'off', reason: 'not_started' };
 
 export function initializeDesktopCompanionControls(root: ParentNode = document): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const target = window as ControlsWindow;
-  if (target.__omnixDesktopCompanionControlsInstalled) return () => undefined;
-  target.__omnixDesktopCompanionControlsInstalled = true;
+  if (desktopCompanionControlsInstalled) return () => undefined;
+  desktopCompanionControlsInstalled = true;
   const inject = () => ensureControls(root);
   inject();
   const observer = new MutationObserver(inject);
@@ -35,7 +32,7 @@ export function initializeDesktopCompanionControls(root: ParentNode = document):
     unsubscribe();
     window.removeEventListener(DESKTOP_COMPANION_STATUS_EVENT, handleStatus);
     root.querySelectorAll(`[${ATTRIBUTE}]`).forEach((element) => element.remove());
-    target.__omnixDesktopCompanionControlsInstalled = false;
+    desktopCompanionControlsInstalled = false;
   };
 }
 

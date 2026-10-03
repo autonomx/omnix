@@ -1,10 +1,8 @@
 import { DESKTOP_COMPANION_TEXT_EVENT } from './desktop-companion-delivery';
 
-const ATTRIBUTE = 'data-omnix-desktop-companion-text';
+let desktopCompanionTextSurfaceInstalled = false;
 
-type TextSurfaceWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionTextSurfaceInstalled?: boolean;
-};
+const ATTRIBUTE = 'data-omnix-desktop-companion-text';
 
 export type DesktopCompanionTextNotice = {
   sessionId: string;
@@ -19,9 +17,8 @@ let latest: DesktopCompanionTextNotice | null = null;
 
 export function initializeDesktopCompanionTextSurface(root: ParentNode = document): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const target = window as TextSurfaceWindow;
-  if (target.__omnixDesktopCompanionTextSurfaceInstalled) return () => undefined;
-  target.__omnixDesktopCompanionTextSurfaceInstalled = true;
+  if (desktopCompanionTextSurfaceInstalled) return () => undefined;
+  desktopCompanionTextSurfaceInstalled = true;
   const ensure = () => ensureSurface(root);
   const handleText = (event: Event) => {
     const notice = normalizeDesktopCompanionTextNotice((event as CustomEvent<unknown>).detail);
@@ -39,7 +36,7 @@ export function initializeDesktopCompanionTextSurface(root: ParentNode = documen
     window.removeEventListener(DESKTOP_COMPANION_TEXT_EVENT, handleText);
     root.querySelectorAll(`[${ATTRIBUTE}]`).forEach((element) => element.remove());
     latest = null;
-    target.__omnixDesktopCompanionTextSurfaceInstalled = false;
+    desktopCompanionTextSurfaceInstalled = false;
   };
 }
 

@@ -132,7 +132,7 @@ describe('StorytellerWorkspace', () => {
   it('shows an empty manuscript state before the first story is generated', async () => {
     stubStoryApi([]);
     renderStoryteller();
-    expect(await screen.findByText(/Start with a premise/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Start with a premise/)).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Save story' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeDisabled();
   });

@@ -2,20 +2,17 @@ import { createRoot, type Root } from 'react-dom/client';
 
 import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
 
-const HOST_ATTRIBUTE = 'data-omnix-voice-session-evaluation-host';
+let voiceSessionEvaluationWorkspaceInstalled = false;
 
-type VoiceEvaluationWindow = Window & typeof globalThis & {
-  __omnixVoiceSessionEvaluationWorkspaceInstalled?: boolean;
-};
+const HOST_ATTRIBUTE = 'data-omnix-voice-session-evaluation-host';
 
 let mountedRoot: Root | null = null;
 let mountedHost: HTMLElement | null = null;
 
 export function initializeVoiceSessionEvaluationWorkspace(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const liveWindow = window as VoiceEvaluationWindow;
-  if (liveWindow.__omnixVoiceSessionEvaluationWorkspaceInstalled) return () => undefined;
-  liveWindow.__omnixVoiceSessionEvaluationWorkspaceInstalled = true;
+  if (voiceSessionEvaluationWorkspaceInstalled) return () => undefined;
+  voiceSessionEvaluationWorkspaceInstalled = true;
 
   const observer = new MutationObserver(() => mountVoiceSessionEvaluation());
   observer.observe(document.documentElement, { childList: true, subtree: true });
@@ -24,7 +21,7 @@ export function initializeVoiceSessionEvaluationWorkspace(): () => void {
   return () => {
     observer.disconnect();
     disposeMountedPanel();
-    liveWindow.__omnixVoiceSessionEvaluationWorkspaceInstalled = false;
+    voiceSessionEvaluationWorkspaceInstalled = false;
   };
 }
 

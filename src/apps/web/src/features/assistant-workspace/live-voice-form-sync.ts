@@ -25,11 +25,14 @@ export function finishLiveVoiceInput(event: Event): void {
   redispatching = false;
 }
 
-export function initializeLiveVoiceFormSync(root: Document = document): void {
-  if (initialized) return;
+export function initializeLiveVoiceFormSync(root: Document = document): () => void {
+  if (initialized) return () => undefined;
   initialized = true;
   root.addEventListener('input', captureLiveVoiceInput, true);
   root.addEventListener('input', finishLiveVoiceInput);
+  return () => {
+    root.removeEventListener('input', captureLiveVoiceInput, true);
+    root.removeEventListener('input', finishLiveVoiceInput);
+    initialized = false;
+  };
 }
-
-if (typeof document !== 'undefined') initializeLiveVoiceFormSync();

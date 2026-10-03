@@ -1,4 +1,5 @@
  
+import { DisposableStore } from '../../app/moduleRuntime';
 import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { isActiveView } from '../../app/viewApiScope';
 
@@ -128,11 +129,13 @@ export function visemeAnimationFrameKeys(
   return keys.length ? keys : [next];
 }
 
-function install(): void {
-  if (typeof window === 'undefined') return;
-  if (bridgeInstalled) return;
+/** Returns a function that removes it. */
+export function installLiveCharacterVisemeBridge(): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  if (bridgeInstalled) return () => undefined;
   bridgeInstalled = true;
-  window.addEventListener(RUNTIME_EVENT, (event) => {
+  const store = new DisposableStore();
+  store.listen(window, RUNTIME_EVENT, (event) => {
     if (!isActiveView('chatbot')) {
       runtime = null;
       currentViseme = 'silence';
@@ -144,14 +147,19 @@ function install(): void {
     clearAnimationTimers();
     preloadAvatarFrames(runtime?.avatar_pack ?? null);
   });
-  window.addEventListener(ENVELOPE_FRAME_EVENT, (event) => {
+  store.listen(window, ENVELOPE_FRAME_EVENT, (event) => {
     if (runtime?.avatar_pack?.render_mode === 'viseme') event.stopImmediatePropagation();
   }, { capture: true });
-  installFetchMonitor();
+  store.add(installFetchMonitor());
+  return () => {
+    clearAnimationTimers();
+    store.dispose();
+    bridgeInstalled = false;
+  };
 }
 
-function installFetchMonitor(): void {
-  registerFetchMiddleware('character-viseme-tts-monitor', async (input, init, next) => {
+function installFetchMonitor(): () => void {
+  return registerFetchMiddleware('character-viseme-tts-monitor', async (input, init, next) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const text = url.includes(TTS_STREAM_PATH) ? requestText(init?.body) : '';
     const response = await next(input, init);
@@ -384,5 +392,3 @@ function normalizeViseme(value: string): CharacterViseme {
 function appendUnique(values: CharacterViseme[], value: CharacterViseme): void {
   if (!values.length || values.at(-1) !== value) values.push(value);
 }
-
-install();

@@ -84,14 +84,22 @@ const reporter = typeof window === 'undefined'
 let initialized = false;
 let state: ReleaseState = emptyState();
 
-export function initializeLiveVoiceReleaseObserver(): void {
-  if (initialized || typeof window === 'undefined') return;
+export function initializeLiveVoiceReleaseObserver(): () => void {
+  if (initialized || typeof window === 'undefined') return () => undefined;
   initialized = true;
   window.addEventListener(PERF_EVENT, handlePerfEvent);
   window.addEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
   window.addEventListener(INTERRUPT_EVENT, handleInterruption);
   window.addEventListener(QUALITY_EVENT, handleQualityEvent);
   window.addEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, handleTurnTimeline);
+  return () => {
+    window.removeEventListener(PERF_EVENT, handlePerfEvent);
+    window.removeEventListener(DIAGNOSTIC_EVENT, handleDiagnosticEvent);
+    window.removeEventListener(INTERRUPT_EVENT, handleInterruption);
+    window.removeEventListener(QUALITY_EVENT, handleQualityEvent);
+    window.removeEventListener(LIVE_VOICE_TURN_TIMELINE_EVENT, handleTurnTimeline);
+    initialized = false;
+  };
 }
 
 export function recordLiveVoiceReleaseQuality(
@@ -419,5 +427,3 @@ function emptyState(): ReleaseState {
     activeTraceId: null,
   };
 }
-
-initializeLiveVoiceReleaseObserver();

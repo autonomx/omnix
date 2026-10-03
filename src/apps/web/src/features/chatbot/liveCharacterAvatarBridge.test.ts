@@ -1,8 +1,9 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CharacterLiveCallRuntime } from './characterClient';
-import './liveCharacterVisemeBridge';
+import { installLiveCharacterVisemeBridge } from './liveCharacterVisemeBridge';
 import {
+  installLiveCharacterAvatarBridge,
   avatarMouthAssetForFrame,
   characterAvatarAssetUrl,
   floatPcmMouthFrame,
@@ -89,6 +90,11 @@ const live2dRuntime: CharacterLiveCallRuntime = {
     mouth_frames: {},
   },
 };
+
+beforeEach(() => {
+  installLiveCharacterAvatarBridge();
+  installLiveCharacterVisemeBridge();
+});
 
 afterEach(() => {
   vi.useRealTimers();

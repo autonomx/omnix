@@ -23,6 +23,8 @@ import {
   resampleWaveform,
 } from './live-voice-waveform-reference';
 
+let liveVoiceDuplexGateInstalled = false;
+
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const PLAYBACK_PCM_EVENT = 'omnix:character-avatar-pcm';
 const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
@@ -72,9 +74,8 @@ export function shouldMuteLiveMic(
 
 export function initializeLiveVoiceDuplexGate(): () => void {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return () => undefined;
-  const liveWindow = window as Window & typeof globalThis & { __omnixLiveVoiceDuplexGateInstalled?: boolean };
-  if (liveWindow.__omnixLiveVoiceDuplexGateInstalled) return () => undefined;
-  liveWindow.__omnixLiveVoiceDuplexGateInstalled = true;
+  if (liveVoiceDuplexGateInstalled) return () => undefined;
+  liveVoiceDuplexGateInstalled = true;
   const mediaDevices = navigator.mediaDevices;
   if (!mediaDevices?.getUserMedia) return () => undefined;
 
@@ -233,7 +234,7 @@ export function initializeLiveVoiceDuplexGate(): () => void {
     for (const tap of microphoneTaps.values()) void tap.close();
     microphoneTaps.clear();
     trackedStreams.clear();
-    liveWindow.__omnixLiveVoiceDuplexGateInstalled = false;
+    liveVoiceDuplexGateInstalled = false;
   };
 }
 

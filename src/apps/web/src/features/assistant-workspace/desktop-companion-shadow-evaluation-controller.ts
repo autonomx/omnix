@@ -14,6 +14,8 @@ import {
   type DesktopCompanionEvaluationEvent,
 } from './desktop-companion-watch-controller';
 
+let desktopCompanionShadowEvaluationInstalled = false;
+
 const FLUSH_INTERVAL_MS = 60_000;
 
 type EvaluationIdentity = {
@@ -34,10 +36,6 @@ export type DesktopCompanionDeliveryEvidence = {
   reason: string | null;
 };
 
-type EvaluationWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionShadowEvaluationInstalled?: boolean;
-};
-
 let accumulator: DesktopCompanionEvaluationAccumulator | null = null;
 let identity: EvaluationIdentity | null = null;
 let recordedEvents = 0;
@@ -47,9 +45,8 @@ let eventQueue: Promise<void> = Promise.resolve();
 
 export function initializeDesktopCompanionShadowEvaluationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const target = window as EvaluationWindow;
-  if (target.__omnixDesktopCompanionShadowEvaluationInstalled) return () => undefined;
-  target.__omnixDesktopCompanionShadowEvaluationInstalled = true;
+  if (desktopCompanionShadowEvaluationInstalled) return () => undefined;
+  desktopCompanionShadowEvaluationInstalled = true;
   const handleEvent = (event: Event) => {
     const detail = normalizeEvaluationEvent((event as CustomEvent<unknown>).detail);
     if (!detail) return;
@@ -78,7 +75,7 @@ export function initializeDesktopCompanionShadowEvaluationController(): () => vo
     flushTimer = null;
     const payload = finalizeCurrent();
     if (payload) void submitEvaluation(payload);
-    target.__omnixDesktopCompanionShadowEvaluationInstalled = false;
+    desktopCompanionShadowEvaluationInstalled = false;
   };
 }
 

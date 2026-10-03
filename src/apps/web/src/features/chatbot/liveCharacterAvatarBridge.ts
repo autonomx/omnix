@@ -160,9 +160,10 @@ export function presentationStateFromDom(
   return 'idle';
 }
 
-function installLiveCharacterAvatarBridge(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  if (bridgeInstalled) return;
+/** Lip sync and avatar rendering for Chat; returns a function that removes it. */
+export function installLiveCharacterAvatarBridge(): () => void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
+  if (bridgeInstalled) return () => undefined;
   bridgeInstalled = true;
 
   const observer = new MutationObserver(() => renderAvatarHost());
@@ -180,14 +181,14 @@ function installLiveCharacterAvatarBridge(): void {
   if (document.body) observe();
   else window.addEventListener('DOMContentLoaded', observe, { once: true });
 
-  window.addEventListener(AVATAR_FRAME_EVENT, (event) => {
+  const handleFrame = (event: Event) => {
     const detail = (event as CustomEvent<{ frame?: AvatarMouthFrame }>).detail;
     if (!detail?.frame) return;
     currentMouthFrame = detail.frame;
     updateAvatarImage();
-  });
-  window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, () => renderAvatarHost());
-  window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, (event) => {
+  };
+  const handleRuntime = () => renderAvatarHost();
+  const handleDiagnostic = (event: Event) => {
     if (currentRuntime?.avatar_pack?.renderer !== 'live2d') return;
     const detail = (event as CustomEvent<LiveCallDiagnosticDetail>).detail;
     if (detail?.source !== 'audio_worklet') return;
@@ -204,8 +205,8 @@ function installLiveCharacterAvatarBridge(): void {
     ) {
       dispatchAvatarFrame('closed');
     }
-  });
-  window.addEventListener(AVATAR_PCM_EVENT, (event) => {
+  };
+  const handlePcm = (event: Event) => {
     // Live2D live-call lip sync is driven from the AudioWorklet's actual
     // playback envelope. Arrival-time PCM can be hundreds of milliseconds
     // ahead of what is audible when playback is buffered or rebuffering.
@@ -221,16 +222,28 @@ function installLiveCharacterAvatarBridge(): void {
       Number(detail.sampleRate) || 24_000,
       Number(detail.startDelayMs) || 0,
     );
-  });
+  };
+  window.addEventListener(AVATAR_FRAME_EVENT, handleFrame);
+  window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
+  window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
+  window.addEventListener(AVATAR_PCM_EVENT, handlePcm);
 
-  installTtsFetchMonitor();
-  installAudioElementMonitor();
-  installAudioBufferSourceMonitor();
+  const cleanups = [installTtsFetchMonitor(), installAudioElementMonitor(), installAudioBufferSourceMonitor()];
+  return () => {
+    observer.disconnect();
+    window.removeEventListener('DOMContentLoaded', observe);
+    window.removeEventListener(AVATAR_FRAME_EVENT, handleFrame);
+    window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
+    window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
+    window.removeEventListener(AVATAR_PCM_EVENT, handlePcm);
+    cleanups.reverse().forEach((cleanup) => cleanup());
+    bridgeInstalled = false;
+  };
 }
 
-function installTtsFetchMonitor(): void {
-  if (typeof window.fetch !== 'function') return;
-  registerFetchMiddleware('character-avatar-tts-monitor', async (input, init, next) => {
+function installTtsFetchMonitor(): () => void {
+  if (typeof window.fetch !== 'function') return () => undefined;
+  return registerFetchMiddleware('character-avatar-tts-monitor', async (input, init, next) => {
     const response = await next(input, init);
     if (!isActiveView('chatbot')) return response;
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
@@ -246,11 +259,11 @@ function installTtsFetchMonitor(): void {
   });
 }
 
-function installAudioElementMonitor(): void {
+function installAudioElementMonitor(): () => void {
   const prototype = window.HTMLMediaElement?.prototype;
-  if (!prototype || typeof prototype.play !== 'function') return;
+  if (!prototype || typeof prototype.play !== 'function') return () => undefined;
   const originalPlay = prototype.play;
-  prototype.play = function patchedAvatarAudioPlay(this: HTMLMediaElement): Promise<void> {
+  const patchedPlay = function patchedAvatarAudioPlay(this: HTMLMediaElement): Promise<void> {
     const audio = this instanceof HTMLAudioElement ? this : null;
     if (audio) startAudioElementMonitor(audio);
     const result = originalPlay.call(this);
@@ -259,9 +272,15 @@ function installAudioElementMonitor(): void {
     }
     return result;
   };
+  prototype.play = patchedPlay;
+  return () => {
+    // Restore only our own patch; a later patch on top stays in place.
+    if (prototype.play === patchedPlay) prototype.play = originalPlay;
+  };
 }
 
-function installAudioBufferSourceMonitor(): void {
+function installAudioBufferSourceMonitor(): () => void {
+  const restores: Array<() => void> = [];
   const liveWindow = window as AudioMonitorWindow;
   const constructors = [liveWindow.AudioContext, liveWindow.webkitAudioContext]
     .filter((value): value is typeof AudioContext => Boolean(value));
@@ -285,7 +304,12 @@ function installAudioBufferSourceMonitor(): void {
     } as PatchedCreateBufferSource;
     monitoredCreators.add(patchedCreate);
     prototype.createBufferSource = patchedCreate;
+    restores.push(() => {
+      if (prototype.createBufferSource === patchedCreate) prototype.createBufferSource = originalCreate;
+      monitoredCreators.delete(patchedCreate);
+    });
   }
+  return () => restores.forEach((restore) => restore());
 }
 
 function scheduleAudioBufferFrames(
@@ -613,5 +637,3 @@ function resolveFrameAsset(
   if (pack.active_outfit && pack.outfit_frames[pack.active_outfit]) return pack.outfit_frames[pack.active_outfit];
   return avatarMouthAssetForFrame(pack, 'closed');
 }
-
-installLiveCharacterAvatarBridge();

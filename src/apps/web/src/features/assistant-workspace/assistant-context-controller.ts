@@ -1114,9 +1114,3 @@ function storeDeepResearchPageLimit(value: number): void {
     // Storage is optional; the chosen limit remains active for this page.
   }
 }
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => initializeAssistantContextController(), { once: true });
-} else {
-  initializeAssistantContextController();
-}

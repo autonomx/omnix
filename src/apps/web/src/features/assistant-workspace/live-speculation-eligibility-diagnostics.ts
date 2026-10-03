@@ -5,14 +5,11 @@ import {
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
 
+let liveSpeculationEligibilityDiagnosticsInstalled = false;
+
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const INSTALLED_KEY = '__omnixLiveSpeculationEligibilityDiagnosticsInstalled';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
-
-type EligibilityDiagnosticsWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationEligibilityDiagnosticsInstalled?: boolean;
-};
 
 type SttDetail = {
   chatSessionId?: string;
@@ -79,9 +76,8 @@ export function classifySpeculationEligibility(text: string): EligibilityClassif
 
 export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as EligibilityDiagnosticsWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
+  if (liveSpeculationEligibilityDiagnosticsInstalled) return () => undefined;
+  liveSpeculationEligibilityDiagnosticsInstalled = true;
 
   const handlePartial = (event: Event): void => {
     const detail = (event as CustomEvent<SttDetail>).detail;
@@ -226,7 +222,7 @@ export function initializeLiveSpeculationEligibilityDiagnostics(): () => void {
     window.removeEventListener(LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT, handleDeliverySettled);
     window.removeEventListener(LIVE_VOICE_PERF_EVENT, handlePerformance);
     segments.clear();
-    liveWindow[INSTALLED_KEY] = false;
+    liveSpeculationEligibilityDiagnosticsInstalled = false;
   };
 }
 

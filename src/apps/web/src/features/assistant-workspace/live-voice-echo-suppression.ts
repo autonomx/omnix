@@ -1,10 +1,7 @@
+let liveVoiceEchoSuppressionInstalled = false;
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const PLAYBACK_STATE_EVENT = 'omnix:assistant-audio-playback-state';
 const DEFAULT_SUPPRESSION_MS = 800;
-
-type EchoSuppressionWindow = Window & typeof globalThis & {
-  __omnixLiveVoiceEchoSuppressionInstalled?: boolean;
-};
 
 type AcousticCandidateDetail = {
   stage?: unknown;
@@ -44,9 +41,8 @@ export function playbackEchoSuppressionReason(nowMs = currentTimeMs()): string |
 
 export function initializePlaybackEchoSuppression(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as EchoSuppressionWindow;
-  if (liveWindow.__omnixLiveVoiceEchoSuppressionInstalled) return () => undefined;
-  liveWindow.__omnixLiveVoiceEchoSuppressionInstalled = true;
+  if (liveVoiceEchoSuppressionInstalled) return () => undefined;
+  liveVoiceEchoSuppressionInstalled = true;
 
   const handlePerf = (event: Event): void => {
     const detail = (event as CustomEvent<AcousticCandidateDetail>).detail;
@@ -74,12 +70,10 @@ export function initializePlaybackEchoSuppression(): () => void {
     window.removeEventListener(PERF_EVENT, handlePerf);
     window.removeEventListener(PLAYBACK_STATE_EVENT, handlePlaybackState);
     clearPlaybackEchoSuppression();
-    liveWindow.__omnixLiveVoiceEchoSuppressionInstalled = false;
+    liveVoiceEchoSuppressionInstalled = false;
   };
 }
 
 function currentTimeMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
-
-initializePlaybackEchoSuppression();

@@ -1,11 +1,6 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { describe, expect, it } from 'vitest';
 
-type AssistantContextTestWindow = Window & typeof globalThis & {
-  __omnixAssistantContextInitialized?: boolean;
-};
-
-(window as AssistantContextTestWindow).__omnixAssistantContextInitialized = true;
 const {
   assistantContextControlsMissing,
   desktopStatusLabel,

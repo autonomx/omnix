@@ -692,7 +692,7 @@ function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
 }
 function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
-function readStoryTitle(): string { return (document.querySelector('.storyteller-project-copy h1') as HTMLElement | null)?.innerText.trim() || 'Untitled story'; }
+function readStoryTitle(): string { const heading = document.querySelector('.storyteller-project-copy h1') as HTMLElement | null; return (heading?.innerText ?? heading?.textContent ?? '').trim() || 'Untitled story'; }
 function normalizeStoryAudioText(value: string): string { return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim(); }
 function fingerprintStoryAudio(text: string): string { return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`; }
 function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }

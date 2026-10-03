@@ -224,17 +224,26 @@ export function isLiveVoiceControllerInstalled(): boolean {
   return initialized;
 }
 
-export function initializeLiveVoiceController(root: ParentNode = document): void {
-  if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return;
+export function initializeLiveVoiceController(root: ParentNode = document): () => void {
+  if (initialized || typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   initialized = true;
   prepareCards(root);
   document.addEventListener('click', handleDocumentClick, true);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
-  new MutationObserver(() => prepareCards(root)).observe(document.body, {
+  const observer = new MutationObserver(() => prepareCards(root));
+  observer.observe(document.body, {
     childList: true,
     subtree: true,
     characterData: true,
   });
+  return () => {
+    // Leaving Chat ends a running call, as the stop button would.
+    handleExternalStop();
+    observer.disconnect();
+    document.removeEventListener('click', handleDocumentClick, true);
+    window.removeEventListener(LIVE_VOICE_STOP_EVENT, handleExternalStop);
+    initialized = false;
+  };
 }
 
 function prepareCards(root: ParentNode): void {

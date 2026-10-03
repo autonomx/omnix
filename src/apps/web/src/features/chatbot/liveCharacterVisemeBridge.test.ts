@@ -1,7 +1,8 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fitVisemesToDuration,
+  installLiveCharacterVisemeBridge,
   visemeAnimationFrameKeys,
   visemeSequenceFromText,
   type RuntimeAvatarPack,
@@ -24,6 +25,10 @@ const phasedPack: RuntimeAvatarPack = {
     E: 'image:maya-e-peak',
   },
 };
+
+beforeEach(() => {
+  installLiveCharacterVisemeBridge();
+});
 
 afterEach(() => {
   window.dispatchEvent(new CustomEvent('omnix:character-avatar-runtime', { detail: null }));

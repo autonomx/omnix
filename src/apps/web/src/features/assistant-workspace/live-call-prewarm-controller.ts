@@ -1,15 +1,12 @@
 import { liveConversationStore } from './live-conversation-store';
 
-const INSTALLED_KEY = '__omnixLiveCallPrewarmInstalled';
+let liveCallPrewarmInstalled = false;
+
 const LIVE_VOICE_CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
 const LIVE_VOICE_USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const PREWARM_TTL_MS = 5 * 60_000;
 const PREWARM_RETRY_MS = 5_000;
-
-type PrewarmWindow = Window & typeof globalThis & {
-  __omnixLiveCallPrewarmInstalled?: boolean;
-};
 
 type RuntimePayload = {
   voice_speaker_id?: string | null;
@@ -28,9 +25,8 @@ const inflight = new Map<string, Promise<void>>();
 
 export function initializeLiveCallPrewarmController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as PrewarmWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
+  if (liveCallPrewarmInstalled) return () => undefined;
+  liveCallPrewarmInstalled = true;
 
   const prewarmActiveSession = () => {
     const sessionId = liveConversationStore.getState().sessionId;
@@ -43,7 +39,7 @@ export function initializeLiveCallPrewarmController(): () => void {
   return () => {
     window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, prewarmActiveSession);
     window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, prewarmActiveSession);
-    liveWindow[INSTALLED_KEY] = false;
+    liveCallPrewarmInstalled = false;
   };
 }
 

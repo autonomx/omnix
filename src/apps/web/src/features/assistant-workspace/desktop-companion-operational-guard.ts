@@ -5,6 +5,8 @@ import {
   type DesktopCompanionEvaluationEvent,
 } from './desktop-companion-watch-controller';
 
+let desktopCompanionOperationalGuardInstalled = false;
+
 export type DesktopCompanionFailureAction = 'none' | 'backoff' | 'stop';
 
 export class DesktopCompanionFailureCircuit {
@@ -55,19 +57,14 @@ type OperationalStatus = {
   circuit_backoff_seconds: number;
 };
 
-type GuardWindow = Window & typeof globalThis & {
-  __omnixDesktopCompanionOperationalGuardInstalled?: boolean;
-};
-
 let circuit = new DesktopCompanionFailureCircuit();
 let resumeTimer: ReturnType<typeof setTimeout> | null = null;
 let operationalTimer: ReturnType<typeof setInterval> | null = null;
 
 export function initializeDesktopCompanionOperationalGuard(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const target = window as GuardWindow;
-  if (target.__omnixDesktopCompanionOperationalGuardInstalled) return () => undefined;
-  target.__omnixDesktopCompanionOperationalGuardInstalled = true;
+  if (desktopCompanionOperationalGuardInstalled) return () => undefined;
+  desktopCompanionOperationalGuardInstalled = true;
   const handleEvaluation = (event: Event) => {
     const detail = (event as CustomEvent<DesktopCompanionEvaluationEvent>).detail;
     if (detail?.kind !== 'vision_result') return;
@@ -89,7 +86,7 @@ export function initializeDesktopCompanionOperationalGuard(): () => void {
     resumeTimer = null;
     operationalTimer = null;
     circuit.reset();
-    target.__omnixDesktopCompanionOperationalGuardInstalled = false;
+    desktopCompanionOperationalGuardInstalled = false;
   };
 }
 

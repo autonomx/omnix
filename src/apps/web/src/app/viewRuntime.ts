@@ -1,122 +1,141 @@
 /* eslint-disable omnix/no-app-direct-feature-dynamic-import -- baseline WP-9.x */
 import type { QueryClient } from '@tanstack/react-query';
+import { DisposableStore, type Disposable } from './moduleRuntime';
 import type { OmnixModuleId } from './modules';
 
 /**
- * Browser-side runtime initialization is deliberately scoped to the active
- * workspace.  Importing a feature is not free: many of the legacy workspaces
- * install fetch/event observers and start background reconciliation. Keeping
- * those imports behind this boundary prevents Chat from booting trading,
- * voice, audiobook, and desktop-companion runtimes at the same time.
+ * Browser-side runtime of the active workspace (WP-9.1).
+ *
+ * Entering a workspace activates its runtime; leaving it disposes it. Every
+ * initializer returns a cleanup that goes into the workspace's store, so
+ * listeners, observers, timers, fetch middleware and client patches do not
+ * outlive the route. Feature code is imported here, lazily, so Chat does not
+ * boot trading, voice or audiobook runtimes (and vice versa).
  */
-const runtimePromises = new Map<OmnixModuleId, Promise<void>>();
-
-export function initializeViewRuntime(moduleId: OmnixModuleId, queryClient: QueryClient): Promise<void> {
-  const existing = runtimePromises.get(moduleId);
-  if (existing) return existing;
-
-  const runtime = loadViewRuntime(moduleId, queryClient).catch((error: unknown) => {
-    runtimePromises.delete(moduleId);
-    console.error(`[Omnix] ${moduleId} workspace runtime failed to initialize`, error);
-  });
-  runtimePromises.set(moduleId, runtime);
-  return runtime;
+export interface ModuleRuntimeContext {
+  queryClient: QueryClient;
 }
 
-async function loadViewRuntime(moduleId: OmnixModuleId, queryClient: QueryClient): Promise<void> {
+const activeStores = new Map<OmnixModuleId, DisposableStore>();
+
+export interface ActiveViewRuntime extends Disposable {
+  /** Settles when activation finished (or failed and was logged). */
+  readonly ready: Promise<void>;
+}
+
+export function activateViewRuntime(moduleId: OmnixModuleId, context: ModuleRuntimeContext): ActiveViewRuntime {
+  const store = new DisposableStore();
+  activeStores.get(moduleId)?.dispose();
+  activeStores.set(moduleId, store);
+  const ready = loadViewRuntime(moduleId, context, store).catch((error: unknown) => {
+    console.error(`[Omnix] ${moduleId} workspace runtime failed to initialize`, error);
+  });
+  return {
+    ready,
+    dispose: () => {
+      store.dispose();
+      if (activeStores.get(moduleId) === store) activeStores.delete(moduleId);
+    },
+  };
+}
+
+/** Workspaces whose runtime is active (tests and diagnostics). */
+export function activeViewRuntimes(): OmnixModuleId[] {
+  return [...activeStores.keys()];
+}
+
+async function loadViewRuntime(moduleId: OmnixModuleId, context: ModuleRuntimeContext, store: DisposableStore): Promise<void> {
   switch (moduleId) {
     case 'chatbot':
-      await initializeChatRuntime(queryClient);
+      await activateChatRuntime(context, store);
       return;
     case 'rpg':
-      (await import('../features/rpg/rpgTurnUiStore')).installRpgTurnUiFetchInterceptor();
-      return;
-    case 'podcast':
-      await import('../features/podcast/podcastSessionGuard');
+      store.add((await import('../features/rpg/rpgTurnUiStore')).installRpgTurnUiFetchInterceptor());
       return;
     case 'voice':
-      await import('../features/voice/voiceJobListGuard');
-      (await import('../features/voice/voiceLibraryAssetFallback')).installVoiceLibraryAssetFallback();
-      (await import('../features/voice/voiceLibraryFetchDiagnostics')).installVoiceLibraryFetchDiagnostics();
-      return;
-    case 'storyteller':
-      await import('../features/storyteller/story-audio-enhancer');
-      await import('../features/storyteller/story-extra-mount');
+      store.add((await import('../features/voice/voiceLibraryAssetFallback')).installVoiceLibraryAssetFallback());
+      store.add((await import('../features/voice/voiceLibraryFetchDiagnostics')).installVoiceLibraryFetchDiagnostics());
       return;
     default:
       return;
   }
 }
 
-async function initializeChatRuntime(queryClient: QueryClient): Promise<void> {
-  // These controllers are the chat/live-chat runtime. They used to be
-  // installed from main.tsx for every route, which caused unrelated API work
-  // to start while the user was opening the chat history sidebar.
-  await import('../features/chatbot/sessionTools');
-  (await import('../features/chatbot/researchProgressController')).installResearchProgressController();
-  (await import('../features/voice/voiceLibraryAssetFallback')).installVoiceLibraryAssetFallback();
-  (await import('../features/voice/voiceLibraryFetchDiagnostics')).installVoiceLibraryFetchDiagnostics();
+async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store: DisposableStore): Promise<void> {
+  // Navigating away can dispose the store while these imports load; a step
+  // that completes afterwards is undone at once by store.add.
+  const add = (cleanup: Parameters<DisposableStore['add']>[0]) => store.add(cleanup);
 
-  (await import('../features/chatbot/chat-sidebar-manager')).initializeChatSidebarManager();
-  (await import('../features/chatbot/live-chat-workspace')).initializeLiveChatWorkspace(queryClient);
-  (await import('../features/chatbot/voice-session-evaluation-workspace')).initializeVoiceSessionEvaluationWorkspace();
+  add((await import('../features/chatbot/chat-response-metrics-controller')).initializeChatResponseMetricsController());
+  add((await import('../features/chatbot/sessionTools')).installSessionTools());
+  add((await import('../features/chatbot/researchProgressController')).installResearchProgressController());
+  add((await import('../features/voice/voiceLibraryAssetFallback')).installVoiceLibraryAssetFallback());
+  add((await import('../features/voice/voiceLibraryFetchDiagnostics')).installVoiceLibraryFetchDiagnostics());
+  add((await import('../features/chatbot/newChatCoordinator')).initializeNewChatCoordinator());
+  add((await import('../features/chatbot/liveCharacterAvatarBridge')).installLiveCharacterAvatarBridge());
+  add((await import('../features/chatbot/liveCharacterVisemeBridge')).installLiveCharacterVisemeBridge());
+  add((await import('../features/chatbot/live2dCharacterRenderer')).installLive2DCharacterRenderer());
 
-  const runtimeStore = await import('../features/assistant-workspace/live-conversation-store-bridge');
-  runtimeStore.initializeLiveConversationStoreBridge();
-  (await import('../features/assistant-workspace/live-session-coordinator')).initializeLiveSessionCoordinator();
-  await import('../features/assistant-workspace/live-voice-transcript-autoscroll');
-  (await import('../features/assistant-workspace/live-stt-authority-controller')).initializeLiveSttAuthorityController();
+  add((await import('../features/chatbot/chat-sidebar-manager')).initializeChatSidebarManager());
+  add((await import('../features/chatbot/live-chat-workspace')).initializeLiveChatWorkspace(queryClient));
+  add((await import('../features/chatbot/voice-session-evaluation-workspace')).initializeVoiceSessionEvaluationWorkspace());
+
+  add((await import('../features/assistant-workspace/live-conversation-store-bridge')).initializeLiveConversationStoreBridge());
+  add((await import('../features/assistant-workspace/live-session-coordinator')).initializeLiveSessionCoordinator());
+  add((await import('../features/assistant-workspace/live-voice-transcript-autoscroll')).initializeLiveVoiceTranscriptAutoscroll());
+  add((await import('../features/assistant-workspace/live-stt-authority-controller')).initializeLiveSttAuthorityController());
   const voiceTurns = await import('../features/assistant-workspace/live-voice-turn-coordinator');
-  voiceTurns.initializeLiveVoiceTranscriptReconciliation();
-  voiceTurns.initializeLiveVoiceTurnCoordinator();
-  (await import('../features/assistant-workspace/live-speculation-diagnostics-bridge')).initializeLiveSpeculationDiagnosticsBridge();
-  (await import('../features/assistant-workspace/live-speculation-eligibility-diagnostics')).initializeLiveSpeculationEligibilityDiagnostics();
-  (await import('../features/assistant-workspace/live-speculation-direct-gateway-transport')).initializeLiveSpeculationDirectGatewayTransport();
-  (await import('../features/assistant-workspace/live-speculation-handshake-transport')).initializeLiveSpeculationHandshakeTransport();
-  (await import('../features/assistant-workspace/live-speculation-early-trigger')).initializeLiveSpeculationEarlyTrigger();
-  (await import('../features/assistant-workspace/live-speculation-runtime')).initializeLiveSpeculationRuntime();
-  (await import('../features/assistant-workspace/live-call-prewarm-controller')).initializeLiveCallPrewarmController();
-  (await import('../features/assistant-workspace/live-runtime-provenance')).emitLiveRuntimeProvenance();
-  (await import('../features/assistant-workspace/live-voice-controller')).initializeLiveVoiceController();
-  (await import('../features/assistant-workspace/live-output-coordinator')).initializeLiveOutputCoordinator();
-  (await import('../features/assistant-workspace/live-presence-policy-controller')).initializeLivePresencePolicyController();
-  (await import('../features/assistant-workspace/live-voice-duplex-gate')).initializeLiveVoiceDuplexGate();
-  (await import('../features/assistant-workspace/live-voice-audio-duck-bridge')).initializeLiveVoiceAudioDuckBridge();
-  (await import('../features/assistant-workspace/live-voice-cue-asset-bridge')).initializeLiveVoiceCueAssetBridge();
-  (await import('../features/assistant-workspace/live-voice-cue-pack-loader')).initializeLiveVoiceCuePackLoader();
-  (await import('../features/assistant-workspace/live-tts-capability-controller')).initializeLiveTtsCapabilityController();
-  (await import('../features/assistant-workspace/live-tts-adaptive-buffer-controller')).initializeLiveTtsAdaptiveBufferController();
-  (await import('../features/assistant-workspace/live-voice-unified-audio-controller')).initializeLiveVoiceUnifiedAudioController();
-  (await import('../features/assistant-workspace/live-voice-pending-output-interrupt')).initializeLiveVoicePendingOutputInterrupt();
-  (await import('../features/assistant-workspace/live-avatar-presence')).initializeLiveAvatarPresenceController();
-  (await import('../features/assistant-workspace/live-conversation-initiative-controller')).initializeLiveConversationInitiativeController();
-  (await import('../features/assistant-workspace/live-conversation-repair-controller')).initializeLiveConversationRepairController();
-  (await import('../features/assistant-workspace/live-conversation-evaluation-controller')).initializeLiveConversationEvaluationController();
-  (await import('../features/assistant-workspace/live-conversation-durable-evaluation-controller')).initializeLiveConversationDurableEvaluationController();
+  add(voiceTurns.initializeLiveVoiceTranscriptReconciliation());
+  add(voiceTurns.initializeLiveVoiceTurnCoordinator());
+  add((await import('../features/assistant-workspace/live-voice-release-observer')).initializeLiveVoiceReleaseObserver());
+  add((await import('../features/assistant-workspace/live-voice-echo-suppression')).initializePlaybackEchoSuppression());
+  add((await import('../features/assistant-workspace/live-speculation-diagnostics-bridge')).initializeLiveSpeculationDiagnosticsBridge());
+  add((await import('../features/assistant-workspace/live-speculation-eligibility-diagnostics')).initializeLiveSpeculationEligibilityDiagnostics());
+  add((await import('../features/assistant-workspace/live-speculation-direct-gateway-transport')).initializeLiveSpeculationDirectGatewayTransport());
+  add((await import('../features/assistant-workspace/live-speculation-handshake-transport')).initializeLiveSpeculationHandshakeTransport());
+  add((await import('../features/assistant-workspace/live-speculation-early-trigger')).initializeLiveSpeculationEarlyTrigger());
+  add((await import('../features/assistant-workspace/live-speculation-runtime')).initializeLiveSpeculationRuntime());
+  add((await import('../features/assistant-workspace/live-call-prewarm-controller')).initializeLiveCallPrewarmController());
+  if (!store.isDisposed) (await import('../features/assistant-workspace/live-runtime-provenance')).emitLiveRuntimeProvenance();
+  add((await import('../features/assistant-workspace/live-voice-controller')).initializeLiveVoiceController());
+  add((await import('../features/assistant-workspace/live-output-coordinator')).initializeLiveOutputCoordinator());
+  add((await import('../features/assistant-workspace/live-presence-policy-controller')).initializeLivePresencePolicyController());
+  add((await import('../features/assistant-workspace/live-voice-duplex-gate')).initializeLiveVoiceDuplexGate());
+  add((await import('../features/assistant-workspace/live-voice-audio-duck-bridge')).initializeLiveVoiceAudioDuckBridge());
+  add((await import('../features/assistant-workspace/live-voice-cue-asset-bridge')).initializeLiveVoiceCueAssetBridge());
+  add((await import('../features/assistant-workspace/live-voice-cue-pack-loader')).initializeLiveVoiceCuePackLoader());
+  add((await import('../features/assistant-workspace/live-tts-capability-controller')).initializeLiveTtsCapabilityController());
+  add((await import('../features/assistant-workspace/live-tts-adaptive-buffer-controller')).initializeLiveTtsAdaptiveBufferController());
+  add((await import('../features/assistant-workspace/live-voice-unified-audio-controller')).initializeLiveVoiceUnifiedAudioController());
+  add((await import('../features/assistant-workspace/live-voice-pending-output-interrupt')).initializeLiveVoicePendingOutputInterrupt());
+  add((await import('../features/assistant-workspace/live-avatar-presence')).initializeLiveAvatarPresenceController());
+  add((await import('../features/assistant-workspace/live-conversation-initiative-controller')).initializeLiveConversationInitiativeController());
+  add((await import('../features/assistant-workspace/live-conversation-repair-controller')).initializeLiveConversationRepairController());
+  add((await import('../features/assistant-workspace/live-conversation-evaluation-controller')).initializeLiveConversationEvaluationController());
+  add((await import('../features/assistant-workspace/live-conversation-durable-evaluation-controller')).initializeLiveConversationDurableEvaluationController());
 
-  // These controls are intentionally deferred until the chat route is active.
-  await import('../features/assistant-workspace/assistant-context-controller');
+  add((await import('../features/assistant-workspace/assistant-context-controller')).initializeAssistantContextController());
   const [audio, streamAudio, desktop] = await Promise.all([
     import('../features/assistant-workspace/chat-message-audio-controller-v2'),
     import('../features/assistant-workspace/chat-message-stream-audio-controller'),
     import('../features/assistant-workspace/desktop-companion-controls'),
   ]);
-  audio.initializeChatMessageAudioControllerV2();
-  streamAudio.initializeChatMessageStreamAudioController();
-  desktop.initializeDesktopCompanionControls();
+  add(audio.initializeChatMessageAudioControllerV2());
+  add(streamAudio.initializeChatMessageStreamAudioController());
+  add(desktop.initializeDesktopCompanionControls());
 
-  (await import('../features/assistant-workspace/live-voice-form-sync'));
-  (await import('../features/assistant-workspace/desktop-companion-expression-enricher')).initializeDesktopCompanionExpressionEnricher();
-  (await import('../features/assistant-workspace/desktop-companion-delivery')).initializeDesktopCompanionDeliveryController();
+  add((await import('../features/assistant-workspace/live-voice-form-sync')).initializeLiveVoiceFormSync());
+  add((await import('../features/assistant-workspace/desktop-companion-expression-enricher')).initializeDesktopCompanionExpressionEnricher());
+  add((await import('../features/assistant-workspace/desktop-companion-delivery')).initializeDesktopCompanionDeliveryController());
   const [watch, textSurface, evaluation, operationalGuard] = await Promise.all([
     import('../features/assistant-workspace/desktop-companion-watch-controller'),
     import('../features/assistant-workspace/desktop-companion-text-surface'),
     import('../features/assistant-workspace/desktop-companion-shadow-evaluation-controller'),
     import('../features/assistant-workspace/desktop-companion-operational-guard'),
   ]);
-  textSurface.initializeDesktopCompanionTextSurface();
-  evaluation.initializeDesktopCompanionShadowEvaluationController();
-  operationalGuard.initializeDesktopCompanionOperationalGuard();
-  watch.initializeDesktopCompanionWatchController();
-  await import('../features/assistant-workspace/research-release-controller');
+  add(textSurface.initializeDesktopCompanionTextSurface());
+  add(evaluation.initializeDesktopCompanionShadowEvaluationController());
+  add(operationalGuard.initializeDesktopCompanionOperationalGuard());
+  add(watch.initializeDesktopCompanionWatchController());
+  add((await import('../features/assistant-workspace/research-release-controller')).initializeResearchReleaseController());
 }

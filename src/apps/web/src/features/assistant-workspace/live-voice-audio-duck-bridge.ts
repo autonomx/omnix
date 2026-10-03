@@ -1,11 +1,12 @@
 import { LIVE_VOICE_PCM_WORKLET_NAME } from './live-voice-pcm-worklet';
 
+let liveVoiceDuckBridgeInstalled = false;
+
 const DUCK_EVENT = 'omnix:assistant-audio-duck';
 const activeGains = new Set<GainNode>();
 let currentGain = 1;
 
 type DuckBridgeWindow = Window & typeof globalThis & {
-  __omnixLiveVoiceDuckBridgeInstalled?: boolean;
   AudioWorkletNode?: typeof AudioWorkletNode;
 };
 
@@ -13,8 +14,8 @@ export function initializeLiveVoiceAudioDuckBridge(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const liveWindow = window as DuckBridgeWindow;
   const OriginalCtor = liveWindow.AudioWorkletNode;
-  if (!OriginalCtor || liveWindow.__omnixLiveVoiceDuckBridgeInstalled) return () => undefined;
-  liveWindow.__omnixLiveVoiceDuckBridgeInstalled = true;
+  if (!OriginalCtor || liveVoiceDuckBridgeInstalled) return () => undefined;
+  liveVoiceDuckBridgeInstalled = true;
 
   const WrappedCtor = new Proxy(OriginalCtor, {
     construct(target, args, newTarget) {
@@ -37,7 +38,7 @@ export function initializeLiveVoiceAudioDuckBridge(): () => void {
   return () => {
     window.removeEventListener(DUCK_EVENT, handleDuck);
     if (liveWindow.AudioWorkletNode === WrappedCtor) liveWindow.AudioWorkletNode = OriginalCtor;
-    liveWindow.__omnixLiveVoiceDuckBridgeInstalled = false;
+    liveVoiceDuckBridgeInstalled = false;
     activeGains.clear();
     currentGain = 1;
   };

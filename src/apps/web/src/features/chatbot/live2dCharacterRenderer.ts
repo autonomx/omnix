@@ -1,3 +1,4 @@
+import { DisposableStore } from '../../app/moduleRuntime';
 import { Application, extensions } from 'pixi.js';
 // Pixi's shader and uniform code without eval, so the ingress CSP can omit 'unsafe-eval' (WP-11.3).
 import 'pixi.js/unsafe-eval';
@@ -104,9 +105,9 @@ type Live2DRuntime = {
 
 type Live2DWindow = Window & typeof globalThis & {
   Live2DCubismCore?: unknown;
-  __omnixLive2DRendererInstalled?: boolean;
 };
 
+let rendererInstalled = false;
 const RENDER_EVENT = 'omnix:character-live2d-render';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
@@ -140,7 +141,8 @@ const RIG_BASELINE_SCALE: Record<string, number> = {
 // live-call stage that reads as a repeated gesture rather than an idle avatar,
 // so reserve an intentionally empty group and let Cubism update physics,
 // blinking, expressions, and lip-sync parameters without replaying that clip.
-const STATIC_IDLE_MOTION_GROUP = '__omnix_static_idle__';
+// A motion group no model defines, so the idle loop stays still.
+const STATIC_IDLE_MOTION_GROUP = 'omnix-static-idle';
 const MOUTH_OPEN_PARAMETER_IDS = ['ParamMouthOpenY', 'PARAM_MOUTH_OPEN_Y', 'ParamA'] as const;
 const MOUTH_FORM_PARAMETER_IDS = ['ParamMouthForm', 'PARAM_MOUTH_FORM'] as const;
 
@@ -275,46 +277,47 @@ export function live2dModelUrl(rigAssetId: string): string {
   return `/api/character-live2d/assets/${encodeURIComponent(rigAssetId)}/${entryPath}`;
 }
 
-function install(): void {
-  if (typeof window === 'undefined') return;
-  const liveWindow = window as Live2DWindow;
-  if (liveWindow.__omnixLive2DRendererInstalled) return;
-  liveWindow.__omnixLive2DRendererInstalled = true;
+/** Returns a function that removes it. */
+export function installLive2DCharacterRenderer(): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  if (rendererInstalled) return () => undefined;
+  rendererInstalled = true;
+  const store = new DisposableStore();
 
-  window.addEventListener(RENDER_EVENT, (event) => {
+  store.listen(window, RENDER_EVENT, (event) => {
     const detail = (event as CustomEvent<Live2DRenderDetail>).detail;
     if (!detail?.host || detail.runtime.avatar_pack?.renderer !== 'live2d') return;
     void renderLive2D(detail.runtime, detail.host);
   });
-  window.addEventListener(RIG_VISEME_EVENT, (event) => {
+  store.listen(window, RIG_VISEME_EVENT, (event) => {
     const detail = (event as CustomEvent<RigVisemeDetail>).detail;
     if (!detail || detail.renderer !== 'live2d' || detail.rigAssetId !== activeRigAssetId) return;
     setViseme(detail.viseme, detail.durationMs);
   });
-  window.addEventListener(AVATAR_FRAME_EVENT, (event) => {
+  store.listen(window, AVATAR_FRAME_EVENT, (event) => {
     const detail = (event as CustomEvent<{ frame?: AvatarMouthFrame }>).detail;
     if (!detail?.frame || performance.now() < preciseVisemeUntil) return;
     currentMouthShape = live2dMouthShapeForAvatarFrame(detail.frame);
   });
-  window.addEventListener(LIVE2D_MOTION_EVENT, (event) => {
+  store.listen(window, LIVE2D_MOTION_EVENT, (event) => {
     const detail = (event as CustomEvent<Live2DMotionSelection>).detail;
     if (!detail?.rigAssetId || detail.rigAssetId !== activeRigAssetId) return;
     activeMotionSelection = detail;
     applyLive2DMotion(detail);
   });
-  window.addEventListener(LIVE2D_ZOOM_EVENT, (event) => {
+  store.listen(window, LIVE2D_ZOOM_EVENT, (event) => {
     const zoom = (event as CustomEvent<{ zoom?: number }>).detail?.zoom;
     if (typeof zoom !== 'number') return;
     currentZoom = clampLive2DZoom(zoom);
     fitActiveModel();
   });
-  window.addEventListener(LIVE2D_FRAMING_EVENT, (event) => {
+  store.listen(window, LIVE2D_FRAMING_EVENT, (event) => {
     const framing = (event as CustomEvent<{ framing?: Live2DFraming }>).detail?.framing;
     if (framing !== 'full' && framing !== 'head') return;
     currentFraming = framing;
     fitActiveModel();
   });
-  window.addEventListener(AVATAR_RUNTIME_EVENT, (event) => {
+  store.listen(window, AVATAR_RUNTIME_EVENT, (event) => {
     const runtime = (event as CustomEvent<CharacterLiveCallRuntime | null>).detail;
     if (runtime?.avatar_pack?.renderer !== 'live2d' || !runtime.avatar_pack.rig_asset_id) {
       destroyActiveRenderer();
@@ -329,6 +332,11 @@ function install(): void {
     ) ?? document.querySelector<HTMLElement>('.assistant-live-character-avatar');
     if (host) void renderLive2D(runtime, host);
   });
+  return () => {
+    destroyActiveRenderer();
+    store.dispose();
+    rendererInstalled = false;
+  };
 }
 
 async function renderLive2D(
@@ -726,5 +734,3 @@ function destroyActiveRenderer(): void {
 export function isLive2DPack(pack: CharacterAvatarPack | null | undefined): boolean {
   return pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
 }
-
-install();

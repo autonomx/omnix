@@ -1,13 +1,11 @@
 import { liveConversationStore } from './live-conversation-store';
 import type { LiveConversationState } from './live-conversation-state';
 
+let liveVoicePendingOutputInterruptInstalled = false;
+
 const USER_SPEECH_EVENT = 'omnix:assistant-live-voice-user-speech';
 const INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-
-type PendingOutputInterruptWindow = Window & typeof globalThis & {
-  __omnixLiveVoicePendingOutputInterruptInstalled?: boolean;
-};
 
 type UserSpeechDetail = {
   assistantSpeaking?: boolean;
@@ -27,9 +25,8 @@ export function shouldInterruptPendingAssistantOutput(conversation: LiveConversa
 
 export function initializeLiveVoicePendingOutputInterrupt(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as PendingOutputInterruptWindow;
-  if (liveWindow.__omnixLiveVoicePendingOutputInterruptInstalled) return () => undefined;
-  liveWindow.__omnixLiveVoicePendingOutputInterruptInstalled = true;
+  if (liveVoicePendingOutputInterruptInstalled) return () => undefined;
+  liveVoicePendingOutputInterruptInstalled = true;
 
   const handleUserSpeech = (event: Event): void => {
     const conversation = liveConversationStore.getState().conversation;
@@ -60,6 +57,6 @@ export function initializeLiveVoicePendingOutputInterrupt(): () => void {
   window.addEventListener(USER_SPEECH_EVENT, handleUserSpeech);
   return () => {
     window.removeEventListener(USER_SPEECH_EVENT, handleUserSpeech);
-    liveWindow.__omnixLiveVoicePendingOutputInterruptInstalled = false;
+    liveVoicePendingOutputInterruptInstalled = false;
   };
 }
