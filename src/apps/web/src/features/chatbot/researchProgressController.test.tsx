@@ -1,4 +1,6 @@
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { ResearchJobPanel, ResearchMessageDetails, ResearchProgressCard } from './ResearchProgressCard';
 import { omnixApiClient } from '../../api/client';
 import type { ChatSession, JobRecord } from '../../api/client';
 
@@ -162,40 +164,33 @@ describe('research progress restoration', () => {
         },
       ],
     });
-    const panel = document.createElement('section');
 
     expect(helpers.researchStageAnnouncement(complete)).toContain('limited evidence');
-    helpers.renderJobPanel(panel, complete);
+    const { container: panel } = render(<ResearchJobPanel job={complete} />);
     expect(panel.textContent).toContain('Search diagnostics');
     expect(panel.textContent).toContain('rtx 4090 coding llm');
     expect(panel.textContent).toContain('0 results');
   });
 
   it('renders a close button for completed progress panels', () => {
-    const panel = document.createElement('section');
-    document.body.append(panel);
 
-    helpers.renderJobPanel(panel, researchJob({ status: 'completed' }));
+    const { container: panel } = render(<ResearchJobPanel job={researchJob({ status: 'completed' })} />);
     const close = panel.querySelector<HTMLButtonElement>('[data-omnix-research-close]');
 
     expect(close).not.toBeNull();
-    close?.click();
-    expect(document.body.contains(panel)).toBe(false);
+    fireEvent.click(close!);
+    expect(helpers.researchProgressStore.getState().dismissedJobIds.has('job:research-one')).toBe(true);
   });
 
   it('keeps active progress panels focused on cancellation instead of dismissal', () => {
-    const panel = document.createElement('section');
-    document.body.append(panel);
 
-    helpers.renderJobPanel(panel, researchJob());
+    const { container: panel } = render(<ResearchJobPanel job={researchJob()} />);
 
     expect(panel.querySelector('[data-omnix-research-close]')).toBeNull();
     expect(panel.querySelector('[data-omnix-research-cancel]')).not.toBeNull();
-    panel.remove();
   });
 
   it('shows a ChatGPT-style outline and hard page limit before a deep-research job starts', async () => {
-    const panel = document.createElement('section');
     const job = researchJob({
       status: 'queued',
       input_payload: {
@@ -219,7 +214,7 @@ describe('research progress restoration', () => {
       },
     });
 
-    helpers.renderJobPanel(panel, job);
+    const { container: panel } = render(<ResearchJobPanel job={job} />);
 
     expect(panel.textContent).toContain('Nvidia stock Deep Research');
     expect(panel.textContent).toContain('AI planner step: collect recent Nvidia filings');
@@ -232,18 +227,16 @@ describe('research progress restoration', () => {
     expect(pageInput?.readOnly).toBe(true);
     const edit = panel.querySelector<HTMLButtonElement>('[data-omnix-research-plan-update]');
     expect(edit?.textContent).toBe('Edit');
-    edit?.click();
+    fireEvent.click(edit!);
     expect(pageInput?.readOnly).toBe(false);
     expect(edit?.textContent).toBe('Save');
-    edit?.click();
-    await Promise.resolve();
-    expect(pageInput?.readOnly).toBe(true);
+    fireEvent.click(edit!);
+    await waitFor(() => expect(pageInput?.readOnly).toBe(true));
     expect(edit?.textContent).toBe('Edit');
     expect(edit?.disabled).toBe(false);
   });
 
   it('keeps the approved outline visible while marking completed areas', () => {
-    const panel = document.createElement('section');
     const job = researchJob({
       status: 'running',
       input_payload: {
@@ -265,7 +258,7 @@ describe('research progress restoration', () => {
       })),
     });
 
-    helpers.renderJobPanel(panel, job);
+    const { container: panel } = render(<ResearchJobPanel job={job} />);
 
     expect(panel.textContent).toContain('NVIDIA Stock Buy Assessment');
     expect(panel.textContent).toContain('Gather recent NVIDIA financial results.');
@@ -286,20 +279,21 @@ describe('research progress restoration', () => {
   });
 
   it('offers to restart a worker that stopped before entering its first stage', () => {
-    const panel = document.createElement('section');
     const job = researchJob({
       input_payload: { max_sources: 5 },
       stages: (researchJob().stages ?? []).map((stage) => ({ ...stage, status: 'queued' })),
     });
 
     expect(helpers.isStalledResearchJob(job)).toBe(true);
-    helpers.renderJobPanel(panel, job);
+    const { container: panel } = render(<ResearchJobPanel job={job} />);
 
     expect(panel.textContent).toContain('Research needs restarting');
     expect(panel.textContent).toContain('5-page limit');
     expect(panel.querySelector('[data-omnix-research-restart]')).not.toBeNull();
   });
 });
+
+afterEach(() => cleanup());
 
 describe('chat workspace reports', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -319,5 +313,38 @@ describe('chat workspace reports', () => {
     } finally {
       dispose();
     }
+  });
+});
+
+describe('research progress card', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows the followed job below the transcript and hides it once the answer is complete', async () => {
+    const running = researchJob();
+    let current = running;
+    vi.spyOn(omnixApiClient, 'getJob').mockImplementation(async () => current);
+    vi.spyOn(omnixApiClient, 'listJobs').mockResolvedValue({ jobs: [] } as unknown as Awaited<ReturnType<typeof omnixApiClient.listJobs>>);
+    vi.spyOn(omnixApiClient, 'getChatSession').mockResolvedValue({ id: 'chat:research', messages: [] } as unknown as ChatSession);
+    const dispose = helpers.installResearchProgressController();
+    const { container } = render(<ResearchProgressCard />);
+    try {
+      helpers.noteChatMessageSent('chat:research', { session: { id: 'chat:research', messages: [] }, user_message: {}, job: running } as unknown as Parameters<typeof helpers.noteChatMessageSent>[1]);
+      await waitFor(() => expect(container).toHaveTextContent('Searching the web'));
+
+      current = researchJob({ status: 'completed' });
+      await waitFor(() => expect(container).toBeEmptyDOMElement(), { timeout: 3_000 });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('lists search details under a quick-search answer only', () => {
+    const quick = { id: 'm1', role: 'assistant', content: 'Answer', created_at: '', metadata: { research_mode: 'quick', research_provider: 'duckduckgo', web_search_source_count: 3 } };
+    const { container, rerender } = render(<ResearchMessageDetails message={quick as never} />);
+    expect(container).toHaveTextContent('Quick search details · completed');
+    expect(container).toHaveTextContent('Duckduckgo');
+
+    rerender(<ResearchMessageDetails message={{ ...quick, metadata: {} } as never} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });

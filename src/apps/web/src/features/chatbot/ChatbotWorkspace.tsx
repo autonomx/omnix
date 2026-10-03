@@ -68,7 +68,8 @@ import { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCa
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 import type { components } from '../../api/generated/types';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
-import { noteChatMessageSent, noteChatSession } from './researchProgressController';
+import { handleResearchReportAction, noteChatMessageSent, noteChatSession } from './researchProgressController';
+import { ResearchMessageDetails, ResearchProgressCard } from './ResearchProgressCard';
 import { visibleChatSessions } from './sessionTools';
 import { liveVoiceTranscriptStore, useLiveVoiceTranscript } from '../assistant-workspace/live-voice-transcript-store';
 
@@ -2006,6 +2007,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                       <div
                         className={`assistant-message-content${isDeepResearchMessage(message.metadata) ? ' assistant-research-report-host' : ''}`}
                         data-omnix-message-content="true"
+                        onClick={(event) => handleResearchReportAction(event.nativeEvent)}
                         data-raw-content={message.content}
                         data-message-id={message.id}
                         dangerouslySetInnerHTML={{
@@ -2017,6 +2019,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                       {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
                       <OmnixRunCard metadata={message.metadata} />
                       {message.role === 'assistant' ? <ChatResponseMetricsRow metadata={message.metadata} /> : null}{message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" data-omnix-stream-audio="true" aria-label={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} title={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} aria-pressed={pcmStream.messageId === message.id} onClick={() => streamAssistantResponseAudio(message)}>{pcmStream.messageId === message.id ? '■' : '≋'}</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
+                      {message.role === 'assistant' ? <ResearchMessageDetails message={message} /> : null}
                     </div>
                   </article>
                 )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
@@ -2024,6 +2027,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {sendMutation.isPending || chatJobInProgress ? <div className="assistant-thinking-indicator" role="status" aria-live="polite"><span className="assistant-thinking-orb" aria-hidden="true" /><span className="assistant-thinking-label">Thinking<span className="assistant-thinking-dots" aria-hidden="true"><i /><i /><i /></span></span></div> : null}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
+              <ResearchProgressCard />
               <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>
                 <div role="group" className="assistant-suggestion-row" aria-label="Suggested prompts">
                   {suggestedPrompts.map((prompt) => <button key={prompt} type="button" onClick={() => applySuggestedPrompt(prompt)}>{prompt}</button>)}
