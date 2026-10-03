@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 import uuid
 
 import psycopg
@@ -15,6 +14,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import ensure_local_identity
 from tests.support.database import admin_database_url
+from tests.support.waiting import wait_until
 
 pytestmark = [
     pytest.mark.postgres,
@@ -55,12 +55,7 @@ def _labels(events, job_id: str) -> list[str]:
 def _wait_for(reader: EventReader, after: EventCursor, job_id: str, *, count: int) -> list:
     """The reader never passes a transaction in progress anywhere in the cluster
     (other tests' included), so delivery can lag the commit briefly."""
-    deadline = time.monotonic() + 15
-    while True:
-        delivered = reader.events_after(after)
-        if len(_labels(delivered, job_id)) >= count or time.monotonic() > deadline:
-            return delivered
-        time.sleep(0.1)
+    return wait_until(lambda: reader.events_after(after), lambda events: len(_labels(events, job_id)) >= count)
 
 
 def test_a_lower_id_that_commits_late_is_delivered_in_order_exactly_once(setup) -> None:

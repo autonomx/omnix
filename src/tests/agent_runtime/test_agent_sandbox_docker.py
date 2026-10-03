@@ -12,6 +12,7 @@ import pytest
 
 from app.agent_runtime.isolation import DockerStrongIsolation
 from app.agent_runtime.sandbox import check_egress
+from tests.support.waiting import wait_until
 
 
 def _sandbox_available() -> bool:
@@ -45,7 +46,6 @@ def test_the_sandbox_cannot_reach_another_host_port_directly(monkeypatch) -> Non
 def test_a_preview_runs_in_the_sandbox_and_answers_on_loopback(tmp_path, monkeypatch) -> None:
     import json
     import socket
-    import time
     import urllib.request
 
     from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
@@ -68,18 +68,14 @@ def test_a_preview_runs_in_the_sandbox_and_answers_on_loopback(tmp_path, monkeyp
     spec = AgentRunSpec(run_id="run-preview-test", task="preview", model=ModelRef(provider_id="t", model_id="m"),
                         workspace=WorkspaceSpec(root=str(tmp_path)), capabilities=["workspace.edit"])
     process, containers = start_sandboxed_preview(spec, root=tmp_path, package="web", port=port)
+    def answer() -> str:
+        try:
+            return urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3).read().decode()
+        except OSError:
+            return ""
+
     try:
-        body = ""
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            try:
-                body = urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3).read().decode()
-                if body != "unknown":
-                    break
-            except OSError:
-                pass
-            time.sleep(0.5)
-        assert body == "blocked"
+        assert wait_until(answer, lambda body: body not in ("", "unknown"), timeout=60, interval=0.5) == "blocked"
     finally:
         process.kill()
         remove_containers(containers)

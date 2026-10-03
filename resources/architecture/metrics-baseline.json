@@ -6089,6 +6089,15 @@
       "src/apps/web/src/features/trading/tradingStrategyOperationsApi.ts:104",
       "src/apps/web/src/features/voice/voiceJobListGuard.ts:21"
     ],
+    "web_global_css_files": [
+      "@mantine/core/styles.layer.css",
+      "src/apps/web/src/appearance-overrides.css",
+      "src/apps/web/src/design/layers.css",
+      "src/apps/web/src/design/tokens.css",
+      "src/apps/web/src/liquid-glass-theme.css",
+      "src/apps/web/src/styles.css",
+      "src/apps/web/src/theme-presets.css"
+    ],
     "web_handwritten_api_types": [
       [
         "src/apps/web/src/api/client.ts",
@@ -7437,6 +7446,11 @@
       "direction": "lower",
       "target": 0,
       "value": 17
+    },
+    "web_global_css_files": {
+      "direction": "lower",
+      "target": 10,
+      "value": 7
     },
     "web_handwritten_api_types": {
       "direction": "lower",
