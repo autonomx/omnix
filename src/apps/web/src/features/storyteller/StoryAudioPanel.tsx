@@ -137,23 +137,14 @@ export function StoryAudioPanel() {
 
   function printAudioDebugJson(): void {
     if (!debugAudioJson) return;
-    try {
-      console.info('[STORY AUDIO DEBUG PAYLOAD]', JSON.parse(debugAudioJson));
-    } catch {
-      console.info('[STORY AUDIO DEBUG PAYLOAD]', debugAudioJson);
-    }
+    logStoryAudioDebugPayload(debugAudioJson);
     setStatusMessage('Printed Story Audio JSON to the browser console.');
   }
 
   async function copyAudioDebugJson(): Promise<void> {
     if (!debugAudioJson) return;
-    if (!navigator.clipboard) {
-      printAudioDebugJson();
-      setStatusMessage('Clipboard unavailable. Printed Story Audio JSON to the browser console.');
-      return;
-    }
-    await navigator.clipboard.writeText(debugAudioJson);
-    setStatusMessage('Copied Story Audio JSON to clipboard.');
+    const copied = await copyStoryAudioDebugPayload(debugAudioJson);
+    setStatusMessage(copied ? 'Copied Story Audio JSON to clipboard.' : 'Clipboard unavailable. Printed Story Audio JSON to the browser console.');
   }
 
   async function generateStoryAudio(): Promise<void> {
@@ -370,6 +361,24 @@ async function createStoryAudioJob({ title, text, segments, voiceId, storyDocume
       { id: 'store-story-audio', label: 'Save downloadable story audio', resource_class: 'cpu', status: 'queued' },
     ],
   }, { timeoutMs: 120_000, timeoutMessage: 'Story audio generation timed out after 120s.' });
+}
+
+function logStoryAudioDebugPayload(json: string): void {
+  try {
+    console.info('[STORY AUDIO DEBUG PAYLOAD]', JSON.parse(json));
+  } catch {
+    console.info('[STORY AUDIO DEBUG PAYLOAD]', json);
+  }
+}
+
+/** Copies the debug payload; without a clipboard, logs it to the console and returns false. */
+async function copyStoryAudioDebugPayload(json: string): Promise<boolean> {
+  if (!navigator.clipboard) {
+    logStoryAudioDebugPayload(json);
+    return false;
+  }
+  await navigator.clipboard.writeText(json);
+  return true;
 }
 
 function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callbacks: StoryAudioRealtimeCallbacks): Promise<StoryAudioRealtimeResult> {
