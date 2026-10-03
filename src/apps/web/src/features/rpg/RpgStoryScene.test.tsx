@@ -1,22 +1,13 @@
-import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgStoryScene } from './RpgStoryScene';
 import { previewHeroSummary, previewRecentEvents, previewSessionSummary } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>
-  );
-}
 
 describe('RpgStoryScene', () => {
   it('renders scene context, dialogue, recent events, and child controls', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgStoryScene
         heroSummary={previewHeroSummary}
         recentEvents={previewRecentEvents}
@@ -58,7 +49,7 @@ describe('RpgStoryScene', () => {
       tone: 'player' as const,
     }));
 
-    renderWithTheme(
+    renderWithProviders(
       <RpgStoryScene
         heroSummary={previewHeroSummary}
         recentEvents={[]}

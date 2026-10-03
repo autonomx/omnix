@@ -1,29 +1,10 @@
-import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { OmnixModuleDefinition } from '../../app/modules';
-import { omnixTheme } from '../../design/theme';
 import { RpgWorkspaceHeader } from './RpgWorkspaceHeader';
 import { previewSessionSummary } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-        {element}
-      </MantineProvider>
-    </QueryClientProvider>
-  );
-}
 
 const rpgModule: OmnixModuleDefinition = {
   id: 'rpg',
@@ -50,7 +31,7 @@ describe('RpgWorkspaceHeader', () => {
   });
 
   it('replaces runtime status options with a full world lore view', () => {
-    renderWithTheme(<RpgWorkspaceHeader {...headerProps} />);
+    renderWithProviders(<RpgWorkspaceHeader {...headerProps} />);
 
     expect(screen.queryByLabelText('RPG runtime status')).not.toBeInTheDocument();
     expect(screen.queryByText('Replay-preserving')).not.toBeInTheDocument();
@@ -71,7 +52,7 @@ describe('RpgWorkspaceHeader', () => {
   });
 
   it('opens the world library and keeps bundle import available', async () => {
-    const view = renderWithTheme(
+    const view = renderWithProviders(
       <>
         <section className="rpg-launcher-dialog">
           <div className="rpg-launcher-panel-heading">Campaign Menu</div>

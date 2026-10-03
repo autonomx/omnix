@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatIdentityModeControl } from './ChatIdentityModeControl';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 const maya = {
   id: 'maya',
@@ -38,7 +39,7 @@ const voices = [
 ];
 
 function renderControl(props: Partial<ComponentProps<typeof ChatIdentityModeControl>> = {}) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const queryClient = createTestQueryClient();
   const defaults = {
     sessionId: 'chat:one',
     systemVoiceId: 'aurora',

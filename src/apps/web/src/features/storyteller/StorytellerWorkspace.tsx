@@ -18,6 +18,7 @@ import { useStoryLibrary } from './useStoryLibrary';
 import { useStoryPersistence } from './useStoryPersistence';
 import { useStoryRequests } from './useStoryRequests';
 import { storyJobRequest } from './storyModel';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -75,7 +76,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   const watchedProvider = watch('providerId');
   const storyProviders = useMemo(() => llmCapableProviders(providersQuery.data), [providersQuery.data]);
   const {
-    storyJobs, libraryStoryJobs, libraryItems, trashItems,
+    libraryError, storyJobs, libraryStoryJobs, libraryItems, trashItems,
     activeLibraryItem, activeJob, activeAsset, assetContentQuery, activeItemSceneAdditions, activeStoryText,
   } = useStoryLibrary({
     createdJob: createJobMutation.data ?? null,
@@ -193,6 +194,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         />
         <main className="storyteller-stage">
           <h2 className="storyteller-module-title">{module.label}</h2>
+          <GatewayErrorNotice label="Stories and providers" errors={[libraryError, providersQuery.error]} />
           <StoryProjectHeader
             canPersistStory={canPersistStory}
             chapterCount={chapterCount}

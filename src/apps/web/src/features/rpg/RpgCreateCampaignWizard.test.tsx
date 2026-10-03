@@ -1,9 +1,10 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { RpgCreateCampaignWizard } from './RpgCreateCampaignWizard';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string'
@@ -12,12 +13,7 @@ function requestPath(input: RequestInfo | URL): string {
 }
 
 function renderWizard() {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">

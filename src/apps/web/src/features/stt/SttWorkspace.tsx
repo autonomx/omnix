@@ -10,6 +10,7 @@ import { loadSettingsProfile } from '../settings';
 import { FeatureSubmitFeedback } from '../../shared/FeatureSubmitFeedback';
 import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -80,6 +81,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
       </div>
 
       <p className="workspace-summary">{module.summary}</p>
+      <GatewayErrorNotice label="Speech-to-text data" errors={[providersQuery.error, jobsQuery.error, assetsQuery.error]} />
 
       <div className="feature-layout">
         <section className="feature-panel">

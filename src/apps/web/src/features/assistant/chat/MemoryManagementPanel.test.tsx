@@ -1,12 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 function renderPanel(sessionId: string | null = 'chat:one') {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryManagementPanel sessionId={sessionId} />

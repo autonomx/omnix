@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldDeleteDialog } from './RpgWorldDeleteDialog';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const world: RpgWorldSummary = {
   id: 'world:disposable',
@@ -20,9 +21,7 @@ const world: RpgWorldSummary = {
 };
 
 function renderDialog(onDeleted = vi.fn()) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = createTestQueryClient();
   render(
     <QueryClientProvider client={client}>
       <RpgWorldDeleteDialog onCancel={vi.fn()} onDeleted={onDeleted} world={world} />

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { IMAGE_GALLERY_BATCH, ImageAssetGallery, type ImageAsset } from './ImageAssetGallery';
 import { fixture } from '../../test/fixture';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const asset = fixture<ImageAsset>({
   id: 'image:castle',
@@ -25,12 +26,7 @@ const asset = fixture<ImageAsset>({
 });
 
 function renderGallery(assets: ImageAsset[] = [asset]) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>

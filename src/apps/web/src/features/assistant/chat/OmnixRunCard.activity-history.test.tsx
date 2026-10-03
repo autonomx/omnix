@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../../api/client';
 import { OmnixRunCard } from './OmnixRunCardCore';
 import { fixture } from '../../../test/fixture';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 function renderCard(metadata: Record<string, unknown>) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <OmnixRunCard metadata={metadata} />

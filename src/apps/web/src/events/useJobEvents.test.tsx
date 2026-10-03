@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixEventClient, RESYNC_EVENT } from './eventClient';
 import { useJobEventRefresh } from './useJobEvents';
+import { createTestQueryClient } from '../test/renderWithProviders';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -19,7 +20,7 @@ function captureSubscriptions() {
 }
 
 function renderWithClient(callback: () => void) {
-  const client = new QueryClient();
+  const client = createTestQueryClient();
   const invalidate = vi.spyOn(client, 'invalidateQueries').mockResolvedValue();
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
   renderHook(callback, { wrapper });

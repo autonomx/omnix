@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CharacterAvatarPanel } from './CharacterAvatarPanel';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 vi.mock('./Live2DModelThumbnail', () => ({
   Live2DModelThumbnail: ({ model }: { model: { name: string } }) => <span aria-label={`${model.name} rig preview`}>{model.name} preview</span>,
@@ -44,7 +45,7 @@ const models = [
 ];
 
 function renderPanel() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const queryClient = createTestQueryClient();
   return render(<QueryClientProvider client={queryClient}><CharacterAvatarPanel character={character} /></QueryClientProvider>);
 }
 

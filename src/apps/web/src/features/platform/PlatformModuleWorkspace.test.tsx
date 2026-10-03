@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules, type OmnixModuleId } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PlatformModuleWorkspace } from './PlatformModuleWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -52,12 +53,7 @@ class MockEventSource {
 
 function renderPlatform(moduleId: OmnixModuleId, prepare?: (queryClient: QueryClient) => void) {
   vi.stubGlobal('EventSource', MockEventSource);
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   prepare?.(queryClient);
   const module = omnixModules.find((entry) => entry.id === moduleId);
 

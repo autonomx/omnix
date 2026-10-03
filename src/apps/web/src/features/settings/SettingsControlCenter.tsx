@@ -18,6 +18,7 @@ import type { SettingsCategoryId } from './settingsTypes';
 import './SettingsControlCenter.css';
 import './SettingsComponents.css';
 import './SettingsResponsive.css';
+import { useSettingsProfileContext } from './SettingsProfileContext';
 
 export function SettingsControlCenter() {
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>(() => {
@@ -59,10 +60,16 @@ export function SettingsControlCenter() {
         <a className="settings-skip-link" href="#settings-main">Skip to settings content</a>
         <div className="settings-control-center">
           <SettingsCategoryRail activeCategory={activeCategory} query={query} onQueryChange={setQuery} onSelect={setActiveCategory} />
-          <div className="settings-control-content"><SettingsActionHeader /><main id="settings-main" ref={mainRef} tabIndex={-1} aria-label={`${category.label} settings`} className="settings-main-column">{content}</main></div>
+          <div className="settings-control-content"><SettingsActionHeader /><SettingsLoadError /><main id="settings-main" ref={mainRef} tabIndex={-1} aria-label={`${category.label} settings`} className="settings-main-column">{content}</main></div>
           <SettingsStatusRail />
         </div>
       </WorkspacePanel>
     </SettingsProfileProvider>
   );
+}
+
+/** Settings that could not be loaded say so on every category (WP-9.10). */
+function SettingsLoadError() {
+  const { loadError } = useSettingsProfileContext();
+  return loadError ? <p role="alert" className="settings-inline-status">Settings could not be loaded: {loadError}</p> : null;
 }

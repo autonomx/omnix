@@ -1,18 +1,14 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { VoiceWorkspace } from './VoiceWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderVoice() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'voice');
   if (!module) throw new Error('Voice module is missing');
   return render(

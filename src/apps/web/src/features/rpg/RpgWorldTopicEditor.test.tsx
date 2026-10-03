@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RpgAuthoringTopic } from '../../api/rpgWorldAuthoringClient';
 import { RpgWorldTopicEditor } from './RpgWorldTopicEditor';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const generatedTopic: RpgAuthoringTopic = {
   topic_id: 'classes',
@@ -26,9 +27,7 @@ function response(value: unknown): Response {
 }
 
 function renderEditor(topic: RpgAuthoringTopic) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <RpgWorldTopicEditor topic={topic} worldId="world:aurelia" />

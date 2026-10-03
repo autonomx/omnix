@@ -1,11 +1,12 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../../app/modules';
 import { omnixTheme } from '../../../design/theme';
 import { ChatbotWorkspace } from './ChatbotWorkspace';
 import { renderMarkdownHtml } from './markdownRenderer';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 // Counts message renders: a rendered message turns its markdown into HTML.
 vi.mock('./markdownRenderer', async (importOriginal) => {
@@ -54,7 +55,7 @@ describe('Chat rendering', () => {
     if (!module) throw new Error('Chatbot module is missing');
     render(
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <QueryClientProvider client={createTestQueryClient()}>
           <ChatbotWorkspace module={module} />
         </QueryClientProvider>
       </MantineProvider>,

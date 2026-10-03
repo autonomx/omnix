@@ -1,27 +1,18 @@
-import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgHermesExecutionResult } from './RpgHermesExecutionResult';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>,
-  );
-}
 
 describe('RpgHermesExecutionResult', () => {
   it('renders nothing without a result', () => {
-    renderWithTheme(<RpgHermesExecutionResult result={null} />);
+    renderWithProviders(<RpgHermesExecutionResult result={null} />);
 
     expect(screen.queryByRole('region', { name: 'Hermes execution result' })).not.toBeInTheDocument();
   });
 
   it('renders approved execution details', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgHermesExecutionResult
         result={{
           ok: true,

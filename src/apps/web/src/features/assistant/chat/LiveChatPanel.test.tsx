@@ -1,11 +1,12 @@
  
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../workspace/live-conversation-store';
 import { LiveChatPanel } from './LiveChatPanel';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 const defaultProfile = {
   presence_preset: 'natural', talkativeness: 50, conversation_stance: 'automatic',
@@ -45,7 +46,7 @@ afterEach(() => {
 });
 
 function renderPanel(sessionId: string | null, onToggleCall = vi.fn()) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <LiveChatPanel sessionId={sessionId} onToggleCall={onToggleCall} />

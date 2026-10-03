@@ -1,9 +1,9 @@
-import { QueryClient } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { initializeLiveChatWorkspace, sessionIdFromChatRequest } from './live-chat-workspace';
 import { pipelineFetch } from '../../../api/fetchPipeline';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 let disposeWorkspace: (() => void) | null = null;
 
@@ -25,7 +25,7 @@ describe('live chat workspace controller', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: true })));
     const changed = vi.fn();
     window.addEventListener('omnix:live-chat-session-changed', changed);
-    disposeWorkspace = initializeLiveChatWorkspace(new QueryClient());
+    disposeWorkspace = initializeLiveChatWorkspace(createTestQueryClient());
 
     await pipelineFetch('/api/chat/sessions/chat%3Aone/interaction');
     await pipelineFetch('/api/chat/sessions/chat%3Aone/live-call/runtime');
@@ -37,7 +37,7 @@ describe('live chat workspace controller', () => {
 
   it('reconciles persisted chat history after terminal live response diagnostics', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: true })));
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = createTestQueryClient();
     const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
     disposeWorkspace = initializeLiveChatWorkspace(queryClient);
 

@@ -1,18 +1,9 @@
-import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgPlayerRail } from './RpgPlayerRail';
 import { activeQuests, equippedGear, heroStats as previewHeroStats, partyMembers, previewHeroSummary, previewSurvival } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>
-  );
-}
 
 const baseRailProps = {
   activeQuests,
@@ -26,7 +17,7 @@ const baseRailProps = {
 describe('RpgPlayerRail', () => {
   it('keeps player-facing RPG information and removes Hermes diagnostics', () => {
     const onSelectCommand = vi.fn();
-    renderWithTheme(
+    renderWithProviders(
       <RpgPlayerRail
         {...baseRailProps}
         hermesRouteDecision={{

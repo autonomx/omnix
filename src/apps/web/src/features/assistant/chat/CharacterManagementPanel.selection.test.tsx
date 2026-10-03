@@ -1,10 +1,11 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../../design/theme';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
 import type { CharacterProfile, SessionInteraction } from './characterClient';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 const maya: CharacterProfile = {
   id: 'maya',
@@ -138,12 +139,7 @@ describe('CharacterManagementPanel selection', () => {
       return new Response('not found', { status: 404 });
     }));
 
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: { retry: false },
-        mutations: { retry: false },
-      },
-    });
+    const queryClient = createTestQueryClient();
     render(
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
         <QueryClientProvider client={queryClient}>

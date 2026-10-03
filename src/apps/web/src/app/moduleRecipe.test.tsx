@@ -1,8 +1,9 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../design/theme';
+import { createTestQueryClient } from '../test/renderWithProviders';
 
 // The add-a-module recipe (WP-9.7): a module is one manifest plus one line in
 // the registry. Here the line adds a scaffolded module to the real registry.
@@ -41,7 +42,7 @@ describe('adding a module', () => {
     window.history.replaceState(null, '', '/fake');
     render(
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={createTestQueryClient()}>
           <OmnixApp />
         </QueryClientProvider>
       </MantineProvider>,
@@ -56,7 +57,7 @@ describe('adding a module', () => {
     window.history.replaceState(null, '', '/nowhere');
     render(
       <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-        <QueryClientProvider client={new QueryClient()}>
+        <QueryClientProvider client={createTestQueryClient()}>
           <OmnixApp />
         </QueryClientProvider>
       </MantineProvider>,

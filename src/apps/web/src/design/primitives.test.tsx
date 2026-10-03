@@ -1,16 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { MantineProvider } from '@mantine/core';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import {
-  OmnixAssetCard,
-  OmnixAudioControls,
-  OmnixDiagnosticsView,
-  OmnixProgressLog,
-  OmnixTopBar,
-  OmnixTranscriptView,
-} from './primitives';
-import { omnixTheme } from './theme';
+import { OmnixAssetCard, OmnixAudioControls, OmnixDiagnosticsView, OmnixProgressLog, OmnixTopBar, OmnixTranscriptView } from './primitives';
+import { renderWithProviders } from '../test/renderWithProviders';
 
 const styles = readFileSync('src/styles.css', 'utf8');
 const themePresets = readFileSync('src/theme-presets.css', 'utf8');
@@ -18,13 +10,6 @@ const styleElement = document.createElement('style');
 document.head.appendChild(styleElement);
 
 
-function renderWithTheme(ui: React.ReactNode) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {ui}
-    </MantineProvider>,
-  );
-}
 
 describe('design primitives', () => {
   it.each([
@@ -33,7 +18,7 @@ describe('design primitives', () => {
   ])('keeps the Assistant header label readable in %s mode', (appearance, textColor) => {
     document.documentElement.dataset.omnixAppearance = appearance;
     styleElement.textContent = styles.replaceAll('var(--omnix-text)', textColor);
-    renderWithTheme(<OmnixTopBar title="Chatbot" />);
+    renderWithProviders(<OmnixTopBar title="Chatbot" />);
 
     const assistantLabel = document.querySelector('.omnix-topbar-status span');
     expect(assistantLabel).toHaveTextContent('Assistant');
@@ -56,7 +41,7 @@ describe('design primitives', () => {
   });
 
   it('shows a directional arrow for the sidebar toggle state', () => {
-    const { rerender } = renderWithTheme(<OmnixTopBar title="Chatbot" isSidebarVisible />);
+    const { rerender } = renderWithProviders(<OmnixTopBar title="Chatbot" isSidebarVisible />);
 
     expect(document.querySelector('.omnix-shell-toggle span')).toHaveTextContent('‹');
     expect(document.querySelector('.omnix-shell-toggle span')).toHaveAttribute('data-direction', 'left');
@@ -68,7 +53,7 @@ describe('design primitives', () => {
   });
 
   it('renders shared operational primitives', () => {
-    renderWithTheme(
+    renderWithProviders(
       <>
         <OmnixProgressLog value={50} logs={[{ level: 'info', message: 'Halfway' }]} />
         <OmnixTranscriptView messages={[{ role: 'assistant', content: 'Ready.' }]} />

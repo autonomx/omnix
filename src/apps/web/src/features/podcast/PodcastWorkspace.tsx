@@ -18,6 +18,7 @@ import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
 import { jobOutputRefs } from '../../api/schemas/streams';
 import { downloadUrl } from '../../shared/download';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -308,8 +309,8 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const stitchRunRef = useRef(0);
   const liveBlobUrlsRef = useRef<string[]>([]);
 
-  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: async () => { try { return (await omnixApiClient.listJobs()) ?? { jobs: [] }; } catch { return { jobs: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
-  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: async () => { try { return (await omnixApiClient.listAssets()) ?? { assets: [] }; } catch { return { assets: [] }; } }, retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const jobsQuery = useQuery({ queryKey: ['platform', 'jobs'], queryFn: () => omnixApiClient.listJobs(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
+  const assetsQuery = useQuery({ queryKey: ['platform', 'assets'], queryFn: () => omnixApiClient.listAssets(), retry: false, refetchInterval: false, refetchOnWindowFocus: false });
 
   const [title, setTitle] = useState(defaultTitle);
   const [brief, setBrief] = useState(defaultBrief);
@@ -459,7 +460,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return () => window.clearTimeout(timer);
   }, [current?.key, current?.dataUrl, autoplay, playbackRate]);
 
-  function naturalEnd(audio: HTMLAudioElement | null) { return Boolean(audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.18); }
   function onPause() {
     const audio = audioRef.current;
     if (naturalEnd(audio) && createJobMutation.isPending) return;
@@ -526,6 +526,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
           <code>/podcast-renderer</code>
         </header>
+        <GatewayErrorNotice label="Podcast jobs and voices" errors={[jobsQuery.error, assetsQuery.error]} />
 
         <div className="podcast-studio-grid">
           <section className="podcast-studio-stack">
@@ -624,3 +625,6 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     </WorkspacePanel>
   );
 }
+
+/** Whether playback reached the end of the audio (not a pause near it). */
+function naturalEnd(audio: HTMLAudioElement | null) { return Boolean(audio && Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.18); }

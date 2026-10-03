@@ -1,16 +1,15 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { ImageRequestForm } from './ImageRequestForm';
 import type { ImageRequestFormValues } from './imageRequestModel';
 import { fixture } from '../../test/fixture';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>

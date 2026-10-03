@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldCampaignSetup } from './RpgWorldCampaignSetup';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
@@ -71,9 +72,7 @@ const detail = {
 };
 
 function renderSetup(onSessionLaunched = vi.fn(), onEditWorld = vi.fn()) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   render(
     <QueryClientProvider client={queryClient}>
       <RpgWorldCampaignSetup

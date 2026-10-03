@@ -1,25 +1,16 @@
-import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgCombatSurface } from './RpgCombatSurface';
 import { createRpgCombatSurfaceState } from './rpgCombatState';
 import { partyMembers, previewEncounter, previewHeroSummary } from './rpgUiState';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>
-  );
-}
 
 describe('RpgCombatSurface', () => {
   it('renders inactive combat affordances without enabling combat actions', () => {
     const combat = createRpgCombatSurfaceState({ encounter: previewEncounter, heroSummary: previewHeroSummary, partyMembers });
 
-    renderWithTheme(<RpgCombatSurface combat={combat} onSelectCommand={vi.fn()} />);
+    renderWithProviders(<RpgCombatSurface combat={combat} onSelectCommand={vi.fn()} />);
 
     expect(screen.getByRole('region', { name: 'Combat surface' })).toBeInTheDocument();
     expect(screen.getByText('Tactical combat')).toBeInTheDocument();
@@ -41,7 +32,7 @@ describe('RpgCombatSurface', () => {
       partyMembers,
     });
 
-    renderWithTheme(<RpgCombatSurface combat={combat} onSelectCommand={onSelectCommand} />);
+    renderWithProviders(<RpgCombatSurface combat={combat} onSelectCommand={onSelectCommand} />);
 
     expect(screen.getByText('Combat turn gate active')).toBeInTheDocument();
     expect(screen.getByText('Mira Vale')).toBeInTheDocument();

@@ -4,10 +4,10 @@
  * live listeners, observers, intervals and fetch middlewares after each cycle,
  * and disposing Chat returns them to what was there before it was activated.
  */
-import { QueryClient } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { activeFetchMiddlewares, resetFetchPipelineForTests } from '../api/fetchPipeline';
 import { activateViewRuntime, activeViewRuntimes } from './viewRuntime';
+import { createTestQueryClient } from '../test/renderWithProviders';
 
 type ListenerKey = string;
 
@@ -115,7 +115,7 @@ afterAll(() => {
 
 describe('view runtime lifecycle', () => {
   it('leaves nothing behind when Chat is left, cycle after cycle', async () => {
-    const queryClient = new QueryClient();
+    const queryClient = createTestQueryClient();
     const afterEachCycle: Array<ReturnType<typeof counts>> = [];
     let beforeChat: ReturnType<typeof counts> | null = null;
     let afterChatDisposed: ReturnType<typeof counts> | null = null;

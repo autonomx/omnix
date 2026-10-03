@@ -99,6 +99,7 @@ export function useStoryLibrary({
   }, [selectableLibraryItems, selectedLibraryItemId, setSelectedLibraryItemId]);
 
   return {
+    libraryError: jobsQuery.error ?? assetsQuery.error,
     storyJobs,
     libraryStoryJobs,
     libraryItems,

@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldAuthoringWorkspace } from './RpgWorldAuthoringWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const world = {
   id: 'world:disposable',
@@ -19,7 +20,7 @@ const world = {
 };
 
 function renderWorkspace() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <RpgWorldAuthoringWorkspace onBack={vi.fn()} onSessionLaunched={vi.fn()} />

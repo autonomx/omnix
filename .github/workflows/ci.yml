@@ -258,10 +258,12 @@ jobs:
         run: npm run web:build
       - name: Verify generated OpenAPI client
         run: npm --workspace @omnix/web run api:check
-      - name: Install Chromium for the app-shell test
+      - name: Install Chromium for the browser tests
         run: npx playwright install --with-deps chromium
-      - name: Run mocked app-shell browser test
-        run: npm --workspace @omnix/web run test:e2e -- tests/e2e/app-shell.spec.ts --project=chromium
+      # Every workspace against a mocked gateway: open, primary action, error state,
+      # accessibility (WP-9.10). The live companion test skips itself without a gateway.
+      - name: Run mocked browser tests
+        run: npm --workspace @omnix/web run test:e2e -- --project=chromium
 
   docs:
     name: docs

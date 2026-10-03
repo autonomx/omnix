@@ -1,22 +1,13 @@
-import { MantineProvider } from '@mantine/core';
-import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgHermesSequenceJobPanel } from './RpgHermesSequenceJobPanel';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>,
-  );
-}
 
 describe('RpgHermesSequenceJobPanel', () => {
   it('renders progress and controls', () => {
     const onCancel = vi.fn();
-    renderWithTheme(
+    renderWithProviders(
       <RpgHermesSequenceJobPanel
         activeJob={{ id: 'job-1', status: 'running', stages: [{ status: 'completed' }, { status: 'queued' }] } as never}
         onCancel={onCancel}

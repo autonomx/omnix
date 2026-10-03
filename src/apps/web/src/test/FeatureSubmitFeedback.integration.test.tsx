@@ -1,5 +1,5 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import { SttWorkspace } from '../features/stt/SttWorkspace';
 import { StorytellerWorkspace } from '../features/storyteller/StorytellerWorkspace';
 import { VoiceCloningWorkspace } from '../features/voice-cloning/VoiceCloningWorkspace';
 import { VoiceWorkspace } from '../features/voice/VoiceWorkspace';
+import { createTestQueryClient } from './renderWithProviders';
 
 function requestPath(input: RequestInfo | URL): string {
   return typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
@@ -28,12 +29,7 @@ function moduleById(moduleId: OmnixModuleDefinition['id']): OmnixModuleDefinitio
 }
 
 function renderWithProviders(children: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
 
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">

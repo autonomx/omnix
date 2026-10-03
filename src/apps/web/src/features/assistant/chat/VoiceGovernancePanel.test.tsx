@@ -1,17 +1,18 @@
  
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { liveConversationStore } from '../workspace/live-conversation-store';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import type { CharacterProfile } from './characterClient';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 function renderPanel(
   assetId = 'voice-cloning:maya',
   character?: CharacterProfile,
   characterIsActive = false,
 ) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <VoiceGovernancePanel

@@ -1,9 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RpgAuthoringDocumentPage, RpgAuthoringSection } from '../../api/rpgWorldAuthoringClient';
 import type { RpgWorldSummary } from '../../api/rpgWorldLibraryClient';
 import { RpgWorldAuthoringPage } from './RpgWorldAuthoringPage';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const world: RpgWorldSummary = {
   id: 'world:hogwarth',
@@ -39,7 +40,7 @@ function section(id: string, label: string): RpgAuthoringSection {
 }
 
 function renderPage(page: RpgAuthoringDocumentPage, currentSection: RpgAuthoringSection) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = createTestQueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
       <RpgWorldAuthoringPage

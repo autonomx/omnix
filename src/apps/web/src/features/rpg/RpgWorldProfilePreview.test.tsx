@@ -1,7 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RpgWorldProfilePreview } from './RpgWorldProfilePreview';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const profile = {
   profile_id: 'cyberpunk',
@@ -71,9 +72,7 @@ function response(status = 'review_required', revision = 1) {
 }
 
 function renderPreview(onApprovalChange = vi.fn()) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = createTestQueryClient();
   render(
     <QueryClientProvider client={queryClient}>
       <RpgWorldProfilePreview

@@ -1,21 +1,12 @@
-import { MantineProvider } from '@mantine/core';
-import { render, screen } from '@testing-library/react';
-import type { ReactElement } from 'react';
+import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { omnixTheme } from '../../design/theme';
 import { RpgHermesSequenceReviewPanel } from './RpgHermesSequenceReviewPanel';
+import { renderWithProviders } from '../../test/renderWithProviders';
 
-function renderWithTheme(element: ReactElement) {
-  return render(
-    <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
-      {element}
-    </MantineProvider>,
-  );
-}
 
 describe('RpgHermesSequenceReviewPanel', () => {
   it('does not render the removed Hermes sequence review section', () => {
-    renderWithTheme(
+    renderWithProviders(
       <RpgHermesSequenceReviewPanel onReview={vi.fn()} onUseFirstItem={vi.fn()} />,
     );
 

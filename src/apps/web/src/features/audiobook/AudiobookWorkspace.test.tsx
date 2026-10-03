@@ -1,15 +1,16 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { AudiobookWorkspace } from './AudiobookWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const project = {
   id: 'book-one', title: 'The Book', author: 'The Author', language: 'en',
   state: 'review_required', current_source_revision_id: 'source-one',
 };
 
-function renderWorkspace(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderWorkspace(client = createTestQueryClient()) {
   const module = omnixModules.find((entry) => entry.id === 'audiobook');
   if (!module) throw new Error('audiobook module missing');
   return render(<QueryClientProvider client={client}><AudiobookWorkspace module={module} /></QueryClientProvider>);
@@ -71,7 +72,7 @@ describe('AudiobookWorkspace', () => {
   it.each(['classification', 'extraction'])('refreshes cached spans when background %s completes', async (phase) => {
     let completed = false;
     let chapterRequests = 0;
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = createTestQueryClient();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       let body: unknown;

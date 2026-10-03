@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RpgAuthoringEntityCard, RpgAuthoringTopic } from '../../api/rpgWorldAuthoringClient';
 import { RpgWorldEntityEditor } from './RpgWorldEntityEditor';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const dossier = {
   schema_version: 'rpg_world_entity_dossier_v1',
@@ -59,9 +60,7 @@ function response(value: unknown): Response {
 }
 
 function renderEditor() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const client = createTestQueryClient();
   return render(
     <QueryClientProvider client={client}>
       <RpgWorldEntityEditor entity={entity} topic={topic} worldId="world:aurelia" />

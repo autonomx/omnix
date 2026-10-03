@@ -1,10 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CharacterHermesPanel } from './CharacterHermesPanel';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 function renderPanel() {
-  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+  const client = createTestQueryClient();
   return render(<QueryClientProvider client={client}><CharacterHermesPanel characterId="maya" /></QueryClientProvider>);
 }
 

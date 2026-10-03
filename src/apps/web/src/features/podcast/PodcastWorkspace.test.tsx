@@ -1,21 +1,17 @@
 import { MantineProvider } from '@mantine/core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { omnixTheme } from '../../design/theme';
 import { PodcastWorkspace } from './PodcastWorkspace';
+import { createTestQueryClient } from '../../test/renderWithProviders';
 
 const GENERATED_AUDIO_DATA_URL = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 const STITCHED_AUDIO_BLOB_URL = 'blob:stitched-podcast-preview';
 
 function renderPodcast() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
+  const queryClient = createTestQueryClient();
   const module = omnixModules.find((entry) => entry.id === 'podcast');
 
   if (!module) {

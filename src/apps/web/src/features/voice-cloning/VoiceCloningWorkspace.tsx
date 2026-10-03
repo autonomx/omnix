@@ -10,6 +10,7 @@ import { loadSettingsProfile } from '../settings';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../../shared/FeatureSubmitFeedback';
 import { buildProfileInput, cloneFormDefaults, type CloneFormValues } from './cloneFormDefaults';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { GatewayErrorNotice } from '../../shared/GatewayErrorNotice';
 
 export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -90,6 +91,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
       </div>
 
       <p className="workspace-summary">{module.summary}</p>
+      <GatewayErrorNotice label="Voice cloning data" errors={[providersQuery.error, jobsQuery.error, assetsQuery.error]} />
 
       <div className="feature-layout">
         <section className="feature-panel">

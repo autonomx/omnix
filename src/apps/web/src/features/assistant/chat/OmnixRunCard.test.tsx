@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
+import { createTestQueryClient } from '../../../test/renderWithProviders';
 
 // Fixtures carry only the fields each test reads.
 function fixture<T>(value: unknown): T {
@@ -11,7 +12,7 @@ function fixture<T>(value: unknown): T {
 }
 
 function renderCard(metadata: Record<string, unknown>) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return render(<QueryClientProvider client={client}><OmnixRunCard metadata={metadata} /></QueryClientProvider>);
 }
 
