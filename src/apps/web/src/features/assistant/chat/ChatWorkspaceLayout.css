@@ -1,124 +1,5 @@
+/* Chat workspace layout: composer, message list, voice and live controls. */
 @layer features {
-  :root {
-    --omnix-sidebar-expanded: 19.5rem;
-    --omnix-sidebar-collapsed: 5.25rem;
-  }
-
-  .omnix-shell {
-    display: grid;
-    grid-template-columns: var(--omnix-sidebar-expanded) minmax(0, 1fr);
-    grid-template-rows: var(--omnix-topbar-height) minmax(0, 1fr);
-    min-height: 100vh;
-  }
-
-  .omnix-shell.sidebar-hidden {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .omnix-shell.sidebar-hidden .omnix-main {
-    grid-column: 1;
-  }
-
-  .omnix-shell.sidebar-hidden .omnix-sidebar {
-    border: 0;
-    display: none;
-    padding: 0;
-    width: 0;
-  }
-
-  .omnix-sidebar {
-    height: calc(100vh - var(--omnix-topbar-height));
-    overflow: hidden;
-    transition: width 180ms ease;
-    width: var(--omnix-sidebar-expanded);
-  }
-
-  .omnix-sidebar.collapsed {
-    width: var(--omnix-sidebar-collapsed);
-  }
-
-  .omnix-sidebar.collapsed .omnix-brand {
-    justify-content: center;
-  }
-
-  .omnix-sidebar.collapsed .omnix-brand-copy,
-  .omnix-sidebar.collapsed .omnix-nav::after,
-  .omnix-sidebar.collapsed .omnix-nav-label {
-    display: none;
-  }
-
-  .omnix-sidebar.collapsed .omnix-nav a,
-  .omnix-sidebar.collapsed .omnix-nav-item {
-    justify-content: center;
-  }
-
-  .omnix-sidebar.collapsed .omnix-nav a {
-    padding: 0;
-  }
-
-  .omnix-main {
-    grid-column: 2;
-    grid-row: 2;
-    min-height: calc(100vh - var(--omnix-topbar-height));
-    min-width: 0;
-  }
-
-  .storyteller-module-title {
-    color: var(--omnix-text);
-    font-size: 1rem;
-    font-weight: 800;
-    margin: 0 0 0.75rem;
-  }
-
-  .provider-settings-form {
-    display: grid;
-    gap: 0.85rem;
-  }
-
-  .provider-settings-grid {
-    display: grid;
-    gap: 0.85rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .provider-settings-grid label,
-  .provider-settings-form label {
-    color: #d8d3ea;
-    display: grid;
-    gap: 0.4rem;
-    font-size: 0.86rem;
-    font-weight: 700;
-  }
-
-  .provider-settings-form select,
-  .provider-settings-form input {
-    background: rgba(9, 8, 18, 0.78);
-    border: 1px solid rgba(151, 114, 255, 0.24);
-    border-radius: 0.58rem;
-    color: #f3f0ff;
-    min-height: 2.35rem;
-    padding: 0.55rem 0.7rem;
-  }
-
-  .provider-settings-actions {
-    align-items: center;
-    display: flex;
-    gap: 0.75rem;
-    justify-content: flex-end;
-  }
-
-  .provider-config-list {
-    display: grid;
-    gap: 0.7rem;
-  }
-
-  .provider-config-card {
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(151, 114, 255, 0.12);
-    border-radius: 0.65rem;
-    padding: 0.85rem;
-  }
-
   .assistant-composer {
     border-top: 1px solid var(--omnix-border);
     display: grid;
@@ -315,8 +196,11 @@
     width: 5.5rem;
   }
 
-  .assistant-voice-orb::before { left: 0.2rem; }
-  .assistant-voice-orb::after { right: 0.2rem; }
+  .assistant-voice-orb::before { left: 0.2rem;
+  }
+
+  .assistant-voice-orb::after { right: 0.2rem;
+  }
 
   .assistant-voice-orb span {
     align-items: center;
@@ -394,10 +278,6 @@
   .assistant-sessions-card {
     display: grid;
     gap: 0.75rem;
-  }
-
-  .assistant-chat-side .platform-empty {
-    margin-top: 0;
   }
 
   .workspace-card.assistant-chat-page {
@@ -604,19 +484,32 @@
     margin: 1.1rem 0 0.55rem;
   }
 
-  .assistant-message-content h1 { font-size: 1.5rem; }
-  .assistant-message-content h2 { font-size: 1.2rem; }
-  .assistant-message-content h3 { font-size: 1.05rem; }
-  .assistant-message-content p { margin: 0 0 0.85rem; }
+  .assistant-message-content h1 { font-size: 1.5rem;
+  }
+
+  .assistant-message-content h2 { font-size: 1.2rem;
+  }
+
+  .assistant-message-content h3 { font-size: 1.05rem;
+  }
+
+  .assistant-message-content p { margin: 0 0 0.85rem;
+  }
+
   .assistant-message-content ul,
-  .assistant-message-content ol { margin: 0 0 0.85rem; padding-left: 1.35rem; }
-  .assistant-message-content li + li { margin-top: 0.35rem; }
+  .assistant-message-content ol { margin: 0 0 0.85rem; padding-left: 1.35rem;
+  }
+
+  .assistant-message-content li + li { margin-top: 0.35rem;
+  }
+
   .assistant-message-content blockquote {
     border-left: 3px solid var(--omnix-cyan);
     color: #cbd5f5;
     margin: 0 0 0.85rem;
     padding-left: 0.85rem;
   }
+
   .assistant-message-content pre {
     background: rgba(5, 9, 20, 0.72);
     border: 1px solid rgba(132, 148, 196, 0.2);
@@ -625,14 +518,20 @@
     overflow: auto;
     padding: 0.75rem;
   }
+
   .assistant-message-content code {
     background: rgba(5, 9, 20, 0.42);
     border-radius: 0.25rem;
     font-size: 0.9em;
     padding: 0.1rem 0.25rem;
   }
-  .assistant-message-content pre code { background: transparent; padding: 0; }
-  .assistant-message-content a { color: #67e8f9; text-decoration: underline; }
+
+  .assistant-message-content pre code { background: transparent; padding: 0;
+  }
+
+  .assistant-message-content a { color: #67e8f9; text-decoration: underline;
+  }
+
   .assistant-research-citation {
     color: #7dd3fc;
     font-size: 0.78em;
@@ -640,6 +539,7 @@
     margin-left: 0.18rem;
     white-space: nowrap;
   }
+
   a.assistant-research-citation {
     cursor: pointer;
     text-decoration: underline;
@@ -1008,58 +908,56 @@
   }
 
   @media (max-width: 1500px) {
-    .assistant-chat-layout { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); height: auto; }
-    .assistant-chat-main { min-height: 44rem; }
-    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr; }
-    .assistant-live-card { height: auto; min-height: 32rem; }
+    .assistant-chat-layout { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); height: auto;
+    }
+
+    .assistant-chat-main { min-height: 44rem;
+    }
+
+    .assistant-chat-side { grid-column: 1 / -1; grid-template-columns: 1fr;
+    }
+
+    .assistant-live-card { height: auto; min-height: 32rem;
+    }
   }
 
   @media (max-width: 1180px) {
-    .omnix-shell { grid-template-columns: 16rem minmax(0, 1fr); }
-    .assistant-chat-layout { grid-template-columns: 1fr; height: auto; }
-    .assistant-chat-sidebar { min-height: 38rem; }
-    .assistant-chat-main { min-height: 44rem; }
-    .assistant-chat-side { grid-template-columns: 1fr; }
-    .assistant-live-card { height: auto; min-height: 44rem; }
+    .assistant-chat-layout { grid-template-columns: 1fr; height: auto;
+    }
+
+    .assistant-chat-sidebar { min-height: 38rem;
+    }
+
+    .assistant-chat-main { min-height: 44rem;
+    }
+
+    .assistant-chat-side { grid-template-columns: 1fr;
+    }
+
+    .assistant-live-card { height: auto; min-height: 44rem;
+    }
   }
 
   @media (max-width: 900px) {
-    .omnix-shell { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr); }
-    .omnix-sidebar {
-      grid-column: 1;
-      grid-row: 2;
-      height: auto;
-      overflow-x: auto;
-      position: static;
-      width: auto;
+    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem;
     }
-    .omnix-main {
-      grid-column: 1;
-      grid-row: 3;
-      min-height: 0;
+
+    .assistant-chat-layout { min-height: 0;
     }
-    .omnix-nav { display: flex; }
-    .omnix-nav a { flex: 0 0 auto; }
-    .omnix-nav::after { display: none; }
-    .assistant-composer-controls,
-    .assistant-chat-side,
-    .provider-settings-grid {
-      grid-template-columns: 1fr;
-    }
-    .omnix-topbar { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: repeat(3, auto); position: relative; }
-    .omnix-mode-tabs { grid-column: 1 / -1; grid-row: 2; justify-self: stretch; }
-    .omnix-topbar-actions { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; justify-content: flex-start; }
-    .omnix-topbar-status { display: none; }
-    .omnix-command-search { max-width: none; }
-    .workspace-card.assistant-chat-page { margin: 1rem 0.75rem; }
-    .assistant-chat-layout { min-height: 0; }
+
     .assistant-chat-header {
       align-items: flex-start;
       flex-direction: column;
     }
+
     .assistant-chat-message,
-    .assistant-chat-message.user { max-width: 100%; }
-    .assistant-composer-actions { position: static; justify-content: flex-end; }
-    .assistant-message-input textarea { padding-right: 1rem; }
+    .assistant-chat-message.user { max-width: 100%;
+    }
+
+    .assistant-composer-actions { position: static; justify-content: flex-end;
+    }
+
+    .assistant-message-input textarea { padding-right: 1rem;
+    }
   }
 }

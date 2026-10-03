@@ -224,3 +224,185 @@
     color: var(--omnix-control-text);
   }
 }
+
+/* App shell layout: navigation, top bar, sidebar and main area. */
+@layer features {
+  :root {
+    --omnix-sidebar-expanded: 19.5rem;
+    --omnix-sidebar-collapsed: 5.25rem;
+  }
+
+  .omnix-shell {
+    display: grid;
+    grid-template-columns: var(--omnix-sidebar-expanded) minmax(0, 1fr);
+    grid-template-rows: var(--omnix-topbar-height) minmax(0, 1fr);
+    min-height: 100vh;
+  }
+
+  .omnix-shell.sidebar-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .omnix-shell.sidebar-hidden .omnix-main {
+    grid-column: 1;
+  }
+
+  .omnix-shell.sidebar-hidden .omnix-sidebar {
+    border: 0;
+    display: none;
+    padding: 0;
+    width: 0;
+  }
+
+  .omnix-sidebar {
+    height: calc(100vh - var(--omnix-topbar-height));
+    overflow: hidden;
+    transition: width 180ms ease;
+    width: var(--omnix-sidebar-expanded);
+  }
+
+  .omnix-sidebar.collapsed {
+    width: var(--omnix-sidebar-collapsed);
+  }
+
+  .omnix-sidebar.collapsed .omnix-brand {
+    justify-content: center;
+  }
+
+  .omnix-sidebar.collapsed .omnix-brand-copy,
+  .omnix-sidebar.collapsed .omnix-nav::after,
+  .omnix-sidebar.collapsed .omnix-nav-label {
+    display: none;
+  }
+
+  .omnix-sidebar.collapsed .omnix-nav a,
+  .omnix-sidebar.collapsed .omnix-nav-item {
+    justify-content: center;
+  }
+
+  .omnix-sidebar.collapsed .omnix-nav a {
+    padding: 0;
+  }
+
+  .omnix-main {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: calc(100vh - var(--omnix-topbar-height));
+    min-width: 0;
+  }
+
+  .storyteller-module-title {
+    color: var(--omnix-text);
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0 0 0.75rem;
+  }
+
+  .provider-settings-form {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .provider-settings-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .provider-settings-grid label,
+  .provider-settings-form label {
+    color: #d8d3ea;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.86rem;
+    font-weight: 700;
+  }
+
+  .provider-settings-form select,
+  .provider-settings-form input {
+    background: rgba(9, 8, 18, 0.78);
+    border: 1px solid rgba(151, 114, 255, 0.24);
+    border-radius: 0.58rem;
+    color: #f3f0ff;
+    min-height: 2.35rem;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .provider-settings-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+  }
+
+  .provider-config-list {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .provider-config-card {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(151, 114, 255, 0.12);
+    border-radius: 0.65rem;
+    padding: 0.85rem;
+  }
+
+  .assistant-chat-side .platform-empty {
+    margin-top: 0;
+  }
+
+  @media (max-width: 1180px) {
+    .omnix-shell { grid-template-columns: 16rem minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .omnix-shell { grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .omnix-sidebar {
+      grid-column: 1;
+      grid-row: 2;
+      height: auto;
+      overflow-x: auto;
+      position: static;
+      width: auto;
+    }
+
+    .omnix-main {
+      grid-column: 1;
+      grid-row: 3;
+      min-height: 0;
+    }
+
+    .omnix-nav { display: flex;
+    }
+
+    .omnix-nav a { flex: 0 0 auto;
+    }
+
+    .omnix-nav::after { display: none;
+    }
+
+    .assistant-composer-controls,
+    .assistant-chat-side,
+    .provider-settings-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .omnix-topbar { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: repeat(3, auto); position: relative;
+    }
+
+    .omnix-mode-tabs { grid-column: 1 / -1; grid-row: 2; justify-self: stretch;
+    }
+
+    .omnix-topbar-actions { grid-column: 1 / -1; grid-row: 3; flex-wrap: nowrap; justify-content: flex-start;
+    }
+
+    .omnix-topbar-status { display: none;
+    }
+
+    .omnix-command-search { max-width: none;
+    }
+  }
+}

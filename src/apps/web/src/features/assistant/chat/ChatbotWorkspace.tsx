@@ -2,6 +2,7 @@
 // components imported below.
 import './chat-sidebar-manager.css';
 import './researchProgressController.css';
+import './ChatWorkspaceLayout.css';
 import './ChatbotWorkspaceTools.css';
 import './ChatbotWorkspaceUtilityToggle.css';
 import '../workspace/assistant-context-controller.css';

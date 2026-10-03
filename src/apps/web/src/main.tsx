@@ -9,7 +9,6 @@ import { OmnixApp } from './app/OmnixApp';
 import { installClientErrorReporting } from './app/clientErrorReporter';
 import { omnixTheme } from './design/theme';
 import './styles.css';
-import './legacy-layout.css';
 import './appearance-overrides.css';
 import './theme-presets.css';
 import './liquid-glass-theme.css';
