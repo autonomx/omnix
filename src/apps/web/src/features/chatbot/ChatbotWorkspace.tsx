@@ -4,7 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClipboardEvent as ReactClipboardEvent, KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch, type Control } from 'react-hook-form';
 import {
   ApiError,
   omnixApiClient,
@@ -43,13 +43,11 @@ import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/ru
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import { CharacterManagementPanel } from './CharacterManagementPanel';
 import { ChatIdentityModeControl } from './ChatIdentityModeControl';
-import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentToolProposalCard';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import { LiveChatPanel } from './LiveChatPanel';
 import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
 import { LiveCallVisual } from './LiveCallVisual';
 import { ChatSidebarSessions } from './ChatSidebarSessions';
-import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
 import { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from '../assistant-workspace/assistant-context-controls';
 import { assistantContextStore } from '../assistant-workspace/assistant-context-store';
 import { DesktopCompanionControls } from '../assistant-workspace/desktop-companion-controls';
@@ -58,18 +56,18 @@ import { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
-import { OmnixRunCard } from './OmnixRunCard';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
-import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
 import { isLiveVoiceControllerInstalled, startLiveVoiceCall, toggleLiveVoiceCall } from '../assistant-workspace/live-voice-controller';
 import { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
 import type { components } from '../../api/generated/types';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
-import { handleResearchReportAction, noteChatMessageSent, noteChatSession } from './researchProgressController';
-import { ResearchMessageDetails, ResearchProgressCard } from './ResearchProgressCard';
+import { noteChatMessageSent, noteChatSession } from './researchProgressController';
+import { ResearchProgressCard } from './ResearchProgressCard';
+import { ChatMessageItem, type ChatMessageActions } from './ChatMessageItem';
+import { MAX_CHAT_IMAGE_ATTACHMENTS, SUPPORTED_CHAT_IMAGE_TYPES, chatImageDataUrls, formatMessageTime } from './chatMessageModel';
 import { visibleChatSessions } from './sessionTools';
 import { liveVoiceTranscriptStore, useLiveVoiceTranscript } from '../assistant-workspace/live-voice-transcript-store';
 
@@ -94,9 +92,7 @@ type PastedChatTextFile = {
 };
 
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
 const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
-const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const DEFAULT_IMAGE_MESSAGE = 'Please analyze the attached image.';
 const DEFAULT_IMAGES_MESSAGE = 'Please analyze the attached images.';
 const DEFAULT_TEXT_FILE_MESSAGE = 'Please analyze the attached file.';
@@ -422,10 +418,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       && interactionQuery.data?.interaction_mode === 'character',
     ),
   });
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ChatbotFormValues>({
+  const { register, handleSubmit, reset, setValue, getValues, watch, control, formState: { errors } } = useForm<ChatbotFormValues>({
     defaultValues: { content: '', providerId: runtimeConfig.defaultProviderId ?? '', modelId: runtimeConfig.defaultModelId ?? '' },
   });
-  const composerContent = watch('content') ?? '';
   const selectedProviderId = watch('providerId');
   const selectedModelId = watch('modelId');
   const providerPayload = providerQuery.data;
@@ -795,6 +790,18 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceTranscript = useLiveVoiceTranscript();
   const livePresentation = useLiveCallPresentation();
   const pcmStream = useAssistantPcmStream();
+  // Message buttons call the latest handlers through one stable object, so messages stay memoized.
+  const messageActionsRef = useRef<ChatMessageActions | null>(null);
+  const messageActions = useMemo<ChatMessageActions>(() => ({
+    toggleFeedback: (messageId, feedback) => messageActionsRef.current?.toggleFeedback(messageId, feedback),
+    copy: (message) => messageActionsRef.current?.copy(message),
+    play: (text) => messageActionsRef.current?.play(text),
+    stream: (message) => messageActionsRef.current?.stream(message),
+    toggleMenu: (messageId) => messageActionsRef.current?.toggleMenu(messageId),
+    closeMenu: () => messageActionsRef.current?.closeMenu(),
+    continueFrom: (message) => messageActionsRef.current?.continueFrom(message),
+    openTools: () => messageActionsRef.current?.openTools(),
+  }), []);
   // Immersive Live Chat shows the chat when it has messages, the live transcript otherwise.
   const liveChatMessages = useMemo<LiveChatMessage[]>(() => {
     if (displayedMessages.length) {
@@ -1361,7 +1368,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function sendVoiceTranscript(): void {
-    const content = (liveDraftText || composerContent).trim();
+    const content = (liveDraftText || getValues('content') || '').trim();
     void submitVoiceTranscriptContent(content, { manual: true });
   }
 
@@ -1626,6 +1633,17 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       })
       .catch(() => setChatImageError('Unable to read one or more pasted images.'));
   }
+
+  messageActionsRef.current = {
+    toggleFeedback: toggleAssistantMessageFeedback,
+    copy: (message) => void copyAssistantResponse(message),
+    play: (text) => void playAssistantResponseAudio(text),
+    stream: streamAssistantResponseAudio,
+    toggleMenu: (messageId) => setOpenMessageActionMenuId((current) => current === messageId ? null : messageId),
+    closeMenu: () => setOpenMessageActionMenuId(null),
+    continueFrom: (message) => applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`),
+    openTools: () => { showAssistantView('tools'); setActiveUtilityPanel('tools'); },
+  };
 
   function toggleAssistantMessageFeedback(messageId: string, feedback: AssistantMessageFeedback): void {
     setAssistantMessageFeedback((current) => {
@@ -1998,30 +2016,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               </header>
               <div className="assistant-chat-messages" role="log" aria-live="polite" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
                 {displayedMessages.length ? <VirtualList items={displayedMessages} getKey={(message) => message.id} scrollRef={messagesContainerRef} estimateSize={180} renderItem={(message) => (
-                  <article key={message.id} className={`assistant-chat-message ${message.role}`}>
-                    {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
-                    <div className="assistant-chat-bubble">
-                      <header><strong>{message.role === 'assistant' ? 'personality' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
-                      {chatImageDataUrls(message.metadata).length ? <div className="assistant-chat-message-images">{chatImageDataUrls(message.metadata).map((dataUrl, index) => <img className="assistant-chat-message-image" src={dataUrl} alt={index === 0 ? 'User-provided attachment' : `User-provided attachment ${index + 1}`} key={`${message.id}:image:${index}`} />)}</div> : null}
-                      {chatTextAttachment(message.metadata) ? <div className="assistant-chat-file-attachment"><strong>Attached file: {chatTextAttachment(message.metadata)?.filename}</strong><small>{chatTextAttachment(message.metadata)?.mimeType}</small></div> : null}
-                      <div
-                        className={`assistant-message-content${isDeepResearchMessage(message.metadata) ? ' assistant-research-report-host' : ''}`}
-                        data-omnix-message-content="true"
-                        onClick={(event) => handleResearchReportAction(event.nativeEvent)}
-                        data-raw-content={message.content}
-                        data-message-id={message.id}
-                        dangerouslySetInnerHTML={{
-                          __html: isDeepResearchMessage(message.metadata)
-                            ? renderResearchReportHtml(message.content, message.metadata)
-                            : renderMarkdownHtml(message.content, message.metadata),
-                        }}
-                      />
-                      {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
-                      <OmnixRunCard metadata={message.metadata} />
-                      {message.role === 'assistant' ? <ChatResponseMetricsRow metadata={message.metadata} /> : null}{message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" data-omnix-stream-audio="true" aria-label={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} title={pcmStream.messageId === message.id ? 'Stop streaming response audio' : 'Stream response audio'} aria-pressed={pcmStream.messageId === message.id} onClick={() => streamAssistantResponseAudio(message)}>{pcmStream.messageId === message.id ? '■' : '≋'}</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
-                      {message.role === 'assistant' ? <ResearchMessageDetails message={message} /> : null}
-                    </div>
-                  </article>
+                  <ChatMessageItem
+                    key={message.id}
+                    message={message}
+                    sessionId={displayedSessionId}
+                    feedback={assistantMessageFeedback[message.id]}
+                    menuOpen={openMessageActionMenuId === message.id}
+                    streaming={pcmStream.messageId === message.id}
+                    actions={messageActions}
+                  />
                 )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
                 {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
                 {sendMutation.isPending || chatJobInProgress ? <div className="assistant-thinking-indicator" role="status" aria-live="polite"><span className="assistant-thinking-orb" aria-hidden="true" /><span className="assistant-thinking-label">Thinking<span className="assistant-thinking-dots" aria-hidden="true"><i /><i /><i /></span></span></div> : null}
@@ -2119,7 +2122,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <i aria-hidden="true"><b /></i>
               </div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
-              <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={toggleLiveCallFromControls}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={toggleLiveCallFromControls}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><SendVoiceTextButton control={control} draft={liveDraftText} pending={sendMutation.isPending} onSend={sendVoiceTranscript} /></div>
               <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
@@ -2133,6 +2136,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       <LiveChatFullscreenShell messages={liveChatMessages} onSendMessage={sendFromLiveChat} onToggleCall={toggleLiveCallFromControls} />
     </WorkspacePanel>
   );
+}
+
+// Watches the composer here, so typing re-renders this button rather than all of Chat.
+function SendVoiceTextButton({ control, draft, pending, onSend }: { control: Control<ChatbotFormValues>; draft: string; pending: boolean; onSend: () => void }) {
+  const content = useWatch({ control, name: 'content' }) ?? '';
+  return <button type="button" onClick={onSend} disabled={pending || !(draft || content).trim()}>Send text</button>;
 }
 
 export function selectFreshChatSession<T extends { id?: string; message_count?: number; messages?: unknown[] } | null | undefined>(
@@ -2169,7 +2178,6 @@ function chatCapableModels(payload: ProviderFacadePayload | undefined, providerI
 function selectedProviderLabel(payload: ProviderFacadePayload | undefined, providerId: string) { if (!providerId) return 'Default provider'; return payload?.providers.find((provider) => provider.id === providerId)?.label ?? providerId; }
 function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string) { if (!modelId) return 'Default model'; return payload?.models.find((model) => model.id === modelId)?.label ?? modelId; }
 function chatbotSubmitErrorMessage(error: unknown): string { if (error instanceof ApiError) return error.message; if (error instanceof Error) return error.message; return 'Chat request failed'; }
-function formatMessageTime(value: string): string { if (value.includes('T')) return value.slice(11, 16); return value; }
 function formatClockTime(value: string): string { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 function formatCallDuration(valueMs: number): string { const totalSeconds = Math.max(0, Math.floor(valueMs / 1000)); const hours = Math.floor(totalSeconds / 3600); const minutes = Math.floor((totalSeconds % 3600) / 60); const seconds = totalSeconds % 60; return [hours, minutes, seconds].map((value) => value.toString().padStart(2, '0')).join(':'); }
 function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore { const storage = getAssistantWorkspaceEventStorage(); if (config.features.persistedEvents && storage) return createStoredAssistantWorkspaceEventStore(storage, config.eventStorageKey); return createInMemoryAssistantWorkspaceEventStore(); }
@@ -2209,20 +2217,6 @@ function voiceLabelForId(voiceId: string, voiceProfiles: VoiceProfileAsset[]): s
 function stringMetadata(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function readFileAsDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.')); reader.onerror = () => reject(reader.error ?? new Error('Image read failed.')); reader.readAsDataURL(file); }); }
 function attachmentDefaultMessage(images: PastedChatImage[], textFile: PastedChatTextFile | null): string { return images.length > 1 ? DEFAULT_IMAGES_MESSAGE : images.length === 1 ? DEFAULT_IMAGE_MESSAGE : textFile ? DEFAULT_TEXT_FILE_MESSAGE : ''; }
-function chatImageDataUrls(metadata?: Record<string, unknown>): string[] {
-  const candidates: unknown[] = [];
-  if (Array.isArray(metadata?.image_data_urls)) candidates.push(...metadata.image_data_urls);
-  if (metadata?.image_data_url) candidates.unshift(metadata.image_data_url);
-  const images: string[] = [];
-  for (const value of candidates) {
-    if (typeof value !== 'string') continue;
-    if (![...SUPPORTED_CHAT_IMAGE_TYPES].some((mimeType) => value.startsWith(`data:${mimeType};base64,`))) continue;
-    if (!images.includes(value)) images.push(value);
-    if (images.length >= MAX_CHAT_IMAGE_ATTACHMENTS) break;
-  }
-  return images;
-}
-function chatTextAttachment(metadata?: Record<string, unknown>): { filename: string; mimeType: string } | null { const value = metadata?.text_attachment; if (!value || typeof value !== 'object' || Array.isArray(value)) return null; const attachment = value as Record<string, unknown>; const filename = typeof attachment.filename === 'string' ? attachment.filename.trim() : ''; const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type.trim() : ''; const text = typeof attachment.text === 'string' ? attachment.text : ''; return filename && mimeType && text ? { filename, mimeType } : null; }
 async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }
 function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY, codingApprovalPolicy: DEFAULT_CODING_APPROVAL_POLICY }; }
 function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality, liveVoiceSensitivity: clampLiveVoiceSensitivity(parsed.liveVoiceSensitivity), codingApprovalPolicy: isCodingApprovalPolicy(parsed.codingApprovalPolicy) ? parsed.codingApprovalPolicy : fallback.codingApprovalPolicy }; } catch { return fallback; } }
