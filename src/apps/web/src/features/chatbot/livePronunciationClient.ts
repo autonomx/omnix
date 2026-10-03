@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
 export type PronunciationEntry = components['schemas']['PronunciationEntry'];
 
 export type PronunciationListResponse = components['schemas']['PronunciationListResponse'];
@@ -6,25 +7,22 @@ export type PronunciationListResponse = components['schemas']['PronunciationList
 export const ACTIVE_PRONUNCIATIONS_KEY = 'omnix.liveConversation.activePronunciations';
 export const PRONUNCIATIONS_CHANGED_EVENT = 'omnix:live-conversation-pronunciations-changed';
 
-async function request(url: string, init?: RequestInit): Promise<PronunciationListResponse> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
-  if (!response.ok) throw new Error(`Pronunciation request failed with status ${response.status}.`);
-  return response.json() as Promise<PronunciationListResponse>;
+function pronunciations(call: Promise<{ data?: PronunciationListResponse; error?: unknown; response: Response }>): Promise<PronunciationListResponse> {
+  return unwrapAs(call, (error) => `Pronunciation request failed with status ${error.status}.`);
 }
 
 export const livePronunciationClient = {
-  list: (sessionId: string) => request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/pronunciations`),
-  create: (sessionId: string, phrase: string, pronunciation: string, locale = 'en-US') => request(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/pronunciations`,
-    { method: 'POST', body: JSON.stringify({ phrase, pronunciation, locale }) },
-  ),
-  delete: (sessionId: string, entryId: string) => request(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/pronunciations/${encodeURIComponent(entryId)}`,
-    { method: 'DELETE' },
-  ),
+  list: (sessionId: string) =>
+    pronunciations(api.GET('/api/chat/sessions/{session_id}/live-conversation/pronunciations', { params: { path: { session_id: sessionId } } })),
+  create: (sessionId: string, phrase: string, pronunciation: string, locale = 'en-US') =>
+    pronunciations(api.POST('/api/chat/sessions/{session_id}/live-conversation/pronunciations', {
+      params: { path: { session_id: sessionId } },
+      body: { phrase, pronunciation, locale },
+    })),
+  delete: (sessionId: string, entryId: string) =>
+    pronunciations(api.DELETE('/api/chat/sessions/{session_id}/live-conversation/pronunciations/{entry_id}', {
+      params: { path: { session_id: sessionId, entry_id: entryId } },
+    })),
 };
 
 export function publishActivePronunciations(entries: PronunciationEntry[]): void {

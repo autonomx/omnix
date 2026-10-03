@@ -1,0 +1,67 @@
+import { ApiError } from './errors';
+
+/**
+ * Gateway calls the typed JSON client (api/http.ts) does not cover: binary
+ * uploads, streamed responses (Server-Sent Events and chunked bodies) and
+ * asset bytes. Routes and their media types are listed in
+ * docs/architecture/api-transport-exceptions.md. Like the typed client, these
+ * go through window.fetch, so the fetch pipeline's middleware applies.
+ */
+
+type GatewayPath = `/api/${string}` | `/events${string}`;
+
+function withQuery(path: GatewayPath, query?: Record<string, string | number | boolean | null | undefined>): string {
+  const entries = Object.entries(query ?? {}).filter(([, value]) => value !== undefined && value !== null && value !== '');
+  if (!entries.length) return path;
+  const search = new URLSearchParams(entries.map(([key, value]) => [key, String(value)]));
+  return `${path}${path.includes('?') ? '&' : '?'}${search.toString()}`;
+}
+
+async function failed(response: Response): Promise<never> {
+  const body = await response.text().catch(() => '');
+  throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined);
+}
+
+/** POSTs file bytes as the request body and returns the JSON response. */
+export async function uploadBinary<T>(
+  path: GatewayPath,
+  body: Blob,
+  options: { query?: Record<string, string | number | boolean | null | undefined>; contentType?: string; method?: 'POST' | 'PUT' } = {},
+): Promise<T> {
+  const response = await fetch(withQuery(path, options.query), {
+    method: options.method ?? 'POST',
+    headers: { 'Content-Type': options.contentType || body.type || 'application/octet-stream' },
+    body,
+  });
+  if (!response.ok) return failed(response);
+  return response.json() as Promise<T>;
+}
+
+/**
+ * Opens a streamed response (SSE or a chunked body) and returns it once the
+ * status is OK; the caller reads `response.body`. A JSON `body` is sent as such.
+ */
+export async function openStream(
+  path: GatewayPath,
+  init: { method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const hasBody = init.body !== undefined;
+  const response = await fetch(path, {
+    method: init.method ?? (hasBody ? 'POST' : 'GET'),
+    headers: { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...(init.headers ?? {}) },
+    ...(hasBody ? { body: JSON.stringify(init.body) } : {}),
+    ...(init.signal ? { signal: init.signal } : {}),
+  });
+  if (!response.ok) return failed(response);
+  return response;
+}
+
+/** Fetches asset or file bytes (images, audio, Live2D models, preview files). */
+export async function fetchBytes(
+  path: GatewayPath,
+  init: { signal?: AbortSignal; headers?: Record<string, string>; cache?: RequestCache } = {},
+): Promise<Response> {
+  const response = await fetch(path, init);
+  if (!response.ok) return failed(response);
+  return response;
+}

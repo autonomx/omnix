@@ -37,8 +37,9 @@ export function VoiceGovernancePanel({
 
   const assignmentMutation = useMutation({
     mutationFn: async () => {
-      const updated = await characterClient.update(character?.id ?? '', {
-        expected_version: character?.active_version,
+      if (!character) throw new Error('Select a character before assigning its voice.');
+      const updated = await characterClient.update(character.id, {
+        expected_version: character.active_version,
         default_voice_asset_id: selectedVoiceId,
       });
       const liveState = liveConversationStore.getState();

@@ -1,5 +1,6 @@
 import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
 export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';
@@ -97,18 +98,12 @@ export function applyCharacterAvatarPackToTrackedRuntimes(
   else applyAvatarPackToCurrentRuntime(characterId, avatarPack);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Character request failed with status ${response.status}.`);
-  }
-  return response.json() as Promise<T>;
+function character<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  return unwrapAs(call, (error) => error.body || `Character request failed with status ${error.status}.`);
 }
 
-function jsonInit(method: string, body: unknown): RequestInit {
-  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
-}
+const characterPath = (characterId: string) => ({ character_id: characterId });
+const sessionPath = (sessionId: string) => ({ session_id: sessionId });
 
 function adaptLiveCallRuntimeForPlayback(runtime: CharacterLiveCallRuntime): CharacterLiveCallRuntime {
   const speakerId = runtime.voice_speaker_id?.trim();
@@ -169,9 +164,8 @@ async function loadLiveCallRuntime(
     if (pending) return pending;
   }
 
-  const pending = request<CharacterLiveCallRuntime>(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`,
-  ).then(synchronizeTrackedPlaybackRuntime);
+  const pending = character(api.GET('/api/chat/sessions/{session_id}/live-call/runtime', { params: { path: sessionPath(sessionId) } }))
+    .then(synchronizeTrackedPlaybackRuntime);
   if (!force) liveCallRuntimeRequests.set(sessionId, pending);
   try {
     return await pending;
@@ -189,52 +183,37 @@ function invalidateLiveCallRuntime(sessionId: string): void {
 
 export const characterClient = {
   list(includeArchived = false): Promise<CharacterListResponse> {
-    return request(`/api/characters${includeArchived ? '?include_archived=true' : ''}`);
+    return character(api.GET('/api/characters', { params: { query: includeArchived ? { include_archived: true } : {} } }));
   },
-  create(input: Pick<CharacterProfile, 'display_name' | 'personality_prompt'> & Partial<CharacterProfile>): Promise<CharacterProfile> {
-    return request('/api/characters', jsonInit('POST', input));
+  create(input: components['schemas']['CreateCharacterRequest']): Promise<CharacterProfile> {
+    return character(api.POST('/api/characters', { body: input }));
   },
-  update(characterId: string, input: Record<string, unknown>): Promise<CharacterProfile> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}`, jsonInit('PATCH', input));
+  update(characterId: string, input: components['schemas']['UpdateCharacterRequest']): Promise<CharacterProfile> {
+    return character(api.PATCH('/api/characters/{character_id}', { params: { path: characterPath(characterId) }, body: input }));
   },
   data(characterId: string): Promise<CharacterDataExport> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/data`);
+    return character(api.GET('/api/characters/{character_id}/data', { params: { path: characterPath(characterId) } }));
   },
-  applyDataActions(
-    characterId: string,
-    input: {
-      confirm_character_id: string;
-      delete_memories?: boolean;
-      delete_transcripts?: boolean;
-      unlink_voice?: boolean;
-      archive_profile?: boolean;
-    },
-  ): Promise<CharacterDataActionResponse> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/data/actions`, jsonInit('POST', input));
+  applyDataActions(characterId: string, input: components['schemas']['CharacterDataActionRequest']): Promise<CharacterDataActionResponse> {
+    return character(api.POST('/api/characters/{character_id}/data/actions', { params: { path: characterPath(characterId) }, body: input }));
   },
   avatarPack(characterId: string): Promise<CharacterAvatarPack> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`);
+    return character(api.GET('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) } }));
   },
   upsertAvatarPack(characterId: string, input: UpsertCharacterAvatarPackInput): Promise<CharacterAvatarPack> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`, jsonInit('PUT', input));
+    return character(api.PUT('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) }, body: input }));
   },
   deleteAvatarPack(characterId: string): Promise<{ ok: boolean; character_id: string }> {
-    return request(`/api/characters/${encodeURIComponent(characterId)}/avatar-pack`, { method: 'DELETE' });
+    return character(api.DELETE('/api/characters/{character_id}/avatar-pack', { params: { path: characterPath(characterId) } }));
   },
   voiceGovernance(assetId: string): Promise<VoiceProfileGovernance> {
-    return request(`/api/voice-profiles/${encodeURIComponent(assetId)}/governance`);
+    return character(api.GET('/api/voice-profiles/{asset_id}/governance', { params: { path: { asset_id: assetId } } }));
   },
-  updateVoiceGovernance(
-    assetId: string,
-    input: UpdateVoiceProfileGovernanceInput,
-  ): Promise<VoiceProfileGovernance> {
-    return request(
-      `/api/voice-profiles/${encodeURIComponent(assetId)}/governance`,
-      jsonInit('PATCH', input),
-    );
+  updateVoiceGovernance(assetId: string, input: UpdateVoiceProfileGovernanceInput): Promise<VoiceProfileGovernance> {
+    return character(api.PATCH('/api/voice-profiles/{asset_id}/governance', { params: { path: { asset_id: assetId } }, body: input }));
   },
   session(sessionId: string): Promise<SessionInteraction> {
-    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`);
+    return character(api.GET('/api/chat/sessions/{session_id}/interaction', { params: { path: sessionPath(sessionId) } }));
   },
   liveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
     return loadLiveCallRuntime(sessionId);
@@ -242,29 +221,17 @@ export const characterClient = {
   refreshLiveCallRuntime(sessionId: string): Promise<CharacterLiveCallRuntime> {
     return loadLiveCallRuntime(sessionId, { force: true });
   },
-  async setSession(
-    sessionId: string,
-    input: {
-      interaction_mode: 'system' | 'character';
-      character_id?: string | null;
-      voice_asset_id?: string | null;
-      read_memory?: boolean;
-      write_memory?: boolean;
-      shared_memory_access?: 'none' | 'read_only';
-      transcript_policy?: 'persistent' | 'temporary' | 'none';
-      continue_topic?: boolean;
-    },
-  ): Promise<SessionInteraction> {
-    const interaction = await request<SessionInteraction>(
-      `/api/chat/sessions/${encodeURIComponent(sessionId)}/interaction`,
-      jsonInit('POST', {
+  async setSession(sessionId: string, input: components['schemas']['SetSessionInteractionRequest']): Promise<SessionInteraction> {
+    const interaction = await character(api.POST('/api/chat/sessions/{session_id}/interaction', {
+      params: { path: sessionPath(sessionId) },
+      body: {
         transcript_policy: 'persistent',
         read_memory: false,
         write_memory: false,
         shared_memory_access: 'none',
         ...input,
-      }),
-    );
+      },
+    }));
     invalidateLiveCallRuntime(sessionId);
     return interaction;
   },

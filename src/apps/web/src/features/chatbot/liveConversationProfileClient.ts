@@ -4,6 +4,7 @@ import {
   updateLiveConversationSettings,
 } from '../assistant-workspace/live-voice-conversation-settings';
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
 
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ConversationStance = 'automatic' | 'listen' | 'discuss' | 'advise' | 'brainstorm' | 'teach';
@@ -31,33 +32,23 @@ const MIGRATION_KEY = 'omnix.liveConversation.serverProfileMigrated.v1';
 const CANONICAL_LEGACY_KEY = 'omnix.liveConversation.settings';
 const ASSISTANT_LEGACY_KEY = 'omnix.chatbot.assistantSettings';
 
-async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set('Content-Type', 'application/json');
-  const response = await fetch(url, { ...init, headers });
-  if (!response.ok) throw new Error(`Live Chat profile request failed with status ${response.status}.`);
-  return response.json() as Promise<T>;
+function profileCall<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  return unwrapAs(call, (error) => `Live Chat profile request failed with status ${error.status}.`);
 }
 
-export const liveConversationProfileClient = {
-  defaults: () => requestJson<LiveConversationProfile>('/api/live-chat/profile/defaults'),
-  updateDefaults: (patch: LiveConversationProfilePatch) => requestJson<LiveConversationProfile>(
-    '/api/live-chat/profile/defaults',
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  ),
-  get: (sessionId: string) => requestJson<LiveConversationProfileEnvelope>(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
-  ),
-  update: (sessionId: string, patch: LiveConversationProfilePatch) => requestJson<LiveConversationProfileEnvelope>(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  ),
-  clear: (sessionId: string) => requestJson<LiveConversationProfileEnvelope>(
-    `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-conversation/profile`,
-    { method: 'DELETE' },
-  ),
-};
+const PROFILE_PATH = '/api/chat/sessions/{session_id}/live-conversation/profile';
 
+export const liveConversationProfileClient = {
+  defaults: (): Promise<LiveConversationProfile> => profileCall(api.GET('/api/live-chat/profile/defaults')),
+  updateDefaults: (patch: LiveConversationProfilePatch): Promise<LiveConversationProfile> =>
+    profileCall(api.PATCH('/api/live-chat/profile/defaults', { body: patch })),
+  get: (sessionId: string): Promise<LiveConversationProfileEnvelope> =>
+    profileCall(api.GET(PROFILE_PATH, { params: { path: { session_id: sessionId } } })),
+  update: (sessionId: string, patch: LiveConversationProfilePatch): Promise<LiveConversationProfileEnvelope> =>
+    profileCall(api.PATCH(PROFILE_PATH, { params: { path: { session_id: sessionId } }, body: patch })),
+  clear: (sessionId: string): Promise<LiveConversationProfileEnvelope> =>
+    profileCall(api.DELETE(PROFILE_PATH, { params: { path: { session_id: sessionId } } })),
+};
 export function mirrorProfileForLegacyRuntime(profile: LiveConversationProfile): void {
   updateLiveConversationSettings({
     conversationPace: profile.conversation_pace,

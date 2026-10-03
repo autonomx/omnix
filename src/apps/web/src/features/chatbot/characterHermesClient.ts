@@ -1,23 +1,16 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
+
 export type CharacterHermesSyncStatus = components['schemas']['CharacterHermesSyncStatus'];
 
-async function run(characterId: string, action: 'import' | 'export'): Promise<CharacterHermesSyncStatus> {
-  const response = await fetch(
-    `/api/characters/${encodeURIComponent(characterId)}/hermes/${action}`,
-    { method: 'POST' },
-  );
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Character Hermes ${action} failed with status ${response.status}.`);
-  }
-  return response.json() as Promise<CharacterHermesSyncStatus>;
-}
+const failure = (action: string) => (error: { body: string; status: number }) =>
+  error.body || `Character Hermes ${action} failed with status ${error.status}.`;
 
 export const characterHermesClient = {
   import(characterId: string): Promise<CharacterHermesSyncStatus> {
-    return run(characterId, 'import');
+    return unwrapAs(api.POST('/api/characters/{character_id}/hermes/import', { params: { path: { character_id: characterId } } }), failure('import'));
   },
   export(characterId: string): Promise<CharacterHermesSyncStatus> {
-    return run(characterId, 'export');
+    return unwrapAs(api.POST('/api/characters/{character_id}/hermes/export', { params: { path: { character_id: characterId } } }), failure('export'));
   },
 };

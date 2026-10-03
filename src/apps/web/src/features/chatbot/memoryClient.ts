@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
 export type MemoryScope = 'global' | 'workspace' | 'project' | 'session';
 export type MemoryCategory = 'preference' | 'fact' | 'project' | 'relationship' | 'instruction';
 export type CompanionRolloutStage =
@@ -12,55 +13,15 @@ export type CompanionRolloutStage =
   | 'active_initiative'
   | 'paralinguistic_pilot';
 
-export interface ManagedMemoryRecord {
-  id: string;
-  scope: MemoryScope;
-  scope_id: string;
-  category: MemoryCategory;
-  kind: string;
-  structured_payload: Record<string, unknown>;
-  source: string;
-  content: string;
-  confidence: number;
-  pinned: boolean;
-  trust_level: string;
-  provenance_type: string;
-  provenance_id?: string | null;
-  status: string;
-  revision: number;
-  created_at: string;
-  updated_at: string;
-  expires_at?: string | null;
-}
+export type ManagedMemoryRecord = components['schemas']['MemoryRecord'];
 
-export interface ManagedMemoryCandidate {
-  id: string;
-  source_session_id: string;
-  source_message_id: string;
-  proposed_scope: MemoryScope;
-  proposed_scope_id: string;
-  proposed_category: MemoryCategory;
-  proposed_content: string;
-  confidence: number;
-  source: string;
-  trust_level: string;
-  status: string;
-  created_at: string;
-}
+export type ManagedMemoryCandidate = components['schemas']['app__memory_contracts__MemoryCandidate'];
 
 export type MemoryCandidateReviewResult = ManagedMemoryRecord | ManagedMemoryCandidate;
 
-export interface ManagedMemoryList {
-  records: ManagedMemoryRecord[];
-  total: number;
-  session_id: string;
-}
+export type ManagedMemoryList = components['schemas']['MemoryListResponse'];
 
-export interface ManagedMemoryCandidateList {
-  candidates: ManagedMemoryCandidate[];
-  total: number;
-  session_id: string;
-}
+export type ManagedMemoryCandidateList = components['schemas']['MemoryCandidateListResponse'];
 
 export interface SessionMemorySnapshotItem {
   memory_record_id: string;
@@ -86,111 +47,97 @@ export type MemoryResetResponse = components['schemas']['MemoryResetResponse'];
 
 export type SessionMemoryState = components['schemas']['SessionMemoryState'];
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Memory request failed with status ${response.status}.`);
-  }
-  return response.json() as Promise<T>;
+function memory<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  return unwrapAs(call, (error) => error.body || `Memory request failed with status ${error.status}.`);
 }
 
-function jsonInit(method: string, body: unknown): RequestInit {
-  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
-}
-
-function revisionBody(sessionId: string, record: ManagedMemoryRecord): RequestInit {
-  return jsonInit('POST', { session_id: sessionId, expected_revision: record.revision });
-}
+const memoryPath = (record: ManagedMemoryRecord) => ({ memory_id: record.id });
+const revision = (sessionId: string, record: ManagedMemoryRecord) => ({ session_id: sessionId, expected_revision: record.revision });
 
 export const memoryClient = {
-  list(sessionId: string, query = '', scope = '', category = ''): Promise<ManagedMemoryList> {
-    const params = new URLSearchParams({ session_id: sessionId });
-    if (query) params.set('query', query);
-    if (scope) params.set('scope', scope);
-    if (category) params.set('category', category);
-    return request(`/api/assistant/memory?${params.toString()}`);
-  },
-  archived(sessionId: string): Promise<ManagedMemoryList> {
-    return request(`/api/assistant/memory/archived?session_id=${encodeURIComponent(sessionId)}`);
-  },
-  recentAutomatic(sessionId: string): Promise<{ session_id: string; records: ManagedMemoryRecord[] }> {
-    return request(`/api/assistant/memory/recent-automatic?session_id=${encodeURIComponent(sessionId)}`);
-  },
-  usage(sessionId: string): Promise<MemoryUsageResponse> {
-    return request(`/api/assistant/memory/usage?session_id=${encodeURIComponent(sessionId)}`);
-  },
-  exportMemory(sessionId: string): Promise<MemoryExportResponse> {
-    return request(`/api/assistant/memory/export?session_id=${encodeURIComponent(sessionId)}`);
-  },
-  reset(sessionId: string): Promise<MemoryResetResponse> {
-    return request(`/api/assistant/memory/reset?session_id=${encodeURIComponent(sessionId)}`, { method: 'POST' });
-  },
-  create(sessionId: string, input: { scope: MemoryScope; category: MemoryCategory; content: string; pinned: boolean }): Promise<ManagedMemoryRecord> {
-    return request('/api/assistant/memory', jsonInit('POST', { session_id: sessionId, ...input }));
-  },
-  edit(sessionId: string, record: ManagedMemoryRecord, content: string): Promise<ManagedMemoryRecord> {
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}`, jsonInit('PATCH', {
-      session_id: sessionId,
-      expected_revision: record.revision,
-      content,
+  list(sessionId: string, query = '', scope: MemoryScope | '' = '', category: MemoryCategory | '' = ''): Promise<ManagedMemoryList> {
+    return memory(api.GET('/api/assistant/memory', {
+      params: { query: { session_id: sessionId, ...(query ? { query } : {}), ...(scope ? { scope } : {}), ...(category ? { category } : {}) } },
     }));
   },
+  archived(sessionId: string): Promise<ManagedMemoryList> {
+    return memory(api.GET('/api/assistant/memory/archived', { params: { query: { session_id: sessionId } } }));
+  },
+  recentAutomatic(sessionId: string): Promise<components['schemas']['RecentAutomaticMemoryResponse']> {
+    return memory(api.GET('/api/assistant/memory/recent-automatic', { params: { query: { session_id: sessionId } } }));
+  },
+  usage(sessionId: string): Promise<MemoryUsageResponse> {
+    return memory(api.GET('/api/assistant/memory/usage', { params: { query: { session_id: sessionId } } }));
+  },
+  exportMemory(sessionId: string): Promise<MemoryExportResponse> {
+    return memory(api.GET('/api/assistant/memory/export', { params: { query: { session_id: sessionId } } }));
+  },
+  reset(sessionId: string): Promise<MemoryResetResponse> {
+    return memory(api.POST('/api/assistant/memory/reset', { params: { query: { session_id: sessionId } } }));
+  },
+  create(sessionId: string, input: { scope: MemoryScope; category: MemoryCategory; content: string; pinned: boolean }): Promise<ManagedMemoryRecord> {
+    return memory(api.POST('/api/assistant/memory', { body: { session_id: sessionId, ...input } }));
+  },
+  edit(sessionId: string, record: ManagedMemoryRecord, content: string): Promise<ManagedMemoryRecord> {
+    return memory(api.PATCH('/api/assistant/memory/{memory_id}', { params: { path: memoryPath(record) }, body: { ...revision(sessionId, record), content } }));
+  },
   pin(sessionId: string, record: ManagedMemoryRecord, pinned: boolean): Promise<ManagedMemoryRecord> {
-    const action = pinned ? 'pin' : 'unpin';
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/${action}`, revisionBody(sessionId, record));
+    const request = { params: { path: memoryPath(record) }, body: revision(sessionId, record) };
+    return memory(pinned
+      ? api.POST('/api/assistant/memory/{memory_id}/pin', request)
+      : api.POST('/api/assistant/memory/{memory_id}/unpin', request));
   },
   move(sessionId: string, record: ManagedMemoryRecord, targetScope: MemoryScope): Promise<ManagedMemoryRecord> {
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/move`, jsonInit('POST', {
-      session_id: sessionId,
-      expected_revision: record.revision,
-      target_scope: targetScope,
+    return memory(api.POST('/api/assistant/memory/{memory_id}/move', {
+      params: { path: memoryPath(record) },
+      body: { ...revision(sessionId, record), target_scope: targetScope },
     }));
   },
   archive(sessionId: string, record: ManagedMemoryRecord): Promise<ManagedMemoryRecord> {
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/archive`, revisionBody(sessionId, record));
+    return memory(api.POST('/api/assistant/memory/{memory_id}/archive', { params: { path: memoryPath(record) }, body: revision(sessionId, record) }));
   },
   restore(sessionId: string, record: ManagedMemoryRecord): Promise<ManagedMemoryRecord> {
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/restore`, revisionBody(sessionId, record));
+    return memory(api.POST('/api/assistant/memory/{memory_id}/restore', { params: { path: memoryPath(record) }, body: revision(sessionId, record) }));
   },
-  undo(sessionId: string, record: ManagedMemoryRecord): Promise<{ ok: true; memory_id: string }> {
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}/undo`, revisionBody(sessionId, record));
+  undo(sessionId: string, record: ManagedMemoryRecord): Promise<components['schemas']['ForgetMemoryResponse']> {
+    return memory(api.POST('/api/assistant/memory/{memory_id}/undo', { params: { path: memoryPath(record) }, body: revision(sessionId, record) }));
   },
-  forget(sessionId: string, record: ManagedMemoryRecord): Promise<{ ok: true; memory_id: string }> {
-    const params = new URLSearchParams({ session_id: sessionId, expected_revision: String(record.revision) });
-    return request(`/api/assistant/memory/${encodeURIComponent(record.id)}?${params.toString()}`, { method: 'DELETE' });
+  forget(sessionId: string, record: ManagedMemoryRecord): Promise<components['schemas']['ForgetMemoryResponse']> {
+    return memory(api.DELETE('/api/assistant/memory/{memory_id}', {
+      params: { path: memoryPath(record), query: revision(sessionId, record) },
+    }));
   },
   candidates(sessionId: string): Promise<ManagedMemoryCandidateList> {
-    return request(`/api/assistant/memory/candidates/pending?session_id=${encodeURIComponent(sessionId)}`);
+    return memory(api.GET('/api/assistant/memory/candidates/pending', { params: { query: { session_id: sessionId } } }));
   },
   approve(sessionId: string, candidateId: string): Promise<MemoryCandidateReviewResult> {
-    return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/approve`, jsonInit('POST', {
-      session_id: sessionId,
-      pinned: false,
+    return memory(api.POST('/api/assistant/memory/candidates/{candidate_id}/approve', {
+      params: { path: { candidate_id: candidateId } },
+      body: { session_id: sessionId, pinned: false },
     }));
   },
   reject(sessionId: string, candidateId: string): Promise<MemoryCandidateReviewResult> {
-    return request(`/api/assistant/memory/candidates/${encodeURIComponent(candidateId)}/reject`, jsonInit('POST', {
-      session_id: sessionId,
-      pinned: false,
+    return memory(api.POST('/api/assistant/memory/candidates/{candidate_id}/reject', {
+      params: { path: { candidate_id: candidateId } },
+      body: { session_id: sessionId, pinned: false },
     }));
   },
   sessionState(sessionId: string): Promise<SessionMemoryState> {
-    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/memory`);
+    return memory(api.GET('/api/chat/sessions/{session_id}/memory', { params: { path: { session_id: sessionId } } }));
   },
   refresh(sessionId: string, expectedRevision?: number | null): Promise<SessionMemoryState> {
-    return request(`/api/chat/sessions/${encodeURIComponent(sessionId)}/memory/refresh`, jsonInit('POST', {
-      expected_snapshot_revision: expectedRevision ?? null,
-      token_budget: 4000,
+    return memory(api.POST('/api/chat/sessions/{session_id}/memory/refresh', {
+      params: { path: { session_id: sessionId } },
+      body: { expected_snapshot_revision: expectedRevision ?? null, token_budget: 4000 },
     }));
   },
   settings(): Promise<AssistantMemoryRuntimeStatus> {
-    return request('/api/assistant/memory/settings');
+    return memory(api.GET('/api/assistant/memory/settings'));
   },
   updateSettings(update: Partial<AssistantMemoryRuntimeSettings>): Promise<AssistantMemoryRuntimeStatus> {
-    return request('/api/assistant/memory/settings', jsonInit('POST', update));
+    return memory(api.POST('/api/assistant/memory/settings', { body: update }));
   },
   metrics(): Promise<CompanionMemoryMetrics> {
-    return request('/api/assistant/memory/metrics');
+    return memory(api.GET('/api/assistant/memory/metrics'));
   },
 };

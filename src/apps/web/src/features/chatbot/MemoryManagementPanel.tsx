@@ -26,8 +26,8 @@ const rolloutStages: CompanionRolloutStage[] = [
 export function MemoryManagementPanel({ sessionId }: { sessionId: string | null }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
-  const [scope, setScope] = useState('');
-  const [category, setCategory] = useState('');
+  const [scope, setScope] = useState<MemoryScope | ''>('');
+  const [category, setCategory] = useState<MemoryCategory | ''>('');
   const [newContent, setNewContent] = useState('');
   const [newScope, setNewScope] = useState<MemoryScope>('session');
   const [newCategory, setNewCategory] = useState<MemoryCategory>('preference');
@@ -174,7 +174,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
 
       <section className="memory-section" aria-labelledby="saved-memory-heading">
         <div className="memory-section-header"><div><h3 id="saved-memory-heading">Saved memory</h3><p>Approved records Omnix can reuse when memory is enabled.</p></div></div>
-        <div className="memory-filter-bar"><label>Search<input aria-label="Search saved memory" placeholder="Search content" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label><label>Scope<select aria-label="Filter memory scope" value={scope} onChange={(event) => setScope(event.currentTarget.value)}><option value="">All scopes</option>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label>Category<select aria-label="Filter memory category" value={category} onChange={(event) => setCategory(event.currentTarget.value)}><option value="">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
+        <div className="memory-filter-bar"><label>Search<input aria-label="Search saved memory" placeholder="Search content" value={query} onChange={(event) => setQuery(event.currentTarget.value)} /></label><label>Scope<select aria-label="Filter memory scope" value={scope} onChange={(event) => setScope(event.currentTarget.value as MemoryScope | '')}><option value="">All scopes</option>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><label>Category<select aria-label="Filter memory category" value={category} onChange={(event) => setCategory(event.currentTarget.value as MemoryCategory | '')}><option value="">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>
         {memoryQuery.isPending ? <p>Loading saved memory...</p> : records.length ? <div className="memory-record-grid">{records.map((record) => <article className="memory-record-card" key={record.id}><header><h4>{record.category}</h4><strong>{record.scope}{record.pinned ? ' - pinned' : ''}</strong></header><p>{record.content}</p><small>Source: {record.source} - Trust: {record.trust_level} - Revision {record.revision}</small><div className="memory-record-actions"><button type="button" onClick={() => recordMutation.mutate({ action: 'pin', record })}>{record.pinned ? 'Unpin' : 'Pin'}</button><button type="button" onClick={() => { const value = window.prompt('Edit memory', record.content); if (value?.trim()) recordMutation.mutate({ action: 'edit', record, value }); }}>Edit</button><select aria-label={`Move ${record.content}`} value={record.scope} onChange={(event) => recordMutation.mutate({ action: 'move', record, value: event.currentTarget.value })}>{scopes.map((item) => <option key={item} value={item}>{item}</option>)}</select><button type="button" onClick={() => recordMutation.mutate({ action: 'archive', record })}>Archive</button><button type="button" onClick={() => { if (window.confirm('Forget this memory permanently?')) recordMutation.mutate({ action: 'forget', record }); }}>Forget</button></div></article>)}</div> : <p className="memory-empty-state">No saved memory matches the current filters.</p>}
       </section>
 

@@ -74,6 +74,16 @@ export async function unwrap<T>(call: Promise<GatewayResult<T>>): Promise<T> {
   return data as T;
 }
 
+/** unwrap() that turns a failed call into an Error with the caller's message. */
+export async function unwrapAs<T>(call: Promise<GatewayResult<T>>, message: (error: ApiError) => string): Promise<T> {
+  try {
+    return await unwrap(call);
+  } catch (error) {
+    if (error instanceof ApiError) throw new Error(message(error));
+    throw error;
+  }
+}
+
 /**
  * unwrap() for features whose messages users and code read as
  * `<label> request failed (<status>): <detail>`.

@@ -43,7 +43,7 @@ function settings(curated = false): AssistantMemoryRuntimeStatus {
 }
 
 function record(overrides: Partial<ManagedMemoryRecord> = {}): ManagedMemoryRecord {
-  return {
+  return fixture({
     id: 'memory:one',
     scope: 'session',
     scope_id: 'chat:one',
@@ -62,7 +62,7 @@ function record(overrides: Partial<ManagedMemoryRecord> = {}): ManagedMemoryReco
     created_at: '2026-07-19T00:00:00Z',
     updated_at: '2026-07-19T00:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 function commonResponse(url: URL) {
