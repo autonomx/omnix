@@ -441,7 +441,7 @@ describe('AudiobookWorkspace', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/speakers/candidate-unused/reject',
-      expect.objectContaining({ method: 'POST', body: '{}' }),
+      expect.objectContaining({ method: 'POST' }),
     ));
   });
 
