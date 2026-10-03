@@ -1,64 +1,262 @@
+# Omnix deployment (WP-11.2). Copy .env.example to .env and set the required
+# values first; Compose refuses to start without them (no default passwords).
+#
+#   docker compose up -d --build                      # core: database, gateway, workers, web
+#   docker compose --profile gpu up -d --build        # + TTS, STT and image services (NVIDIA GPU)
+#   docker compose --profile storage up -d            # + S3 blob store (set OMNIX_BLOB_BACKEND=s3)
+#   docker compose --profile observability up -d      # + OpenTelemetry collector, Jaeger, Prometheus, Grafana
+#   docker compose --profile agent-tests up -d postgres-agent-tests   # disposable test database
+#
+# The web UI is on http://127.0.0.1:${OMNIX_WEB_PORT:-8080}. Developers who run
+# only PostgreSQL keep using docker-compose.postgres.yml.
+
+x-omnix-build: &omnix-build
+  image: omnix-gateway:${OMNIX_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: deploy/docker/gateway.Dockerfile
+    args:
+      OMNIX_LOCK: ${OMNIX_LOCK:-gateway}
+      OMNIX_SOFTWARE_REVISION: ${OMNIX_SOFTWARE_REVISION:-unknown}
+
+x-omnix-env: &omnix-env
+  OMNIX_ENV: ${OMNIX_ENV:-production}
+  OMNIX_DATABASE_URL: postgresql://omnix_app:${OMNIX_APP_DB_PASSWORD:?set OMNIX_APP_DB_PASSWORD in .env}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}
+  OMNIX_SERVICE_TOKEN: ${OMNIX_SERVICE_TOKEN:?set OMNIX_SERVICE_TOKEN in .env}
+  OMNIX_SECRET_STORE: env
+  OMNIX_BIND_HOST: 0.0.0.0
+  OMNIX_ALLOW_LAN: "true"
+  OMNIX_ALLOWED_HOSTS: ${OMNIX_ALLOWED_HOSTS:-localhost,localhost:8080,127.0.0.1,127.0.0.1:8080},127.0.0.1:8000,gateway-worker,gateway-worker:8000,api,api:8000
+  OMNIX_ALLOWED_ORIGINS: ${OMNIX_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+  OMNIX_AUTH_MODE: ${OMNIX_AUTH_MODE:-}
+  OMNIX_LOCAL_JOB_WORKER: "0"
+  OMNIX_TTS_STARTUP_WARMUP: "0"
+  OMNIX_GATEWAY_TTS_HTTP: "1"
+  OMNIX_TTS_URL: ${OMNIX_TTS_URL:-http://tts:5101}
+  OMNIX_STT_URL: ${OMNIX_STT_URL:-http://stt:5201}
+  OMNIX_IMAGE_URL: ${OMNIX_IMAGE_URL:-http://image:5301}
+  OMNIX_BLOB_BACKEND: ${OMNIX_BLOB_BACKEND:-local}
+  OMNIX_S3_ENDPOINT: ${OMNIX_S3_ENDPOINT:-http://s3:8333}
+  OMNIX_S3_BUCKET: ${OMNIX_S3_BUCKET:-omnix}
+  OMNIX_S3_ACCESS_KEY_ID: ${OMNIX_S3_ACCESS_KEY_ID:-}
+  OMNIX_S3_SECRET_ACCESS_KEY: ${OMNIX_S3_SECRET_ACCESS_KEY:-}
+  OMNIX_OTEL_ENABLED: ${OMNIX_OTEL_ENABLED:-false}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+
+# Gateway processes: read-only image, runtime data in the resources volume.
+x-omnix-process: &omnix-process
+  <<: *omnix-build
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/lib/omnix:uid=10001,gid=10001
+  volumes:
+    - ${OMNIX_RESOURCES:-omnix-resources}:/app/resources
+  environment: *omnix-env
+  restart: unless-stopped
+
+x-gateway-health: &gateway-health
+  test: ["CMD", "python", "scripts/container_healthcheck.py", "http://127.0.0.1:8000/ready"]
+  interval: 10s
+  timeout: 5s
+  retries: 30
+  start_period: 30s
+
+x-model-service: &model-service
+  profiles: [gpu]
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/lib/omnix:uid=10001,gid=10001
+  volumes:
+    - omnix-models:/models
+  environment:
+    OMNIX_SERVICE_TOKEN: ${OMNIX_SERVICE_TOKEN:?set OMNIX_SERVICE_TOKEN in .env}
+    OMNIX_SECRET_STORE: env
+    OMNIX_BIND_HOST: 0.0.0.0
+    OMNIX_ALLOW_LAN: "true"
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  restart: unless-stopped
+
+# One-shot download of a service's pinned models into the models volume.
+x-model-download: &model-download
+  profiles: [gpu]
+  volumes:
+    - omnix-models:/models
+  environment:
+    HF_HUB_OFFLINE: "0"
+  restart: "no"
+
 services:
   postgres:
-    extends:
-      file: docker-compose.postgres.yml
-      service: postgres
-
-  omnix-migrate:
-    image: omnix:latest
-    build: .
-    command: ["python", "-m", "app.persistence", "migrate"]
-    volumes:
-      - ./resources:/app/resources
+    image: postgres:17-alpine
+    container_name: ${OMNIX_POSTGRES_CONTAINER:-omnix-postgres}
     environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app/src
-      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
-      OMNIX_MIGRATION_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+      POSTGRES_DB: ${OMNIX_POSTGRES_DB:-omnix}
+      POSTGRES_USER: ${OMNIX_POSTGRES_USER:-omnix}
+      POSTGRES_PASSWORD: ${OMNIX_POSTGRES_PASSWORD:?set OMNIX_POSTGRES_PASSWORD in .env}
+      OMNIX_APP_DB_PASSWORD: ${OMNIX_APP_DB_PASSWORD:?set OMNIX_APP_DB_PASSWORD in .env}
+      TZ: UTC
+      PGTZ: UTC
+    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC", "-c", "max_connections=200"]
+    ports:
+      - "127.0.0.1:${OMNIX_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - omnix-postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  migrate:
+    <<: *omnix-build
+    command: ["python", "-m", "app.persistence", "migrate"]
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/lib/omnix:uid=10001,gid=10001
+    volumes:
+      - ${OMNIX_RESOURCES:-omnix-resources}:/app/resources
+    environment:
+      <<: *omnix-env
+      OMNIX_MIGRATION_DATABASE_URL: postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:?set OMNIX_POSTGRES_PASSWORD in .env}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres: {condition: service_healthy}
     restart: "no"
 
-  omnix:
-    image: omnix:latest
-    build: .
-    ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - ./resources:/app/resources
+  # Scheduler and singleton background work (WP-6.3); serves requests the
+  # ingress pins to it (Chat, live voice without remote speech).
+  gateway-worker:
+    <<: *omnix-process
+    command: ["python", "scripts/run_omnix_gateway.py", "--host", "0.0.0.0", "--port", "8000", "--api-replicas", "0"]
     environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app/src
+      <<: *omnix-env
       OMNIX_GATEWAY_BACKGROUND_ROLE: worker
-      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+    healthcheck: *gateway-health
     depends_on:
-      omnix-migrate:
-        condition: service_completed_successfully
-    restart: unless-stopped
+      migrate: {condition: service_completed_successfully}
 
-  omnix-api:
-    profiles: [replicas]
-    image: omnix:latest
-    build: .
-    expose:
-      - "8000"
-    volumes:
-      - ./resources:/app/resources
+  api:
+    <<: *omnix-process
+    command: ["python", "scripts/run_omnix_gateway.py", "--host", "0.0.0.0", "--port", "8000", "--api-replicas", "0"]
     environment:
-      PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app/src
+      <<: *omnix-env
       OMNIX_GATEWAY_BACKGROUND_ROLE: api
-      OMNIX_TTS_STARTUP_WARMUP: "0"
-      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+    deploy:
+      replicas: ${OMNIX_API_REPLICAS:-2}
+    healthcheck: *gateway-health
     depends_on:
-      omnix-migrate:
-        condition: service_completed_successfully
+      gateway-worker: {condition: service_healthy}
+
+  job-worker:
+    <<: *omnix-process
+    command: ["python", "-m", "app.worker", "--metrics-host", "0.0.0.0"]
+    environment:
+      <<: *omnix-env
+      OMNIX_GATEWAY_BACKGROUND_ROLE: job-worker
+      OMNIX_JOB_WORKER_POOLS: ${OMNIX_JOB_WORKER_POOLS:-cpu=2}
+    healthcheck:
+      test: ["CMD", "python", "scripts/container_healthcheck.py", "http://127.0.0.1:8090/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      gateway-worker: {condition: service_healthy}
+
+  web:
+    image: omnix-web:${OMNIX_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deploy/docker/web.Dockerfile
+      args:
+        VITE_GIT_SHA: ${OMNIX_SOFTWARE_REVISION:-unknown}
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      - "127.0.0.1:${OMNIX_WEB_PORT:-8080}:8080"
+    depends_on:
+      api: {condition: service_healthy}
     restart: unless-stopped
 
-  # Tracing (WP-10.4): `docker compose --profile observability up`, build the
-  # image with `--build-arg OMNIX_LOCK=tracing` and set OMNIX_OTEL_ENABLED=true
-  # and OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 on the Omnix services.
+  # --- gpu ---------------------------------------------------------------
+  tts-models:
+    <<: *model-download
+    image: omnix-tts:${OMNIX_IMAGE_TAG:-local}
+    command: ["python", "-m", "app.models", "download", "--service", "tts"]
+
+  tts:
+    <<: *model-service
+    image: omnix-tts:${OMNIX_IMAGE_TAG:-local}
+    build: {context: ., dockerfile: deploy/docker/tts.Dockerfile}
+    depends_on:
+      tts-models: {condition: service_completed_successfully}
+
+  stt-models:
+    <<: *model-download
+    image: omnix-stt:${OMNIX_IMAGE_TAG:-local}
+    command: ["python", "-m", "app.models", "download", "--service", "stt"]
+
+  stt:
+    <<: *model-service
+    image: omnix-stt:${OMNIX_IMAGE_TAG:-local}
+    build: {context: ., dockerfile: deploy/docker/stt.Dockerfile}
+    depends_on:
+      stt-models: {condition: service_completed_successfully}
+
+  image-models:
+    <<: *model-download
+    image: omnix-image:${OMNIX_IMAGE_TAG:-local}
+    command: ["python", "-m", "app.models", "download", "--service", "image"]
+
+  image:
+    <<: *model-service
+    image: omnix-image:${OMNIX_IMAGE_TAG:-local}
+    build: {context: ., dockerfile: deploy/docker/image.Dockerfile}
+    depends_on:
+      image-models: {condition: service_completed_successfully}
+
+  # --- storage -----------------------------------------------------------
+  # S3-compatible blob store (SeaweedFS). Set OMNIX_BLOB_BACKEND=s3 and the
+  # OMNIX_S3_* credentials in .env; the identity is written from them.
+  s3:
+    profiles: [storage]
+    image: chrislusf/seaweedfs:3.99
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"omnix","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$OMNIX_S3_ACCESS_KEY_ID" "$$OMNIX_S3_SECRET_ACCESS_KEY" > /tmp/s3.json
+        && exec weed server -s3 -s3.config=/tmp/s3.json -dir=/data
+    environment:
+      OMNIX_S3_ACCESS_KEY_ID: ${OMNIX_S3_ACCESS_KEY_ID:-}
+      OMNIX_S3_SECRET_ACCESS_KEY: ${OMNIX_S3_SECRET_ACCESS_KEY:-}
+    volumes:
+      - omnix-blobs:/data
+    restart: unless-stopped
+
+  s3-bucket:
+    profiles: [storage]
+    <<: *omnix-build
+    command: ["python", "scripts/create_s3_bucket.py"]
+    environment: *omnix-env
+    depends_on:
+      s3: {condition: service_started}
+    restart: "no"
+
+  # --- observability -----------------------------------------------------
+  # Tracing (WP-10.4): build with OMNIX_LOCK=tracing and set OMNIX_OTEL_ENABLED=true.
   otel-collector:
     profiles: [observability]
     image: otel/opentelemetry-collector:0.139.0
@@ -80,6 +278,67 @@ services:
       - "4317"
     restart: unless-stopped
 
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.7.3
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - omnix-prometheus:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.2.1
+    # Read-only dashboards without sign-in: no account (and no default admin
+    # password) is reachable. Provisioned dashboards are the source of truth.
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/dashboards:/var/lib/grafana/dashboards:ro
+      - omnix-grafana:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # --- agent-tests -------------------------------------------------------
+  # Disposable PostgreSQL for the agent runtime tests (test-only credentials).
+  postgres-agent-tests:
+    profiles: [agent-tests]
+    image: postgres:17-alpine
+    container_name: omnix-postgres-agent-tests
+    environment:
+      POSTGRES_DB: omnix_test
+      POSTGRES_USER: omnix_test
+      POSTGRES_PASSWORD: omnix_test
+      TZ: UTC
+      PGTZ: UTC
+    command: ["postgres", "-c", "timezone=UTC", "-c", "log_timezone=UTC", "-c", "max_connections=100"]
+    ports:
+      - "127.0.0.1:${OMNIX_AGENT_TEST_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnix_test -d omnix_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 2s
+
 volumes:
+  # Shared with docker-compose.postgres.yml so both use the same local database.
   omnix-postgres-data:
-    name: omnix-postgres-data
+    name: ${OMNIX_POSTGRES_VOLUME:-omnix-postgres-data}
+  omnix-resources:
+  omnix-models:
+  omnix-blobs:
+  omnix-prometheus:
+  omnix-grafana:

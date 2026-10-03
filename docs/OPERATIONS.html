@@ -126,6 +126,62 @@
     <div class="diagram-node"><span class="diagram-kicker">CONFIGURED URLS</span><strong>Providers and sidecars</strong><small>LLM, Hermes, market data, and governed integrations</small></div>
   </div>
 </div></figure>
+<h2 id="containers">Containers</h2>
+<p>Images (<code>deploy/docker/</code>):</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Image</th>
+<th>Dockerfile</th>
+<th>Contents</th>
+<th>Runs as</th>
+</tr></thead><tbody>
+<tr>
+<td><code>omnix-gateway</code></td>
+<td><code>gateway.Dockerfile</code></td>
+<td>Gateway lock in a venv, <code>src/app</code>, scripts, ffmpeg; no CUDA, no models. API replicas, the gateway worker, the job worker and migrations all use it. <code>--build-arg OMNIX_LOCK=tracing</code> adds OpenTelemetry.</td>
+<td>uid 10001, read-only root</td>
+</tr>
+<tr>
+<td><code>omnix-web</code></td>
+<td><code>web.Dockerfile</code></td>
+<td>The built SPA behind Nginx with the ingress routes (<code>deploy/docker/nginx/omnix.conf</code>, generated from the route policy).</td>
+<td>Nginx&#x27;s unprivileged user</td>
+</tr>
+<tr>
+<td><code>omnix-tts</code>, <code>omnix-stt</code>, <code>omnix-image</code></td>
+<td><code>tts</code>/<code>stt</code>/<code>image.Dockerfile</code></td>
+<td>CUDA 12.4 runtime, Python 3.11, the service&#x27;s Linux lock (one Torch version). No weights.</td>
+<td>uid 10001</td>
+</tr>
+</tbody></table></div>
+<p>Model weights are not in the images. <code>python -m app.models download --service &lt;tts|stt|image&gt;</code> fetches the pinned files listed in <code>src/app/models/catalog.json</code> (a commit per repository and a SHA-256 per file) into the Hugging Face cache on the <code>/models</code> volume, refuses any file whose digest differs, and points the cache&#x27;s <code>main</code> ref at the pinned commit. The services run with <code>HF_HUB_OFFLINE=1</code>, so they load only those files. <code>python -m app.models verify --service &lt;name&gt;</code> checks a cache without downloading. To move a model to a new upstream commit, a maintainer runs <code>python -m app.models pin &lt;id&gt; --repo &lt;repo&gt; --service &lt;name&gt; --include &lt;files...&gt;</code> and reviews the catalog diff.</p>
+<p>Compose (<code>docker-compose.yml</code>) needs a <code>.env</code> (template: <code>.env.example</code>) with <code>OMNIX_POSTGRES_PASSWORD</code> (database owner, migrations), <code>OMNIX_APP_DB_PASSWORD</code> (the <code>omnix_app</code> runtime role, created when the database volume is first initialized) and <code>OMNIX_SERVICE_TOKEN</code>; it refuses to start without them.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Profile</th>
+<th>Services</th>
+</tr></thead><tbody>
+<tr>
+<td>default</td>
+<td><code>postgres</code>, <code>migrate</code> (one-shot), <code>gateway-worker</code> (scheduler and singletons), <code>api</code> (<code>OMNIX_API_REPLICAS</code>, default 2), <code>job-worker</code>, <code>web</code> (http://127.0.0.1:8080)</td>
+</tr>
+<tr>
+<td><code>gpu</code></td>
+<td><code>tts</code>, <code>stt</code>, <code>image</code>, each after a one-shot <code>*-models</code> download</td>
+</tr>
+<tr>
+<td><code>storage</code></td>
+<td><code>s3</code> (SeaweedFS) and a one-shot <code>s3-bucket</code>; set <code>OMNIX_BLOB_BACKEND=s3</code> and the <code>OMNIX_S3_*</code> credentials</td>
+</tr>
+<tr>
+<td><code>observability</code></td>
+<td><code>otel-collector</code>, <code>jaeger</code>, <code>prometheus</code> (http://127.0.0.1:9090, with <code>deploy/observability/alerts.yml</code>), <code>grafana</code> (http://127.0.0.1:3000, read-only dashboards without sign-in)</td>
+</tr>
+<tr>
+<td><code>agent-tests</code></td>
+<td><code>postgres-agent-tests</code>, a disposable test database on port 55432</td>
+</tr>
+</tbody></table></div>
+<p>The <code>postgres</code> service shares its container and volume names with <code>docker-compose.postgres.yml</code>, so both refer to the same local database. An existing volume was initialized without <code>omnix_app</code>: create the role by hand (see Database roles below) before starting the stack against it.</p>
+<p><code>.github/workflows/images.yml</code> builds every image nightly and on release tags, scans it with trivy (fails on critical vulnerabilities that have a fix), stores a CycloneDX SBOM and smoke-tests the gateway image against PostgreSQL; release tags also push the images to GHCR.</p>
 <h2 id="startup-runbook">Startup runbook</h2>
 <h3 id="separate-process-mode">Separate process mode</h3>
 <ol>
@@ -175,7 +231,7 @@
 <p>Tracing is optional and off by default. To turn it on:</p>
 <ol>
 <li>Install the tracing lock (a superset of the gateway lock):</li>
-<p><code>python -m pip install --require-hashes -r requirements/tracing.lock.txt</code>. For the container image, build with <code>--build-arg OMNIX_LOCK=tracing</code>.</p>
+<p><code>python -m pip install --require-hashes -r requirements/tracing.lock.txt</code>. For the gateway image, build <code>deploy/docker/gateway.Dockerfile</code> with <code>--build-arg OMNIX_LOCK=tracing</code> (Compose: <code>OMNIX_LOCK=tracing</code> in <code>.env</code>).</p>
 <li>Set <code>OMNIX_OTEL_ENABLED=true</code> and the standard exporter variables, for</li>
 <p>example <code>OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318</code> (OTLP over HTTP). <code>OTEL_SERVICE_NAME</code> overrides the service name (<code>omnix-gateway</code>, <code>omnix-job-worker</code>).</p>
 </ol>

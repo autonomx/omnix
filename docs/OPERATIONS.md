@@ -58,6 +58,49 @@ The Vite server proxies browser calls to the gateway. A direct browser request t
 ```omnix-diagram service-topology
 ```
 
+## Containers
+
+Images (`deploy/docker/`):
+
+| Image | Dockerfile | Contents | Runs as |
+| --- | --- | --- | --- |
+| `omnix-gateway` | `gateway.Dockerfile` | Gateway lock in a venv, `src/app`, scripts, ffmpeg; no CUDA, no models. API replicas, the gateway worker, the job worker and migrations all use it. `--build-arg OMNIX_LOCK=tracing` adds OpenTelemetry. | uid 10001, read-only root |
+| `omnix-web` | `web.Dockerfile` | The built SPA behind Nginx with the ingress routes (`deploy/docker/nginx/omnix.conf`, generated from the route policy). | Nginx's unprivileged user |
+| `omnix-tts`, `omnix-stt`, `omnix-image` | `tts`/`stt`/`image.Dockerfile` | CUDA 12.4 runtime, Python 3.11, the service's Linux lock (one Torch version). No weights. | uid 10001 |
+
+Model weights are not in the images. `python -m app.models download --service <tts|stt|image>`
+fetches the pinned files listed in `src/app/models/catalog.json` (a commit per
+repository and a SHA-256 per file) into the Hugging Face cache on the `/models`
+volume, refuses any file whose digest differs, and points the cache's `main` ref
+at the pinned commit. The services run with `HF_HUB_OFFLINE=1`, so they load
+only those files. `python -m app.models verify --service <name>` checks a cache
+without downloading. To move a model to a new upstream commit, a maintainer runs
+`python -m app.models pin <id> --repo <repo> --service <name> --include <files...>`
+and reviews the catalog diff.
+
+Compose (`docker-compose.yml`) needs a `.env` (template: `.env.example`) with
+`OMNIX_POSTGRES_PASSWORD` (database owner, migrations), `OMNIX_APP_DB_PASSWORD`
+(the `omnix_app` runtime role, created when the database volume is first
+initialized) and `OMNIX_SERVICE_TOKEN`; it refuses to start without them.
+
+| Profile | Services |
+| --- | --- |
+| default | `postgres`, `migrate` (one-shot), `gateway-worker` (scheduler and singletons), `api` (`OMNIX_API_REPLICAS`, default 2), `job-worker`, `web` (http://127.0.0.1:8080) |
+| `gpu` | `tts`, `stt`, `image`, each after a one-shot `*-models` download |
+| `storage` | `s3` (SeaweedFS) and a one-shot `s3-bucket`; set `OMNIX_BLOB_BACKEND=s3` and the `OMNIX_S3_*` credentials |
+| `observability` | `otel-collector`, `jaeger`, `prometheus` (http://127.0.0.1:9090, with `deploy/observability/alerts.yml`), `grafana` (http://127.0.0.1:3000, read-only dashboards without sign-in) |
+| `agent-tests` | `postgres-agent-tests`, a disposable test database on port 55432 |
+
+The `postgres` service shares its container and volume names with
+`docker-compose.postgres.yml`, so both refer to the same local database. An
+existing volume was initialized without `omnix_app`: create the role by hand
+(see Database roles below) before starting the stack against it.
+
+`.github/workflows/images.yml` builds every image nightly and on release tags,
+scans it with trivy (fails on critical vulnerabilities that have a fix), stores
+a CycloneDX SBOM and smoke-tests the gateway image against PostgreSQL; release
+tags also push the images to GHCR.
+
 ## Startup runbook
 
 ### Separate process mode
@@ -157,7 +200,8 @@ Tracing is optional and off by default. To turn it on:
 
 1. Install the tracing lock (a superset of the gateway lock):
    `python -m pip install --require-hashes -r requirements/tracing.lock.txt`.
-   For the container image, build with `--build-arg OMNIX_LOCK=tracing`.
+   For the gateway image, build `deploy/docker/gateway.Dockerfile` with
+   `--build-arg OMNIX_LOCK=tracing` (Compose: `OMNIX_LOCK=tracing` in `.env`).
 2. Set `OMNIX_OTEL_ENABLED=true` and the standard exporter variables, for
    example `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318` (OTLP over HTTP).
    `OTEL_SERVICE_NAME` overrides the service name (`omnix-gateway`,

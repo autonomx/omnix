@@ -9,16 +9,21 @@ from .registry import CORE_SETTING_SPECS
 from .service import SettingsPatch, SettingsService
 
 
-def settings_dict(service: SettingsService | None) -> dict[str, Any]:
-    result: dict[str, Any] = {}
+def _entries(service: SettingsService | None) -> dict[str, tuple[Any, int]]:
+    result: dict[str, tuple[Any, int]] = {}
     for spec in CORE_SETTING_SPECS:
         item = service.get(spec.key) if service is not None else None
-        result[spec.key] = spec.default if item is None else item["value"]
+        result[spec.key] = (spec.default, 0) if item is None else (item["value"], int(item["revision"]))
     return result
 
 
+def settings_dict(service: SettingsService | None) -> dict[str, Any]:
+    return {key: value for key, (value, _revision) in _entries(service).items()}
+
+
 def settings_payload(service: SettingsService | None) -> SettingsPayload:
-    settings = settings_dict(service)
+    entries = _entries(service)
+    settings = {key: value for key, (value, _revision) in entries.items()}
     image = settings.get("image") if isinstance(settings.get("image"), dict) else {}
     visual = settings.get("rpg_visual") if isinstance(settings.get("rpg_visual"), dict) else {}
     return SettingsPayload(
@@ -33,6 +38,7 @@ def settings_payload(service: SettingsService | None) -> SettingsPayload:
             "image": str(settings.get("image_worker_url") or ""),
         },
         settings=settings,
+        revisions={key: revision for key, (_value, revision) in entries.items()},
     )
 
 

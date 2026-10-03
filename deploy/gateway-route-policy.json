@@ -2,12 +2,39 @@
   "schema_version": 1,
   "chat_pattern": "^/api/chat/sessions(?:/[^/]+(?:/(?:attachments|messages(?:/stream)?))?)?$",
   "read_pattern": "^(?:/events|/api/jobs(?:/[^/]+)?|/api/trading/(?:bars|quotes))$",
-  "read_methods": ["GET", "HEAD"],
-  "speech_paths": ["/api/tts/stream/websocket", "/api/tts/stream/server-sent-events", "/api/tts/live-call/websocket"],
+  "read_methods": [
+    "GET",
+    "HEAD"
+  ],
+  "speech_paths": [
+    "/api/tts/stream/websocket",
+    "/api/tts/stream/server-sent-events",
+    "/api/tts/live-call/websocket"
+  ],
   "live_call_websocket_path": "/api/tts/live-call/websocket",
   "live_chat_pattern": "^/api/chat/sessions/[^/]+/messages/stream$",
   "call_id_header": "x-omnix-call-id",
   "call_affinity_cookie": "omnix_call_affinity",
   "default_target": "worker",
-  "worker_affinity_header": "x-omnix-gateway-affinity"
+  "worker_affinity_header": "x-omnix-gateway-affinity",
+  "external_worker_affinity": false,
+  "rate_limits": {
+    "auth": {
+      "pattern": "^/api/auth/",
+      "rate": "10r/m",
+      "burst": 10
+    },
+    "api": {
+      "rate": "50r/s",
+      "burst": 400
+    }
+  },
+  "body_limits": {
+    "default": "64m",
+    "auth": "1m",
+    "routes": {
+      "^/api/audiobook/projects/[^/]+/source$": "200m",
+      "^/api/rpg/worlds/import$": "512m"
+    }
+  }
 }

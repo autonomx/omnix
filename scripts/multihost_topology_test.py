@@ -23,7 +23,6 @@ and p99 latency and throughput per operation.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import statistics
@@ -35,6 +34,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import httpx
+from create_s3_bucket import create_bucket
 
 HEADERS = {"X-Omnix-Client": "multihost-topology-test"}
 FAKE_REPLY = "Multi-host topology reply."
@@ -109,39 +109,14 @@ def wait_ready(urls: list[str], timeout: float) -> dict[str, Any]:
     return status
 
 
-def create_bucket() -> None:
-    from app.persistence.s3_blob_store import S3Settings, SigV4Signer
-
-    endpoint = os.environ["OMNIX_S3_ENDPOINT"]
-    settings = S3Settings(
-        endpoint=endpoint,
-        bucket=os.environ["OMNIX_S3_BUCKET"],
-        access_key_id=os.environ["OMNIX_S3_ACCESS_KEY_ID"],
-        secret_access_key=os.environ["OMNIX_S3_SECRET_ACCESS_KEY"],
-    )
-    path = f"/{settings.bucket}"
-    deadline = time.monotonic() + 90
-    while True:
-        # Fresh signature per attempt; the store may still be starting.
-        headers = SigV4Signer(settings).sign_headers("PUT", path, payload_sha256=hashlib.sha256(b"").hexdigest())
-        try:
-            response = httpx.put(f"{endpoint.rstrip('/')}{path}", headers=headers, timeout=30)
-            if response.status_code in {200, 409}:
-                return
-            failure = f"{response.status_code} {response.text[:300]}"
-        except httpx.HTTPError as exc:
-            failure = repr(exc)
-        if time.monotonic() > deadline:
-            raise RuntimeError(f"bucket creation failed: {failure}")
-        time.sleep(1)
-
-
 def configure_fake_models(base: str, fake_url: str) -> None:
     with httpx.Client(timeout=30, headers=HEADERS) as client:
-        current = _check(client.get(f"{base}/api/settings"))["settings"]
-        lmstudio = dict(current.get("lmstudio") or {})
+        payload = _check(client.get(f"{base}/api/settings"))
+        lmstudio = dict(payload["settings"].get("lmstudio") or {})
         lmstudio.update({"base_url": fake_url, "model": FAKE_MODEL})
-        _check(client.post(f"{base}/api/settings", json={"values": {"provider": "lmstudio", "lmstudio": lmstudio}}))
+        values = {"provider": "lmstudio", "lmstudio": lmstudio}
+        revisions = {key: payload["revisions"][key] for key in values}
+        _check(client.post(f"{base}/api/settings", json={"values": values, "revisions": revisions}))
 
 
 def chat_round_trip(base: str, other: str) -> dict[str, Any]:

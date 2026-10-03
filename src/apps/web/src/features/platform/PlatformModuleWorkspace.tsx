@@ -295,12 +295,19 @@ function SettingsView() {
     queryFn: () => omnixApiClient.listProviders(),
   });
   const saveMutation = useMutation({
-    mutationFn: () =>
-      omnixApiClient.saveSettings({
+    mutationFn: () => {
+      const values = {
         provider: llmProvider,
         audio_provider_tts: ttsProvider,
         audio_provider_stt: sttProvider,
-      }),
+      };
+      // The gateway refuses a save whose revisions are stale (another tab or
+      // process changed the setting); the form then reloads.
+      const revisions = Object.fromEntries(
+        Object.keys(values).map((key) => [key, query.data?.revisions?.[key] ?? 0]),
+      );
+      return omnixApiClient.saveSettings({ values, revisions });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['platform', 'settings'] });
       await queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] });

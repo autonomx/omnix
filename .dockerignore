@@ -2,11 +2,11 @@
 .git
 .gitignore
 
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+# Python (patterns are relative to the context root, so nested caches need **/)
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
 .Python
 *.egg-info
 .eggs
@@ -45,9 +45,10 @@ resources/models/
 *.tar.gz
 *.tar.zst
 
-# Documentation - keep only README
+# Documentation - keep only README and the agent skills the runtime loads
 *.md
 !README.md
+!src/app/**/*.md
 
 # Node dependencies and web build output (the gateway image serves no SPA)
 node_modules/

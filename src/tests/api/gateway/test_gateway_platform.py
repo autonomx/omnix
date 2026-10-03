@@ -195,6 +195,24 @@ def test_gateway_settings_endpoint_does_not_load_provider_secrets() -> None:
     assert "api_keys" not in payload
 
 
+def test_gateway_settings_endpoint_reports_each_setting_revision() -> None:
+    # A client needs the revisions to save: the POST refuses an existing setting without its revision.
+    class SavedProviderSettings:
+        def get(self, key):
+            if key == "provider":
+                return {"key": key, "value": "openrouter", "revision": 3}
+            return None
+
+        def register_specs(self, _specs):
+            return None
+
+    payload = _client(SavedProviderSettings()).get("/api/settings").json()
+    assert payload["provider"] == "openrouter"
+    assert payload["revisions"]["provider"] == 3
+    assert payload["revisions"]["audio_provider_tts"] == 0
+    assert set(payload["revisions"]) == set(payload["settings"])
+
+
 def test_gateway_settings_post_uses_revisioned_typed_patch() -> None:
     from app.settings.service import SettingRevisionConflict
 

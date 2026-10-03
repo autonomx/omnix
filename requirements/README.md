@@ -6,6 +6,14 @@ inputs; install them with `--require-hashes` so pip verifies every distribution.
 - `requirements.txt` delegates to the gateway lock.
 - `dev.lock.txt` adds test and repository tooling.
 - `worker.lock.txt` delegates to the gateway lock plus worker-only packages.
+- `tts.linux.lock.txt`, `stt.linux.lock.txt` and `image.linux.lock.txt` are
+  the Linux installs of the GPU locks for the container images. pip-tools
+  writes only the dependencies of the platform it runs on, and Torch and
+  `huggingface-hub` have Linux-only dependencies (`nvidia-*`, `triton`,
+  `hf-xet`). Compile them in a Linux `python:3.11` container, seeded with the
+  Windows lock so the shared pins stay identical: copy `<name>.lock.txt` to
+  `<name>.linux.lock.txt`, then run the same `pip-compile` command with that
+  output file.
 - `tracing.lock.txt` is the gateway lock plus the optional OpenTelemetry
   packages (WP-10.4); `dev.lock.txt` layers on it so the tracing tests run.
 - `image.lock.txt`, `tts.lock.txt`, and `stt.lock.txt` contain isolated model

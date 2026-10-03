@@ -36053,6 +36053,13 @@
             "title": "Provider",
             "type": "string"
           },
+          "revisions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Revisions",
+            "type": "object"
+          },
           "rpg_visual_enabled": {
             "title": "Rpg Visual Enabled",
             "type": "boolean"

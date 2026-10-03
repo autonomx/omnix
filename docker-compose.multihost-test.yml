@@ -31,12 +31,14 @@ x-omnix-env: &omnix-env
 
 x-omnix: &omnix
   image: omnix:multihost-test
-  build: .
+  build:
+    context: .
+    dockerfile: deploy/docker/gateway.Dockerfile
   environment: *omnix-env
   restart: "no"
 
 x-gateway-health: &gateway-health
-  test: ["CMD", "curl", "-fsS", "http://localhost:8000/ready"]
+  test: ["CMD", "python", "scripts/container_healthcheck.py", "http://127.0.0.1:8000/ready"]
   interval: 3s
   timeout: 5s
   retries: 60
@@ -56,7 +58,7 @@ services:
       retries: 30
 
   s3:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:3.99
     command: ["server", "-s3", "-s3.config=/config/s3.json", "-dir=/data"]
     volumes:
       - ./deploy/multihost/s3.json:/config/s3.json:ro
@@ -69,7 +71,7 @@ services:
       - >-
         python -m app.persistence migrate
         && python -c "from app.persistence.startup import bootstrap_postgresql_runtime; bootstrap_postgresql_runtime()"
-        && python scripts/multihost_topology_test.py --create-bucket
+        && python scripts/create_s3_bucket.py
     depends_on:
       postgres: {condition: service_healthy}
       s3: {condition: service_started}
@@ -78,7 +80,7 @@ services:
     <<: *omnix
     command: ["python", "scripts/multihost/fake_model_service.py", "--port", "8020"]
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8020/health"]
+      test: ["CMD", "python", "scripts/container_healthcheck.py", "http://127.0.0.1:8020/health"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -116,7 +118,7 @@ services:
       <<: *omnix-env
       OMNIX_GATEWAY_BACKGROUND_ROLE: job-worker
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8090/health/ready"]
+      test: ["CMD", "python", "scripts/container_healthcheck.py", "http://127.0.0.1:8090/health/ready"]
       interval: 3s
       timeout: 5s
       retries: 60
@@ -139,6 +141,9 @@ services:
   driver:
     <<: *omnix
     profiles: [driver]
+    # Writes the report into the host's ./artifacts bind mount, whose owner
+    # differs from the image's uid 10001 on CI runners.
+    user: "0:0"
     command: ["python", "scripts/multihost_topology_test.py", "--output", "/artifacts/multihost-topology.json"]
     volumes:
       - ./artifacts:/artifacts

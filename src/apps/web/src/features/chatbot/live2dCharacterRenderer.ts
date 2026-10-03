@@ -1,4 +1,6 @@
 import { Application, extensions } from 'pixi.js';
+// Pixi's shader and uniform code without eval, so the ingress CSP can omit 'unsafe-eval' (WP-11.3).
+import 'pixi.js/unsafe-eval';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import type { AvatarMouthFrame } from './liveCharacterAvatarBridge';
 

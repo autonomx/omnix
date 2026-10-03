@@ -74,7 +74,7 @@ function renderPlatform(moduleId: OmnixModuleId) {
 }
 
 function mockGateway(payloads: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
     const payload = payloads[path];
 
@@ -475,6 +475,34 @@ describe('PlatformModuleWorkspace', () => {
     renderPlatform('diagnostics');
     expect(await screen.findByRole('heading', { name: 'Gateway status' })).toBeInTheDocument();
     expect(screen.getByText('mocked')).toBeInTheDocument();
+  });
+
+  it('saves provider defaults with the revisions it loaded', async () => {
+    const fetchMock = mockGateway({
+      '/api/settings': {
+        provider: 'lmstudio',
+        audio_provider_tts: 'faster-qwen3-tts',
+        audio_provider_stt: 'parakeet',
+        image_enabled: false,
+        rpg_visual_enabled: false,
+        worker_urls: {},
+        settings: {},
+        revisions: { provider: 4, audio_provider_tts: 0, audio_provider_stt: 2 },
+      },
+    });
+
+    renderPlatform('settings');
+    await screen.findByText('lmstudio');
+    fireEvent.click(screen.getByRole('button', { name: 'Save provider defaults' }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
+    });
+    const [, init] = fetchMock.mock.calls.find(([, call]) => call?.method === 'POST')!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      values: { provider: 'lmstudio', audio_provider_tts: 'faster-qwen3-tts', audio_provider_stt: 'parakeet' },
+      revisions: { provider: 4, audio_provider_tts: 0, audio_provider_stt: 2 },
+    });
   });
 
   it('renders core empty states when platform APIs return empty collections', async () => {

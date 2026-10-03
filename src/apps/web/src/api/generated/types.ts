@@ -23961,6 +23961,10 @@ export interface components {
             image_enabled: boolean;
             /** Provider */
             provider: string;
+            /** Revisions */
+            revisions?: {
+                [key: string]: number;
+            };
             /** Rpg Visual Enabled */
             rpg_visual_enabled: boolean;
             /** Settings */
