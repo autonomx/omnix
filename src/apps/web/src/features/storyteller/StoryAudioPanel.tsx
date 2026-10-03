@@ -667,8 +667,9 @@ function playableAudioSource(job: JobRecord): string {
 
 function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
-function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }
-function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
+// A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
+function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return asset.id; }
+function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.file_name) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
 function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string { return voices.find((voice) => voice.id === voiceId)?.label || voiceId; }
 function stringValue(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function basename(path: string | undefined): string { return path?.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || ''; }

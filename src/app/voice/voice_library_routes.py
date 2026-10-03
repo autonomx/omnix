@@ -7,7 +7,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Response
 
 from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
-from app.assets.models import AssetListResponse
+from app.assets.models import AssetListResponse, PublicAssetListResponse
 
 _ROUTE_SENTINEL = "_omnix_voice_library_route_registered"
 VOICE_LIBRARY_PATH = "/api/voice-library"
@@ -22,7 +22,7 @@ def register_voice_library_route(router: APIRouter, state: Any) -> None:
 
     @router.get(
         VOICE_LIBRARY_PATH,
-        response_model=AssetListResponse,
+        response_model=PublicAssetListResponse,
     )
     def voice_library(response: Response) -> AssetListResponse:
         assets = discover_canonical_voice_clone_assets()

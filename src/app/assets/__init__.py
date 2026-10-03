@@ -24,6 +24,11 @@ from .models import (
     AssetMigrationPreview,
     AssetRecord,
     AssetType,
+    PublicAssetLegacyImportDryRun,
+    PublicAssetListResponse,
+    PublicAssetMigrationPreview,
+    PublicAssetRecord,
+    asset_download_url,
 )
 from .paging import iter_assets, paginate_assets
 from .rpg_map_pack import curated_rpg_map_assets
@@ -284,6 +289,11 @@ __all__ = [
     "AssetLegacyImportDryRun",
     "AssetLegacyRootScan",
     "AssetMigrationPreview",
+    "PublicAssetLegacyImportDryRun",
+    "PublicAssetListResponse",
+    "PublicAssetMigrationPreview",
+    "PublicAssetRecord",
+    "asset_download_url",
     "AssetRecord",
     "AssetType",
     "SharedAssetStore",

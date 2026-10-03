@@ -111,7 +111,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
                 <option value="">External path</option>
                 {audioAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
-                    {asset.storage_path}
+                    {asset.file_name}
                   </option>
                 ))}
               </select>
@@ -167,7 +167,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
           {transcriptAssets.length ? (
             <div className="platform-grid">
               {transcriptAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.file_name} />
               ))}
             </div>
           ) : (

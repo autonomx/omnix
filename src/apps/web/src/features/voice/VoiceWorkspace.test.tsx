@@ -183,7 +183,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'application/octet-stream',
-              storage_path: 'resources/voice_clones/Dave.wav',
+              file_name: 'Dave.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
             {
@@ -191,7 +191,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'audio/wav',
-              storage_path: 'resources/voice_clones/jinx2.wav',
+              file_name: 'jinx2.wav',
               metadata: { profile_name: 'jinx2', voice_id: 'jinx2' },
               created_at: '2026-06-14T00:00:01Z',
             },
@@ -200,7 +200,7 @@ describe('VoiceWorkspace', () => {
               module: 'voice',
               type: 'audio',
               mime_type: 'audio/wav',
-              storage_path: 'artifacts/voice.wav',
+              file_name: 'voice.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
           ],
@@ -244,7 +244,7 @@ describe('VoiceWorkspace', () => {
 
     fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Narrator: A short line for synthesis.' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]);
-    fireEvent.change(screen.getByLabelText('Narrator voice'), { target: { value: 'resources/voice_clones/jinx2.wav' } });
+    fireEvent.change(screen.getByLabelText('Narrator voice'), { target: { value: 'voice-cloning:jinx2' } });
     fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
 
     expect(await screen.findByText('TTS job queued: job:tts')).toBeInTheDocument();
@@ -258,7 +258,7 @@ describe('VoiceWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"provider_id":"faster-qwen3-tts"');
       expect(createCall?.[1]?.body).toContain('"language":"English"');
-      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/jinx2.wav"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"voice-cloning:jinx2"');
       expect(createCall?.[1]?.body).toContain('"speed":1.25');
       expect(createCall?.[1]?.body).toContain('"audio_effects":["Compression"]');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');

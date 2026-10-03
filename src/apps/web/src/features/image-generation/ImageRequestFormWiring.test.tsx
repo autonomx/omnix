@@ -45,7 +45,7 @@ describe('ImageRequestForm wiring', () => {
         module: 'image-reference',
         type: 'image',
         mime_type: 'image/png',
-        storage_path: 'generated/reference-one.png',
+        file_name: 'reference-one.png',
         source_job_id: null,
         created_at: '2026-07-07T00:00:00Z',
         metadata: { title: 'reference-one.png', width: 768, height: 768 },

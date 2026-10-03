@@ -155,7 +155,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const selectedCloneSampleName = cloneSource === 'record' ? 'recorded-voice.webm' : sampleFile?.name ?? null;
   const defaultTtsProviderId = moduleDefaults.providerId || ttsProviders[0]?.id || '';
   const defaultCloneProviderId = moduleDefaults.voiceCloningProviderId || cloneProviders[0]?.id || '';
-  const defaultVoiceId = profileAssets[0] ? voiceStoragePath(profileAssets[0]) : '';
+  const defaultVoiceId = profileAssets[0] ? voiceReference(profileAssets[0]) : '';
   const defaultSpeakerName = parsedSpeakers[0]?.name ?? 'Narrator';
 
   const createJobMutation = useMutation({
@@ -204,7 +204,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
 
   const previewVoiceMutation = useMutation({
     mutationFn: (asset: VoiceAsset) => {
-      const voiceId = voiceStoragePath(asset) || voiceAssetId(asset);
+      const voiceId = voiceReference(asset);
       const voiceName = voiceAssetName(asset);
       return omnixApiClient.createJob({
         module: 'voice',
@@ -294,7 +294,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const deleteVoiceMutation = useMutation({
     mutationFn: (asset: VoiceAsset) => omnixApiClient.deleteVoiceAsset(voiceAssetId(asset)),
     onSuccess: async (_result, asset) => {
-      const deletedIds = new Set([voiceAssetId(asset), voiceStoragePath(asset)]);
+      const deletedIds = new Set([voiceAssetId(asset)]);
       if (deletedIds.has(getValues('voiceId'))) {
         setValue('voiceId', '');
         setValue('speaker', '');
@@ -596,7 +596,7 @@ function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string
 }
 
 function AssignmentRow({ assets, index, speaker, voiceValue, styleValue, onPreview, onVoiceChange, onStyleChange }: { assets: VoiceAsset[]; index: number; speaker: ScriptSpeakerRow; voiceValue: string; styleValue: string; onPreview: (voiceId: string) => void; onVoiceChange: (voiceId: string) => void; onStyleChange: (style: string) => void }) {
-  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={voiceAssetId(asset)} value={voiceStoragePath(asset)}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
+  return <div className="assignment-row"><span><i>{speaker.name.slice(0, 2).toUpperCase()}</i>{speaker.name}</span><select aria-label={`${speaker.name} voice`} value={voiceValue} onChange={(event) => onVoiceChange(event.currentTarget.value)}>{assets.map((asset) => <option key={voiceAssetId(asset)} value={voiceReference(asset)}>{voiceAssetName(asset)} ({voiceProfileName(asset)})</option>)}{!assets.length ? <option value="">No cloned voices</option> : null}</select><select aria-label={`${speaker.name} style`} value={styleValue} onChange={(event) => onStyleChange(event.currentTarget.value)}>{STYLE_OPTIONS.map((style) => <option key={style} value={style}>{style}</option>)}</select><Button size="xs" variant="subtle" type="button" onClick={() => onPreview(voiceValue)}>▶</Button></div>;
 }
 
 function Waveform() {
@@ -621,7 +621,7 @@ function buildSpeakerAssignments(speakers: ScriptSpeakerRow[], assets: VoiceAsse
 }
 
 function assignedVoiceFor(speaker: ScriptSpeakerRow, assets: VoiceAsset[], voiceAssignments: Record<string, string>): string {
-  return voiceAssignments[speaker.name] ?? voiceStoragePath(findMatchingVoice(speaker.name, assets)) ?? voiceStoragePath(assets[0]) ?? '';
+  return voiceAssignments[speaker.name] ?? voiceReference(findMatchingVoice(speaker.name, assets)) ?? voiceReference(assets[0]) ?? '';
 }
 
 function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | undefined {
@@ -630,7 +630,9 @@ function findMatchingVoice(name: string, assets: VoiceAsset[]): VoiceAsset | und
 }
 
 function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset: VoiceAsset) => void, setSaveMessage: (message: string) => void) {
-  const asset = assets.find((entry) => voiceStoragePath(entry) === voiceId || voiceAssetId(entry) === voiceId);
+  // Older saved assignments name the voice's file path.
+  const fileName = voiceId.split(/[\/]/).pop();
+  const asset = assets.find((entry) => voiceReference(entry) === voiceId || (Boolean(fileName) && voiceFileName(entry) === fileName));
   if (asset) {
     preview(asset);
   } else {
@@ -639,7 +641,7 @@ function previewVoiceById(voiceId: string, assets: VoiceAsset[], preview: (asset
 }
 
 function useVoice(asset: VoiceAsset, setValue: ReturnType<typeof useForm<VoiceFormValues>>['setValue'], setSaveMessage: (message: string) => void) {
-  setValue('voiceId', voiceStoragePath(asset));
+  setValue('voiceId', voiceReference(asset));
   setValue('speaker', voiceAssetName(asset));
   setSaveMessage(`Selected ${voiceAssetName(asset)} for synthesis.`);
 }
@@ -747,8 +749,14 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function voiceStoragePath(asset: VoiceAsset | undefined): string {
-  const value = (asset as { storage_path?: unknown } | undefined)?.storage_path;
+/** The voice a job names: its asset id, which the TTS provider resolves (WP-4.10). */
+function voiceReference(asset: VoiceAsset | undefined): string {
+  const value = (asset as { id?: unknown } | undefined)?.id;
+  return typeof value === 'string' ? value : '';
+}
+
+function voiceFileName(asset: VoiceAsset | undefined): string {
+  const value = (asset as { file_name?: unknown } | undefined)?.file_name;
   return typeof value === 'string' ? value : '';
 }
 
@@ -766,7 +774,7 @@ function voiceAssetName(asset: VoiceAsset): string {
   const metadata = voiceAssetMetadata(asset);
   const preferred = metadata.profile_name ?? metadata.name ?? metadata.voice_name;
   if (typeof preferred === 'string' && preferred.trim()) return preferred.trim();
-  const source = voiceStoragePath(asset) || voiceAssetId(asset);
+  const source = voiceFileName(asset) || voiceAssetId(asset);
   return source.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || voiceAssetId(asset);
 }
 

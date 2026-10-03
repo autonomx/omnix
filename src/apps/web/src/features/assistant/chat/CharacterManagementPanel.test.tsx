@@ -226,7 +226,7 @@ describe('CharacterManagementPanel dashboard', () => {
           module: 'image-reference',
           type: 'image',
           mime_type: 'image/png',
-          storage_path: '/tmp/user-face.png',
+          file_name: 'user-face.png',
           metadata: { reference_upload: true },
         },
       });

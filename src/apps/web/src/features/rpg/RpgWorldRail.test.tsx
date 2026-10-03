@@ -19,7 +19,7 @@ const baseProps = {
   onRefreshJobs: vi.fn(),
   onToggleAutoplay: vi.fn(),
   reportsHref: '/api/reports',
-  rpgAssets: [{ id: 'asset-1', module: 'rpg', storage_path: 'sessions/checkpoint-001.json', type: 'rpg_checkpoint' }],
+  rpgAssets: [{ id: 'asset-1', module: 'rpg', file_name: 'checkpoint-001.json', type: 'rpg_checkpoint' }],
   rpgJobCount: 0,
   rpgReportCount: 2,
   selectedSessionSummary: previewSessionSummary,

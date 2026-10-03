@@ -658,6 +658,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Asset Download
+         * @description The asset's bytes as an attachment, by id: clients never learn where they are stored (WP-4.10).
+         */
+        get: operations["asset_download_api_assets__asset_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/file": {
         parameters: {
             query?: never;
@@ -9868,7 +9888,7 @@ export interface components {
         AssetClass: "crypto" | "equity" | "forex" | "commodity";
         /** AssetContentResponse */
         AssetContentResponse: {
-            asset: components["schemas"]["AssetRecord"];
+            asset: components["schemas"]["PublicAssetRecord"];
             /** Content */
             content: string;
             /**
@@ -9886,29 +9906,6 @@ export interface components {
              */
             truncated: false;
         };
-        /** AssetLegacyImportDryRun */
-        AssetLegacyImportDryRun: {
-            /** Assets */
-            assets: components["schemas"]["AssetRecord"][];
-            /** Category Counts */
-            category_counts: {
-                [key: string]: number;
-            };
-            /** Collision Asset Ids */
-            collision_asset_ids: string[];
-            /** Roots Scanned */
-            roots_scanned: components["schemas"]["AssetLegacyRootScan"][];
-            /** Skipped Files */
-            skipped_files: {
-                [key: string]: unknown;
-            }[];
-            /** Source */
-            source: string;
-            /** Warnings */
-            warnings: string[];
-            /** Would Import */
-            would_import: number;
-        };
         /** AssetLegacyRootScan */
         AssetLegacyRootScan: {
             /** Exists */
@@ -9917,71 +9914,6 @@ export interface components {
             family: string;
             /** Path */
             path: string;
-        };
-        /**
-         * AssetListResponse
-         * @description A page of assets, newest first (WP-5.5).
-         */
-        AssetListResponse: {
-            /** Assets */
-            assets: components["schemas"]["AssetRecord"][];
-            /**
-             * Has More
-             * @default false
-             */
-            has_more: boolean;
-            /** Next Cursor */
-            next_cursor: string | null;
-        };
-        /** AssetMigrationPreview */
-        AssetMigrationPreview: {
-            /** Assets */
-            assets: components["schemas"]["AssetRecord"][];
-            /** Missing Files */
-            missing_files: {
-                [key: string]: unknown;
-            }[];
-            /** Source */
-            source: string;
-            /** Would Import */
-            would_import: number;
-        };
-        /** AssetRecord */
-        AssetRecord: {
-            /** Checksum Sha256 */
-            checksum_sha256: string | null;
-            /** Compat */
-            compat: {
-                [key: string]: unknown;
-            };
-            /** Created At */
-            created_at: string;
-            /** Derived Asset Ids */
-            derived_asset_ids: string[];
-            /** Id */
-            id: string;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Mime Type */
-            mime_type: string;
-            /** Module */
-            module: string;
-            /** Owner Id */
-            owner_id: string | null;
-            /** Parent Asset Ids */
-            parent_asset_ids: string[];
-            /** Source Job Id */
-            source_job_id: string | null;
-            /** Storage Key */
-            storage_key: string | null;
-            /**
-             * Storage Path
-             * @default
-             */
-            storage_path: string;
-            type: components["schemas"]["AssetType"];
         };
         /**
          * AssetType
@@ -17099,7 +17031,7 @@ export interface components {
         };
         /** ImageReferenceUploadResponse */
         ImageReferenceUploadResponse: {
-            asset: components["schemas"]["AssetRecord"];
+            asset: components["schemas"]["PublicAssetRecord"];
             /** Ok */
             ok: boolean;
         };
@@ -22134,6 +22066,99 @@ export interface components {
              */
             status: "available" | "configured" | "unknown" | "degraded";
         };
+        /** PublicAssetLegacyImportDryRun */
+        PublicAssetLegacyImportDryRun: {
+            /** Assets */
+            assets: components["schemas"]["PublicAssetRecord"][];
+            /** Category Counts */
+            category_counts: {
+                [key: string]: number;
+            };
+            /** Collision Asset Ids */
+            collision_asset_ids: string[];
+            /** Roots Scanned */
+            roots_scanned: components["schemas"]["AssetLegacyRootScan"][];
+            /** Skipped Files */
+            skipped_files: {
+                [key: string]: unknown;
+            }[];
+            /** Source */
+            source: string;
+            /** Warnings */
+            warnings: string[];
+            /** Would Import */
+            would_import: number;
+        };
+        /**
+         * PublicAssetListResponse
+         * @description ``AssetListResponse`` as the API returns it.
+         */
+        PublicAssetListResponse: {
+            /** Assets */
+            assets: components["schemas"]["PublicAssetRecord"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** PublicAssetMigrationPreview */
+        PublicAssetMigrationPreview: {
+            /** Assets */
+            assets: components["schemas"]["PublicAssetRecord"][];
+            /** Missing Files */
+            missing_files: {
+                [key: string]: unknown;
+            }[];
+            /** Source */
+            source: string;
+            /** Would Import */
+            would_import: number;
+        };
+        /**
+         * PublicAssetRecord
+         * @description An asset as the API returns it: ids and URLs, never where its bytes are
+         *     stored (WP-4.10). Built from an ``AssetRecord``: the storage path and key
+         *     and the legacy ``compat`` block are left out, absolute paths in metadata
+         *     become file names.
+         */
+        PublicAssetRecord: {
+            /** Checksum Sha256 */
+            checksum_sha256: string | null;
+            /** Created At */
+            created_at: string;
+            /** Derived Asset Ids */
+            derived_asset_ids: string[];
+            /**
+             * Download Url
+             * @default
+             */
+            download_url: string;
+            /**
+             * File Name
+             * @default
+             */
+            file_name: string;
+            /** Id */
+            id: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Mime Type */
+            mime_type: string;
+            /** Module */
+            module: string;
+            /** Owner Id */
+            owner_id: string | null;
+            /** Parent Asset Ids */
+            parent_asset_ids: string[];
+            /** Source Job Id */
+            source_job_id: string | null;
+            type: components["schemas"]["AssetType"];
+        };
         /** QuoteResponse */
         QuoteResponse: {
             /** Binding Id */
@@ -24377,7 +24402,7 @@ export interface components {
          * @description Saved Storyteller shared asset plus the stored text.
          */
         SavedStoryAssetResponse: {
-            asset: components["schemas"]["AssetRecord"];
+            asset: components["schemas"]["PublicAssetRecord"];
             /** Content */
             content: string;
         };
@@ -25080,11 +25105,8 @@ export interface components {
             external_capabilities?: string[] | null;
             /** Forbidden Paths */
             forbidden_paths?: string[];
-            /**
-             * Isolation Policy
-             * @default supervised_worktree
-             */
-            isolation_policy?: string;
+            /** Isolation Policy */
+            isolation_policy?: string | null;
             limits?: components["schemas"]["RunLimits-Input"] | null;
             /** Model Id */
             model_id: string;
@@ -30503,7 +30525,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetListResponse"];
+                    "application/json": components["schemas"]["PublicAssetListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -30532,7 +30554,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetMigrationPreview"];
+                    "application/json": components["schemas"]["PublicAssetMigrationPreview"];
                 };
             };
         };
@@ -30552,7 +30574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetMigrationPreview"];
+                    "application/json": components["schemas"]["PublicAssetMigrationPreview"];
                 };
             };
         };
@@ -30572,7 +30594,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetLegacyImportDryRun"];
+                    "application/json": components["schemas"]["PublicAssetLegacyImportDryRun"];
                 };
             };
         };
@@ -30658,6 +30680,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AssetContentResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    asset_download_api_assets__asset_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -36849,7 +36900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetListResponse"];
+                    "application/json": components["schemas"]["PublicAssetListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -37167,7 +37218,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetListResponse"];
+                    "application/json": components["schemas"]["PublicAssetListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -48326,7 +48377,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssetListResponse"];
+                    "application/json": components["schemas"]["PublicAssetListResponse"];
                 };
             };
         };

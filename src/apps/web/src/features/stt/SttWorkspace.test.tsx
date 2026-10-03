@@ -78,7 +78,7 @@ describe('SttWorkspace', () => {
               module: 'voice',
               type: 'audio',
               mime_type: 'audio/wav',
-              storage_path: 'artifacts/input.wav',
+              file_name: 'input.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
             {
@@ -86,7 +86,7 @@ describe('SttWorkspace', () => {
               module: 'stt',
               type: 'transcript',
               mime_type: 'text/plain',
-              storage_path: 'artifacts/transcript.txt',
+              file_name: 'transcript.txt',
               created_at: '2026-06-14T00:00:00Z',
             },
           ],
@@ -127,7 +127,7 @@ describe('SttWorkspace', () => {
       '/api/providers': () => ({ providers: [{ id: 'parakeet', label: 'Parakeet STT', family: 'stt', source: 'settings', status: 'configured', capabilities: ['stt'] }], models: [] }),
       'GET /api/jobs': () => ({ jobs: [] }),
       'POST /api/jobs': () => Response.json({ detail: 'The STT worker is offline.' }, { status: 503 }),
-      '/api/assets': () => ({ assets: [{ id: 'asset:audio', module: 'voice', type: 'audio', mime_type: 'audio/wav', storage_path: 'artifacts/input.wav', created_at: '2026-06-14T00:00:00Z' }] }),
+      '/api/assets': () => ({ assets: [{ id: 'asset:audio', module: 'voice', type: 'audio', mime_type: 'audio/wav', file_name: 'input.wav', created_at: '2026-06-14T00:00:00Z' }] }),
     });
     const module = omnixModules.find((entry) => entry.id === 'stt');
     if (!module) throw new Error('STT module is missing');

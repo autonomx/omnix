@@ -80,8 +80,15 @@ def tts_language_code(value: Any) -> str:
 
 
 def voice_stem(value: str) -> str:
+    """The TTS speaker for a voice reference.
+
+    Clients send the voice's asset id (``voice-cloning:<id>``), which the
+    provider resolves, so it passes unchanged. A file path (saved by older
+    clients) becomes its file stem."""
     if not value:
         return ""
+    if value.startswith("voice-cloning:"):
+        return value
     name = re.split(r"[\\/]", value)[-1]
     return name.rsplit(".", 1)[0]
 

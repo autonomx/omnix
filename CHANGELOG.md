@@ -55,6 +55,9 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Changed
 
+- Asset APIs no longer reveal where files are stored: responses carry the
+  asset id, `file_name` and `download_url` (`GET /api/assets/{id}/download`)
+  instead of `storage_path`, and voices are chosen by asset id.
 - Gateway errors no longer return provider, driver or database error text;
   the cause is logged under the request id.
 - Errors that used to be swallowed silently are logged at debug level.

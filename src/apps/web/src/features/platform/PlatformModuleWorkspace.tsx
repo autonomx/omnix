@@ -258,7 +258,7 @@ function AssetsView() {
               <OmnixAssetCard
                 key={asset.id}
                 title={`${asset.type} / ${asset.module}`}
-                metadata={`${asset.mime_type} - ${asset.storage_path}`}
+                metadata={`${asset.mime_type} - ${asset.file_name}`}
               />
             ))}
           </div>

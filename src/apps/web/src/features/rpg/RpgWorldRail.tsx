@@ -18,7 +18,7 @@ const MAP_ART_SRC = '/rpg/glimmerdeep-pass-map.svg';
 interface RpgReportAssetPreview {
   id: unknown;
   module?: unknown;
-  storage_path?: unknown;
+  file_name?: unknown;
   type?: unknown;
 }
 
@@ -184,7 +184,7 @@ export function RpgWorldRail({
             <article className="rpg-job-row" key={String(asset.id)}>
               <div>
                 <h3>{String(asset.type)} / {String(asset.module)}</h3>
-                <small>{String(asset.storage_path ?? asset.id)}</small>
+                <small>{String(asset.file_name || asset.id)}</small>
               </div>
             </article>
           ))}

@@ -115,7 +115,7 @@ function assetPayload(includeAsset: boolean) {
             module: 'image-generation',
             type: 'image',
             mime_type: 'image/png',
-            storage_path: 'artifacts/image.png',
+            file_name: 'image.png',
             created_at: '2026-06-14T00:00:00Z',
             source_job_id: 'job-1',
           },

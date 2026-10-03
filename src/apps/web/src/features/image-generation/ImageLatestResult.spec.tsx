@@ -12,7 +12,7 @@ const asset = fixture<ImageAsset>({
   module: 'image-generation',
   type: 'image',
   mime_type: 'image/png',
-  storage_path: 'private/night.png',
+  file_name: 'night.png',
   created_at: '2026-07-05T00:00:00Z',
   metadata: {
     title: 'Night harbor',

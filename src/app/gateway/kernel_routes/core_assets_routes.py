@@ -13,6 +13,10 @@ from app.assets import (
     AssetMigrationPreview,
     AssetRecord,
     AssetType,
+    PublicAssetLegacyImportDryRun,
+    PublicAssetListResponse,
+    PublicAssetMigrationPreview,
+    PublicAssetRecord,
     SharedAssetStore,
 )
 from app.runtime.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, InvalidCursor
@@ -55,7 +59,7 @@ def _read_text_asset(asset_store: SharedAssetStore, asset: AssetRecord) -> Asset
 
 
 def register_core_assets_routes(router: APIRouter, *, get_asset_store):
-    @router.get("/api/assets", response_model=AssetListResponse, tags=["assets"])
+    @router.get("/api/assets", response_model=PublicAssetListResponse, tags=["assets"])
     def assets(
         asset_type: Annotated[AssetType | None, Query(alias="type")] = None,
         module: str | None = Query(default=None, max_length=100),
@@ -104,9 +108,30 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
             headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
         )
 
+    @router.get("/api/assets/{asset_id}/download", response_class=FileResponse, tags=["assets"])
+    def asset_download(asset_id: str) -> FileResponse:
+        """The asset's bytes as an attachment, by id: clients never learn where they are stored (WP-4.10)."""
+        asset = _asset_by_id(get_asset_store(), asset_id)
+        if asset is None:
+            raise HTTPException(status_code=404, detail="asset_not_found")
+        try:
+            path = materialize_asset(asset)
+        except AssetContentUnavailable as exc:
+            raise HTTPException(status_code=404, detail="asset_file_not_found") from exc
+        return FileResponse(
+            path,
+            media_type=asset.mime_type or "application/octet-stream",
+            filename=PublicAssetRecord.model_validate(asset).file_name or "asset",
+            headers={
+                "Cache-Control": "private, no-cache",
+                "Content-Security-Policy": "sandbox",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @router.post(
         "/api/assets/migrations/image/dry-run",
-        response_model=AssetMigrationPreview,
+        response_model=PublicAssetMigrationPreview,
         tags=["assets"],
     )
     def image_asset_migration_dry_run() -> AssetMigrationPreview:
@@ -114,7 +139,7 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
 
     @router.post(
         "/api/assets/migrations/image/import",
-        response_model=AssetMigrationPreview,
+        response_model=PublicAssetMigrationPreview,
         tags=["assets"],
     )
     def image_asset_migration_import() -> AssetMigrationPreview:
@@ -122,7 +147,7 @@ def register_core_assets_routes(router: APIRouter, *, get_asset_store):
 
     @router.post(
         "/api/assets/migrations/legacy-non-image/dry-run",
-        response_model=AssetLegacyImportDryRun,
+        response_model=PublicAssetLegacyImportDryRun,
         tags=["assets"],
     )
     def legacy_non_image_asset_migration_dry_run() -> AssetLegacyImportDryRun:

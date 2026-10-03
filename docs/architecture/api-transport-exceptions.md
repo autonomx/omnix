@@ -39,6 +39,7 @@ HTTP routes below transfer file bytes or redirect the browser. Their OpenAPI res
 | `src/app/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/google/callback` | 303 OAuth result redirect |
 | `src/app/assistant_tools/routes.py` | GET | `/api/assistant/tools/connect/github/callback` | 303 OAuth result redirect |
 | `src/app/gateway/kernel_routes/core_assets_routes.py` | GET | `/api/assets/{asset_id}/audio` | Audio file bytes with Range support; media type from the asset |
+| `src/app/gateway/kernel_routes/core_assets_routes.py` | GET | `/api/assets/{asset_id}/download` | Asset file bytes as an attachment; media type from the asset |
 | `src/app/security/auth/routes.py` | GET | `/api/auth/local/callback` | 303 launcher sign-in redirect that sets the session cookies |
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/login` | 302 redirect to the identity provider |
 | `src/app/security/auth/routes.py` | GET | `/api/auth/oidc/callback` | 303 sign-in result redirect that sets the session cookies |

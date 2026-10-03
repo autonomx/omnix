@@ -69,9 +69,9 @@ function toSpeakerDraft(profile: (typeof mockPodcastSpeakerProfiles)[number]) {
 const minutes = (value: string) => Math.max(1, Number.parseInt(value, 10) || 1);
 const clock = (seconds: number) => `${String(Math.floor((seconds || 0) / 60)).padStart(2, '0')}:${String(Math.floor(seconds || 0) % 60).padStart(2, '0')}`;
 const isTerminal = (status: unknown) => ['completed', 'complete', 'succeeded', 'success', 'done', 'failed', 'error', 'cancelled', 'canceled'].includes(String(status ?? '').toLowerCase());
-const voicePath = (asset: VoiceAsset) => String((asset as any).storage_path || (asset as any).id || '');
-const voiceName = (asset: VoiceAsset) => String((asset as any).metadata?.profile_name || (asset as any).metadata?.name || voicePath(asset).split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'Voice');
-const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: voicePath(asset), label: voiceName(asset) })).filter((voice) => voice.id);
+// A voice is named by its asset id, which the TTS provider resolves (WP-4.10).
+const voiceName = (asset: VoiceAsset) => String((asset as any).metadata?.profile_name || (asset as any).metadata?.name || String((asset as any).file_name || '').replace(/\.[^.]+$/, '') || 'Voice');
+const voicesFrom = (assets: VoiceAsset[]) => assets.filter((asset) => asset.type === 'voice_profile').map((asset) => ({ id: String(asset.id || ''), label: voiceName(asset) })).filter((voice) => voice.id);
 const jobTitle = (job?: JobRecord) => String((job?.input_payload as any)?.title || job?.type || 'Podcast audio');
 const rowsFrom = (segments: Segment[], total: number) => segments.map((segment, index) => ({ timestamp: clock(index * Math.max(8, total / Math.max(1, segments.length))), speaker: segment.speaker, text: segment.text }));
 

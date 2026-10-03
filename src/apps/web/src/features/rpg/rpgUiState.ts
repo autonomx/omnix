@@ -890,7 +890,7 @@ function buildCheckpointSummary(assets: RpgAsset[], selectedSession: RpgSessionS
     };
   }
   const latestAsset = [...assets].sort((left, right) => timestampRank(right.created_at) - timestampRank(left.created_at))[0];
-  return { label: 'Latest checkpoint', detail: String(latestAsset.storage_path ?? latestAsset.id), source: 'live' };
+  return { label: 'Latest checkpoint', detail: latestAsset.file_name || latestAsset.id, source: 'live' };
 }
 
 function toJobCard(job: RpgJob): RpgJobCardPreview {

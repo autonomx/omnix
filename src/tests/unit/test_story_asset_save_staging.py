@@ -18,13 +18,17 @@ class _BlobBackedStore:
         staged = Path(asset.storage_path)
         self.staged.append(staged)
         self.copied[asset.id] = staged.read_text(encoding="utf-8")
-        return asset.model_copy(update={"storage_path": "", "storage_key": f"assets/{asset.id}"})
+        self.stored = asset.model_copy(update={"storage_path": "", "storage_key": f"assets/{asset.id}"})
+        return self.stored
 
 
 def test_story_is_staged_temporarily_and_stored_through_the_asset_store() -> None:
     store = _BlobBackedStore()
     saved = save_story_asset(store, SaveStoryAssetRequest(title="Night Train", content="Chapter one."))  # type: ignore[arg-type]
-    assert saved.asset.storage_key == f"assets/{saved.asset.id}"
+    assert store.stored.storage_key == f"assets/{saved.asset.id}"
+    # The response names the asset by id and URL, not by where it is stored (WP-4.10).
+    assert {"storage_path", "storage_key"}.isdisjoint(saved.asset.model_dump())
+    assert saved.asset.download_url.endswith("/download")
     assert store.copied[saved.asset.id].strip() == "Chapter one."
     assert saved.content == "Chapter one."
     # The staging file is removed once the store has taken the content.

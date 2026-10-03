@@ -3,7 +3,7 @@ import { registerFetchMiddleware } from '../../api/fetchPipeline';
 type AssetRecordLike = {
   id?: unknown;
   module?: unknown;
-  storage_path?: unknown;
+  file_name?: unknown;
   type?: unknown;
   metadata?: unknown;
 };
@@ -60,7 +60,7 @@ function voiceProfileSummary(body: string): Record<string, unknown> {
         return {
           id: asset.id,
           name: metadata.profile_name ?? metadata.voice_id ?? metadata.speaker,
-          storagePath: asset.storage_path,
+          fileName: asset.file_name,
         };
       }),
     };

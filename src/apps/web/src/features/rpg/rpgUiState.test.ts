@@ -49,8 +49,8 @@ describe('rpg UI state', () => {
     } as JobListResponse;
     const assets = {
       assets: [
-        { id: 'asset:rpg', module: 'rpg', type: 'rpg_checkpoint', mime_type: 'application/json', storage_path: 'checkpoints/session.json', created_at: '2026-06-16T00:00:00Z' },
-        { id: 'asset:chat', module: 'chat', type: 'chat_transcript', mime_type: 'application/json', storage_path: 'chat/session.json', created_at: '2026-06-16T00:00:00Z' },
+        { id: 'asset:rpg', module: 'rpg', type: 'rpg_checkpoint', mime_type: 'application/json', file_name: 'session.json', created_at: '2026-06-16T00:00:00Z' },
+        { id: 'asset:chat', module: 'chat', type: 'chat_transcript', mime_type: 'application/json', file_name: 'session.json', created_at: '2026-06-16T00:00:00Z' },
       ],
     } as AssetListResponse;
     const reports = {
@@ -65,7 +65,7 @@ describe('rpg UI state', () => {
     expect(state.sessions).toHaveLength(2);
     expect(state.sessionSummaries[0]).toMatchObject({ id: 'session:live', title: 'Live campaign', location: 'Rusty Flagon Tavern', turnLabel: 'Turn 12', updatedAt: '2026-06-16 00:00 UTC' });
     expect(state.worldStateRows[0]).toMatchObject({ label: 'Calendar / Season', value: 'Not tracked yet' });
-    expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'checkpoints/session.json' });
+    expect(state.checkpointSummary).toMatchObject({ label: 'Latest checkpoint', detail: 'session.json' });
     expect(state.rpgJobs).toHaveLength(1);
     expect(state.rpgAssets).toHaveLength(1);
     expect(state.rpgReports).toHaveLength(1);

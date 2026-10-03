@@ -71,7 +71,7 @@ describe('PodcastWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'audio/wav',
-              storage_path: 'resources/voice_clones/alex.wav',
+              file_name: 'alex.wav',
               metadata: { profile_name: 'Alex Voice' },
               created_at: '2026-06-14T00:00:00Z',
             },
@@ -151,7 +151,7 @@ describe('PodcastWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"resource_class":"gpu:tts"');
       expect(createCall?.[1]?.body).toContain('"script_segments"');
       expect(createCall?.[1]?.body).toContain('"character_voice_assignments"');
-      expect(createCall?.[1]?.body).toContain('"voice_id":"resources/voice_clones/alex.wav"');
+      expect(createCall?.[1]?.body).toContain('"voice_id":"voice-cloning:alex"');
       expect(createCall?.[1]?.body).toContain('"voice_mapping"');
       expect(createCall?.[1]?.body).toContain('"speakerInstructions"');
       expect(createCall?.[1]?.body).toContain('"maxSpeakerTurnSeconds":45');

@@ -58,7 +58,7 @@ assets: [{
   module: 'voice-cloning',
   type: 'voice_profile',
   mime_type: 'audio/webm',
-  storage_path: 'resources/voice_clones/maya.webm',
+  file_name: 'maya.webm',
   metadata: { profile_name: 'Maya Recovery', voice_id: 'maya' },
   created_at: '2026-07-30T22:00:00Z',
 }],

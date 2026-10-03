@@ -35,7 +35,7 @@ export function buildStoryLibraryItems(savedDraft: SavedStoryDraft | null, jobs:
   const assetItems = assets.map((asset) => ({
     id: libraryAssetId(asset.id),
     source: 'asset' as const,
-    title: storyAssetTitle(asset.storage_path),
+    title: storyAssetTitle(asset.file_name),
     subtitle: `${asset.type}${asset.created_at ? ` • ${shortDate(asset.created_at)}` : ''}`,
     content: null,
     jobId: null,
@@ -134,9 +134,9 @@ export function libraryJobId(jobId: string): string { return `job:${jobId}`; }
 export function libraryAssetId(assetId: string): string { return `asset:${assetId}`; }
 
 
-export function storyAssetTitle(storagePath: string | undefined): string {
-  if (!storagePath) return 'Untitled Draft';
-  const filename = storagePath.split(/[\\/]/).pop() ?? storagePath;
+export function storyAssetTitle(fileName: string | undefined): string {
+  if (!fileName) return 'Untitled Draft';
+  const filename = fileName.split(/[\\/]/).pop() ?? fileName;
   return filename.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') || 'Untitled Draft';
 }
 

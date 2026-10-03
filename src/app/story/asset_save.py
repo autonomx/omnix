@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from app.assets import AssetRecord, AssetType, SharedAssetStore
+from app.assets import AssetRecord, AssetType, PublicAssetRecord, SharedAssetStore
 
 
 class SaveStoryAssetRequest(BaseModel):
@@ -32,7 +32,7 @@ class SaveStoryAssetRequest(BaseModel):
 class SavedStoryAssetResponse(BaseModel):
     """Saved Storyteller shared asset plus the stored text."""
 
-    asset: AssetRecord
+    asset: PublicAssetRecord
     content: str
 
 

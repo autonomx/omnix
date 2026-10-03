@@ -62,7 +62,7 @@ function assetPayload() {
         type: 'voice_profile',
         module: 'voice-cloning',
         title: 'Ari Clone',
-        storage_path: 'resources/voice_clones/ari-clone.json',
+        file_name: 'ari-clone.json',
         metadata: { voice_id: 'ari-clone', profile_name: 'Ari Clone' },
         created_at: '2026-06-14T00:00:00Z',
         updated_at: '2026-06-14T00:00:00Z',

@@ -8,8 +8,8 @@ export { ApiError, ApiTimeoutError } from './errors';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
-export type AssetLegacyImportDryRun = components['schemas']['AssetLegacyImportDryRun'];
-export type AssetListResponse = components['schemas']['AssetListResponse'];
+export type AssetLegacyImportDryRun = components['schemas']['PublicAssetLegacyImportDryRun'];
+export type AssetListResponse = components['schemas']['PublicAssetListResponse'];
 
 export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];

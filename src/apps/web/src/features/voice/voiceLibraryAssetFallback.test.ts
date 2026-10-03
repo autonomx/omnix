@@ -21,7 +21,7 @@ describe('voiceLibraryAssetFallback', () => {
               id: 'voice-cloning:Maya',
               module: 'voice-cloning',
               type: 'voice_profile',
-              storage_path: 'F:/LLM/omnix/resources/voice_clones/Maya.wav',
+              file_name: 'Maya.wav',
               metadata: { profile_name: 'Maya' },
             },
           ],

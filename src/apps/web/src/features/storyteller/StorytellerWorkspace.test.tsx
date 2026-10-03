@@ -82,7 +82,7 @@ function assetPayload() {
         module: 'storyteller',
         type: 'story',
         mime_type: 'text/markdown',
-        storage_path: 'artifacts/the-glass-orchard.md',
+        file_name: 'the-glass-orchard.md',
         created_at: '2026-06-14T00:00:00Z',
       },
     ],

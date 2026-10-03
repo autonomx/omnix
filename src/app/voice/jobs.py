@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from app.assets.content import asset_location
 from app.assets import AssetRecord, AssetType, default_asset_store
+from app.providers.tts_service import voice_stem
 from app.persistence.blob_store import default_blob_store
 from app.runtime.paths import resources_data_root
 
@@ -254,7 +254,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
     assignments_by_speaker = _assignments_by_speaker(assignments)
     segments = _script_segments(payload, text)
     primary_voice = _text(payload.get("voice_id")) or _first_assignment_voice(assignments)
-    default_speaker = _voice_stem(primary_voice) or _text(payload.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
+    default_speaker = voice_stem(primary_voice) or _text(payload.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
 
     wav_chunks: list[bytes] = []
     segment_outputs: list[dict[str, Any]] = []
@@ -262,7 +262,7 @@ def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]
         speaker_name = _text(segment.get("speaker")) or DEFAULT_UNTAGGED_SPEAKER
         assignment = assignments_by_speaker.get(speaker_name.casefold(), {})
         voice_id = _text(assignment.get("voice_id")) or primary_voice
-        generated_speaker = _voice_stem(voice_id) or speaker_name or default_speaker
+        generated_speaker = voice_stem(voice_id) or speaker_name or default_speaker
         wav_bytes, metadata = _generate_audio_bytes(_text(segment.get("text")), speaker=generated_speaker, payload=payload)
         wav_chunks.append(wav_bytes)
         segment_outputs.append(
@@ -645,7 +645,6 @@ def _asset_output_ref(asset: AssetRecord, *, title: str) -> dict[str, Any]:
         "type": asset.type.value if hasattr(asset.type, "value") else str(asset.type),
         "asset_id": asset.id,
         "title": title,
-        "storage_path": asset_location(asset),
         "mime_type": asset.mime_type,
     }
 
@@ -657,13 +656,6 @@ def _first_assignment_voice(assignments: list[Any]) -> str:
             if value:
                 return value
     return ""
-
-
-def _voice_stem(value: str) -> str:
-    if not value:
-        return ""
-    name = re.split(r"[\\/]", value)[-1]
-    return name.rsplit(".", 1)[0]
 
 
 def _tts_title(payload: dict[str, Any], job: JobRecord) -> str:

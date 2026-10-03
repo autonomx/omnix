@@ -41,7 +41,7 @@ const emptyWorkspaceResponses = {
         module: 'rpg',
         type: 'rpg_checkpoint',
         mime_type: 'application/json',
-        storage_path: 'checkpoints/session.json',
+        file_name: 'session.json',
         created_at: '2026-06-14T00:00:00Z',
       },
     ],

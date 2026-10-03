@@ -9,7 +9,7 @@ const asset = {
   module: 'image-generation',
   type: 'image',
   mime_type: 'image/png',
-  storage_path: 'test.png',
+  file_name: 'test.png',
   source_job_id: 'job:test',
   created_at: '2026-07-01T00:00:00Z',
 } as ImageAsset;

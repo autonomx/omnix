@@ -94,7 +94,7 @@ describe('VoiceCloningWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_sample',
               mime_type: 'audio/wav',
-              storage_path: 'samples/ref.wav',
+              file_name: 'ref.wav',
               created_at: '2026-06-14T00:00:00Z',
             },
             {
@@ -102,7 +102,7 @@ describe('VoiceCloningWorkspace', () => {
               module: 'voice-cloning',
               type: 'voice_profile',
               mime_type: 'application/json',
-              storage_path: 'profiles/narrator.json',
+              file_name: 'narrator.json',
               created_at: '2026-06-14T00:00:00Z',
             },
           ],

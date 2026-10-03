@@ -121,7 +121,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
                 <option value="">No sample selected</option>
                 {sampleAssets.map((asset) => (
                   <option key={asset.id} value={asset.id}>
-                    {asset.storage_path}
+                    {asset.file_name}
                   </option>
                 ))}
               </select>
@@ -195,7 +195,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
           {profileAssets.length ? (
             <div className="platform-grid">
               {profileAssets.map((asset) => (
-                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.storage_path} />
+                <OmnixAssetCard key={asset.id} title={`${asset.type} / ${asset.module}`} metadata={asset.file_name} />
               ))}
             </div>
           ) : (

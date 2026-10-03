@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.assets import AssetRecord
+from app.assets import PublicAssetRecord
 from app.runtime.worker_health import (
     GATEWAY_FORMAT_VERSION,
     WorkerHealthPayload,
@@ -71,7 +71,7 @@ class CompatibilityHandoffPayload(BaseModel):
 
 
 class AssetContentResponse(BaseModel):
-    asset: AssetRecord
+    asset: PublicAssetRecord
     content: str
     encoding: Literal["utf-8"] = "utf-8"
     size_bytes: int

@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.assets.content import asset_available
-from app.assets import AssetListResponse, AssetRecord, AssetType, iter_assets
+from app.assets import AssetListResponse, AssetRecord, AssetType, PublicAssetListResponse, iter_assets
 from app.jobs import CreateJobRequest, JobListResponse, JobRecord, JobStatus
 from app.runtime.contracts import AssetService, JobService
 
@@ -68,7 +68,7 @@ def create_image_workspace_router(
             raise HTTPException(status_code=409, detail="job_not_retryable")
         return job_store.create_job(_retry_request(source))
 
-    @router.get("/api/image-generation/assets", response_model=AssetListResponse, tags=["image"])
+    @router.get("/api/image-generation/assets", response_model=PublicAssetListResponse, tags=["image"])
     def image_assets(limit: int = Query(default=DEFAULT_IMAGE_ASSET_LIMIT, ge=1, le=MAX_IMAGE_ASSET_LIMIT)) -> AssetListResponse:
         rpg_world_asset_ids = _rpg_world_image_asset_ids(job_store)
         # Type and module are filtered in SQL, newest first (WP-5.5); the

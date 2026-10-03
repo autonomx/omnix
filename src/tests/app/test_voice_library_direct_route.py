@@ -28,4 +28,8 @@ def test_direct_voice_library_route_reads_canonical_clone_folder(tmp_path, monke
     assert len(payload["assets"]) == 1
     assert payload["assets"][0]["id"] == "voice-cloning:Maya"
     assert payload["assets"][0]["type"] == "voice_profile"
-    assert payload["assets"][0]["storage_path"] == str(maya_path)
+    assert payload["assets"][0]["file_name"] == "Maya.wav"
+    assert payload["assets"][0]["download_url"] == "/api/assets/voice-cloning%3AMaya/download"
+    # Where the clone is stored never reaches the client (WP-4.10).
+    assert "storage_path" not in payload["assets"][0]
+    assert str(clone_dir) not in response.text and str(clone_dir).replace("\\", "\\\\") not in response.text

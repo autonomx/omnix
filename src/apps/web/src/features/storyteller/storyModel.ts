@@ -71,7 +71,7 @@ export interface SavedStoryDraft {
 
 export interface StoryAssetSummary {
   id: string;
-  storage_path: string;
+  file_name: string;
   type: string;
   created_at?: string;
 }

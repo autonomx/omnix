@@ -1738,7 +1738,7 @@
       "AssetContentResponse": {
         "properties": {
           "asset": {
-            "$ref": "#/components/schemas/AssetRecord"
+            "$ref": "#/components/schemas/PublicAssetRecord"
           },
           "content": {
             "title": "Content",
@@ -1771,73 +1771,6 @@
         "title": "AssetContentResponse",
         "type": "object"
       },
-      "AssetLegacyImportDryRun": {
-        "properties": {
-          "assets": {
-            "items": {
-              "$ref": "#/components/schemas/AssetRecord"
-            },
-            "title": "Assets",
-            "type": "array"
-          },
-          "category_counts": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "Category Counts",
-            "type": "object"
-          },
-          "collision_asset_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Collision Asset Ids",
-            "type": "array"
-          },
-          "roots_scanned": {
-            "items": {
-              "$ref": "#/components/schemas/AssetLegacyRootScan"
-            },
-            "title": "Roots Scanned",
-            "type": "array"
-          },
-          "skipped_files": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Skipped Files",
-            "type": "array"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Warnings",
-            "type": "array"
-          },
-          "would_import": {
-            "title": "Would Import",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "source",
-          "would_import",
-          "category_counts",
-          "roots_scanned",
-          "collision_asset_ids",
-          "skipped_files",
-          "warnings",
-          "assets"
-        ],
-        "title": "AssetLegacyImportDryRun",
-        "type": "object"
-      },
       "AssetLegacyRootScan": {
         "properties": {
           "exists": {
@@ -1859,190 +1792,6 @@
           "exists"
         ],
         "title": "AssetLegacyRootScan",
-        "type": "object"
-      },
-      "AssetListResponse": {
-        "description": "A page of assets, newest first (WP-5.5).",
-        "properties": {
-          "assets": {
-            "items": {
-              "$ref": "#/components/schemas/AssetRecord"
-            },
-            "title": "Assets",
-            "type": "array"
-          },
-          "has_more": {
-            "default": false,
-            "title": "Has More",
-            "type": "boolean"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          }
-        },
-        "required": [
-          "assets",
-          "next_cursor",
-          "has_more"
-        ],
-        "title": "AssetListResponse",
-        "type": "object"
-      },
-      "AssetMigrationPreview": {
-        "properties": {
-          "assets": {
-            "items": {
-              "$ref": "#/components/schemas/AssetRecord"
-            },
-            "title": "Assets",
-            "type": "array"
-          },
-          "missing_files": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Missing Files",
-            "type": "array"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "would_import": {
-            "title": "Would Import",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "source",
-          "would_import",
-          "missing_files",
-          "assets"
-        ],
-        "title": "AssetMigrationPreview",
-        "type": "object"
-      },
-      "AssetRecord": {
-        "properties": {
-          "checksum_sha256": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Checksum Sha256"
-          },
-          "compat": {
-            "additionalProperties": true,
-            "title": "Compat",
-            "type": "object"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "derived_asset_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Derived Asset Ids",
-            "type": "array"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "metadata": {
-            "additionalProperties": true,
-            "title": "Metadata",
-            "type": "object"
-          },
-          "mime_type": {
-            "title": "Mime Type",
-            "type": "string"
-          },
-          "module": {
-            "title": "Module",
-            "type": "string"
-          },
-          "owner_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Id"
-          },
-          "parent_asset_ids": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Parent Asset Ids",
-            "type": "array"
-          },
-          "source_job_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Job Id"
-          },
-          "storage_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Storage Key"
-          },
-          "storage_path": {
-            "default": "",
-            "title": "Storage Path",
-            "type": "string"
-          },
-          "type": {
-            "$ref": "#/components/schemas/AssetType"
-          }
-        },
-        "required": [
-          "id",
-          "module",
-          "type",
-          "mime_type",
-          "created_at",
-          "owner_id",
-          "storage_path",
-          "storage_key",
-          "checksum_sha256",
-          "metadata",
-          "source_job_id",
-          "parent_asset_ids",
-          "derived_asset_ids",
-          "compat"
-        ],
-        "title": "AssetRecord",
         "type": "object"
       },
       "AssetType": {
@@ -19750,7 +19499,7 @@
       "ImageReferenceUploadResponse": {
         "properties": {
           "asset": {
-            "$ref": "#/components/schemas/AssetRecord"
+            "$ref": "#/components/schemas/PublicAssetRecord"
           },
           "ok": {
             "title": "Ok",
@@ -33336,6 +33085,246 @@
         "title": "ProviderSummary",
         "type": "object"
       },
+      "PublicAssetLegacyImportDryRun": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAssetRecord"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "category_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Category Counts",
+            "type": "object"
+          },
+          "collision_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collision Asset Ids",
+            "type": "array"
+          },
+          "roots_scanned": {
+            "items": {
+              "$ref": "#/components/schemas/AssetLegacyRootScan"
+            },
+            "title": "Roots Scanned",
+            "type": "array"
+          },
+          "skipped_files": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Skipped Files",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "would_import": {
+            "title": "Would Import",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "would_import",
+          "category_counts",
+          "roots_scanned",
+          "collision_asset_ids",
+          "skipped_files",
+          "warnings",
+          "assets"
+        ],
+        "title": "PublicAssetLegacyImportDryRun",
+        "type": "object"
+      },
+      "PublicAssetListResponse": {
+        "description": "``AssetListResponse`` as the API returns it.",
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAssetRecord"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "assets",
+          "next_cursor",
+          "has_more"
+        ],
+        "title": "PublicAssetListResponse",
+        "type": "object"
+      },
+      "PublicAssetMigrationPreview": {
+        "properties": {
+          "assets": {
+            "items": {
+              "$ref": "#/components/schemas/PublicAssetRecord"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "missing_files": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Missing Files",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "would_import": {
+            "title": "Would Import",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "would_import",
+          "missing_files",
+          "assets"
+        ],
+        "title": "PublicAssetMigrationPreview",
+        "type": "object"
+      },
+      "PublicAssetRecord": {
+        "description": "An asset as the API returns it: ids and URLs, never where its bytes are\nstored (WP-4.10). Built from an ``AssetRecord``: the storage path and key\nand the legacy ``compat`` block are left out, absolute paths in metadata\nbecome file names.",
+        "properties": {
+          "checksum_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum Sha256"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Derived Asset Ids",
+            "type": "array"
+          },
+          "download_url": {
+            "default": "",
+            "title": "Download Url",
+            "type": "string"
+          },
+          "file_name": {
+            "default": "",
+            "title": "File Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "parent_asset_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parent Asset Ids",
+            "type": "array"
+          },
+          "source_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Job Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AssetType"
+          }
+        },
+        "required": [
+          "id",
+          "module",
+          "type",
+          "mime_type",
+          "created_at",
+          "owner_id",
+          "file_name",
+          "download_url",
+          "checksum_sha256",
+          "metadata",
+          "source_job_id",
+          "parent_asset_ids",
+          "derived_asset_ids"
+        ],
+        "title": "PublicAssetRecord",
+        "type": "object"
+      },
       "QuoteResponse": {
         "additionalProperties": true,
         "properties": {
@@ -38208,7 +38197,7 @@
         "description": "Saved Storyteller shared asset plus the stored text.",
         "properties": {
           "asset": {
-            "$ref": "#/components/schemas/AssetRecord"
+            "$ref": "#/components/schemas/PublicAssetRecord"
           },
           "content": {
             "title": "Content",
@@ -39817,9 +39806,15 @@
             "type": "array"
           },
           "isolation_policy": {
-            "default": "supervised_worktree",
-            "title": "Isolation Policy",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isolation Policy"
           },
           "limits": {
             "anyOf": [
@@ -52634,7 +52629,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetListResponse"
+                  "$ref": "#/components/schemas/PublicAssetListResponse"
                 }
               }
             },
@@ -52665,7 +52660,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetMigrationPreview"
+                  "$ref": "#/components/schemas/PublicAssetMigrationPreview"
                 }
               }
             },
@@ -52686,7 +52681,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetMigrationPreview"
+                  "$ref": "#/components/schemas/PublicAssetMigrationPreview"
                 }
               }
             },
@@ -52707,7 +52702,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetLegacyImportDryRun"
+                  "$ref": "#/components/schemas/PublicAssetLegacyImportDryRun"
                 }
               }
             },
@@ -52831,6 +52826,42 @@
           }
         },
         "summary": "Asset Content"
+      }
+    },
+    "/api/assets/{asset_id}/download": {
+      "get": {
+        "description": "The asset's bytes as an attachment, by id: clients never learn where they are stored (WP-4.10).",
+        "operationId": "asset_download_api_assets__asset_id__download_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Asset Download",
+        "tags": [
+          "assets"
+        ]
       }
     },
     "/api/assets/{asset_id}/file": {
@@ -61849,7 +61880,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetListResponse"
+                  "$ref": "#/components/schemas/PublicAssetListResponse"
                 }
               }
             },
@@ -62258,7 +62289,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetListResponse"
+                  "$ref": "#/components/schemas/PublicAssetListResponse"
                 }
               }
             },
@@ -78212,7 +78243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssetListResponse"
+                  "$ref": "#/components/schemas/PublicAssetListResponse"
                 }
               }
             },

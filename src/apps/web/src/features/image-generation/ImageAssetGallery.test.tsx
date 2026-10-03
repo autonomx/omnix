@@ -13,7 +13,7 @@ const asset = fixture<ImageAsset>({
   module: 'image-generation',
   type: 'image',
   mime_type: 'image/png',
-  storage_path: 'generated/castle.png',
+  file_name: 'castle.png',
   source_job_id: 'job:castle',
   created_at: '2026-07-06T00:00:00Z',
   metadata: {

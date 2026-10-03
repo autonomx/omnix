@@ -13,7 +13,7 @@ const assets: AssetListResponse['assets'] = [
     module: 'image-generation',
     type: 'image',
     mime_type: 'image/png',
-    storage_path: 'artifacts/one.png',
+    file_name: 'one.png',
     created_at: '2026-06-14T00:00:00Z',
     metadata: {
       title: 'Mountain lake',
@@ -28,7 +28,7 @@ const assets: AssetListResponse['assets'] = [
     module: 'image-generation',
     type: 'image',
     mime_type: 'image/png',
-    storage_path: 'artifacts/two.png',
+    file_name: 'two.png',
     created_at: '2026-06-14T00:01:00Z',
     metadata: {
       title: 'Neon city',

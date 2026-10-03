@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from app.assets import AssetListResponse, AssetRecord
+from app.assets import AssetListResponse, PublicAssetListResponse, PublicAssetRecord
 from app.runtime.contracts import AssetService
 from app.image.reference_assets import (
     ImageReferenceError,
@@ -18,7 +18,7 @@ MAX_REFERENCE_LIMIT = 250
 
 class ImageReferenceUploadResponse(BaseModel):
     ok: bool
-    asset: AssetRecord
+    asset: PublicAssetRecord
 
 
 def create_image_reference_router(asset_store: AssetService) -> APIRouter:
@@ -26,7 +26,7 @@ def create_image_reference_router(asset_store: AssetService) -> APIRouter:
 
     @router.get(
         "/api/image-generation/references",
-        response_model=AssetListResponse,
+        response_model=PublicAssetListResponse,
         tags=["image"],
     )
     def image_references(
