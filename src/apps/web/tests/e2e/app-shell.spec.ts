@@ -118,7 +118,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
     });
   });
 
-  await page.route('**/api/jobs', async (route) => {
+  await page.route(/\/api\/jobs(\?.*)?$/, async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({

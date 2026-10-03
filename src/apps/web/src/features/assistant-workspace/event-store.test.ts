@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AssistantWorkspaceEvent } from './events';
 import {
   createInMemoryAssistantWorkspaceEventStore,
@@ -60,6 +60,27 @@ describe('assistant workspace event stores', () => {
 
     reloaded.clear();
     expect(storage.getItem('events')).toBeNull();
+  });
+
+  it('writes a batch once and keeps only the newest stored events', () => {
+    const values = new Map<string, string>();
+    const setItem = vi.fn((key: string, value: string) => values.set(key, value));
+    const storage = { getItem: (key: string) => values.get(key) ?? null, setItem, removeItem: (key: string) => values.delete(key) };
+
+    const store = createStoredAssistantWorkspaceEventStore(storage, 'events', 3);
+    store.appendMany(['event-1', 'event-2', 'event-3', 'event-4'].map((id) => userEvent(id)));
+
+    expect(setItem).toHaveBeenCalledTimes(1);
+    const reloaded = createStoredAssistantWorkspaceEventStore(storage, 'events', 3);
+    expect(reloaded.list().map((event) => event.id)).toEqual(['event-2', 'event-3', 'event-4']);
+  });
+
+  it('keeps working when storage is full', () => {
+    const storage = { getItem: () => null, setItem: () => { throw new DOMException('full', 'QuotaExceededError'); }, removeItem: () => undefined };
+    const store = createStoredAssistantWorkspaceEventStore(storage, 'events');
+
+    expect(store.append(userEvent('event-1')).id).toBe('event-1');
+    expect(store.list().map((event) => event.id)).toEqual(['event-1']);
   });
 
   it('ignores invalid serialized event entries', () => {

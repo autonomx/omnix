@@ -16,6 +16,7 @@ import {
 } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
+import { VirtualList } from '../../design/VirtualList';
 import {
   ToolExecutionPanel,
   createFetchSpeechServiceTransport,
@@ -847,12 +848,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const currentEvents = eventStore.list(filter);
     const currentEventIds = new Set(currentEvents.map((event) => event.id));
     const sessionEvents = createChatbotActivityEvents(activeSession, { workspaceId: runtimeConfig.workspaceId, projectId: runtimeConfig.projectId });
-    for (const event of sessionEvents) {
-      if (!currentEventIds.has(event.id)) {
-        eventStore.append(event);
-        currentEventIds.add(event.id);
-      }
-    }
+    eventStore.appendMany(sessionEvents.filter((event) => !currentEventIds.has(event.id)));
     setActivityEvents(eventStore.list(filter));
   }, [activeSession, eventStore, runtimeConfig]);
 
@@ -2166,7 +2162,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 </div>
               </header>
               <div className="assistant-chat-messages" role="log" aria-live="polite" ref={messagesContainerRef} onScroll={handleMessagesScroll}>
-                {displayedMessages.length ? displayedMessages.map((message) => (
+                {displayedMessages.length ? <VirtualList items={displayedMessages} getKey={(message) => message.id} scrollRef={messagesContainerRef} estimateSize={180} renderItem={(message) => (
                   <article key={message.id} className={`assistant-chat-message ${message.role}`}>
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
                     <div className="assistant-chat-bubble">
@@ -2189,7 +2185,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                       {message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
                     </div>
                   </article>
-                )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
+                )} /> : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
                 {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
                 {sendMutation.isPending || chatJobInProgress ? <div className="assistant-thinking-indicator" role="status" aria-live="polite"><span className="assistant-thinking-orb" aria-hidden="true" /><span className="assistant-thinking-label">Thinking<span className="assistant-thinking-dots" aria-hidden="true"><i /><i /><i /></span></span></div> : null}
                 <div ref={messagesEndRef} aria-hidden="true" />

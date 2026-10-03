@@ -16,12 +16,16 @@ export type AssistantWorkspaceEventStorage = {
 
 export type AssistantWorkspaceEventStore = {
   append(event: AssistantWorkspaceEvent): AssistantWorkspaceEvent;
+  /** Appends several events with one write to storage. */
+  appendMany(events: AssistantWorkspaceEvent[]): AssistantWorkspaceEvent[];
   list(filter?: AssistantWorkspaceEventStoreFilter): AssistantWorkspaceEvent[];
   get(eventId: string): AssistantWorkspaceEvent | undefined;
   clear(): void;
 };
 
 const DEFAULT_STORAGE_KEY = 'omnix.assistantWorkspace.events';
+/** Browser storage keeps the newest events only; older ones are dropped. */
+export const MAX_STORED_ASSISTANT_WORKSPACE_EVENTS = 1_000;
 
 function cloneEvent(event: AssistantWorkspaceEvent): AssistantWorkspaceEvent {
   return JSON.parse(JSON.stringify(event)) as AssistantWorkspaceEvent;
@@ -87,6 +91,11 @@ export function createInMemoryAssistantWorkspaceEventStore(
       events = [...events, nextEvent];
       return cloneEvent(nextEvent);
     },
+    appendMany(nextEvents) {
+      const added = nextEvents.map(cloneEvent);
+      events = [...events, ...added];
+      return added.map(cloneEvent);
+    },
     list(filter = {}) {
       return events.filter((event) => matchesFilter(event, filter)).map(cloneEvent);
     },
@@ -103,17 +112,30 @@ export function createInMemoryAssistantWorkspaceEventStore(
 export function createStoredAssistantWorkspaceEventStore(
   storage: AssistantWorkspaceEventStorage,
   storageKey = DEFAULT_STORAGE_KEY,
+  maxEvents = MAX_STORED_ASSISTANT_WORKSPACE_EVENTS,
 ): AssistantWorkspaceEventStore {
-  let events = parseAssistantWorkspaceEvents(storage.getItem(storageKey));
+  let events = parseAssistantWorkspaceEvents(storage.getItem(storageKey)).slice(-maxEvents);
 
-  const persist = () => storage.setItem(storageKey, serializeAssistantWorkspaceEvents(events));
+  const persist = () => {
+    try {
+      storage.setItem(storageKey, serializeAssistantWorkspaceEvents(events));
+    } catch {
+      // Storage full or unavailable: the events stay in memory for this page.
+    }
+  };
+  const add = (nextEvents: AssistantWorkspaceEvent[]): AssistantWorkspaceEvent[] => {
+    const added = nextEvents.map(cloneEvent);
+    events = [...events, ...added].slice(-maxEvents);
+    persist();
+    return added.map(cloneEvent);
+  };
 
   return {
     append(event) {
-      const nextEvent = cloneEvent(event);
-      events = [...events, nextEvent];
-      persist();
-      return cloneEvent(nextEvent);
+      return add([event])[0];
+    },
+    appendMany(nextEvents) {
+      return nextEvents.length ? add(nextEvents) : [];
     },
     list(filter = {}) {
       return events.filter((event) => matchesFilter(event, filter)).map(cloneEvent);

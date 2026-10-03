@@ -14,6 +14,8 @@ export type ChatbotActivitySession = {
   messages?: ChatbotActivityMessage[];
 };
 
+export const CHATBOT_ACTIVITY_MESSAGE_LIMIT = 200;
+
 export type ChatbotActivityEventOptions = {
   workspaceId: string;
   projectId?: string;
@@ -35,7 +37,10 @@ export function createChatbotActivityEvents(
 ): AssistantWorkspaceEvent[] {
   if (!session?.messages?.length) return [];
 
+  // Activity covers the recent conversation; long transcripts would otherwise copy
+  // every message into the event store.
   return session.messages
+    .slice(-CHATBOT_ACTIVITY_MESSAGE_LIMIT)
     .filter((message) => message.role === 'user' || message.role === 'assistant')
     .map((message) => createMessageEvent(session.id, message, options));
 }
