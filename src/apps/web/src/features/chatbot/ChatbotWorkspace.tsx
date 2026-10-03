@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ClipboardEvent as ReactClipboardEvent, KeyboardEvent, UIEvent } from 'react';
+import type { KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
 import { ApiError, omnixApiClient, type ChatSession as ApiChatSession, type CodingApprovalPolicy } from '../../api/client';
@@ -38,35 +38,29 @@ import { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCa
 import { noteChatMessageSent, noteChatSession } from './researchProgressController';
 import { ResearchProgressCard } from './ResearchProgressCard';
 import { ChatMessageItem, type ChatMessageActions } from './ChatMessageItem';
-import { MAX_CHAT_IMAGE_ATTACHMENTS, SUPPORTED_CHAT_IMAGE_TYPES, chatImageDataUrls, formatMessageTime } from './chatMessageModel';
+import { formatMessageTime } from './chatMessageModel';
 import { visibleChatSessions } from './sessionTools';
 import { liveVoiceTranscriptStore, useLiveVoiceTranscript } from '../assistant-workspace/live-voice-transcript-store';
-import { ASSISTANT_SESSION_STORAGE_KEY, ASSISTANT_SIDEBAR_STORAGE_KEY, ASSISTANT_SIDE_PANEL_STORAGE_KEY, ASSISTANT_VIEW_STORAGE_KEY, AssistantMessageFeedback, AssistantSettings, AssistantView, BrowserSpeechRecognition, CALL_TIMER_TICK_MS, CHAT_JOB_ACTIVE_POLL_MS, CHAT_JOB_TERMINAL_STATUSES, ChatMessage, ChatbotFormValues, DEFAULT_SPEECH_LANGUAGE, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, LIVE_VOICE_INTERRUPT_EVENT, LIVE_VOICE_PERF_EVENT, LIVE_VOICE_STOP_EVENT, MAX_CHAT_IMAGE_BYTES, MAX_CHAT_TEXT_FILE_BYTES, PastedChatImage, PastedChatTextFile, PersonalityId, STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, SessionListEntry, StreamingTtsPlayback, StreamingTtsWindow, UtilityPanel, VoiceCaptureMode, VoicePerformanceStage, VoiceProfileAsset, VoiceTurnPerformance, VoiceTurnTimestampStage, appendWorkspaceEventIfMissing, assistantSidebarItems, attachmentDefaultMessage, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, chatCapableModels, chatCapableProviders, chatbotSubmitErrorMessage, clampLiveVoiceSensitivity, codingApprovalOptions, copyTextToClipboard, createChatbotWorkspaceEventStore, createPersonalityPrompt, createWorkspaceEventFilter, dedicatedLiveVoiceControllerInstalled, defaultAssistantSettings, elapsedMs, finiteNumber, formatCallDuration, formatClockTime, getLatestAssistantMessage, getSpeechRecognitionConstructor, getSynthesizedAudioSource, getVoiceJobAudioSource, getVoiceProfileAssets, isScrolledNearBottom, liveVoiceSubmissionKey, loadAssistantSettings, loadSelectedSessionId, makePlayableAudioSource, mergeTranscript, parseChatStreamEvent, personalityLabel, personalityOptions, readAssistantToolReturn, readFileAsDataUrl, saveAssistantSettings, selectedModelLabel, selectedProviderLabel, shouldFlushStreamedSpeechBuffer, suggestedPrompts, unifiedLiveVoiceAudioInstalled, voiceCaptureLabel, voiceJobErrorMessage, voiceLabelForId, voiceProfileId, voiceProfileLabel, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish } from './chatbotWorkspaceModel';
+import { ASSISTANT_SESSION_STORAGE_KEY, AssistantMessageFeedback, AssistantSettings, AssistantView, BrowserSpeechRecognition, CALL_TIMER_TICK_MS, CHAT_JOB_ACTIVE_POLL_MS, CHAT_JOB_TERMINAL_STATUSES, ChatMessage, ChatbotFormValues, DEFAULT_SPEECH_LANGUAGE, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, LIVE_VOICE_INTERRUPT_EVENT, LIVE_VOICE_PERF_EVENT, LIVE_VOICE_STOP_EVENT, PersonalityId, STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, SessionListEntry, StreamingTtsPlayback, StreamingTtsWindow, VoiceCaptureMode, VoicePerformanceStage, VoiceProfileAsset, VoiceTurnPerformance, VoiceTurnTimestampStage, appendWorkspaceEventIfMissing, assistantSidebarItems, attachmentDefaultMessage, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, chatCapableModels, chatCapableProviders, chatbotSubmitErrorMessage, clampLiveVoiceSensitivity, codingApprovalOptions, copyTextToClipboard, createChatbotWorkspaceEventStore, createPersonalityPrompt, createWorkspaceEventFilter, dedicatedLiveVoiceControllerInstalled, defaultAssistantSettings, elapsedMs, finiteNumber, formatCallDuration, formatClockTime, getLatestAssistantMessage, getSpeechRecognitionConstructor, getSynthesizedAudioSource, getVoiceJobAudioSource, getVoiceProfileAssets, isScrolledNearBottom, liveVoiceSubmissionKey, loadAssistantSettings, loadSelectedSessionId, makePlayableAudioSource, mergeTranscript, parseChatStreamEvent, personalityLabel, personalityOptions, readAssistantToolReturn, saveAssistantSettings, selectedModelLabel, selectedProviderLabel, shouldFlushStreamedSpeechBuffer, suggestedPrompts, unifiedLiveVoiceAudioInstalled, voiceCaptureLabel, voiceJobErrorMessage, voiceLabelForId, voiceProfileId, voiceProfileLabel, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish } from './chatbotWorkspaceModel';
+import { useChatLayout } from './useChatLayout';
+import { useChatAttachments } from './useChatAttachments';
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const assistantToolReturn = useMemo(() => readAssistantToolReturn(), []);
+  const {
+    activeView, setActiveView,
+    isChatFullscreen, setIsChatFullscreen,
+    activeUtilityPanel, setActiveUtilityPanel,
+    isAssistantSidebarMinimized, setIsAssistantSidebarMinimized,
+    isSidePanelMinimized, setIsSidePanelMinimized,
+  } = useChatLayout(assistantToolReturn.toolId);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => loadSelectedSessionId());
-  const [isChatFullscreen, setIsChatFullscreen] = useState(false);
-  const [activeView, setActiveView] = useState<AssistantView>(() => {
-    if (assistantToolReturn.toolId) return 'tools';
-    const stored = window.localStorage.getItem(ASSISTANT_VIEW_STORAGE_KEY);
-    return assistantSidebarItems.some((item) => item.id === stored) ? stored as AssistantView : 'chats';
-  });
-  const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
-  const [isAssistantSidebarMinimized, setIsAssistantSidebarMinimized] = useState(() => {
-    try {
-      return window.localStorage.getItem(ASSISTANT_SIDEBAR_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
-  const [isSidePanelMinimized, setIsSidePanelMinimized] = useState(() => {
-    try {
-      return window.localStorage.getItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const {
+    pastedChatImages, setPastedChatImages,
+    pastedChatTextFile, setPastedChatTextFile,
+    chatImageError, setChatImageError,
+    handleComposerPaste,
+  } = useChatAttachments();
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
   const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
@@ -76,9 +70,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [activeChatJobId, setActiveChatJobId] = useState<string | null>(null);
   const [chatJobError, setChatJobError] = useState<string | null>(null);
-  const [pastedChatImages, setPastedChatImages] = useState<PastedChatImage[]>([]);
-  const [pastedChatTextFile, setPastedChatTextFile] = useState<PastedChatTextFile | null>(null);
-  const [chatImageError, setChatImageError] = useState<string | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
   const [callElapsedMs, setCallElapsedMs] = useState(0);
   const [voiceCaptureMode, setVoiceCaptureMode] = useState<VoiceCaptureMode>('idle');
@@ -289,95 +280,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     };
   }, [queryClient]);
 
-  useEffect(() => {
-    window.localStorage.setItem(ASSISTANT_VIEW_STORAGE_KEY, activeView);
-  }, [activeView]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY, String(isSidePanelMinimized));
-    } catch {
-      // Ignore local storage failures; the panel remains usable for this session.
-    }
-  }, [isSidePanelMinimized]);
 
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(ASSISTANT_SIDEBAR_STORAGE_KEY, String(isAssistantSidebarMinimized));
-    } catch {
-      // Ignore local storage failures; the navigation remains usable for this session.
-    }
-  }, [isAssistantSidebarMinimized]);
 
-  useEffect(() => {
-    const handleSelectedChatImage = (event: Event): void => {
-      const detail = (event as CustomEvent<Partial<PastedChatImage>>).detail;
-      if (!detail || typeof detail.dataUrl !== 'string' || typeof detail.mimeType !== 'string' || !SUPPORTED_CHAT_IMAGE_TYPES.has(detail.mimeType) || chatImageDataUrls({ image_data_url: detail.dataUrl }).length !== 1) {
-        setChatImageError('The selected file is not a supported image.');
-        return;
-      }
-      const image = {
-        dataUrl: detail.dataUrl,
-        mimeType: detail.mimeType,
-        size: typeof detail.size === 'number' && Number.isFinite(detail.size) ? detail.size : 0,
-      };
-      if (pastedChatImages.length >= MAX_CHAT_IMAGE_ATTACHMENTS && !pastedChatImages.some((candidate) => candidate.dataUrl === image.dataUrl)) {
-        setChatImageError(`You can attach up to ${MAX_CHAT_IMAGE_ATTACHMENTS} images.`);
-        return;
-      }
-      setPastedChatImages((current) => {
-        if (current.some((candidate) => candidate.dataUrl === image.dataUrl)) return current;
-        return [...current, image].slice(0, MAX_CHAT_IMAGE_ATTACHMENTS);
-      });
-      setPastedChatTextFile(null);
-      setChatImageError(null);
-    };
-    const handleSelectedChatTextFile = (event: Event): void => {
-      const detail = (event as CustomEvent<Partial<PastedChatTextFile>>).detail;
-      if (!detail || typeof detail.filename !== 'string' || typeof detail.mimeType !== 'string' || typeof detail.text !== 'string' || !detail.filename.trim() || !detail.mimeType.trim() || !detail.text.trim() || detail.text.length > MAX_CHAT_TEXT_FILE_BYTES) {
-        setChatImageError('The selected file is empty or too large. Choose a text file smaller than 100 KB.');
-        return;
-      }
-      setPastedChatTextFile({
-        filename: detail.filename.trim(),
-        mimeType: detail.mimeType.trim(),
-        size: typeof detail.size === 'number' && Number.isFinite(detail.size) ? detail.size : detail.text.length,
-        text: detail.text,
-      });
-      setPastedChatImages([]);
-      setChatImageError(null);
-    };
-    const handleChatImageError = (event: Event): void => {
-      const detail = (event as CustomEvent<{ message?: unknown }>).detail;
-      setChatImageError(typeof detail?.message === 'string' ? detail.message : 'Unable to attach the selected image.');
-    };
-    window.addEventListener('omnix:chat-image-selected', handleSelectedChatImage);
-    window.addEventListener('omnix:chat-text-file-selected', handleSelectedChatTextFile);
-    window.addEventListener('omnix:chat-image-error', handleChatImageError);
-    return () => {
-      window.removeEventListener('omnix:chat-image-selected', handleSelectedChatImage);
-      window.removeEventListener('omnix:chat-text-file-selected', handleSelectedChatTextFile);
-      window.removeEventListener('omnix:chat-image-error', handleChatImageError);
-    };
-  }, [pastedChatImages.length]);
 
-  useEffect(() => {
-    if (activeView !== 'chats') setIsChatFullscreen(false);
-  }, [activeView]);
 
-  useEffect(() => {
-    if (!isChatFullscreen) return;
-    const previousOverflow = document.body.style.overflow;
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setIsChatFullscreen(false);
-    };
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [isChatFullscreen]);
 
   useEffect(() => {
     if (!liveCallRuntimeQuery.data || liveVoiceActiveRef.current) return;
@@ -1364,48 +1271,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     event.currentTarget.form?.requestSubmit();
   }
 
-  function handleComposerPaste(event: ReactClipboardEvent<HTMLTextAreaElement>): void {
-    const imageItems = Array.from(event.clipboardData.items).filter((item) => item.type.startsWith('image/'));
-    if (!imageItems.length) return;
-
-    event.preventDefault();
-    const files = imageItems.map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
-    if (files.length !== imageItems.length) {
-      setChatImageError('Unable to read one or more pasted images.');
-      return;
-    }
-    if (files.some((file) => !SUPPORTED_CHAT_IMAGE_TYPES.has(file.type))) {
-      setChatImageError('Paste PNG, JPEG, or WebP images.');
-      return;
-    }
-    if (files.some((file) => file.size > MAX_CHAT_IMAGE_BYTES)) {
-      setChatImageError('Each image must be 5 MB or smaller.');
-      return;
-    }
-    if (files.length > MAX_CHAT_IMAGE_ATTACHMENTS - pastedChatImages.length) {
-      setChatImageError(`You can attach up to ${MAX_CHAT_IMAGE_ATTACHMENTS} images.`);
-      return;
-    }
-
-    setChatImageError(null);
-    void Promise.all(files.map(async (file) => ({
-      dataUrl: await readFileAsDataUrl(file),
-      mimeType: file.type,
-      size: file.size,
-    })))
-      .then((images) => {
-        setPastedChatImages((current) => {
-          const next = [...current];
-          for (const image of images) {
-            if (next.length >= MAX_CHAT_IMAGE_ATTACHMENTS) break;
-            if (!next.some((candidate) => candidate.dataUrl === image.dataUrl)) next.push(image);
-          }
-          return next;
-        });
-        setPastedChatTextFile(null);
-      })
-      .catch(() => setChatImageError('Unable to read one or more pasted images.'));
-  }
 
   messageActionsRef.current = {
     toggleFeedback: toggleAssistantMessageFeedback,
