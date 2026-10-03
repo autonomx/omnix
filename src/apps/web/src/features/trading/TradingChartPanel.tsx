@@ -432,7 +432,6 @@ export function TradingChartPanel({
   const [customRangeError, setCustomRangeError] = useState<string | null>(null);
   const [timezoneId, setTimezoneId] = useState(readTradingTimezoneId);
   const [timezoneMenuOpen, setTimezoneMenuOpen] = useState(false);
-  const [clockNow, setClockNow] = useState(() => new Date());
   const customRangeRef = useRef<HTMLDivElement | null>(null);
   const timezoneMenuRef = useRef<HTMLDivElement | null>(null);
   const [rightOffset, setRightOffset] = useState(readTradingRightOffset);
@@ -768,11 +767,6 @@ export function TradingChartPanel({
     };
     window.addEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
     return () => window.removeEventListener(TRADING_TIMEZONE_CHANGE_EVENT, synchronizeTimezone);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setClockNow(new Date()), 1_000);
-    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -2021,13 +2015,13 @@ export function TradingChartPanel({
               title={`Timezone: ${selectedTimezoneOption.label}`}
               onClick={() => { setTimezoneMenuOpen((current) => !current); setCustomRangeOpen(false); }}
             >
-              {`${formatTradingTime(clockNow, selectedTimezone)} ${formatTradingTimezoneOffset(clockNow, selectedTimezone)}`}
+              <TradingClock timezone={selectedTimezone} />
             </button>
             {timezoneMenuOpen ? (
               <div className="trading-timezone-menu" role="listbox" aria-label="Chart timezone">
                 {TRADING_TIMEZONE_OPTIONS.map((option) => {
                   const optionTimezone = resolveTradingTimezone(option.id, chartQuery.data?.instrument.exchange_timezone);
-                  const offset = formatTradingTimezoneOffset(clockNow, optionTimezone);
+                  const offset = formatTradingTimezoneOffset(new Date(), optionTimezone);
                   return (
                     <button
                       key={option.id}
@@ -2056,4 +2050,14 @@ export function TradingChartPanel({
       </footer>
     </article>
   );
+}
+
+/** The chart footer's clock; it re-renders itself each second, not the chart panel (WP-9.9). */
+function TradingClock({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <>{`${formatTradingTime(now, timezone)} ${formatTradingTimezoneOffset(now, timezone)}`}</>;
 }
