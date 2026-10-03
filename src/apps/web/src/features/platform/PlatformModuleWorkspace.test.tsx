@@ -50,7 +50,7 @@ class MockEventSource {
   }
 }
 
-function renderPlatform(moduleId: OmnixModuleId) {
+function renderPlatform(moduleId: OmnixModuleId, prepare?: (queryClient: QueryClient) => void) {
   vi.stubGlobal('EventSource', MockEventSource);
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -58,6 +58,7 @@ function renderPlatform(moduleId: OmnixModuleId) {
       mutations: { retry: false },
     },
   });
+  prepare?.(queryClient);
   const module = omnixModules.find((entry) => entry.id === moduleId);
 
   if (!module) {
@@ -359,6 +360,14 @@ describe('PlatformModuleWorkspace', () => {
     expect(screen.getByRole('heading', { name: 'job.first' })).toBeInTheDocument();
     expect(String(fetchMock.mock.calls[1][0])).toContain('cursor=page-2');
     expect(screen.queryByRole('button', { name: 'Load more jobs' })).not.toBeInTheDocument();
+  });
+
+  it('pages assets apart from the plain asset list other workspaces cache', async () => {
+    mockGateway({ '/api/assets': assetPayload(true) });
+
+    renderPlatform('assets', (queryClient) => queryClient.setQueryData(['platform', 'assets'], { assets: [] }));
+
+    expect(await screen.findByRole('heading', { name: 'image / image-generation' })).toBeInTheDocument();
   });
 
   it('refreshes jobs when shared job events arrive', async () => {

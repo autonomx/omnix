@@ -173,7 +173,8 @@ function JobsView() {
   const eventStatus = useEventConnectionStatus();
   useJobEventRefresh(jobsEventQueryKeys);
   const query = useInfiniteQuery({
-    queryKey: ['platform', 'jobs'],
+    // Other workspaces cache the plain jobs list under ['platform', 'jobs']; invalidating that prefix refreshes these pages too.
+    queryKey: ['platform', 'jobs', 'pages'],
     queryFn: ({ pageParam }) => omnixApiClient.listJobs({ limit: JOB_PAGE_SIZE, cursor: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: nextCursor,
@@ -239,7 +240,8 @@ function JobsView() {
 function AssetsView() {
   useJobEventRefresh(artifactEventQueryKeys);
   const query = useInfiniteQuery({
-    queryKey: ['platform', 'assets'],
+    // Other workspaces cache the plain assets list under ['platform', 'assets']; invalidating that prefix refreshes these pages too.
+    queryKey: ['platform', 'assets', 'pages'],
     queryFn: ({ pageParam }) => omnixApiClient.listAssetPage({ limit: ASSET_PAGE_SIZE, cursor: pageParam }),
     initialPageParam: null as string | null,
     getNextPageParam: nextCursor,
