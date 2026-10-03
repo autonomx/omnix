@@ -1,43 +1,17 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClipboardEvent as ReactClipboardEvent, KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { useForm, useWatch, type Control } from 'react-hook-form';
-import {
-  ApiError,
-  omnixApiClient,
-  type AssetListResponse,
-  type ChatSession as ApiChatSession,
-  type CodingApprovalPolicy,
-  type JobRecord,
-  type ProviderFacadePayload,
-} from '../../api/client';
+import { ApiError, omnixApiClient, type ChatSession as ApiChatSession, type CodingApprovalPolicy } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { VirtualList } from '../../design/VirtualList';
-import { fetchBytes, openStream, statusError } from '../../api/transport';
-import {
-  ToolExecutionPanel,
-  createFetchSpeechServiceTransport,
-  createInMemoryAssistantWorkspaceEventStore,
-  createStoredAssistantWorkspaceEventStore,
-  createSttServiceClient,
-  createToolExecutionRows,
-  createTtsServiceClient,
-  type AssistantWorkspaceEvent,
-  type AssistantWorkspaceEventStore,
-  type AssistantWorkspaceEventStoreFilter,
-  type AssistantWorkspaceEventStorage,
-  type AssistantWorkspaceRuntimeConfig,
-  type TtsSynthesisResponse,
-} from '../assistant-workspace';
+import { openStream, statusError } from '../../api/transport';
+import { ToolExecutionPanel, createFetchSpeechServiceTransport, createSttServiceClient, createToolExecutionRows, createTtsServiceClient, type AssistantWorkspaceEvent, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
 import { createChatbotActivityEvents, createChatbotFailureEvent } from '../assistant-workspace/chatbot-activity';
-import {
-  createLiveCallDiagnosticsReporter,
-  type LiveCallDiagnosticsReporter,
-} from '../assistant-workspace/live-call-diagnostics-client';
+import { createLiveCallDiagnosticsReporter, type LiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
 import { liveChatSubmissionGateway } from '../assistant-workspace/live-chat-submission-gateway';
 import { createAssistantWorkspaceRuntimeConfig } from '../assistant-workspace/runtime-config';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
@@ -59,216 +33,15 @@ import { MemoryManagementPanel } from './MemoryManagementPanel';
 import { enterLiveChatFullscreen } from './live-chat-fullscreen-controller';
 import { characterClient, type CharacterLiveCallRuntime, type LiveCallSpeechStyle } from './characterClient';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
-import { isLiveVoiceControllerInstalled, startLiveVoiceCall, toggleLiveVoiceCall } from '../assistant-workspace/live-voice-controller';
+import { startLiveVoiceCall, toggleLiveVoiceCall } from '../assistant-workspace/live-voice-controller';
 import { LIVE_TASK_PRESETS, liveCallPresentationStore, liveCallVoiceMode, liveCaptureLabels, useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
-import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
-import type { components } from '../../api/generated/types';
-import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
 import { noteChatMessageSent, noteChatSession } from './researchProgressController';
 import { ResearchProgressCard } from './ResearchProgressCard';
 import { ChatMessageItem, type ChatMessageActions } from './ChatMessageItem';
 import { MAX_CHAT_IMAGE_ATTACHMENTS, SUPPORTED_CHAT_IMAGE_TYPES, chatImageDataUrls, formatMessageTime } from './chatMessageModel';
 import { visibleChatSessions } from './sessionTools';
 import { liveVoiceTranscriptStore, useLiveVoiceTranscript } from '../assistant-workspace/live-voice-transcript-store';
-
-interface ChatbotFormValues {
-  content: string;
-  providerId: string;
-  modelId: string;
-  userTurnId?: string;
-}
-
-type PastedChatImage = {
-  dataUrl: string;
-  mimeType: string;
-  size: number;
-};
-
-type PastedChatTextFile = {
-  filename: string;
-  mimeType: string;
-  size: number;
-  text: string;
-};
-
-const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
-const DEFAULT_IMAGE_MESSAGE = 'Please analyze the attached image.';
-const DEFAULT_IMAGES_MESSAGE = 'Please analyze the attached images.';
-const DEFAULT_TEXT_FILE_MESSAGE = 'Please analyze the attached file.';
-
-type AssistantView = 'chats' | 'live' | 'voice' | 'tools' | 'characters' | 'memory' | 'settings';
-type UtilityPanel = 'voice' | 'tools';
-type VoiceCaptureMode = 'idle' | 'listening' | 'recording' | 'transcribing' | 'error';
-type VoiceProfileAsset = AssetListResponse['assets'][number];
-type PersonalityId = 'default' | 'concise' | 'coach' | 'technical' | 'creative' | 'custom';
-type AssistantMessageFeedback = 'liked' | 'disliked';
-
-type ChatMessage = components['schemas']['ChatMessage'];
-
-type BrowserSpeechRecognitionAlternative = { transcript: string };
-type BrowserSpeechRecognitionResult = { isFinal: boolean; 0?: BrowserSpeechRecognitionAlternative };
-type BrowserSpeechRecognitionEvent = { resultIndex: number; results: { length: number; [index: number]: BrowserSpeechRecognitionResult } };
-type BrowserSpeechRecognitionErrorEvent = { error?: string; message?: string };
-type BrowserSpeechRecognition = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
-  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-};
-type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
-type SpeechRecognitionWindow = Window & { SpeechRecognition?: BrowserSpeechRecognitionConstructor; webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor };
-
-type AssistantSettings = {
-  voiceId: string;
-  personalityId: PersonalityId;
-  customPersonality: string;
-  liveVoiceSensitivity: number;
-  codingApprovalPolicy: CodingApprovalPolicy;
-};
-
-const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: string }> = [
-  { id: 'chats', label: 'Chats', icon: '▣' },
-  { id: 'live', label: 'Live Chat', icon: '◉' },
-  { id: 'voice', label: 'Voice Sessions', icon: '◉' },
-  { id: 'tools', label: 'Tools', icon: '⚒' },
-  { id: 'characters', label: 'Characters', icon: '♙' },
-  { id: 'memory', label: 'Memory', icon: '▦' },
-  { id: 'settings', label: 'Settings', icon: '⚙' },
-];
-
-const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me productivity tips'] as const;
-const CALL_TIMER_TICK_MS = 1_000;
-const DEFAULT_SPEECH_LANGUAGE = 'en-US';
-const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
-const DEFAULT_CODING_APPROVAL_POLICY: CodingApprovalPolicy = 'ask_sensitive';
-const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: string; description: string }> = [
-  { value: 'always_ask', label: 'Ask for approval', description: 'Approve coding commands and file edits before they run.' },
-  { value: 'ask_sensitive', label: 'Approve for me', description: 'Run safe coding actions automatically and ask only for higher-risk actions.' },
-  { value: 'allow_automatic', label: 'Full access', description: 'Run workspace-scoped coding actions without approval prompts.' },
-];
-const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
-const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
-const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
-const ASSISTANT_SIDEBAR_STORAGE_KEY = 'omnix.chatbot.assistantSidebarMinimized';
-const ASSISTANT_SIDE_PANEL_STORAGE_KEY = 'omnix.chatbot.sidePanelMinimized';
-const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
-const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
-const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
-const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
-const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
-const LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS = 0;
-const CHAT_JOB_TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
-const CHAT_JOB_ACTIVE_POLL_MS = 1_000;
-
-function liveVoiceSubmissionKey(content: string): string {
-  return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
-}
-
-function finiteNumber(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function dedicatedLiveVoiceControllerInstalled(): boolean {
-  return isLiveVoiceControllerInstalled();
-}
-
-function unifiedLiveVoiceAudioInstalled(): boolean {
-  return isLiveVoiceUnifiedAudioInstalled();
-}
-
-type VoicePerformanceStage = {
-  stage?: unknown;
-  turnId?: unknown;
-  transcriptChars?: unknown;
-  sttFinalizeMs?: unknown;
-  delayMs?: unknown;
-  pace?: unknown;
-  probabilityDone?: unknown;
-  reason?: unknown;
-};
-
-type ChatStreamEvent = {
-  type?: string;
-  text?: string;
-  message?: unknown;
-  session?: ApiChatSession;
-};
-
-type VoiceTurnPerformance = {
-  turnId: string;
-  sttFinalReceivedAt: number;
-  transcriptChars?: number;
-  sttFinalizeMs?: number;
-  chatSubmitStartedAt?: number;
-  chatResponseReceivedAt?: number;
-  llmFirstChunkReceivedAt?: number;
-  llmCompletedAt?: number;
-  ttsStartedAt?: number;
-  ttsReadyAt?: number;
-  ttsFirstChunkReceivedAt?: number;
-  audioFirstScheduledAt?: number;
-  audioPlayStartedAt?: number;
-  turnaroundLogged?: boolean;
-};
-
-type VoiceTurnTimestampStage = Exclude<
-  keyof VoiceTurnPerformance,
-  'turnId' | 'sttFinalReceivedAt' | 'transcriptChars' | 'sttFinalizeMs' | 'turnaroundLogged'
->;
-
-type StreamingTtsPlayback = {
-  audioContext: AudioContext;
-  abortController: AbortController;
-  sources: AudioBufferSourceNode[];
-  closed: boolean;
-};
-
-type StreamingTtsWindow = Window & typeof globalThis & {
-  AudioContext?: typeof AudioContext;
-  webkitAudioContext?: typeof AudioContext;
-};
-
-const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: string }> = [
-  {
-    id: 'default',
-    label: 'Omnix Default',
-    prompt: 'You are Omnix Assistant. Be helpful, clear, and practical.',
-  },
-  {
-    id: 'concise',
-    label: 'Concise operator',
-    prompt: 'You are Omnix Assistant. Be direct, concise, and action-oriented. Prefer short answers unless detail is requested.',
-  },
-  {
-    id: 'coach',
-    label: 'Friendly coach',
-    prompt: 'You are Omnix Assistant. Be warm, encouraging, and practical. Ask at most one clarifying question when needed.',
-  },
-  {
-    id: 'technical',
-    label: 'Technical expert',
-    prompt: 'You are Omnix Assistant. Be precise, technical, and implementation-focused. Include concrete steps and caveats.',
-  },
-  {
-    id: 'creative',
-    label: 'Creative collaborator',
-    prompt: 'You are Omnix Assistant. Be imaginative, collaborative, and vivid while staying useful and grounded.',
-  },
-  {
-    id: 'custom',
-    label: 'Custom personality',
-    prompt: '',
-  },
-];
+import { ASSISTANT_SESSION_STORAGE_KEY, ASSISTANT_SIDEBAR_STORAGE_KEY, ASSISTANT_SIDE_PANEL_STORAGE_KEY, ASSISTANT_VIEW_STORAGE_KEY, AssistantMessageFeedback, AssistantSettings, AssistantView, BrowserSpeechRecognition, CALL_TIMER_TICK_MS, CHAT_JOB_ACTIVE_POLL_MS, CHAT_JOB_TERMINAL_STATUSES, ChatMessage, ChatbotFormValues, DEFAULT_SPEECH_LANGUAGE, LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, LIVE_VOICE_AUTO_SEND_DELAY_MS, LIVE_VOICE_INTERRUPT_EVENT, LIVE_VOICE_PERF_EVENT, LIVE_VOICE_STOP_EVENT, MAX_CHAT_IMAGE_BYTES, MAX_CHAT_TEXT_FILE_BYTES, PastedChatImage, PastedChatTextFile, PersonalityId, STREAMING_TTS_RECOVERY_DELAY_SECONDS, STREAMING_TTS_SAMPLE_RATE, SessionListEntry, StreamingTtsPlayback, StreamingTtsWindow, UtilityPanel, VoiceCaptureMode, VoicePerformanceStage, VoiceProfileAsset, VoiceTurnPerformance, VoiceTurnTimestampStage, appendWorkspaceEventIfMissing, assistantSidebarItems, attachmentDefaultMessage, audioSourceToArrayBuffer, canUseDecodedAudioPlayback, chatCapableModels, chatCapableProviders, chatbotSubmitErrorMessage, clampLiveVoiceSensitivity, codingApprovalOptions, copyTextToClipboard, createChatbotWorkspaceEventStore, createPersonalityPrompt, createWorkspaceEventFilter, dedicatedLiveVoiceControllerInstalled, defaultAssistantSettings, elapsedMs, finiteNumber, formatCallDuration, formatClockTime, getLatestAssistantMessage, getSpeechRecognitionConstructor, getSynthesizedAudioSource, getVoiceJobAudioSource, getVoiceProfileAssets, isScrolledNearBottom, liveVoiceSubmissionKey, loadAssistantSettings, loadSelectedSessionId, makePlayableAudioSource, mergeTranscript, parseChatStreamEvent, personalityLabel, personalityOptions, readAssistantToolReturn, readFileAsDataUrl, saveAssistantSettings, selectedModelLabel, selectedProviderLabel, shouldFlushStreamedSpeechBuffer, suggestedPrompts, unifiedLiveVoiceAudioInstalled, voiceCaptureLabel, voiceJobErrorMessage, voiceLabelForId, voiceProfileId, voiceProfileLabel, waitForAudioElementPlaying, waitForAudioElementToFinish, waitForStreamingPlaybackToFinish } from './chatbotWorkspaceModel';
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const assistantToolReturn = useMemo(() => readAssistantToolReturn(), []);
@@ -2172,58 +1945,3 @@ function AssistantWorkspaceView({ activeView, assistantSettings, selectedSession
   if (activeView === 'memory') return <MemoryManagementPanel sessionId={selectedSessionId} />;
   return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Select the assistant personality and cloned voice used by Chatbot sessions and response audio.</p><div className="assistant-settings-list"><div><label htmlFor="assistant-personality">Personality</label><select id="assistant-personality" aria-label="Personality" value={assistantSettings.personalityId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, personalityId: event.currentTarget.value as PersonalityId })}>{personalityOptions.map((personality) => <option key={personality.id} value={personality.id}>{personality.label}</option>)}</select></div><div><label htmlFor="coding-approval-policy">Coding agent permissions</label><select id="coding-approval-policy" aria-label="Coding agent permissions" value={assistantSettings.codingApprovalPolicy} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, codingApprovalPolicy: event.currentTarget.value as CodingApprovalPolicy })}>{codingApprovalOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>{codingApprovalOptions.find((option) => option.value === assistantSettings.codingApprovalPolicy)?.description}</small></div><div><label htmlFor="assistant-custom-personality">Custom personality</label><textarea id="assistant-custom-personality" aria-label="Custom personality" rows={4} value={assistantSettings.customPersonality} disabled={assistantSettings.personalityId !== 'custom'} placeholder="Describe how the assistant should behave, speak, and prioritize responses." onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, customPersonality: event.currentTarget.value })} /></div><div><label htmlFor="assistant-voice">Cloned voice</label><select id="assistant-voice" aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}><option value="">{runtimeConfig.ttsVoice ? `Default configured voice (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>{voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}</select></div><div><label htmlFor="assistant-live-sensitivity">Live mic sensitivity</label><input id="assistant-live-sensitivity" aria-label="Live mic sensitivity" type="range" min="1" max="100" step="1" value={assistantSettings.liveVoiceSensitivity} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, liveVoiceSensitivity: clampLiveVoiceSensitivity(event.currentTarget.value) })} /><strong>{assistantSettings.liveVoiceSensitivity}%</strong></div><div><span>Voice profiles</span><strong>{voiceProfilesLoading ? 'Loading cloned voices…' : voiceProfiles.length ? `${voiceProfiles.length} cloned voices available` : 'No cloned voices indexed'}</strong></div><div><span>TTS output</span><strong>{ttsOutputLabel}</strong></div><div><span>Provider</span><strong>{providerLabel}</strong></div><div><span>Model</span><strong>{modelLabel}</strong></div><div><span>Speech input</span><strong>{speechInputLabel}</strong></div><div><span>Event storage</span><strong>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</strong></div><div><span>Live assistant</span><strong>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</strong></div><div><span>Tool execution</span><strong>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</strong></div><div><span>Available chat providers</span><strong>{chatProviders.length}</strong></div></div><div className="assistant-settings-actions"><button type="button" onClick={onResetAssistantSettings}>Reset assistant settings</button></div>{settingsStatus ? <p className="assistant-view-note" role="status">{settingsStatus}</p> : null}<p className="assistant-view-note">Personality is sent as the system prompt when a new chat session is created. Coding agent permissions apply to new coding Agent runs. Existing runs keep their original policy.</p></section>;
 }
-
-function chatCapableProviders(payload: ProviderFacadePayload | undefined) { return payload?.providers.filter((provider) => provider.capabilities.includes('chat')) ?? []; }
-function chatCapableModels(payload: ProviderFacadePayload | undefined, providerId: string) { return payload?.models.filter((model) => { const providerMatches = providerId ? model.provider_id === providerId : true; return providerMatches && model.capabilities.includes('chat'); }) ?? []; }
-function selectedProviderLabel(payload: ProviderFacadePayload | undefined, providerId: string) { if (!providerId) return 'Default provider'; return payload?.providers.find((provider) => provider.id === providerId)?.label ?? providerId; }
-function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string) { if (!modelId) return 'Default model'; return payload?.models.find((model) => model.id === modelId)?.label ?? modelId; }
-function chatbotSubmitErrorMessage(error: unknown): string { if (error instanceof ApiError) return error.message; if (error instanceof Error) return error.message; return 'Chat request failed'; }
-function formatClockTime(value: string): string { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-function formatCallDuration(valueMs: number): string { const totalSeconds = Math.max(0, Math.floor(valueMs / 1000)); const hours = Math.floor(totalSeconds / 3600); const minutes = Math.floor((totalSeconds % 3600) / 60); const seconds = totalSeconds % 60; return [hours, minutes, seconds].map((value) => value.toString().padStart(2, '0')).join(':'); }
-function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore { const storage = getAssistantWorkspaceEventStorage(); if (config.features.persistedEvents && storage) return createStoredAssistantWorkspaceEventStore(storage, config.eventStorageKey); return createInMemoryAssistantWorkspaceEventStore(); }
-function appendWorkspaceEventIfMissing(eventStore: AssistantWorkspaceEventStore, event: AssistantWorkspaceEvent, filter: AssistantWorkspaceEventStoreFilter): void { const currentEventIds = new Set(eventStore.list(filter).map((currentEvent) => currentEvent.id)); if (!currentEventIds.has(event.id)) eventStore.append(event); }
-function getAssistantWorkspaceEventStorage(): AssistantWorkspaceEventStorage | undefined { try { return typeof window === 'undefined' ? undefined : window.localStorage; } catch { return undefined; } }
-function createWorkspaceEventFilter(config: AssistantWorkspaceRuntimeConfig, sessionId?: string): AssistantWorkspaceEventStoreFilter { return { workspaceId: config.workspaceId, projectId: config.projectId, sessionId }; }
-function readAssistantToolReturn(): { message: string | null; toolId: string | null } { try { if (typeof window === 'undefined') return { message: null, toolId: null }; const params = new URLSearchParams(window.location.search); const toolId = params.get('assistant_tool'); return { message: params.get('assistant_tool_message'), toolId: toolId && /^[a-z][a-z0-9_-]*$/.test(toolId) ? toolId : null }; } catch { return { message: null, toolId: null }; } }
-function getLatestAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined { return [...messages].reverse().find((message) => message.role === 'assistant' && message.content.trim()); }
-function isScrolledNearBottom(element: HTMLElement): boolean { return element.scrollHeight - element.scrollTop - element.clientHeight < 160; }
-function getSynthesizedAudioSource(response: TtsSynthesisResponse): string { if (response.audioUrl) return response.audioUrl; if (response.audioBase64) return `data:${response.mimeType ?? 'audio/wav'};base64,${response.audioBase64}`; throw new Error('TTS service did not return playable audio.'); }
-/** The fields the session list reads; summaries and full sessions both have them. */
-type SessionListEntry = Pick<ApiChatSession, 'id' | 'title' | 'created_at' | 'updated_at'>;
-
-function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
-function shouldFlushStreamedSpeechBuffer(value: string): boolean { const text = value.trim(); if (text.length < STREAMED_TTS_MIN_PHRASE_CHARS) return false; return /[.!?]["')\]]?$/.test(text) || text.length >= STREAMED_TTS_MIN_PHRASE_CHARS * 2; }
-function elapsedMs(start: number | undefined, end: number | undefined): number | null { return start === undefined || end === undefined ? null : Math.round(end - start); }
-function voiceCaptureLabel(mode: VoiceCaptureMode): string { if (mode === 'recording') return 'Recording'; if (mode === 'transcribing') return 'Transcribing'; if (mode === 'error') return 'Error'; if (mode === 'listening') return 'Listening'; return 'Ready'; }
-function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined { if (typeof window === 'undefined') return undefined; const speechWindow = window as SpeechRecognitionWindow; return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition; }
-function canUseDecodedAudioPlayback(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean(liveWindow.AudioContext || liveWindow.webkitAudioContext); }
-// Checked at the boundary; the session is then read as the full ChatSession the route sends.
-function parseChatStreamEvent(value: string): ChatStreamEvent | null { return parseSseData(chatStreamEventSchema, value) as ChatStreamEvent | null; }
-function makePlayableAudioSource(source: string): { url: string; revoke?: () => void } { if (!source.startsWith('data:audio/') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return { url: source }; const blob = dataUrlToBlob(source); const url = URL.createObjectURL(blob); return { url, revoke: () => URL.revokeObjectURL(url) }; }
-function dataUrlToBlob(source: string): Blob { const [header, encoded = ''] = source.split(',', 2); const mime = /^data:([^;,]+)/.exec(header)?.[1] || 'audio/wav'; const binary = window.atob(encoded); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return new Blob([bytes], { type: mime }); }
-async function audioSourceToArrayBuffer(source: string): Promise<ArrayBuffer> { if (source.startsWith('data:')) return dataUrlToArrayBuffer(source); const response = await fetchBytes(source).catch(statusError('Audio fetch')); return response.arrayBuffer(); }
-function dataUrlToArrayBuffer(source: string): ArrayBuffer { const [, encoded = ''] = source.split(',', 2); return base64ToArrayBuffer(encoded); }
-function waitForAudioElementPlaying(audio: HTMLAudioElement): Promise<void> { return new Promise((resolve, reject) => { if (typeof audio.addEventListener !== 'function') { resolve(); return; } if (!audio.paused && audio.readyState >= 3) { resolve(); return; } let timeoutId: ReturnType<typeof setTimeout> | null = null; const cleanup = () => { audio.removeEventListener('playing', onPlaying); audio.removeEventListener('error', onError); if (timeoutId !== null) clearTimeout(timeoutId); }; const onPlaying = () => { cleanup(); resolve(); }; const onError = () => { cleanup(); reject(new Error(audio.error?.message || 'Audio playback failed before it started.')); }; audio.addEventListener('playing', onPlaying, { once: true }); audio.addEventListener('error', onError, { once: true }); timeoutId = setTimeout(() => { cleanup(); reject(new Error('Audio element did not start playing within 3s.')); }, 3000); }); }
-function waitForAudioElementToFinish(audio: HTMLAudioElement): Promise<void> { return new Promise((resolve) => { if (audio.ended || audio.paused || typeof audio.addEventListener !== 'function') { resolve(); return; } const done = () => resolve(); audio.addEventListener('ended', done, { once: true }); audio.addEventListener('pause', done, { once: true }); audio.addEventListener('error', done, { once: true }); }); }
-function waitForStreamingPlaybackToFinish(playback: StreamingTtsPlayback, isCancelled: () => boolean): Promise<void> { return new Promise((resolve) => { const tick = () => { if (playback.closed || playback.sources.length === 0 || isCancelled()) { resolve(); return; } window.setTimeout(tick, 25); }; tick(); }); }
-function base64ToArrayBuffer(value: string): ArrayBuffer { const binary = window.atob(value); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return bytes.buffer; }
-function getVoiceJobAudioSource(job: JobRecord): string | null { for (const output of jobOutputRefs(job)) { if (isFallbackOutputRef(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
-function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }
-function getVoiceProfileAssets(payload: AssetListResponse | undefined): VoiceProfileAsset[] { return payload?.assets.filter((asset) => asset.type === 'voice_profile') ?? []; }
-function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-function voiceProfileId(asset: VoiceProfileAsset): string { const metadata = asRecord(asset.metadata); return stringMetadata(metadata.voice_id) || stringMetadata(metadata.profile_id) || stringMetadata(metadata.id) || asset.id; }
-function voiceProfileLabel(asset: VoiceProfileAsset): string { const metadata = asRecord(asset.metadata); return stringMetadata(metadata.profile_name) || stringMetadata(metadata.name) || stringMetadata(metadata.voice_name) || asset.storage_path.split(/[\\/]/).pop() || asset.id; }
-function voiceLabelForId(voiceId: string, voiceProfiles: VoiceProfileAsset[]): string { if (!voiceId) return ''; const profile = voiceProfiles.find((asset) => voiceProfileId(asset) === voiceId || asset.id === voiceId); return profile ? voiceProfileLabel(profile) : voiceId; }
-function stringMetadata(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
-function readFileAsDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.')); reader.onerror = () => reject(reader.error ?? new Error('Image read failed.')); reader.readAsDataURL(file); }); }
-function attachmentDefaultMessage(images: PastedChatImage[], textFile: PastedChatTextFile | null): string { return images.length > 1 ? DEFAULT_IMAGES_MESSAGE : images.length === 1 ? DEFAULT_IMAGE_MESSAGE : textFile ? DEFAULT_TEXT_FILE_MESSAGE : ''; }
-async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }
-function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY, codingApprovalPolicy: DEFAULT_CODING_APPROVAL_POLICY }; }
-function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality, liveVoiceSensitivity: clampLiveVoiceSensitivity(parsed.liveVoiceSensitivity), codingApprovalPolicy: isCodingApprovalPolicy(parsed.codingApprovalPolicy) ? parsed.codingApprovalPolicy : fallback.codingApprovalPolicy }; } catch { return fallback; } }
-function saveAssistantSettings(settings: AssistantSettings): void { try { if (typeof window !== 'undefined') window.localStorage.setItem(ASSISTANT_SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore local storage failures */ } }
-function loadSelectedSessionId(): string | null { try { if (typeof window === 'undefined') return null; const stored = window.localStorage.getItem(ASSISTANT_SESSION_STORAGE_KEY)?.trim(); return stored || null; } catch { return null; } }
-function clampLiveVoiceSensitivity(value: unknown): number { const parsed = typeof value === 'number' ? value : Number(value); if (!Number.isFinite(parsed)) return DEFAULT_LIVE_VOICE_SENSITIVITY; return Math.min(100, Math.max(1, Math.round(parsed))); }
-function isCodingApprovalPolicy(value: unknown): value is CodingApprovalPolicy { return value === 'always_ask' || value === 'ask_sensitive' || value === 'allow_automatic'; }
-function isPersonalityId(value: unknown): value is PersonalityId { return typeof value === 'string' && personalityOptions.some((option) => option.id === value); }
-function personalityLabel(value: PersonalityId): string { return personalityOptions.find((option) => option.id === value)?.label ?? 'Omnix Default'; }
-function createPersonalityPrompt(settings: AssistantSettings): string | undefined { if (settings.personalityId === 'custom') return settings.customPersonality.trim() || undefined; return personalityOptions.find((option) => option.id === settings.personalityId)?.prompt; }
