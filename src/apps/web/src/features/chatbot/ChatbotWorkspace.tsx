@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, KeyboardEvent, UIEvent } from 'react';
+import type { ClipboardEvent as ReactClipboardEvent, KeyboardEvent, UIEvent } from 'react';
 import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -47,6 +47,9 @@ import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentTo
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import { LiveChatPanel } from './LiveChatPanel';
 import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
+import { LiveVoiceOrb } from './LiveVoiceOrb';
+import { DesktopCompanionControls } from '../assistant-workspace/desktop-companion-controls';
+import { DesktopCompanionTextSurface } from '../assistant-workspace/desktop-companion-text-surface';
 import { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from '../assistant-workspace/assistant-pcm-stream-websocket-player';
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
@@ -2135,11 +2138,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 role="img"
                 aria-label="Live character visual"
               >
-                <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">
-                  <div className="assistant-voice-meter assistant-voice-meter-left">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`left-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
-                  <div className="assistant-voice-core"><span className="assistant-voice-pulse" /><span className="assistant-voice-mic" /></div>
-                  <div className="assistant-voice-meter assistant-voice-meter-right">{[0, 1, 2, 3, 4, 5, 6].map((index) => <i key={`right-${index}`} style={{ '--bar-index': index } as CSSProperties} />)}</div>
-                </div>
+                <LiveVoiceOrb voiceMode={liveVoiceVisualMode} />
               </div>
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d' ? <Live2DZoomControl /> : null}
               <div className="assistant-voice-input-indicator" aria-live="polite">
@@ -2152,7 +2151,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
               <div className="assistant-voice-transcript" ref={voiceTranscriptRef}><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
-              <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div></div>
+              <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div><DesktopCompanionControls /><DesktopCompanionTextSurface /></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
             <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading"><ToolExecutionPanel rows={toolExecutionRows} title="Tool execution" description="Review approvals and monitor tool execution results." /></section>

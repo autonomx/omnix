@@ -106,25 +106,21 @@ async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store:
   add((await import('../features/assistant-workspace/live-tts-adaptive-buffer-controller')).initializeLiveTtsAdaptiveBufferController());
   add((await import('../features/assistant-workspace/live-voice-unified-audio-controller')).initializeLiveVoiceUnifiedAudioController());
   add((await import('../features/assistant-workspace/live-voice-pending-output-interrupt')).initializeLiveVoicePendingOutputInterrupt());
-  add((await import('../features/assistant-workspace/live-avatar-presence')).initializeLiveAvatarPresenceController());
   add((await import('../features/assistant-workspace/live-conversation-initiative-controller')).initializeLiveConversationInitiativeController());
   add((await import('../features/assistant-workspace/live-conversation-repair-controller')).initializeLiveConversationRepairController());
   add((await import('../features/assistant-workspace/live-conversation-evaluation-controller')).initializeLiveConversationEvaluationController());
   add((await import('../features/assistant-workspace/live-conversation-durable-evaluation-controller')).initializeLiveConversationDurableEvaluationController());
 
   add((await import('../features/assistant-workspace/assistant-context-controller')).initializeAssistantContextController());
-  add((await import('../features/assistant-workspace/desktop-companion-controls')).initializeDesktopCompanionControls());
 
   add((await import('../features/assistant-workspace/live-voice-form-sync')).initializeLiveVoiceFormSync());
   add((await import('../features/assistant-workspace/desktop-companion-expression-enricher')).initializeDesktopCompanionExpressionEnricher());
   add((await import('../features/assistant-workspace/desktop-companion-delivery')).initializeDesktopCompanionDeliveryController());
-  const [watch, textSurface, evaluation, operationalGuard] = await Promise.all([
+  const [watch, evaluation, operationalGuard] = await Promise.all([
     import('../features/assistant-workspace/desktop-companion-watch-controller'),
-    import('../features/assistant-workspace/desktop-companion-text-surface'),
     import('../features/assistant-workspace/desktop-companion-shadow-evaluation-controller'),
     import('../features/assistant-workspace/desktop-companion-operational-guard'),
   ]);
-  add(textSurface.initializeDesktopCompanionTextSurface());
   add(evaluation.initializeDesktopCompanionShadowEvaluationController());
   add(operationalGuard.initializeDesktopCompanionOperationalGuard());
   add(watch.initializeDesktopCompanionWatchController());

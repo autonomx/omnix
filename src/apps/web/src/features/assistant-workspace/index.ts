@@ -345,3 +345,6 @@ export type {
   BrowserRecorderErrorEvent,
   MediaRecorderAudioReaderOptions,
 } from './media-recorder-reader';
+
+export { useAvatarPresence } from './live-avatar-presence';
+export type { AvatarPresence, AvatarPresenceCue } from './live-avatar-presence';
