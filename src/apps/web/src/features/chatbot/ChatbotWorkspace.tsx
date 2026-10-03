@@ -150,7 +150,6 @@ const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const STREAMING_TTS_SAMPLE_RATE = 24_000;
-const STREAMING_TTS_START_DELAY_SECONDS = 0.09;
 const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
 const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
@@ -1574,28 +1573,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       markVoiceTurnPerformance('ttsStartedAt');
       recordVoiceTurnDiagnostic('tts_request_started', {
         text_chars: spokenText.length,
-        streaming_requested: liveVoiceActive && canUseStreamingTts(),
       });
       setAudioStatus(activeVoiceId ? `Synthesizing ${activeVoiceLabel || activeVoiceId} voice…` : 'Synthesizing response voice…');
-      if (liveVoiceActive && canUseStreamingTts()) {
-        try {
-          stopAssistantResponseAudio(undefined, { cancelPending: false });
-          await playStreamingAssistantResponseAudio(spokenText, playbackToken);
-          setAudioStatus(activeVoiceId ? 'Streaming cloned response voice.' : 'Streaming response voice.');
-          return;
-        } catch (streamError) {
-          stopStreamingTtsPlayback();
-          if (assistantPlaybackTokenRef.current !== playbackToken) return;
-          console.info('[Omnix Voice Perf] streaming TTS failed without batch fallback', {
-            reason: streamError instanceof Error ? streamError.message : 'Streaming TTS failed.',
-          });
-          recordVoiceTurnDiagnostic('tts_stream_failed', {
-            error_name: streamError instanceof Error ? streamError.name : 'unknown',
-          });
-          setAudioStatus(streamError instanceof Error ? streamError.message : 'Streaming TTS failed.');
-          return;
-        }
-      }
       if (assistantPlaybackTokenRef.current !== playbackToken) return;
       const audioSource = runtimeConfig.ttsServiceUrl
         ? await synthesizeWithTtsService(spokenText)
@@ -1671,204 +1650,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     }
     setIsAssistantSpeaking(false);
     if (status) setAudioStatus(status);
-  }
-
-  async function playStreamingAssistantResponseAudio(text: string, playbackToken: number): Promise<void> {
-    const liveWindow = window as StreamingTtsWindow;
-    const AudioContextCtor = liveWindow.AudioContext ?? liveWindow.webkitAudioContext;
-    if (!AudioContextCtor || typeof window.fetch !== 'function' || typeof window.ReadableStream === 'undefined') throw new Error('Streaming TTS requires browser streaming fetch and AudioContext support.');
-
-    const requestId = `tts:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-    const requestStartedAt = performance.now();
-    const speechStyle = currentLiveCallSpeechStyle();
-    const resolvedVoiceId = currentLiveCallVoiceId();
-    const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: STREAMING_TTS_SAMPLE_RATE });
-    if (audioContext.state !== 'running') await audioContext.resume();
-    const abortController = new AbortController();
-    const streamingUrl = '/api/tts/stream/server-sent-events' as const;
-    console.info('[Omnix Voice Perf] streaming TTS connect', {
-      requestId,
-      url: streamingUrl,
-      textChars: text.length,
-      speaker: resolvedVoiceId || null,
-      nonStreamingMode: false,
-      parityMode: true,
-      chunkSize: 8,
-      audioContextState: audioContext.state,
-    });
-    recordVoiceTurnDiagnostic('tts_stream_connecting', {
-      request_id: requestId,
-      text_chars: text.length,
-      playback_mode: 'sse_audio_context',
-    });
-    const playback: StreamingTtsPlayback = { audioContext, abortController, sources: [], closed: false };
-    streamingTtsRef.current = playback;
-    setIsAssistantSpeaking(true);
-
-    let nextStartAt = audioContext.currentTime + STREAMING_TTS_START_DELAY_SECONDS;
-    let firstAudioScheduled = false;
-    let receivedChunkCount = 0;
-    let scheduledAudioSeconds = 0;
-
-    // No gateway route serves this path since the audio transport consolidation (#1205); see WP-9.3 notes.
-    const response = await openStream(streamingUrl, {
-      body: {
-        text,
-        speaker: resolvedVoiceId || null,
-        language: 'English',
-        chunk_size: 8,
-        temperature: speechStyle.temperature,
-        top_k: speechStyle.top_k,
-        top_p: speechStyle.top_p,
-        repetition_penalty: speechStyle.repetition_penalty,
-        append_silence: false,
-        max_new_tokens: 180,
-        non_streaming_mode: false,
-        parity_mode: true,
-        request_id: requestId,
-      },
-      signal: abortController.signal,
-    }).catch(statusError('Streaming TTS SSE'));
-    if (!response.body) throw new Error(`Streaming TTS SSE failed with status ${response.status}.`);
-    console.info('[Omnix Voice Perf] streaming TTS response opened', {
-      requestId,
-      status: response.status,
-      openMs: Math.round(performance.now() - requestStartedAt),
-      contentType: response.headers.get('content-type'),
-    });
-    recordVoiceTurnDiagnostic('tts_stream_opened', {
-      request_id: requestId,
-      status: response.status,
-      open_ms: Math.round(performance.now() - requestStartedAt),
-    });
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let pending = '';
-    let streamDone = false;
-
-    while (!playback.closed && !streamDone) {
-      const { value, done } = await reader.read();
-      if (assistantPlaybackTokenRef.current !== playbackToken) return;
-      if (done) break;
-      pending += decoder.decode(value, { stream: true });
-      const events = pending.split(/\n\n/);
-      pending = events.pop() ?? '';
-
-      for (const eventText of events) {
-        const message = parseStreamingTtsSseEvent(eventText);
-        if (!message) continue;
-        if (message.type === 'error') {
-          console.info('[Omnix Voice Perf] streaming TTS error event', {
-            requestId,
-            elapsedMs: Math.round(performance.now() - requestStartedAt),
-            message: message.message || 'Streaming TTS failed.',
-            chunks: receivedChunkCount,
-          });
-          throw new Error(message.message || 'Streaming TTS failed.');
-        }
-        if (message.type === 'done') {
-          console.info('[Omnix Voice Perf] streaming TTS done event', {
-            requestId,
-            elapsedMs: Math.round(performance.now() - requestStartedAt),
-            chunks: receivedChunkCount,
-            scheduledAudioMs: Math.round(scheduledAudioSeconds * 1000),
-            partial: Boolean(message.partial),
-            message: typeof message.message === 'string' ? message.message : undefined,
-          });
-          streamDone = true;
-          break;
-        }
-        if (message.type !== 'chunk' || typeof message.audio_b64 !== 'string') continue;
-
-        const pcm = base64ToArrayBuffer(message.audio_b64);
-        if (!pcm.byteLength) continue;
-        receivedChunkCount += 1;
-        const sampleRate = typeof message.sample_rate === 'number' && message.sample_rate > 0 ? message.sample_rate : STREAMING_TTS_SAMPLE_RATE;
-        const audioBuffer = pcm16ArrayBufferToAudioBuffer(audioContext, pcm, sampleRate);
-        const source = audioContext.createBufferSource();
-        source.buffer = audioBuffer;
-        source.playbackRate.value = speechStyle.speed;
-        source.connect(audioContext.destination);
-        const underrunSeconds = Math.max(0, audioContext.currentTime - nextStartAt);
-        const startAt = Math.max(nextStartAt, audioContext.currentTime + STREAMING_TTS_RECOVERY_DELAY_SECONDS);
-        source.start(startAt);
-        playback.sources.push(source);
-        const effectiveDuration = audioBuffer.duration / speechStyle.speed;
-        nextStartAt = startAt + effectiveDuration;
-        scheduledAudioSeconds += effectiveDuration;
-        source.addEventListener('ended', () => {
-          playback.sources = playback.sources.filter((entry) => entry !== source);
-          if (playback.sources.length === 0 && streamingTtsRef.current === playback) {
-            setIsAssistantSpeaking(false);
-          }
-        }, { once: true });
-
-        if (!firstAudioScheduled) {
-          firstAudioScheduled = true;
-          if (assistantPlaybackTokenRef.current !== playbackToken) return;
-          markVoiceTurnPerformance('ttsFirstChunkReceivedAt');
-          markVoiceTurnPerformance('ttsReadyAt');
-          markVoiceTurnPerformance('audioFirstScheduledAt');
-          const delayMs = Math.max(0, (startAt - audioContext.currentTime) * 1000);
-          console.info('[Omnix Voice Perf] streaming TTS first audio scheduled', {
-            requestId,
-            elapsedMs: Math.round(performance.now() - requestStartedAt),
-            chunkBytes: pcm.byteLength,
-            sampleRate,
-            bufferDurationMs: Math.round(audioBuffer.duration * 1000),
-            scheduledLeadMs: Math.round(delayMs),
-            audioContextTime: Number(audioContext.currentTime.toFixed(3)),
-            startAt: Number(startAt.toFixed(3)),
-          });
-          recordVoiceTurnDiagnostic('tts_first_audio_scheduled', {
-            request_id: requestId,
-            first_frame_ms: Math.round(performance.now() - requestStartedAt),
-            scheduled_lead_ms: Math.round(delayMs),
-            chunk_bytes: pcm.byteLength,
-          });
-          window.setTimeout(() => {
-            if (assistantPlaybackTokenRef.current !== playbackToken || playback.closed) return;
-            markVoiceTurnPerformance('audioPlayStartedAt');
-            recordVoiceTurnDiagnostic('audio_playback_started', {
-              request_id: requestId,
-              playback_mode: 'sse_audio_context',
-              playback_start_ms: Math.round(performance.now() - requestStartedAt),
-            });
-            console.info('[Omnix Voice Perf] streaming TTS first audio start', {
-              requestId,
-              elapsedMs: Math.round(performance.now() - requestStartedAt),
-              chunkCountAtStart: receivedChunkCount,
-              scheduledAudioMs: Math.round(scheduledAudioSeconds * 1000),
-              audioContextTime: Number(audioContext.currentTime.toFixed(3)),
-            });
-            logVoiceTurnPerformance();
-          }, delayMs);
-        } else if (underrunSeconds > 0.005) {
-          console.info('[Omnix Voice Perf] streaming TTS underrun recovery', {
-            requestId,
-            chunkIndex: receivedChunkCount - 1,
-            underrunMs: Math.round(underrunSeconds * 1000),
-            activeSources: playback.sources.length,
-          });
-        }
-      }
-    }
-    console.info('[Omnix Voice Perf] streaming TTS stream done', {
-      requestId,
-      elapsedMs: Math.round(performance.now() - requestStartedAt),
-      chunks: receivedChunkCount,
-      scheduledAudioMs: Math.round(scheduledAudioSeconds * 1000),
-      activeSources: playback.sources.length,
-      audioContextTime: Number(audioContext.currentTime.toFixed(3)),
-    });
-    recordVoiceTurnDiagnostic('tts_stream_completed', {
-      request_id: requestId,
-      elapsed_ms: Math.round(performance.now() - requestStartedAt),
-      chunks: receivedChunkCount,
-      scheduled_audio_ms: Math.round(scheduledAudioSeconds * 1000),
-    });
-    await waitForStreamingPlaybackToFinish(playback, () => assistantPlaybackTokenRef.current !== playbackToken);
   }
 
   async function playDecodedAssistantResponseAudio(audioSource: string, playbackToken: number): Promise<void> {
@@ -2348,9 +2129,7 @@ function shouldFlushStreamedSpeechBuffer(value: string): boolean { const text = 
 function elapsedMs(start: number | undefined, end: number | undefined): number | null { return start === undefined || end === undefined ? null : Math.round(end - start); }
 function voiceCaptureLabel(mode: VoiceCaptureMode): string { if (mode === 'recording') return 'Recording'; if (mode === 'transcribing') return 'Transcribing'; if (mode === 'error') return 'Error'; if (mode === 'listening') return 'Listening'; return 'Ready'; }
 function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined { if (typeof window === 'undefined') return undefined; const speechWindow = window as SpeechRecognitionWindow; return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition; }
-function canUseStreamingTts(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean((liveWindow.AudioContext || liveWindow.webkitAudioContext) && typeof window.fetch === 'function' && typeof window.ReadableStream !== 'undefined'); }
 function canUseDecodedAudioPlayback(): boolean { if (typeof window === 'undefined') return false; const liveWindow = window as StreamingTtsWindow; return Boolean(liveWindow.AudioContext || liveWindow.webkitAudioContext); }
-function parseStreamingTtsSseEvent(value: string): { type?: string; message?: string; audio_b64?: string; sample_rate?: number; partial?: boolean } | null { const line = value.split(/\r?\n/).find((entry) => entry.startsWith('data:')); if (!line) return null; try { return JSON.parse(line.slice(5).trim()) as { type?: string; message?: string; audio_b64?: string; sample_rate?: number; partial?: boolean }; } catch { return null; } }
 // Checked at the boundary; the session is then read as the full ChatSession the route sends.
 function parseChatStreamEvent(value: string): ChatStreamEvent | null { return parseSseData(chatStreamEventSchema, value) as ChatStreamEvent | null; }
 function makePlayableAudioSource(source: string): { url: string; revoke?: () => void } { if (!source.startsWith('data:audio/') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return { url: source }; const blob = dataUrlToBlob(source); const url = URL.createObjectURL(blob); return { url, revoke: () => URL.revokeObjectURL(url) }; }
@@ -2361,7 +2140,6 @@ function waitForAudioElementPlaying(audio: HTMLAudioElement): Promise<void> { re
 function waitForAudioElementToFinish(audio: HTMLAudioElement): Promise<void> { return new Promise((resolve) => { if (audio.ended || audio.paused || typeof audio.addEventListener !== 'function') { resolve(); return; } const done = () => resolve(); audio.addEventListener('ended', done, { once: true }); audio.addEventListener('pause', done, { once: true }); audio.addEventListener('error', done, { once: true }); }); }
 function waitForStreamingPlaybackToFinish(playback: StreamingTtsPlayback, isCancelled: () => boolean): Promise<void> { return new Promise((resolve) => { const tick = () => { if (playback.closed || playback.sources.length === 0 || isCancelled()) { resolve(); return; } window.setTimeout(tick, 25); }; tick(); }); }
 function base64ToArrayBuffer(value: string): ArrayBuffer { const binary = window.atob(value); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return bytes.buffer; }
-function pcm16ArrayBufferToAudioBuffer(audioContext: AudioContext, pcm: ArrayBuffer, sampleRate: number): AudioBuffer { const input = new Int16Array(pcm); const buffer = audioContext.createBuffer(1, input.length, sampleRate); const channel = buffer.getChannelData(0); for (let index = 0; index < input.length; index += 1) channel[index] = input[index] / 32768; return buffer; }
 function getVoiceJobAudioSource(job: JobRecord): string | null { for (const output of jobOutputRefs(job)) { if (isFallbackOutputRef(output)) continue; if (typeof output.data_url === 'string' && output.data_url.startsWith('data:audio/')) return output.data_url; if (typeof output.audio_url === 'string' && output.audio_url.trim()) return output.audio_url; } return null; }
 function voiceJobErrorMessage(job: JobRecord): string { if (job.status !== 'failed') return ''; const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio TTS job failed.'; }
 function getVoiceProfileAssets(payload: AssetListResponse | undefined): VoiceProfileAsset[] { return payload?.assets.filter((asset) => asset.type === 'voice_profile') ?? []; }

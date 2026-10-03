@@ -1,5 +1,4 @@
  
-import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import { isActiveView } from '../../app/viewApiScope';
 import './liveCharacterAvatarBridge.css';
@@ -14,7 +13,6 @@ const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
 const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
-const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
 let bridgeInstalled = false;
 const AUDIO_ELEMENT_FRAME_MS = 50;
 const AUDIO_ELEMENT_FFT_SIZE = 1_024;
@@ -228,7 +226,7 @@ export function installLiveCharacterAvatarBridge(): () => void {
   window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
   window.addEventListener(AVATAR_PCM_EVENT, handlePcm);
 
-  const cleanups = [installTtsFetchMonitor(), installAudioElementMonitor(), installAudioBufferSourceMonitor()];
+  const cleanups = [installAudioElementMonitor(), installAudioBufferSourceMonitor()];
   return () => {
     observer.disconnect();
     window.removeEventListener('DOMContentLoaded', observe);
@@ -239,24 +237,6 @@ export function installLiveCharacterAvatarBridge(): () => void {
     cleanups.reverse().forEach((cleanup) => cleanup());
     bridgeInstalled = false;
   };
-}
-
-function installTtsFetchMonitor(): () => void {
-  if (typeof window.fetch !== 'function') return () => undefined;
-  return registerFetchMiddleware('character-avatar-tts-monitor', async (input, init, next) => {
-    const response = await next(input, init);
-    if (!isActiveView('chatbot')) return response;
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    if (!url.includes(TTS_STREAM_PATH) || !response.body || typeof response.body.tee !== 'function') return response;
-
-    const [applicationBody, monitorBody] = response.body.tee();
-    void monitorTtsStream(monitorBody);
-    return new Response(applicationBody, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-  });
 }
 
 function installAudioElementMonitor(): () => void {
@@ -402,58 +382,6 @@ function stopAudioElementMonitor(audio: HTMLAudioElement): void {
   audioElementStops.get(audio)?.();
 }
 
-async function monitorTtsStream(stream: ReadableStream<Uint8Array>): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let pending = '';
-  nextAudioFrameAt = performance.now() + 90;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      pending += decoder.decode(value, { stream: true });
-      const events = pending.split(/\n\n/);
-      pending = events.pop() ?? '';
-      for (const eventText of events) {
-        const payload = parseSsePayload(eventText);
-        if (!payload) continue;
-        if (payload.type === 'chunk' && typeof payload.audio_b64 === 'string') {
-          schedulePcmFrames(payload.audio_b64, Number(payload.sample_rate) || 24_000);
-        }
-        if (payload.type === 'done' || payload.type === 'error') scheduleClosedFrame();
-      }
-    }
-  } catch {
-    scheduleClosedFrame();
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function parseSsePayload(eventText: string): Record<string, unknown> | null {
-  const data = eventText
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trim())
-    .join('');
-  if (!data) return null;
-  try {
-    return JSON.parse(data) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function schedulePcmFrames(audioBase64: string, sampleRate: number): void {
-  const binary = window.atob(audioBase64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  const evenLength = bytes.byteLength - (bytes.byteLength % 2);
-  if (!evenLength) return;
-  const samples = new Int16Array(bytes.buffer, bytes.byteOffset, evenLength / 2);
-  schedulePcmSamples(samples, sampleRate);
-}
-
 function schedulePcmSamples(samples: Int16Array, sampleRate: number, startDelayMs = 0): void {
   const now = performance.now();
   const startAt = Math.max(nextAudioFrameAt, now + 25 + Math.max(0, startDelayMs));
@@ -464,10 +392,6 @@ function schedulePcmSamples(samples: Int16Array, sampleRate: number, startDelayM
   const durationMs = (samples.length / sampleRate) * 1000;
   nextAudioFrameAt = startAt + durationMs;
   window.setTimeout(() => dispatchAvatarFrame('closed'), Math.max(0, nextAudioFrameAt - now));
-}
-
-function scheduleClosedFrame(): void {
-  window.setTimeout(() => dispatchAvatarFrame('closed'), Math.max(0, nextAudioFrameAt - performance.now()));
 }
 
 function isAvatarMouthFrame(value: unknown): value is AvatarMouthFrame {
