@@ -1,4 +1,5 @@
 import type { StoryVoiceAssignment } from './storyDocument';
+import { writeStoryData } from './storySnapshotStore';
 
 const STORY_VOICE_CAST_STORAGE_PREFIX = 'omnix.storyteller.voiceCast:';
 
@@ -32,11 +33,7 @@ export function loadStoryVoiceCastAny(keys: string[]): StoryVoiceAssignment[] {
 }
 
 export function saveStoryVoiceCast(storyFingerprint: string, assignments: StoryVoiceAssignment[]): void {
-  try {
-    window.localStorage.setItem(storyVoiceCastStorageKey(storyFingerprint), JSON.stringify(assignments.filter(isVoiceAssignment)));
-  } catch {
-    // Local voice cast persistence is best-effort until backend persistence exists.
-  }
+  writeStoryData(storyVoiceCastStorageKey(storyFingerprint), JSON.stringify(assignments.filter(isVoiceAssignment)));
 }
 
 export function saveStoryVoiceCastAliases(keys: string[], assignments: StoryVoiceAssignment[]): void {

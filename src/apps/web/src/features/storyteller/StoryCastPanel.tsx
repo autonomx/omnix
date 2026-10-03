@@ -1,32 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readStorySnapshot } from './StoryAudioPanel';
 import { addStoryCharacter, deriveStoryCast, loadStoryCast, saveStoryCast, type StoryCharacter } from './storyCast';
+import { useStorySnapshot } from './storySnapshotStore';
 
 export function StoryCastPanel() {
-  const [snapshot, setSnapshot] = useState(() => readStorySnapshot());
+  const snapshot = useStorySnapshot();
   const [cast, setCast] = useState<StoryCharacter[]>(() => deriveStoryCast(snapshot.text, loadStoryCast(snapshot.fingerprint)));
   const [newCharacterName, setNewCharacterName] = useState('');
   const nonNarratorCount = useMemo(() => cast.filter((character) => character.id !== 'narrator').length, [cast]);
 
   useEffect(() => {
-    const refreshCast = () => {
-      const nextSnapshot = readStorySnapshot();
-      setSnapshot((current) => current.fingerprint === nextSnapshot.fingerprint ? current : nextSnapshot);
-      setCast((current) => {
-        const stored = loadStoryCast(nextSnapshot.fingerprint);
-        const next = deriveStoryCast(nextSnapshot.text, stored.length > 1 ? stored : current);
-        saveStoryCast(nextSnapshot.fingerprint, next);
-        return next;
-      });
-    };
-    refreshCast();
-    const intervalId = window.setInterval(refreshCast, 1_500);
-    window.addEventListener('focus', refreshCast);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshCast);
-    };
-  }, []);
+    setCast((current) => {
+      const stored = loadStoryCast(snapshot.fingerprint);
+      const next = deriveStoryCast(snapshot.text, stored.length > 1 ? stored : current);
+      saveStoryCast(snapshot.fingerprint, next);
+      return next;
+    });
+  }, [snapshot.fingerprint, snapshot.text]);
 
   function addManualCharacter(): void {
     const next = addStoryCharacter(cast, newCharacterName);

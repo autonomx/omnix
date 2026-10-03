@@ -5,6 +5,7 @@ import { jobProgressPercent } from '../../api/jobProgress';
 import { isFallbackOutputRef, jobOutputRefs } from '../../api/schemas/streams';
 import { storyAudioStreamControlMessageSchema } from './storyAudioMessages';
 import { parseJson } from '../../api/schemas/streams';
+import { normalizeStoryAudioText, useStorySnapshot } from './storySnapshotStore';
 
 export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
@@ -48,7 +49,8 @@ export function StoryAudioPanel() {
   const [jobId, setJobId] = useState('');
   const [audioSource, setAudioSource] = useState('');
   const [filename, setFilename] = useState('story-audio.wav');
-  const [storySnapshot, setStorySnapshot] = useState(() => readStorySnapshot());
+  const storySnapshot = useStorySnapshot();
+  const previousFingerprint = useRef(storySnapshot.fingerprint);
   const [debugAudioJson, setDebugAudioJson] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const generationRunRef = useRef(0);
@@ -84,29 +86,18 @@ export function StoryAudioPanel() {
   }, []);
 
   useEffect(() => {
-    const refreshSnapshot = () => {
-      const next = readStorySnapshot();
-      setStorySnapshot((current) => {
-        if (current.fingerprint === next.fingerprint) return current;
-        streamAbortRef.current?.();
-        streamAbortRef.current = null;
-        setAudioSource('');
-        setProgress(0);
-        setJobId('');
-        setDebugAudioJson('');
-        setFilename(`${slugify(next.title || 'story')}-audio.wav`);
-        setStatus('ready');
-        setStatusMessage('Story changed. Ready to regenerate full-story narration.');
-        return next;
-      });
-    };
-    const intervalId = window.setInterval(refreshSnapshot, 1_000);
-    window.addEventListener('focus', refreshSnapshot);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshSnapshot);
-    };
-  }, []);
+    if (previousFingerprint.current === storySnapshot.fingerprint) return;
+    previousFingerprint.current = storySnapshot.fingerprint;
+    streamAbortRef.current?.();
+    streamAbortRef.current = null;
+    setAudioSource('');
+    setProgress(0);
+    setJobId('');
+    setDebugAudioJson('');
+    setFilename(`${slugify(storySnapshot.title || 'story')}-audio.wav`);
+    setStatus('ready');
+    setStatusMessage('Story changed. Ready to regenerate full-story narration.');
+  }, [storySnapshot.fingerprint, storySnapshot.title]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -165,7 +156,7 @@ export function StoryAudioPanel() {
   }
 
   async function generateStoryAudio(): Promise<void> {
-    const snapshot = readStorySnapshot();
+    const snapshot = storySnapshot;
     const audioMap = mapStoryToAudioSegments(snapshot.title, snapshot.text, selectedVoiceId);
     const segments = audioMap.segments;
     if (!snapshot.text.trim() || !segments.length) {
@@ -180,7 +171,6 @@ export function StoryAudioPanel() {
     streamAbortRef.current?.();
     const streamAbortController = new AbortController();
     streamAbortRef.current = () => streamAbortController.abort();
-    setStorySnapshot(snapshot);
     setAudioSource('');
     setFilename(`${slugify(snapshot.title || 'story')}-audio.wav`);
     setProgress(2);
@@ -328,20 +318,6 @@ export function StoryAudioPanel() {
       </div>
     </section>
   );
-}
-
-export function readStorySnapshot(): { title: string; text: string; fingerprint: string } {
-  const text = extractStoryTextFromDocument(document);
-  const title = readStoryTitle();
-  return { title, text, fingerprint: fingerprintStoryAudio(text) };
-}
-
-export function extractStoryTextFromDocument(root: ParentNode = document): string {
-  const prose = root.querySelector('.storyteller-prose') as HTMLElement | null;
-  const storyModePage = root.querySelector('.story-mode-page') as HTMLElement | null;
-  const manuscript = root.querySelector('[aria-label="Story manuscript"]') as HTMLElement | null;
-  const source = prose?.innerText || prose?.textContent || storyModePage?.innerText || storyModePage?.textContent || manuscript?.innerText || manuscript?.textContent || '';
-  return normalizeStoryAudioText(source);
 }
 
 export function splitStoryAudioSegments(text: string): StoryAudioSegment[] {
@@ -687,9 +663,6 @@ function playableAudioSource(job: JobRecord): string {
 
 function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
-function readStoryTitle(): string { const heading = document.querySelector('.storyteller-project-copy h1') as HTMLElement | null; return (heading?.innerText ?? heading?.textContent ?? '').trim() || 'Untitled story'; }
-function normalizeStoryAudioText(value: string): string { return value.replace(/\r\n/g, '\n').split('\n').map((line) => line.trim()).filter(Boolean).join('\n\n').trim(); }
-function fingerprintStoryAudio(text: string): string { return `${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`; }
 function voiceAssetId(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.storage_path) || stringValue(asset.metadata?.voice_id) || stringValue(asset.metadata?.profile_id) || stringValue(asset.metadata?.id) || asset.id; }
 function voiceAssetLabel(asset: AssetListResponse['assets'][number]): string { return stringValue(asset.metadata?.profile_name) || stringValue(asset.metadata?.name) || stringValue(asset.metadata?.voice_name) || basename(asset.storage_path) || asset.id.replace(/^voice-cloning:/, '').replace(/^asset:/, ''); }
 function voiceLabelForId(voiceId: string, voices: StoryAudioVoiceOption[]): string { return voices.find((voice) => voice.id === voiceId)?.label || voiceId; }

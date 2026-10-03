@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { readStorySnapshot } from './StoryAudioPanel';
 import { buildStoryDocumentFromText } from './storyDocument';
 import { validateStoryDocumentForRemote } from './storyRemoteStore';
+import { useStorySnapshot } from './storySnapshotStore';
 
 export function StoryRemotePanel() {
-  const snapshot = readStorySnapshot();
+  const snapshot = useStorySnapshot();
   const storyDoc = useMemo(() => buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text }), [snapshot.title, snapshot.text]);
   const issues = useMemo(() => validateStoryDocumentForRemote(storyDoc), [storyDoc]);
 

@@ -10,6 +10,7 @@ import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/Featu
 import { StoryExtraPanels } from './StoryExtraPanels';
 import { StorytellerToolbox } from './StorytellerToolbox';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { publishStorySnapshot } from './storySnapshotStore';
 
 interface StorytellerFormValues {
   providerId: string;
@@ -303,6 +304,18 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   );
   const sourceJobId = activeJob?.id ?? activeLibraryItem?.jobId ?? null;
   const outline = useMemo(() => deriveStoryOutline(activeStoryText, storyTitle), [activeStoryText, storyTitle]);
+  // The tool panels (audio, cast, chapters, document) read the story as it is shown.
+  const renderedStoryText = useMemo(() => {
+    if (!activeStoryText) return '';
+    if (workspaceMode === 'story') {
+      const page = lastStoryPage(activeStoryText);
+      return page ? storyParagraphs(page).join('\n') : '';
+    }
+    return storyTextBlocks(activeStoryText, outline).map((block) => block.text).join('\n');
+  }, [activeStoryText, outline, workspaceMode]);
+  useEffect(() => {
+    publishStorySnapshot(storyTitle, renderedStoryText);
+  }, [storyTitle, renderedStoryText]);
   const activeChapter = outline.find((chapter) => chapter.number === selectedChapter) ?? outline[0] ?? null;
   const chapterCount = outline.length || Math.max(1, Math.min(12, libraryStoryJobs.length || selectedChapter));
   const wordCount = countWords(activeStoryText ?? watchedPremise ?? '');

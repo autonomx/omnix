@@ -1,33 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { readStorySnapshot } from './StoryAudioPanel';
 import { validateDialogueAttribution } from './storyAttribution';
 import { allStoryBlocks, buildStoryDocumentFromText, loadStoryDocument, saveStoryDocument, storyDocumentFingerprint, type StoryDocument } from './storyDocument';
+import { useStorySnapshot } from './storySnapshotStore';
 
 export function StoryDocumentPanel() {
-  const [document, setDocument] = useState<StoryDocument>(() => {
-    const snapshot = readStorySnapshot();
-    return buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text, existing: loadStoryDocument(`${snapshot.title}:${snapshot.fingerprint}`) });
-  });
+  const snapshot = useStorySnapshot();
+  const [document, setDocument] = useState<StoryDocument>(() => (
+    buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text, existing: loadStoryDocument(`${snapshot.title}:${snapshot.fingerprint}`) })
+  ));
   const blocks = useMemo(() => allStoryBlocks(document), [document]);
   const attribution = useMemo(() => validateDialogueAttribution(document), [document]);
   const dialogueCount = useMemo(() => blocks.filter((block) => block.kind === 'dialogue').length, [blocks]);
 
   useEffect(() => {
-    const refreshDocument = () => {
-      const snapshot = readStorySnapshot();
-      const existing = loadStoryDocument(document.id);
-      const next = buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text, existing });
+    setDocument((current) => {
+      const next = buildStoryDocumentFromText({ title: snapshot.title, text: snapshot.text, existing: loadStoryDocument(current.id) });
       saveStoryDocument(next);
-      setDocument(next);
-    };
-    refreshDocument();
-    const intervalId = window.setInterval(refreshDocument, 1_500);
-    window.addEventListener('focus', refreshDocument);
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshDocument);
-    };
-  }, [document.id]);
+      return next;
+    });
+  }, [snapshot.title, snapshot.text]);
 
   return (
     <section className="storyteller-cast-panel" aria-label="Structured story document">
