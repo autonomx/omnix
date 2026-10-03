@@ -72,7 +72,7 @@ class ChatGPTCodexProviderConfig(BaseModel):
 class LlamaCppProviderConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    base_url: str = Field("http://localhost:8080", alias="baseUrl")
+    base_url: str = Field("http://localhost:8180", alias="baseUrl")
     model: str = ""
     download_location: str = Field("server", alias="downloadLocation")
     auto_start: bool = Field(False, alias="autoStart")

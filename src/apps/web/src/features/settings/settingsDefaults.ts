@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS_DOCUMENT: SettingsDocument = {
     openrouter: { apiKey: '', model: 'openai/gpt-4o-mini', contextSize: 128000, thinkingBudget: 0 },
     cerebras: { apiKey: '', model: 'llama-3.3-70b-versatile' },
     chatgptCodex: { model: 'gpt-5.6-sol', reasoningEffort: 'medium', fastMode: false, codexPath: 'codex', transport: 'app_server' },
-    llamacpp: { baseUrl: 'http://localhost:8080', model: '', downloadLocation: 'server', autoStart: false },
+    llamacpp: { baseUrl: 'http://localhost:8180', model: '', downloadLocation: 'server', autoStart: false },
     fasterQwen3Tts: { modelName: 'Qwen/Qwen3-TTS-12Hz-0.6B-Base', modelDir: '', device: 'cuda', dtype: 'bfloat16', chunkSize: 12, nonStreamingMode: true },
     parakeet: { baseUrl: 'http://127.0.0.1:5201' },
     fluxKlein: { enabled: false, repoId: 'black-forest-labs/FLUX.2-klein-4B', localDir: '', device: 'cuda', torchDtype: 'bfloat16', preferLocalFiles: true, allowRepoFallback: false },

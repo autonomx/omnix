@@ -399,7 +399,7 @@ class TestLlamaCppProviderFull:
         """Test LlamaCppProvider initialization with defaults."""
         config = ProviderConfig(provider_type="llamacpp")
         provider = LlamaCppProvider(config)
-        assert provider.config.base_url == "http://localhost:8080"
+        assert provider.config.base_url == "http://localhost:8180"
         assert 'model_dir' in provider.config.extra_params
     
     def test_config_schema(self):
@@ -522,7 +522,7 @@ class TestProviderConfiguration:
         """Test LlamaCpp default URL is correct."""
         config = ProviderConfig(provider_type="llamacpp")
         provider = LlamaCppProvider(config)
-        assert provider.config.base_url == "http://localhost:8080"
+        assert provider.config.base_url == "http://localhost:8180"
     
     def test_url_trailing_slash_stripped(self):
         """Test that trailing slashes are stripped from URLs."""

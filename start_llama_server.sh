@@ -24,7 +24,7 @@ echo "Starting llama.cpp server with model: $MODEL_PATH"
 # Start llama.cpp server
 python -m llama_cpp.server \
     --host 0.0.0.0 \
-    --port 8080 \
+    --port 8180 \
     --model "$MODEL_PATH" \
     --n_gpu_layers 999 \
     &

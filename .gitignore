@@ -82,6 +82,14 @@ resources/data/
 
 # Generated runtime and rehearsal artifacts
 /resources/artifacts/
+# Runtime output under resources (WP-11.6): caches, market-data evidence
+# captures, benchmark runs and voice clones users create. The approved sample
+# voices are tracked; add a new one deliberately with `git add -f`.
+/resources/cache/
+/resources/trading/ibkr_evidence/
+/resources/trading/yahoo_evidence/
+/resources/benchmarks/gateway/hardening-*.json
+/resources/voice_clones/*
 
 # Environment variables
 .env

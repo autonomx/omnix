@@ -63,7 +63,7 @@ class LlamaCppProvider(BaseProvider):
 
     def _validate_config(self):
         if not self.config.base_url:
-            self.config.base_url = "http://localhost:8080"
+            self.config.base_url = "http://localhost:8180"
         self.config.base_url = self.config.base_url.rstrip("/")
         if not self.config.extra_params.get("model_dir"):
             base_dir = Path(__file__).parent.parent.parent
@@ -92,7 +92,7 @@ class LlamaCppProvider(BaseProvider):
         try:
             return int(self.config.base_url.split(":")[-1])
         except (TypeError, ValueError):
-            return 8080
+            return 8180
 
     def _start_server(self, model_path: str) -> Optional[int]:
         host = bind_host()
@@ -411,7 +411,7 @@ class LlamaCppProvider(BaseProvider):
                     "name": "base_url",
                     "type": "string",
                     "label": "Server URL",
-                    "default": "http://localhost:8080",
+                    "default": "http://localhost:8180",
                     "required": True,
                     "description": "URL of the llama.cpp server",
                 },

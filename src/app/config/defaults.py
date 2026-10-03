@@ -9,7 +9,7 @@ DEFAULT_SETTINGS = {
     "lmstudio": {"base_url": "http://localhost:1234", "direct": False},
     "openrouter": {"api_key": "", "model": "openai/gpt-4o-mini", "context_size": 128000, "thinking_budget": 0},
     "cerebras": {"api_key": "", "model": "llama-3.3-70b-versatile"},
-    "llamacpp": {"base_url": "http://localhost:8080", "model": "", "download_location": "server", "auto_start": False},
+    "llamacpp": {"base_url": "http://localhost:8180", "model": "", "download_location": "server", "auto_start": False},
     "faster-qwen3-tts": {
         "model_name": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
         "model_dir": "",

@@ -176,7 +176,7 @@ def _provider_config(
         cfg = dict(settings.get("llamacpp") or {})
         config = ProviderConfig(
             provider_type=name,
-            base_url=str(cfg.get("base_url") or "http://localhost:8080"),
+            base_url=str(cfg.get("base_url") or "http://localhost:8180"),
             model=str(cfg.get("model") or ""),
             extra_params={
                 "download_location": str(cfg.get("download_location") or "server"),

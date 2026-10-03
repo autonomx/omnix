@@ -165,7 +165,7 @@ class TestLlamaCppProvider:
         """Test default base URL is set."""
         config = ProviderConfig(provider_type='llamacpp')
         provider = LlamaCppProvider(config)
-        assert provider.config.base_url == 'http://localhost:8080'
+        assert provider.config.base_url == 'http://localhost:8180'
     
     def test_config_schema(self):
         """Test configuration schema."""

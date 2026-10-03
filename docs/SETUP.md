@@ -29,6 +29,29 @@ GPU/model calls use PostgreSQL device permits, not per-process semaphores. The g
 
 This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.
 
+### Port map
+
+Every listener binds to loopback unless configured otherwise (see the listener policy in [OPERATIONS.md](OPERATIONS.md)).
+
+| Port | Service | Notes |
+| --- | --- | --- |
+| 5173 / 4173 | Vite dev server / preview | Development only |
+| 8000 | Gateway worker (control and background owner) | `scripts/run_omnix_gateway.py --port` |
+| 8001-8008 | Gateway API replicas | `--api-replicas N` takes the next N ports |
+| 8080 | Nginx ingress / `omnix-web` container | 8443 for the HTTPS variant |
+| 8090 | Job worker health and metrics | `OMNIX_JOB_WORKER_METRICS_PORT` |
+| 8101 | Standalone OpenAI-compatible server | [OPENAI_COMPATIBILITY.md](OPENAI_COMPATIBILITY.md) |
+| 8180 | llama.cpp `llama-server` | Was 8080, which the ingress uses |
+| 1234 | LM Studio | External application |
+| 5055 | Windows launcher dashboard | |
+| 5101 | TTS service | `OMNIX_TTS_PORT` |
+| 5201 | STT service | `OMNIX_STT_PORT` |
+| 5301 | Image service | |
+| 5432 | PostgreSQL | `OMNIX_POSTGRES_PORT` in Compose |
+| 55432 | Disposable test PostgreSQL | Compose `agent-tests` profile |
+| 8642 | Hermes sidecar | Optional |
+| 3000 / 9090 / 16686 / 4318 | Grafana / Prometheus / Jaeger / OTLP collector | Compose `observability` profile |
+
 ## 1. Prerequisites
 
 Install the tools needed for the parts of Omnix you intend to run.

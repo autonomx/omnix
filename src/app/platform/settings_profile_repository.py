@@ -153,7 +153,7 @@ def _legacy_seed(settings: dict[str, Any]) -> dict[str, Any]:
                 "model": str(cerebras.get("model") or "llama-3.3-70b-versatile"),
             },
             "llamacpp": {
-                "baseUrl": str(llamacpp.get("base_url") or "http://localhost:8080"),
+                "baseUrl": str(llamacpp.get("base_url") or "http://localhost:8180"),
                 "model": str(llamacpp.get("model") or ""),
                 "downloadLocation": str(llamacpp.get("download_location") or "server"),
                 "autoStart": bool(llamacpp.get("auto_start")),

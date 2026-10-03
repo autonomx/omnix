@@ -430,7 +430,7 @@ class LlamaCppInstaller:
         try:
             from app.runtime.http_client import shared_http_client
             response = shared_http_client("llamacpp-server").get(
-                "http://localhost:8080/v1/models", timeout=2, retry=False
+                "http://localhost:8180/v1/models", timeout=2, retry=False
             )
             return response.status_code == 200
         except:
