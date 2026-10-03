@@ -25,7 +25,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from app.config.env import env_str
+from app.config.env import env_str, environment
 from app.observability.tracing import current_trace_id, set_span_attributes
 
 CONTEXT_FIELDS = ("request_id", "job_id", "attempt", "run_id", "workspace_id", "user_id", "feature")
@@ -125,6 +125,22 @@ def configure_logging(*, log_format: str | None = None, level: str | None = None
     return handler
 
 
+def process_log_name() -> str:
+    """This process's name in per-process log files.
+
+    ``OMNIX_INSTANCE_NAME`` when set (one per replica), else the process role.
+    Each process rotates its own file, so a rotation never renames a file
+    another process is writing.
+    """
+    raw = (
+        environment().get("OMNIX_INSTANCE_NAME", "")
+        or environment().get("OMNIX_GATEWAY_BACKGROUND_ROLE", "")
+        or "worker"
+    ).strip()
+    name = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip(".-")
+    return name[:64] or "worker"
+
+
 def request_id_from_header(value: str | None) -> str:
     """A valid inbound request id, or a new one."""
     if value and _REQUEST_ID.fullmatch(value):
@@ -163,6 +179,7 @@ class RequestContextMiddleware:
 
 
 __all__ = [
+    "process_log_name",
     "CONTEXT_FIELDS",
     "RECORD_FIELDS",
     "ContextFilter",

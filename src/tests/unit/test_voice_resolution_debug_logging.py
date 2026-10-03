@@ -77,3 +77,15 @@ def test_tts_reference_snapshot_exposes_exact_and_fallback_paths(tmp_path: Path,
     assert fallback["requested_path_exists"] is False
     assert fallback["resolved_reference_name"] == "default_ref.wav"
     assert fallback["available_wav_files"] == ["default_ref.wav", "Jinx.wav"]
+
+
+def test_each_process_writes_its_own_voice_debug_file(tmp_path: Path, monkeypatch) -> None:
+    """Replicas never share a rotating file (WP-10.1)."""
+    monkeypatch.setenv("OMNIX_VOICE_DEBUG_LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("OMNIX_INSTANCE_NAME", "gateway-8000")
+    first = Path(voice_debug_log_path("backend")).name
+    monkeypatch.setenv("OMNIX_INSTANCE_NAME", "gateway 8001")
+    second = Path(voice_debug_log_path("backend")).name
+
+    assert first == "voice-debug-backend.gateway-8000.log"
+    assert second == "voice-debug-backend.gateway-8001.log"

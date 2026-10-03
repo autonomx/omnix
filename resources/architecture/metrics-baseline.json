@@ -7365,7 +7365,7 @@
     "print_calls": {
       "direction": "lower",
       "target": 0,
-      "value": 46
+      "value": 0
     },
     "process_local_state_unapproved": {
       "direction": "lower",

@@ -28,6 +28,9 @@ from __future__ import annotations
 import random
 from enum import Enum
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ResolutionStrategy(Enum):
@@ -147,7 +150,7 @@ class ActionResolver:
         if self.log_resolutions and self._resolution_log:
             import json
             log_summary = json.dumps(self._resolution_log, indent=2)
-            print(f"[ActionResolver] Resolutions:\n{log_summary}")
+            logger.debug('[ActionResolver] Resolutions:\n%s', log_summary)
             self._resolution_log.clear()
             
         return resolved

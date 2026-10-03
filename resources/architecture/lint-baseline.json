@@ -141,7 +141,7 @@
       "count": 1,
       "fingerprint": "default_asset_store:app.runtime_composition",
       "lines": [
-        277
+        282
       ],
       "path": "src/app/assets/__init__.py",
       "rule": "AL001"
@@ -168,7 +168,7 @@
       "count": 1,
       "fingerprint": "_legacy_memory_write_guard:app.assistant_memory_v2.authority",
       "lines": [
-        66
+        78
       ],
       "path": "src/app/assistant_memory/owner_defaults.py",
       "rule": "AL001"
@@ -195,7 +195,7 @@
       "count": 1,
       "fingerprint": "_workspace_for_preview:app.agent_runtime.service",
       "lines": [
-        941
+        953
       ],
       "path": "src/app/assistant_tools/browser_adapter.py",
       "rule": "AL001"
@@ -631,144 +631,6 @@
       ],
       "path": "src/app/trading/research/adapters/generic_web.py",
       "rule": "AL001"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        43
-      ],
-      "path": "src/app/live_speech/benchmark_runner.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "main:print",
-      "lines": [
-        43
-      ],
-      "path": "src/app/live_voice/release_gate_cli.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "_render:print",
-      "lines": [
-        58
-      ],
-      "path": "src/app/persistence/cli.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 7,
-      "fingerprint": "_llm_text:print",
-      "lines": [
-        116,
-        129,
-        132,
-        141,
-        142,
-        156,
-        163
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_common.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 3,
-      "fingerprint": "_generate_live_narrative:print",
-      "lines": [
-        578,
-        580,
-        636
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 11,
-      "fingerprint": "narrate_scene:print",
-      "lines": [
-        749,
-        801,
-        825,
-        859,
-        860,
-        883,
-        905,
-        959,
-        960,
-        961,
-        983
-      ],
-      "path": "src/app/rpg/ai/world_scene_narrator_runtime.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "ActionResolver.resolve:print",
-      "lines": [
-        150
-      ],
-      "path": "src/app/rpg/core/action_resolver.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "EventBus.emit:print",
-      "lines": [
-        391
-      ],
-      "path": "src/app/rpg/core/event_bus.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "main:print",
-      "lines": [
-        279,
-        285
-      ],
-      "path": "src/app/rpg/local_live_smoke.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "append_image_request:print",
-      "lines": [
-        479
-      ],
-      "path": "src/app/rpg/presentation/visual_state.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "append_scene_illustration:print",
-      "lines": [
-        424
-      ],
-      "path": "src/app/rpg/presentation/visual_state.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
-      "fingerprint": "append_visual_asset:print",
-      "lines": [
-        565
-      ],
-      "path": "src/app/rpg/presentation/visual_state.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 3,
-      "fingerprint": "assemble_turn_narration_response:print",
-      "lines": [
-        301,
-        376,
-        399
-      ],
-      "path": "src/app/rpg/session/narration_runtime.py",
-      "rule": "AL008"
     },
     {
       "count": 3,

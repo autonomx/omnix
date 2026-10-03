@@ -113,7 +113,7 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
         # Try streaming if callback provided
         chunks = []
         try:
-            print("[RPG][LLM] calling provider.stream")
+            logger.debug('[RPG][LLM] calling provider.stream')
             if callable(gateway_call):
                 events = gateway_call("generate_stream", prompt, context=context or {})
             elif callable(gateway_generate_stream):
@@ -126,10 +126,10 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
                 if piece:
                     chunks.append(piece)
                     on_chunk(piece)
-            print("[RPG][LLM] stream completed, chunks:", len(chunks))
+            logger.debug('[RPG][LLM] stream completed, chunks: %s', len(chunks))
             return _extract_llm_text("".join(chunks).strip())
         except Exception as exc:
-            print("[RPG][LLM] stream failed:", repr(exc))
+            logger.debug('[RPG][LLM] stream failed: %s', repr(exc))
             logger.exception(
                 "[RPG LLM GATEWAY] Streaming failed, falling back to non-streaming"
             )
@@ -138,8 +138,8 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
 
     # Fallback to non-streaming
     try:
-        print("[RPG][LLM] calling provider.generate")
-        print("[ACTIVE PROVIDER]", llm_gateway)
+        logger.debug('[RPG][LLM] calling provider.generate')
+        logger.debug('[ACTIVE PROVIDER] %s', llm_gateway)
         if callable(gateway_call):
             response = gateway_call("generate", prompt, context=context or {})
         elif callable(gateway_generate):
@@ -153,14 +153,14 @@ def _llm_text(llm_gateway, prompt, *, context=None, on_chunk=None):
             response = "".join(chunks).strip()
         else:
             raise AttributeError("gateway has no generate or call interface")
-        print("[RPG][LLM] raw response:", repr(response)[:500])
+        logger.debug('[RPG][LLM] raw response: %s', repr(response)[:500])
         logger.info(
             "[RPG LLM GATEWAY] Received response type: %s, length: %d",
             type(response),
             len(str(response)) if response else 0,
         )
     except Exception as exc:
-        print("[RPG][LLM] generate failed:", repr(exc))
+        logger.debug('[RPG][LLM] generate failed: %s', repr(exc))
         logger.exception("[RPG LLM GATEWAY] LLM call failed")
         raise RuntimeError(
             f"live_llm_required_but_llm_failed: provider_exception: {repr(exc)}"

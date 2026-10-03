@@ -12,6 +12,9 @@ Design invariants:
 from __future__ import annotations
 
 from typing import Any, Dict, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 _MAX_SCENE_ILLUSTRATIONS = 24
 _MAX_IMAGE_REQUESTS = 24
@@ -421,7 +424,7 @@ def append_scene_illustration(
 
     scene_id = _safe_str(illustration.get("scene_id")).strip()
     if ":" not in scene_id:
-        print("[RPG][WARN] Rejecting invalid scene_id:", scene_id)
+        logger.warning('[RPG][WARN] Rejecting invalid scene_id: %s', scene_id)
         return simulation_state
 
     normalized = _normalize_scene_illustration(illustration)
@@ -476,7 +479,7 @@ def append_image_request(
 
     target_id = _safe_str(request.get("target_id")).strip()
     if ":" not in target_id:
-        print("[RPG][WARN] Rejecting invalid target_id:", target_id)
+        logger.warning('[RPG][WARN] Rejecting invalid target_id: %s', target_id)
         return simulation_state
 
     requests.append(_normalize_image_request(request))
@@ -562,7 +565,7 @@ def append_visual_asset(
 
     target_id = _safe_str(asset.get("target_id")).strip()
     if ":" not in target_id:
-        print("[RPG][WARN] Rejecting invalid target_id:", target_id)
+        logger.warning('[RPG][WARN] Rejecting invalid target_id: %s', target_id)
         return simulation_state
 
     normalized = _normalize_visual_asset(asset)

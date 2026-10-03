@@ -6,7 +6,6 @@ from app.config.env import environment
 import json
 import logging
 import os
-import re
 import threading
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -60,13 +59,9 @@ def trade_log_path(channel: TradeLogChannel) -> Path:
 
 def trade_log_process_name() -> str:
     """``OMNIX_INSTANCE_NAME`` when set (one per replica), else the process role."""
-    raw = (
-        environment().get("OMNIX_INSTANCE_NAME", "")
-        or environment().get("OMNIX_GATEWAY_BACKGROUND_ROLE", "")
-        or "worker"
-    ).strip()
-    name = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip(".-")
-    return name[:64] or "worker"
+    from app.observability.logging import process_log_name
+
+    return process_log_name()
 
 
 def trade_audit_logging_enabled() -> bool:

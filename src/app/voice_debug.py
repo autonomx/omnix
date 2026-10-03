@@ -58,8 +58,16 @@ def _log_dir() -> Path:
 
 
 def voice_debug_log_path(channel: str) -> str:
-    """Return the absolute log path for one diagnostic process/channel."""
-    return str((_log_dir() / f"voice-debug-{_safe_channel(channel)}.log").resolve())
+    """Return the absolute log path for one diagnostic channel in this process.
+
+    One file per process (``voice-debug-<channel>.<process>.log``): gateway
+    replicas share the backend channel, and a rotating file shared between
+    processes loses lines when one of them rotates it (WP-10.1).
+    """
+    from app.observability.logging import process_log_name
+
+    name = f"voice-debug-{_safe_channel(channel)}.{process_log_name()}.log"
+    return str((_log_dir() / name).resolve())
 
 
 def _close_logger(logger: logging.Logger) -> None:

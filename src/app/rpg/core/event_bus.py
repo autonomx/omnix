@@ -47,6 +47,9 @@ from .determinism import (
 
 # PHASE 3 — TIMELINE GRAPH
 from .timeline_graph import TimelineGraph
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Allowed layers for cross-system enforcement (Fix #3)
 ALLOWED_LAYERS = {
@@ -388,7 +391,7 @@ class EventBus:
         event = cloned
 
         if self._debug:
-            print(f"[EVENT] {event.type} -> {event.payload}")
+            logger.debug('[EVENT] %s -> %s', event.type, event.payload)
 
         if self._log is not None:
             self._log.append(event)

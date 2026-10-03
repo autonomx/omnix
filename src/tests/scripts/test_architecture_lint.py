@@ -55,6 +55,17 @@ def test_each_rule_and_patch_form(rule, sources):
     assert rule in {entry["rule"] for entry in current["violations"]}
 
 
+@pytest.mark.parametrize("path,source", [
+    (APP + "chat/cli.py", "print('result')"),
+    (APP + "chat/release_cli.py", "print('result')"),
+    (APP + "chat/__main__.py", "print('result')"),
+    (APP + "chat/tool.py", "def main():\n    print('result')\n\nif __name__ == '__main__':\n    main()"),
+])
+def test_command_line_programs_may_print_their_output(path, source):
+    """AL008 is about logging; a CLI's stdout is its output (WP-10.1)."""
+    assert "AL008" not in {entry["rule"] for entry in report({path: source})["violations"]}
+
+
 def test_all_fourteen_rules_are_exercised():
     assert {rule for rule, _ in CASES} == set(lint.RULES)
 

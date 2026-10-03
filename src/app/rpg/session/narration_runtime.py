@@ -14,6 +14,9 @@ from app.rpg.session.state_normalization import (
     _safe_list,
     _safe_str,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def build_turn_narration_context(
@@ -298,7 +301,7 @@ def assemble_turn_narration_response(
     force_sync = bool(runtime_state.get("force_sync_narration", False))
 
     if force_sync:
-        print("[RPG][narration][sync] calling narrate_scene")
+        logger.debug('[RPG][narration][sync] calling narrate_scene')
 
         sync_scene = _safe_dict(narration_request.get("scene") or runtime_state.get("current_scene"))
         sync_context = _safe_dict(narration_request.get("narration_context"))
@@ -373,7 +376,7 @@ def assemble_turn_narration_response(
         try:
             narration_payload = narrate_scene(sync_scene, sync_context, llm_gateway=llm_gateway)
         except Exception as exc:
-            print("[RPG][narration][sync] failed", {"error": repr(exc)})
+            logger.debug('[RPG][narration][sync] failed %s', {"error": repr(exc)})
             raise
 
         authoritative["narration"] = _safe_str(narration_payload.get("narration"))
@@ -396,14 +399,11 @@ def assemble_turn_narration_response(
             "conversation_thread_state": sync_context.get("conversation_thread_state") or {},
         }
 
-        print(
-            "[RPG][narration][sync] completed",
-            {
+        logger.debug('[RPG][narration][sync] completed %s', {
                 "used_llm": authoritative["used_llm"],
                 "has_text": bool(authoritative["narration"].strip()),
                 "has_turn_contract": bool(turn_contract),
-            },
-        )
+            })
         narration = _safe_str(authoritative.get("narration"))
         raw_llm_narrative = authoritative.get("raw_llm_narrative")
         used_llm = _safe_bool(authoritative.get("used_llm"), False)

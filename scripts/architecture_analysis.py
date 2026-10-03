@@ -185,6 +185,19 @@ def is_test(path: str) -> bool:
     return "tests" in parts or "test" in parts or bool(re.search(r"(?:^|[./])test_|\.(?:test|spec)\.", path))
 
 
+def cli_module(path: str, tree: ast.Module) -> bool:
+    """A module run as a command: ``cli.py``/``*_cli.py``/``__main__.py``, under ``cli/``, or with a main guard."""
+    if path.endswith(("/cli.py", "_cli.py", "/__main__.py")) or "/cli/" in path:
+        return True
+    for node in tree.body:
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Compare):
+            left, comparators = node.test.left, node.test.comparators
+            if (isinstance(left, ast.Name) and left.id == "__name__" and len(comparators) == 1
+                    and isinstance(comparators[0], ast.Constant) and comparators[0].value == "__main__"):
+                return True
+    return False
+
+
 def is_production(path: str, config: dict) -> bool:
     return not is_test(path) and (path.startswith("src/app/") or path in config.get("production", {}).get("entrypoints", []))
 
@@ -327,6 +340,8 @@ class SourceAnalysis:
             bindings = self.bindings(path)
             parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
             patches: set[ast.AST] = set()
+            # A command-line program prints its output; that is not logging (AL008).
+            cli_program = cli_module(path, tree)
 
             def add(rule: str, node: ast.AST, subject: str, scope: str) -> None:
                 result.append(Violation(rule, path, f"{scope or '<module>'}:{subject}", getattr(node, "lineno", 1)))
@@ -392,7 +407,7 @@ class SourceAnalysis:
                     if call_name in {"os.getenv", "os.environ.get", "os.environ.pop", "os.environ.copy", "os.environ.items", "os.environ.keys", "os.environ.values", "os.environ.setdefault"}:
                         if not path.startswith("src/app/config/") and path != "src/app/runtime/net.py":
                             add("AL007", node, call_name + ":" + str(literal_string(node.args[0]) if node.args else "<dynamic>"), scope)
-                    if call_name in {"print", "builtins.print"} and path.startswith("src/app/"):
+                    if call_name in {"print", "builtins.print"} and path.startswith("src/app/") and not cli_program:
                         add("AL008", node, "print", scope)
                     if call_name.split(".")[-1] == "LocalBlobStore" and relative not in owners.get("blob_store_construction", []):
                         add("AL011", node, call_name, scope)
