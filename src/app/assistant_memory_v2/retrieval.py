@@ -71,6 +71,9 @@ def _object_text(value: GraphValue) -> str:
 
 
 def _assertion_content(item: GraphAssertion) -> str:
+    # A seeded assertion is a curated memory whose text is the memory itself.
+    if item.assertion_type == "seeded":
+        return _object_text(item.object)
     return f"{item.subject.entity_id} {item.predicate.replace('_', ' ')} {_object_text(item.object)}"
 
 

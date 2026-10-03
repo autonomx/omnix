@@ -34,6 +34,13 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   RPG turn, live speech and agent step spans, with the trace id in log lines.
 - `scripts/backup_omnix.py` and `scripts/restore_rehearsal.py`, with a nightly
   restore rehearsal.
+- Memory v2 switch: curated memory can move from Memory v1 to Memory v2
+  (`python -m app.assistant_memory_v2.shadow_runner`, then
+  `python -m app.assistant_memory_v2.cutover activate`). After the switch,
+  saving, approving, editing, pinning, archiving and forgetting memories work
+  as before but live in v2; Chat puts pinned memories first and then the
+  memories most relevant to the turn. Rollback is possible until the first
+  memory change under v2.
 - Web: a failing workspace shows an error panel with Try again (or Reload when
   a newer build replaced its code) instead of a blank app, and browser errors
   are reported to `POST /api/client-errors`.

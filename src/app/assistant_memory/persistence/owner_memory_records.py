@@ -13,6 +13,7 @@ from .owner_memory_rows import OwnerMemoryRowSupport
 class OwnerMemoryRecordMixin(OwnerMemoryRowSupport):
     def create_record(self, record: MemoryRecord) -> MemoryRecord:
         with self.database.transaction() as connection:
+            self.require_v1_authority(connection)
             connection.execute(
                 """
                 INSERT INTO omnix_memory_records (
@@ -113,6 +114,7 @@ class OwnerMemoryRecordMixin(OwnerMemoryRowSupport):
         expected_revision: int,
     ) -> MemoryRecord:
         with self.database.transaction() as connection:
+            self.require_v1_authority(connection)
             current = connection.execute(
                 "SELECT revision FROM omnix_memory_records "
                 "WHERE id = %s AND workspace_id = %s FOR UPDATE",
@@ -178,6 +180,7 @@ class OwnerMemoryRecordMixin(OwnerMemoryRowSupport):
 
     def forget_record(self, record_id: str, *, expected_revision: int) -> bool:
         with self.database.transaction() as connection:
+            self.require_v1_authority(connection)
             row = connection.execute(
                 "SELECT revision FROM omnix_memory_records "
                 "WHERE id = %s AND workspace_id = %s FOR UPDATE",

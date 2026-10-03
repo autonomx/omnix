@@ -194,3 +194,28 @@ class OwnerMemoryRowSupport:
                 json.dumps(payload, sort_keys=True),
             ),
         )
+
+    @staticmethod
+    def require_v1_authority(connection: Any) -> None:
+        """Refuse a v1 record write once Memory v2 is authoritative.
+
+        Runs inside the write's own transaction and share-locks the authority
+        row, so the v2 activation (which updates that row) waits for in-flight
+        v1 writes and any later v1 write sees v2 and stops.
+        """
+        row = connection.execute(
+            """
+            SELECT e.authority
+              FROM omnix_memory_v2_authority_current c
+              JOIN omnix_memory_v2_authority_epochs e ON e.epoch = c.current_epoch
+             WHERE c.singleton = TRUE
+               FOR SHARE OF c
+            """
+        ).fetchone()
+        if row is not None and str(row[0]) != "v1":
+            from app.assistant_memory.service import LegacyMemoryReadOnlyError
+
+            raise LegacyMemoryReadOnlyError(
+                "legacy assistant_memory is read-only while Memory v2 is authoritative"
+            )
+

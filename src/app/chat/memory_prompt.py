@@ -48,12 +48,19 @@ def _v2_space_and_scopes(session: ChatSession) -> tuple[MemorySpaceKey, tuple[Vi
     scopes.append(VisibilityScope(kind="session", scope_id=context.session_id))
     return (
         MemorySpaceKey(
-            principal_id=context.profile_id,
+            principal_id=_memory_principal(),
             owner_type=context.owner_type,
             owner_id=context.owner_id,
         ),
         tuple(scopes),
     )
+
+
+def _memory_principal() -> str:
+    """Memory v2 spaces belong to the tenant workspace; profiles are visibility scopes."""
+    from app.runtime.tenant_context import current_tenant
+
+    return current_tenant().workspace_id
 
 
 def _memory_query_text(session: ChatSession, explicit: str | None) -> str:
@@ -143,13 +150,43 @@ def _resolve_v2_prompt_memory(
     session: ChatSession,
     *,
     runtime: Any,
+    service: MemoryService,
     read_allowed: bool,
     shared_allowed: bool,
+    shared_categories: list[str],
     query_text: str | None,
     diagnostics: dict[str, Any],
 ) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
+    """Memory v2 prompt memory.
+
+    Pinned memories always come first, as under v1 (pinning means "always
+    include"); ranked retrieval for the turn fills the rest of the budget;
+    a character session's shared System Assistant memory follows the v1
+    category rule, plus anything an explicit v2 grant federates.
+    """
     authority = runtime.assert_v2_authoritative()
     space, visible_scopes = _v2_space_and_scopes(session)
+    budget = prompt_budget_from_env().memory_tokens
+    character_session = session.interaction_mode == "character"
+
+    selected: list[PromptMemoryItem] = []
+    used_tokens = 0
+    if read_allowed:
+        context = resolve_session_memory_scope(session)
+        selection = select_memory_records(service.list_active(context), context, token_budget=budget)
+        for record in selection.records:
+            if not record.pinned:
+                continue
+            selected.append(PromptMemoryItem(
+                memory_id=record.id,
+                content=record.content,
+                scope=record.scope,
+                category=record.category,
+                revision=record.revision,
+                source="character" if character_session else "system",
+            ))
+            used_tokens += estimate_memory_tokens(record.content)
+
     query = RetrievalQuery(
         query_id=f"prompt-memory:{session.id}"[:200],
         space=space,
@@ -158,7 +195,7 @@ def _resolve_v2_prompt_memory(
         authority="final",
         as_of=datetime.now(timezone.utc),
         top_k=12,
-        token_budget=prompt_budget_from_env().memory_tokens,
+        token_budget=max(0, budget - used_tokens),
         deadline_ms=50.0,
         grant_ids=(
             _active_grant_ids(runtime, space)
@@ -169,7 +206,7 @@ def _resolve_v2_prompt_memory(
 
     if read_allowed:
         result = runtime.retrieve(query)
-        selected = [
+        retrieved = [
             _v2_prompt_item(candidate, shared=_candidate_is_shared(candidate))
             for candidate in result.candidates
             if candidate.prompt_eligible
@@ -180,15 +217,31 @@ def _resolve_v2_prompt_memory(
             "index_graph_revision": result.index_graph_revision,
         }
     else:
-        selected = _granted_only_v2_items(runtime, query) if shared_allowed else []
+        retrieved = _granted_only_v2_items(runtime, query) if shared_allowed else []
         state = runtime.graph_store.state(space)
         watermarks = {
             "observation": runtime.observation_store.watermark(space),
             "graph_revision": state.graph_revision,
             "index_graph_revision": runtime.search_index.index_graph_revision(space),
         }
+    seen = {item.content for item in selected}
+    for item in retrieved:
+        if item.content not in seen:
+            seen.add(item.content)
+            selected.append(item)
 
-    shared_selected = [item for item in selected if item.source == "shared_memory_v2"]
+    shared_excluded: dict[str, int] = {}
+    if shared_allowed:
+        owner_tokens = sum(estimate_memory_tokens(item.content) for item in selected)
+        shared_items, shared_excluded = _shared_system_items(
+            session, service, shared_categories, token_budget=max(0, budget - owner_tokens),
+        )
+        for item in shared_items:
+            if item.content not in seen:
+                seen.add(item.content)
+                selected.append(item)
+
+    shared_selected = [item for item in selected if item.source in {"shared_memory_v2", "shared_system"}]
     diagnostics.update({
         "status": "resolved_v2",
         "authority": "v2",
@@ -199,9 +252,60 @@ def _resolve_v2_prompt_memory(
         "selected_memory_count": len(selected),
         "shared_selected_memory_ids": [item.memory_id for item in shared_selected],
         "shared_selected_memory_count": len(shared_selected),
+        "shared_excluded_reason_counts": shared_excluded,
         "v2_watermarks": watermarks,
     })
     return selected, diagnostics
+
+
+def _shared_system_items(
+    session: ChatSession,
+    service: MemoryService,
+    shared_categories: list[str],
+    *,
+    token_budget: int,
+) -> tuple[list[PromptMemoryItem], dict[str, int]]:
+    """The System Assistant memories a character session may read (v1 rule).
+
+    Allowed categories only, never session-scoped, normal sensitivity, then
+    the usual selection within the remaining budget. Under Memory v2 the
+    service reads the same records from v2.
+    """
+    excluded: dict[str, int] = {}
+    system_context = resolve_chat_scope(
+        session.id,
+        profile_id=session.profile_id,
+        workspace_id=session.workspace_id,
+        project_id=session.project_id,
+    )
+    candidates = []
+    for record in service.list_active(system_context):
+        reason = None
+        if record.scope == "session":
+            reason = "session_scope_blocked"
+        elif record.category not in shared_categories:
+            reason = "category_not_allowed"
+        elif record.sensitivity != "normal":
+            reason = "sensitivity_not_normal"
+        if reason:
+            excluded[reason] = excluded.get(reason, 0) + 1
+        else:
+            candidates.append(record)
+    selection = select_memory_records(candidates, system_context, token_budget=token_budget)
+    for reason, count in selection.diagnostics.excluded_reason_counts.items():
+        excluded[reason] = excluded.get(reason, 0) + count
+    items = [
+        PromptMemoryItem(
+            memory_id=record.id,
+            content=record.content,
+            scope=record.scope,
+            category=record.category,
+            revision=record.revision,
+            source="shared_system",
+        )
+        for record in selection.records
+    ]
+    return items, excluded
 
 
 def resolve_prompt_memory(
@@ -243,8 +347,10 @@ def resolve_prompt_memory(
         return _resolve_v2_prompt_memory(
             session,
             runtime=runtime,
+            service=memory_service_factory(),
             read_allowed=read_allowed,
             shared_allowed=shared_allowed,
+            shared_categories=shared_categories,
             query_text=query_text,
             diagnostics=diagnostics,
         )
@@ -290,45 +396,13 @@ def resolve_prompt_memory(
     shared_excluded: dict[str, int] = {}
     shared_selected: list[PromptMemoryItem] = []
     if shared_allowed:
-        system_context = resolve_chat_scope(
-            session.id,
-            profile_id=session.profile_id,
-            workspace_id=session.workspace_id,
-            project_id=session.project_id,
-        )
-        candidates = []
-        for record in service.list_active(system_context):
-            reason = None
-            if record.scope == "session":
-                reason = "session_scope_blocked"
-            elif record.category not in shared_categories:
-                reason = "category_not_allowed"
-            elif record.sensitivity != "normal":
-                reason = "sensitivity_not_normal"
-            if reason:
-                shared_excluded[reason] = shared_excluded.get(reason, 0) + 1
-            else:
-                candidates.append(record)
         owner_tokens = sum(estimate_memory_tokens(item.content) for item in selected)
-        token_budget = max(0, prompt_budget_from_env().memory_tokens - owner_tokens)
-        shared_selection = select_memory_records(
-            candidates,
-            system_context,
-            token_budget=token_budget,
+        shared_selected, shared_excluded = _shared_system_items(
+            session,
+            service,
+            shared_categories,
+            token_budget=max(0, prompt_budget_from_env().memory_tokens - owner_tokens),
         )
-        for reason, count in shared_selection.diagnostics.excluded_reason_counts.items():
-            shared_excluded[reason] = shared_excluded.get(reason, 0) + count
-        shared_selected = [
-            PromptMemoryItem(
-                memory_id=record.id,
-                content=record.content,
-                scope=record.scope,
-                category=record.category,
-                revision=record.revision,
-                source="shared_system",
-            )
-            for record in shared_selection.records
-        ]
         selected.extend(shared_selected)
 
     diagnostics.update({

@@ -67,6 +67,28 @@ def _space_status(database, space: MemorySpaceKey):
     )
 
 
+def _insert_v1(database, record: MemoryRecord) -> None:
+    """Store the record in v1 too, so the report sees v2 in step with v1."""
+    with system_scope("operator.cli"), database.transaction() as connection:
+        workspace_id = connection.execute("SELECT id FROM omnix_workspaces ORDER BY id LIMIT 1").fetchone()[0]
+        connection.execute(
+            """
+            INSERT INTO omnix_memory_records (
+                id, workspace_id, owner_type, owner_id, scope, scope_id, category, kind,
+                content, normalized_content, source, trust_level, provenance_type
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (record.id, workspace_id, record.owner_type, record.owner_id, record.scope, record.scope_id,
+             record.category, record.kind, record.content, record.normalized_content, record.source,
+             record.trust_level, record.provenance_type),
+        )
+
+
+def _delete_v1(database, owner_id: str) -> None:
+    with system_scope("operator.cli"), database.transaction() as connection:
+        connection.execute("DELETE FROM omnix_memory_records WHERE owner_id = %s", (owner_id,))
+
+
 def _imported_space(database, content: str = "Skyrim is my favorite game"):
     observations = PostgresMemoryV2ObservationStore(database)
     record = _record(f"sofia-{uuid4().hex}", content)
@@ -149,20 +171,45 @@ def test_an_imported_space_without_an_evaluation_is_not_evaluated() -> None:
 
 def test_failed_and_stale_evaluations_are_reported() -> None:
     database = _database()
+    space = None
     try:
         apply_migrations(database)
         observations, space, record = _imported_space(database)
+        _insert_v1(database, record)
         _record_failing_evaluation(database, observations, space, v1_contents=[record.content])
         assert _space_status(database, space).status == "shadow_failed"
 
-        LegacyMemoryV2Importer(observations).import_record(
-            principal_id="profile:alice", record=_record(space.owner_id, "Morrowind is my second favorite"),
-        )
+        second = _record(space.owner_id, "Morrowind is my second favorite")
+        _insert_v1(database, second)
+        LegacyMemoryV2Importer(observations).import_record(principal_id="profile:alice", record=second)
         status = _space_status(database, space)
         assert status.status == "evaluation_stale"
         assert status.evaluation is not None and status.evaluation.observation_watermark == 1
         assert status.observation_watermark == 2
     finally:
+        if space is not None:
+            _delete_v1(database, space.owner_id)
+        database.close()
+
+
+def test_a_v1_change_after_import_is_reported_before_staleness() -> None:
+    database = _database()
+    space = None
+    try:
+        apply_migrations(database)
+        observations, space, record = _imported_space(database)
+        _insert_v1(database, record)
+        _record_failing_evaluation(database, observations, space, v1_contents=[record.content])
+        assert _space_status(database, space).status == "shadow_failed"
+
+        _insert_v1(database, _record(space.owner_id, "Oblivion is my third favorite"))
+        assert _space_status(database, space).status == "v1_changed"
+
+        _delete_v1(database, space.owner_id)
+        assert _space_status(database, space).status == "v1_changed"
+    finally:
+        if space is not None:
+            _delete_v1(database, space.owner_id)
         database.close()
 
 

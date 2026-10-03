@@ -105,9 +105,11 @@ def production_memory_repository():
 
 
 def production_owner_memory_repository():
+    """Curated memory records follow the memory authority (v1, then Memory v2)."""
     _register_feature_repositories("assistant-memory")
     from app.assistant_memory.persistence.owner_memory_store import PostgresOwnerAwareMemoryRepository
-    return PostgresOwnerAwareMemoryRepository()
+    from app.assistant_memory_v2.memory_repository import MemoryAuthorityRoutedRepository
+    return MemoryAuthorityRoutedRepository(PostgresOwnerAwareMemoryRepository())
 
 
 @bounded_lru_cache(max_entries=1, ttl_seconds=3600.0)

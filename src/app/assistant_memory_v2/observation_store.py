@@ -373,102 +373,125 @@ class PostgresMemoryV2ObservationStore:
         reason: str | None = None,
         changed_at: datetime | None = None,
     ) -> ObservationDisposition:
+        with self.database.transaction() as connection:
+            return self.apply_disposition(
+                connection,
+                space,
+                observation_id,
+                state=state,
+                actor_id=actor_id,
+                reason=reason,
+                changed_at=changed_at,
+            )
+
+    @classmethod
+    def apply_disposition(
+        cls,
+        connection: Any,
+        space: MemorySpaceKey,
+        observation_id: str,
+        *,
+        state: str,
+        actor_id: str,
+        reason: str | None = None,
+        changed_at: datetime | None = None,
+    ) -> ObservationDisposition:
+        """Revoke, purge or restore one observation inside the caller's transaction."""
         if state not in {"active", "revoked", "purged"}:
             raise ValueError(f"unsupported observation disposition: {state}")
         timestamp = changed_at or datetime.now(timezone.utc)
         values = _space_values(space)
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                SELECT authority_sequence
-                  FROM omnix_memory_v2_observations
-                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                   AND observation_id = %s
-                 FOR UPDATE
-                """,
-                (*values, observation_id),
-            ).fetchone()
-            if row is None:
-                raise ObservationNotFound(observation_id)
-            sequence = int(row[0])
-            disposition_row = connection.execute(
-                """
-                INSERT INTO omnix_memory_v2_observation_dispositions (
-                    observation_id, principal_id, owner_type, owner_id,
-                    authority_sequence, state, changed_at, reason, actor_id, revision
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
-                ON CONFLICT (observation_id) DO UPDATE
-                   SET state = EXCLUDED.state,
-                       changed_at = EXCLUDED.changed_at,
-                       reason = EXCLUDED.reason,
-                       actor_id = EXCLUDED.actor_id,
-                       revision = omnix_memory_v2_observation_dispositions.revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
-                RETURNING revision
-                """,
-                (observation_id, *values, sequence, state, timestamp, reason, actor_id),
-            ).fetchone()
-            stream_row = connection.execute(
-                """
-                UPDATE omnix_memory_v2_authority_streams
-                   SET governance_revision = governance_revision + 1,
-                       updated_at = CURRENT_TIMESTAMP
-                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                RETURNING governance_revision, observation_watermark
-                """,
-                values,
-            ).fetchone()
-            if stream_row is None:  # pragma: no cover - authority invariant
-                raise ObservationStoreError("governance mutation lost authority stream")
-            governance_revision = int(stream_row[0])
-            observation_watermark = int(stream_row[1])
+        row = connection.execute(
+            """
+            SELECT authority_sequence
+              FROM omnix_memory_v2_observations
+             WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+               AND observation_id = %s
+             FOR UPDATE
+            """,
+            (*values, observation_id),
+        ).fetchone()
+        if row is None:
+            raise ObservationNotFound(observation_id)
+        sequence = int(row[0])
+        disposition_row = connection.execute(
+            """
+            INSERT INTO omnix_memory_v2_observation_dispositions (
+                observation_id, principal_id, owner_type, owner_id,
+                authority_sequence, state, changed_at, reason, actor_id, revision
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1)
+            ON CONFLICT (observation_id) DO UPDATE
+               SET state = EXCLUDED.state,
+                   changed_at = EXCLUDED.changed_at,
+                   reason = EXCLUDED.reason,
+                   actor_id = EXCLUDED.actor_id,
+                   revision = omnix_memory_v2_observation_dispositions.revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+            RETURNING revision
+            """,
+            (observation_id, *values, sequence, state, timestamp, reason, actor_id),
+        ).fetchone()
+        stream_row = connection.execute(
+            """
+            UPDATE omnix_memory_v2_authority_streams
+               SET governance_revision = governance_revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+            RETURNING governance_revision, observation_watermark
+            """,
+            values,
+        ).fetchone()
+        if stream_row is None:  # pragma: no cover - authority invariant
+            raise ObservationStoreError("governance mutation lost authority stream")
+        governance_revision = int(stream_row[0])
+        observation_watermark = int(stream_row[1])
 
-            if state == "purged":
-                connection.execute(
-                    """
-                    UPDATE omnix_memory_v2_observations
-                       SET payload = '{\"purged\":true}'::jsonb
-                     WHERE observation_id = %s
-                    """,
-                    (observation_id,),
-                )
-                connection.execute(
-                    """
-                    UPDATE omnix_memory_v2_consolidation_decision_sets
-                       SET normalized_proposals = '[]'::jsonb,
-                           deterministic_decisions = '{\"redacted\":true}'::jsonb,
-                           redacted_at = COALESCE(redacted_at, %s),
-                           invalidated_at = COALESCE(invalidated_at, %s)
-                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                       AND input_observation_from <= %s
-                       AND input_observation_through >= %s
-                    """,
-                    (timestamp, timestamp, *values, sequence, sequence),
-                )
-                connection.execute(
-                    """
-                    DELETE FROM omnix_memory_v2_derived_policy_envelopes
-                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                       AND source_observation_ids @> %s::jsonb
-                    """,
-                    (*values, _canonical_json([observation_id])),
-                )
-                connection.execute(
-                    """
-                    DELETE FROM omnix_memory_v2_search_index_entries
-                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                       AND evidence_observation_ids @> %s::jsonb
-                    """,
-                    (*values, _canonical_json([observation_id])),
-                )
-
-            self._coalesce_derive_job(
-                connection,
-                space,
-                target_observation_watermark=observation_watermark,
-                target_governance_revision=governance_revision,
+        if state == "purged":
+            connection.execute(
+                """
+                UPDATE omnix_memory_v2_observations
+                   SET payload = '{\"purged\":true}'::jsonb
+                 WHERE observation_id = %s
+                """,
+                (observation_id,),
             )
-            revision = int(disposition_row[0]) if disposition_row is not None else 1
+            connection.execute(
+                """
+                UPDATE omnix_memory_v2_consolidation_decision_sets
+                   SET normalized_proposals = '[]'::jsonb,
+                       deterministic_decisions = '{\"redacted\":true}'::jsonb,
+                       redacted_at = COALESCE(redacted_at, %s),
+                       invalidated_at = COALESCE(invalidated_at, %s)
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND input_observation_from <= %s
+                   AND input_observation_through >= %s
+                """,
+                (timestamp, timestamp, *values, sequence, sequence),
+            )
+            connection.execute(
+                """
+                DELETE FROM omnix_memory_v2_derived_policy_envelopes
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND source_observation_ids @> %s::jsonb
+                """,
+                (*values, _canonical_json([observation_id])),
+            )
+            connection.execute(
+                """
+                DELETE FROM omnix_memory_v2_search_index_entries
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND evidence_observation_ids @> %s::jsonb
+                """,
+                (*values, _canonical_json([observation_id])),
+            )
+
+        cls._coalesce_derive_job(
+            connection,
+            space,
+            target_observation_watermark=observation_watermark,
+            target_governance_revision=governance_revision,
+        )
+        revision = int(disposition_row[0]) if disposition_row is not None else 1
         return ObservationDisposition(
             observation_id=observation_id,
             state=state,

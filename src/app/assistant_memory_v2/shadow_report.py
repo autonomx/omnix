@@ -6,17 +6,20 @@ decision needs from the existing tables, without writing anything:
 - the current authority epoch;
 - for every v2 memory space: its watermarks, latest shadow retrieval
   evaluation and latest cutover readiness receipt;
-- v1 owners with active memories but no v2 space yet (not imported).
+- v1 owners with memories but no v2 space yet (not imported).
 
-Run it as an operator command::
+The shadow runner (``python -m app.assistant_memory_v2.shadow_runner``)
+produces the evaluations and receipts. Run it as an operator command::
 
     python -m app.assistant_memory_v2.shadow_report [--require-ready]
 
-A space's ``status`` is one of ``not_evaluated``, ``evaluation_stale`` (the
-space received observations after its evaluation), ``shadow_failed``,
-``not_ready`` (the evaluation passed but no current ready receipt exists) and
-``ready``. ``ready`` is advisory: activation re-checks every receipt under
-lock, so a receipt can still be refused as stale.
+A space's ``status`` is one of ``not_evaluated``, ``v1_changed`` (the
+owner's v1 records differ from what v2 holds: run the shadow runner
+again), ``evaluation_stale`` (the space received observations after its
+evaluation), ``shadow_failed``, ``not_ready`` (the evaluation passed but no
+current ready receipt exists) and ``ready``. ``ready`` is advisory:
+activation re-checks every receipt under lock, so a receipt can still be
+refused as stale.
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ from typing import Any
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.tenant_scope import system_scope
 
-SPACE_STATUSES = ("not_evaluated", "evaluation_stale", "shadow_failed", "not_ready", "ready")
+SPACE_STATUSES = ("not_evaluated", "v1_changed", "evaluation_stale", "shadow_failed", "not_ready", "ready")
 _UNIMPORTED_LIST_LIMIT = 50
 
 
@@ -100,9 +103,12 @@ def _space_status(
     observation: int,
     evaluation: ShadowEvaluationSummary | None,
     readiness: ReadinessSummary | None,
+    v1_changed: bool = False,
 ) -> str:
     if evaluation is None:
         return "not_evaluated"
+    if v1_changed:
+        return "v1_changed"
     if evaluation.observation_watermark != observation:
         return "evaluation_stale"
     if not evaluation.passed:
@@ -148,11 +154,10 @@ SELECT s.principal_id, s.owner_type, s.owner_id,
  ORDER BY s.principal_id, s.owner_type, s.owner_id
 """
 
-_UNIMPORTED_SQL = """
+UNIMPORTED_V1_OWNERS_SQL = """
 SELECT r.owner_type, r.owner_id, COUNT(*)
   FROM omnix_memory_records r
- WHERE r.status = 'active'
-   AND NOT EXISTS (
+ WHERE NOT EXISTS (
        SELECT 1
          FROM omnix_memory_v2_authority_streams s
         WHERE s.owner_type = r.owner_type
@@ -160,6 +165,31 @@ SELECT r.owner_type, r.owner_id, COUNT(*)
    )
  GROUP BY r.owner_type, r.owner_id
  ORDER BY COUNT(*) DESC, r.owner_type, r.owner_id
+"""
+
+# Owners whose v1 records (any status; id and revision) differ from the
+# active imported observations across their v2 spaces. The shadow runner
+# imports every record; what may reach a prompt is decided at projection.
+V1_CHANGED_SQL = """
+WITH v1 AS (
+    SELECT owner_type, owner_id, id, revision
+      FROM omnix_memory_records
+), imported AS (
+    SELECT o.owner_type, o.owner_id,
+           o.payload->'legacy_record'->>'id' AS id,
+           (o.payload->'legacy_record'->>'revision')::BIGINT AS revision
+      FROM omnix_memory_v2_observations o
+      LEFT JOIN omnix_memory_v2_observation_dispositions d
+        ON d.observation_id = o.observation_id
+     WHERE o.event_type = 'imported_legacy_memory'
+       AND COALESCE(d.state, 'active') = 'active'
+)
+SELECT owner_type, owner_id FROM (
+    (SELECT * FROM v1 EXCEPT SELECT * FROM imported)
+    UNION ALL
+    (SELECT * FROM imported EXCEPT SELECT * FROM v1)
+) changed
+GROUP BY owner_type, owner_id
 """
 
 _EPOCH_SQL = """
@@ -170,7 +200,7 @@ SELECT e.epoch, e.authority
 """
 
 
-def _space_from_row(row: Sequence[Any]) -> SpaceShadowStatus:
+def _space_from_row(row: Sequence[Any], v1_changed: set[tuple[str, str]]) -> SpaceShadowStatus:
     evaluation = None
     if row[5] is not None:
         evaluation = ShadowEvaluationSummary(
@@ -209,6 +239,7 @@ def _space_from_row(row: Sequence[Any]) -> SpaceShadowStatus:
             observation=observation,
             evaluation=evaluation,
             readiness=readiness,
+            v1_changed=(str(row[1]), str(row[2])) in v1_changed,
         ),
         evaluation=evaluation,
         readiness=readiness,
@@ -221,10 +252,11 @@ def build_shadow_report(database: PostgresDatabase) -> MemoryV2ShadowReport:
         epoch_row = connection.execute(_EPOCH_SQL).fetchone()
         if epoch_row is None:
             raise RuntimeError("Memory v2 current authority epoch is missing")
-        spaces = tuple(_space_from_row(row) for row in connection.execute(_SPACES_SQL).fetchall())
+        v1_changed = {(str(row[0]), str(row[1])) for row in connection.execute(V1_CHANGED_SQL).fetchall()}
+        spaces = tuple(_space_from_row(row, v1_changed) for row in connection.execute(_SPACES_SQL).fetchall())
         unimported = [
             UnimportedOwner(owner_type=str(row[0]), owner_id=str(row[1]), active_v1_records=int(row[2]))
-            for row in connection.execute(_UNIMPORTED_SQL).fetchall()
+            for row in connection.execute(UNIMPORTED_V1_OWNERS_SQL).fetchall()
         ]
     counts = Counter(space.status for space in spaces)
     return MemoryV2ShadowReport(

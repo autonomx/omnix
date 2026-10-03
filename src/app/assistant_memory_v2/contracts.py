@@ -39,6 +39,9 @@ ObservationEventType = Literal[
     "system_event",
     "imported_legacy_memory",
     "acoustic_observation",
+    # One revision of a curated memory record (saved, approved, edited, moved,
+    # pinned or archived) written while Memory v2 is authoritative.
+    "curated_memory",
 ]
 ObservationSourceType = Literal[
     "user",
@@ -131,6 +134,7 @@ class Observation(FrozenContract):
             "system_event": {"system"},
             "imported_legacy_memory": {"import", "migration"},
             "acoustic_observation": {"acoustic"},
+            "curated_memory": {"user", "assistant", "system", "external", "import"},
         }
         if self.provenance.source_type not in expected_sources[self.event_type]:
             raise ValueError("observation event_type and provenance source_type disagree")

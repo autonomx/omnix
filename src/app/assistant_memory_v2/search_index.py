@@ -269,7 +269,8 @@ class PostgresMemoryV2SearchIndex:
                        BOOL_AND(COALESCE(d.state, 'active') = 'active') AS evidence_active,
                        p.sensitivity, p.effective_visibility, p.trust_class,
                        p.source_observation_ids, p.source_assertion_ids,
-                       p.source_governance_revision, p.policy_version, p.policy_digest
+                       p.source_governance_revision, p.policy_version, p.policy_digest,
+                       a.assertion_type
                   FROM omnix_memory_v2_graph_assertions a
                   LEFT JOIN omnix_memory_v2_assertion_observation_evidence e
                     ON e.assertion_id = a.assertion_id
@@ -287,7 +288,8 @@ class PostgresMemoryV2SearchIndex:
                           a.predicate, a.object_value, a.domain, a.revision,
                           p.sensitivity, p.effective_visibility, p.trust_class,
                           p.source_observation_ids, p.source_assertion_ids,
-                          p.source_governance_revision, p.policy_version, p.policy_digest
+                          p.source_governance_revision, p.policy_version, p.policy_digest,
+                          a.assertion_type
                  ORDER BY a.assertion_id
                 """,
                 values,
@@ -297,9 +299,11 @@ class PostgresMemoryV2SearchIndex:
                 if row[8] is False:
                     continue
                 object_value = dict(row[4])
+                # A seeded assertion is a curated memory whose text is the memory itself.
                 content = (
-                    f"{row[2]!s} {str(row[3]).replace('_', ' ')} "
-                    f"{_object_text(object_value)}"
+                    _object_text(object_value)
+                    if row[17] == "seeded"
+                    else f"{row[2]!s} {str(row[3]).replace('_', ' ')} {_object_text(object_value)}"
                 )
                 policy = _policy_from_columns(row, 9)
                 effective_visibility = (

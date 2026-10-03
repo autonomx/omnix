@@ -12,16 +12,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.memory_contracts import MemoryCandidate, MemoryRecord, MemorySnapshot
+from app.memory_contracts import (
+    MemoryCandidate,
+    MemoryConflictError,
+    MemoryNotFoundError,
+    MemoryRecord,
+    MemorySnapshot,
+)
 from app.runtime.pagination import bounded_count
-
-
-class MemoryConflictError(RuntimeError):
-    """Raised when an optimistic revision or pending-state check fails."""
-
-
-class MemoryNotFoundError(KeyError):
-    """Raised when a requested memory entity does not exist."""
 
 
 def default_memory_db_path() -> Path:
@@ -201,6 +199,19 @@ class InMemoryMemoryRepository:
                 "revision": record.revision,
             })
             return deepcopy(record)
+
+    def mark_candidate_accepted(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
+        """Accept a pending candidate whose record was stored elsewhere (Memory v2)."""
+        return self._resolve_candidate(candidate_id, "accepted", resolved_at)
+
+    def delete_snapshot_items_for_record(self, record_id: str) -> int:
+        with self._state.lock:
+            removed = 0
+            for key, snapshot in list(self._state.snapshots.items()):
+                kept = [item for item in snapshot.items if item.memory_record_id != record_id]
+                removed += len(snapshot.items) - len(kept)
+                self._state.snapshots[key] = snapshot.model_copy(update={"items": kept})
+            return removed
 
     def create_snapshot(self, snapshot: MemorySnapshot) -> MemorySnapshot:
         with self._state.lock:

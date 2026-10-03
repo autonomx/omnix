@@ -151,6 +151,14 @@ def create_production_app(config: RuntimeConfig | None = None):
         production_chat_store,
         production_job_store,
         production_model_residency_store,
+        production_owner_memory_repository,
+    )
+    from app.assistant_memory.owner_defaults import install_default_memory_repository_factory
+
+    # Every process (API, scheduler, job worker) serves curated memory from
+    # the repository that follows the memory authority (WP-8.5).
+    install_default_memory_repository_factory(
+        production_owner_memory_repository, routes_by_authority=True,
     )
     from app.gateway.main import create_gateway_app
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
@@ -269,6 +277,25 @@ def create_production_app(config: RuntimeConfig | None = None):
                 run=run_retention,
                 interval_seconds=3600,
                 timeout_seconds=900,
+                executor="thread",
+            )
+        )
+
+        def converge_memory_v2(_task_context) -> None:
+            from app.assistant_memory_v2.curated_records import MemoryV2CuratedConvergence
+            from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
+
+            # Before the cutover the shadow runner converges its own spaces.
+            if PostgresMemoryV2Runtime(services.jobs.database).current().epoch.authority != "v2":
+                return
+            MemoryV2CuratedConvergence(services.jobs.database).run()
+
+        scheduler.register_task(
+            ScheduledTaskSpec(
+                task_id="memory-v2.convergence",
+                run=converge_memory_v2,
+                interval_seconds=10,
+                timeout_seconds=300,
                 executor="thread",
             )
         )

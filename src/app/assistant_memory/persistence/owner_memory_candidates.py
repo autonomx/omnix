@@ -146,6 +146,7 @@ class OwnerMemoryCandidateMixin(OwnerMemoryRowSupport):
         resolved_at: str,
     ) -> MemoryRecord:
         with self.database.transaction() as connection:
+            self.require_v1_authority(connection)
             candidate_row = connection.execute(
                 self.candidate_select()
                 + " WHERE id = %s AND workspace_id = %s FOR UPDATE",
@@ -209,6 +210,10 @@ class OwnerMemoryCandidateMixin(OwnerMemoryRowSupport):
                 {"memory_record_id": record.id},
             )
         return record
+
+    def mark_candidate_accepted(self, candidate_id: str, *, resolved_at: str) -> MemoryCandidate:
+        """Accept a pending candidate whose record was stored elsewhere (Memory v2)."""
+        return self._resolve_candidate(candidate_id, "accepted", resolved_at)
 
     def _resolve_candidate(
         self,

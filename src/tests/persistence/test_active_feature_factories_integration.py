@@ -111,7 +111,8 @@ management = CharacterManagementService(
     object(),
     production_owner_memory_repository(),
 )
-assert management.memory_repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
+assert management.memory_repository.__class__.__name__ == "MemoryAuthorityRoutedRepository"
+assert management.memory_repository.legacy.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
 memory = default_memory_service().create_explicit_memory(
     MemoryScopeContext(profile_id="profile:default", workspace_id="workspace:local",
                        session_id="chat:factory", owner_type="character", owner_id="character:factory"),

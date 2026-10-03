@@ -53,6 +53,17 @@ class OwnerMemorySnapshotMixin(OwnerMemoryRowSupport):
                 )
         return snapshot
 
+    def delete_snapshot_items_for_record(self, record_id: str) -> int:
+        """Remove a forgotten record's frozen text from this workspace's snapshots."""
+        with self.database.transaction() as connection:
+            deleted = connection.execute(
+                "DELETE FROM omnix_memory_snapshot_items "
+                "WHERE memory_record_id = %s AND snapshot_id IN ("
+                "SELECT id FROM omnix_memory_snapshots WHERE workspace_id = %s)",
+                (record_id, self.workspace_id),
+            ).rowcount
+        return int(deleted or 0)
+
     def get_snapshot(self, snapshot_id: str) -> MemorySnapshot | None:
         with self.database.connection() as connection:
             row = connection.execute(

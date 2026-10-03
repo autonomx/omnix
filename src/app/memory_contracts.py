@@ -1,6 +1,7 @@
 """Typed contracts for curated Chat and Character memory."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +29,17 @@ MemorySensitivity = Literal["normal", "sensitive", "secret"]
 MemoryProvenanceType = Literal["user_message", "assistant_inference", "import", "hermes", "system"]
 
 SYSTEM_MEMORY_OWNER_ID = "system-assistant"
+
+# Trust levels whose records may reach a prompt (anything else needs approval).
+PROMPT_TRUST_LEVELS: frozenset[str] = frozenset({"user_approved", "system_trusted"})
+
+
+class MemoryConflictError(RuntimeError):
+    """Raised when an optimistic revision or pending-state check fails."""
+
+
+class MemoryNotFoundError(KeyError):
+    """Raised when a requested memory entity does not exist."""
 
 
 class MemoryScopeContext(BaseModel):
@@ -133,3 +145,33 @@ class MemoryPolicyDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     allowed: bool
     reason: str = Field(min_length=1, max_length=160)
+
+
+def _parse_record_time(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def record_is_expired(record: MemoryRecord, now: datetime | None = None) -> bool:
+    if not record.expires_at:
+        return False
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return _parse_record_time(record.expires_at) <= current
+
+
+def record_prompt_block_reason(record: MemoryRecord, now: datetime | None = None) -> str | None:
+    """Why this record may not reach a prompt, whatever the scope; ``None`` if it may.
+
+    One rule for Memory v1 selection and for what Memory v2 makes retrievable.
+    """
+    if record.status != "active":
+        return f"record_{record.status}"
+    if record_is_expired(record, now):
+        return "record_expired"
+    if record.sensitivity == "secret":
+        return "secret_content_blocked"
+    if record.trust_level not in PROMPT_TRUST_LEVELS:
+        return "trust_not_approved"
+    return None
