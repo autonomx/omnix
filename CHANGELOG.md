@@ -97,8 +97,8 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 
 ### Fixed
 
-- "Disconnect account" for Google and GitHub tools now deletes the stored
-  token and revokes the grant; it used to clear only the account label.
+- "Disconnect account" for Google and GitHub tools now also revokes the
+  grant at the provider; before, only the stored token was deleted.
 - Over HTTPS, session cookies are always `Secure` (named
   `__Host-omnix_session`); sign-out clears the browser's stored app data.
 - DOCX, EPUB and Live2D archives are refused when they would expand past
