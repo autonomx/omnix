@@ -275,27 +275,11 @@ export function useResponseAudio({
 
   async function synthesizeWithVoiceJob(text: string): Promise<string> {
     setAudioStatus('Queueing local Voice Studio TTS job…');
-    const job = await omnixApiClient.createJob({
-      module: 'voice',
-      type: 'tts.synthesize',
-      resource_class: 'gpu:tts',
-      priority: 1,
-      input_payload: {
-        text,
-        provider_id: null,
-        speaker: currentLiveCallDisplayName(),
-        voice_id: currentLiveCallVoiceId() || null,
-        script_mode: 'single_speaker',
-        script_speakers: [{ name: currentLiveCallDisplayName(), count: 1 }],
-        script_segments: [{ index: 0, speaker: currentLiveCallDisplayName(), text }],
-        character_voice_assignments: [{ speaker: currentLiveCallDisplayName(), voice_id: currentLiveCallVoiceId() || null, style: liveCallRuntimeRef.current?.speech_style.expressiveness || selectedPersonalityLabel, line_count: 1 }],
-        save_output: true,
-      },
-      stages: [
-        { id: 'synthesize-chatbot-response', label: 'Generate chatbot response speech', resource_class: 'gpu:tts', status: 'queued' },
-        { id: 'store-chatbot-response-audio', label: 'Save chatbot response audio', resource_class: 'cpu', status: 'queued' },
-      ],
-    }, { timeoutMs: 120_000, timeoutMessage: 'Voice synthesis timed out after 120s.' });
+    const job = await omnixApiClient.createJob(voiceStudioSpeechJob(text, {
+      speaker: currentLiveCallDisplayName(),
+      voiceId: currentLiveCallVoiceId() || null,
+      style: liveCallRuntimeRef.current?.speech_style.expressiveness || selectedPersonalityLabel,
+    }), { timeoutMs: 120_000, timeoutMessage: 'Voice synthesis timed out after 120s.' });
     await queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
     const source = getVoiceJobAudioSource(job);
     if (!source) throw new Error(voiceJobErrorMessage(job) || 'Voice Studio did not return playable speech audio.');
@@ -308,5 +292,33 @@ export function useResponseAudio({
     stopAssistantResponseAudio,
     currentLiveCallVoiceId,
     currentLiveCallSpeechStyle,
+  };
+}
+
+/** The Voice Studio job that speaks one reply in the call's voice (used without a TTS service). */
+function voiceStudioSpeechJob(
+  text: string,
+  { speaker, voiceId, style }: { speaker: string; voiceId: string | null; style: string },
+): Parameters<typeof omnixApiClient.createJob>[0] {
+  return {
+    module: 'voice',
+    type: 'tts.synthesize',
+    resource_class: 'gpu:tts',
+    priority: 1,
+    input_payload: {
+      text,
+      provider_id: null,
+      speaker: speaker,
+      voice_id: voiceId,
+      script_mode: 'single_speaker',
+      script_speakers: [{ name: speaker, count: 1 }],
+      script_segments: [{ index: 0, speaker: speaker, text }],
+      character_voice_assignments: [{ speaker: speaker, voice_id: voiceId, style: style, line_count: 1 }],
+      save_output: true,
+    },
+    stages: [
+      { id: 'synthesize-chatbot-response', label: 'Generate chatbot response speech', resource_class: 'gpu:tts', status: 'queued' },
+      { id: 'store-chatbot-response-audio', label: 'Save chatbot response audio', resource_class: 'cpu', status: 'queued' },
+    ],
   };
 }
