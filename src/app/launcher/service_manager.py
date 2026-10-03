@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from app.config.env import env_str, environment
+from app.config.env import environment
 
 import math
 import os
@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from app.launcher.config import load_launcher_config
 from app.runtime.net import bind_host
 from app.security.service_credentials import initialize_service_token
 
@@ -50,10 +51,6 @@ def _gateway_ready_timeout_seconds() -> float:
 
 def _s(value: Any) -> str:
     return "" if value is None else str(value)
-
-
-def _python_env(name: str, fallback: str) -> str:
-    return environment().get(name, fallback)
 
 
 def _npm_command() -> str:
@@ -287,19 +284,25 @@ class LauncherServiceManager:
             self._clear_conflicting_ports(service)
             self._append(service, "[launcher] starting: " + " ".join(service.spec.command))
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-            process = subprocess.Popen(
-                service.spec.command,
-                cwd=str(service.spec.cwd),
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                creationflags=creationflags,
-            )
+            try:
+                process = subprocess.Popen(
+                    service.spec.command,
+                    cwd=str(service.spec.cwd),
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    stdin=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    bufsize=1,
+                    creationflags=creationflags,
+                )
+            except OSError as exc:
+                # A missing interpreter or tool (npm, a Conda environment) is a
+                # failed start the dashboard shows, not a launcher error.
+                self._append(service, f"[launcher] could not start {service.spec.command[0]}: {exc.strerror or exc}")
+                return {"ok": False, "error": "executable_unavailable", "service": service.snapshot()}
             service.process = process
             service.started_at = time.time()
             service.last_returncode = None
@@ -502,9 +505,10 @@ def _kill_processes_for_port(port: int) -> list[int]:
 def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     root = root or _repo_root()
     host = bind_host()
-    app_python = _python_env("RPG_FLUX_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe")
-    tts_python = _python_env("RPG_TTS_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe")
-    stt_python = _python_env("RPG_STT_PYTHON", r"C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe")
+    launcher = load_launcher_config(root)
+    app_python = launcher.python("app")
+    tts_python = launcher.python("tts")
+    stt_python = launcher.python("stt")
     image_enabled = _env_flag("OMNIX_IMAGE_ENABLED")
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")

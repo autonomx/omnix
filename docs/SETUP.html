@@ -396,8 +396,11 @@ hermes model</code></pre></div>
 </ul>
 <p>Run:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\start_all.bat</code></pre></div>
-<h3 id="important-portability-note">Important portability note</h3>
-<p>The current batch file contains workstation-specific absolute Python/Conda paths for the <code>rpg-flux</code>, <code>rpg-tts</code>, and <code>rpg-stt</code> environments. Treat it as an operator configuration template unless your workstation matches those paths. Update or replace those paths for your machine rather than assuming the batch file is portable unchanged.</p>
+<h3 id="interpreters-and-posix">Interpreters and POSIX</h3>
+<p>Neither launcher contains workstation paths. Each interpreter resolves from its environment variable (<code>RPG_FLUX_PYTHON</code>, <code>RPG_TTS_PYTHON</code>, <code>RPG_STT_PYTHON</code>), then <code>resources/config/launcher.toml</code> (copy <code>launcher.example.toml</code>; the local file is ignored by git), then the <code>rpg-flux</code>, <code>rpg-tts</code> and <code>rpg-stt</code> Conda environments under <code>CONDA_ROOT</code> (default <code>~/miniconda3</code>).</p>
+<p>On Linux and macOS, <code>./start_all.sh</code> runs <code>python -m app.launcher start</code>: it checks PostgreSQL, applies migrations, serves the dashboard on port <code>5055</code>, starts the gateway and, once the gateway is healthy, the web app. A service whose interpreter or tool (for example <code>npm</code>) is missing shows as failed in the dashboard with the reason in its log.</p>
+<p><code>setup.sh</code> installs the Linux GPU locks (<code>requirements/*.linux.lock.txt</code>). Both setup scripts start <code>docker-compose.postgres.yml</code> only when Docker is available and nothing already listens on <code>OMNIX_POSTGRES_PORT</code> (5432), so an existing database is never touched.</p>
+<p>For local HTTPS, <code>python src/generate_certs.py --host &lt;name&gt; --ip &lt;address&gt; --out &lt;dir&gt;</code> writes a self-signed <code>cert.pem</code> and <code>key.pem</code> for the names given.</p>
 <p>Useful launcher-related environment values include:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_APP_OPEN_URL
 OMNIX_LAUNCHER_URL

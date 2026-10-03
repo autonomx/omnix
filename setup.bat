@@ -382,6 +382,27 @@ if errorlevel 1 (
 )
 
 echo.
+echo [PostgreSQL] Local database ^(docker-compose.postgres.yml^)
+if not defined OMNIX_POSTGRES_PORT set "OMNIX_POSTGRES_PORT=5432"
+"%RPG_FLUX_PYTHON%" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1', %OMNIX_POSTGRES_PORT%)) == 0 else 1)"
+if not errorlevel 1 (
+    echo PostgreSQL is already listening on 127.0.0.1:%OMNIX_POSTGRES_PORT%; leaving it as it is.
+) else (
+    REM Only a machine without a database gets one; an existing install is never touched.
+    where docker >nul 2>nul
+    if errorlevel 1 (
+        echo WARNING: Docker not found and nothing listens on %OMNIX_POSTGRES_PORT%; install PostgreSQL 17 ^(docs\SETUP.md^).
+    ) else (
+        docker compose -f "%OMNIX_REPO_ROOT%\docker-compose.postgres.yml" up -d --wait
+        if errorlevel 1 (
+            echo WARNING: Could not start PostgreSQL with Docker; see docs\SETUP.md.
+        ) else (
+            echo PostgreSQL started. Configure OMNIX_DATABASE_URL and apply migrations ^(docs\SETUP.md^).
+        )
+    )
+)
+
+echo.
 echo =============================================
 echo Setup Complete!
 echo =============================================

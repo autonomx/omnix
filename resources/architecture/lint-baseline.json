@@ -652,58 +652,6 @@
     },
     {
       "count": 1,
-      "fingerprint": "LlamaCppInstaller.download_and_extract_server.ProgressTracker.update:print",
-      "lines": [
-        316
-      ],
-      "path": "src/app/llamacpp_installer.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 4,
-      "fingerprint": "LlamaCppInstaller.download_and_extract_server:print",
-      "lines": [
-        294,
-        342,
-        344,
-        353
-      ],
-      "path": "src/app/llamacpp_installer.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 3,
-      "fingerprint": "LlamaCppInstaller.download_model_from_url:print",
-      "lines": [
-        554,
-        579,
-        581
-      ],
-      "path": "src/app/llamacpp_installer.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "LlamaCppInstaller.install_complete:print",
-      "lines": [
-        458,
-        470
-      ],
-      "path": "src/app/llamacpp_installer.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 2,
-      "fingerprint": "LlamaCppInstaller.install_python_wheel:print",
-      "lines": [
-        189,
-        196
-      ],
-      "path": "src/app/llamacpp_installer.py",
-      "rule": "AL008"
-    },
-    {
-      "count": 1,
       "fingerprint": "_render:print",
       "lines": [
         58

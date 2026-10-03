@@ -41,19 +41,19 @@ def main(argv: list[str] | None = None) -> int:
         catalog = load_catalog()
         if args.command == "list":
             for entry in catalog.values():
-                print(f"{entry.id}\t{entry.service}\t{entry.repo}@{entry.revision[:12]}\t{entry.size / 1e9:.2f} GB")
+                sys.stdout.write(f"{entry.id}\t{entry.service}\t{entry.repo}@{entry.revision[:12]}\t{entry.size / 1e9:.2f} GB\n")
             return 0
         failed = False
         for entry in select(catalog, args.ids, args.service):
             if args.command == "download":
-                print(f"{entry.id}: {download(entry, cache_dir=args.cache_dir)}")
+                sys.stdout.write(f"{entry.id}: {download(entry, cache_dir=args.cache_dir)}\n")
                 continue
             problems = verify(entry, cache_dir=args.cache_dir)
             failed = failed or bool(problems)
-            print(f"{entry.id}: " + ("ok" if not problems else "; ".join(problems)))
+            sys.stdout.write(f"{entry.id}: " + ("ok" if not problems else "; ".join(problems)) + "\n")
         return 1 if failed else 0
     except ModelDownloadError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        sys.stderr.write(f"error: {exc}\n")
         return 2
 
 

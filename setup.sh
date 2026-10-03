@@ -85,21 +85,21 @@ if [ ! -f "$RPG_STT_PYTHON" ]; then
     fi
 fi
 
-if [ ! -f "requirements/image.lock.txt" ]; then
+if [ ! -f "requirements/image.linux.lock.txt" ]; then
     echo "ERROR: Hashed image runtime lock not found"
-    echo "Expected: requirements/image.lock.txt"
+    echo "Expected: requirements/image.linux.lock.txt"
     error
 fi
 
-if [ ! -f "requirements/tts.lock.txt" ]; then
+if [ ! -f "requirements/tts.linux.lock.txt" ]; then
     echo "ERROR: Hashed TTS runtime lock not found"
-    echo "Expected: requirements/tts.lock.txt"
+    echo "Expected: requirements/tts.linux.lock.txt"
     error
 fi
 
-if [ ! -f "requirements/stt.lock.txt" ]; then
+if [ ! -f "requirements/stt.linux.lock.txt" ]; then
     echo "ERROR: Hashed STT runtime lock not found"
-    echo "Expected: requirements/stt.lock.txt"
+    echo "Expected: requirements/stt.linux.lock.txt"
     error
 fi
 
@@ -156,7 +156,7 @@ echo "[2/10][FLUX] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/10][FLUX] Installing the hashed image runtime lock..."
-"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/image.lock.txt
+"$RPG_FLUX_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/image.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked image runtime into $RPG_FLUX_ENV"
     error
@@ -190,10 +190,10 @@ fi
 echo "[FLUX] Cleanup complete."
 
 echo ""
-echo "[4/10][FLUX] Gateway requirements are included in requirements/image.lock.txt."
+echo "[4/10][FLUX] Gateway requirements are included in requirements/image.linux.lock.txt."
 
 echo ""
-echo "[5/10][FLUX] FLUX requirements are included in requirements/image.lock.txt."
+echo "[5/10][FLUX] FLUX requirements are included in requirements/image.linux.lock.txt."
 
 echo ""
 echo "[6/10][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
@@ -262,7 +262,7 @@ echo "[2/7][TTS] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/7][TTS] Installing the hashed TTS runtime lock..."
-"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/tts.lock.txt
+"$RPG_TTS_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/tts.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked TTS runtime into $RPG_TTS_ENV"
     error
@@ -276,7 +276,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[5/7][TTS] TTS requirements and torch pins are included in requirements/tts.lock.txt."
+echo "[5/7][TTS] TTS requirements and torch pins are included in requirements/tts.linux.lock.txt."
 
 echo ""
 echo "============================================="
@@ -353,14 +353,14 @@ echo "[2/7][STT] Removing conflicting torch packages..."
 
 echo ""
 echo "[3/7][STT] Installing the hashed STT runtime lock..."
-"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/stt.lock.txt
+"$RPG_STT_PYTHON" -m pip install --no-cache-dir --force-reinstall --require-hashes -r requirements/stt.linux.lock.txt
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to install the locked STT runtime into $RPG_STT_ENV"
     error
 fi
 
 echo ""
-echo "[5/7][STT] Torch and Transformers pins are included in requirements/stt.lock.txt."
+echo "[5/7][STT] Torch and Transformers pins are included in requirements/stt.linux.lock.txt."
 
 echo ""
 echo "[7/7][STT] Pre-downloading Parakeet model..."
@@ -407,6 +407,22 @@ chmod +x "$OMNIX_REPO_ROOT/scripts/setup_agent_tools.sh"
 if [ $? -ne 0 ]; then
     echo "ERROR: Governed browser/MCP tool setup failed"
     error
+fi
+
+echo ""
+echo "[PostgreSQL] Local database (docker-compose.postgres.yml)"
+OMNIX_POSTGRES_PORT="${OMNIX_POSTGRES_PORT:-5432}"
+if "$RPG_FLUX_PYTHON" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1', int('$OMNIX_POSTGRES_PORT'))) == 0 else 1)"; then
+    echo "PostgreSQL is already listening on 127.0.0.1:$OMNIX_POSTGRES_PORT; leaving it as it is."
+elif command -v docker >/dev/null 2>&1; then
+    # Only a machine without a database gets one; an existing install is never touched.
+    if docker compose -f "$OMNIX_REPO_ROOT/docker-compose.postgres.yml" up -d --wait; then
+        echo "PostgreSQL started. Set OMNIX_DATABASE_URL and run: PYTHONPATH=src \"$RPG_FLUX_PYTHON\" -m app.persistence migrate"
+    else
+        echo "WARNING: Could not start PostgreSQL with Docker; see docs/SETUP.md (PostgreSQL)."
+    fi
+else
+    echo "WARNING: Docker not found and nothing listens on $OMNIX_POSTGRES_PORT; install PostgreSQL 17 (docs/SETUP.md)."
 fi
 
 echo ""

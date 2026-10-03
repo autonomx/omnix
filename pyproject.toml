@@ -84,7 +84,6 @@ module = [
   "app.agent_runtime", "app.agent_runtime.*",
   "app.production",
   "app.runtime_composition",
-  "app.llamacpp_installer",
   "app.assistant_context", "app.assistant_context.*",
   "app.assistant_memory", "app.assistant_memory.*",
   "app.assistant_memory_v2", "app.assistant_memory_v2.*",

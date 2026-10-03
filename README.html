@@ -336,7 +336,7 @@ npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
 <td>Run the Playwright, API, frontend, and live-voice suites</td>
 </tr>
 </tbody></table></div>
-<p>The root <code>setup.bat</code>/<code>setup.sh</code>, <code>start_all.bat</code>/<code>start_all.sh</code>, and Docker&#x27;s <code>start_llama_server.sh</code> remain at the root because they are primary launch entrypoints referenced by tests, Docker configuration, and operator workflows.</p>
+<p>The root <code>setup.bat</code>/<code>setup.sh</code>, <code>start_all.bat</code>/<code>start_all.sh</code> and <code>start_llama_server.sh</code> (llama.cpp on port 8180) remain at the root because they are the primary launch entrypoints. <code>start_all.sh</code> wraps <code>python -m app.launcher start</code>; container images and Compose profiles live in <code>deploy/docker/</code> and <code>docker-compose.yml</code> (see <a href="docs/OPERATIONS.html#containers">OPERATIONS.html</a>).</p>
 <h2 id="documentation">Documentation</h2>
 <p>The repository keeps Markdown as editable source and generates browser-facing HTML counterparts:</p>
 <ul>

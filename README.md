@@ -374,9 +374,11 @@ root or another working directory:
 | `scripts/run_tests.bat` | Run the legacy Windows pytest groups |
 | `scripts/run_playwright_tests.py` | Run the Playwright, API, frontend, and live-voice suites |
 
-The root `setup.bat`/`setup.sh`, `start_all.bat`/`start_all.sh`, and Docker's
-`start_llama_server.sh` remain at the root because they are primary launch
-entrypoints referenced by tests, Docker configuration, and operator workflows.
+The root `setup.bat`/`setup.sh`, `start_all.bat`/`start_all.sh` and
+`start_llama_server.sh` (llama.cpp on port 8180) remain at the root because they
+are the primary launch entrypoints. `start_all.sh` wraps `python -m app.launcher
+start`; container images and Compose profiles live in `deploy/docker/` and
+`docker-compose.yml` (see [OPERATIONS.md](docs/OPERATIONS.md#containers)).
 
 ## Documentation
 

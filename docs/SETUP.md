@@ -411,9 +411,27 @@ Run:
 .\start_all.bat
 ```
 
-### Important portability note
+### Interpreters and POSIX
 
-The current batch file contains workstation-specific absolute Python/Conda paths for the `rpg-flux`, `rpg-tts`, and `rpg-stt` environments. Treat it as an operator configuration template unless your workstation matches those paths. Update or replace those paths for your machine rather than assuming the batch file is portable unchanged.
+Neither launcher contains workstation paths. Each interpreter resolves from its
+environment variable (`RPG_FLUX_PYTHON`, `RPG_TTS_PYTHON`, `RPG_STT_PYTHON`),
+then `resources/config/launcher.toml` (copy `launcher.example.toml`; the local
+file is ignored by git), then the `rpg-flux`, `rpg-tts` and `rpg-stt` Conda
+environments under `CONDA_ROOT` (default `~/miniconda3`).
+
+On Linux and macOS, `./start_all.sh` runs `python -m app.launcher start`: it
+checks PostgreSQL, applies migrations, serves the dashboard on port `5055`,
+starts the gateway and, once the gateway is healthy, the web app. A service
+whose interpreter or tool (for example `npm`) is missing shows as failed in the
+dashboard with the reason in its log.
+
+`setup.sh` installs the Linux GPU locks (`requirements/*.linux.lock.txt`).
+Both setup scripts start `docker-compose.postgres.yml` only when Docker is
+available and nothing already listens on `OMNIX_POSTGRES_PORT` (5432), so an
+existing database is never touched.
+
+For local HTTPS, `python src/generate_certs.py --host <name> --ip <address> --out <dir>`
+writes a self-signed `cert.pem` and `key.pem` for the names given.
 
 Useful launcher-related environment values include:
 
