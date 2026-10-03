@@ -1,22 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ToolExecutionPanel as BaseToolExecutionPanel, type ToolExecutionPanelProps } from './ToolExecutionPanel';
 import type { ToolExecutionRow } from './tool-execution-view';
+import type { components } from '../../api/generated/types';
 
-type AssistantToolLedgerEntry = {
-  execution_id: string;
-  tool_id: string;
-  action_id: string;
-  approval_source: string;
-  input_summary: string;
-  result_summary: string;
-  state_changed: boolean;
-  error?: string | null;
-  created_at: string;
-};
+type AssistantToolLedgerEntry = components['schemas']['AssistantToolLedgerEntry'];
 
-type AssistantToolLedgerPayload = {
-  entries: AssistantToolLedgerEntry[];
-};
+type AssistantToolLedgerPayload = components['schemas']['AssistantToolLedgerPayload'];
 
 async function loadLedger(): Promise<AssistantToolLedgerPayload> {
   const response = await fetch('/api/assistant/tools/ledger');

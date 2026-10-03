@@ -8,6 +8,7 @@ import {
   type SendChatMessageResponse,
 } from '../../api/client';
 import { renderAssistantMessageHtml } from './markdownRenderer';
+import type { components } from '../../api/generated/types';
 
 let researchProgressControllerInstalled = false;
 
@@ -20,7 +21,7 @@ const POLL_INTERVAL_MS = 1_500;
 const ACTIVE_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
-type ChatMessage = NonNullable<ChatSession['messages']>[number];
+type ChatMessage = components['schemas']['ChatMessage'];
 type ClientPatch = {
   getChatSession: (sessionId: string) => Promise<ChatSession>;
   sendChatMessage: (sessionId: string, request: SendChatMessageRequest) => Promise<SendChatMessageResponse>;

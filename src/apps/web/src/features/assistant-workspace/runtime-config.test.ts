@@ -7,6 +7,7 @@ import {
   DEFAULT_ASSISTANT_WORKSPACE_RUNTIME_CONFIG,
   createAssistantWorkspaceRuntimeConfig,
 } from './runtime-config';
+import { fixture } from '../../test/fixture';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -17,7 +18,7 @@ afterEach(() => {
 function trustedRuntime(
   overrides: Partial<CharacterLiveCallRuntime> = {},
 ): CharacterLiveCallRuntime {
-  return {
+  return fixture({
     session_id: 'chat:jinx',
     interaction_mode: 'character',
     display_name: 'Jinx',
@@ -49,7 +50,7 @@ function trustedRuntime(
       resolved_at: '2026-08-01T00:00:00Z',
     },
     ...overrides,
-  };
+  });
 }
 
 async function retainRuntime(runtime = trustedRuntime()): Promise<void> {

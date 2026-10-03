@@ -148,8 +148,8 @@ describe('durable Live Conversation evaluation controller', () => {
         playback_echo_submission_rate: 0,
       },
     });
-    expect(payload.browser_version.length).toBeGreaterThan(0);
-    expect(payload.os_version.length).toBeGreaterThan(0);
+    expect(payload.browser_version?.length ?? 0).toBeGreaterThan(0);
+    expect(payload.os_version?.length ?? 0).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload).toLocaleLowerCase();
     expect(serialized).not.toMatch(/transcript|prompt|memory|message_content|utterance_text/);
   });

@@ -1,26 +1,10 @@
 import { applyAvatarPackToCurrentRuntime, publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import type { components } from '../../api/generated/types';
 
 export type CharacterAvatarRenderMode = 'audio_envelope' | 'viseme' | 'static';
 export type CharacterAvatarRenderer = 'sprite' | 'live2d' | 'rive';
 
-export interface CharacterAvatarPack {
-  character_id: string;
-  version: number;
-  render_mode: CharacterAvatarRenderMode;
-  renderer: CharacterAvatarRenderer;
-  rig_asset_id?: string | null;
-  base_asset_id?: string | null;
-  mouth_frames: Record<string, string>;
-  blink_frames: Record<string, string>;
-  expression_frames: Record<string, string>;
-  outfit_frames: Record<string, string>;
-  background_asset_ids: Record<string, string>;
-  active_outfit?: string | null;
-  active_background?: string | null;
-  mouth_anchor: Record<string, number>;
-  created_at: string;
-  updated_at: string;
-}
+export type CharacterAvatarPack = components['schemas']['CharacterAvatarPack'];
 
 export interface UpsertCharacterAvatarPackInput {
   expected_version?: number | null;
@@ -38,45 +22,15 @@ export interface UpsertCharacterAvatarPackInput {
   mouth_anchor?: Record<string, number>;
 }
 
-export interface CharacterProfile {
-  id: string;
-  display_name: string;
-  description: string;
-  personality_prompt: string;
-  default_greeting: string;
-  default_voice_asset_id?: string | null;
-  speech_style: Record<string, unknown>;
-  identity_policy: Record<string, unknown>;
-  shared_memory_policy: Record<string, unknown>;
-  active_version: number;
-  enabled: boolean;
-  status: 'active' | 'archived';
-  created_at: string;
-  updated_at: string;
-}
+export type CharacterProfile = components['schemas']['CharacterProfile'];
 
-export interface CharacterListResponse { characters: CharacterProfile[]; }
+export type CharacterListResponse = components['schemas']['CharacterListResponse'];
 
 export type VoiceConsentStatus = 'unverified' | 'granted' | 'revoked';
 export type VoiceDeletionState = 'active' | 'pending_deletion' | 'deleted';
 export type VoiceAllowedUse = 'character' | 'live_call' | 'system_assistant' | 'general_tts';
 
-export interface VoiceProfileGovernance {
-  asset_id: string;
-  subject_owner: string;
-  source_type: string;
-  source_reference: string;
-  creator_id: string;
-  consent_status: VoiceConsentStatus;
-  consent_recorded_at?: string | null;
-  allowed_uses: VoiceAllowedUse[];
-  source_sha256?: string | null;
-  deletion_state: VoiceDeletionState;
-  deletion_requested_at?: string | null;
-  deleted_at?: string | null;
-  deletion_reason: string;
-  updated_at: string;
-}
+export type VoiceProfileGovernance = components['schemas']['VoiceProfileGovernance'];
 
 export interface UpdateVoiceProfileGovernanceInput {
   subject_owner: string;
@@ -104,65 +58,14 @@ export interface SessionInteraction {
   messages: Array<{ id: string; role: string; content: string; created_at: string }>;
 }
 
-export interface LiveCallSpeechStyle {
-  speed: number;
-  temperature: number;
-  top_k: number;
-  top_p: number;
-  repetition_penalty: number;
-  expressiveness: string;
-  emotion: string;
-  interruption_style: string;
-}
+export type LiveCallSpeechStyle = components['schemas']['LiveCallSpeechStyle'];
 
-export interface CharacterLiveCallRuntime {
-  session_id: string;
-  interaction_mode: 'system' | 'character';
-  display_name: string;
-  character_id?: string | null;
-  character_profile_version?: number | null;
-  effective_identity_hash?: string | null;
-  voice_asset_id?: string | null;
-  voice_speaker_id?: string | null;
-  voice_profile_asset_id?: string | null;
-  greeting: string;
-  avatar_pack?: CharacterAvatarPack | null;
-  speech_style: LiveCallSpeechStyle;
-  read_memory: boolean;
-  write_memory: boolean;
-  shared_memory_access: 'none' | 'read_only';
-  memory_snapshot_id?: string | null;
-  preload: {
-    profile_loaded: boolean;
-    voice_resolved: boolean;
-    voice_error?: string | null;
-    avatar_pack_loaded?: boolean;
-    memory_snapshot_loaded: boolean;
-    memory_record_count: number;
-    preload_ms: number;
-    resolved_at: string;
-  };
-}
+// Playback adapts the runtime: a cloned speaker plays as voice_asset_id and the profile moves aside.
+export type CharacterLiveCallRuntime = components['schemas']['CharacterLiveCallRuntime'] & { voice_profile_asset_id?: string | null };
 
-export interface CharacterDataExport {
-  character: CharacterProfile;
-  versions: Array<{ character_id: string; version: number; personality_prompt: string; created_at: string }>;
-  memories: Array<{ id: string; category: string; scope: string; content: string; pinned: boolean; revision: number }>;
-  pending_suggestions: Array<{ id: string; proposed_category: string; proposed_content: string; confidence: number; created_at: string }>;
-  sessions: Array<{ id: string; title: string; message_count: number; character_message_count: number; created_at: string; updated_at: string }>;
-  generated_at: string;
-}
+export type CharacterDataExport = components['schemas']['CharacterDataExport'];
 
-export interface CharacterDataActionResponse {
-  ok: boolean;
-  character_id: string;
-  deleted_memory_records: number;
-  deleted_memory_candidates: number;
-  deleted_memory_snapshots: number;
-  deleted_transcript_messages: number;
-  voice_unlinked: boolean;
-  profile_archived: boolean;
-}
+export type CharacterDataActionResponse = components['schemas']['CharacterDataActionResponse'];
 
 const LIVE_CALL_RUNTIME_CACHE_TTL_MS = 5 * 60_000;
 const trackedPlaybackRuntimes = new Map<string, Set<CharacterLiveCallRuntime>>();

@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 export const SPEECH_PERFORMANCE_SCHEMA_VERSION = 1 as const;
 
 export type SpeechAct =
@@ -11,26 +12,7 @@ export type DeliveryLevel = 'low' | 'moderate' | 'high';
 export type DeliveryPace = 'slightly_slow' | 'natural' | 'slightly_fast';
 export type ClausePause = 'short' | 'medium' | 'long';
 
-export type SpeechPerformancePlan = {
-  schema_version: typeof SPEECH_PERFORMANCE_SCHEMA_VERSION;
-  speech_act: SpeechAct;
-  energy: DeliveryLevel;
-  warmth: DeliveryLevel;
-  certainty: DeliveryLevel;
-  pace: DeliveryPace;
-  clause_pause: ClausePause;
-  emphasis: string[];
-  onset_policy: {
-    desired_perceived_onset_ms: number;
-    maximum_additional_delay_ms: number;
-  };
-  nonverbal_eligibility: {
-    breath: boolean;
-    acknowledgement: boolean;
-    amused_exhale: boolean;
-    sigh: boolean;
-  };
-};
+export type SpeechPerformancePlan = components['schemas']['SpeechPerformancePlan'];
 
 export type TtsProviderCapabilities = {
   provider: string;

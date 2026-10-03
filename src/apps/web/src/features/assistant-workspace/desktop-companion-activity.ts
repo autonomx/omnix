@@ -15,7 +15,7 @@ export type DesktopActivityHypothesis =
   | 'likely_app_switch'
   | 'likely_media';
 
-export type DesktopActivitySignal = {
+export type DesktopActivityReading = {
   activity: DesktopActivity;
   hypothesis: DesktopActivityHypothesis;
   confidence: number;
@@ -27,7 +27,7 @@ export type DesktopActivitySignal = {
   capturedAtMs: number;
 };
 
-export type DesktopBehaviorState = {
+export type DesktopBehaviorReading = {
   currentPattern: 'starting' | 'settled' | 'browsing' | 'rapid_switching' | 'exploring' | 'watching' | 'typing' | 'mixed';
   settledSeconds: number;
   browsingPace: number;
@@ -65,7 +65,7 @@ export function classifyDesktopActivity(
   current: Uint8Array,
   capturedAtMs: number,
   options: Partial<ActivityClassifierOptions> = {},
-): DesktopActivitySignal {
+): DesktopActivityReading {
   const config = { ...DEFAULT_OPTIONS, ...options };
   if (!previous || previous.length !== current.length || current.length !== config.width * config.height) {
     return signal('unknown', 'none', 0, 0, 0, 0, 0, 0, capturedAtMs);
@@ -152,7 +152,7 @@ function signal(
   verticalShift: number,
   focus: number,
   capturedAtMs: number,
-): DesktopActivitySignal {
+): DesktopActivityReading {
   return {
     activity,
     hypothesis,
@@ -209,11 +209,11 @@ function estimateTranslation(
 }
 
 export class DesktopBehaviorTracker {
-  private readonly history: DesktopActivitySignal[] = [];
+  private readonly history: DesktopActivityReading[] = [];
   private lastActiveAtMs = 0;
   private previousHypothesis: DesktopActivityHypothesis = 'none';
 
-  record(signalValue: DesktopActivitySignal): DesktopBehaviorState {
+  record(signalValue: DesktopActivityReading): DesktopBehaviorReading {
     this.history.push(signalValue);
     if (this.history.length > 20) this.history.splice(0, this.history.length - 20);
     const quiet = signalValue.activity === 'static' || signalValue.activity === 'micro_change';
@@ -223,7 +223,7 @@ export class DesktopBehaviorTracker {
     return state;
   }
 
-  snapshot(nowMs: number): DesktopBehaviorState {
+  snapshot(nowMs: number): DesktopBehaviorReading {
     const recent = this.history.slice(-6);
     const active = recent.filter((item) => !['static', 'micro_change'].includes(item.activity));
     const browsing = recent.filter((item) => ['likely_scroll', 'likely_navigation', 'likely_app_switch'].includes(item.hypothesis));
@@ -234,7 +234,7 @@ export class DesktopBehaviorTracker {
     const rapidBrowsing = browsing.length >= 3;
     const likelyTyping = typing.length >= 2;
     const likelyMedia = media.length >= 3;
-    let currentPattern: DesktopBehaviorState['currentPattern'] = 'starting';
+    let currentPattern: DesktopBehaviorReading['currentPattern'] = 'starting';
     if (likelyTyping) currentPattern = 'typing';
     else if (likelyMedia) currentPattern = 'watching';
     else if (settled) currentPattern = 'settled';

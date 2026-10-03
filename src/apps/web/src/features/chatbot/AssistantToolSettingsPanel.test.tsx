@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantToolSettingsPanel } from './AssistantToolSettingsPanel';
 import type { AssistantToolsConfigPayload } from './assistantToolConfigClient';
+import { fixture } from '../../test/fixture';
 
 function renderToolsPanel() {
   const queryClient = new QueryClient({
@@ -22,7 +23,7 @@ function renderToolsPanel() {
 function defaultConfig(): AssistantToolsConfigPayload {
   return {
     tools: [
-      {
+      fixture({
         tool_id: 'gmail',
         enabled: false,
         connection_status: 'not_configured',
@@ -33,7 +34,7 @@ function defaultConfig(): AssistantToolsConfigPayload {
           { action_id: 'gmail.delete', enabled: false, approval_policy: 'always_ask' },
           { action_id: 'gmail.attachments', enabled: true, approval_policy: 'ask_sensitive' },
         ],
-      },
+      }),
     ],
   };
 }

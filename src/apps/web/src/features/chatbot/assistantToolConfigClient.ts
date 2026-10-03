@@ -1,70 +1,24 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-import type { ApprovalPolicy } from '../assistant-workspace/tool-actions';
-import type { ToolConfig } from '../assistant-workspace/tool-registry';
 import { executeToolProposal } from '../assistant-workspace/tool-proposal-client';
 import type { components } from '../../api/generated/types';
+import { api, unwrap } from '../../api/http';
 
-export type AssistantActionConfigRecord = {
-  action_id: string;
-  enabled: boolean;
-  approval_policy: ApprovalPolicy;
-};
+export type AssistantActionConfigRecord = components['schemas']['AssistantActionConfigRecord'];
 
-export type AssistantToolConfigRecord = {
-  tool_id: string;
-  enabled: boolean;
-  connection_status: ToolConfig['connectionStatus'];
-  account_label?: string | null;
-  account_email?: string | null;
-  connected_at?: string | null;
-  approval_policy?: ApprovalPolicy | null;
-  actions: AssistantActionConfigRecord[];
-};
+export type AssistantToolConfigRecord = components['schemas']['AssistantToolConfigRecord'];
 
-export type AssistantToolsConfigPayload = {
-  tools: AssistantToolConfigRecord[];
-};
+export type AssistantToolsConfigPayload = components['schemas']['AssistantToolsConfigPayload-Output'];
+export type AssistantToolsConfigUpdate = components['schemas']['AssistantToolsConfigPayload-Input'];
 
-export type AssistantToolConnectionStartPayload = {
-  tool_id: string;
-  provider?: string | null;
-  configured: boolean;
-  auth_url?: string | null;
-  redirect_uri?: string | null;
-  message: string;
-};
+export type AssistantToolConnectionStartPayload = components['schemas']['AssistantToolConnectionStartPayload'];
 
-export type AssistantToolOAuthClientPayload = {
-  client_id: string;
-  client_secret: string;
-};
+export type AssistantToolOAuthClientPayload = components['schemas']['AssistantToolOAuthClientPayload'];
 
-export type AssistantToolLedgerEntry = {
-  execution_id: string;
-  session_id?: string | null;
-  tool_id: string;
-  action_id: string;
-  approval_source: string;
-  input_summary: string;
-  result_summary: string;
-  state_changed: boolean;
-  error?: string | null;
-  created_at: string;
-};
+export type AssistantToolLedgerEntry = components['schemas']['AssistantToolLedgerEntry'];
 
-export type AssistantToolLedgerPayload = {
-  entries: AssistantToolLedgerEntry[];
-};
+export type AssistantToolLedgerPayload = components['schemas']['AssistantToolLedgerPayload'];
 
-export type AssistantToolIntent = {
-  detected: boolean;
-  tool_id?: string | null;
-  action_id?: string | null;
-  confidence: number;
-  preview_title: string;
-  preview_summary: string;
-  input: Record<string, unknown>;
-};
+export type AssistantToolIntent = components['schemas']['AssistantToolIntent'];
 
 export type LiveAgentToolProposal = {
   proposal_id: string;
@@ -84,74 +38,32 @@ export type LiveAgentToolProposal = {
 
 export type AssistantToolExecutionPayload = components['schemas']['HermesAssistantToolExecutePayload'];
 
-export type AssistantCapabilityStatus = {
-  tool_id: string;
-  name: string;
-  enabled: boolean;
-  connection_status: ToolConfig['connectionStatus'];
-  action_count: number;
-  enabled_action_count: number;
-  recent_execution_count: number;
-  recent_error_count: number;
-};
+export type AssistantCapabilityStatus = components['schemas']['AssistantCapabilityStatus'];
 
-export type AssistantCapabilityDashboard = {
-  tools: AssistantCapabilityStatus[];
-  total_tools: number;
-  enabled_tools: number;
-  recent_execution_count: number;
-  recent_error_count: number;
-};
-
-async function readJsonResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    throw new Error(`Assistant tool request failed: ${response.status}`);
-  }
-  return response.json() as Promise<T>;
-}
+export type AssistantCapabilityDashboard = components['schemas']['AssistantCapabilityDashboard'];
 
 export async function fetchAssistantToolsConfig(): Promise<AssistantToolsConfigPayload> {
-  return readJsonResponse<AssistantToolsConfigPayload>(await fetch('/api/assistant/tools/config'));
+  return unwrap(api.GET('/api/assistant/tools/config'));
 }
 
-export async function saveAssistantToolsConfig(payload: AssistantToolsConfigPayload): Promise<AssistantToolsConfigPayload> {
-  return readJsonResponse<AssistantToolsConfigPayload>(
-    await fetch('/api/assistant/tools/config', {
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    }),
-  );
+export async function saveAssistantToolsConfig(payload: AssistantToolsConfigUpdate): Promise<AssistantToolsConfigPayload> {
+  return unwrap(api.POST('/api/assistant/tools/config', { body: payload }));
 }
 
 export async function startAssistantToolConnection(toolId: string): Promise<AssistantToolConnectionStartPayload> {
-  return readJsonResponse<AssistantToolConnectionStartPayload>(
-    await fetch(`/api/assistant/tools/connect/${encodeURIComponent(toolId)}`),
-  );
+  return unwrap(api.GET('/api/assistant/tools/connect/{tool_id}', { params: { path: { tool_id: toolId } } }));
 }
 
 export async function saveAssistantToolOAuthClient(toolId: string, payload: AssistantToolOAuthClientPayload): Promise<AssistantToolConnectionStartPayload> {
-  return readJsonResponse<AssistantToolConnectionStartPayload>(
-    await fetch(`/api/assistant/tools/connect/${encodeURIComponent(toolId)}/oauth-client`, {
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    }),
-  );
+  return unwrap(api.POST('/api/assistant/tools/connect/{tool_id}/oauth-client', { params: { path: { tool_id: toolId } }, body: payload }));
 }
 
 export async function fetchAssistantToolLedger(): Promise<AssistantToolLedgerPayload> {
-  return readJsonResponse<AssistantToolLedgerPayload>(await fetch('/api/assistant/tools/ledger'));
+  return unwrap(api.GET('/api/assistant/tools/ledger'));
 }
 
 export async function detectAssistantToolIntent(message: string): Promise<AssistantToolIntent> {
-  return readJsonResponse<AssistantToolIntent>(
-    await fetch('/api/assistant/tools/intent', {
-      body: JSON.stringify({ message }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    }),
-  );
+  return unwrap(api.POST('/api/assistant/tools/intent', { body: { message } }));
 }
 
 export async function executeLiveAgentToolProposal(
@@ -166,5 +78,5 @@ export async function executeLiveAgentToolProposal(
 }
 
 export async function fetchAssistantCapabilityDashboard(): Promise<AssistantCapabilityDashboard> {
-  return readJsonResponse<AssistantCapabilityDashboard>(await fetch('/api/assistant/tools/dashboard'));
+  return unwrap(api.GET('/api/assistant/tools/dashboard'));
 }

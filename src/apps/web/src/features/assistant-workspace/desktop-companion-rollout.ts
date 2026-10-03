@@ -1,14 +1,8 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { AssistantSettings, DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
+import type { components } from '../../api/generated/types';
 
-export type DesktopCompanionRolloutStatus = {
-  requested_stage: DesktopCompanionRolloutStage;
-  effective_stage: DesktopCompanionRolloutStage;
-  enabled: boolean;
-  reason: string;
-  release_gate_status: 'pass' | 'fail' | 'insufficient';
-  evidence_evaluation_ids: string[];
-};
+export type DesktopCompanionRolloutStatus = components['schemas']['DesktopCompanionRolloutStatus'];
 
 export type DesktopCompanionRolloutEvidenceIdentity = {
   exactCommitSha: string;

@@ -1,59 +1,14 @@
+import type { components } from '../../api/generated/types';
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ReleaseGateStatus = 'pass' | 'fail' | 'insufficient';
 
-export type VoiceSessionEvaluationCreate = {
-  call_id: string;
-  session_id: string | null;
-  started_at: string;
-  ended_at: string;
-  exact_commit_sha: string;
-  app_version: string;
-  browser_version: string;
-  os_version: string;
-  character_id: string;
-  profile_version: number | null;
-  presence_preset: PresencePreset;
-  conversation_stance: string;
-  configured_duplex_mode: 'automatic' | 'half_duplex' | 'echo_aware';
-  resolved_duplex_mode: 'half_duplex' | 'echo_aware';
-  calibration_version: string | null;
-  input_device_hash: string | null;
-  output_device_hash: string | null;
-  environment_hash: string | null;
-  latency_summary: Record<string, number | null>;
-  quality_metrics: Record<string, number | null>;
-  eos_termination_counts: Record<string, number>;
-  scenario_labels: string[];
-  release_gate_status: ReleaseGateStatus;
-  listening_score: number | null;
-  pressure_score: number | null;
-};
+export type VoiceSessionEvaluationCreate = components['schemas']['VoiceSessionEvaluationCreate'];
 
-export type VoiceSessionEvaluationRecord = VoiceSessionEvaluationCreate & {
-  evaluation_id: string;
-  created_at: string;
-  updated_at: string;
-};
+export type VoiceSessionEvaluationRecord = components['schemas']['VoiceSessionEvaluationRecord'];
 
-export type PresencePolicyValues = {
-  silence_tolerance_ms: number;
-  initiative_threshold_ms: number;
-  initiative_cooldown_ms: number;
-  listener_backchannel_frequency: number;
-  typical_turn_words: number;
-  interruption_sensitivity: number;
-  response_onset_ms: number;
-};
+export type PresencePolicyValues = components['schemas']['PresencePolicyValues'];
 
-export type PresencePolicyVersion = {
-  preset: PresencePreset;
-  version: number;
-  values: PresencePolicyValues;
-  reason: string;
-  evidence_evaluation_ids: string[];
-  active: boolean;
-  created_at: string;
-};
+export type PresencePolicyVersion = components['schemas']['PresencePolicyVersion'];
 
 export type LiveChatReleaseMetric = {
   name: string;
@@ -65,18 +20,7 @@ export type LiveChatReleaseMetric = {
   comparison: 'maximum' | 'minimum';
 };
 
-export type LiveChatReleaseGateReport = {
-  status: ReleaseGateStatus;
-  generated_at: string;
-  records_scanned: number;
-  traces: number;
-  scenarios: string[];
-  missing_scenarios: string[];
-  character_modes: string[];
-  metrics: LiveChatReleaseMetric[];
-  failures: string[];
-  insufficient: string[];
-};
+export type LiveChatReleaseGateReport = components['schemas']['LiveChatReleaseGateReport'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);

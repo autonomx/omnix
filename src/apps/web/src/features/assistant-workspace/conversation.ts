@@ -1,4 +1,4 @@
-import type { ChatSession } from './domain';
+import type { WorkspaceChatSession } from './domain';
 
 export const CONVERSATION_TURN_ROLES = ['user', 'assistant', 'tool', 'system'] as const;
 
@@ -33,7 +33,7 @@ export type ConversationTurn = {
 };
 
 export type ConversationState = {
-  session: ChatSession;
+  session: WorkspaceChatSession;
   turns: ConversationTurn[];
 };
 

@@ -1,4 +1,4 @@
-import type { ChatSession } from './domain';
+import type { WorkspaceChatSession } from './domain';
 import type { ConversationState, ConversationTurn } from './conversation';
 import type { AssistantWorkspaceEvent } from './events';
 
@@ -6,7 +6,7 @@ export type ConversationProjection = ConversationState & {
   events: AssistantWorkspaceEvent[];
 };
 
-export function createConversationProjection(session: ChatSession): ConversationProjection {
+export function createConversationProjection(session: WorkspaceChatSession): ConversationProjection {
   return {
     session,
     turns: [],
@@ -38,7 +38,7 @@ export function appendProjectionEvent(
 }
 
 export function rebuildConversationProjection(
-  session: ChatSession,
+  session: WorkspaceChatSession,
   events: AssistantWorkspaceEvent[],
 ): ConversationProjection {
   return events.reduce(appendProjectionEvent, createConversationProjection(session));

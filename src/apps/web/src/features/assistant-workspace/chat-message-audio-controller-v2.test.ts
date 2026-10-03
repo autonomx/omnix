@@ -23,13 +23,14 @@ import {
   initializeChatMessageAudioControllerV2,
   resolveChatMessageAudioVoiceId,
 } from './chat-message-audio-controller-v2';
+import { fixture } from '../../test/fixture';
 
 let cleanupController: (() => void) | null = null;
 
 function trustedRuntime(
   overrides: Partial<CharacterLiveCallRuntime> = {},
 ): CharacterLiveCallRuntime {
-  return {
+  return fixture({
     session_id: 'chat:jinx',
     interaction_mode: 'character',
     display_name: 'Jinx',
@@ -61,7 +62,7 @@ function trustedRuntime(
       resolved_at: '2026-08-01T00:00:00Z',
     },
     ...overrides,
-  };
+  });
 }
 
 async function retainRuntime(runtime = trustedRuntime()): Promise<void> {

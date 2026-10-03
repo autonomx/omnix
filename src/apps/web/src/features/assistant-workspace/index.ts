@@ -9,7 +9,7 @@ export {
   isChatSessionMode,
 } from './domain';
 export type {
-  ChatSession,
+  WorkspaceChatSession,
   ChatSessionMode,
   ChatSessionRef,
   Project,
@@ -146,7 +146,7 @@ export {
   pinMemory,
   requiresMemoryConfirmation,
 } from './memories';
-export type { MemoryRecord, MemoryScope, MemorySource } from './memories';
+export type { WorkspaceMemory, MemoryScope, MemorySource } from './memories';
 
 export { createMemoryViewRows } from './memory-view';
 export type { MemoryViewAction, MemoryViewFilter, MemoryViewRow } from './memory-view';

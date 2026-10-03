@@ -40,14 +40,12 @@ import {
   parseJobEvent,
   selectLatestImageAsset,
 } from './imageWorkspaceModel';
+import type { components } from '../../api/generated/types';
 
 const DEFAULT_IMAGE_MODEL = 'flux_klein';
 const IMAGE_MODEL_QUERY_ROOT = ['image-generation', 'model-status'] as const;
 
-type ImageModelDownloadRequest = {
-  provider: string;
-  hf_token?: string;
-};
+type ImageModelDownloadRequest = components['schemas']['ImageModelDownloadRequest'];
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Image model action failed.';
@@ -172,7 +170,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     onSuccess: refreshModelQueries,
   });
   const modelAction: ImageModelAction = downloadModelMutation.isPending
-    ? { type: 'download', provider: downloadModelMutation.variables.provider }
+    ? { type: 'download', provider: downloadModelMutation.variables.provider ?? '' }
     : loadModelMutation.isPending
       ? { type: 'load', provider: loadModelMutation.variables }
       : unloadModelMutation.isPending

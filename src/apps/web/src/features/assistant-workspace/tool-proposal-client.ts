@@ -1,24 +1,15 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrap } from '../../api/http';
 
 type ToolRequest = components['schemas']['AssistantToolRequest-Input'];
-type ToolProposal = components['schemas']['AssistantToolProposalPayload'];
 type ToolExecution = components['schemas']['HermesAssistantToolExecutePayload'];
 
-async function post<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(path, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  if (!response.ok) throw new Error(`Assistant tool request failed: ${response.status}`);
-  return response.json() as Promise<T>;
-}
-
 export async function executeToolProposal(request: ToolRequest, confirm = false): Promise<ToolExecution> {
-  const proposal = await post<ToolProposal>('/api/assistant/tools/proposals', request);
-  const path = `/api/assistant/tools/proposals/${encodeURIComponent(proposal.proposal_id)}`;
+  const proposal = await unwrap(api.POST('/api/assistant/tools/proposals', { body: request }));
+  const path = { proposal_id: proposal.proposal_id };
   if (proposal.approval_required) {
     if (!confirm) throw new Error('Assistant tool requires explicit approval.');
-    await post<ToolProposal>(`${path}/approve`, {});
+    await unwrap(api.POST('/api/assistant/tools/proposals/{proposal_id}/approve', { params: { path }, body: {} }));
   }
-  return post<ToolExecution>(`${path}/execute`);
+  return unwrap(api.POST('/api/assistant/tools/proposals/{proposal_id}/execute', { params: { path } }));
 }

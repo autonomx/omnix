@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 export type LiveConversationRepairKind =
   | 'acknowledge_correction'
   | 'clarify_number'
@@ -5,12 +6,7 @@ export type LiveConversationRepairKind =
   | 'yield_to_user'
   | 'resume_interrupted_thought';
 
-export type LiveConversationRepairContext = {
-  kind: LiveConversationRepairKind;
-  instruction: string;
-  source_reason: string;
-  confidence: number;
-};
+export type LiveConversationRepairContext = components['schemas']['LiveConversationRepairContext'];
 
 export type RepairPlanInput = {
   transcript: string;

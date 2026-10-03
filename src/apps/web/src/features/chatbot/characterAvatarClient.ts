@@ -1,4 +1,5 @@
 import type { CharacterAvatarPack } from './characterClient';
+import type { components } from '../../api/generated/types';
 
 export type AvatarGenerationStatus = 'queued' | 'generating_base' | 'generating_variants' | 'completed' | 'failed';
 export type VisemeGenerationStatus = 'generating' | 'completed' | 'failed';
@@ -23,36 +24,9 @@ export interface CreateCharacterAvatarGenerationInput {
   source_image_consent_confirmed?: boolean;
 }
 
-export interface CharacterAvatarGenerationBatch {
-  id: string;
-  character_id: string;
-  status: AvatarGenerationStatus;
-  request: Required<Omit<CreateCharacterAvatarGenerationInput, 'seed' | 'guidance_scale'>> & {
-    seed?: number | null;
-    guidance_scale?: number | null;
-  };
-  base_job_id: string;
-  variant_job_ids: Record<string, string>;
-  asset_ids: Record<string, string>;
-  avatar_pack_version?: number | null;
-  error: string;
-  created_at: string;
-  updated_at: string;
-}
+export type CharacterAvatarGenerationBatch = components['schemas']['CharacterAvatarGenerationBatch'];
 
-export interface CharacterVisemeGenerationBatch {
-  id: string;
-  character_id: string;
-  status: VisemeGenerationStatus;
-  job_ids: Record<string, string>;
-  asset_ids: Record<string, string>;
-  attempts: Record<string, number>;
-  quality_fallbacks: Record<string, string>;
-  avatar_pack_version?: number | null;
-  error: string;
-  created_at: string;
-  updated_at: string;
-}
+export type CharacterVisemeGenerationBatch = components['schemas']['CharacterVisemeGenerationBatch'];
 
 export interface ClonedVoiceBackfillItem {
   voice_asset_id: string;
@@ -76,32 +50,11 @@ export interface UploadedAvatarSourceAsset {
   metadata: Record<string, unknown>;
 }
 
-export interface Live2DModelCatalogItem {
-  id: string;
-  name: string;
-  description: string;
-  preview_url: string;
-  repository: string;
-  revision: string;
-  source_url: string;
-  model_license_url: string;
-  runtime_license_url: string;
-  license_summary: string;
-  installed: boolean;
-  selected: boolean;
-}
+export type Live2DModelCatalogItem = components['schemas']['Live2DModelCatalogItem'];
 
-export interface Live2DModelCatalogResponse {
-  models: Live2DModelCatalogItem[];
-  runtime_installed: boolean;
-}
+export type Live2DModelCatalogResponse = components['schemas']['Live2DModelCatalogResponse'];
 
-export interface Live2DAvatarActionResponse {
-  ok: boolean;
-  character_id: string;
-  avatar_pack?: CharacterAvatarPack | null;
-  downloaded: boolean;
-}
+export type Live2DAvatarActionResponse = components['schemas']['Live2DAvatarActionResponse'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);

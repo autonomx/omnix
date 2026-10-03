@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 export type MemoryScope = 'global' | 'workspace' | 'project' | 'session';
 export type MemoryCategory = 'preference' | 'fact' | 'project' | 'relationship' | 'instruction';
 export type CompanionRolloutStage =
@@ -69,89 +70,21 @@ export interface SessionMemorySnapshotItem {
   invalidation_reason?: string | null;
 }
 
-export interface AssistantMemoryRuntimeSettings {
-  curated_memory_enabled: boolean;
-  suggestions_enabled: boolean;
-  history_recall_enabled: boolean;
-  compaction_enabled: boolean;
-  hermes_sync_enabled: boolean;
-  require_approval_for_inferred_memory: boolean;
-  automatic_direct_assertion_memory: boolean;
-  proactive_memory_enabled: boolean;
-  paralinguistic_signals_enabled: boolean;
-  transcript_retention_enabled: boolean;
-  companion_master_enabled: boolean;
-  companion_rollout_stage: CompanionRolloutStage;
-  memory_token_budget: number;
-  history_token_budget: number;
-  retention_days: number;
-  show_memory_use_indicator: boolean;
-}
+export type AssistantMemoryRuntimeSettings = components['schemas']['AssistantMemoryRuntimeSettings'];
 
-export interface AssistantMemoryRuntimeStatus {
-  settings: AssistantMemoryRuntimeSettings;
-  settings_path: string;
-  environment_overrides: string[];
-  approval_policy_locked: boolean;
-  diagnostics_policy: 'content_free';
-}
+export type AssistantMemoryRuntimeStatus = components['schemas']['AssistantMemoryRuntimeStatus'];
 
-export interface CompanionMemoryMetrics {
-  turns: number;
-  counters: Record<string, number>;
-  totals: Record<string, number>;
-  maxima: Record<string, number>;
-  diagnostics_policy: 'content_free';
-}
+export type CompanionMemoryMetrics = components['schemas']['CompanionMemoryMetrics'];
 
-export interface MemoryUsageItem {
-  memory_id: string;
-  selection_reason: string;
-  activation_score: number;
-  section: string;
-  source_revision: number;
-}
+export type MemoryUsageItem = components['schemas']['MemoryUsageItem'];
 
-export interface MemoryUsageResponse {
-  session_id: string;
-  recorded_at: string;
-  items: MemoryUsageItem[];
-  diagnostics_policy: 'content_free';
-}
+export type MemoryUsageResponse = components['schemas']['MemoryUsageResponse'];
 
-export interface MemoryExportResponse {
-  exported_at: string;
-  owner_type: string;
-  owner_id: string;
-  records: ManagedMemoryRecord[];
-  candidates: ManagedMemoryCandidate[];
-}
+export type MemoryExportResponse = components['schemas']['MemoryExportResponse'];
 
-export interface MemoryResetResponse {
-  ok: true;
-  owner_type: string;
-  owner_id: string;
-  record_count: number;
-  candidate_count: number;
-  snapshot_count: number;
-}
+export type MemoryResetResponse = components['schemas']['MemoryResetResponse'];
 
-export interface SessionMemoryState {
-  session_id: string;
-  memory_enabled: boolean;
-  snapshot_id?: string | null;
-  snapshot_revision?: number | null;
-  memory_record_count: number;
-  last_refreshed_at?: string | null;
-  snapshot?: {
-    snapshot_id: string;
-    revision: number;
-    token_estimate: number;
-    active_count: number;
-    invalidated_count: number;
-    items: SessionMemorySnapshotItem[];
-  } | null;
-}
+export type SessionMemoryState = components['schemas']['SessionMemoryState'];
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);

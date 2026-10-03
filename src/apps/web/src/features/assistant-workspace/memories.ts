@@ -1,7 +1,7 @@
 export type MemoryScope = 'global' | 'workspace' | 'project' | 'session';
 export type MemorySource = 'user_saved' | 'assistant_suggested' | 'imported';
 
-export type MemoryRecord = {
+export type WorkspaceMemory = {
   id: string;
   scope: MemoryScope;
   source: MemorySource;
@@ -13,18 +13,18 @@ export type MemoryRecord = {
   updatedAt: string;
 };
 
-export function createMemoryRecord(memory: MemoryRecord): MemoryRecord {
+export function createMemoryRecord(memory: WorkspaceMemory): WorkspaceMemory {
   return { ...memory };
 }
 
-export function filterMemoriesByScope(memories: MemoryRecord[], scope: MemoryScope): MemoryRecord[] {
+export function filterMemoriesByScope(memories: WorkspaceMemory[], scope: MemoryScope): WorkspaceMemory[] {
   return memories.filter((memory) => memory.scope === scope);
 }
 
-export function pinMemory(memory: MemoryRecord, updatedAt: string): MemoryRecord {
+export function pinMemory(memory: WorkspaceMemory, updatedAt: string): WorkspaceMemory {
   return { ...memory, pinned: true, updatedAt };
 }
 
-export function requiresMemoryConfirmation(memory: MemoryRecord): boolean {
+export function requiresMemoryConfirmation(memory: WorkspaceMemory): boolean {
   return memory.source === 'assistant_suggested';
 }

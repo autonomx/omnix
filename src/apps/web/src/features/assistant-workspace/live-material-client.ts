@@ -1,61 +1,16 @@
+import type { components } from '../../api/generated/types';
 export type LiveMaterialResponsePolicy = 'none' | 'observe' | 'respond';
 export type LiveMaterialRetention = 'ephemeral_session' | 'visible_transcript' | 'durable_conversation';
 
-export type LiveMaterialAppendRequest = {
-  segment_id: string;
-  sequence: number;
-  text: string;
-  start_sample?: number;
-  end_sample?: number;
-  response_policy?: LiveMaterialResponsePolicy;
-  retention?: LiveMaterialRetention;
-  task_contract_id?: string;
-  task_contract_version?: number;
-};
+export type LiveMaterialAppendRequest = components['schemas']['LiveMaterialAppendRequest'];
 
-export type LiveMaterialAcknowledgement = {
-  segment_id: string;
-  accepted_sequence: number;
-  context_version: number;
-  task_contract_id: string;
-  task_contract_version: number;
-  retention: LiveMaterialRetention;
-  response_policy: LiveMaterialResponsePolicy;
-  idempotent: boolean;
-  exact_segment_count: number;
-  exact_text_chars: number;
-  security: {
-    instruction_authority: 'none';
-    tool_eligibility: 'none';
-    memory_write_eligibility: false;
-    task_contract_mutation: false;
-  };
-};
+export type LiveMaterialAcknowledgement = components['schemas']['LiveMaterialAcknowledgement'];
 
-export type LiveTaskContractAcknowledgementRequest = {
-  task_contract_id: string;
-  task_contract_version: number;
-};
+export type LiveTaskContractAcknowledgementRequest = components['schemas']['LiveTaskContractAcknowledgementRequest'];
 
-export type LiveTaskContractAcknowledgement = {
-  session_id: string;
-  task_contract_id: string;
-  task_contract_version: number;
-  context_version: number;
-  idempotent: boolean;
-};
+export type LiveTaskContractAcknowledgement = components['schemas']['LiveTaskContractAcknowledgement'];
 
-export type LiveMaterialSnapshot = {
-  session_id: string;
-  context_version: number;
-  accepted_sequence: number;
-  exact_segment_count: number;
-  exact_text_chars: number;
-  summary_chars: number;
-  retention: LiveMaterialRetention;
-  task_contract_id: string;
-  task_contract_version: number;
-};
+export type LiveMaterialSnapshot = components['schemas']['LiveMaterialSnapshot'];
 
 export class LiveMaterialClient {
   constructor(

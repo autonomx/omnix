@@ -3,6 +3,7 @@ import {
   readLiveConversationSettings,
   updateLiveConversationSettings,
 } from '../assistant-workspace/live-voice-conversation-settings';
+import type { components } from '../../api/generated/types';
 
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ConversationStance = 'automatic' | 'listen' | 'discuss' | 'advise' | 'brainstorm' | 'teach';
@@ -18,32 +19,9 @@ export type TopicContinuity = 'focused' | 'natural' | 'exploratory';
 export type DuplexMode = 'automatic' | 'half_duplex' | 'echo_aware';
 export type PronunciationSavePolicy = 'ask' | 'session_only' | 'allow';
 
-export type LiveConversationProfile = {
-  presence_preset: PresencePreset;
-  talkativeness: number;
-  conversation_stance: ConversationStance;
-  conversation_pace: ConversationPace;
-  interruption_preference: InterruptionPreference;
-  assistant_backchannel_mode: AssistantBackchannelMode;
-  initiative_mode: InitiativeMode;
-  idle_threshold_ms: number;
-  long_pause_behavior: LongPauseBehavior;
-  response_length: ResponseLength;
-  response_onset_style: ResponseOnsetStyle;
-  emotional_attunement: EmotionalAttunement;
-  topic_continuity: TopicContinuity;
-  max_idle_prompts: number;
-  duplex_mode: DuplexMode;
-  pronunciation_save_policy: PronunciationSavePolicy;
-  profile_version: number;
-};
+export type LiveConversationProfile = components['schemas']['LiveConversationProfile'];
 
-export type LiveConversationProfileEnvelope = {
-  user_defaults: LiveConversationProfile;
-  session_override: LiveConversationProfile | null;
-  effective: LiveConversationProfile;
-  source: 'user_defaults' | 'session_override';
-};
+export type LiveConversationProfileEnvelope = components['schemas']['LiveConversationProfileEnvelope'];
 
 export type LiveConversationProfilePatch = Partial<Omit<LiveConversationProfile, 'profile_version'>>;
 

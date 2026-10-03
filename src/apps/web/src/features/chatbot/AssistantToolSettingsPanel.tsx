@@ -258,6 +258,7 @@ function createFallbackConfigPayload(tools: AssistantTool[]): AssistantToolsConf
         approval_policy: action.approvalPolicy,
       })),
       connection_status: tool.defaultConfig.connectionStatus,
+      approval_policy: null,
       account_label: null,
       account_email: null,
       connected_at: null,

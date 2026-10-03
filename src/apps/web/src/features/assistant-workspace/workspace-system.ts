@@ -1,9 +1,9 @@
-import type { ChatSession, Project, Workspace } from './domain';
+import type { WorkspaceChatSession, Project, Workspace } from './domain';
 
 export type WorkspaceProjectTree = {
   workspace: Workspace;
   projects: Project[];
-  conversations: ChatSession[];
+  conversations: WorkspaceChatSession[];
 };
 
 export type ProjectWorkspaceSummary = {

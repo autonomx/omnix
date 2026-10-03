@@ -12,8 +12,9 @@ import {
   presentationStateFromDom,
   publishCharacterAvatarRuntime,
 } from './liveCharacterAvatarBridge';
+import { fixture } from '../../test/fixture';
 
-const runtime: CharacterLiveCallRuntime = {
+const runtime: CharacterLiveCallRuntime = fixture({
   session_id: 'chat:maya',
   interaction_mode: 'character',
   display_name: 'Maya',
@@ -63,7 +64,7 @@ const runtime: CharacterLiveCallRuntime = {
     preload_ms: 1,
     resolved_at: '2026-07-10T00:00:00Z',
   },
-};
+});
 
 const visemeRuntime: CharacterLiveCallRuntime = {
   ...runtime,

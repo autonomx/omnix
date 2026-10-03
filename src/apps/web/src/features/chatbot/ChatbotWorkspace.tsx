@@ -54,6 +54,7 @@ import { CHARACTER_AVATAR_RUNTIME_EVENT } from './liveCharacterAvatarBridge';
 import { isDeepResearchMessage, renderMarkdownHtml, renderResearchReportHtml } from './markdownRenderer';
 import { isLiveVoiceControllerInstalled } from '../assistant-workspace/live-voice-controller';
 import { isLiveVoiceUnifiedAudioInstalled } from '../assistant-workspace/live-voice-unified-audio-controller';
+import type { components } from '../../api/generated/types';
 
 interface ChatbotFormValues {
   content: string;
@@ -90,13 +91,7 @@ type VoiceProfileAsset = AssetListResponse['assets'][number];
 type PersonalityId = 'default' | 'concise' | 'coach' | 'technical' | 'creative' | 'custom';
 type AssistantMessageFeedback = 'liked' | 'disliked';
 
-type ChatMessage = {
-  id: string;
-  role: 'system' | 'user' | 'assistant' | string;
-  content: string;
-  created_at: string;
-  metadata?: Record<string, unknown>;
-};
+type ChatMessage = components['schemas']['ChatMessage'];
 
 type BrowserSpeechRecognitionAlternative = { transcript: string };
 type BrowserSpeechRecognitionResult = { isFinal: boolean; 0?: BrowserSpeechRecognitionAlternative };
@@ -682,15 +677,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         role: 'user',
         content,
         created_at: new Date().toISOString(),
-        ...((pastedChatImages.length > 0 || pastedChatTextFile) ? {
-          metadata: {
-            ...(pastedChatImages.length > 0 ? {
-              image_data_urls: pastedChatImages.map((image) => image.dataUrl),
-              image_data_url: pastedChatImages[0].dataUrl,
-            } : {}),
-            ...(pastedChatTextFile ? { text_attachment: { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text } } : {}),
-          },
-        } : {}),
+        metadata: {
+          ...(pastedChatImages.length > 0 ? {
+            image_data_urls: pastedChatImages.map((image) => image.dataUrl),
+            image_data_url: pastedChatImages[0].dataUrl,
+          } : {}),
+          ...(pastedChatTextFile ? { text_attachment: { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text } } : {}),
+        },
       });
     },
     onSuccess: (_result, values) => {
@@ -1055,6 +1048,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           character_profile_version: null,
           effective_identity_hash: null,
           voice_asset_id: assistantSettings.voiceId || runtimeConfig.ttsVoice || null,
+          voice_speaker_id: null,
+          avatar_pack: null,
           greeting: '',
           speech_style: currentLiveCallSpeechStyle(),
           read_memory: false,
@@ -1064,6 +1059,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           preload: {
             profile_loaded: false,
             voice_resolved: Boolean(assistantSettings.voiceId || runtimeConfig.ttsVoice),
+            voice_error: null,
+            avatar_pack_loaded: false,
             memory_snapshot_loaded: false,
             memory_record_count: 0,
             preload_ms: 0,

@@ -396,8 +396,8 @@ function CharacterDataSummary({
       </div>
       {(data.memories.length || data.pending_suggestions.length) ? <details>
         <summary>Review stored relationship data</summary>
-        {data.memories.length ? <ul>{data.memories.map((memory) => <li key={memory.id}><strong>{memory.category}</strong> · <span>{memory.content}</span></li>)}</ul> : null}
-        {data.pending_suggestions.length ? <ul>{data.pending_suggestions.map((candidate) => <li key={candidate.id}><strong>{candidate.proposed_category}</strong> · <span>{candidate.proposed_content}</span></li>)}</ul> : null}
+        {data.memories.length ? <ul>{data.memories.map((memory, index) => <li key={String(memory.id ?? index)}><strong>{String(memory.category ?? '')}</strong> · <span>{String(memory.content ?? '')}</span></li>)}</ul> : null}
+        {data.pending_suggestions.length ? <ul>{data.pending_suggestions.map((candidate, index) => <li key={String(candidate.id ?? index)}><strong>{String(candidate.proposed_category ?? '')}</strong> · <span>{String(candidate.proposed_content ?? '')}</span></li>)}</ul> : null}
       </details> : null}
       <CharacterHermesPanel characterId={characterId} />
     </> : <p>Character data is unavailable.</p>}

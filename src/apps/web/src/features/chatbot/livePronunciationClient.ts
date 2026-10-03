@@ -1,16 +1,7 @@
-export type PronunciationEntry = {
-  id: string;
-  phrase: string;
-  pronunciation: string;
-  locale: string;
-  created_at: string;
-  updated_at: string;
-};
+import type { components } from '../../api/generated/types';
+export type PronunciationEntry = components['schemas']['PronunciationEntry'];
 
-export type PronunciationListResponse = {
-  session_id: string;
-  entries: PronunciationEntry[];
-};
+export type PronunciationListResponse = components['schemas']['PronunciationListResponse'];
 
 export const ACTIVE_PRONUNCIATIONS_KEY = 'omnix.liveConversation.activePronunciations';
 export const PRONUNCIATIONS_CHANGED_EVENT = 'omnix:live-conversation-pronunciations-changed';

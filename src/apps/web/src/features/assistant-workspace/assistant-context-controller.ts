@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
+import type { components } from '../../api/generated/types';
 
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
@@ -9,11 +10,7 @@ export type LocalWorkspaceSelection = {
   name: string;
 };
 
-type LocalWorkspacePickResponse = {
-  path?: unknown;
-  name?: unknown;
-  cancelled?: unknown;
-};
+type LocalWorkspacePickResponse = components['schemas']['LocalWorkspacePickResponse'];
 
 type DesktopShareSession = {
   stream: MediaStream;

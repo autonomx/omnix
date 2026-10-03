@@ -18,7 +18,7 @@ describe('image runtime readiness', () => {
   });
 
   it('uses inline generation when no image worker is configured', () => {
-    expect(resolveImageReadiness({ providers, workers: { ok: true, status: 'not_configured', workers: [] } })).toMatchObject({
+    expect(resolveImageReadiness({ providers, workers: fixture({ ok: true, status: 'not_configured', workers: [] }) })).toMatchObject({
       status: 'ready',
       canGenerate: true,
       workerMode: 'inline',
@@ -29,11 +29,11 @@ describe('image runtime readiness', () => {
   it('blocks generation when an image worker is unreachable', () => {
     expect(resolveImageReadiness({
       providers,
-      workers: {
+      workers: fixture({
         ok: false,
         status: 'degraded',
         workers: [{ id: 'image', ok: false, status: 'unreachable', capabilities: ['image'], error: 'connection refused' }],
-      },
+      }),
     })).toMatchObject({ status: 'blocked', canGenerate: false, workerMode: 'unavailable' });
   });
 

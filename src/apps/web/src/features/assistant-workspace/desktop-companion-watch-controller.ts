@@ -3,8 +3,8 @@ import type { DesktopCompanionRolloutStage } from '../settings/settingsDocumentT
 import {
   classifyDesktopActivity,
   DesktopBehaviorTracker,
-  type DesktopActivitySignal,
-  type DesktopBehaviorState,
+  type DesktopActivityReading,
+  type DesktopBehaviorReading,
 } from './desktop-companion-activity';
 import { desktopCompanionRolloutEvidenceIdentity } from './desktop-companion-build-identity';
 import { desktopCompanionControlStore } from './desktop-companion-control-store';
@@ -190,7 +190,7 @@ export function parseShadowWatchSettings(payload: unknown): ShadowWatchSettings 
   };
 }
 
-export function activityPayload(signal: DesktopActivitySignal, sourceWidth: number, sourceHeight: number) {
+export function activityPayload(signal: DesktopActivityReading, sourceWidth: number, sourceHeight: number) {
   return {
     activity: signal.activity,
     hypothesis: signal.hypothesis,
@@ -207,8 +207,8 @@ export function activityPayload(signal: DesktopActivitySignal, sourceWidth: numb
 }
 
 export function scenarioForActivity(
-  activity: DesktopActivitySignal,
-  behavior: DesktopBehaviorState,
+  activity: DesktopActivityReading,
+  behavior: DesktopBehaviorReading,
 ): string | null {
   if (behavior.likelyTyping || activity.hypothesis === 'likely_typing') return 'typing';
   if (behavior.rapidBrowsing) return 'rapid-browsing';

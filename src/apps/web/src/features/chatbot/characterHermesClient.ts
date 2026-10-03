@@ -1,12 +1,5 @@
-export interface CharacterHermesSyncStatus {
-  enabled: boolean;
-  available: boolean;
-  character_id: string;
-  memory_dir: string;
-  imported_candidate_ids: string[];
-  exported_memory_ids: string[];
-  skipped_reasons: string[];
-}
+import type { components } from '../../api/generated/types';
+export type CharacterHermesSyncStatus = components['schemas']['CharacterHermesSyncStatus'];
 
 async function run(characterId: string, action: 'import' | 'export'): Promise<CharacterHermesSyncStatus> {
   const response = await fetch(

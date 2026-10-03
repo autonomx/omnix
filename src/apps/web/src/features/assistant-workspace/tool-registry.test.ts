@@ -45,13 +45,9 @@ describe('assistant workspace tool registry', () => {
   });
 
   it('routes execution requests through the backend endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ proposal_id: 'server-proposal', approval_required: false }),
-    }).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ execution_result: { output: { messages: [] } } }),
-    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ proposal_id: 'server-proposal', approval_required: false }))
+      .mockResolvedValueOnce(Response.json({ execution_result: { output: { messages: [] } } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await executeAssistantToolRequest(

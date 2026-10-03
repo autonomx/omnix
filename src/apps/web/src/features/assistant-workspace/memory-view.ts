@@ -1,4 +1,4 @@
-import type { MemoryRecord, MemoryScope } from './memories';
+import type { WorkspaceMemory, MemoryScope } from './memories';
 
 export type MemoryViewFilter = {
   scope?: MemoryScope;
@@ -17,7 +17,7 @@ export type MemoryViewRow = {
   actions: MemoryViewAction[];
 };
 
-export function createMemoryViewRows(memories: MemoryRecord[], filter: MemoryViewFilter = {}): MemoryViewRow[] {
+export function createMemoryViewRows(memories: WorkspaceMemory[], filter: MemoryViewFilter = {}): MemoryViewRow[] {
   return memories
     .filter((memory) => (filter.scope ? memory.scope === filter.scope : true))
     .filter((memory) => (filter.pinnedOnly ? Boolean(memory.pinned) : true))

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { allocateContextBudget, createDefaultContextBudget } from './budget';
 import { assembleContext } from './context';
 import { createConversationProjection } from './projections';
-import type { ChatSession } from './domain';
+import type { WorkspaceChatSession } from './domain';
 
-const session: ChatSession = {
+const session: WorkspaceChatSession = {
   id: 'session-1',
   workspaceId: 'workspace-1',
   title: 'Budgeting',

@@ -2,14 +2,12 @@ import { Button, Text } from '@mantine/core';
 import { useRef, useState } from 'react';
 import './ImageReferenceControl.css';
 import { imageAssetTitle, imageAssetUrl, type ImageAsset } from './imageWorkspaceModel';
+import type { components } from '../../api/generated/types';
 
 export const IMAGE_REFERENCES_QUERY_KEY = ['image-generation', 'references'] as const;
 const MAX_REFERENCE_IMAGES = 2;
 
-interface ImageReferenceUploadResponse {
-  ok: boolean;
-  asset: ImageAsset;
-}
+type ImageReferenceUploadResponse = components['schemas']['ImageReferenceUploadResponse'];
 
 interface ImageReferenceControlProps {
   selectedAssetIds: string[];

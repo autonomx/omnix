@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fixture } from '../../test/fixture';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryManagementPanel } from './MemoryManagementPanel';
@@ -16,7 +17,7 @@ function renderPanel() {
 }
 
 function settings(curated = false): AssistantMemoryRuntimeStatus {
-  return {
+  return fixture({
     settings: {
       curated_memory_enabled: curated,
       suggestions_enabled: false,
@@ -35,11 +36,10 @@ function settings(curated = false): AssistantMemoryRuntimeStatus {
       retention_days: 365,
       show_memory_use_indicator: true,
     },
-    settings_path: '/tmp/settings.json',
     environment_overrides: [],
     approval_policy_locked: true,
     diagnostics_policy: 'content_free',
-  };
+  });
 }
 
 function record(overrides: Partial<ManagedMemoryRecord> = {}): ManagedMemoryRecord {

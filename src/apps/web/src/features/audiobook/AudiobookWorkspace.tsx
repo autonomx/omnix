@@ -94,7 +94,7 @@ interface Speaker {
   proposed_aliases?: string[];
 }
 
-interface JobStatus {
+interface AudiobookJobView {
   id: string;
   status: string;
   chapter_id?: string;
@@ -125,7 +125,7 @@ const CONTROLLABLE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'ru
 const QUEUED_RENDER_STATUSES = new Set(['queued', 'waiting', 'retrying']);
 const RUNNING_RENDER_STATUSES = new Set(['leased', 'running']);
 
-function renderJobLabel(job: JobStatus | undefined, projectState: string): string {
+function renderJobLabel(job: AudiobookJobView | undefined, projectState: string): string {
   if (!job) {
     if (projectState === 'rendering') return 'Waiting';
     if (projectState === 'mastering') return 'Mastering';
@@ -143,7 +143,7 @@ function renderJobLabel(job: JobStatus | undefined, projectState: string): strin
   return job.status.replaceAll('_', ' ');
 }
 
-function renderJobProgress(job: JobStatus | undefined, projectState: string): number {
+function renderJobProgress(job: AudiobookJobView | undefined, projectState: string): number {
   const status = renderJobLabel(job, projectState);
   if (status === 'Completed') return 100;
   const current = Number(job?.progress?.current);
@@ -152,11 +152,11 @@ function renderJobProgress(job: JobStatus | undefined, projectState: string): nu
   return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
 }
 
-function pipelineJobProgress(job: JobStatus | undefined): number {
+function pipelineJobProgress(job: AudiobookJobView | undefined): number {
   return pipelineJobProgressPercent(job) ?? 0;
 }
 
-function pipelineJobProgressPercent(job: JobStatus | undefined): number | null {
+function pipelineJobProgressPercent(job: AudiobookJobView | undefined): number | null {
   const current = Number(job?.progress?.current);
   const total = Number(job?.progress?.total);
   if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
@@ -173,10 +173,10 @@ interface ProjectDetail extends ProjectSummary {
   chapters: ChapterSummary[];
   review_issues: ReviewIssue[];
   speakers: Speaker[];
-  render_jobs: JobStatus[];
-  pipeline_jobs?: JobStatus[];
-  preview_jobs: JobStatus[];
-  export_jobs: JobStatus[];
+  render_jobs: AudiobookJobView[];
+  pipeline_jobs?: AudiobookJobView[];
+  preview_jobs: AudiobookJobView[];
+  export_jobs: AudiobookJobView[];
   render_progress: { completed: number; total: number };
   pronunciations: { source_term: string; spoken_term: string; revision: number }[];
   word_count?: number;

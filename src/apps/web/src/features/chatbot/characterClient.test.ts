@@ -5,11 +5,12 @@ import {
   readLatestTrustedCharacterRuntime,
   type CharacterLiveCallRuntime,
 } from './characterClient';
+import { fixture } from '../../test/fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
 function runtime(overrides: Partial<CharacterLiveCallRuntime> = {}): CharacterLiveCallRuntime {
-  return {
+  return fixture({
     session_id: 'chat:one',
     interaction_mode: 'character',
     display_name: 'Maya',
@@ -42,7 +43,7 @@ function runtime(overrides: Partial<CharacterLiveCallRuntime> = {}): CharacterLi
       resolved_at: '2026-07-09T00:00:00Z',
     },
     ...overrides,
-  };
+  });
 }
 
 describe('characterClient live-call runtime', () => {
@@ -111,7 +112,7 @@ describe('characterClient live-call runtime', () => {
       character_id: 'avatar-character',
     }))));
     const activeRuntime = await characterClient.liveCallRuntime('chat:avatar-switch');
-    const avatarPack = {
+    const avatarPack = fixture<NonNullable<CharacterLiveCallRuntime['avatar_pack']>>({
       character_id: 'avatar-character',
       version: 7,
       render_mode: 'viseme' as const,
@@ -125,7 +126,7 @@ describe('characterClient live-call runtime', () => {
       mouth_anchor: {},
       created_at: '2026-08-01T00:00:00Z',
       updated_at: '2026-08-01T00:00:00Z',
-    };
+    });
 
     applyCharacterAvatarPackToTrackedRuntimes('avatar-character', avatarPack);
 
@@ -134,7 +135,7 @@ describe('characterClient live-call runtime', () => {
   });
 
   it('does not let an older live-runtime response restore the previous avatar pack', async () => {
-    const maoPack = {
+    const maoPack = fixture<NonNullable<CharacterLiveCallRuntime['avatar_pack']>>({
       character_id: 'avatar-race',
       version: 2,
       render_mode: 'viseme' as const,
@@ -142,7 +143,7 @@ describe('characterClient live-call runtime', () => {
       rig_asset_id: 'character-live2d:open-llm-vtuber-mao-pro',
       mouth_frames: {}, blink_frames: {}, expression_frames: {}, outfit_frames: {}, background_asset_ids: {}, mouth_anchor: {},
       created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-01T00:00:00Z',
-    };
+    });
     const shizukuPack = { ...maoPack, version: 3, rig_asset_id: 'character-live2d:open-llm-vtuber-shizuku' };
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(runtime({
       session_id: 'chat:avatar-race',

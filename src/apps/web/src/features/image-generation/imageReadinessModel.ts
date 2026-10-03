@@ -1,4 +1,5 @@
 import type { ProviderFacadePayload } from '../../api/client';
+import type { components } from '../../api/generated/types';
 
 export interface WorkerHealthRecord {
   id: string;
@@ -9,11 +10,7 @@ export interface WorkerHealthRecord {
   error?: string | null;
 }
 
-export interface WorkerHealthPayload {
-  ok: boolean;
-  status: string;
-  workers: WorkerHealthRecord[];
-}
+export type WorkerHealthPayload = components['schemas']['WorkerHealthPayload'];
 
 export type ImageReadinessStatus = 'loading' | 'ready' | 'degraded' | 'blocked';
 

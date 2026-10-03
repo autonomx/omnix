@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatSession } from './domain';
+import type { WorkspaceChatSession } from './domain';
 import {
   appendConversationTurn,
   createConversationTurn,
@@ -8,7 +8,7 @@ import {
   type ConversationState,
 } from './conversation';
 
-const session: ChatSession = {
+const session: WorkspaceChatSession = {
   id: 'session-1',
   workspaceId: 'workspace-1',
   title: 'Conversation',
