@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtinRules } from 'eslint/use-at-your-own-risk';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
@@ -153,6 +154,9 @@ function featureImportTarget(importer, specifier) {
 
 const omnixBoundaryPlugin = {
   rules: {
+    // The core rule under a second name, so long functions warn at one
+    // length and fail at another (WP-9.5).
+    'max-lines-per-function-warn': builtinRules.get('max-lines-per-function'),
     'no-cross-feature-dynamic-import': {
       meta: {
         type: 'problem',
@@ -261,6 +265,41 @@ const appImports = {
   ],
 };
 
+// Files whose longest function was over 250 lines when the length rule
+// arrived (WP-9.5). Each file's limit is that function's length: shrink a
+// function, then lower or delete its entry; never raise one.
+const functionLengthBaseline = {
+  'src/features/assistant-workspace/live-voice-pcm-session.ts': 773,
+  'src/features/chatbot/CharacterAvatarPanel.tsx': 349,
+  'src/features/chatbot/CharacterManagementPanel.tsx': 309,
+  'src/features/chatbot/OmnixRunCardCore.tsx': 470,
+  'src/features/image-generation/ImageGenerationWorkspaceMultiModel.tsx': 288,
+  'src/features/podcast/PodcastWorkspace.tsx': 303,
+  'src/features/rpg/RpgActionComposer.tsx': 551,
+  'src/features/rpg/RpgCreateCampaignWizardLegacy.tsx': 443,
+  'src/features/rpg/RpgLorePanel.tsx': 373,
+  'src/features/rpg/RpgWorkspace.tsx': 713,
+  'src/features/rpg/RpgWorldCampaignSetup.tsx': 290,
+  'src/features/rpg/RpgWorldEditorShell.tsx': 267,
+  'src/features/rpg/RpgWorldEntityEditor.tsx': 309,
+  'src/features/rpg/RpgWorldGenerationDashboard.tsx': 388,
+  'src/features/rpg/RpgWorldGenerationPanel.tsx': 301,
+  'src/features/rpg/RpgWorldProfilePreview.tsx': 280,
+  'src/features/rpg/RpgWorldVisualMapPanel.tsx': 299,
+  'src/features/trading/TradingAlertsPanel.tsx': 313,
+  'src/features/trading/TradingChartAlertOverlay.tsx': 332,
+  'src/features/trading/TradingPaperPanel.tsx': 499,
+  'src/features/trading/TradingPositionOverlay.tsx': 333,
+  'src/features/trading/TradingStrategiesPanel.tsx': 925,
+  'src/features/trading/TradingTerminalDock.tsx': 296,
+  'src/features/trading/TradingWatchlist.tsx': 321,
+  'src/features/trading/TradingWorkspace.tsx': 607,
+  'src/features/trading/drawings/TradingDrawingOverlay.tsx': 519,
+  'src/features/trading/indicators/tradingViewBuiltIns.ts': 254,
+  'src/features/trading/persistence/useTradingWorkspacePersistence.ts': 263,
+  'src/features/voice/VoiceWorkspace.tsx': 499,
+};
+
 export default [
   {
     ignores: [
@@ -312,6 +351,22 @@ export default [
       'omnix/no-cross-feature-dynamic-import': 'error',
     },
   },
+  {
+    // Function length (WP-9.5): warn above 150 lines, fail above 250.
+    // Functions over 250 carry a tracked `baseline WP-9.5` disable.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'src/test/**'],
+    rules: {
+      'omnix/max-lines-per-function-warn': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
+      'max-lines-per-function': ['error', { max: 250, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  ...Object.entries(functionLengthBaseline).map(([file, max]) => ({
+    files: [file],
+    rules: {
+      'max-lines-per-function': ['error', { max, skipBlankLines: true, skipComments: true }],
+    },
+  })),
   {
     files: ['src/app/**/*.{js,jsx,ts,tsx}'],
     ignores: ['src/app/modules.ts', 'src/app/*Manifest.ts'],
