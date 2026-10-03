@@ -316,3 +316,15 @@ def test_context_service_keeps_desktop_failure_visible_to_chat_prompt():
     assert "no vision model configured" in result.items[0].content
 
 
+
+
+def test_a_vision_endpoint_outside_the_url_policy_is_refused_before_any_request(monkeypatch):
+    """The configured endpoint passes the outbound URL policy; redirects are not followed (WP-4.10)."""
+    from app.security.url_policy import UrlPolicyError
+
+    def no_client(*args, **kwargs):
+        raise AssertionError("no connection may be opened")
+
+    monkeypatch.setattr(httpx, "Client", no_client)
+    with pytest.raises(UrlPolicyError, match="link_local_address_blocked"):
+        DesktopVisionClient(base_url="http://169.254.169.254/v1", default_model="m").describe(image_data("CURRENT"), "What is shown?")

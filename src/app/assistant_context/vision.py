@@ -180,7 +180,13 @@ class DesktopVisionClient:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        client = self.client or httpx.Client(timeout=self.timeout_seconds, follow_redirects=True)
+        if self.client is None:
+            # The endpoint is checked against the outbound URL policy, resolved
+            # addresses included, and redirects are not followed (WP-4.10).
+            from app.security.url_policy import check_outbound_url
+
+            check_outbound_url(self.base_url, resolve=True)
+        client = self.client or httpx.Client(timeout=self.timeout_seconds, follow_redirects=False)
         close_client = self.client is None
         errors: list[str] = []
         try:
