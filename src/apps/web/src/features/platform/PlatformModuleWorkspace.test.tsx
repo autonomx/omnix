@@ -335,6 +335,32 @@ describe('PlatformModuleWorkspace', () => {
     });
   });
 
+  it('loads jobs one cursor page at a time', async () => {
+    const page = (id: string, extra: Record<string, unknown>) => ({
+      jobs: [{ ...jobPayload('completed', 'Done').jobs[0], id, type: `job.${id}` }],
+      ...extra,
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (url.pathname !== '/api/jobs') return new Response('not found', { status: 404 });
+      return Response.json(url.searchParams.get('cursor') === 'page-2'
+        ? page('second', { has_more: false, next_cursor: null })
+        : page('first', { has_more: true, next_cursor: 'page-2' }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPlatform('jobs');
+
+    expect(await screen.findByRole('heading', { name: 'job.first' })).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[0][0])).toContain('limit=50');
+    fireEvent.click(screen.getByRole('button', { name: 'Load more jobs' }));
+
+    expect(await screen.findByRole('heading', { name: 'job.second' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'job.first' })).toBeInTheDocument();
+    expect(String(fetchMock.mock.calls[1][0])).toContain('cursor=page-2');
+    expect(screen.queryByRole('button', { name: 'Load more jobs' })).not.toBeInTheDocument();
+  });
+
   it('refreshes jobs when shared job events arrive', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;

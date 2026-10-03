@@ -17,7 +17,8 @@ export type CreateChatSessionRequest = Partial<GeneratedCreateChatSessionRequest
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
 export type JobListResponse = components['schemas']['JobListResponse'];
-export type ListJobsOptions = { limit?: number; full?: boolean };
+export type ListJobsOptions = { limit?: number; full?: boolean; cursor?: string | null };
+export type ListAssetsOptions = { type?: string; module?: string; limit?: number; cursor?: string | null };
 export type JobRecord = components['schemas']['JobRecord'];
 export type ModelResidencyDiagnostics = components['schemas']['ModelResidencyDiagnostics'];
 export type ModelResidencyRecord = components['schemas']['ModelResidencyRecord'];
@@ -669,6 +670,7 @@ export class OmnixApiClient {
     const query = new URLSearchParams();
     if (options.limit !== undefined) query.set('limit', String(options.limit));
     if (options.full !== undefined) query.set('full', String(options.full));
+    if (options.cursor) query.set('cursor', options.cursor);
     const suffix = query.size ? `?${query.toString()}` : '';
     return this.get<JobListResponse>(`/api/jobs${suffix}`);
   }
@@ -702,11 +704,7 @@ export class OmnixApiClient {
     const assets: AssetListResponse['assets'] = [];
     let cursor: string | null | undefined;
     for (let page = 0; page < MAX_ASSET_PAGES; page += 1) {
-      const params = new URLSearchParams({ limit: String(ASSET_PAGE_SIZE) });
-      if (filter.type) params.set('type', filter.type);
-      if (filter.module) params.set('module', filter.module);
-      if (cursor) params.set('cursor', cursor);
-      const response = await this.get<AssetListResponse>(`/api/assets?${params.toString()}`);
+      const response = await this.listAssetPage({ ...filter, limit: ASSET_PAGE_SIZE, cursor });
       assets.push(...response.assets);
       if (!response.has_more || !response.next_cursor) {
         break;
@@ -714,6 +712,15 @@ export class OmnixApiClient {
       cursor = response.next_cursor;
     }
     return { assets, next_cursor: null, has_more: false };
+  }
+
+  /** One page of assets, newest first; pass the previous page's `next_cursor` for the next one. */
+  async listAssetPage(options: ListAssetsOptions = {}): Promise<AssetListResponse> {
+    const params = new URLSearchParams({ limit: String(options.limit ?? ASSET_PAGE_SIZE) });
+    if (options.type) params.set('type', options.type);
+    if (options.module) params.set('module', options.module);
+    if (options.cursor) params.set('cursor', options.cursor);
+    return this.get<AssetListResponse>(`/api/assets?${params.toString()}`);
   }
 
   async listVoiceLibrary(): Promise<AssetListResponse> {
