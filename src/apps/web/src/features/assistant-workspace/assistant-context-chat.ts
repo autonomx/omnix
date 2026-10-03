@@ -13,7 +13,7 @@ import type { DesktopTemporalCapture } from './desktop-temporal-capture';
 /** The route a chat message goes to: the chat route, or the context route with the tools' fields. */
 export type AssistantChatRoute = 'chat' | 'context';
 
-type DesktopPayload = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>;
+type DesktopFrames = Awaited<ReturnType<DesktopTemporalCapture['buildPayload']>>;
 
 /**
  * Sends one chat message the way the active context tools need it (WP-9.5
@@ -73,7 +73,7 @@ async function sendThroughContext<T>(
 }
 
 /** The shared desktop's frames for this message; a failed capture stops sharing and the message goes without them. */
-async function captureDesktop({ desktopShare }: AssistantContextState): Promise<DesktopPayload | undefined> {
+async function captureDesktop({ desktopShare }: AssistantContextState): Promise<DesktopFrames | undefined> {
   if (!desktopShare) return undefined;
   try {
     const payload = await desktopShare.capture.buildPayload();

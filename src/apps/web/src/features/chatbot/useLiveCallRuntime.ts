@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { characterClient, type CharacterLiveCallRuntime } from './characterClient';
-import type { ChatSessionSummary } from './useChatSessions';
+import type { ChatSessionListEntry } from './useChatSessions';
 import { CHARACTER_AVATAR_RUNTIME_EVENT } from '../../events/bus';
 
 type LiveCallRuntimeOptions = {
   selectedSessionId: string | null;
-  selectedSessionSummary: ChatSessionSummary | undefined;
+  selectedSessionSummary: ChatSessionListEntry | undefined;
   interaction: Awaited<ReturnType<typeof characterClient.session>> | undefined;
   /** While a call runs, its runtime stays as the call started it. */
   liveVoiceActiveRef: RefObject<boolean>;

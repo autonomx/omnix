@@ -134,4 +134,4 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
   };
 }
 
-export type ChatSessionSummary = NonNullable<ReturnType<typeof useChatSessions>['selectedSessionSummary']>;
+export type ChatSessionListEntry = NonNullable<ReturnType<typeof useChatSessions>['selectedSessionSummary']>;

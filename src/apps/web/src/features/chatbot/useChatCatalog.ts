@@ -3,14 +3,14 @@ import { useMemo } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { characterClient } from './characterClient';
 import { chatCapableModels, chatCapableProviders, getVoiceProfileAssets, type AssistantView } from './chatbotWorkspaceModel';
-import type { ChatSessionSummary } from './useChatSessions';
+import type { ChatSessionListEntry } from './useChatSessions';
 
 type ChatCatalogOptions = {
   activeView: AssistantView;
   /** Voice profiles wait until the session list has loaded. */
   sessionsPending: boolean;
   selectedSessionId: string | null;
-  selectedSessionSummary: ChatSessionSummary | undefined;
+  selectedSessionSummary: ChatSessionListEntry | undefined;
   selectedProviderId: string;
 };
 
