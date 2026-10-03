@@ -5,7 +5,6 @@ import { MantineProvider } from '@mantine/core';
 import '@mantine/core/styles.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';
-import { installViewApiFirewall } from './app/viewApiScope';
 import { initializeViewRuntime } from './app/viewRuntime';
 import { moduleIdFromPathname } from './app/viewApiScope';
 import { omnixTheme } from './design/theme';
@@ -42,11 +41,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Keep trading requests out of the globally installed assistant interceptors.
-// The first installation still protects side-effect imports; this outer pass
-// bypasses those wrappers for the active trading route entirely.
-installViewApiFirewall({ outermost: true });
 
 async function mountApplication(): Promise<void> {
   void initializeViewRuntime(moduleIdFromPathname(window.location.pathname), queryClient);

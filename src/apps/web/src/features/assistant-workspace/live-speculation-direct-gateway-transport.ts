@@ -1,41 +1,35 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
+
+const MIDDLEWARE = 'live-speculation-direct-gateway';
 const SPECULATION_PATH = /^\/api\/live\/speculation(?:\/|$)/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
-const INSTALLED_KEY = '__omnixLiveSpeculationDirectGatewayTransportInstalled';
 const DEFAULT_DIRECT_GATEWAY_ORIGIN = 'http://127.0.0.1:8000';
 const PERF_EVENT = 'omnix:assistant-voice-perf';
-
-type DirectGatewayWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationDirectGatewayTransportInstalled?: boolean;
-};
 
 type LocationLike = Pick<Location, 'hostname' | 'port' | 'origin'>;
 type EnvLike = Record<string, string | boolean | number | undefined>;
 
-let previousFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
 
 export function initializeLiveSpeculationDirectGatewayTransport(): () => void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
     return () => undefined;
   }
-  const liveWindow = window as DirectGatewayWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
-  previousFetch = window.fetch.bind(window);
-  window.fetch = directLiveGatewayFetch;
-
+  if (removeMiddleware) return () => undefined;
+  const remove = registerFetchMiddleware(MIDDLEWARE, directLiveGatewayFetch);
+  removeMiddleware = remove;
   return () => {
-    if (previousFetch) window.fetch = previousFetch;
-    previousFetch = null;
-    liveWindow[INSTALLED_KEY] = false;
+    remove();
+    if (removeMiddleware === remove) removeMiddleware = null;
   };
 }
 
 export async function directLiveGatewayFetch(
   input: RequestInfo | URL,
-  init?: RequestInit,
+  init: RequestInit | undefined,
+  next: FetchNext = fetchBelow(MIDDLEWARE),
 ): Promise<Response> {
-  const fetchImpl = previousFetch ?? window.fetch.bind(window);
+  const fetchImpl = next;
   const directUrl = resolveDirectLiveGatewayUrl(input, init);
   if (!directUrl) return fetchImpl(input, withLiveVoiceCallAffinity(input, init));
 

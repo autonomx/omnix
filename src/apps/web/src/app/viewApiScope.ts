@@ -1,12 +1,10 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { registerFetchMiddleware } from '../api/fetchPipeline';
 import type { OmnixModuleId } from './modules';
 
-const VIEW_API_FIREWALL_KEY = '__omnixViewApiFirewallInstalled';
-const OUTER_VIEW_API_FIREWALL_KEY = '__omnixOuterViewApiFirewallInstalled';
-let previousFetch: typeof window.fetch | null = null;
+let removeFirewall: (() => void) | null = null;
 let previousWebSocket: typeof window.WebSocket | null = null;
 let previousEventSource: typeof window.EventSource | null = null;
-let rootFetch: typeof window.fetch | null = null;
 
 const ROUTE_MODULES: ReadonlyArray<readonly [string, OmnixModuleId]> = [
   ['/voice-cloning', 'voice-cloning'],
@@ -179,28 +177,24 @@ function withClientHeader(input: RequestInfo | URL, init?: RequestInit): Request
   return { ...init, headers };
 }
 
-export function installViewApiFirewall(options: { outermost?: boolean } = {}): void {
+/**
+ * The browser's API boundary: one transport middleware in the fetch pipeline
+ * (scope to the active workspace, client/CSRF headers and request ids, sign-in
+ * redirect on 401), plus scoped WebSocket and EventSource constructors.
+ */
+export function installViewApiFirewall(): void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
-  const state = window as typeof window & Record<string, unknown>;
-  if (options.outermost) {
-    if (state[OUTER_VIEW_API_FIREWALL_KEY]) return;
-  } else if (state[VIEW_API_FIREWALL_KEY]) return;
+  if (!removeFirewall) {
+    removeFirewall = registerFetchMiddleware('view-api-firewall', async (input, init, next) => {
+      const pathname = apiPath(input);
+      const moduleId = activeViewModule();
+      if (!isApiAllowedForView(pathname, moduleId)) return blockedApiResponse(pathname, moduleId);
+      const response = await next(input, withClientHeader(input, init));
+      return redirectWhenUnauthenticated(input, response);
+    }, { layer: 'transport' });
+  }
 
-  if (!rootFetch) rootFetch = window.fetch.bind(window);
-  if (!options.outermost) previousFetch = window.fetch;
-  const delegate = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const pathname = apiPath(input);
-    const moduleId = activeViewModule();
-    if (!isApiAllowedForView(pathname, moduleId)) return blockedApiResponse(pathname, moduleId);
-    const guardedInit = withClientHeader(input, init);
-    const response = options.outermost && moduleId === 'trading' && rootFetch
-      ? await rootFetch(input, guardedInit)
-      : await delegate(input, guardedInit);
-    return redirectWhenUnauthenticated(input, response);
-  };
-
-  if (!options.outermost) {
+  if (!previousWebSocket) {
     const NativeWebSocket = window.WebSocket;
     if (typeof NativeWebSocket === 'function') {
       previousWebSocket = NativeWebSocket;
@@ -231,21 +225,14 @@ export function installViewApiFirewall(options: { outermost?: boolean } = {}): v
       window.EventSource = ScopedEventSource;
     }
   }
-  if (options.outermost) state[OUTER_VIEW_API_FIREWALL_KEY] = true;
-  else state[VIEW_API_FIREWALL_KEY] = true;
 }
 
 export function resetViewApiFirewallForTests(): void {
-  if (typeof window !== 'undefined' && previousFetch) window.fetch = previousFetch;
+  removeFirewall?.();
+  removeFirewall = null;
   if (typeof window !== 'undefined' && previousWebSocket) window.WebSocket = previousWebSocket;
   if (typeof window !== 'undefined' && previousEventSource) window.EventSource = previousEventSource;
-  previousFetch = null;
   previousWebSocket = null;
   previousEventSource = null;
-  rootFetch = null;
   loginRedirectPending = false;
-  if (typeof window !== 'undefined') {
-    delete (window as typeof window & Record<string, unknown>)[VIEW_API_FIREWALL_KEY];
-    delete (window as typeof window & Record<string, unknown>)[OUTER_VIEW_API_FIREWALL_KEY];
-  }
 }

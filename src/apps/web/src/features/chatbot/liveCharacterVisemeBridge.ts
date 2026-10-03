@@ -1,4 +1,5 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import { isActiveView } from '../../app/viewApiScope';
 
 export type CharacterViseme = 'silence' | 'A' | 'E' | 'O' | 'U' | 'MBP' | 'FV' | 'L' | 'WQ' | 'other';
@@ -33,7 +34,7 @@ const RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const RIG_VISEME_EVENT = 'omnix:character-rig-viseme';
 const ENVELOPE_FRAME_EVENT = 'omnix:character-avatar-frame';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
-const INSTALL_KEY = '__omnixCharacterVisemeBridgeInstalled';
+let bridgeInstalled = false;
 const DEFAULT_VISEME_DURATION_MS = 90;
 const STRONG_PHASE_DURATION_MS = 85;
 const PEAK_PHASE_DURATION_MS = 140;
@@ -129,9 +130,8 @@ export function visemeAnimationFrameKeys(
 
 function install(): void {
   if (typeof window === 'undefined') return;
-  const state = window as typeof window & Record<string, unknown>;
-  if (state[INSTALL_KEY]) return;
-  state[INSTALL_KEY] = true;
+  if (bridgeInstalled) return;
+  bridgeInstalled = true;
   window.addEventListener(RUNTIME_EVENT, (event) => {
     if (!isActiveView('chatbot')) {
       runtime = null;
@@ -151,17 +151,16 @@ function install(): void {
 }
 
 function installFetchMonitor(): void {
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  registerFetchMiddleware('character-viseme-tts-monitor', async (input, init, next) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const text = url.includes(TTS_STREAM_PATH) ? requestText(init?.body) : '';
-    const response = await originalFetch(input, init);
+    const response = await next(input, init);
     if (!isActiveView('chatbot')) return response;
     if (!text || !response.body || typeof response.body.tee !== 'function') return response;
     const [applicationBody, monitorBody] = response.body.tee();
     void monitorStream(monitorBody, text);
     return new Response(applicationBody, { status: response.status, statusText: response.statusText, headers: response.headers });
-  };
+  });
 }
 
 async function monitorStream(stream: ReadableStream<Uint8Array>, text: string): Promise<void> {

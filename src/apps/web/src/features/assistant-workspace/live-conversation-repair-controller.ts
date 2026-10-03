@@ -1,5 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+ 
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import {
   planConversationRepair,
   type LiveConversationRepairContext,
@@ -8,12 +9,7 @@ import {
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
 const REPAIR_EVENT = 'omnix:live-conversation-repair-planned';
-const INSTALL_FLAG = '__omnixLiveConversationRepairInstalled';
 const CONTEXT_MESSAGE_PATH = /\/api\/assistant\/context\/chat\/sessions\/[^/]+\/messages(?:\/stream)?$/;
-
-type RepairWindow = Window & typeof globalThis & {
-  __omnixLiveConversationRepairInstalled?: boolean;
-};
 
 type OverlapPerfDetail = {
   stage?: unknown;
@@ -24,19 +20,18 @@ type OverlapPerfDetail = {
 };
 
 let pendingRepair: LiveConversationRepairContext | null = null;
+let installed = false;
 
 export function initializeLiveConversationRepairController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const liveWindow = window as RepairWindow;
-  if (liveWindow.__omnixLiveConversationRepairInstalled) return () => undefined;
-  liveWindow.__omnixLiveConversationRepairInstalled = true;
+  if (installed) return () => undefined;
+  installed = true;
 
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const removeMiddleware = registerFetchMiddleware('live-conversation-repair', (input, init, next) => {
     const injection = injectRepairIntoRequest(input, init, pendingRepair);
     if (injection.consumed) pendingRepair = null;
-    return originalFetch(injection.input, injection.init);
-  };
+    return next(injection.input, injection.init);
+  });
 
   const handlePerf = (event: Event) => {
     const detail = (event as CustomEvent<OverlapPerfDetail>).detail;
@@ -65,9 +60,9 @@ export function initializeLiveConversationRepairController(): () => void {
   return () => {
     window.removeEventListener(PERF_EVENT, handlePerf);
     window.removeEventListener(STOP_EVENT, clear);
-    if (window.fetch !== originalFetch) window.fetch = originalFetch;
+    removeMiddleware();
     pendingRepair = null;
-    liveWindow.__omnixLiveConversationRepairInstalled = false;
+    installed = false;
   };
 }
 

@@ -1,4 +1,5 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
 
 type ResearchMode = 'disabled' | 'quick' | 'deep';
@@ -28,10 +29,6 @@ export type DesktopCompanionCaptureSnapshot = {
   capture: DesktopTemporalCapture;
 };
 
-type AssistantContextWindow = Window & typeof globalThis & {
-  __omnixAssistantContextInitialized?: boolean;
-};
-
 type DisplayMediaDevices = MediaDevices & {
   getDisplayMedia?: (constraints?: {
     video?: boolean | MediaTrackConstraints;
@@ -59,14 +56,16 @@ const SUPPORTED_CHAT_TEXT_FILE_SUFFIXES = new Set([
   '.c', '.cpp', '.cs', '.css', '.csv', '.go', '.h', '.hpp', '.htm', '.html', '.java', '.js', '.json', '.jsx', '.md', '.markdown', '.py', '.rs', '.sh', '.sql', '.text', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
 ]);
 const SUPPORTED_CHAT_TEXT_FILE_TYPES = new Set(['application/json', 'application/xml', 'text/csv', 'text/markdown', 'text/plain', 'text/xml']);
-const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
 let researchMode: ResearchMode = 'disabled';
 let agentMode = readStoredAgentMode();
 let deepResearchMaxPages = DEFAULT_DEEP_RESEARCH_PAGES;
 let activeSessionId: string | null = null;
-let nativeFetch: typeof window.fetch | null = null;
+const MIDDLEWARE = 'assistant-context';
+// The controller's own requests skip its rewriting but keep the transport layer.
+const ownFetch = fetchBelow(MIDDLEWARE);
+let disposeController: (() => void) | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
 let localWorkspace: LocalWorkspaceSelection | null = null;
@@ -75,10 +74,9 @@ let openContextToolsMenu: { addButton: HTMLButtonElement; menu: HTMLElement; too
 const knownResearchModes = new Map<string, ResearchMode>();
 const researchModePersistenceQueues = new Map<string, Promise<void>>();
 
-export function initializeAssistantContextController(root: ParentNode = document): void {
-  if (assistantContextWindow.__omnixAssistantContextInitialized) return;
-  assistantContextWindow.__omnixAssistantContextInitialized = true;
-  installFetchInterceptor();
+export function initializeAssistantContextController(root: ParentNode = document): () => void {
+  if (disposeController) return () => undefined;
+  const removeMiddleware = installFetchInterceptor();
   void loadProfileResearchDefault();
   injectControls(root);
   document.addEventListener('pointerdown', handleContextToolsOutsidePointerDown);
@@ -88,7 +86,19 @@ export function initializeAssistantContextController(root: ParentNode = document
   });
   const observeTarget = root instanceof Document ? root.documentElement : root;
   observer.observe(observeTarget, { childList: true, subtree: true });
-  window.addEventListener('beforeunload', () => stopDesktopShare(), { once: true });
+  const handleUnload = () => stopDesktopShare();
+  window.addEventListener('beforeunload', handleUnload, { once: true });
+  const dispose = () => {
+    observer.disconnect();
+    removeMiddleware();
+    document.removeEventListener('pointerdown', handleContextToolsOutsidePointerDown);
+    window.removeEventListener('omnix:chat-session-selected', handleChatSessionSelected);
+    window.removeEventListener('beforeunload', handleUnload);
+    stopDesktopShare();
+    if (disposeController === dispose) disposeController = null;
+  };
+  disposeController = dispose;
+  return dispose;
 }
 
 export function assistantContextControlsMissing(root: ParentNode = document): boolean {
@@ -168,10 +178,9 @@ export function currentDesktopCompanionCapture(): DesktopCompanionCaptureSnapsho
   };
 }
 
-function installFetchInterceptor(): void {
-  const originalFetch = window.fetch.bind(window);
-  nativeFetch = originalFetch;
-  const wrappedFetch: typeof window.fetch = async (input, init) => {
+function installFetchInterceptor(): () => void {
+  return registerFetchMiddleware(MIDDLEWARE, async (input, init, next) => {
+    const originalFetch = next;
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const inputUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
     const parsed = new URL(inputUrl, window.location.origin);
@@ -267,8 +276,7 @@ function installFetchInterceptor(): void {
     }
     deferResearchModePersistence(Promise.resolve(enhancedResponse), activeSessionId, researchMode);
     return enhancedResponse;
-  };
-  window.fetch = wrappedFetch;
+  });
 }
 
 async function applySessionResearchMode(sessionId: string, response: Response): Promise<void> {
@@ -286,7 +294,7 @@ async function applySessionResearchMode(sessionId: string, response: Response): 
 }
 
 async function loadProfileResearchDefault(): Promise<void> {
-  const fetchImpl = nativeFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   try {
     const response = await fetchImpl('/api/settings');
     if (!response.ok) return;
@@ -345,8 +353,7 @@ function scheduleConversationResearchModePersistence(sessionId: string, mode: Re
 }
 
 async function persistConversationResearchMode(sessionId: string, mode: ResearchMode): Promise<boolean> {
-  const fetchImpl = nativeFetch;
-  if (!fetchImpl) return false;
+  const fetchImpl = ownFetch;
   try {
     const response = await fetchImpl(`/api/chat/sessions/${encodeURIComponent(sessionId)}/research-mode`, {
       method: 'POST',
@@ -936,7 +943,7 @@ async function toggleLocalWorkspace(): Promise<void> {
   }
   localWorkspaceStatus = 'Choose a folder…';
   renderControls();
-  const fetchImpl = nativeFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   try {
     const response = await fetchImpl('/api/agent-runs/workspace-picker', {
       method: 'POST',

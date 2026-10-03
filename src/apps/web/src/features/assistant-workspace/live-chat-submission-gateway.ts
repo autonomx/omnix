@@ -1,4 +1,5 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 export type LiveChatSubmissionInput = {
   sessionId: string;
   text: string;
@@ -165,9 +166,7 @@ export class LiveChatSubmissionGateway {
     // await. Scope interception to that call only. The response promise is also
     // the submission identity used for early acceptance.
     const interceptor = this.fetchInterceptor;
-    const originalFetch = window.fetch;
-    const next: LiveChatSubmissionFetchNext = originalFetch.bind(window);
-    window.fetch = ((request: RequestInfo | URL, init?: RequestInit) => {
+    const remove = registerFetchMiddleware('live-chat-submission', (request, init, next) => {
       const existingSignal = init?.signal ?? (request instanceof Request ? request.signal : undefined);
       if (existingSignal && existingSignal !== abortController.signal) {
         if (existingSignal.aborted) abortController.abort();
@@ -175,15 +174,15 @@ export class LiveChatSubmissionGateway {
       }
       const scopedInit = { ...init, signal: abortController.signal };
       const response = interceptor
-        ? interceptor(input, request, scopedInit, next)
+        ? interceptor(input, request, scopedInit, next as LiveChatSubmissionFetchNext)
         : next(request, scopedInit);
       observeFetch(request, scopedInit, response);
       return response;
-    }) as typeof window.fetch;
+    });
     try {
       return Promise.resolve(handler(input));
     } finally {
-      window.fetch = originalFetch;
+      remove();
     }
   }
 }

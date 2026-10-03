@@ -1,4 +1,5 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { activeFetchMiddlewares, registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { stopAssistantPcmStream } from './assistant-pcm-stream-websocket-player';
 import {
   createLiveCallDiagnosticsReporter,
@@ -62,10 +63,6 @@ type ChatStreamEvent = {
   };
 };
 
-type LiveVoiceWindow = Window & typeof globalThis & {
-  __omnixLiveVoiceUnifiedAudioInstalled?: boolean;
-};
-
 type LiveTurnKind = 'greeting' | 'response';
 
 type ActiveLiveTurn = {
@@ -119,7 +116,8 @@ type GreetingStartup = {
   requestAbortController: AbortController | null;
 };
 
-let originalFetch: typeof window.fetch | null = null;
+const MIDDLEWARE = 'live-voice-unified-audio';
+let removeMiddleware: (() => void) | null = null;
 let playbackGeneration = 0;
 let activeTurn: ActiveLiveTurn | null = null;
 let sharedAudioSession: SharedLiveAudioSession | null = null;
@@ -129,12 +127,8 @@ let reportedSpeaking = false;
 
 export function initializeLiveVoiceUnifiedAudioController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const liveWindow = window as LiveVoiceWindow;
-  if (liveWindow.__omnixLiveVoiceUnifiedAudioInstalled) return () => undefined;
-  liveWindow.__omnixLiveVoiceUnifiedAudioInstalled = true;
-
-  originalFetch = window.fetch.bind(window);
-  window.fetch = interceptLiveVoiceFetch;
+  if (removeMiddleware) return () => undefined;
+  removeMiddleware = registerFetchMiddleware(MIDDLEWARE, interceptLiveVoiceFetch);
   window.addEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
   window.addEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
   window.addEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
@@ -144,14 +138,14 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
   const installedReporter = createLiveCallDiagnosticsReporter('live-call:controller');
   installedReporter.record('controller_installed', {
     location: window.location.href,
-    fetch_wrapped: window.fetch === interceptLiveVoiceFetch,
+    fetch_wrapped: activeFetchMiddlewares().includes(MIDDLEWARE),
     humanization_flags: readLiveVoiceHumanizationFlags(),
   }, 'controller');
   void installedReporter.close('controller_install_confirmed');
 
   return () => {
-    if (originalFetch) window.fetch = originalFetch;
-    originalFetch = null;
+    removeMiddleware?.();
+    removeMiddleware = null;
     window.removeEventListener(LIVE_VOICE_INTERRUPT_EVENT, stopLiveVoiceUnifiedAudio);
     window.removeEventListener(LIVE_VOICE_STOP_EVENT, stopLiveVoiceUnifiedAudio);
     window.removeEventListener(LIVE_VOICE_CALL_START_EVENT, handleGreetingCallStart);
@@ -159,12 +153,11 @@ export function initializeLiveVoiceUnifiedAudioController(): () => void {
     window.removeEventListener(LIVE_VOICE_USER_SPEECH_EVENT, handleGreetingUserSpeech);
     window.removeEventListener('beforeunload', stopLiveVoiceUnifiedAudio);
     stopLiveVoiceUnifiedAudio();
-    liveWindow.__omnixLiveVoiceUnifiedAudioInstalled = false;
   };
 }
 
-async function interceptLiveVoiceFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+async function interceptLiveVoiceFetch(input: RequestInfo | URL, init: RequestInit | undefined, next: FetchNext): Promise<Response> {
+  const fetchImpl = next;
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();

@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { createLiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
 
 type JsonRecord = Record<string, unknown>;
@@ -17,16 +18,12 @@ type AssistantMessageSnapshot = {
   metrics: ChatResponseMetrics | null;
 };
 
-type ChatMetricsWindow = Window & typeof globalThis & {
-  __omnixChatResponseMetricsInstalled?: boolean;
-};
-
 const CHAT_SESSION_PATH = /^\/api\/chat\/sessions\/[^/]+$/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const METRICS_ROW_CLASS = 'assistant-response-metrics';
 
-let originalFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
 let observer: MutationObserver | null = null;
 let assistantMessages: AssistantMessageSnapshot[] = [];
 let renderQueued = false;
@@ -231,8 +228,8 @@ function dispatchSseTransportObservation(response: Response, turnId?: string): v
   void reporter.flush();
 }
 
-async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+async function interceptChatMetricsFetch(input: RequestInfo | URL, init: RequestInit | undefined, next: FetchNext): Promise<Response> {
+  const fetchImpl = next;
   const response = await fetchImpl(input, init);
   if (!response.ok) return response;
 
@@ -255,12 +252,9 @@ async function interceptChatMetricsFetch(input: RequestInfo | URL, init?: Reques
 
 export function initializeChatResponseMetricsController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
-  const metricsWindow = window as ChatMetricsWindow;
-  if (metricsWindow.__omnixChatResponseMetricsInstalled) return () => undefined;
+  if (removeMiddleware) return () => undefined;
 
-  metricsWindow.__omnixChatResponseMetricsInstalled = true;
-  originalFetch = window.fetch.bind(window);
-  window.fetch = interceptChatMetricsFetch;
+  removeMiddleware = registerFetchMiddleware('chat-response-metrics', interceptChatMetricsFetch);
   observer = new MutationObserver(scheduleMetricsRender);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   scheduleMetricsRender();
@@ -268,17 +262,14 @@ export function initializeChatResponseMetricsController(): () => void {
   return () => {
     observer?.disconnect();
     observer = null;
-    if (window.fetch === interceptChatMetricsFetch && originalFetch) window.fetch = originalFetch;
-    originalFetch = null;
-    metricsWindow.__omnixChatResponseMetricsInstalled = false;
+    removeMiddleware?.();
+    removeMiddleware = null;
   };
 }
 
 export function resetChatResponseMetricsForTests(): void {
-  const metricsWindow = window as ChatMetricsWindow;
-  if (window.fetch === interceptChatMetricsFetch && originalFetch) window.fetch = originalFetch;
-  originalFetch = null;
-  metricsWindow.__omnixChatResponseMetricsInstalled = false;
+  removeMiddleware?.();
+  removeMiddleware = null;
   assistantMessages = [];
   renderQueued = false;
   observer?.disconnect();

@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { registerFetchMiddleware, resetFetchPipelineForTests } from '../api/fetchPipeline';
 import {
   activeViewModule,
   installViewApiFirewall,
@@ -13,6 +14,7 @@ import {
 describe('view API scope', () => {
   afterEach(() => {
     resetViewApiFirewallForTests();
+    resetFetchPipelineForTests();
     window.history.replaceState({}, '', '/chatbot');
   });
 
@@ -70,19 +72,21 @@ describe('view API scope', () => {
     expect((await window.fetch('/api/rpg/turns')).ok).toBe(true);
   });
 
-  it('bypasses global assistant wrappers for allowed trading requests', async () => {
+  it('scopes requests that feature middleware rewrites to the active workspace', async () => {
     window.history.replaceState({}, '', '/trading');
     const rawFetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = rawFetch;
     installViewApiFirewall();
-    const assistantWrapper = vi.fn<typeof fetch>(window.fetch);
-    window.fetch = assistantWrapper;
-    installViewApiFirewall({ outermost: true });
+    // A leftover assistant middleware cannot reach the chat API from the trading workspace.
+    const remove = registerFetchMiddleware('assistant', (_input, init, next) => next('/api/chat/sessions', init));
 
-    await window.fetch('/api/trading/paper/accounts');
+    const blocked = await window.fetch('/api/trading/paper/accounts');
+    remove();
+    const allowed = await window.fetch('/api/trading/paper/accounts');
 
+    expect(blocked.status).toBe(403);
+    expect(allowed.status).toBe(200);
     expect(rawFetch).toHaveBeenCalledTimes(1);
-    expect(assistantWrapper).not.toHaveBeenCalled();
   });
 
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('adds the client header to same-origin %s', async (method) => {
@@ -133,12 +137,12 @@ describe('view API scope', () => {
     expect(ids[2]).toBe('caller-request-0001');
   });
 
-  it('adds headers when trading bypasses assistant wrappers', async () => {
+  it('adds headers to trading requests', async () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
     window.fetch = delegate;
     installViewApiFirewall();
-    installViewApiFirewall({ outermost: true });
+    installViewApiFirewall();
     await window.fetch('/api/trading/paper/accounts', { method: 'POST' });
     expect(new Headers(delegate.mock.calls[0][1]?.headers).get('X-Omnix-Client')).toBe('web');
   });

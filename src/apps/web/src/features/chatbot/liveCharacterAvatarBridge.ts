@@ -1,4 +1,5 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
 import { isActiveView } from '../../app/viewApiScope';
 import './liveCharacterAvatarBridge.css';
@@ -14,7 +15,7 @@ const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
 const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
 const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 const TTS_STREAM_PATH = '/api/tts/stream/server-sent-events';
-const INSTALL_KEY = '__omnixCharacterAvatarBridgeInstalled';
+let bridgeInstalled = false;
 const AUDIO_ELEMENT_FRAME_MS = 50;
 const AUDIO_ELEMENT_FFT_SIZE = 1_024;
 const AUDIO_BUFFER_WINDOW_MS = 60;
@@ -35,9 +36,9 @@ type CapturableAudioElement = HTMLAudioElement & {
   mozCaptureStream?: () => MediaStream;
 };
 
-type PatchedCreateBufferSource = AudioContext['createBufferSource'] & {
-  __omnixAvatarAudioMonitor?: boolean;
-};
+type PatchedCreateBufferSource = AudioContext['createBufferSource'];
+// createBufferSource implementations this bridge already wraps.
+const monitoredCreators = new WeakSet<PatchedCreateBufferSource>();
 
 type LiveCallDiagnosticDetail = {
   source?: string;
@@ -161,9 +162,8 @@ export function presentationStateFromDom(
 
 function installLiveCharacterAvatarBridge(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const state = window as typeof window & Record<string, unknown>;
-  if (state[INSTALL_KEY]) return;
-  state[INSTALL_KEY] = true;
+  if (bridgeInstalled) return;
+  bridgeInstalled = true;
 
   const observer = new MutationObserver(() => renderAvatarHost());
   const observe = () => {
@@ -230,9 +230,8 @@ function installLiveCharacterAvatarBridge(): void {
 
 function installTtsFetchMonitor(): void {
   if (typeof window.fetch !== 'function') return;
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const response = await originalFetch(input, init);
+  registerFetchMiddleware('character-avatar-tts-monitor', async (input, init, next) => {
+    const response = await next(input, init);
     if (!isActiveView('chatbot')) return response;
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (!url.includes(TTS_STREAM_PATH) || !response.body || typeof response.body.tee !== 'function') return response;
@@ -244,7 +243,7 @@ function installTtsFetchMonitor(): void {
       statusText: response.statusText,
       headers: response.headers,
     });
-  };
+  });
 }
 
 function installAudioElementMonitor(): void {
@@ -272,7 +271,7 @@ function installAudioBufferSourceMonitor(): void {
     if (patchedPrototypes.has(prototype)) continue;
     patchedPrototypes.add(prototype);
     const originalCreate = prototype.createBufferSource as PatchedCreateBufferSource;
-    if (originalCreate.__omnixAvatarAudioMonitor) continue;
+    if (monitoredCreators.has(originalCreate)) continue;
     const patchedCreate = function patchedAvatarBufferSource(this: AudioContext): AudioBufferSourceNode {
       const source = originalCreate.call(this);
       const originalStart = source.start.bind(source);
@@ -284,7 +283,7 @@ function installAudioBufferSourceMonitor(): void {
       }) as AudioBufferSourceNode['start'];
       return source;
     } as PatchedCreateBufferSource;
-    patchedCreate.__omnixAvatarAudioMonitor = true;
+    monitoredCreators.add(patchedCreate);
     prototype.createBufferSource = patchedCreate;
   }
 }

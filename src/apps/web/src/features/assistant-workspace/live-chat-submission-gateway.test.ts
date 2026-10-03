@@ -1,4 +1,5 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { activeFetchMiddlewares, resetFetchPipelineForTests } from '../../api/fetchPipeline';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -186,8 +187,12 @@ describe('live chat submission gateway', () => {
       });
       expect(intercepted).toHaveBeenCalledOnce();
       expect(fallback).not.toHaveBeenCalled();
-      expect(window.fetch).toBe(fallback);
+      // The interceptor is gone once the handoff returns: later requests reach the base fetch.
+      expect(activeFetchMiddlewares()).not.toContain('live-chat-submission');
+      await window.fetch('/api/chat/sessions');
+      expect(fallback).toHaveBeenCalledOnce();
     } finally {
+      resetFetchPipelineForTests();
       window.fetch = originalFetch;
     }
   });

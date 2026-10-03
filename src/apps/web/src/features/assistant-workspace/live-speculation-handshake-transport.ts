@@ -1,12 +1,8 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
+
 const LEGACY_SPECULATION_STREAM_PATH = /^\/api\/live\/speculation\/sessions\/([^/]+)\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const INSTALLED_KEY = '__omnixLiveSpeculationHandshakeTransportInstalled';
 const CLIENT_GENERATION_PREFIX = 'spec-client-';
-
-type HandshakeTransportWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationHandshakeTransportInstalled?: boolean;
-};
 
 type SpeculationHandshake = {
   ok?: boolean;
@@ -29,27 +25,21 @@ type PriorityRequestInit = RequestInit & {
   priority?: 'high' | 'low' | 'auto';
 };
 
-let previousFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
 
 export function initializeLiveSpeculationHandshakeTransport(): () => void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') {
     return () => undefined;
   }
-  const liveWindow = window as HandshakeTransportWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
-  previousFetch = window.fetch.bind(window);
-
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const fetchImpl = previousFetch ?? window.fetch.bind(window);
-    const bridged = await bridgeLiveSpeculationHandshakeRequest(fetchImpl, input, init);
-    return bridged ?? fetchImpl(input, init);
-  };
-
+  if (removeMiddleware) return () => undefined;
+  const remove = registerFetchMiddleware('live-speculation-handshake', async (input, init, next) => {
+    const bridged = await bridgeLiveSpeculationHandshakeRequest(next as typeof fetch, input, init);
+    return bridged ?? next(input, init);
+  });
+  removeMiddleware = remove;
   return () => {
-    if (previousFetch) window.fetch = previousFetch;
-    previousFetch = null;
-    liveWindow[INSTALLED_KEY] = false;
+    remove();
+    if (removeMiddleware === remove) removeMiddleware = null;
   };
 }
 

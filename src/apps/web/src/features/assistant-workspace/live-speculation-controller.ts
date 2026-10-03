@@ -1,4 +1,5 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
+import { fetchBelow, registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { createLiveSpeechSynthesisOptions } from './live-speech-synthesis-options';
 import {
   LIVE_STT_SPECULATION_CANDIDATE_EVENT,
@@ -10,7 +11,7 @@ import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const INSTALLED_KEY = '__omnixLiveSpeculationInstalled';
+const MIDDLEWARE = 'live-speculation';
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const CORRECTION_PATTERN = /(?:^|\s)(?:uh+|um+|erm+|wait|sorry|actually|correction|no[,. ]+i mean)(?:\s|$)/i;
 const WORD_PATTERN = /[\p{L}\p{N}_]+(?:['’][\p{L}\p{N}_]+)?/gu;
@@ -38,10 +39,6 @@ export function speculationHandshakeWaitBudgetMs(
   }
   return state.responseReady ? LIVE_SPECULATION_HANDSHAKE_GRACE_MS : 0;
 }
-
-type SpeculationWindow = Window & typeof globalThis & {
-  __omnixLiveSpeculationInstalled?: boolean;
-};
 
 type SttPartialDetail = {
   chatSessionId?: string;
@@ -116,7 +113,8 @@ type ActiveSpeculation = {
   prefetchAcceptPromise: Promise<void> | null;
 };
 
-let originalFetch: typeof window.fetch | null = null;
+let removeMiddleware: (() => void) | null = null;
+const ownFetch = fetchBelow(MIDDLEWARE);
 let activeSpeculations: ActiveSpeculation[] = [];
 const partials = new Map<string, string>();
 const correctionTimers = new Map<string, ReturnType<typeof window.setTimeout>>();
@@ -206,11 +204,8 @@ export function speculativeTtsPrefetchEnabled(value: string | undefined): boolea
 
 export function initializeLiveSpeculationController(): () => void {
   if (typeof window === 'undefined') return () => undefined;
-  const liveWindow = window as SpeculationWindow;
-  if (liveWindow[INSTALLED_KEY]) return () => undefined;
-  liveWindow[INSTALLED_KEY] = true;
-  originalFetch = window.fetch.bind(window);
-  window.fetch = interceptChatStream;
+  if (removeMiddleware) return () => undefined;
+  removeMiddleware = registerFetchMiddleware(MIDDLEWARE, interceptChatStream);
 
   const handlePartial = (event: Event): void => {
     const detail = (event as CustomEvent<SttPartialDetail>).detail;
@@ -353,8 +348,8 @@ export function initializeLiveSpeculationController(): () => void {
   );
 
   return () => {
-    if (originalFetch) window.fetch = originalFetch;
-    originalFetch = null;
+    removeMiddleware?.();
+    removeMiddleware = null;
     [...activeSpeculations].forEach((active) => cancelSpeculation(active, 'controller_uninstalled'));
     correctionTimers.forEach((timer) => window.clearTimeout(timer));
     correctionTimers.clear();
@@ -366,7 +361,6 @@ export function initializeLiveSpeculationController(): () => void {
       LIVE_STT_SPECULATION_DELIVERY_SETTLED_EVENT,
       handleDeliverySettled,
     );
-    liveWindow[INSTALLED_KEY] = false;
   };
 }
 
@@ -376,8 +370,8 @@ function clearCorrectionTimer(key: string): void {
   correctionTimers.delete(key);
 }
 
-async function interceptChatStream(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+async function interceptChatStream(input: RequestInfo | URL, init: RequestInit | undefined, next: FetchNext): Promise<Response> {
+  const fetchImpl = next;
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
   const rawUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
   const url = new URL(rawUrl, window.location.origin);
@@ -570,7 +564,7 @@ function createSpeculation(
 }
 
 async function consumeSpeculation(active: ActiveSpeculation, probability?: number): Promise<void> {
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   dispatchPerformance('llm_speculation_started', {
     sessionId: active.sessionId,
     segmentId: active.segmentId,
@@ -684,7 +678,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
   ) return;
   active.prefetchStarted = true;
   active.prefetchAcceptPromise = null;
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   const synthesis = createLiveSpeechSynthesisOptions(clause, {
     scopeKey: active.sessionId,
     enablePerformancePlan: true,
@@ -744,7 +738,7 @@ function startSpeculativeTtsPrefetch(active: ActiveSpeculation, clause: string):
 
 function acceptSpeculativeTts(active: ActiveSpeculation): void {
   if (!active.prefetchStarted || !active.generationId || active.prefetchAcceptPromise) return;
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   active.prefetchAcceptPromise = (active.prefetchPromise ?? Promise.resolve())
     .then(async () => {
       const response = await fetchImpl(
@@ -775,7 +769,7 @@ function cancelSpeculativeTts(active: ActiveSpeculation, reason: string): void {
   if (!active.prefetchStarted || !active.generationId) return;
   active.prefetchStarted = false;
   active.prefetchAcceptPromise = null;
-  const fetchImpl = originalFetch ?? window.fetch.bind(window);
+  const fetchImpl = ownFetch;
   const priorOperation = active.prefetchPromise ?? Promise.resolve();
   active.prefetchPromise = priorOperation
     .catch(() => undefined)

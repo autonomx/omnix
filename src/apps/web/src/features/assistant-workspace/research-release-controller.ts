@@ -1,4 +1,6 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
+
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
 type ReleaseAvailability = {
@@ -26,32 +28,35 @@ type ResearchUnavailableDetail = {
   downgrade_available?: boolean;
 };
 
-type ReleaseWindow = Window & typeof globalThis & {
-  __omnixResearchReleaseInitialized?: boolean;
-};
-
 const CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
 const RELEASE_ATTRIBUTE = 'data-omnix-research-release';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const ENHANCED_MESSAGE_PATH = /^\/api\/assistant\/context\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
-const releaseWindow = window as ReleaseWindow;
 
 let allowDowngrade = false;
 let activeSessionId: string | null = null;
 let availability: ReleaseAvailability = { disabled: true, quick: true, deep: true, hermes_planner: false };
 let releaseMessage = 'Research availability is loading.';
-let baseFetch: typeof window.fetch | null = null;
+const MIDDLEWARE = 'research-release';
+const ownFetch = fetchBelow(MIDDLEWARE);
+let disposeController: (() => void) | null = null;
 
-export function initializeResearchReleaseController(root: ParentNode = document): void {
-  if (releaseWindow.__omnixResearchReleaseInitialized) return;
-  releaseWindow.__omnixResearchReleaseInitialized = true;
-  installFetchWrapper();
+export function initializeResearchReleaseController(root: ParentNode = document): () => void {
+  if (disposeController) return () => undefined;
+  const removeMiddleware = installFetchWrapper();
   injectReleaseControls(root);
   void loadReleaseStatus();
   const observer = new MutationObserver(() => injectReleaseControls(root));
   const target = root instanceof Document ? root.documentElement : root;
   observer.observe(target, { childList: true, subtree: true });
+  const dispose = () => {
+    observer.disconnect();
+    removeMiddleware();
+    if (disposeController === dispose) disposeController = null;
+  };
+  disposeController = dispose;
+  return dispose;
 }
 
 export function shouldOfferResearchDowngrade(mode: ResearchMode, current: ReleaseAvailability): boolean {
@@ -72,10 +77,9 @@ export function researchReleaseMessage(detail: ResearchUnavailableDetail): strin
   return `${reason}.${available}`;
 }
 
-function installFetchWrapper(): void {
-  const originalFetch = window.fetch.bind(window);
-  baseFetch = originalFetch;
-  window.fetch = async (input, init) => {
+function installFetchWrapper(): () => void {
+  return registerFetchMiddleware(MIDDLEWARE, async (input, init, next) => {
+    const originalFetch = next;
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const inputUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
     const parsed = new URL(inputUrl, window.location.origin);
@@ -111,11 +115,11 @@ function installFetchWrapper(): void {
     else if (response.ok) releaseMessage = 'Research mode accepted for this turn.';
     renderReleaseControls();
     return response;
-  };
+  });
 }
 
 async function loadReleaseStatus(sessionId: string | null = activeSessionId): Promise<void> {
-  const fetcher = baseFetch ?? window.fetch.bind(window);
+  const fetcher = ownFetch;
   try {
     const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
     const response = await fetcher(`/api/assistant/research/status${query}`);

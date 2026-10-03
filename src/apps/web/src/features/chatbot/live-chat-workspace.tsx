@@ -1,12 +1,10 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+ 
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 
-import { LiveChatPanel } from './LiveChatPanel';
+import { registerFetchMiddleware } from '../../api/fetchPipeline';
 
-type LiveChatWindow = Window & typeof globalThis & {
-  __omnixLiveChatWorkspaceInstalled?: boolean;
-};
+import { LiveChatPanel } from './LiveChatPanel';
 
 type LiveCallDiagnosticDetail = {
   event?: unknown;
@@ -25,6 +23,7 @@ const SESSION_RECONCILIATION_EVENTS = new Set([
 ]);
 
 let active = false;
+let installed = false;
 let selectedSessionId: string | null = null;
 let mountedRoot: Root | null = null;
 let mountedHost: HTMLElement | null = null;
@@ -44,21 +43,19 @@ export function sessionIdFromChatRequest(input: RequestInfo | URL): string | nul
 
 export function initializeLiveChatWorkspace(queryClient: QueryClient): () => void {
   workspaceQueryClient = queryClient;
-  const liveWindow = window as LiveChatWindow;
-  if (liveWindow.__omnixLiveChatWorkspaceInstalled) return () => undefined;
-  liveWindow.__omnixLiveChatWorkspaceInstalled = true;
+  if (installed) return () => undefined;
+  installed = true;
 
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const removeMiddleware = registerFetchMiddleware('live-chat-workspace', async (input, init, next) => {
     const sessionId = sessionIdFromChatRequest(input);
-    const response = await originalFetch(input, init);
+    const response = await next(input, init);
     if (response.ok && sessionId && sessionId !== selectedSessionId) {
       selectedSessionId = sessionId;
       window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT, { detail: { sessionId } }));
       renderLiveChat();
     }
     return response;
-  };
+  });
 
   const observer = new MutationObserver(() => {
     installLiveChatNavigation();
@@ -106,10 +103,10 @@ export function initializeLiveChatWorkspace(queryClient: QueryClient): () => voi
     document.removeEventListener('click', handleNavigationClick, true);
     closeLiveChat();
     document.querySelector(`[${NAV_ATTRIBUTE}]`)?.remove();
-    window.fetch = originalFetch;
+    removeMiddleware();
     selectedSessionId = null;
     workspaceQueryClient = null;
-    liveWindow.__omnixLiveChatWorkspaceInstalled = false;
+    installed = false;
   };
 }
 
