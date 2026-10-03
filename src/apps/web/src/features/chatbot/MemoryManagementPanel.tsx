@@ -8,6 +8,7 @@ import {
   type MemoryScope,
 } from './memoryClient';
 import './MemoryManagementPanel.css';
+import { downloadJson } from '../../shared/download';
 
 const scopes: MemoryScope[] = ['global', 'workspace', 'project', 'session'];
 const categories: MemoryCategory[] = ['preference', 'fact', 'project', 'relationship', 'instruction'];
@@ -102,13 +103,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
   const exportMutation = useMutation({
     mutationFn: () => memoryClient.exportMemory(sessionId ?? ''),
     onSuccess: (data) => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `omnix-memory-${sessionId ?? 'export'}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadJson(data, `omnix-memory-${sessionId ?? 'export'}.json`);
       setStatus('Memory export downloaded.');
     },
     onError: (error) => setStatus(error instanceof Error ? error.message : 'Memory export failed.'),

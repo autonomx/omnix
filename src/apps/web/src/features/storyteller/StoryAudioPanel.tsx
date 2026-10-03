@@ -6,6 +6,7 @@ import { isFallbackOutputRef, jobOutputRefs } from '../../api/schemas/streams';
 import { storyAudioStreamControlMessageSchema } from './storyAudioMessages';
 import { parseJson } from '../../api/schemas/streams';
 import { normalizeStoryAudioText, useStorySnapshot } from './storySnapshotStore';
+import { downloadUrl } from '../../shared/download';
 
 export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
@@ -271,13 +272,7 @@ export function StoryAudioPanel() {
 
   function downloadAudio(): void {
     if (!audioSource) return;
-    const link = document.createElement('a');
-    link.href = audioSource;
-    link.download = filename;
-    link.rel = 'noopener';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    downloadUrl(audioSource, filename);
     setStatusMessage(`Downloaded ${filename}.`);
   }
 

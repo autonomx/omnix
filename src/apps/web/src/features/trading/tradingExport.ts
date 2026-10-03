@@ -1,4 +1,5 @@
 import type { TradingChartState, TradingLayout, TradingLinkState } from './tradingStore';
+import { downloadJson } from '../../shared/download';
 
 export type TradingWorkspaceExport = {
   schemaVersion: 2;
@@ -24,11 +25,5 @@ export function buildTradingWorkspaceExport(input: Omit<TradingWorkspaceExport, 
 }
 
 export function downloadTradingWorkspaceExport(payload: TradingWorkspaceExport): void {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `omnix-trading-workspace-${payload.exportedAt.replace(/[:.]/g, '-')}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadJson(payload, `omnix-trading-workspace-${payload.exportedAt.replace(/[:.]/g, '-')}.json`);
 }

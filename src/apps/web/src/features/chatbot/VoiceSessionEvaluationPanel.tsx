@@ -12,6 +12,7 @@ import {
 import { LIVE_DURABLE_EVALUATION_SAVED_EVENT } from '../assistant-workspace/live-conversation-durable-evaluation-controller';
 import { LIVE_PRESENCE_POLICY_REFRESH_EVENT } from '../assistant-workspace/live-presence-policy-controller';
 import './VoiceSessionEvaluationPanel.css';
+import { downloadJson } from '../../shared/download';
 
 const PRESETS: PresencePreset[] = ['quiet', 'natural', 'engaged', 'listener'];
 const MINIMUM_TUNING_EVIDENCE = 5;
@@ -121,13 +122,7 @@ export function VoiceSessionEvaluationPanel() {
     setBusy(true);
     try {
       const payload = await liveChatEvaluationClient.export();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'omnix-live-chat-evidence.json';
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadJson(payload, 'omnix-live-chat-evidence.json');
       setStatus('Content-free Voice Session evidence exported.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Voice Session evidence export failed.');

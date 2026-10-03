@@ -9,6 +9,7 @@ import { CharacterHermesPanel } from './CharacterHermesPanel';
 import { CharacterVoiceBackfillButton } from './CharacterVoiceBackfillButton';
 import { VoiceGovernancePanel } from './VoiceGovernancePanel';
 import './CharacterManagementPanel.css';
+import { downloadJson } from '../../shared/download';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'omnix.chatbot.selectedCharacterId';
 
@@ -185,13 +186,7 @@ export function CharacterManagementPanel({
   });
 
   function exportData(data: CharacterDataExport): void {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${data.character.id}-character-export.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadJson(data, `${data.character.id}-character-export.json`);
     setStatus('Character export prepared from current backend state.');
   }
 

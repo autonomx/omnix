@@ -49,6 +49,7 @@ import {
   writeTradingTimezoneId,
   zonedDateTimeToUtc,
 } from './tradingTime';
+import { downloadUrl } from '../../shared/download';
 
 type TradingContextMenuState = ChartAlertPlacement & {
   contextIndicatorId?: CoreIndicatorId;
@@ -166,13 +167,6 @@ function normalizeStreamBar(
     ingestion_revision: ingestionRevision,
     received_at: new Date().toISOString(),
   };
-}
-
-function downloadDataUrl(dataUrl: string, filename: string): void {
-  const anchor = document.createElement('a');
-  anchor.href = dataUrl;
-  anchor.download = filename;
-  anchor.click();
 }
 
 function price(value?: string | null): string {
@@ -1556,7 +1550,7 @@ export function TradingChartPanel({
           <div className="trading-drawing-manager" onPointerDown={(event) => event.stopPropagation()}>
             <button type="button" onClick={() => drawings.undo()} aria-label="Undo drawing">↶</button>
             <button type="button" onClick={() => drawings.redo()} aria-label="Redo drawing">↷</button>
-            <button type="button" onClick={() => adapterRef.current && downloadDataUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
+            <button type="button" onClick={() => adapterRef.current && downloadUrl(adapterRef.current.snapshotDataUrl(), `${chartId}.png`)} aria-label="Snapshot chart">PNG</button>
             {drawings.hasConflict ? (
               <>
                 <span role="status">Drawing conflict</span>

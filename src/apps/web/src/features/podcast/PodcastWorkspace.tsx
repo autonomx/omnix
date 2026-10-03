@@ -18,6 +18,7 @@ import './PodcastWorkspaceLayoutFix.css';
 import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
 import { jobOutputRefs } from '../../api/schemas/streams';
+import { downloadUrl } from '../../shared/download';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -512,7 +513,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
     }
   }
   function selectRecentJob(id: string) { const output = outputsFrom([podcastJobs.find((job) => job.id === id)])[0]; if (output) install(output); }
-  function downloadCurrentOutput(label = 'Podcast audio') { if (!current) return; const link = document.createElement('a'); link.href = current.dataUrl; link.download = `${title || 'podcast-output'}.wav`; link.click(); setMessage(`${label}: download started.`); }
+  function downloadCurrentOutput(label = 'Podcast audio') { if (!current) return; downloadUrl(current.dataUrl, `${title || 'podcast-output'}.wav`); setMessage(`${label}: download started.`); }
   async function copyEpisodeLink() { try { await navigator.clipboard?.writeText(`${location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}`); setMessage('Podcast link copied.'); } catch {} }
 
   return (

@@ -813,17 +813,9 @@ function setVoiceSpeaking(speaking: boolean, kind?: LiveTurnKind): void {
   }
 }
 
+// Chat shows it in its status line.
 function setInlineStatus(message: string): void {
-  const host = document.querySelector<HTMLElement>('.assistant-inline-status');
-  if (!host) return;
-  let status = host.querySelector<HTMLElement>('[data-omnix-live-voice-stream-status]');
-  if (!status) {
-    status = document.createElement('span');
-    status.setAttribute('data-omnix-live-voice-stream-status', 'true');
-    status.setAttribute('role', 'status');
-    host.appendChild(status);
-  }
-  status.textContent = message;
+  liveCallPresentationStore.update({ streamStatus: message });
 }
 
 function filterLegacyAudioTextChunks(stream: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {

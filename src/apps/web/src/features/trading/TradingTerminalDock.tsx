@@ -11,6 +11,7 @@ import './TradingTerminalDock.css';
 import './TradingTerminalDockMinimize.css';
 import './TradingTerminalDockLight.css';
 import './TradingTerminalDockData.css';
+import { downloadBlob } from '../../shared/download';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
@@ -359,8 +360,7 @@ export function TradingTerminalDock({
     const header = ['Symbol', 'Side', 'Type', 'Quantity', 'Limit price', 'Stop price', 'Fill price', 'Status', 'Commission', 'Placing time', 'Closing time', 'Order ID'];
     const rows = orderHistory.map((order) => [symbol(order.instrument_id), order.side, order.order_type, order.quantity, order.limit_price ?? '', order.stop_price ?? '', order.average_fill_price ?? '', order.status, commissionByOrder.get(order.order_id) ?? '', order.created_at ?? '', order.updated_at ?? '', order.order_id]);
     const csv = [header, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a');
-    link.href = url; link.download = 'paper-order-history.csv'; link.click(); URL.revokeObjectURL(url);
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'paper-order-history.csv');
   };
 
   const renderLeverageField = (label: string, key: keyof Leverage) => (

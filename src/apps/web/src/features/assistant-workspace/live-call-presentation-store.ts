@@ -27,6 +27,8 @@ export type LiveCallPresentationState = {
   autoSpeak: boolean;
   /** The live task instruction chosen for new calls ('' is plain conversation). */
   taskInstruction: string;
+  /** The unified audio path's latest status line. */
+  streamStatus: string | null;
 };
 
 export const LIVE_TASK_INSTRUCTION_STORAGE_KEY = 'omnix.live.taskInstruction';
@@ -55,6 +57,7 @@ function initialState(): LiveCallPresentationState {
     outputKind: null,
     autoSpeak: false,
     taskInstruction: typeof window === 'undefined' ? '' : storedTaskInstruction(),
+    streamStatus: null,
   };
 }
 

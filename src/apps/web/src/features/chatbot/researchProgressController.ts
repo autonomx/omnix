@@ -6,6 +6,7 @@ import {
   type SendChatMessageResponse,
 } from '../../api/client';
 import type { components } from '../../api/generated/types';
+import { downloadBlob } from '../../shared/download';
 
 let researchProgressControllerInstalled = false;
 
@@ -182,15 +183,7 @@ export function handleResearchReportAction(event: Event): void {
 function downloadResearchReport(report: HTMLElement): void {
   const host = report.closest<HTMLElement>('[data-raw-content]');
   const content = host?.dataset.rawContent || report.querySelector<HTMLElement>('.assistant-research-report-body')?.innerText || '';
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'omnix-research-report.md';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), 'omnix-research-report.md');
 }
 
 async function pollResearchJob(jobId: string): Promise<void> {

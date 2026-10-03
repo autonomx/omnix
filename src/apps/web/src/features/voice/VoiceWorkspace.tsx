@@ -18,6 +18,7 @@ import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type S
 import './VoiceStudioWorkspace.css';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { isFallbackOutputRef, jobOutputRefs, type JobOutputRef } from '../../api/schemas/streams';
+import { downloadUrl } from '../../shared/download';
 
 interface VoiceFormValues {
   text: string;
@@ -439,10 +440,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
       setSaveMessage('Generate speech before saving output.');
       return;
     }
-    const link = document.createElement('a');
-    link.href = currentOutput.dataUrl;
-    link.download = `${safeDownloadName(currentOutput.title)}.wav`;
-    link.click();
+    downloadUrl(currentOutput.dataUrl, `${safeDownloadName(currentOutput.title)}.wav`);
   }
 
   async function toggleRecording() {

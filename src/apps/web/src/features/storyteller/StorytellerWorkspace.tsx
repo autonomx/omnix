@@ -11,6 +11,7 @@ import { StoryExtraPanels } from './StoryExtraPanels';
 import { StorytellerToolbox } from './StorytellerToolbox';
 import { jobProgressPercent } from '../../api/jobProgress';
 import { publishStorySnapshot } from './storySnapshotStore';
+import { downloadBlob } from '../../shared/download';
 
 interface StorytellerFormValues {
   providerId: string;
@@ -555,16 +556,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
         setSaveFeedback({ kind: 'exported', message: `Prepared Markdown export for ${filename}.` });
         return;
       }
-      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.rel = 'noopener';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      downloadBlob(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), filename);
       setSaveFeedback({ kind: 'exported', message: `Exported ${filename}.` });
     } catch (error) {
       setSaveFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Unable to export story.' });

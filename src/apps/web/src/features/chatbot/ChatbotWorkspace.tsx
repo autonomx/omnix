@@ -2085,6 +2085,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
             {chatJobError ? <span role="alert">{chatJobError}</span> : null}
             {audioStatus ? <span role="status">{audioStatus}</span> : null}
             {pcmStream.status ? <span role="status">{pcmStream.status}</span> : null}
+            {livePresentation.streamStatus ? <span role="status" data-omnix-live-voice-stream-status="true">{livePresentation.streamStatus}</span> : null}
             {settingsStatus && activeView === 'settings' ? <span role="status">{settingsStatus}</span> : null}
             {sendMutation.data ? <span role="status">{chatJobQuery.data?.status === 'completed' ? 'Response ready' : chatJobQuery.data?.status === 'failed' ? 'Response failed' : chatJobQuery.data?.status === 'canceled' ? 'Response canceled' : 'Response job accepted'}: {sendMutation.data.job.id}</span> : null}
           </div>
