@@ -4,9 +4,9 @@
     gap: 1rem;
     margin-top: 1.2rem;
     padding: 1.2rem;
-    border: 1px solid rgba(168, 139, 250, 0.2);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 20%, transparent);
     border-radius: 18px;
-    background: linear-gradient(145deg, rgba(15, 23, 42, 0.7), rgba(7, 10, 28, 0.9));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--c-indigo-210) 70%, transparent), color-mix(in srgb, var(--c-slate-150-2) 90%, transparent));
   }
 
   .rpg-dossier-quality-panel > header {
@@ -23,11 +23,11 @@
 
   .rpg-dossier-quality-panel > header p:last-child {
     margin-bottom: 0;
-    color: rgba(203, 213, 225, 0.78);
+    color: color-mix(in srgb, var(--c-slate-870) 78%, transparent);
   }
 
   .rpg-dossier-quality-panel > header > strong {
-    color: #fde68a;
+    color: var(--c-yellow-920-2);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 2.4rem;
   }
@@ -36,14 +36,14 @@
     height: 8px;
     overflow: hidden;
     border-radius: 999px;
-    background: rgba(2, 6, 23, 0.85);
+    background: color-mix(in srgb, var(--c-blue-130) 85%, transparent);
   }
 
   .rpg-dossier-quality-meter i {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #7c3aed, #d4af37);
+    background: linear-gradient(90deg, var(--c-violet-540), var(--c-yellow-770));
   }
 
   .rpg-dossier-quality-metrics {
@@ -56,13 +56,13 @@
     display: grid;
     gap: 0.25rem;
     padding: 0.8rem;
-    border: 1px solid rgba(168, 139, 250, 0.14);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
     border-radius: 12px;
-    background: rgba(2, 6, 23, 0.5);
+    background: color-mix(in srgb, var(--c-blue-130) 50%, transparent);
   }
 
   .rpg-dossier-quality-metrics small {
-    color: rgba(196, 181, 253, 0.82);
+    color: color-mix(in srgb, var(--c-violet-810) 82%, transparent);
     font-size: 0.68rem;
     font-weight: 800;
     letter-spacing: 0.05em;
@@ -70,19 +70,19 @@
   }
 
   .rpg-dossier-quality-metrics strong {
-    color: #f8fafc;
+    color: var(--c-neutral-1000);
     font-size: 1.3rem;
   }
 
   .rpg-dossier-quality-topics {
-    border: 1px solid rgba(168, 139, 250, 0.16);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
     border-radius: 12px;
     padding: 0.8rem;
   }
 
   .rpg-dossier-quality-topics summary {
     cursor: pointer;
-    color: #ddd6fe;
+    color: var(--c-indigo-900);
     font-weight: 800;
   }
 
@@ -99,7 +99,7 @@
     gap: 0.15rem 0.6rem;
     padding: 0.65rem;
     border-radius: 10px;
-    background: rgba(2, 6, 23, 0.42);
+    background: color-mix(in srgb, var(--c-blue-130) 42%, transparent);
   }
 
   .rpg-dossier-quality-topics strong {
@@ -107,13 +107,13 @@
   }
 
   .rpg-dossier-quality-topics span {
-    color: #fde68a;
+    color: var(--c-yellow-920-2);
     font-weight: 900;
   }
 
   .rpg-dossier-quality-topics small {
     grid-column: 1 / -1;
-    color: rgba(203, 213, 225, 0.7);
+    color: color-mix(in srgb, var(--c-slate-870) 70%, transparent);
   }
 
   .rpg-dossier-quality-actions {
@@ -129,17 +129,17 @@
   }
 
   .rpg-dossier-quality-actions label span {
-    color: #c4b5fd;
+    color: var(--c-violet-810);
     font-size: 0.68rem;
     font-weight: 800;
     text-transform: uppercase;
   }
 
   .rpg-dossier-quality-actions select {
-    border: 1px solid rgba(168, 139, 250, 0.25);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 25%, transparent);
     border-radius: 9px;
-    background: rgba(2, 6, 23, 0.8);
-    color: #f8fafc;
+    background: color-mix(in srgb, var(--c-blue-130) 80%, transparent);
+    color: var(--c-neutral-1000);
     padding: 0.65rem;
   }
 
@@ -147,9 +147,9 @@
     display: grid;
     gap: 0.8rem;
     padding: 1rem;
-    border: 1px solid rgba(250, 204, 21, 0.25);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-880) 25%, transparent);
     border-radius: 14px;
-    background: rgba(76, 29, 149, 0.18);
+    background: color-mix(in srgb, var(--c-violet-380) 18%, transparent);
   }
 
   .rpg-dossier-enrichment-plan > header,
@@ -166,7 +166,7 @@
   }
 
   .rpg-dossier-enrichment-plan > p {
-    color: rgba(226, 232, 240, 0.82);
+    color: color-mix(in srgb, var(--c-slate-930) 82%, transparent);
     line-height: 1.55;
   }
 
@@ -182,12 +182,12 @@
     gap: 0.25rem;
     padding: 0.7rem;
     border-radius: 10px;
-    background: rgba(2, 6, 23, 0.5);
+    background: color-mix(in srgb, var(--c-blue-130) 50%, transparent);
   }
 
   .rpg-dossier-enrichment-plan article small,
   .rpg-dossier-enrichment-plan article p {
-    color: rgba(203, 213, 225, 0.7);
+    color: color-mix(in srgb, var(--c-slate-870) 70%, transparent);
     font-size: 0.76rem;
   }
 

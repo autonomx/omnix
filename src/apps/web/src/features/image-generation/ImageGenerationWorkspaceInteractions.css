@@ -1,8 +1,8 @@
 @layer features {
   .image-model-control {
     align-items: center;
-    background: rgba(9, 15, 29, 0.84);
-    border: 1px solid rgba(112, 130, 176, 0.22);
+    background: color-mix(in srgb, var(--c-slate-170-2) 84%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-sky-610) 22%, transparent);
     border-radius: 0.8rem;
     display: grid;
     gap: 0.85rem;
@@ -12,12 +12,12 @@
   }
 
   .image-model-control.loaded {
-    border-color: rgba(34, 197, 94, 0.38);
-    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.06);
+    border-color: color-mix(in srgb, var(--c-green-720) 38%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-green-720) 6%, transparent);
   }
 
   .image-model-control.unloaded {
-    border-color: rgba(139, 92, 246, 0.35);
+    border-color: color-mix(in srgb, var(--c-indigo-600) 35%, transparent);
   }
 
   .image-model-control-copy {
@@ -32,23 +32,23 @@
   }
 
   .image-model-control-title-row strong {
-    color: #eef2ff;
+    color: var(--c-neutral-960);
     display: block;
     font-size: 0.78rem;
   }
 
   .image-model-control-title-row p {
-    color: #97a3ba;
+    color: var(--c-blue-710);
     margin: 0.12rem 0 0;
   }
 
   .image-model-control-icon {
-    color: #9b7bff;
+    color: var(--c-violet-660);
     font-size: 1.1rem;
   }
 
   .image-model-path {
-    color: #77839a;
+    color: var(--c-slate-600);
     margin: 0.45rem 0 0 1.75rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -63,7 +63,7 @@
   }
 
   .image-quality-value {
-    color: #9aa6c0;
+    color: var(--c-blue-710);
     font-size: 0.62rem;
     margin-left: auto;
     white-space: nowrap;
@@ -72,7 +72,7 @@
   .image-job-footer button {
     background: transparent;
     border: 0;
-    color: #a78bfa;
+    color: var(--c-violet-710);
     cursor: pointer;
     font-size: 0.64rem;
     padding: 0;
@@ -80,7 +80,7 @@
 
   .image-job-footer button:hover,
   .image-job-footer button:focus-visible {
-    color: #c4b5fd;
+    color: var(--c-violet-810);
     outline: none;
     text-decoration: underline;
   }
@@ -90,10 +90,10 @@
   }
 
   .image-clear-filters {
-    background: rgba(9, 15, 29, 0.9);
-    border: 1px solid rgba(112, 130, 176, 0.22);
+    background: color-mix(in srgb, var(--c-slate-170-2) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-sky-610) 22%, transparent);
     border-radius: 0.52rem;
-    color: #b6bfd4;
+    color: var(--c-slate-810);
     cursor: pointer;
     min-height: 2.45rem;
     padding: 0 0.72rem;
@@ -102,9 +102,9 @@
 
   .image-clear-filters:hover,
   .image-clear-filters:focus-visible {
-    background: rgba(124, 77, 255, 0.14);
-    border-color: rgba(139, 92, 246, 0.62);
-    color: #eee9ff;
+    background: color-mix(in srgb, var(--c-indigo-600) 14%, transparent);
+    border-color: color-mix(in srgb, var(--c-indigo-600) 62%, transparent);
+    color: var(--c-slate-940);
     outline: none;
   }
 
@@ -122,7 +122,7 @@
   }
 
   .image-asset-select:focus-visible {
-    outline: 2px solid rgba(139, 92, 246, 0.8);
+    outline: 2px solid color-mix(in srgb, var(--c-indigo-600) 80%, transparent);
     outline-offset: -2px;
   }
 
@@ -136,7 +136,7 @@
 
   .image-asset-actions {
     align-items: center;
-    border-top: 1px solid rgba(112, 130, 176, 0.13);
+    border-top: 1px solid color-mix(in srgb, var(--c-sky-610) 13%, transparent);
     display: flex;
     gap: 0.2rem;
     justify-content: flex-end;
@@ -145,13 +145,13 @@
   }
 
   .image-asset-actions .mantine-Button-root {
-    color: #9da8c0;
+    color: var(--c-slate-740);
     font-size: 0.58rem;
     padding-inline: 0.38rem;
   }
 
   .image-asset-actions .mantine-Button-root:hover {
-    color: #d8d0ff;
+    color: var(--c-indigo-900);
   }
 
   .image-assets-grid.list .image-asset-card {
@@ -164,7 +164,7 @@
   }
 
   .image-assets-grid.list .image-asset-actions {
-    border-top: 1px solid rgba(112, 130, 176, 0.13);
+    border-top: 1px solid color-mix(in srgb, var(--c-sky-610) 13%, transparent);
   }
 
   .image-preview-rendered-image {

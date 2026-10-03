@@ -1,17 +1,17 @@
 @layer features {
   .trading-paper-dashboard {
-    --pd-bg: #07101b;
-    --pd-card: #0c1724;
-    --pd-card-soft: #0a1420;
-    --pd-line: rgba(137, 161, 184, .18);
-    --pd-line-soft: rgba(137, 161, 184, .11);
-    --pd-text: #e9f1f8;
-    --pd-muted: #8496a8;
-    --pd-blue: #3b82f6;
-    --pd-blue-soft: rgba(59, 130, 246, .12);
-    --pd-green: #2fb879;
-    --pd-red: #ec4b5d;
-    --pd-shadow: 0 10px 32px rgba(0, 0, 0, .16);
+    --pd-bg: var(--c-slate-170-2);
+    --pd-card: var(--c-indigo-210);
+    --pd-card-soft: var(--c-indigo-190);
+    --pd-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
+    --pd-line-soft: color-mix(in srgb, var(--c-blue-710) 11%, transparent);
+    --pd-text: var(--c-neutral-960);
+    --pd-muted: var(--c-slate-680);
+    --pd-blue: var(--c-blue-630);
+    --pd-blue-soft: color-mix(in srgb, var(--c-blue-630) 12%, transparent);
+    --pd-green: var(--c-teal-700);
+    --pd-red: var(--c-red-640);
+    --pd-shadow: 0 10px 32px color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
     display: grid;
     gap: 14px;
     min-width: 0;
@@ -22,18 +22,18 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-paper-dashboard {
-    --pd-bg: #f7f9fc;
-    --pd-card: #fff;
-    --pd-card-soft: #fbfcfe;
-    --pd-line: #dfe5ec;
-    --pd-line-soft: #edf1f5;
-    --pd-text: #172033;
-    --pd-muted: #697b91;
-    --pd-blue: #2f72f4;
-    --pd-blue-soft: #edf4ff;
-    --pd-green: #22a869;
-    --pd-red: #e84254;
-    --pd-shadow: 0 5px 18px rgba(41, 61, 88, .08);
+    --pd-bg: var(--c-slate-970-2);
+    --pd-card: var(--c-neutral-1000);
+    --pd-card-soft: var(--c-neutral-1000);
+    --pd-line: var(--c-slate-930);
+    --pd-line-soft: var(--c-neutral-960);
+    --pd-text: var(--c-blue-240-2);
+    --pd-muted: var(--c-blue-560);
+    --pd-blue: var(--c-indigo-590);
+    --pd-blue-soft: var(--c-slate-970-2);
+    --pd-green: var(--c-teal-700);
+    --pd-red: var(--c-red-640);
+    --pd-shadow: 0 5px 18px color-mix(in srgb, var(--c-blue-350) 8%, transparent);
   }
 
   .paper-dashboard-header,
@@ -112,7 +112,7 @@
     outline: none;
   }
 
-  .paper-dashboard-error { border: 1px solid rgba(236, 75, 93, .35); border-radius: 8px; background: rgba(236, 75, 93, .08); padding: 9px 11px; color: var(--pd-red); font-size: 11px; }
+  .paper-dashboard-error { border: 1px solid color-mix(in srgb, var(--c-red-640) 35%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--c-red-640) 8%, transparent); padding: 9px 11px; color: var(--pd-red); font-size: 11px; }
 
   .paper-overview-strip {
     display: grid;
@@ -135,8 +135,8 @@
   }
   .paper-overview-metric:last-child { border-right: 0; }
   .paper-overview-metric .metric-icon { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; background: var(--pd-blue-soft); color: var(--pd-blue); font-size: 13px; font-weight: 800; }
-  .paper-overview-metric.tone-positive .metric-icon { background: rgba(47, 184, 121, .11); color: var(--pd-green); }
-  .paper-overview-metric.tone-negative .metric-icon { background: rgba(236, 75, 93, .1); color: var(--pd-red); }
+  .paper-overview-metric.tone-positive .metric-icon { background: color-mix(in srgb, var(--c-teal-700) 11%, transparent); color: var(--pd-green); }
+  .paper-overview-metric.tone-negative .metric-icon { background: color-mix(in srgb, var(--c-red-640) 10%, transparent); color: var(--pd-red); }
   .paper-overview-metric > div { display: grid; gap: 4px; min-width: 0; }
   .paper-overview-metric small { overflow: hidden; color: var(--pd-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .paper-overview-metric strong { overflow: hidden; color: var(--pd-text); font-size: 15px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
@@ -173,19 +173,19 @@
 
   .paper-dashboard-chart { width: 100%; height: 222px; overflow: visible; }
   .paper-dashboard-chart .series { stroke: var(--pd-blue); stroke-width: 2; vector-effect: non-scaling-stroke; }
-  .paper-dashboard-chart .chart-area { fill: rgba(59, 130, 246, .08); }
+  .paper-dashboard-chart .chart-area { fill: color-mix(in srgb, var(--c-blue-630) 8%, transparent); }
   .paper-dashboard-chart .grid { stroke: var(--pd-line); stroke-width: 1; }
   .paper-dashboard-chart .grid.faint { opacity: .45; }
-  .paper-dashboard-chart .reference { stroke: rgba(118, 139, 162, .65); stroke-width: 1; stroke-dasharray: 4 4; }
+  .paper-dashboard-chart .reference { stroke: color-mix(in srgb, var(--c-slate-630) 65%, transparent); stroke-width: 1; stroke-dasharray: 4 4; }
   .paper-dashboard-chart .reference.target { stroke: var(--pd-green); }
   .paper-dashboard-chart .reference-label,
   .paper-dashboard-chart .axis-label { fill: var(--pd-muted); font-size: 10px; }
   .paper-dashboard-chart .last-point { fill: var(--pd-card); stroke: var(--pd-blue); stroke-width: 2; }
   .paper-dashboard-chart.tone-danger .series { stroke: var(--pd-red); }
-  .paper-dashboard-chart.tone-danger .chart-area { fill: rgba(236, 75, 93, .09); }
+  .paper-dashboard-chart.tone-danger .chart-area { fill: color-mix(in srgb, var(--c-red-640) 9%, transparent); }
   .paper-dashboard-chart.tone-danger .last-point { stroke: var(--pd-red); }
   .paper-dashboard-chart.tone-success .series { stroke: var(--pd-green); }
-  .paper-dashboard-chart.tone-success .chart-area { fill: rgba(47, 184, 121, .08); }
+  .paper-dashboard-chart.tone-success .chart-area { fill: color-mix(in srgb, var(--c-teal-700) 8%, transparent); }
 
   .paper-dashboard-daily-bars {
     display: flex;
@@ -237,8 +237,8 @@
   .paper-trades-table td { color: var(--pd-muted); }
   .paper-trades-table td strong { color: var(--pd-text); }
   .trade-outcome { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; border-radius: 999px; padding: 4px 7px; font-size: 8px; font-weight: 700; }
-  .trade-outcome.win { background: rgba(47, 184, 121, .1); color: var(--pd-green); }
-  .trade-outcome.loss { background: rgba(236, 75, 93, .1); color: var(--pd-red); }
+  .trade-outcome.win { background: color-mix(in srgb, var(--c-teal-700) 10%, transparent); color: var(--pd-green); }
+  .trade-outcome.loss { background: color-mix(in srgb, var(--c-red-640) 10%, transparent); color: var(--pd-red); }
   .paper-order-references-card { margin-bottom: 10px; }
   .paper-order-status { color: var(--pd-muted); font-size: 8px; font-weight: 700; }
   .paper-order-status.status-filled { color: var(--pd-green); }
@@ -269,17 +269,17 @@
   .paper-dashboard-grid article.wide,
   .paper-dashboard-grid > .wide { grid-column: 1 / -1; }
 
-  .paper-qualification { display: grid; gap: 10px; border: 1px solid rgba(226, 164, 57, .35); border-radius: 10px; background: rgba(226, 164, 57, .06); padding: 12px; }
-  .paper-qualification[data-authorized='true'] { border-color: rgba(47, 184, 121, .38); background: rgba(47, 184, 121, .06); }
-  .paper-qualification > header > span { border-radius: 6px; background: rgba(226, 164, 57, .12); padding: 5px 8px; color: #d09b3a; font-size: 9px; font-weight: 800; }
-  .paper-qualification[data-authorized='true'] > header > span { background: rgba(47, 184, 121, .12); color: var(--pd-green); }
+  .paper-qualification { display: grid; gap: 10px; border: 1px solid color-mix(in srgb, var(--c-yellow-770) 35%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--c-yellow-770) 6%, transparent); padding: 12px; }
+  .paper-qualification[data-authorized='true'] { border-color: color-mix(in srgb, var(--c-teal-700) 38%, transparent); background: color-mix(in srgb, var(--c-teal-700) 6%, transparent); }
+  .paper-qualification > header > span { border-radius: 6px; background: color-mix(in srgb, var(--c-yellow-770) 12%, transparent); padding: 5px 8px; color: var(--c-yellow-720); font-size: 9px; font-weight: 800; }
+  .paper-qualification[data-authorized='true'] > header > span { background: color-mix(in srgb, var(--c-teal-700) 12%, transparent); color: var(--pd-green); }
   .qualification-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 6px; }
   .qualification-grid > div { position: relative; display: grid; gap: 3px; border-radius: 7px; background: var(--pd-card-soft); padding: 8px 26px 8px 9px; }
   .qualification-grid small { color: var(--pd-muted); font-size: 8px; }
   .qualification-grid strong { font-size: 11px; }
   .qualification-grid > div > span { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; }
   .qualification-grid > div[data-pass='true'] > span { color: var(--pd-green); }
-  .qualification-grid > div[data-pass='false'] > span { color: #d09b3a; }
+  .qualification-grid > div[data-pass='false'] > span { color: var(--c-yellow-720); }
   .paper-qualification footer { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--pd-muted); font-size: 8px; }
 
   .paper-dashboard-histogram { display: grid; grid-template-columns: repeat(8, minmax(36px, 1fr)); align-items: end; gap: 5px; height: 200px; }
@@ -296,7 +296,7 @@
   .paper-funnel span { font-size: 8px; font-weight: 700; }
   .paper-funnel strong { font-size: 18px; }
   .paper-funnel small { color: var(--pd-muted); font-size: 8px; }
-  .paper-funnel em { color: #d09b3a; font-size: 8px; font-style: normal; overflow-wrap: anywhere; }
+  .paper-funnel em { color: var(--c-yellow-720); font-size: 8px; font-style: normal; overflow-wrap: anywhere; }
 
   .paper-factor-studies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .paper-factor-studies section { display: grid; gap: 6px; min-width: 0; }
@@ -304,7 +304,7 @@
 
   .paper-epochs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 7px; }
   .paper-epochs > div { display: grid; gap: 3px; border: 1px solid var(--pd-line); border-radius: 8px; background: var(--pd-card-soft); padding: 9px; }
-  .paper-epochs > div[data-current='true'] { border-color: rgba(47, 184, 121, .45); }
+  .paper-epochs > div[data-current='true'] { border-color: color-mix(in srgb, var(--c-teal-700) 45%, transparent); }
   .paper-epochs span { color: var(--pd-muted); font-size: 8px; font-weight: 800; }
   .paper-epochs small { color: var(--pd-muted); font-size: 8px; }
 

@@ -1,15 +1,15 @@
 @layer features {
   .live-chat-fullscreen-shell {
-    --immersive-bg: #090815;
-    --immersive-panel: rgba(21, 17, 42, 0.92);
-    --immersive-panel-soft: rgba(29, 23, 55, 0.72);
-    --immersive-border: rgba(165, 145, 255, 0.2);
-    --immersive-text: #f7f4ff;
-    --immersive-muted: #aaa3c1;
-    --immersive-accent: #b35c98;
+    --immersive-bg: var(--c-slate-150-2);
+    --immersive-panel: color-mix(in srgb, var(--c-indigo-200) 92%, transparent);
+    --immersive-panel-soft: color-mix(in srgb, var(--c-violet-230) 72%, transparent);
+    --immersive-border: color-mix(in srgb, var(--c-violet-710) 20%, transparent);
+    --immersive-text: var(--c-slate-970-2);
+    --immersive-muted: var(--c-slate-730);
+    --immersive-accent: var(--c-pink-600);
     background:
-      radial-gradient(circle at 12% 10%, rgba(91, 62, 153, 0.24), transparent 32rem),
-      radial-gradient(circle at 82% 92%, rgba(48, 75, 135, 0.16), transparent 30rem),
+      radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--c-violet-470) 24%, transparent), transparent 32rem),
+      radial-gradient(circle at 82% 92%, color-mix(in srgb, var(--c-blue-460-2) 16%, transparent), transparent 30rem),
       var(--immersive-bg);
     color: var(--immersive-text);
     display: grid;
@@ -47,8 +47,8 @@
 
   .live-chat-fullscreen-brand > span {
     align-items: center;
-    background: rgba(120, 94, 210, 0.15);
-    border: 1px solid rgba(152, 126, 240, 0.28);
+    background: color-mix(in srgb, var(--c-violet-570) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 28%, transparent);
     border-radius: 50%;
     display: flex;
     height: 2.25rem;
@@ -81,7 +81,7 @@
   }
 
   .live-chat-fullscreen-topbar-actions > span {
-    background: rgba(25, 22, 45, 0.78);
+    background: color-mix(in srgb, var(--c-indigo-220) 78%, transparent);
     border: 1px solid var(--immersive-border);
     border-radius: 999px;
     gap: 0.45rem;
@@ -90,7 +90,7 @@
 
   .live-chat-fullscreen-topbar-actions > span i,
   .live-chat-stage-caption i {
-    background: #8f839e;
+    background: var(--c-slate-630);
     border-radius: 50%;
     box-shadow: 0 0 0.55rem currentColor;
     height: 0.42rem;
@@ -100,7 +100,7 @@
   .live-chat-fullscreen-topbar-actions > span.connected i,
   .live-chat-fullscreen-shell.mode-speaking .live-chat-stage-caption i,
   .live-chat-fullscreen-shell.mode-listening .live-chat-stage-caption i {
-    background: #ef8ac8;
+    background: var(--c-pink-760);
   }
 
   .live-chat-fullscreen-topbar-actions button,
@@ -125,7 +125,7 @@
   .live-chat-fullscreen-rail {
     border: 1px solid var(--immersive-border);
     border-radius: 1.25rem;
-    box-shadow: 0 1.25rem 3rem rgba(0, 0, 0, 0.28);
+    box-shadow: 0 1.25rem 3rem color-mix(in srgb, var(--c-neutral-0) 28%, transparent);
     min-height: 0;
     overflow: hidden;
     position: relative;
@@ -133,9 +133,9 @@
 
   .live-chat-character-stage {
     background:
-      linear-gradient(180deg, rgba(14, 12, 35, 0.08), rgba(10, 9, 24, 0.72)),
-      radial-gradient(circle at 50% 22%, rgba(122, 119, 211, 0.34), transparent 35%),
-      linear-gradient(145deg, #181733, #0d0c20);
+      linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-170) 8%, transparent), color-mix(in srgb, var(--c-slate-150-2) 72%, transparent)),
+      radial-gradient(circle at 50% 22%, color-mix(in srgb, var(--c-violet-650) 34%, transparent), transparent 35%),
+      linear-gradient(145deg, var(--c-indigo-220), var(--c-indigo-170));
     background-position: center;
     background-size: cover;
     display: grid;
@@ -145,7 +145,7 @@
   }
 
   .live-chat-character-stage::before {
-    background: linear-gradient(110deg, transparent 0 18%, rgba(180, 176, 255, 0.06) 18.2% 18.5%, transparent 18.7% 100%);
+    background: linear-gradient(110deg, transparent 0 18%, color-mix(in srgb, var(--c-violet-810) 6%, transparent) 18.2% 18.5%, transparent 18.7% 100%);
     content: '';
     inset: 0;
     pointer-events: none;
@@ -155,12 +155,12 @@
 
   .live-chat-stage-stars {
     background-image:
-      radial-gradient(circle, rgba(255, 255, 255, 0.8) 0 1px, transparent 1.2px),
-      radial-gradient(circle, rgba(201, 196, 255, 0.56) 0 0.8px, transparent 1px);
+      radial-gradient(circle, color-mix(in srgb, var(--c-neutral-1000) 80%, transparent) 0 1px, transparent 1.2px),
+      radial-gradient(circle, color-mix(in srgb, var(--c-violet-830) 56%, transparent) 0 0.8px, transparent 1px);
     background-position: 0 0, 2.3rem 1.6rem;
     background-size: 5.7rem 5.7rem, 7.4rem 7.4rem;
     inset: 0;
-    mask-image: linear-gradient(to bottom, black, transparent 78%);
+    mask-image: linear-gradient(to bottom, var(--c-neutral-0), transparent 78%);
     opacity: 0.46;
     pointer-events: none;
     position: absolute;
@@ -189,7 +189,7 @@
 
   .live-chat-character-stage .eyebrow,
   .live-chat-fullscreen-rail .eyebrow {
-    color: #c0b5dd;
+    color: var(--c-violet-830);
     font-size: 0.68rem;
     font-weight: 800;
     letter-spacing: 0.13em;
@@ -198,10 +198,10 @@
   }
 
   .live-chat-character-stage > header > span {
-    background: rgba(15, 13, 35, 0.58);
+    background: color-mix(in srgb, var(--c-indigo-170) 58%, transparent);
     border: 1px solid var(--immersive-border);
     border-radius: 999px;
-    color: #d7d0eb;
+    color: var(--c-slate-890);
     font-size: 0.72rem;
     padding: 0.45rem 0.7rem;
   }
@@ -218,7 +218,7 @@
   .live-chat-stage-avatar > .assistant-live-character-avatar {
     align-self: stretch;
     aspect-ratio: auto;
-    border-color: rgba(190, 176, 255, 0.24);
+    border-color: color-mix(in srgb, var(--c-violet-810) 24%, transparent);
     box-shadow: none;
     height: 100%;
     min-height: 0;
@@ -231,7 +231,7 @@
   }
 
   .live-chat-stage-avatar img {
-    filter: drop-shadow(0 1.2rem 1.4rem rgba(0, 0, 0, 0.32));
+    filter: drop-shadow(0 1.2rem 1.4rem color-mix(in srgb, var(--c-neutral-0) 32%, transparent));
     height: 100%;
     max-width: 100%;
     object-fit: contain;
@@ -255,10 +255,10 @@
 
   .live-chat-stage-fallback span {
     align-items: center;
-    background: radial-gradient(circle at 35% 30%, #8e82cd, #392d69 68%);
-    border: 1px solid rgba(207, 196, 255, 0.34);
+    background: radial-gradient(circle at 35% 30%, var(--c-violet-650), var(--c-indigo-340-2) 68%);
+    border: 1px solid color-mix(in srgb, var(--c-violet-830) 34%, transparent);
     border-radius: 50%;
-    box-shadow: 0 0 5rem rgba(119, 100, 209, 0.28);
+    box-shadow: 0 0 5rem color-mix(in srgb, var(--c-violet-570) 28%, transparent);
     display: flex;
     font-family: Georgia, 'Times New Roman', serif;
     font-size: clamp(5rem, 12vw, 10rem);
@@ -268,7 +268,7 @@
   }
 
   .live-chat-stage-fallback i {
-    border: 1px solid rgba(203, 193, 255, 0.18);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 18%, transparent);
     border-radius: 50%;
     height: min(51vh, 31rem);
     position: absolute;
@@ -277,8 +277,8 @@
 
   .live-chat-stage-caption {
     align-items: center;
-    background: rgba(17, 15, 37, 0.72);
-    border: 1px solid rgba(190, 176, 255, 0.2);
+    background: color-mix(in srgb, var(--c-indigo-200) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 20%, transparent);
     border-radius: 999px;
     display: flex;
     gap: 0.55rem;
@@ -295,7 +295,7 @@
   }
 
   .live-chat-character-stage > footer {
-    border-top: 1px solid rgba(190, 176, 255, 0.12);
+    border-top: 1px solid color-mix(in srgb, var(--c-violet-810) 12%, transparent);
     color: var(--immersive-muted);
     font-size: 0.69rem;
     padding-top: 0.7rem;
@@ -310,7 +310,7 @@
 
   .live-chat-fullscreen-rail > header {
     align-items: flex-start;
-    border-bottom: 1px solid rgba(190, 176, 255, 0.12);
+    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-810) 12%, transparent);
     display: flex;
     justify-content: space-between;
     padding-bottom: 0.85rem;
@@ -325,12 +325,12 @@
     gap: 0.65rem;
     overflow-y: auto;
     padding: 0.9rem 0.2rem 0.9rem 0;
-    scrollbar-color: rgba(170, 153, 220, 0.35) transparent;
+    scrollbar-color: color-mix(in srgb, var(--c-indigo-750) 35%, transparent) transparent;
   }
 
   .live-chat-fullscreen-transcript article {
-    background: rgba(39, 32, 66, 0.62);
-    border: 1px solid rgba(190, 176, 255, 0.1);
+    background: color-mix(in srgb, var(--c-indigo-260-2) 62%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 10%, transparent);
     border-radius: 0.75rem;
     display: grid;
     gap: 0.35rem;
@@ -339,7 +339,7 @@
   }
 
   .live-chat-fullscreen-transcript article.user {
-    background: rgba(61, 52, 92, 0.56);
+    background: color-mix(in srgb, var(--c-indigo-340) 56%, transparent);
     justify-self: end;
   }
 
@@ -357,7 +357,7 @@
   .live-chat-fullscreen-transcript article strong,
   .live-chat-fullscreen-transcript article time,
   .live-chat-fullscreen-transcript article header span {
-    color: #bbb1d2;
+    color: var(--c-indigo-780);
     font-size: 0.64rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -386,7 +386,7 @@
 
   .live-chat-fullscreen-call-card {
     background: var(--immersive-panel-soft);
-    border: 1px solid rgba(190, 176, 255, 0.14);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 14%, transparent);
     border-radius: 0.85rem;
     display: grid;
     gap: 0.65rem;
@@ -405,10 +405,10 @@
 
   .live-chat-fullscreen-call-card > button {
     align-items: center;
-    background: linear-gradient(100deg, #a84e8d, #7b4c8f);
+    background: linear-gradient(100deg, var(--c-pink-600), var(--c-purple-500));
     border: 0;
     border-radius: 0.65rem;
-    color: white;
+    color: var(--c-neutral-1000);
     cursor: pointer;
     display: flex;
     font-weight: 800;
@@ -418,7 +418,7 @@
   }
 
   .live-chat-fullscreen-call-card > button.danger {
-    background: linear-gradient(100deg, #a44872, #794779);
+    background: linear-gradient(100deg, var(--c-pink-530), var(--c-purple-480));
   }
 
   .live-chat-fullscreen-composer {
@@ -440,8 +440,8 @@
   }
 
   .live-chat-fullscreen-composer textarea {
-    background: rgba(9, 8, 21, 0.76);
-    border: 1px solid rgba(190, 176, 255, 0.18);
+    background: color-mix(in srgb, var(--c-slate-150-2) 76%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 18%, transparent);
     border-radius: 0.7rem;
     color: inherit;
     font: inherit;
@@ -451,8 +451,8 @@
   }
 
   .live-chat-fullscreen-composer > button {
-    background: rgba(145, 111, 207, 0.18);
-    border: 1px solid rgba(190, 176, 255, 0.22);
+    background: color-mix(in srgb, var(--c-violet-650-2) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 22%, transparent);
     border-radius: 0.7rem;
     color: inherit;
     cursor: pointer;
@@ -522,16 +522,16 @@
 
   /* Omnix light appearance: fullscreen Live Voice */
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-shell {
-    --immersive-bg: #dbe6f2;
-    --immersive-panel: rgba(241,248,255,.9);
-    --immersive-panel-soft: rgba(226,237,248,.74);
-    --immersive-border: rgba(86,112,148,.22);
-    --immersive-text: #203049;
-    --immersive-muted: #66778e;
-    --immersive-accent: #597da6;
+    --immersive-bg: var(--c-slate-930);
+    --immersive-panel: color-mix(in srgb, var(--c-slate-970-2) 90%, transparent);
+    --immersive-panel-soft: color-mix(in srgb, var(--c-slate-950) 74%, transparent);
+    --immersive-border: color-mix(in srgb, var(--c-blue-560) 22%, transparent);
+    --immersive-text: var(--c-blue-310);
+    --immersive-muted: var(--c-blue-560);
+    --immersive-accent: var(--c-blue-560);
   }
   :root[data-omnix-appearance='light'] .live-chat-stage-avatar img {
-    filter: drop-shadow(0 .8rem 1rem rgba(62,83,109,.14));
+    filter: drop-shadow(0 .8rem 1rem color-mix(in srgb, var(--c-blue-440) 14%, transparent));
   }
 }
 
@@ -550,8 +550,8 @@
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-shell {
     background:
-      radial-gradient(circle at 12% 10%, rgba(255,255,255,.82), transparent 32rem),
-      radial-gradient(circle at 82% 92%, rgba(154,178,207,.28), transparent 30rem),
+      radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--c-neutral-1000) 82%, transparent), transparent 32rem),
+      radial-gradient(circle at 82% 92%, color-mix(in srgb, var(--c-slate-740) 28%, transparent), transparent 30rem),
       var(--immersive-bg);
     color: var(--immersive-text);
   }
@@ -560,47 +560,47 @@
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-topbar-actions > span,
   :root[data-omnix-appearance='light'] .live-chat-character-stage > header > span,
   :root[data-omnix-appearance='light'] .live-chat-stage-caption {
-    background: rgba(242,248,255,.72);
+    background: color-mix(in srgb, var(--c-slate-970-2) 72%, transparent);
     border-color: var(--immersive-border);
     color: var(--immersive-text);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-character-stage {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.2), rgba(188,207,229,.3)),
-      radial-gradient(circle at 50% 22%, rgba(130,160,197,.24), transparent 35%),
-      linear-gradient(145deg, #eaf1f8, #cbd9e9);
+      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 20%, transparent), color-mix(in srgb, var(--c-slate-850) 30%, transparent)),
+      radial-gradient(circle at 50% 22%, color-mix(in srgb, var(--c-blue-710) 24%, transparent), transparent 35%),
+      linear-gradient(145deg, var(--c-neutral-960), var(--c-slate-870));
   }
 
   :root[data-omnix-appearance='light'] .live-chat-character-stage .eyebrow,
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-rail .eyebrow {
-    color: #55718f;
+    color: var(--c-blue-560);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-rail {
     background: var(--immersive-panel);
     border-color: var(--immersive-border);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 .8rem 1.8rem rgba(50,72,100,.1);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 80%, transparent), 0 .8rem 1.8rem color-mix(in srgb, var(--c-blue-390) 10%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article {
-    background: rgba(255,255,255,.58);
-    border-color: rgba(86,112,148,.15);
+    background: color-mix(in srgb, var(--c-neutral-1000) 58%, transparent);
+    border-color: color-mix(in srgb, var(--c-blue-560) 15%, transparent);
     color: var(--immersive-text);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article.user {
-    background: rgba(190,210,232,.54);
+    background: color-mix(in srgb, var(--c-slate-850) 54%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-transcript article :where(strong,time,header span) {
-    color: #61758e;
+    color: var(--c-blue-560);
   }
 
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-call-card,
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-composer textarea,
   :root[data-omnix-appearance='light'] .live-chat-fullscreen-composer > button {
-    background: rgba(244,249,255,.7);
+    background: color-mix(in srgb, var(--c-slate-970-2) 70%, transparent);
     border-color: var(--immersive-border);
     color: var(--immersive-text);
   }

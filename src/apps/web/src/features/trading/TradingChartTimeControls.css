@@ -41,12 +41,12 @@
     display: grid;
     width: 190px;
     gap: 8px;
-    border: 1px solid rgba(116, 151, 181, .3);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 30%, transparent);
     border-radius: 7px;
-    background: #0b1724;
+    background: var(--c-indigo-210);
     padding: 10px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, .4);
-    color: #dbe7f0;
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--c-neutral-0) 40%, transparent);
+    color: var(--c-slate-930);
   }
 
   .trading-custom-range-popover > strong {
@@ -58,7 +58,7 @@
   .trading-custom-range-popover label {
     display: grid;
     gap: 4px;
-    color: #90a2b4;
+    color: var(--c-blue-710);
     font-size: 9px;
   }
 
@@ -70,7 +70,7 @@
   }
 
   .trading-custom-range-popover > small {
-    color: #ff969d;
+    color: var(--c-red-770);
     font-size: 9px;
   }
 
@@ -85,9 +85,9 @@
   }
 
   .trading-custom-range-popover > div .primary {
-    border-color: #1688ff;
-    background: #1688ff;
-    color: #fff;
+    border-color: var(--c-blue-630);
+    background: var(--c-blue-630);
+    color: var(--c-neutral-1000);
   }
 
   .trading-timezone-trigger {
@@ -104,11 +104,11 @@
     width: 220px;
     max-height: min(330px, 60vh);
     overflow-y: auto;
-    border: 1px solid rgba(116, 151, 181, .3);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 30%, transparent);
     border-radius: 7px;
-    background: #0b1724;
+    background: var(--c-indigo-210);
     padding: 5px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+    box-shadow: 0 12px 30px color-mix(in srgb, var(--c-neutral-0) 45%, transparent);
   }
 
   .trading-timezone-menu button {
@@ -128,12 +128,12 @@
   }
 
   .trading-timezone-menu button small {
-    color: #8599ac;
+    color: var(--c-slate-680);
     font-size: 9px;
   }
 
   .trading-timezone-menu button b {
-    color: #6fb9ff;
+    color: var(--c-blue-770);
     font-size: 13px;
     line-height: 1;
     text-align: center;
@@ -143,7 +143,7 @@
   :root[data-omnix-appearance='light'] .trading-timezone-menu {
     border-color: var(--trading-light-line);
     background: var(--trading-light-surface);
-    box-shadow: 0 12px 28px rgba(50, 70, 92, .2);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--c-blue-390) 20%, transparent);
     color: var(--trading-light-text);
   }
 
@@ -166,7 +166,7 @@
   }
 
   .trading-custom-range-trigger[aria-pressed='true'] {
-    color: #6fb9ff;
+    color: var(--c-blue-770);
   }
 
   .trading-custom-range-popover input {
@@ -186,7 +186,7 @@
 
   .trading-timezone-trigger:hover,
   .trading-timezone-trigger:focus-visible {
-    color: #70baff;
+    color: var(--c-blue-770);
   }
 
   .trading-timezone-menu button {
@@ -194,14 +194,14 @@
     border-radius: 4px;
     background: transparent;
     padding: 4px 6px;
-    color: #c8d5df;
+    color: var(--c-slate-870);
   }
 
   .trading-timezone-menu button:hover,
   .trading-timezone-menu button:focus-visible,
   .trading-timezone-menu button[aria-selected='true'] {
-    background: rgba(22, 136, 255, .16);
-    color: #fff;
+    background: color-mix(in srgb, var(--c-blue-630) 16%, transparent);
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-timezone-menu button {

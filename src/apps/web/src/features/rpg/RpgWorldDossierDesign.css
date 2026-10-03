@@ -20,12 +20,12 @@
     max-height: none;
     overflow: visible;
     padding: clamp(1rem, 2vw, 1.75rem);
-    border: 1px solid rgba(215, 174, 89, 0.2);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 20px;
     background:
-      radial-gradient(circle at 78% 3%, rgba(91, 44, 151, 0.22), transparent 32%),
-      linear-gradient(180deg, rgba(7, 11, 29, 0.98), rgba(4, 8, 22, 0.98));
-    box-shadow: 0 24px 72px rgba(0, 0, 0, 0.3);
+      radial-gradient(circle at 78% 3%, color-mix(in srgb, var(--c-indigo-430) 22%, transparent), transparent 32%),
+      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-150-2) 98%, transparent), color-mix(in srgb, var(--c-blue-130) 98%, transparent));
+    box-shadow: 0 24px 72px color-mix(in srgb, var(--c-neutral-0) 30%, transparent);
   }
 
   .rpg-authoring-detail-backdrop.is-rich-dossier .rpg-authoring-entity-detail-header {
@@ -33,7 +33,7 @@
     top: auto;
     margin: 0 0 1rem;
     padding: 0 0 1rem;
-    border-bottom-color: rgba(215, 174, 89, 0.22);
+    border-bottom-color: color-mix(in srgb, var(--c-yellow-770) 22%, transparent);
     background: transparent;
     backdrop-filter: none;
   }
@@ -47,7 +47,7 @@
 
   .rpg-authoring-dossier-subtitle {
     max-width: 68ch;
-    color: rgba(226, 232, 240, 0.82);
+    color: color-mix(in srgb, var(--c-slate-930) 82%, transparent);
     font-size: 1.04rem;
     line-height: 1.55;
   }
@@ -57,14 +57,14 @@
     min-height: 360px;
     gap: 1.25rem;
     padding: 0.75rem;
-    border: 1px solid rgba(215, 174, 89, 0.18);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(18, 25, 56, 0.82), rgba(27, 13, 55, 0.62));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-220) 82%, transparent), color-mix(in srgb, var(--c-indigo-210-2) 62%, transparent));
   }
 
   .rpg-authoring-detail-backdrop.is-rich-dossier .rpg-authoring-entity-detail-art {
     min-height: 340px;
-    border-color: rgba(215, 174, 89, 0.26);
+    border-color: color-mix(in srgb, var(--c-yellow-770) 26%, transparent);
     border-radius: 14px;
   }
 
@@ -82,9 +82,9 @@
     position: relative;
     margin: 1.1rem 0 0;
     padding: 1.1rem 1.25rem 1.1rem 3.2rem;
-    border: 1px solid rgba(215, 174, 89, 0.2);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-770) 20%, transparent);
     border-radius: 14px;
-    background: linear-gradient(90deg, rgba(56, 35, 77, 0.58), rgba(12, 17, 40, 0.7));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--c-violet-290) 58%, transparent), color-mix(in srgb, var(--c-indigo-190) 70%, transparent));
   }
 
   .rpg-authoring-dossier-quote::before {
@@ -92,7 +92,7 @@
     position: absolute;
     top: 0.35rem;
     left: 1rem;
-    color: #d7ae59;
+    color: var(--c-yellow-770);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 3rem;
     line-height: 1;
@@ -100,7 +100,7 @@
 
   .rpg-authoring-dossier-quote p {
     margin: 0;
-    color: #f1d798;
+    color: var(--c-yellow-910-2);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 1.06rem;
     font-style: italic;
@@ -110,7 +110,7 @@
   .rpg-authoring-dossier-quote cite {
     display: block;
     margin-top: 0.55rem;
-    color: rgba(226, 232, 240, 0.68);
+    color: color-mix(in srgb, var(--c-slate-930) 68%, transparent);
     font-size: 0.84rem;
     font-style: normal;
   }
@@ -132,8 +132,8 @@
     margin-top: 0;
     margin-bottom: 0.85rem;
     padding: 1.2rem 1.25rem;
-    border-color: rgba(215, 174, 89, 0.15);
-    background: rgba(8, 12, 29, 0.74);
+    border-color: color-mix(in srgb, var(--c-yellow-770) 15%, transparent);
+    background: color-mix(in srgb, var(--c-indigo-170) 74%, transparent);
     scroll-margin-top: 1rem;
   }
 
@@ -151,13 +151,13 @@
   .rpg-authoring-dossier-facts h3::before,
   .rpg-authoring-dossier-related h3::before {
     content: '✦';
-    color: #d7ae59;
+    color: var(--c-yellow-770);
     font-size: 0.78rem;
   }
 
   .rpg-authoring-dossier-section p {
     max-width: 82ch;
-    color: rgba(237, 241, 249, 0.92);
+    color: color-mix(in srgb, var(--c-neutral-960) 92%, transparent);
     font-family: Georgia, 'Times New Roman', serif;
     font-size: 1.02rem;
     line-height: 1.82;
@@ -177,13 +177,13 @@
   .rpg-authoring-dossier-facts > dl > div {
     min-width: 0;
     padding: 0.75rem;
-    border: 1px solid rgba(168, 139, 250, 0.14);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
     border-radius: 11px;
-    background: rgba(2, 6, 23, 0.5);
+    background: color-mix(in srgb, var(--c-blue-130) 50%, transparent);
   }
 
   .rpg-authoring-dossier-facts dt {
-    color: #d7ae59;
+    color: var(--c-yellow-770);
     font-size: 0.69rem;
     font-weight: 800;
     letter-spacing: 0.07em;
@@ -193,7 +193,7 @@
   .rpg-authoring-dossier-facts dd {
     margin: 0.35rem 0 0;
     overflow-wrap: anywhere;
-    color: rgba(248, 250, 252, 0.94);
+    color: color-mix(in srgb, var(--c-neutral-1000) 94%, transparent);
     line-height: 1.4;
   }
 
@@ -203,12 +203,12 @@
     display: grid;
     gap: 0.25rem;
     padding: 0.9rem;
-    border-left: 1px solid rgba(215, 174, 89, 0.35);
+    border-left: 1px solid color-mix(in srgb, var(--c-yellow-770) 35%, transparent);
   }
 
   .rpg-authoring-dossier-toc strong {
     margin-bottom: 0.25rem;
-    color: #d7ae59;
+    color: var(--c-yellow-770);
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -216,7 +216,7 @@
 
   .rpg-authoring-dossier-toc a {
     padding: 0.38rem 0.25rem;
-    color: rgba(203, 213, 225, 0.86);
+    color: color-mix(in srgb, var(--c-slate-870) 86%, transparent);
     font-size: 0.8rem;
     line-height: 1.35;
     text-decoration: none;
@@ -224,7 +224,7 @@
 
   .rpg-authoring-dossier-toc a:hover,
   .rpg-authoring-dossier-toc a:focus-visible {
-    color: #f3d98e;
+    color: var(--c-yellow-910-2);
   }
 
   .rpg-authoring-dossier-related {
@@ -257,7 +257,7 @@
       position: static;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       order: -1;
-      border: 1px solid rgba(215, 174, 89, 0.18);
+      border: 1px solid color-mix(in srgb, var(--c-yellow-770) 18%, transparent);
       border-radius: 12px;
     }
 

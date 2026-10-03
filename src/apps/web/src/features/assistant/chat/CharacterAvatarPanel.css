@@ -5,8 +5,8 @@
   }
 
   .character-avatar-type-tabs {
-    background: rgba(5, 10, 22, 0.58);
-    border: 1px solid rgba(130, 146, 190, 0.14);
+    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     border-radius: 0.65rem;
     display: grid;
     gap: 0.3rem;
@@ -17,14 +17,14 @@
   .character-avatar-type-tabs button {
     background: transparent;
     border: 1px solid transparent;
-    color: #8390ad;
+    color: var(--c-blue-660);
     min-height: 2.35rem;
   }
 
   .character-avatar-type-tabs button.is-active {
-    background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(54, 113, 210, 0.18));
-    border-color: rgba(151, 126, 255, 0.32);
-    color: #eef1ff;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 22%, transparent), color-mix(in srgb, var(--c-blue-580) 18%, transparent));
+    border-color: color-mix(in srgb, var(--c-violet-660) 32%, transparent);
+    color: var(--c-neutral-960);
   }
 
   .character-avatar-layout {
@@ -35,8 +35,8 @@
 
   .character-avatar-preview {
     align-self: start;
-    background: rgba(5, 10, 22, 0.58);
-    border: 1px solid rgba(130, 146, 190, 0.16);
+    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 0.75rem;
     overflow: hidden;
   }
@@ -55,7 +55,7 @@
 
   .character-avatar-empty {
     align-content: center;
-    color: #8895b5;
+    color: var(--c-blue-660);
     display: grid;
     gap: 0.25rem;
     justify-items: center;
@@ -64,12 +64,12 @@
   }
 
   .character-avatar-empty > span {
-    color: #9d8cff;
+    color: var(--c-violet-710);
     font-size: 1.6rem;
   }
 
   .character-avatar-empty strong {
-    color: #dce4f8;
+    color: var(--c-indigo-920);
     font-size: 0.8rem;
   }
 
@@ -79,7 +79,7 @@
 
   .character-live2d-preview {
     align-content: end;
-    background: radial-gradient(circle at 50% 30%, rgba(122, 100, 255, 0.34), rgba(5, 10, 22, 0.96));
+    background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--c-indigo-600) 34%, transparent), color-mix(in srgb, var(--c-slate-150-2) 96%, transparent));
     display: grid;
     gap: 0.2rem;
     overflow: hidden;
@@ -88,7 +88,7 @@
   }
 
   .character-live2d-preview::after {
-    background: linear-gradient(transparent, rgba(3, 6, 16, 0.92));
+    background: linear-gradient(transparent, color-mix(in srgb, var(--c-slate-130) 92%, transparent));
     content: '';
     inset: 35% 0 0;
     position: absolute;
@@ -115,7 +115,7 @@
   }
 
   .character-live2d-preview span {
-    color: #b7a9ff;
+    color: var(--c-indigo-750);
     font-size: 0.6rem;
     font-weight: 800;
     letter-spacing: 0.12em;
@@ -123,17 +123,17 @@
   }
 
   .character-live2d-preview strong {
-    color: #f1f3ff;
+    color: var(--c-slate-970-2);
     font-size: 0.8rem;
   }
 
   .character-live2d-preview small {
-    color: #9ba8c5;
+    color: var(--c-slate-740);
     font-size: 0.6rem;
   }
 
   .character-avatar-meta {
-    border-top: 1px solid rgba(130, 146, 190, 0.12);
+    border-top: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
     display: grid;
     gap: 0.45rem;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -147,12 +147,12 @@
   }
 
   .character-avatar-meta small {
-    color: #71809f;
+    color: var(--c-slate-600);
     font-size: 0.57rem;
   }
 
   .character-avatar-meta strong {
-    color: #cbd5eb;
+    color: var(--c-slate-870);
     font-size: 0.65rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -167,7 +167,7 @@
   }
 
   .character-avatar-form label {
-    color: #aeb9d5;
+    color: var(--c-indigo-780);
     display: grid;
     font-size: 0.72rem;
     font-weight: 700;
@@ -187,8 +187,8 @@
 
   .character-avatar-mode-notice {
     align-items: start;
-    background: rgba(124, 92, 255, 0.1);
-    border: 1px solid rgba(151, 126, 255, 0.22);
+    background: color-mix(in srgb, var(--c-indigo-600) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 0.65rem;
     display: grid;
     gap: 0.2rem;
@@ -196,20 +196,20 @@
   }
 
   .character-avatar-mode-notice strong {
-    color: #e4ddff;
+    color: var(--c-violet-920);
     font-size: 0.72rem;
   }
 
   .character-avatar-mode-notice span {
-    color: #8f9cba;
+    color: var(--c-blue-710);
     font-size: 0.64rem;
     line-height: 1.4;
   }
 
   .character-avatar-upload-card {
     align-items: start;
-    background: linear-gradient(135deg, rgba(65, 44, 133, 0.22), rgba(10, 18, 38, 0.76));
-    border: 1px solid rgba(151, 126, 255, 0.25);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-violet-390) 22%, transparent), color-mix(in srgb, var(--c-indigo-190) 76%, transparent));
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 25%, transparent);
     border-radius: 0.75rem;
     display: grid;
     gap: 0.75rem;
@@ -220,10 +220,10 @@
   .character-avatar-upload-preview {
     align-items: center;
     aspect-ratio: 1 / 1;
-    background: rgba(4, 8, 19, 0.72);
-    border: 1px dashed rgba(151, 126, 255, 0.4);
+    background: color-mix(in srgb, var(--c-blue-130) 72%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--c-violet-660) 40%, transparent);
     border-radius: 0.65rem;
-    color: #9d8cff;
+    color: var(--c-violet-710);
     display: flex;
     justify-content: center;
     overflow: hidden;
@@ -246,12 +246,12 @@
   }
 
   .character-avatar-upload-copy > strong {
-    color: #eef2ff;
+    color: var(--c-neutral-960);
     font-size: 0.78rem;
   }
 
   .character-avatar-upload-copy > p {
-    color: #8f9cba;
+    color: var(--c-blue-710);
     font-size: 0.7rem;
     line-height: 1.45;
     margin: 0;
@@ -270,10 +270,10 @@
   }
 
   .character-avatar-upload-picker span {
-    background: rgba(124, 92, 255, 0.18);
-    border: 1px solid rgba(151, 126, 255, 0.34);
+    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
     border-radius: 0.5rem;
-    color: #dcd5ff;
+    color: var(--c-indigo-900);
     cursor: pointer;
     padding: 0.42rem 0.65rem;
   }
@@ -287,7 +287,7 @@
   }
 
   .character-avatar-upload-actions small {
-    color: #71809f;
+    color: var(--c-slate-600);
     font-size: 0.6rem;
     overflow-wrap: anywhere;
   }
@@ -302,7 +302,7 @@
   }
 
   .character-avatar-upload-consent input {
-    accent-color: #7c5cff;
+    accent-color: var(--c-indigo-600);
     margin-top: 0.1rem;
   }
 
@@ -324,10 +324,10 @@
   .character-avatar-progress,
   .character-avatar-status {
     align-items: center;
-    background: rgba(71, 99, 174, 0.1);
-    border: 1px solid rgba(130, 146, 190, 0.12);
+    background: color-mix(in srgb, var(--c-indigo-490) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
     border-radius: 0.6rem;
-    color: #9facc9;
+    color: var(--c-slate-740);
     display: flex;
     flex-wrap: wrap;
     font-size: 0.68rem;
@@ -337,18 +337,18 @@
   }
 
   .character-avatar-progress strong {
-    color: #dce4f8;
+    color: var(--c-indigo-920);
   }
 
   .character-avatar-progress small {
-    color: #f0a8b2;
+    color: var(--c-red-810);
     flex-basis: 100%;
   }
 
   .character-live2d-intro {
     align-items: start;
-    background: linear-gradient(135deg, rgba(67, 53, 145, 0.2), rgba(8, 16, 34, 0.82));
-    border: 1px solid rgba(151, 126, 255, 0.22);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-violet-390) 20%, transparent), color-mix(in srgb, var(--c-indigo-190) 82%, transparent));
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 0.7rem;
     display: flex;
     gap: 0.8rem;
@@ -362,12 +362,12 @@
   }
 
   .character-live2d-intro strong {
-    color: #eceeff;
+    color: var(--c-slate-940);
     font-size: 0.76rem;
   }
 
   .character-live2d-intro p {
-    color: #8d9ab8;
+    color: var(--c-slate-680);
     font-size: 0.66rem;
     line-height: 1.45;
     margin: 0;
@@ -375,24 +375,24 @@
   }
 
   .character-live2d-intro > span {
-    background: rgba(124, 92, 255, 0.14);
-    border: 1px solid rgba(151, 126, 255, 0.22);
+    background: color-mix(in srgb, var(--c-indigo-600) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 999px;
-    color: #c7bdff;
+    color: var(--c-violet-810);
     flex: 0 0 auto;
     font-size: 0.58rem;
     padding: 0.28rem 0.5rem;
   }
 
   .character-live2d-loading {
-    color: #8f9cba;
+    color: var(--c-blue-710);
     font-size: 0.68rem;
     padding: 0.75rem;
     text-align: center;
   }
 
   .character-live2d-loading.is-error {
-    color: #f0a8b2;
+    color: var(--c-red-810);
   }
 
   .character-live2d-model-grid {
@@ -405,14 +405,14 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-right: 0.35rem;
-    scrollbar-color: rgba(151, 126, 255, 0.58) rgba(6, 11, 24, 0.52);
+    scrollbar-color: color-mix(in srgb, var(--c-violet-660) 58%, transparent) color-mix(in srgb, var(--c-slate-150-2) 52%, transparent);
     scrollbar-gutter: stable;
     scrollbar-width: thin;
   }
 
   .character-live2d-model-grid:focus-visible {
     border-radius: 0.7rem;
-    outline: 2px solid rgba(151, 126, 255, 0.72);
+    outline: 2px solid color-mix(in srgb, var(--c-violet-660) 72%, transparent);
     outline-offset: 0.2rem;
   }
 
@@ -421,19 +421,19 @@
   }
 
   .character-live2d-model-grid::-webkit-scrollbar-track {
-    background: rgba(6, 11, 24, 0.52);
+    background: color-mix(in srgb, var(--c-slate-150-2) 52%, transparent);
     border-radius: 999px;
   }
 
   .character-live2d-model-grid::-webkit-scrollbar-thumb {
-    background: rgba(151, 126, 255, 0.58);
+    background: color-mix(in srgb, var(--c-violet-660) 58%, transparent);
     border-radius: 999px;
   }
 
   .character-live2d-model-card {
     align-items: stretch;
-    background: rgba(6, 11, 24, 0.68);
-    border: 1px solid rgba(130, 146, 190, 0.14);
+    background: color-mix(in srgb, var(--c-slate-150-2) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
     border-radius: 0.7rem;
     display: grid;
     gap: 0.65rem;
@@ -447,19 +447,19 @@
 
   .character-live2d-model-card:hover,
   .character-live2d-model-card.is-selected {
-    border-color: rgba(151, 126, 255, 0.42);
+    border-color: color-mix(in srgb, var(--c-violet-660) 42%, transparent);
   }
 
   .character-live2d-model-card.is-selected {
-    box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.2);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-indigo-600) 20%, transparent);
   }
 
   .character-live2d-model-card.is-active {
-    border-color: rgba(78, 231, 194, 0.42);
+    border-color: color-mix(in srgb, var(--c-teal-860) 42%, transparent);
   }
 
   .character-live2d-model-visual {
-    background: radial-gradient(circle at 50% 36%, rgba(124, 92, 255, 0.36), rgba(5, 9, 20, 0.98));
+    background: radial-gradient(circle at 50% 36%, color-mix(in srgb, var(--c-indigo-600) 36%, transparent), color-mix(in srgb, var(--c-slate-150-2) 98%, transparent));
     display: block;
     min-height: 8rem;
     overflow: hidden;
@@ -503,7 +503,7 @@
 
   .character-live2d-model-thumbnail.is-unavailable::after {
     align-items: center;
-    color: #a99cff;
+    color: var(--c-indigo-750);
     content: 'Download to preview';
     display: flex;
     font-size: 0.58rem;
@@ -516,11 +516,11 @@
   }
 
   .character-live2d-model-visual i {
-    background: rgba(5, 9, 20, 0.78);
-    border: 1px solid rgba(191, 180, 255, 0.28);
+    background: color-mix(in srgb, var(--c-slate-150-2) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 28%, transparent);
     border-radius: 999px;
     bottom: 0.45rem;
-    color: #d9d2ff;
+    color: var(--c-indigo-900);
     font-size: 0.52rem;
     font-style: normal;
     font-weight: 800;
@@ -540,18 +540,18 @@
   }
 
   .character-live2d-model-copy strong {
-    color: #e8ecfb;
+    color: var(--c-slate-940);
     font-size: 0.73rem;
   }
 
   .character-live2d-model-copy small {
-    color: #8693af;
+    color: var(--c-blue-660);
     font-size: 0.61rem;
     line-height: 1.4;
   }
 
   .character-live2d-model-copy em {
-    color: #a99cff;
+    color: var(--c-indigo-750);
     font-size: 0.57rem;
     font-style: normal;
     font-weight: 800;
@@ -559,7 +559,7 @@
   }
 
   .character-live2d-model-card.is-active .character-live2d-model-copy em {
-    color: #74e8cc;
+    color: var(--c-teal-860);
   }
 
   .character-live2d-model-card:disabled {
@@ -568,8 +568,8 @@
   }
 
   .character-live2d-license-card {
-    background: rgba(6, 11, 24, 0.72);
-    border: 1px solid rgba(130, 146, 190, 0.16);
+    background: color-mix(in srgb, var(--c-slate-150-2) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 0.7rem;
     display: grid;
     gap: 0.5rem;
@@ -577,25 +577,25 @@
   }
 
   .character-live2d-license-card > strong {
-    color: #e7ebfb;
+    color: var(--c-slate-940);
     font-size: 0.74rem;
   }
 
   .character-live2d-license-card > p {
-    color: #8996b3;
+    color: var(--c-slate-680);
     font-size: 0.63rem;
     line-height: 1.45;
     margin: 0;
   }
 
   .character-live2d-license-links {
-    color: #8996b3;
+    color: var(--c-slate-680);
     font-size: 0.62rem;
   }
 
   .character-live2d-license-card > label {
     align-items: start;
-    color: #aab5cf;
+    color: var(--c-indigo-780);
     display: flex;
     font-size: 0.63rem;
     gap: 0.45rem;
@@ -603,17 +603,17 @@
   }
 
   .character-live2d-license-card input {
-    accent-color: #7c5cff;
+    accent-color: var(--c-indigo-600);
     margin-top: 0.12rem;
   }
 
   .character-live2d-license-card a {
-    color: #ad9fff;
+    color: var(--c-indigo-750);
   }
 
   .character-live2d-download-progress {
     align-items: center;
-    color: #aeb9d5;
+    color: var(--c-indigo-780);
     display: grid;
     font-size: 0.63rem;
     gap: 0.4rem;
@@ -621,7 +621,7 @@
   }
 
   .character-live2d-download-progress-bar {
-    background: rgba(130, 146, 190, 0.16);
+    background: color-mix(in srgb, var(--c-blue-660) 16%, transparent);
     border-radius: 999px;
     height: 0.38rem;
     overflow: hidden;
@@ -630,7 +630,7 @@
 
   .character-live2d-download-progress-bar span {
     animation: character-live2d-download-progress 1.35s ease-in-out infinite;
-    background: linear-gradient(90deg, #6c45e8, #9b82ff, #6c45e8);
+    background: linear-gradient(90deg, var(--c-indigo-540), var(--c-violet-710), var(--c-indigo-540));
     border-radius: inherit;
     height: 100%;
     left: -40%;
@@ -658,8 +658,8 @@
 
   .character-viseme-panel,
   .character-live2d-sync-panel {
-    background: rgba(5, 10, 22, 0.5);
-    border: 1px solid rgba(130, 146, 190, 0.12);
+    background: color-mix(in srgb, var(--c-slate-150-2) 50%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
     border-radius: 0.7rem;
     padding: 0.65rem;
   }
@@ -674,18 +674,18 @@
 
   .character-viseme-panel > header strong,
   .character-live2d-sync-panel > header strong {
-    color: #dce4f8;
+    color: var(--c-indigo-920);
     font-size: 0.72rem;
   }
 
   .character-viseme-panel > header span,
   .character-live2d-sync-panel > header span {
-    color: #8c9ab9;
+    color: var(--c-slate-680);
     font-size: 0.62rem;
   }
 
   .character-live2d-sync-panel > header span {
-    color: #74e8cc;
+    color: var(--c-teal-860);
   }
 
   .character-viseme-strip {
@@ -696,8 +696,8 @@
   }
 
   .character-viseme-strip > span {
-    background: rgba(12, 18, 34, 0.72);
-    border: 1px solid rgba(130, 146, 190, 0.1);
+    background: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 10%, transparent);
     border-radius: 0.45rem;
     display: grid;
     gap: 0.22rem;
@@ -708,7 +708,7 @@
   }
 
   .character-viseme-strip > span.ready {
-    border-color: rgba(124, 92, 255, 0.3);
+    border-color: color-mix(in srgb, var(--c-indigo-600) 30%, transparent);
   }
 
   .character-viseme-strip img,
@@ -722,12 +722,12 @@
 
   .character-viseme-strip i {
     background:
-      radial-gradient(ellipse at 50% 58%, rgba(244, 164, 176, 0.75) 0 15%, rgba(87, 38, 57, 0.84) 17% 31%, transparent 33%),
-      linear-gradient(135deg, rgba(91, 68, 173, 0.24), rgba(23, 30, 57, 0.62));
+      radial-gradient(ellipse at 50% 58%, color-mix(in srgb, var(--c-red-810) 75%, transparent) 0 15%, color-mix(in srgb, var(--c-red-340) 84%, transparent) 17% 31%, transparent 33%),
+      linear-gradient(135deg, color-mix(in srgb, var(--c-violet-470) 24%, transparent), color-mix(in srgb, var(--c-blue-240-2) 62%, transparent));
   }
 
   .character-viseme-strip small {
-    color: #9aa8c5;
+    color: var(--c-slate-740);
     font-size: 0.54rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -736,7 +736,7 @@
 
   .character-viseme-panel > p,
   .character-live2d-sync-panel > p {
-    color: #7c89a6;
+    color: var(--c-slate-630);
     font-size: 0.62rem;
     line-height: 1.45;
     margin: 0.5rem 0 0;

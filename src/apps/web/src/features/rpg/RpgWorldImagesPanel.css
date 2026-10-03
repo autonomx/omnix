@@ -18,15 +18,15 @@
   }
 
   .rpg-world-images-category-filter > span {
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted, var(--c-blue-710));
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
   }
 
   .rpg-world-images-category-filter select {
-    background: rgba(15, 23, 42, .72);
-    border: 1px solid rgba(148, 163, 184, .24);
+    background: color-mix(in srgb, var(--c-indigo-210) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-710) 24%, transparent);
     border-radius: 9px;
     color: inherit;
     font: inherit;
@@ -34,8 +34,8 @@
   }
 
   .rpg-world-images-advanced {
-    background: rgba(15, 23, 42, .45);
-    border: 1px solid rgba(148, 163, 184, .18);
+    background: color-mix(in srgb, var(--c-indigo-210) 45%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-710) 18%, transparent);
     border-radius: 12px;
     padding: 12px 14px;
   }
@@ -60,7 +60,7 @@
 
   .rpg-world-images-advanced label > span,
   .rpg-world-image-prompt > span {
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted, var(--c-blue-710));
     font-size: 12px;
     font-weight: 700;
     letter-spacing: .04em;
@@ -69,8 +69,8 @@
 
   .rpg-world-images-advanced input,
   .rpg-world-image-copy textarea {
-    background: rgba(15, 23, 42, .72);
-    border: 1px solid rgba(148, 163, 184, .24);
+    background: color-mix(in srgb, var(--c-indigo-210) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-710) 24%, transparent);
     border-radius: 10px;
     color: inherit;
     font: inherit;
@@ -78,8 +78,8 @@
   }
 
   .rpg-world-images-progress {
-    background: rgba(8, 47, 73, .42);
-    border: 1px solid rgba(45, 212, 191, .2);
+    background: color-mix(in srgb, var(--c-blue-280) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-cyan-810) 20%, transparent);
     border-radius: 14px;
     display: grid;
     gap: 12px;
@@ -102,20 +102,20 @@
   }
 
   .rpg-world-images-progress-heading > span {
-    color: #99f6e4;
+    color: var(--c-cyan-910-2);
     font-size: 18px;
     font-weight: 800;
   }
 
   .rpg-world-images-progress-track {
-    background: rgba(15, 23, 42, .76);
+    background: color-mix(in srgb, var(--c-indigo-210) 76%, transparent);
     border-radius: 999px;
     height: 9px;
     overflow: hidden;
   }
 
   .rpg-world-images-progress-track > span {
-    background: linear-gradient(90deg, #2dd4bf, #a78bfa);
+    background: linear-gradient(90deg, var(--c-cyan-810), var(--c-violet-710));
     border-radius: inherit;
     display: block;
     height: 100%;
@@ -124,7 +124,7 @@
   }
 
   .rpg-world-images-progress-summary {
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted, var(--c-blue-710));
     display: flex;
     flex-wrap: wrap;
     font-size: 13px;
@@ -132,15 +132,15 @@
   }
 
   .rpg-world-images-progress-summary .is-generating {
-    color: #c4b5fd;
+    color: var(--c-violet-810);
   }
 
   .rpg-world-images-progress-summary .is-failed {
-    color: #fca5a5;
+    color: var(--c-red-810);
   }
 
   .rpg-world-images-progress-summary .is-complete {
-    color: #99f6e4;
+    color: var(--c-cyan-910-2);
   }
 
   .rpg-world-image-grid {
@@ -150,8 +150,8 @@
   }
 
   .rpg-world-image-grid > article {
-    background: rgba(15, 23, 42, .54);
-    border: 1px solid rgba(148, 163, 184, .18);
+    background: color-mix(in srgb, var(--c-indigo-210) 54%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-710) 18%, transparent);
     border-radius: 16px;
     display: grid;
     min-width: 0;
@@ -161,7 +161,7 @@
   .rpg-world-image-preview {
     align-items: center;
     aspect-ratio: 16 / 10;
-    background: linear-gradient(145deg, rgba(30, 41, 59, .95), rgba(15, 23, 42, .95));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--c-blue-280-2) 95%, transparent), color-mix(in srgb, var(--c-indigo-210) 95%, transparent));
     background-position: center;
     background-size: cover;
     display: flex;
@@ -170,14 +170,14 @@
   }
 
   .rpg-world-image-preview > span {
-    color: rgba(226, 232, 240, .58);
+    color: color-mix(in srgb, var(--c-slate-930) 58%, transparent);
     font-size: 54px;
     font-weight: 800;
   }
 
   .rpg-world-image-preview label {
     align-items: center;
-    background: rgba(2, 6, 23, .82);
+    background: color-mix(in srgb, var(--c-blue-130) 82%, transparent);
     border-radius: 999px;
     bottom: 10px;
     display: flex;
@@ -199,7 +199,7 @@
   }
 
   .rpg-world-image-copy > p {
-    color: var(--text-muted, #94a3b8);
+    color: var(--text-muted, var(--c-blue-710));
     font-size: 13px;
   }
 
@@ -217,7 +217,7 @@
   }
 
   .rpg-world-image-copy details {
-    border-top: 1px solid rgba(148, 163, 184, .16);
+    border-top: 1px solid color-mix(in srgb, var(--c-blue-710) 16%, transparent);
     padding-top: 10px;
   }
 
@@ -231,7 +231,7 @@
   }
 
   .rpg-world-image-copy details small {
-    color: #fca5a5;
+    color: var(--c-red-810);
     grid-column: 1 / -1;
     overflow-wrap: anywhere;
   }
@@ -239,7 +239,7 @@
   .rpg-link-button {
     background: transparent;
     border: 0;
-    color: #93c5fd;
+    color: var(--c-sky-830);
     cursor: pointer;
     padding: 0;
     text-decoration: underline;

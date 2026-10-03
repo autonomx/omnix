@@ -1,15 +1,15 @@
 @layer features {
   :root[data-omnix-appearance='light'] {
-    --omnix-page-panel: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(244, 248, 255, 0.92));
-    --omnix-page-panel-flat: rgba(255, 255, 255, 0.82);
-    --omnix-page-panel-muted: rgba(238, 244, 255, 0.82);
-    --omnix-page-line: rgba(86, 102, 145, 0.22);
-    --omnix-page-line-strong: rgba(99, 67, 201, 0.28);
-    --omnix-page-shadow: 0 1rem 2.4rem rgba(37, 51, 86, 0.1);
+    --omnix-page-panel: linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 96%, transparent), color-mix(in srgb, var(--c-slate-970-2) 92%, transparent));
+    --omnix-page-panel-flat: color-mix(in srgb, var(--c-neutral-1000) 82%, transparent);
+    --omnix-page-panel-muted: color-mix(in srgb, var(--c-slate-970-2) 82%, transparent);
+    --omnix-page-line: color-mix(in srgb, var(--c-slate-510) 22%, transparent);
+    --omnix-page-line-strong: color-mix(in srgb, var(--c-indigo-500) 28%, transparent);
+    --omnix-page-shadow: 0 1rem 2.4rem color-mix(in srgb, var(--c-blue-310) 10%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .omnix-main {
-    background: linear-gradient(180deg, rgba(246, 249, 255, 0.92), rgba(241, 246, 255, 0.96));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-slate-970-2) 92%, transparent), color-mix(in srgb, var(--c-slate-970-2) 96%, transparent));
   }
 
 
@@ -22,7 +22,7 @@
   :root[data-omnix-appearance='light'] .workspace-card.assistant-chat-page,
   :root[data-omnix-appearance='light'] .workspace-card.image-workspace {
     background:
-      radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.08), transparent 24rem),
+      radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--c-sky-800) 8%, transparent), transparent 24rem),
       var(--omnix-page-panel);
     border-color: var(--omnix-page-line);
     color: var(--omnix-text);
@@ -105,27 +105,27 @@
 
   :root[data-omnix-appearance='light'] .assistant-chat-header,
   :root[data-omnix-appearance='light'] .assistant-composer {
-    background: linear-gradient(180deg, rgba(250, 252, 255, 0.7), rgba(235, 242, 253, 0.78));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 70%, transparent), color-mix(in srgb, var(--c-neutral-960) 78%, transparent));
     border-color: var(--omnix-page-line);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chat-bubble p {
-    background: rgba(255, 255, 255, 0.86);
+    background: color-mix(in srgb, var(--c-neutral-1000) 86%, transparent);
     border-color: var(--omnix-page-line);
-    color: #24304a;
+    color: var(--c-blue-310);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble {
-    background: linear-gradient(135deg, rgba(117, 85, 225, 0.92), rgba(37, 117, 205, 0.9));
-    border-color: rgba(99, 67, 201, 0.28);
-    box-shadow: 0 0.8rem 1.8rem rgba(99, 67, 201, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.24);
-    color: #ffffff;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-540) 92%, transparent), color-mix(in srgb, var(--c-blue-580) 90%, transparent));
+    border-color: color-mix(in srgb, var(--c-indigo-500) 28%, transparent);
+    box-shadow: 0 0.8rem 1.8rem color-mix(in srgb, var(--c-indigo-500) 14%, transparent), inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 24%, transparent);
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chat-message.user .assistant-chat-bubble p {
     background: transparent;
     border-color: transparent;
-    color: #ffffff;
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .assistant-message-actions button,
@@ -144,14 +144,14 @@
   :root[data-omnix-appearance='light'] .quality-card button,
   :root[data-omnix-appearance='light'] .recent-card .card-heading-row button,
   :root[data-omnix-appearance='light'] .audio-transport-buttons button {
-    background: rgba(255, 255, 255, 0.78);
+    background: color-mix(in srgb, var(--c-neutral-1000) 78%, transparent);
     border-color: var(--omnix-page-line);
     color: var(--omnix-text);
   }
 
   :root[data-omnix-appearance='light'] .assistant-side-panel-toggle,
   :root[data-omnix-appearance='light'] .omnix-mode-tabs {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(235, 242, 253, 0.88));
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 92%, transparent), color-mix(in srgb, var(--c-neutral-960) 88%, transparent));
     border-color: var(--omnix-page-line);
   }
 
@@ -166,9 +166,9 @@
   :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-pill,
   :root[data-omnix-appearance='light'] .assistant-chat-integrated-actions .assistant-header-voice-select,
   :root[data-omnix-appearance='light'] .assistant-send-button {
-    background: linear-gradient(135deg, #7455e1, #2580c8);
-    border-color: rgba(99, 67, 201, 0.32);
-    color: #ffffff;
+    background: linear-gradient(135deg, var(--c-indigo-540), var(--c-blue-580));
+    border-color: color-mix(in srgb, var(--c-indigo-500) 32%, transparent);
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] input,
@@ -181,14 +181,14 @@
   :root[data-omnix-appearance='light'] .image-field textarea,
   :root[data-omnix-appearance='light'] .image-provider-filter select,
   :root[data-omnix-appearance='light'] .image-assets-search input {
-    background: rgba(255, 255, 255, 0.96);
+    background: color-mix(in srgb, var(--c-neutral-1000) 96%, transparent);
     border-color: var(--omnix-page-line);
     color: var(--omnix-text);
   }
 
   :root[data-omnix-appearance='light'] input::placeholder,
   :root[data-omnix-appearance='light'] textarea::placeholder {
-    color: #6b778d;
+    color: var(--c-blue-560);
   }
 
   :root[data-omnix-appearance='light'] h1,
@@ -229,15 +229,15 @@
   :root[data-omnix-appearance='light'] .workspace-heading code,
   :root[data-omnix-appearance='light'] .assistant-tool-config-list article > strong,
   :root[data-omnix-appearance='light'] .assistant-tool-action-row > strong {
-    background: rgba(99, 67, 201, 0.1);
-    border-color: rgba(99, 67, 201, 0.22);
-    color: #493088;
+    background: color-mix(in srgb, var(--c-indigo-500) 10%, transparent);
+    border-color: color-mix(in srgb, var(--c-indigo-500) 22%, transparent);
+    color: var(--c-violet-390);
   }
 
   :root[data-omnix-appearance='light'] .assistant-runtime-card {
     background: var(--omnix-page-panel-flat);
     border-color: var(--omnix-page-line);
-    box-shadow: 0 0.65rem 1.5rem rgba(37, 51, 86, 0.08);
+    box-shadow: 0 0.65rem 1.5rem color-mix(in srgb, var(--c-blue-310) 8%, transparent);
     color: var(--omnix-text);
   }
 
@@ -257,7 +257,7 @@
   }
 
   :root[data-omnix-appearance='light'] .assistant-runtime-test-output {
-    background: rgba(255, 255, 255, 0.92);
+    background: color-mix(in srgb, var(--c-neutral-1000) 92%, transparent);
     border-color: var(--omnix-page-line);
   }
 
@@ -269,6 +269,6 @@
   }
 
   :root[data-omnix-appearance='light'] .assistant-runtime-error {
-    color: #b4233c;
+    color: var(--c-red-500);
   }
 }

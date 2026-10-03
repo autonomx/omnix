@@ -2,9 +2,9 @@
   .rpg-authoring-topic-editor {
     margin-top: 1.25rem;
     padding: 1rem;
-    border: 1px solid rgba(168, 139, 250, 0.22);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 22%, transparent);
     border-radius: 16px;
-    background: rgba(15, 23, 42, 0.5);
+    background: color-mix(in srgb, var(--c-indigo-210) 50%, transparent);
   }
 
   .rpg-authoring-topic-editor h3,
@@ -16,14 +16,14 @@
   .rpg-authoring-topic-regeneration {
     margin-bottom: 1rem;
     padding: 0.8rem;
-    border: 1px solid rgba(168, 139, 250, 0.16);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 16%, transparent);
     border-radius: 12px;
-    background: rgba(2, 6, 23, 0.38);
+    background: color-mix(in srgb, var(--c-blue-130) 38%, transparent);
   }
 
   .rpg-authoring-topic-regeneration > summary {
     cursor: pointer;
-    color: #c4b5fd;
+    color: var(--c-violet-810);
     font-weight: 800;
   }
 
@@ -57,10 +57,10 @@
     width: 100%;
     box-sizing: border-box;
     resize: vertical;
-    border: 1px solid rgba(168, 139, 250, 0.24);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 24%, transparent);
     border-radius: 12px;
-    background: rgba(2, 6, 23, 0.8);
-    color: #f8fafc;
+    background: color-mix(in srgb, var(--c-blue-130) 80%, transparent);
+    color: var(--c-neutral-1000);
     padding: 0.8rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
@@ -77,14 +77,14 @@
     gap: 0.75rem;
     margin-top: 0.65rem;
     padding: 0.75rem;
-    border: 1px solid rgba(168, 139, 250, 0.14);
+    border: 1px solid color-mix(in srgb, var(--c-violet-710) 14%, transparent);
     border-radius: 12px;
-    background: rgba(2, 6, 23, 0.46);
+    background: color-mix(in srgb, var(--c-blue-130) 46%, transparent);
   }
 
   .rpg-authoring-topic-editor-grid > section article p {
     margin: 0.2rem 0;
-    color: var(--omnix-muted, #a7a4b8);
+    color: var(--omnix-muted, var(--c-slate-730));
   }
 
   @media (max-width: 900px) {

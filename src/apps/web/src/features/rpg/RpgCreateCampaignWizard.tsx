@@ -297,11 +297,11 @@ export function RpgCreateCampaignWizard(props: RpgCreateCampaignWizardProps) {
       <section
         aria-label="Selected campaign world"
         style={{
-          border: '1px solid var(--border-subtle, rgba(255,255,255,.12))',
+          border: '1px solid var(--border-subtle, color-mix(in srgb, var(--c-neutral-1000) 12%, transparent))',
           borderRadius: 14,
           padding: 14,
           marginBottom: 14,
-          background: 'var(--surface-elevated, rgba(255,255,255,.035))',
+          background: 'var(--surface-elevated, color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent))',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>

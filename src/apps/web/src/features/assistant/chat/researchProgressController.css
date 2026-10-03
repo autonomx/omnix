@@ -2,10 +2,10 @@
   .assistant-research-progress {
     margin: 0.75rem 1rem 1rem;
     padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, #845ef7) 38%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mantine-color-violet-5, var(--c-indigo-600)) 38%, transparent);
     border-radius: 0.9rem;
-    background: color-mix(in srgb, var(--mantine-color-dark-7, #1a1b1e) 88%, var(--mantine-color-violet-9, #5f3dc4));
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+    background: color-mix(in srgb, var(--mantine-color-dark-7, var(--c-neutral-220)) 88%, var(--mantine-color-violet-9, var(--c-indigo-500)));
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
   }
 
   .assistant-research-progress > header,
@@ -38,7 +38,7 @@
   .assistant-research-status {
     padding: 0.25rem 0.55rem;
     border-radius: 999px;
-    background: rgba(132, 94, 247, 0.18);
+    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
     font-size: 0.75rem;
     font-weight: 700;
   }
@@ -48,21 +48,21 @@
     margin: 0.85rem 0;
     overflow: hidden;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
   }
 
   .assistant-research-progress-track > span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #7950f2, #b197fc);
+    background: linear-gradient(90deg, var(--c-indigo-600), var(--c-indigo-750));
     transition: width 240ms ease;
   }
 
   .assistant-research-announcement {
     min-height: 1.4rem;
     margin-bottom: 0.75rem;
-    color: var(--mantine-color-gray-3, #dee2e6);
+    color: var(--mantine-color-gray-3, var(--c-neutral-910));
   }
 
   .assistant-research-progress-actions button,
@@ -70,9 +70,9 @@
   .assistant-research-job-details a {
     min-height: 2rem;
     padding: 0.35rem 0.7rem;
-    border: 1px solid rgba(255, 255, 255, 0.16);
+    border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 16%, transparent);
     border-radius: 0.55rem;
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--c-neutral-1000) 6%, transparent);
     color: inherit;
     cursor: pointer;
   }
@@ -105,7 +105,7 @@
   }
 
   .assistant-research-plan-list li.is-completed {
-    color: var(--mantine-color-gray-3, #dee2e6);
+    color: var(--mantine-color-gray-3, var(--c-neutral-910));
   }
 
   .assistant-research-plan-list i {
@@ -115,23 +115,23 @@
     width: 1.1rem;
     height: 1.1rem;
     margin-top: 0.1rem;
-    border: 1px solid rgba(196, 181, 253, 0.64);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 64%, transparent);
     border-radius: 999px;
-    color: #c4b5fd;
+    color: var(--c-violet-810);
   }
 
   .assistant-research-plan-list i::after {
     width: 0.35rem;
     height: 0.35rem;
     border-radius: 999px;
-    background: rgba(196, 181, 253, 0.72);
+    background: color-mix(in srgb, var(--c-violet-810) 72%, transparent);
     content: '';
   }
 
   .assistant-research-plan-list li.is-completed i {
-    border-color: #69db7c;
-    background: rgba(105, 219, 124, 0.16);
-    color: #b2f2bb;
+    border-color: var(--c-green-790-2);
+    background: color-mix(in srgb, var(--c-green-790-2) 16%, transparent);
+    color: var(--c-green-900);
     font-size: 0.75rem;
     font-style: normal;
     font-weight: 800;
@@ -147,9 +147,9 @@
     flex-wrap: wrap;
     gap: 0.6rem 0.85rem;
     padding: 0.7rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 10%, transparent);
     border-radius: 0.65rem;
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
   }
 
   .assistant-research-plan-controls label {
@@ -163,9 +163,9 @@
   .assistant-research-plan-controls input {
     width: 3.3rem;
     min-height: 2rem;
-    border: 1px solid rgba(196, 181, 253, 0.34);
+    border: 1px solid color-mix(in srgb, var(--c-violet-810) 34%, transparent);
     border-radius: 0.45rem;
-    background: rgba(8, 12, 26, 0.58);
+    background: color-mix(in srgb, var(--c-slate-150-2) 58%, transparent);
     color: inherit;
     font: inherit;
     font-weight: 800;
@@ -173,14 +173,14 @@
   }
 
   .assistant-research-plan-controls input[readonly] {
-    border-color: rgba(255, 255, 255, 0.16);
+    border-color: color-mix(in srgb, var(--c-neutral-1000) 16%, transparent);
     cursor: default;
     opacity: 0.8;
   }
 
   .assistant-research-plan-intro {
     margin-bottom: 0.8rem;
-    color: var(--mantine-color-gray-3, #dee2e6);
+    color: var(--mantine-color-gray-3, var(--c-neutral-910));
   }
 
   .status-plan-review {
@@ -192,8 +192,8 @@
   }
 
   .status-plan-progress .assistant-research-status {
-    background: rgba(124, 92, 255, 0.18);
-    color: #d0bfff;
+    background: color-mix(in srgb, var(--c-indigo-600) 18%, transparent);
+    color: var(--c-violet-810);
   }
 
   .status-plan-review > header {
@@ -201,12 +201,12 @@
   }
 
   .status-plan-review .assistant-research-status {
-    background: rgba(52, 211, 153, 0.12);
-    color: #a7f3d0;
+    background: color-mix(in srgb, var(--c-green-790-2) 12%, transparent);
+    color: var(--c-teal-900);
   }
 
   .assistant-research-plan-controls small {
-    color: var(--mantine-color-gray-5, #adb5bd);
+    color: var(--mantine-color-gray-5, var(--c-slate-770));
     font-size: 0.74rem;
   }
 
@@ -221,14 +221,14 @@
   }
 
   [data-omnix-research-plan-error] {
-    color: #fda4af;
+    color: var(--c-red-810);
     font-size: 0.78rem;
   }
 
   .assistant-research-job-details,
   .assistant-research-message-details {
     margin-top: 0.75rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.09);
+    border-top: 1px solid color-mix(in srgb, var(--c-neutral-1000) 9%, transparent);
     padding-top: 0.65rem;
   }
 
@@ -250,12 +250,12 @@
   .assistant-research-message-details dl > div {
     padding: 0.5rem;
     border-radius: 0.5rem;
-    background: rgba(255, 255, 255, 0.04);
+    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
   }
 
   .assistant-research-job-details dt,
   .assistant-research-message-details dt {
-    color: var(--mantine-color-gray-5, #adb5bd);
+    color: var(--mantine-color-gray-5, var(--c-slate-770));
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -281,7 +281,7 @@
 
   .assistant-research-source-list small {
     grid-column: 1 / -1;
-    color: var(--mantine-color-gray-5, #adb5bd);
+    color: var(--mantine-color-gray-5, var(--c-slate-770));
   }
 
   .omnix-research-injected-message .assistant-chat-bubble > p,
@@ -291,10 +291,10 @@
 
   .assistant-research-report {
     overflow: hidden;
-    border: 1px solid rgba(132, 148, 196, 0.28);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 0.95rem;
-    background: linear-gradient(180deg, rgba(31, 35, 58, 0.98), rgba(20, 24, 43, 0.98));
-    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.2);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-260-3) 98%, transparent), color-mix(in srgb, var(--c-indigo-210) 98%, transparent));
+    box-shadow: 0 16px 34px color-mix(in srgb, var(--c-neutral-0) 20%, transparent);
   }
 
   .assistant-research-report-header {
@@ -303,7 +303,7 @@
     justify-content: space-between;
     gap: 1rem;
     padding: 0.85rem 1rem;
-    border-bottom: 1px solid rgba(132, 148, 196, 0.2);
+    border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
   }
 
   .assistant-research-report-heading {
@@ -320,15 +320,15 @@
     width: 2rem;
     height: 2rem;
     border-radius: 0.55rem;
-    background: linear-gradient(135deg, #7950f2, #22d3ee);
-    color: #fff;
+    background: linear-gradient(135deg, var(--c-indigo-600), var(--c-sky-800));
+    color: var(--c-neutral-1000);
     font-size: 1.05rem;
     font-weight: 900;
   }
 
   .assistant-research-report-kicker {
     display: block;
-    color: #67e8f9;
+    color: var(--c-sky-870);
     font-size: 0.68rem;
     font-weight: 850;
     letter-spacing: 0.08em;
@@ -337,7 +337,7 @@
 
   .assistant-research-report-heading h3 {
     margin: 0.12rem 0 0;
-    color: #f8fafc;
+    color: var(--c-neutral-1000);
     font-size: 1rem;
   }
 
@@ -357,7 +357,7 @@
     border: 0;
     border-radius: 0.45rem;
     background: transparent;
-    color: var(--mantine-color-gray-5, #adb5bd);
+    color: var(--mantine-color-gray-5, var(--c-slate-770));
     cursor: pointer;
     font: inherit;
     font-size: 1.05rem;
@@ -365,8 +365,8 @@
 
   .assistant-research-report-tools button:hover,
   .assistant-research-report-tools button:focus-visible {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
+    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
+    color: var(--c-neutral-1000);
     outline: none;
   }
 
@@ -376,29 +376,29 @@
     flex-wrap: wrap;
     gap: 0.55rem;
     padding: 0.7rem 1rem;
-    border-bottom: 1px solid rgba(132, 148, 196, 0.14);
-    color: #b9c3dd;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
+    color: var(--c-slate-810);
     font-size: 0.78rem;
   }
 
   .assistant-research-report-status {
     padding: 0.22rem 0.5rem;
-    border: 1px solid rgba(251, 191, 36, 0.28);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-840) 28%, transparent);
     border-radius: 999px;
-    background: rgba(251, 191, 36, 0.1);
-    color: #fde68a;
+    background: color-mix(in srgb, var(--c-yellow-840) 10%, transparent);
+    color: var(--c-yellow-920-2);
     font-weight: 750;
   }
 
   .assistant-research-report-status.complete {
-    border-color: rgba(52, 211, 153, 0.28);
-    background: rgba(52, 211, 153, 0.1);
-    color: #a7f3d0;
+    border-color: color-mix(in srgb, var(--c-green-790-2) 28%, transparent);
+    background: color-mix(in srgb, var(--c-green-790-2) 10%, transparent);
+    color: var(--c-teal-900);
   }
 
   .assistant-research-report-body {
     padding: 1.15rem 1.25rem 1.3rem;
-    color: #eef2ff;
+    color: var(--c-neutral-960);
     font-size: 0.95rem;
     line-height: 1.65;
   }
@@ -409,14 +409,14 @@
   .assistant-research-report-body h4,
   .assistant-research-report-body h5,
   .assistant-research-report-body h6 {
-    color: #fff;
+    color: var(--c-neutral-1000);
     line-height: 1.25;
   }
 
   .assistant-research-report-body h1 { font-size: 1.55rem; }
   .assistant-research-report-body h2 { font-size: 1.22rem; margin-top: 1.45rem; }
   .assistant-research-report-body p { margin-bottom: 1rem; }
-  .assistant-research-report-body strong { color: #fff; font-weight: 800; }
+  .assistant-research-report-body strong { color: var(--c-neutral-1000); font-weight: 800; }
   .assistant-research-report-body ul,
   .assistant-research-report-body ol { padding-left: 1.45rem; }
 
@@ -466,88 +466,88 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .assistant-research-start {
-    border-color: rgba(196, 181, 253, 0.7);
-    background: linear-gradient(135deg, #7950f2, #a78bfa);
-    color: #ffffff;
+    border-color: color-mix(in srgb, var(--c-violet-810) 70%, transparent);
+    background: linear-gradient(135deg, var(--c-indigo-600), var(--c-violet-710));
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-progress {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.72), rgba(224,235,247,.44)),
-      var(--omnix-panel-bg, rgba(240,247,254,.72));
-    border-color: var(--omnix-border, rgba(86,102,145,.22));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.78), 0 .65rem 1.4rem rgba(50,72,100,.08);
-    color: var(--omnix-text, #203049);
+      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 72%, transparent), color-mix(in srgb, var(--c-slate-930) 44%, transparent)),
+      var(--omnix-panel-bg, color-mix(in srgb, var(--c-slate-970-2) 72%, transparent));
+    border-color: var(--omnix-border, color-mix(in srgb, var(--c-slate-510) 22%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 78%, transparent), 0 .65rem 1.4rem color-mix(in srgb, var(--c-blue-390) 8%, transparent);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-progress :where(h3,strong,dd,.assistant-research-plan-list,.assistant-research-progress-actions) {
-    color: var(--omnix-text, #203049);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-progress :where(.assistant-research-announcement,.assistant-research-plan-intro,.assistant-research-progress-actions small,.assistant-research-plan-controls small,.assistant-research-job-details dt,.assistant-research-message-details dt,.assistant-research-source-list small) {
-    color: var(--omnix-muted, #66778e);
+    color: var(--omnix-muted, var(--c-blue-560));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-progress-track {
-    background: rgba(76,102,136,.12);
+    background: color-mix(in srgb, var(--c-blue-490) 12%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-plan-controls,
   :root[data-omnix-appearance='light'] .assistant-research-job-details dl > div,
   :root[data-omnix-appearance='light'] .assistant-research-message-details dl > div {
-    background: rgba(255,255,255,.42);
-    border-color: rgba(86,112,148,.18);
+    background: color-mix(in srgb, var(--c-neutral-1000) 42%, transparent);
+    border-color: color-mix(in srgb, var(--c-blue-560) 18%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-plan-controls input,
   :root[data-omnix-appearance='light'] .assistant-research-progress-actions button,
   :root[data-omnix-appearance='light'] .assistant-research-close,
   :root[data-omnix-appearance='light'] .assistant-research-job-details a {
-    background: rgba(247,251,255,.74);
-    border-color: rgba(86,112,148,.22);
-    color: var(--omnix-text, #203049);
+    background: color-mix(in srgb, var(--c-neutral-1000) 74%, transparent);
+    border-color: color-mix(in srgb, var(--c-blue-560) 22%, transparent);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report {
     background:
-      linear-gradient(180deg, rgba(255,255,255,.78), rgba(222,234,247,.48)),
-      var(--omnix-panel-bg, rgba(241,248,255,.72));
-    border-color: var(--omnix-border, rgba(86,112,148,.22));
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.86), 0 .75rem 1.5rem rgba(50,72,100,.09);
-    color: var(--omnix-text, #203049);
+      linear-gradient(180deg, color-mix(in srgb, var(--c-neutral-1000) 78%, transparent), color-mix(in srgb, var(--c-slate-930) 48%, transparent)),
+      var(--omnix-panel-bg, color-mix(in srgb, var(--c-slate-970-2) 72%, transparent));
+    border-color: var(--omnix-border, color-mix(in srgb, var(--c-blue-560) 22%, transparent));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 86%, transparent), 0 .75rem 1.5rem color-mix(in srgb, var(--c-blue-390) 9%, transparent);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-header,
   :root[data-omnix-appearance='light'] .assistant-research-report-meta {
-    border-color: rgba(86,112,148,.18);
+    border-color: color-mix(in srgb, var(--c-blue-560) 18%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-heading h3,
   :root[data-omnix-appearance='light'] .assistant-research-report-body,
   :root[data-omnix-appearance='light'] .assistant-research-report-body :where(h1,h2,h3,h4,h5,h6,strong,li,td,th) {
-    color: var(--omnix-text, #203049);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-kicker {
-    color: var(--omnix-cyan, #4d78a8);
+    color: var(--omnix-cyan, var(--c-blue-560));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-meta,
   :root[data-omnix-appearance='light'] .assistant-research-report-tools button {
-    color: var(--omnix-muted, #66778e);
+    color: var(--omnix-muted, var(--c-blue-560));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-tools button:hover,
   :root[data-omnix-appearance='light'] .assistant-research-report-tools button:focus-visible {
-    background: rgba(94,126,166,.1);
-    color: var(--omnix-text, #203049);
+    background: color-mix(in srgb, var(--c-blue-560) 10%, transparent);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-body :where(p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6) {
     background: transparent;
     border: 0;
     box-shadow: none;
-    color: var(--omnix-text, #203049);
+    color: var(--omnix-text, var(--c-blue-310));
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-body p {
@@ -555,31 +555,31 @@
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-body blockquote {
-    border-left: 3px solid rgba(77,120,168,.32);
-    color: var(--omnix-muted, #66778e);
+    border-left: 3px solid color-mix(in srgb, var(--c-blue-560) 32%, transparent);
+    color: var(--omnix-muted, var(--c-blue-560));
     padding-left: .85rem;
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-body :where(pre,code) {
-    background: rgba(176,197,222,.2);
-    border-color: rgba(86,112,148,.16);
-    color: #243952;
+    background: color-mix(in srgb, var(--c-slate-820) 20%, transparent);
+    border-color: color-mix(in srgb, var(--c-blue-560) 16%, transparent);
+    color: var(--c-blue-350);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-citation,
   :root[data-omnix-appearance='light'] .assistant-research-report-body a {
-    color: #2f6f9f;
+    color: var(--c-sky-510);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-status {
-    background: rgba(202,138,4,.1);
-    border-color: rgba(180,116,0,.24);
-    color: #8a5a00;
+    background: color-mix(in srgb, var(--c-yellow-720) 10%, transparent);
+    border-color: color-mix(in srgb, var(--c-amber-620) 24%, transparent);
+    color: var(--c-yellow-530);
   }
 
   :root[data-omnix-appearance='light'] .assistant-research-report-status.complete {
-    background: rgba(31,142,103,.1);
-    border-color: rgba(31,142,103,.23);
-    color: #25745c;
+    background: color-mix(in srgb, var(--c-teal-600) 10%, transparent);
+    border-color: color-mix(in srgb, var(--c-teal-600) 23%, transparent);
+    color: var(--c-teal-520);
   }
 }

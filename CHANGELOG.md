@@ -54,6 +54,9 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Errors that used to be swallowed silently are logged at debug level.
 - Structured outputs from model calls go through one gateway with contracts,
   retries and deadlines.
+- Web: styles use one colour palette (`design/tokens.css`, 259 colours instead
+  of 6,685 literals) and cascade layers instead of `!important`; a few
+  accent colours shift slightly.
 - Web: long chat sessions open in seconds and render only the visible
   messages; the Jobs and Assets views load more on request; the image gallery
   shows 60 images at a time; Pixi and Live2D load only when an avatar is shown.

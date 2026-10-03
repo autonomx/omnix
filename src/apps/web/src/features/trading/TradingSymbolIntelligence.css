@@ -1,14 +1,14 @@
 @layer features {
   .trading-symbol-intelligence {
-    --si-line: rgba(137, 161, 184, .18);
-    --si-line-soft: rgba(137, 161, 184, .1);
-    --si-card: rgba(10, 20, 32, .72);
-    --si-text: #e8f0f7;
-    --si-muted: #8496a8;
-    --si-blue: #3b82f6;
-    --si-green: #2fb879;
-    --si-amber: #e0a33a;
-    --si-red: #ec4b5d;
+    --si-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
+    --si-line-soft: color-mix(in srgb, var(--c-blue-710) 10%, transparent);
+    --si-card: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    --si-text: var(--c-neutral-960);
+    --si-muted: var(--c-slate-680);
+    --si-blue: var(--c-blue-630);
+    --si-green: var(--c-teal-700);
+    --si-amber: var(--c-yellow-770);
+    --si-red: var(--c-red-640);
     display: grid;
     gap: 10px;
     min-width: 0;
@@ -17,11 +17,11 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-symbol-intelligence {
-    --si-line: #dfe5ec;
-    --si-line-soft: #edf1f5;
-    --si-card: #fff;
-    --si-text: #172033;
-    --si-muted: #697b91;
+    --si-line: var(--c-slate-930);
+    --si-line-soft: var(--c-neutral-960);
+    --si-card: var(--c-neutral-1000);
+    --si-text: var(--c-blue-240-2);
+    --si-muted: var(--c-blue-560);
   }
 
   .trading-symbol-intelligence.empty {
@@ -53,15 +53,15 @@
     font-weight: 800;
     letter-spacing: .04em;
   }
-  .symbol-intel-health.tone-healthy { border-color: rgba(47, 184, 121, .35); background: rgba(47, 184, 121, .1); color: var(--si-green); }
-  .symbol-intel-health.tone-degraded { border-color: rgba(224, 163, 58, .35); background: rgba(224, 163, 58, .1); color: var(--si-amber); }
-  .symbol-intel-health.tone-blocked { border-color: rgba(236, 75, 93, .35); background: rgba(236, 75, 93, .1); color: var(--si-red); }
+  .symbol-intel-health.tone-healthy { border-color: color-mix(in srgb, var(--c-teal-700) 35%, transparent); background: color-mix(in srgb, var(--c-teal-700) 10%, transparent); color: var(--si-green); }
+  .symbol-intel-health.tone-degraded { border-color: color-mix(in srgb, var(--c-yellow-770) 35%, transparent); background: color-mix(in srgb, var(--c-yellow-770) 10%, transparent); color: var(--si-amber); }
+  .symbol-intel-health.tone-blocked { border-color: color-mix(in srgb, var(--c-red-640) 35%, transparent); background: color-mix(in srgb, var(--c-red-640) 10%, transparent); color: var(--si-red); }
   .symbol-intel-health.tone-unknown { color: var(--si-muted); }
 
   .symbol-intel-error {
-    border: 1px solid rgba(236, 75, 93, .3);
+    border: 1px solid color-mix(in srgb, var(--c-red-640) 30%, transparent);
     border-radius: 7px;
-    background: rgba(236, 75, 93, .08);
+    background: color-mix(in srgb, var(--c-red-640) 8%, transparent);
     padding: 8px;
     color: var(--si-red);
     font-size: 9px;
@@ -107,7 +107,7 @@
   }
   .symbol-intel-reasons span {
     border-radius: 999px;
-    background: rgba(236, 75, 93, .09);
+    background: color-mix(in srgb, var(--c-red-640) 9%, transparent);
     padding: 3px 6px;
     color: var(--si-red);
     font-size: 8px;

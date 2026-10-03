@@ -9,6 +9,7 @@ import { readPaperPositionProtection, writePaperPositionProtection, type Positio
 import './TradingPositionOverlay.css';
 import { PAPER_POSITION_PROTECTION_CHANGED_EVENT } from '../../events/bus';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { chartPalette } from './chartPalette';
 
 type ProtectionLevel = 'takeProfit' | 'stopLoss';
 type DraftProtection = { level: ProtectionLevel; value: number | null; dragging: boolean };
@@ -346,10 +347,10 @@ export function TradingPositionOverlay({
 
   return (
     <div role="group" ref={rootRef} className={`trading-position-overlay${draft?.dragging ? ' is-dragging' : ''}`} aria-label={`${instrumentId} paper position`}>
-      {draft ? zone(takeProfitY, 'rgba(32, 201, 151, .18)') : null}
-      {draft ? zone(stopLossY, 'rgba(255, 159, 67, .18)') : null}
-      {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, '#20c997', 'TP')}
-      {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, '#ff9f43', 'SL')}
+      {draft ? zone(takeProfitY, chartPalette.tealWash) : null}
+      {draft ? zone(stopLossY, chartPalette.amberWash) : null}
+      {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, chartPalette.teal, 'TP')}
+      {levelVisual('stopLoss', currentProtection.stopLoss, stopLossY, chartPalette.amber, 'SL')}
       <div className="trading-position-entry-line" style={{ top: entryY }}>
         <span className="trading-position-entry-price">{priceLabel(entryPrice)}</span>
       </div>

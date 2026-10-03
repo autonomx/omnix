@@ -8,6 +8,7 @@ import { useTradingDrawings } from './drawings/useTradingDrawings';
 import type { TradingDrawing } from './drawings/drawingCommands';
 import { indicatorOutputs, type CoreIndicatorId, type CoreIndicatorInstance, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingObjectPanel.css';
+import { chartPalette } from './chartPalette';
 
 type ObjectPanelView = 'object-tree' | 'data-window';
 
@@ -33,7 +34,7 @@ const indicatorNames: Partial<Record<CoreIndicatorId, string>> = {
   vwap: 'Volume Weighted Average Price',
 };
 
-const indicatorColors = ['#4dabf7', '#ff922b', '#e64980', '#20c997', '#ffd43b', '#9775fa'];
+const indicatorColors = [chartPalette.blue, chartPalette.orange, chartPalette.pink, chartPalette.teal, chartPalette.yellow, chartPalette.violet];
 
 function displaySymbol(instrument: CanonicalInstrument | undefined, instrumentId: string): string {
   return instrument?.display_symbol ?? instrumentId.split(':').at(-1)?.replace('-', '') ?? instrumentId;

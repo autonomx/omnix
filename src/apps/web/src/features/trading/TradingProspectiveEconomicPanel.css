@@ -29,13 +29,13 @@
   .prospective-economic-panel p,
   .prospective-economic-fingerprints small,
   .prospective-economic-events small {
-    color: var(--omnix-text-muted, #94a3b8);
+    color: var(--omnix-text-muted, var(--c-blue-710));
   }
 
   .prospective-economic-hero .monitor-live,
   .prospective-economic-hero .monitor-off,
   .prospective-economic-step-state {
-    border: 1px solid var(--omnix-border, #334155);
+    border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 999px;
     padding: 3px 7px;
     font-size: 10px;
@@ -45,12 +45,12 @@
 
   .prospective-economic-hero .monitor-live,
   .prospective-economic-step.done .prospective-economic-step-state {
-    color: var(--omnix-success, #22c55e);
+    color: var(--omnix-success, var(--c-green-720));
   }
 
   .prospective-economic-hero .monitor-off,
   .prospective-economic-step.failed .prospective-economic-step-state {
-    color: var(--omnix-danger, #ef4444);
+    color: var(--omnix-danger, var(--c-red-640));
   }
 
   .prospective-economic-strategy-select,
@@ -64,7 +64,7 @@
   .prospective-economic-strategy-select span,
   .prospective-economic-form-grid span {
     font-size: 11px;
-    color: var(--omnix-text-muted, #94a3b8);
+    color: var(--omnix-text-muted, var(--c-blue-710));
   }
 
   .prospective-economic-panel select,
@@ -79,9 +79,9 @@
   .prospective-economic-panel textarea {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--omnix-border, #334155);
+    border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 7px;
-    background: var(--omnix-surface-raised, #111827);
+    background: var(--omnix-surface-raised, var(--c-indigo-210));
     color: inherit;
     padding: 7px 8px;
   }
@@ -92,10 +92,10 @@
   }
 
   .prospective-economic-panel button {
-    border: 1px solid var(--omnix-border-strong, #475569);
+    border: 1px solid var(--omnix-border-strong, var(--c-blue-440));
     border-radius: 7px;
-    background: var(--omnix-accent, #2563eb);
-    color: #fff;
+    background: var(--omnix-accent, var(--c-blue-540));
+    color: var(--c-neutral-1000);
     padding: 7px 10px;
     cursor: pointer;
     font-weight: 650;
@@ -107,8 +107,8 @@
   }
 
   .prospective-economic-notice {
-    border: 1px solid color-mix(in srgb, var(--omnix-danger, #ef4444) 50%, transparent);
-    background: color-mix(in srgb, var(--omnix-danger, #ef4444) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--omnix-danger, var(--c-red-640)) 50%, transparent);
+    background: color-mix(in srgb, var(--omnix-danger, var(--c-red-640)) 8%, transparent);
     border-radius: 7px;
     padding: 8px;
     font-size: 12px;
@@ -132,15 +132,15 @@
     min-width: 0;
     gap: 2px;
     padding: 8px;
-    border: 1px solid var(--omnix-border, #334155);
+    border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 8px;
-    background: color-mix(in srgb, var(--omnix-surface-raised, #111827) 86%, transparent);
+    background: color-mix(in srgb, var(--omnix-surface-raised, var(--c-indigo-210)) 86%, transparent);
   }
 
   .prospective-economic-metric span,
   .prospective-economic-metric small {
     font-size: 10px;
-    color: var(--omnix-text-muted, #94a3b8);
+    color: var(--omnix-text-muted, var(--c-blue-710));
   }
 
   .prospective-economic-metric strong {
@@ -148,17 +148,17 @@
   }
 
   .prospective-economic-step {
-    border: 1px solid var(--omnix-border, #334155);
+    border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 9px;
     overflow: hidden;
   }
 
   .prospective-economic-step.done {
-    border-color: color-mix(in srgb, var(--omnix-success, #22c55e) 42%, var(--omnix-border, #334155));
+    border-color: color-mix(in srgb, var(--omnix-success, var(--c-green-720)) 42%, var(--omnix-border, var(--c-blue-390)));
   }
 
   .prospective-economic-step.failed {
-    border-color: color-mix(in srgb, var(--omnix-danger, #ef4444) 48%, var(--omnix-border, #334155));
+    border-color: color-mix(in srgb, var(--omnix-danger, var(--c-red-640)) 48%, var(--omnix-border, var(--c-blue-390)));
   }
 
   .prospective-economic-step > header {
@@ -167,7 +167,7 @@
     gap: 8px;
     align-items: center;
     padding: 9px;
-    background: color-mix(in srgb, var(--omnix-surface-raised, #111827) 70%, transparent);
+    background: color-mix(in srgb, var(--omnix-surface-raised, var(--c-indigo-210)) 70%, transparent);
   }
 
   .prospective-economic-step-number {
@@ -176,17 +176,17 @@
     border-radius: 50%;
     display: grid;
     place-items: center;
-    border: 1px solid var(--omnix-border-strong, #475569);
+    border: 1px solid var(--omnix-border-strong, var(--c-blue-440));
     font-size: 11px;
     font-weight: 700;
   }
 
   .prospective-economic-step.done .prospective-economic-step-number {
-    border-color: var(--omnix-success, #22c55e);
+    border-color: var(--omnix-success, var(--c-green-720));
   }
 
   .prospective-economic-step.failed .prospective-economic-step-number {
-    border-color: var(--omnix-danger, #ef4444);
+    border-color: var(--omnix-danger, var(--c-red-640));
   }
 
   .prospective-economic-step-body {
@@ -212,7 +212,7 @@
   .prospective-economic-progress progress {
     width: 100%;
     height: 5px;
-    accent-color: var(--omnix-accent, #2563eb);
+    accent-color: var(--omnix-accent, var(--c-blue-540));
   }
 
   .prospective-economic-form-grid {
@@ -230,7 +230,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    border-top: 1px solid var(--omnix-border, #334155);
+    border-top: 1px solid var(--omnix-border, var(--c-blue-390));
     padding-top: 10px;
   }
 
@@ -243,7 +243,7 @@
   }
 
   .prospective-economic-events article {
-    border: 1px solid var(--omnix-border, #334155);
+    border: 1px solid var(--omnix-border, var(--c-blue-390));
     border-radius: 7px;
     padding: 7px;
   }
@@ -256,7 +256,7 @@
 
   .prospective-economic-events article span {
     font-size: 10px;
-    color: var(--omnix-text-muted, #94a3b8);
+    color: var(--omnix-text-muted, var(--c-blue-710));
     text-transform: uppercase;
     text-align: right;
   }

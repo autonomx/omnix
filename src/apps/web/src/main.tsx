@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MantineProvider } from '@mantine/core';
 import './design/layers.css';
+import './design/tokens.css';
 import '@mantine/core/styles.layer.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OmnixApp } from './app/OmnixApp';

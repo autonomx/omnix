@@ -1,8 +1,8 @@
 @layer features {
   .assistant-side-panel-toggle {
     align-items: center;
-    background: linear-gradient(180deg, rgba(12, 18, 34, 0.92), rgba(7, 11, 22, 0.96));
-    border: 1px solid rgba(132, 148, 196, 0.2);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--c-indigo-190) 92%, transparent), color-mix(in srgb, var(--c-slate-150-2) 96%, transparent));
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.95rem;
     display: grid;
     gap: 0.35rem;
@@ -16,7 +16,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.72rem;
-    color: #aab3c8;
+    color: var(--c-indigo-780);
     cursor: pointer;
     font-weight: 850;
     min-height: 2.7rem;
@@ -27,16 +27,16 @@
 
   .assistant-side-panel-toggle button:hover,
   .assistant-side-panel-toggle button:focus-visible {
-    background: rgba(124, 92, 255, 0.12);
-    border-color: rgba(151, 114, 255, 0.24);
-    color: #f4f7ff;
+    background: color-mix(in srgb, var(--c-indigo-600) 12%, transparent);
+    border-color: color-mix(in srgb, var(--c-violet-660) 24%, transparent);
+    color: var(--c-slate-970-2);
     outline: none;
   }
 
   .assistant-side-panel-toggle button.active {
-    background: linear-gradient(135deg, rgba(124, 92, 255, 0.96), rgba(34, 211, 238, 0.42));
-    border-color: rgba(151, 114, 255, 0.48);
-    color: #ffffff;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 96%, transparent), color-mix(in srgb, var(--c-sky-800) 42%, transparent));
+    border-color: color-mix(in srgb, var(--c-violet-660) 48%, transparent);
+    color: var(--c-neutral-1000);
   }
 
   .assistant-side-panel-minimize {

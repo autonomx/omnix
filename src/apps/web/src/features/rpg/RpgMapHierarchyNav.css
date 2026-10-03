@@ -10,7 +10,7 @@
     background: transparent;
     border: 0;
     border-radius: 0.4rem;
-    color: #e1c77f;
+    color: var(--c-yellow-870);
     cursor: pointer;
     font: inherit;
     padding: 0.25rem 0.35rem;
@@ -18,12 +18,12 @@
 
   .rpg-map-breadcrumbs button:hover,
   .rpg-map-breadcrumbs button:focus-visible {
-    background: rgba(225, 199, 127, 0.1);
-    outline: 1px solid rgba(225, 199, 127, 0.35);
+    background: color-mix(in srgb, var(--c-yellow-870) 10%, transparent);
+    outline: 1px solid color-mix(in srgb, var(--c-yellow-870) 35%, transparent);
   }
 
   .rpg-map-breadcrumbs span {
-    color: var(--mantine-color-dimmed, #a7a7a7);
+    color: var(--mantine-color-dimmed, var(--c-neutral-730));
     font-size: 0.78rem;
   }
 
@@ -39,8 +39,8 @@
   }
 
   .rpg-map-capability-list button {
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: color-mix(in srgb, var(--c-neutral-1000) 5.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 9%, transparent);
     border-radius: 999px;
     color: inherit;
     cursor: pointer;

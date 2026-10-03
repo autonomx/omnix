@@ -1,6 +1,6 @@
 @layer features {
   .rpg-danger-button:hover:not(:disabled) {
-    box-shadow: 0 12px 30px rgba(127, 29, 29, 0.35);
+    box-shadow: 0 12px 30px color-mix(in srgb, var(--c-orange-400) 35%, transparent);
   }
 
   .rpg-danger-button:disabled {
@@ -29,10 +29,10 @@
     width: 2.5rem;
     height: 2.5rem;
     place-items: center;
-    border: 1px solid rgba(248, 113, 113, 0.55);
+    border: 1px solid color-mix(in srgb, var(--c-red-720) 55%, transparent);
     border-radius: 999px;
-    background: rgba(127, 29, 29, 0.35);
-    color: #fecaca;
+    background: color-mix(in srgb, var(--c-orange-400) 35%, transparent);
+    color: var(--c-red-890);
     font-size: 1.35rem;
     font-weight: 900;
   }
@@ -44,13 +44,13 @@
   }
 
   .rpg-world-delete-blocked {
-    border: 1px solid rgba(251, 191, 36, 0.35);
-    background: rgba(120, 53, 15, 0.18);
+    border: 1px solid color-mix(in srgb, var(--c-yellow-840) 35%, transparent);
+    background: color-mix(in srgb, var(--c-amber-410) 18%, transparent);
   }
 
   .rpg-world-delete-preview {
-    border: 1px solid rgba(248, 113, 113, 0.28);
-    background: rgba(69, 10, 10, 0.22);
+    border: 1px solid color-mix(in srgb, var(--c-red-720) 28%, transparent);
+    background: color-mix(in srgb, var(--c-orange-260) 22%, transparent);
   }
 
   .rpg-world-delete-blocked h4,
@@ -73,12 +73,12 @@
     gap: 0.2rem;
     padding: 0.65rem;
     border-radius: 10px;
-    background: rgba(15, 23, 42, 0.48);
+    background: color-mix(in srgb, var(--c-indigo-210) 48%, transparent);
   }
 
   .rpg-world-delete-blocked li span,
   .rpg-world-delete-preview small {
-    color: var(--omnix-muted, #a7a4b8);
+    color: var(--omnix-muted, var(--c-slate-730));
   }
 
   .rpg-world-delete-preview dl {
@@ -95,16 +95,16 @@
     gap: 0.75rem;
     padding: 0.55rem 0.65rem;
     border-radius: 10px;
-    background: rgba(15, 23, 42, 0.52);
+    background: color-mix(in srgb, var(--c-indigo-210) 52%, transparent);
   }
 
   .rpg-world-delete-preview dt {
-    color: #cbd5e1;
+    color: var(--c-slate-870);
   }
 
   .rpg-world-delete-preview dd {
     margin: 0;
-    color: #fecaca;
+    color: var(--c-red-890);
     font-weight: 800;
   }
 
@@ -118,12 +118,12 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .rpg-danger-button {
-    border-color: rgba(248, 113, 113, 0.6);
-    background: linear-gradient(135deg, #7f1d1d, #b91c1c);
-    color: #fff7ed;
+    border-color: color-mix(in srgb, var(--c-red-720) 60%, transparent);
+    background: linear-gradient(135deg, var(--c-orange-400), var(--c-red-500));
+    color: var(--c-slate-980);
   }
 
   .rpg-danger-button:hover:not(:disabled) {
-    border-color: rgba(254, 202, 202, 0.9);
+    border-color: color-mix(in srgb, var(--c-red-890) 90%, transparent);
   }
 }

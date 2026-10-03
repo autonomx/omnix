@@ -16,6 +16,7 @@ import {
   tradingViewBuiltInUsesSeparatePane,
 } from './indicators/tradingViewBuiltIns';
 import './TradingIndicatorSettings.css';
+import { chartPalette } from './chartPalette';
 
 type SettingsTab = 'inputs' | 'style' | 'visibility';
 
@@ -41,7 +42,7 @@ const displayNames: Partial<Record<CoreIndicatorId, string>> = {
   vwap: 'Volume Weighted Average Price',
 };
 
-const plotColors = ['#ffd43b', '#e599f7', '#74c0fc', '#ff922b', '#20c997', '#ff6b6b'];
+const plotColors = [chartPalette.yellow, chartPalette.orchid, chartPalette.sky, chartPalette.orange, chartPalette.teal, chartPalette.red];
 const lineStyleOptions: Array<{ value: IndicatorLineStyle; label: string }> = [
   { value: 'solid', label: '────' },
   { value: 'dotted', label: '····' },
@@ -70,16 +71,16 @@ function titleFor(indicator: CoreIndicatorInstance): string {
 }
 
 function defaultPlotColor(key: string, index: number): string {
-  if (key.includes('support') || key.includes('value-area-low') || key.includes('plus') || key.includes('long-stop')) return '#20c997';
-  if (key.includes('resistance') || key.includes('value-area-high') || key.includes('minus') || key.includes('short-stop')) return '#ff6b6b';
-  if (key.includes('histogram')) return '#20c997';
-  if (key.includes('signal')) return '#ff922b';
-  if (key.includes('upper') || key.includes('lower')) return '#74c0fc';
-  if (key.includes('middle') || key.includes('basis')) return '#a5d8ff';
-  if (key.startsWith('sma') || key.startsWith('vwap')) return '#ffd43b';
-  if (key.startsWith('ema')) return '#e599f7';
-  if (key.startsWith('bull-market-band:sma')) return '#ff6b6b';
-  if (key.startsWith('bull-market-band:ema')) return '#40ad50';
+  if (key.includes('support') || key.includes('value-area-low') || key.includes('plus') || key.includes('long-stop')) return chartPalette.teal;
+  if (key.includes('resistance') || key.includes('value-area-high') || key.includes('minus') || key.includes('short-stop')) return chartPalette.red;
+  if (key.includes('histogram')) return chartPalette.teal;
+  if (key.includes('signal')) return chartPalette.orange;
+  if (key.includes('upper') || key.includes('lower')) return chartPalette.sky;
+  if (key.includes('middle') || key.includes('basis')) return chartPalette.paleSky;
+  if (key.startsWith('sma') || key.startsWith('vwap')) return chartPalette.yellow;
+  if (key.startsWith('ema')) return chartPalette.orchid;
+  if (key.startsWith('bull-market-band:sma')) return chartPalette.red;
+  if (key.startsWith('bull-market-band:ema')) return chartPalette.green;
   return plotColors[index % plotColors.length];
 }
 

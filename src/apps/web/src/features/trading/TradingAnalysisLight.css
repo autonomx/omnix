@@ -30,7 +30,7 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-tool-drawer.is-fullscreen {
-    box-shadow: 0 18px 55px rgba(50, 70, 92, 0.18);
+    box-shadow: 0 18px 55px color-mix(in srgb, var(--c-blue-390) 18%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-tool-drawer > header {
@@ -50,9 +50,9 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-tool-drawer > header .trading-tool-drawer-actions button:hover {
-    border-color: rgba(22, 136, 255, 0.62);
-    background: #eef6ff;
-    color: #1769b0;
+    border-color: color-mix(in srgb, var(--c-blue-630) 62%, transparent);
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-510);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-scanner-panel,
@@ -124,11 +124,11 @@
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-research-result ul,
   :root[data-omnix-appearance='light'] .trading-workspace .trading-research-result dd {
-    color: #3d4c5d;
+    color: var(--c-slate-390);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-research-result footer {
-    color: #9a6815;
+    color: var(--c-yellow-530);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel {
@@ -165,13 +165,13 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel > aside > button:hover {
-    border-color: rgba(22, 136, 255, 0.42);
-    background: #eef6ff;
+    border-color: color-mix(in srgb, var(--c-blue-630) 42%, transparent);
+    background: var(--c-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel > aside > button.active {
-    border-color: rgba(22, 136, 255, 0.55);
-    background: rgba(22, 136, 255, 0.09);
+    border-color: color-mix(in srgb, var(--c-blue-630) 55%, transparent);
+    background: color-mix(in srgb, var(--c-blue-630) 9%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-mode-switch {
@@ -185,33 +185,33 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-mode-switch button.active {
-    background: rgba(22, 136, 255, 0.1);
-    color: #1769b0;
+    background: color-mix(in srgb, var(--c-blue-630) 10%, transparent);
+    color: var(--c-blue-510);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-notice,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-causality-note {
-    border-color: rgba(22, 136, 255, 0.24);
-    background: #eef6ff;
-    color: #315b7e;
+    border-color: color-mix(in srgb, var(--c-blue-630) 24%, transparent);
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-460);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-safety {
-    border-color: rgba(30, 145, 101, 0.24);
-    background: #eefaf5;
+    border-color: color-mix(in srgb, var(--c-teal-600) 24%, transparent);
+    background: var(--c-slate-970);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-safety strong {
-    color: #197a59;
+    color: var(--c-teal-520);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .llm-research-bar {
-    border-color: rgba(109, 79, 199, 0.24);
-    background: #f7f4ff;
+    border-color: color-mix(in srgb, var(--c-indigo-500) 24%, transparent);
+    background: var(--c-slate-970-2);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .llm-research-bar strong {
-    color: #6040a9;
+    color: var(--c-violet-470);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .candidate-table-wrap,
@@ -223,29 +223,29 @@
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table th,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days th {
     border-color: var(--trading-light-line);
-    background: #eef2f7;
-    color: #526274;
+    background: var(--c-neutral-960);
+    color: var(--c-blue-490);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table td,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days td {
     border-color: var(--trading-light-line-soft);
-    color: #3d4c5d;
+    color: var(--c-slate-390);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table tr[data-tone='ready'] {
-    background: #f1fbf7;
+    background: var(--c-slate-970);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table tr[data-tone='rejected'] {
-    background: #fff6f6;
+    background: var(--c-slate-980);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .universe-json-editor textarea,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-event-list pre {
     border-color: var(--trading-light-line);
-    background: #f7f9fc;
-    color: #33485c;
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-390);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategies-panel small,
@@ -289,56 +289,56 @@
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-phase-grid article header span,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table .score {
-    background: rgba(91, 111, 132, 0.1);
-    color: #526274;
+    background: color-mix(in srgb, var(--c-slate-550) 10%, transparent);
+    color: var(--c-blue-490);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-phase-grid article[data-tone='complete'] header span,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table .score.pass {
-    background: #eaf8f2;
-    color: #197a59;
+    background: var(--c-slate-970);
+    color: var(--c-teal-520);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-phase-grid article[data-tone='active'] header span {
-    background: #eaf4ff;
-    color: #1769b0;
+    background: var(--c-neutral-960);
+    color: var(--c-blue-510);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .trading-strategy-phase-grid article[data-tone='attention'] header span {
-    background: #fff7e6;
-    color: #8a641c;
+    background: var(--c-slate-980);
+    color: var(--c-yellow-530);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-provider-card > header > span,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-range-backtest > header > span {
-    background: #fff7e6;
-    color: #8a641c;
+    background: var(--c-slate-980);
+    color: var(--c-yellow-530);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-provider-card > header > span[data-ready='true'] {
-    background: #eaf8f2;
-    color: #197a59;
+    background: var(--c-slate-970);
+    color: var(--c-teal-520);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-causality-note strong,
   :root[data-omnix-appearance='light'] .trading-workspace .quality-score-explainer b {
-    color: #1769b0;
+    color: var(--c-blue-510);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table .pass,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days tr[data-status='backtested'] strong,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-trades article b {
-    color: #197a59;
+    color: var(--c-teal-520);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table .warn,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days tr[data-status='missing_universe'] strong,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days tr[data-status='data_unavailable'] strong {
-    color: #8a641c;
+    color: var(--c-yellow-530);
   }
 
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-candidate-table .fail,
   :root[data-omnix-appearance='light'] .trading-workspace .strategy-backtest-days tr[data-status='error'] strong {
-    color: #c43e4b;
+    color: var(--c-red-560);
   }
 }

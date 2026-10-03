@@ -2,9 +2,9 @@
   .desktop-companion-text-surface {
     margin-top: 0.5rem;
     padding: 0.65rem 0.75rem;
-    border: 1px solid var(--omnix-border, rgba(255, 255, 255, 0.16));
+    border: 1px solid var(--omnix-border, color-mix(in srgb, var(--c-neutral-1000) 16%, transparent));
     border-radius: 0.55rem;
-    background: rgba(255, 255, 255, 0.035);
+    background: color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent);
   }
 
   .desktop-companion-text-surface[data-priority="critical"] {

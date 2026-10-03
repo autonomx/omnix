@@ -1,14 +1,14 @@
 @layer features {
   .trading-trade-journal {
-    --tj-line: rgba(137, 161, 184, .18);
-    --tj-line-soft: rgba(137, 161, 184, .1);
-    --tj-card: rgba(10, 20, 32, .72);
-    --tj-text: #e8f0f7;
-    --tj-muted: #8496a8;
-    --tj-blue: #3b82f6;
-    --tj-green: #2fb879;
-    --tj-red: #ec4b5d;
-    --tj-amber: #e0a33a;
+    --tj-line: color-mix(in srgb, var(--c-blue-710) 18%, transparent);
+    --tj-line-soft: color-mix(in srgb, var(--c-blue-710) 10%, transparent);
+    --tj-card: color-mix(in srgb, var(--c-indigo-190) 72%, transparent);
+    --tj-text: var(--c-neutral-960);
+    --tj-muted: var(--c-slate-680);
+    --tj-blue: var(--c-blue-630);
+    --tj-green: var(--c-teal-700);
+    --tj-red: var(--c-red-640);
+    --tj-amber: var(--c-yellow-770);
     display: grid;
     gap: 9px;
     min-width: 0;
@@ -17,11 +17,11 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-trade-journal {
-    --tj-line: #dfe5ec;
-    --tj-line-soft: #edf1f5;
-    --tj-card: #fff;
-    --tj-text: #172033;
-    --tj-muted: #697b91;
+    --tj-line: var(--c-slate-930);
+    --tj-line-soft: var(--c-neutral-960);
+    --tj-card: var(--c-neutral-1000);
+    --tj-text: var(--c-blue-240-2);
+    --tj-muted: var(--c-blue-560);
   }
 
   .trading-trade-journal.empty {
@@ -57,9 +57,9 @@
   }
 
   .trade-journal-error {
-    border: 1px solid rgba(236, 75, 93, .3);
+    border: 1px solid color-mix(in srgb, var(--c-red-640) 30%, transparent);
     border-radius: 7px;
-    background: rgba(236, 75, 93, .08);
+    background: color-mix(in srgb, var(--c-red-640) 8%, transparent);
     padding: 8px;
     color: var(--tj-red);
     font-size: 9px;
@@ -98,9 +98,9 @@
   }
   .trade-journal-list > button.selected { box-shadow: inset 2px 0 0 var(--tj-blue); }
   .trade-journal-outcome { display: inline-flex; justify-content: center; border-radius: 999px; padding: 3px 4px; font-size: 7px; font-weight: 800; }
-  .trade-journal-outcome.win { background: rgba(47, 184, 121, .1); color: var(--tj-green); }
-  .trade-journal-outcome.loss { background: rgba(236, 75, 93, .1); color: var(--tj-red); }
-  .trade-journal-outcome.flat { background: rgba(132, 150, 168, .12); color: var(--tj-muted); }
+  .trade-journal-outcome.win { background: color-mix(in srgb, var(--c-teal-700) 10%, transparent); color: var(--tj-green); }
+  .trade-journal-outcome.loss { background: color-mix(in srgb, var(--c-red-640) 10%, transparent); color: var(--tj-red); }
+  .trade-journal-outcome.flat { background: color-mix(in srgb, var(--c-slate-680) 12%, transparent); color: var(--tj-muted); }
   .trade-journal-list-main,
   .trade-journal-result { display: grid; gap: 2px; min-width: 0; }
   .trade-journal-list-main strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -120,8 +120,8 @@
   }
   .trade-journal-detail > header { padding: 9px; border-bottom: 1px solid var(--tj-line-soft); }
   .trade-journal-detail > header strong { font-size: 11px; }
-  .trade-journal-review { border-radius: 999px; padding: 3px 6px; background: rgba(224, 163, 58, .1); color: var(--tj-amber); font-size: 7px; font-weight: 800; }
-  .trade-journal-review.review-reviewed { background: rgba(47, 184, 121, .1); color: var(--tj-green); }
+  .trade-journal-review { border-radius: 999px; padding: 3px 6px; background: color-mix(in srgb, var(--c-yellow-770) 10%, transparent); color: var(--tj-amber); font-size: 7px; font-weight: 800; }
+  .trade-journal-review.review-reviewed { background: color-mix(in srgb, var(--c-teal-700) 10%, transparent); color: var(--tj-green); }
 
   .trade-journal-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--tj-line-soft); }
   .trade-journal-metrics > div { display: grid; gap: 3px; padding: 8px 9px; border-right: 1px solid var(--tj-line-soft); border-bottom: 1px solid var(--tj-line-soft); }
@@ -202,7 +202,7 @@
 
   .trade-journal-list > button:last-child { border-bottom: 0; }
 
-  .trade-journal-list > button.selected { background: rgba(59, 130, 246, .09); }
+  .trade-journal-list > button.selected { background: color-mix(in srgb, var(--c-blue-630) 9%, transparent); }
 
   @media (max-width: 420px) {
   .trade-journal-summary > div,

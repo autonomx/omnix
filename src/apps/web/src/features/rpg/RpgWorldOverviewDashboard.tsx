@@ -109,7 +109,7 @@ export function RpgWorldOverviewDashboard({
       <div
         className={`rpg-world-overview-hero${bannerAssetId ? ' has-image' : ''}`}
         style={bannerAssetId ? {
-          backgroundImage: `linear-gradient(90deg, rgba(3, 6, 18, 0.96), rgba(3, 6, 18, 0.3)), url(${JSON.stringify(assetUrl(bannerAssetId))})`,
+          backgroundImage: `linear-gradient(90deg, color-mix(in srgb, var(--c-blue-130) 96%, transparent), color-mix(in srgb, var(--c-blue-130) 30%, transparent)), url(${JSON.stringify(assetUrl(bannerAssetId))})`,
         } : undefined}
       >
         <div className="rpg-world-overview-identity">

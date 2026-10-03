@@ -1,6 +1,7 @@
 import type { TradingIndicatorPaneGeometry } from './chart/chartAdapter';
 import type { CoreIndicatorId } from './indicators/coreIndicators';
 import { useTradingStore, type TradingIndicatorMove } from './tradingStore';
+import { chartPalette } from './chartPalette';
 
 export function TradingIndicatorPaneControls({
   indicator,
@@ -50,9 +51,9 @@ export function TradingIndicatorPaneControls({
         display: 'flex',
         minWidth: 'auto',
         padding: 2,
-        borderColor: 'rgba(117,151,181,.2)',
-        background: 'rgba(7,16,27,.92)',
-        boxShadow: '0 5px 16px rgba(0,0,0,.28)',
+        borderColor: chartPalette.paneBorder,
+        background: chartPalette.paneBackground,
+        boxShadow: `0 5px 16px ${chartPalette.paneShadow}`,
         pointerEvents: hovered || minimized || fullscreen ? 'auto' : 'none',
       }}
       onPointerDown={(event) => event.stopPropagation()}

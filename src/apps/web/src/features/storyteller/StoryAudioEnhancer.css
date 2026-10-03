@@ -3,14 +3,14 @@
   .storyteller-cast-panel {
     align-items: stretch;
     background:
-      radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.12), transparent 18rem),
-      linear-gradient(180deg, rgba(22, 21, 34, 0.9), rgba(10, 10, 19, 0.9)),
-      rgba(12, 11, 21, 0.92);
-    border: 1px solid rgba(151, 114, 255, 0.22);
+      radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--c-sky-800) 12%, transparent), transparent 18rem),
+      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-190-3) 90%, transparent), color-mix(in srgb, var(--c-slate-150-2) 90%, transparent)),
+      color-mix(in srgb, var(--c-slate-150-2) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 0.625rem;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.045),
-      0 1.25rem 3rem rgba(0, 0, 0, 0.22);
+      inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 4.5%, transparent),
+      0 1.25rem 3rem color-mix(in srgb, var(--c-neutral-0) 22%, transparent);
     display: grid;
     gap: 1rem;
     margin-top: 0.8rem;
@@ -27,14 +27,14 @@
 
   .storyteller-toolbox {
     background:
-      radial-gradient(circle at 85% 10%, rgba(34, 211, 238, 0.1), transparent 14rem),
-      linear-gradient(180deg, rgba(22, 21, 34, 0.9), rgba(10, 10, 19, 0.9)),
-      rgba(12, 11, 21, 0.92);
-    border: 1px solid rgba(151, 114, 255, 0.22);
+      radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--c-sky-800) 10%, transparent), transparent 14rem),
+      linear-gradient(180deg, color-mix(in srgb, var(--c-slate-190-3) 90%, transparent), color-mix(in srgb, var(--c-slate-150-2) 90%, transparent)),
+      color-mix(in srgb, var(--c-slate-150-2) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 0.625rem;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.045),
-      0 1.25rem 3rem rgba(0, 0, 0, 0.16);
+      inset 0 1px 0 color-mix(in srgb, var(--c-neutral-1000) 4.5%, transparent),
+      0 1.25rem 3rem color-mix(in srgb, var(--c-neutral-0) 16%, transparent);
     margin-top: 0.65rem;
     overflow: clip;
   }
@@ -61,29 +61,29 @@
   }
 
   .storyteller-toolbox summary strong {
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
     font-size: 0.98rem;
   }
 
   .storyteller-toolbox summary small {
-    color: #aaa5bc;
+    color: var(--c-slate-730);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .storyteller-toolbox summary em {
-    background: rgba(124, 58, 237, 0.22);
-    border: 1px solid rgba(151, 114, 255, 0.24);
+    background: color-mix(in srgb, var(--c-violet-540) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
     border-radius: 999px;
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
     flex: 0 0 auto;
     font-style: normal;
     padding: 0.22rem 0.65rem;
   }
 
   .storyteller-toolbox[open] summary {
-    border-bottom: 1px solid rgba(151, 114, 255, 0.18);
+    border-bottom: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
   }
 
   .storyteller-toolbox[open] summary em::before {
@@ -134,13 +134,13 @@
 
   .storyteller-audio-copy h3,
   .storyteller-cast-panel h3 {
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
     font-size: 1.05rem;
   }
 
   .storyteller-audio-copy p:not(.eyebrow),
   .storyteller-cast-panel p {
-    color: #c4bdd8;
+    color: var(--c-slate-830);
     font-size: 0.9rem;
     line-height: 1.5;
   }
@@ -151,7 +151,7 @@
   }
 
   .storyteller-audio-controls label {
-    color: #e9ddff;
+    color: var(--c-violet-920);
     display: grid;
     gap: 0.35rem;
     font-size: 0.86rem;
@@ -160,10 +160,10 @@
   .storyteller-audio-controls select,
   .storyteller-cast-add input,
   .storyteller-voice-row select {
-    background: rgba(7, 6, 13, 0.82);
-    border: 1px solid rgba(151, 114, 255, 0.22);
+    background: color-mix(in srgb, var(--c-slate-130) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 22%, transparent);
     border-radius: 0.5rem;
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
     min-height: 2.5rem;
     padding: 0 0.75rem;
   }
@@ -177,10 +177,10 @@
 
   .storyteller-audio-actions button,
   .storyteller-cast-add button {
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(151, 114, 255, 0.24);
+    background: color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
     border-radius: 0.5rem;
-    color: #f3f0ff;
+    color: var(--c-slate-970-2);
     cursor: pointer;
     min-height: 2.5rem;
     padding: 0 0.85rem;
@@ -188,8 +188,8 @@
 
   .storyteller-audio-actions button:first-child,
   .storyteller-cast-add button {
-    background: linear-gradient(135deg, #15bac4, #7c3aed);
-    border-color: rgba(205, 191, 255, 0.32);
+    background: linear-gradient(135deg, var(--c-cyan-720), var(--c-violet-540));
+    border-color: color-mix(in srgb, var(--c-violet-810) 32%, transparent);
   }
 
   .storyteller-audio-actions button:disabled,
@@ -205,12 +205,12 @@
 
   .storyteller-audio-progress span,
   .storyteller-audio-controls small {
-    color: #aaa5bc;
+    color: var(--c-slate-730);
     font-size: 0.8rem;
   }
 
   .storyteller-audio-progress progress {
-    accent-color: #15bac4;
+    accent-color: var(--c-cyan-720);
     height: 0.7rem;
     width: 100%;
   }
@@ -228,10 +228,10 @@
   }
 
   .storyteller-cast-heading strong {
-    background: rgba(124, 58, 237, 0.22);
-    border: 1px solid rgba(151, 114, 255, 0.24);
+    background: color-mix(in srgb, var(--c-violet-540) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 24%, transparent);
     border-radius: 999px;
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
     padding: 0.25rem 0.65rem;
   }
 
@@ -247,8 +247,8 @@
 
   .storyteller-cast-card,
   .storyteller-voice-row {
-    background: rgba(7, 6, 13, 0.55);
-    border: 1px solid rgba(151, 114, 255, 0.16);
+    background: color-mix(in srgb, var(--c-slate-130) 55%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 16%, transparent);
     border-radius: 0.5rem;
     display: grid;
     gap: 0.55rem;
@@ -268,13 +268,13 @@
 
   .storyteller-cast-card strong,
   .storyteller-voice-row strong {
-    color: #f7f3ff;
+    color: var(--c-slate-970-2);
   }
 
   .storyteller-cast-card span,
   .storyteller-cast-card small,
   .storyteller-voice-row span {
-    color: #aaa5bc;
+    color: var(--c-slate-730);
     font-size: 0.78rem;
   }
 

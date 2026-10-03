@@ -3,6 +3,7 @@ import type { TradingChartAdapter, DrawingCoordinate } from './chart/chartAdapte
 import { autoPatternGroupKey, autoPatternTooltipDetails, type AutoPatternTooltipDetails } from './indicators/autoPatternTooltip';
 import { indicatorPaneScale, type CoreIndicatorId, type IndicatorOutput } from './indicators/coreIndicators';
 import './TradingIndicatorBackgroundOverlay.css';
+import { chartPalette } from './chartPalette';
 
 type TradingIndicatorBackgroundOverlayProps = {
   adapter: TradingChartAdapter;
@@ -187,7 +188,7 @@ export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingI
         if (!boundaries) return null;
         const [upper, lower] = boundaries;
         const points = bandPolygon(adapter, upper, lower);
-        return <polygon key={key} data-indicator-background={key} points={points ?? ''} fill={upper.backgroundColor ?? lower.backgroundColor ?? '#74c0fc'} fillOpacity="0.2" />;
+        return <polygon key={key} data-indicator-background={key} points={points ?? ''} fill={upper.backgroundColor ?? lower.backgroundColor ?? chartPalette.sky} fillOpacity="0.2" />;
       })}
       {paneBands.map((band) => (
         <g key={band.id} data-indicator-pane-band={band.id}>
@@ -200,7 +201,7 @@ export function TradingIndicatorBackgroundOverlay({ adapter, outputs }: TradingI
               x2="0"
               y1="0"
               y2="0"
-              stroke="rgba(109, 126, 143, .72)"
+              stroke={chartPalette.slateOverlay}
               strokeDasharray={level.lineStyle === 'dotted' ? '2 4' : '6 5'}
               strokeWidth="1"
             />

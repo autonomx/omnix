@@ -49,8 +49,8 @@
     flex: 0 0 auto;
     margin-left: auto;
     padding: 2px 3px;
-    border-left: 1px solid rgba(117, 151, 181, .16);
-    background: rgba(7, 16, 26, .98);
+    border-left: 1px solid color-mix(in srgb, var(--c-blue-660) 16%, transparent);
+    background: color-mix(in srgb, var(--c-slate-170-2) 98%, transparent);
     box-shadow: none;
   }
 

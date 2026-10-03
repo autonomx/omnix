@@ -12,6 +12,7 @@ import {
 } from './drawingCommands';
 import type { TradingAlertIndicatorId } from '../tradingTypes';
 import './TradingDrawingMeasurement.css';
+import { chartPalette } from '../chartPalette';
 
 const twoPointTools = new Set<DrawingTool>([
   'trend-line',
@@ -584,7 +585,7 @@ export function TradingDrawingOverlay({
         const measurement = drawing.toolType === 'measurement' && second && rawFirst && rawSecond
           ? measurementVisual(first, second, rawFirst, rawSecond, interval)
           : null;
-        const measurementColor = drawing.toolType === 'measurement' && style.color === DEFAULT_DRAWING_STYLE.color ? '#2962ff' : style.color;
+        const measurementColor = drawing.toolType === 'measurement' && style.color === DEFAULT_DRAWING_STYLE.color ? chartPalette.drawingBlue : style.color;
         const ray = (() => {
           if (drawing.toolType !== 'ray' || !second) return null;
           const dx = second.x - first.x;
@@ -610,7 +611,7 @@ export function TradingDrawingOverlay({
                 </marker>
               </defs>
             ) : null}
-            {drawing.toolType === 'dot' ? <circle data-drawing-point-index="0" className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? '#ffd43b' : style.color} strokeWidth={style.lineWidth} /> : null}
+            {drawing.toolType === 'dot' ? <circle data-drawing-point-index="0" className={`drawing-dot${selected ? ' selected' : ''}`} cx={first.x} cy={first.y} r={selected ? 5 : 4} fill={style.color} stroke={selected ? chartPalette.yellow : style.color} strokeWidth={style.lineWidth} /> : null}
             {drawing.toolType === 'horizontal-line' ? <line data-drawing-geometry="horizontal" {...lineProps} x1="0" x2="100%" y1={first.y} y2={first.y} /> : null}
             {drawing.toolType === 'horizontal-ray' ? <line data-drawing-geometry="horizontal" {...lineProps} x1={first.x} x2="100%" y1={first.y} y2={first.y} /> : null}
             {drawing.toolType === 'vertical-line' ? <line data-drawing-geometry="vertical" {...lineProps} x1={first.x} x2={first.x} y1="0" y2="100%" /> : null}
@@ -636,7 +637,7 @@ export function TradingDrawingOverlay({
       {draftFirst && draftSecond && draftStart && draftEnd && tool === 'measurement' ? (
         renderMeasurement(
           measurementVisual(draftFirst, draftSecond, draftStart, draftEnd, interval),
-          '#2962ff',
+          chartPalette.drawingBlue,
           draftFirst,
           draftSecond,
         )

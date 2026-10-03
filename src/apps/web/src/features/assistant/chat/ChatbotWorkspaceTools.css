@@ -91,8 +91,8 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction] {
-    background: rgba(7, 11, 22, 0.78);
-    border: 1px solid rgba(132, 148, 196, 0.28);
+    background: color-mix(in srgb, var(--c-slate-150-2) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 0.65rem;
     box-sizing: border-box;
     color: var(--omnix-text);
@@ -105,8 +105,8 @@
   }
 
   .assistant-live-card > header > select[data-live-task-instruction]:focus-visible {
-    border-color: rgba(137, 112, 255, 0.72);
-    box-shadow: 0 0 0 0.2rem rgba(124, 92, 255, 0.16);
+    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--c-indigo-600) 16%, transparent);
     outline: none;
   }
 
@@ -123,27 +123,27 @@
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong {
-    color: #aeb8d2;
+    color: var(--c-indigo-780);
   }
 
   .assistant-live-card[data-live-voice-status='idle'] > header strong::before {
-    background: #7f8aa3;
-    box-shadow: 0 0 0 0.25rem rgba(127, 138, 163, 0.12);
+    background: var(--c-slate-630);
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--c-slate-630) 12%, transparent);
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong {
-    color: #f5b86c;
+    color: var(--c-amber-830);
   }
 
   .assistant-live-card[data-live-voice-status='disconnected'] > header strong::before {
-    background: #f5b86c;
-    box-shadow: 0 0 0 0.25rem rgba(245, 184, 108, 0.12);
+    background: var(--c-amber-830);
+    box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--c-amber-830) 12%, transparent);
   }
 
   .assistant-live-fullscreen-button {
     align-items: center;
-    background: rgba(83, 63, 170, 0.22);
-    border: 1px solid rgba(137, 112, 255, 0.55);
+    background: color-mix(in srgb, var(--c-indigo-430) 22%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 55%, transparent);
     border-radius: 0.65rem;
     color: inherit;
     cursor: pointer;
@@ -158,7 +158,7 @@
 
   .assistant-live-fullscreen-button:hover,
   .assistant-live-fullscreen-button:focus-visible {
-    background: rgba(112, 76, 255, 0.4);
+    background: color-mix(in srgb, var(--c-indigo-600) 40%, transparent);
     outline: none;
   }
 

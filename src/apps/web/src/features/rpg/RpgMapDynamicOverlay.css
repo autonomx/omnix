@@ -22,7 +22,7 @@
   }
 
   .rpg-map-object-status-occupied > g rect {
-    stroke: #6f9c6d;
+    stroke: var(--c-green-650);
   }
 
   .rpg-map-environment {
@@ -33,36 +33,36 @@
   .rpg-map-weather-snow,
   .rpg-map-weather-snowy,
   .rpg-map-weather-blizzard {
-    fill: rgba(210, 226, 238, 0.11);
+    fill: color-mix(in srgb, var(--c-slate-910) 11%, transparent);
   }
 
   .rpg-map-weather-rain,
   .rpg-map-weather-rainy,
   .rpg-map-weather-storm {
-    fill: rgba(55, 80, 106, 0.14);
+    fill: color-mix(in srgb, var(--c-blue-440) 14%, transparent);
   }
 
   .rpg-map-light-night,
   .rpg-map-light-dark,
   .rpg-map-light-moonlight {
-    fill: rgba(23, 31, 63, 0.24);
+    fill: color-mix(in srgb, var(--c-indigo-260-2) 24%, transparent);
   }
 
   .rpg-map-light-dusk,
   .rpg-map-light-dawn {
-    fill: rgba(116, 68, 54, 0.13);
+    fill: color-mix(in srgb, var(--c-amber-410) 13%, transparent);
   }
 
   .rpg-map-visibility-poor,
   .rpg-map-visibility-foggy,
   .rpg-map-visibility-low {
-    fill: rgba(212, 216, 205, 0.16);
+    fill: color-mix(in srgb, var(--c-slate-870) 16%, transparent);
   }
 
   .rpg-map-fog-polygon {
-    fill: rgba(33, 35, 39, 0.72);
+    fill: color-mix(in srgb, var(--c-neutral-250) 72%, transparent);
     pointer-events: none;
-    stroke: rgba(72, 75, 78, 0.32);
+    stroke: color-mix(in srgb, var(--c-slate-430) 32%, transparent);
     stroke-width: 18;
   }
 }

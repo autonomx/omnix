@@ -4,24 +4,24 @@
   }
 
   .rpg-combat-surface h3 {
-    color: #f7f4ff;
+    color: var(--c-slate-970-2);
     margin: 0.2rem 0 0;
   }
 
   .rpg-combat-status {
-    background: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(151, 114, 255, 0.16);
+    background: color-mix(in srgb, var(--c-neutral-1000) 5.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 16%, transparent);
     border-radius: 999px;
-    color: #c9c1e8;
+    color: var(--c-violet-830);
     font-size: 0.78rem;
     font-weight: 800;
     padding: 0.36rem 0.64rem;
   }
 
   .rpg-combat-status-active {
-    background: rgba(244, 63, 94, 0.14);
-    border-color: rgba(251, 113, 133, 0.36);
-    color: #fecdd3;
+    background: color-mix(in srgb, var(--c-red-640) 14%, transparent);
+    border-color: color-mix(in srgb, var(--c-red-720) 36%, transparent);
+    color: var(--c-red-890);
   }
 
   .rpg-combat-overview,
@@ -39,8 +39,8 @@
   .rpg-initiative-strip,
   .rpg-combatant-card,
   .rpg-combat-deltas {
-    background: rgba(7, 6, 13, 0.42);
-    border: 1px solid rgba(151, 114, 255, 0.12);
+    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
     border-radius: 0.72rem;
     display: grid;
     gap: 0.35rem;
@@ -52,14 +52,14 @@
   .rpg-combatant-card small,
   .rpg-combat-deltas li,
   .rpg-initiative-strip p {
-    color: #aaa5bc;
+    color: var(--c-slate-730);
   }
 
   .rpg-combat-overview strong,
   .rpg-combatant-card strong,
   .rpg-combat-deltas strong,
   .rpg-initiative-strip strong {
-    color: #f7f4ff;
+    color: var(--c-slate-970-2);
   }
 
   .rpg-initiative-strip {
@@ -77,10 +77,10 @@
   }
 
   .rpg-initiative-strip li {
-    background: rgba(124, 58, 237, 0.14);
-    border: 1px solid rgba(151, 114, 255, 0.18);
+    background: color-mix(in srgb, var(--c-violet-540) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
     border-radius: 999px;
-    color: #efe9ff;
+    color: var(--c-slate-940);
     font-size: 0.78rem;
     padding: 0.28rem 0.52rem;
   }
@@ -90,15 +90,15 @@
   }
 
   .rpg-combatant-card {
-    border-color: rgba(151, 114, 255, 0.12);
+    border-color: color-mix(in srgb, var(--c-violet-660) 12%, transparent);
   }
 
   .rpg-combatant-enemy {
-    border-color: rgba(251, 113, 133, 0.24);
+    border-color: color-mix(in srgb, var(--c-red-720) 24%, transparent);
   }
 
   .rpg-combatant-ally {
-    border-color: rgba(34, 197, 94, 0.24);
+    border-color: color-mix(in srgb, var(--c-green-720) 24%, transparent);
   }
 
   .rpg-combat-actions {
@@ -107,10 +107,10 @@
 
   .rpg-combat-action-button {
     align-items: center;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(151, 114, 255, 0.18);
+    background: color-mix(in srgb, var(--c-neutral-1000) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
     border-radius: 0.7rem;
-    color: #f7f4ff;
+    color: var(--c-slate-970-2);
     cursor: pointer;
     display: inline-flex;
     gap: 0.45rem;
@@ -119,19 +119,19 @@
   }
 
   .rpg-combat-action-button:not(:disabled):hover {
-    background: rgba(124, 58, 237, 0.18);
-    border-color: rgba(151, 114, 255, 0.42);
+    background: color-mix(in srgb, var(--c-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--c-violet-660) 42%, transparent);
   }
 
   .rpg-combat-action-button:disabled {
-    color: #7e7891;
+    color: var(--c-slate-600);
     cursor: not-allowed;
     opacity: 0.62;
   }
 
   .rpg-combat-action-button:focus-visible {
-    border-color: rgba(151, 114, 255, 0.72);
-    box-shadow: 0 0 0 0.18rem rgba(124, 58, 237, 0.18);
+    border-color: color-mix(in srgb, var(--c-violet-660) 72%, transparent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--c-violet-540) 18%, transparent);
     outline: none;
   }
 

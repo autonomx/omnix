@@ -1,6 +1,6 @@
 @layer features {
-  :root[data-omnix-appearance='light'] .trading-account-modal-backdrop { background: rgba(30, 42, 56, .35); }
-  :root[data-omnix-appearance='light'] .trading-dock-notice { border-color: rgba(19, 135, 90, .25); background: #effaf5; color: #14774f; }
+  :root[data-omnix-appearance='light'] .trading-account-modal-backdrop { background: color-mix(in srgb, var(--c-blue-280-2) 35%, transparent); }
+  :root[data-omnix-appearance='light'] .trading-dock-notice { border-color: color-mix(in srgb, var(--c-green-560) 25%, transparent); background: var(--c-slate-970); color: var(--c-teal-520); }
 }
 
 /* Declarations that must win over every other layer. */
@@ -31,8 +31,8 @@
 
   :root[data-omnix-appearance='light'] .trading-dock-tabs button[aria-selected='true'],
   :root[data-omnix-appearance='light'] .trading-order-filters button[aria-selected='true'] {
-    background: #2c2c2d;
-    color: #fff;
+    background: var(--c-neutral-290);
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-dock-summary-item span,
@@ -44,27 +44,27 @@
     color: var(--trading-light-muted);
   }
 
-  :root[data-omnix-appearance='light'] .trading-dock-content .positive { color: #13875a; }
+  :root[data-omnix-appearance='light'] .trading-dock-content .positive { color: var(--c-green-560); }
 
   :root[data-omnix-appearance='light'] .trading-dock-content .negative,
-  :root[data-omnix-appearance='light'] .trading-dock-summary-item strong.negative { color: #c43e4b; }
+  :root[data-omnix-appearance='light'] .trading-dock-summary-item strong.negative { color: var(--c-red-560); }
 
   :root[data-omnix-appearance='light'] .trading-dock-account-menu {
     border-color: var(--trading-light-line);
-    background: #fff;
-    box-shadow: 0 18px 40px rgba(50, 70, 92, .2);
+    background: var(--c-neutral-1000);
+    box-shadow: 0 18px 40px color-mix(in srgb, var(--c-blue-390) 20%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-dock-account-menu button { color: var(--trading-light-text); }
 
   :root[data-omnix-appearance='light'] .trading-dock-account-menu button:hover,
-  :root[data-omnix-appearance='light'] .trading-dock-account-menu button.active { background: #eef2f6; }
+  :root[data-omnix-appearance='light'] .trading-dock-account-menu button.active { background: var(--c-neutral-960); }
 
   :root[data-omnix-appearance='light'] .trading-account-modal {
     border-color: var(--trading-light-line);
-    background: #fff;
+    background: var(--c-neutral-1000);
     color: var(--trading-light-text);
-    box-shadow: 0 24px 80px rgba(50, 70, 92, .26);
+    box-shadow: 0 24px 80px color-mix(in srgb, var(--c-blue-390) 26%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-account-modal>header,
@@ -81,12 +81,12 @@
   :root[data-omnix-appearance='light'] .trading-account-field select,
   :root[data-omnix-appearance='light'] .trading-account-modal>footer button {
     border-color: var(--trading-light-line);
-    background: #fff;
+    background: var(--c-neutral-1000);
     color: var(--trading-light-text);
   }
 
   :root[data-omnix-appearance='light'] .trading-account-field input:disabled,
-  :root[data-omnix-appearance='light'] .trading-account-field input[readonly] { background: #f0f1f2; color: #747b84; }
+  :root[data-omnix-appearance='light'] .trading-account-field input[readonly] { background: var(--c-neutral-960); color: var(--c-slate-580); }
 
-  :root[data-omnix-appearance='light'] .trading-account-modal>footer .trading-account-primary { background: #2c2c2d; color: #fff; }
+  :root[data-omnix-appearance='light'] .trading-account-modal>footer .trading-account-primary { background: var(--c-neutral-290); color: var(--c-neutral-1000); }
 }

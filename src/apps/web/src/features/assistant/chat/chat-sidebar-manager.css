@@ -6,9 +6,9 @@
   }
 
   .assistant-chatgpt-section {
-    background: rgba(10, 16, 30, 0.62);
-    border: 1px solid rgba(132, 148, 196, 0.12);
-    border-top-color: rgba(132, 148, 196, 0.18);
+    background: color-mix(in srgb, var(--c-slate-170-2) 62%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 12%, transparent);
+    border-top-color: color-mix(in srgb, var(--c-blue-660) 18%, transparent);
     display: grid;
     gap: 0.4rem;
     min-height: 0;
@@ -52,7 +52,7 @@
 
   .assistant-chatgpt-new:hover,
   .assistant-chatgpt-new:focus-visible {
-    background: rgba(255, 255, 255, 0.07);
+    background: color-mix(in srgb, var(--c-neutral-1000) 7%, transparent);
     outline: none;
   }
 
@@ -79,11 +79,11 @@
   .assistant-chatgpt-row:hover,
   .assistant-chatgpt-row:focus-within,
   .assistant-chatgpt-row.active {
-    background: rgba(255, 255, 255, 0.065);
+    background: color-mix(in srgb, var(--c-neutral-1000) 6.5%, transparent);
   }
 
   .assistant-chatgpt-row.active {
-    background: linear-gradient(135deg, rgba(124, 92, 255, 0.28), rgba(124, 92, 255, 0.09));
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-indigo-600) 28%, transparent), color-mix(in srgb, var(--c-indigo-600) 9%, transparent));
   }
 
   .assistant-chatgpt-session {
@@ -98,7 +98,7 @@
   }
 
   .assistant-chatgpt-session:focus-visible {
-    outline: 1px solid rgba(151, 114, 255, 0.58);
+    outline: 1px solid color-mix(in srgb, var(--c-violet-660) 58%, transparent);
     outline-offset: -1px;
   }
 
@@ -174,16 +174,16 @@
   .assistant-chatgpt-pin:focus-visible,
   .assistant-chatgpt-more:hover,
   .assistant-chatgpt-more:focus-visible {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     color: var(--omnix-text);
     outline: none;
   }
 
   .assistant-chatgpt-menu {
-    background: #171c2b;
-    border: 1px solid rgba(132, 148, 196, 0.2);
+    background: var(--c-blue-230);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 20%, transparent);
     border-radius: 0.8rem;
-    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.34);
+    box-shadow: 0 16px 38px color-mix(in srgb, var(--c-neutral-0) 34%, transparent);
     display: grid;
     min-width: 12.5rem;
     padding: 0.45rem;
@@ -211,12 +211,12 @@
 
   .assistant-chatgpt-menu button:hover,
   .assistant-chatgpt-menu button:focus-visible {
-    background: rgba(255, 255, 255, 0.075);
+    background: color-mix(in srgb, var(--c-neutral-1000) 7.5%, transparent);
     outline: none;
   }
 
   .assistant-chatgpt-menu button.danger {
-    color: #ff646f;
+    color: var(--c-red-720);
   }
 
   .assistant-chatgpt-menu-icon {
@@ -250,21 +250,21 @@
   }
 
   .assistant-chatgpt-status.danger {
-    color: #ff7c85;
+    color: var(--c-red-720);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chatgpt-section {
-    background: rgba(255, 255, 255, 0.72);
+    background: color-mix(in srgb, var(--c-neutral-1000) 72%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chatgpt-row:hover,
   :root[data-omnix-appearance='light'] .assistant-chatgpt-row:focus-within {
-    background: rgba(79, 70, 229, 0.07);
+    background: color-mix(in srgb, var(--c-indigo-540) 7%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .assistant-chatgpt-menu {
-    background: #ffffff;
-    box-shadow: 0 16px 38px rgba(29, 41, 72, 0.18);
+    background: var(--c-neutral-1000);
+    box-shadow: 0 16px 38px color-mix(in srgb, var(--c-blue-280) 18%, transparent);
   }
 
   @media (max-width: 900px) {

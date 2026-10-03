@@ -291,7 +291,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
   const activeMapAssetId = detailMapAssetId ?? mapAssetId;
   const displayZoom = zoom;
   const canvasStyle = activeMapAssetId ? {
-    backgroundImage: `linear-gradient(rgba(3, 7, 18, 0.32), rgba(3, 7, 18, 0.68)), url(${JSON.stringify(assetUrl(activeMapAssetId))})`,
+    backgroundImage: `linear-gradient(color-mix(in srgb, var(--c-blue-130) 32%, transparent), color-mix(in srgb, var(--c-blue-130) 68%, transparent)), url(${JSON.stringify(assetUrl(activeMapAssetId))})`,
   } : undefined;
   const selectedDescription = locationDescription(selected?.entity);
   const handleZoom = (event: WheelEvent<HTMLDivElement>) => {

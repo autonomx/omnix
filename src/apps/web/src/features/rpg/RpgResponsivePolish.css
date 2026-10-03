@@ -22,7 +22,7 @@
   }
 
   .rpg-live-data-summary > span {
-    color: #bfb7dc;
+    color: var(--c-violet-830);
     font-size: 0.8rem;
   }
 
@@ -43,8 +43,8 @@
   }
 
   .rpg-data-status-card {
-    background: rgba(7, 6, 13, 0.42);
-    border: 1px solid rgba(151, 114, 255, 0.12);
+    background: color-mix(in srgb, var(--c-slate-130) 42%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
     border-radius: 0.7rem;
     display: grid;
     gap: 0.45rem;
@@ -60,7 +60,7 @@
   }
 
   .rpg-data-status-card strong {
-    color: #f7f4ff;
+    color: var(--c-slate-970-2);
   }
 
   .rpg-data-status-card span {
@@ -71,34 +71,34 @@
   }
 
   .rpg-data-status-card p {
-    color: #aaa5bc;
+    color: var(--c-slate-730);
     font-size: 0.82rem;
     line-height: 1.45;
   }
 
   .rpg-data-status-loading span,
   .rpg-data-status-refreshing span {
-    background: rgba(59, 130, 246, 0.16);
-    color: #bfdbfe;
+    background: color-mix(in srgb, var(--c-blue-630) 16%, transparent);
+    color: var(--c-blue-870);
   }
 
   .rpg-data-status-ready span {
-    background: rgba(34, 197, 94, 0.14);
-    color: #bbf7d0;
+    background: color-mix(in srgb, var(--c-green-720) 14%, transparent);
+    color: var(--c-teal-930);
   }
 
   .rpg-data-status-empty span {
-    background: rgba(234, 179, 8, 0.14);
-    color: #fef3c7;
+    background: color-mix(in srgb, var(--c-yellow-840) 14%, transparent);
+    color: var(--c-yellow-960);
   }
 
   .rpg-data-status-error {
-    border-color: rgba(251, 113, 133, 0.36);
+    border-color: color-mix(in srgb, var(--c-red-720) 36%, transparent);
   }
 
   .rpg-data-status-error span {
-    background: rgba(244, 63, 94, 0.16);
-    color: #fecdd3;
+    background: color-mix(in srgb, var(--c-red-640) 16%, transparent);
+    color: var(--c-red-890);
   }
 
   .rpg-empty-state {

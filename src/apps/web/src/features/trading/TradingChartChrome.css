@@ -15,11 +15,11 @@
   }
 
   .trading-chart-symbol-trigger:hover {
-    background: rgba(22, 136, 255, 0.14);
+    background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }
 
   .trading-chart-symbol-trigger span {
-    color: #6faeff;
+    color: var(--c-blue-710-2);
     font-size: 10px;
   }
 
@@ -28,20 +28,20 @@
     place-items: center;
     width: 18px;
     height: 18px;
-    border: 1px solid rgba(116, 151, 181, .35);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 35%, transparent);
     border-radius: 50%;
     background: transparent;
     padding: 0;
-    color: #9eb0c1;
+    color: var(--c-slate-740);
     font-size: 15px;
     line-height: 1;
   }
 
   .trading-workspace .trading-chart-title-row .trading-compare-trigger:hover,
   .trading-workspace .trading-chart-title-row .trading-compare-trigger:focus-visible {
-    border-color: #1688ff;
-    background: rgba(22, 136, 255, .14);
-    color: #70baff;
+    border-color: var(--c-blue-630);
+    background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
+    color: var(--c-blue-770);
   }
 
   .trading-chart-header .trading-drawing-manager {
@@ -65,7 +65,7 @@
   }
 
   .trading-chart-header .trading-drawing-manager button:hover {
-    background: rgba(22, 136, 255, 0.14);
+    background: color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }
 
   /* Match the currency control to the narrow price-scale column. */
@@ -94,7 +94,7 @@
 
   .trading-y-axis-controls .trading-y-axis-currency-trigger:hover {
     border: 0;
-    background: rgba(22, 136, 255, 0.12);
+    background: color-mix(in srgb, var(--c-blue-630) 12%, transparent);
   }
 
   .trading-y-axis-controls .trading-y-axis-action {
@@ -111,7 +111,7 @@
   .trading-overlay-indicator,
   .trading-overlay-indicator.active,
   .trading-overlay-indicator.hidden {
-    color: #d7e2ec;
+    color: var(--c-slate-910);
   }
 
   @media (max-width: 700px) {

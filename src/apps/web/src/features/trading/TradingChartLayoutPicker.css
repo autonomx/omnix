@@ -32,10 +32,10 @@
     max-height: min(620px, calc(100vh - 112px));
     overflow-y: auto;
     padding: 8px 8px 10px;
-    border: 1px solid rgba(117, 151, 181, .28);
+    border: 1px solid color-mix(in srgb, var(--c-blue-660) 28%, transparent);
     border-radius: 7px;
-    background: #0a121c;
-    box-shadow: 0 18px 44px rgba(0, 0, 0, .52), 0 0 0 1px rgba(18, 136, 255, .08);
+    background: var(--c-slate-170-2);
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--c-neutral-0) 52%, transparent), 0 0 0 1px color-mix(in srgb, var(--c-blue-630) 8%, transparent);
   }
 
   .trading-chart-layout-menu-header {
@@ -44,14 +44,14 @@
     justify-content: space-between;
     gap: 12px;
     padding: 3px 5px 8px;
-    color: #7990a5;
+    color: var(--c-blue-660);
     font-size: 8px;
     letter-spacing: .08em;
     text-transform: uppercase;
   }
 
   .trading-chart-layout-menu-header strong {
-    color: #d4e3ef;
+    color: var(--c-slate-910);
     font-size: 10px;
     letter-spacing: .02em;
     text-transform: none;
@@ -62,11 +62,11 @@
     grid-template-columns: 29px minmax(0, 1fr);
     align-items: center;
     min-height: 49px;
-    border-top: 1px solid rgba(117, 151, 181, .11);
+    border-top: 1px solid color-mix(in srgb, var(--c-blue-660) 11%, transparent);
   }
 
   .trading-chart-layout-row-count {
-    color: #8296aa;
+    color: var(--c-slate-680);
     font-size: 9px;
     text-align: center;
   }
@@ -99,12 +99,12 @@
     gap: 5px;
     margin-top: 8px;
     padding: 10px 5px 2px;
-    border-top: 1px solid rgba(117, 151, 181, .14);
+    border-top: 1px solid color-mix(in srgb, var(--c-blue-660) 14%, transparent);
   }
 
   .trading-chart-layout-sync h3 {
     margin: 0 0 2px;
-    color: #7790a4;
+    color: var(--c-slate-630);
     font-size: 8px;
     font-weight: 500;
     letter-spacing: .1em;
@@ -116,7 +116,7 @@
     align-items: center;
     justify-content: space-between;
     min-height: 24px;
-    color: #cbd9e4;
+    color: var(--c-slate-870);
     font-size: 10px;
   }
 
@@ -147,11 +147,11 @@
     width: max-content;
     max-width: 250px;
     padding: 7px 10px;
-    border: 1px solid rgba(255, 255, 255, .08);
+    border: 1px solid color-mix(in srgb, var(--c-neutral-1000) 8%, transparent);
     border-radius: 4px;
-    background: #25272b;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, .35);
-    color: #f4f6f8;
+    background: var(--c-neutral-270);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);
+    color: var(--c-slate-970-2);
     content: attr(data-tooltip);
     font-family: inherit;
     font-size: 11px;
@@ -173,7 +173,7 @@
     width: 0;
     height: 0;
     border: 5px solid transparent;
-    border-top-color: #25272b;
+    border-top-color: var(--c-neutral-270);
     content: '';
     opacity: 0;
     pointer-events: none;
@@ -207,13 +207,13 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #d8e2e9;
+    background: var(--c-slate-910);
     transition: transform .12s ease;
   }
 
   .trading-chart-layout-sync-row button.active i {
     transform: translateX(14px);
-    background: #fff;
+    background: var(--c-neutral-1000);
   }
 
   /* Keep the picker previews honest by applying the same TradingView-style
@@ -295,7 +295,7 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'] i {
-    box-shadow: 0 1px 3px rgba(50, 70, 92, 0.18);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--c-blue-390) 18%, transparent);
   }
 }
 
@@ -309,13 +309,13 @@
   .trading-chart-layout-trigger {
     display: grid;
     padding: 4px;
-    border-color: rgba(42, 151, 255, .32);
-    background: rgba(22, 136, 255, .1);
+    border-color: color-mix(in srgb, var(--c-blue-630) 32%, transparent);
+    background: color-mix(in srgb, var(--c-blue-630) 10%, transparent);
   }
 
   .trading-chart-layout-trigger[aria-expanded='true'] {
-    border-color: #1688ff;
-    background: rgba(22, 136, 255, .2);
+    border-color: var(--c-blue-630);
+    background: color-mix(in srgb, var(--c-blue-630) 20%, transparent);
   }
 
   .trading-chart-layout-option {
@@ -324,14 +324,14 @@
     border-color: transparent;
     border-radius: 5px;
     background: transparent;
-    color: #8799aa;
+    color: var(--c-slate-680);
   }
 
   .trading-chart-layout-option:hover,
   .trading-chart-layout-option[aria-pressed='true'] {
-    border-color: rgba(39, 157, 255, .55);
-    background: rgba(25, 133, 211, .16);
-    color: #dbedf9;
+    border-color: color-mix(in srgb, var(--c-blue-680) 55%, transparent);
+    background: color-mix(in srgb, var(--c-blue-580) 16%, transparent);
+    color: var(--c-blue-930);
   }
 
   .trading-chart-layout-sync-row .trading-chart-layout-info {
@@ -339,8 +339,8 @@
     padding: 0;
     border: 0;
     border-radius: 50%;
-    background: #7b8791;
-    color: #0a121c;
+    background: var(--c-slate-630);
+    color: var(--c-slate-170-2);
     font-size: 11px;
   }
 
@@ -348,11 +348,11 @@
     padding: 0;
     border: 0;
     border-radius: 999px;
-    background: #3b4650;
+    background: var(--c-slate-390);
   }
 
   .trading-chart-layout-sync-row button.active {
-    background: #1688ff;
+    background: var(--c-blue-630);
   }
 
   .trading-chart-grid.layout-main-left-3,
@@ -366,8 +366,8 @@
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-menu {
     border-color: var(--trading-light-line);
-    background: rgba(255, 255, 255, 0.99);
-    box-shadow: 0 18px 44px rgba(50, 70, 92, 0.2), 0 0 0 1px rgba(22, 136, 255, 0.06);
+    background: color-mix(in srgb, var(--c-neutral-1000) 99%, transparent);
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--c-blue-390) 20%, transparent), 0 0 0 1px color-mix(in srgb, var(--c-blue-630) 6%, transparent);
     color: var(--trading-light-text);
   }
 
@@ -392,20 +392,20 @@
   :root[data-omnix-appearance='light'] .trading-chart-layout-option {
     border-color: transparent;
     background: var(--trading-light-surface-muted);
-    color: #536273;
-    box-shadow: 0 1px 3px rgba(50, 70, 92, 0.08);
+    color: var(--c-blue-490);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--c-blue-390) 8%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-option:hover,
   :root[data-omnix-appearance='light'] .trading-chart-layout-option[aria-pressed='true'] {
-    border-color: rgba(22, 136, 255, 0.55);
-    background: #eef6ff;
-    color: #155b91;
-    box-shadow: 0 2px 6px rgba(22, 136, 255, 0.14);
+    border-color: color-mix(in srgb, var(--c-blue-630) 55%, transparent);
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-460-2);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--c-blue-630) 14%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-layout-preview {
-    color: #60758a;
+    color: var(--c-blue-560);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync {
@@ -417,30 +417,30 @@
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info {
-    background: #718397;
-    color: #ffffff;
+    background: var(--c-slate-600);
+    color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info::after {
     border-color: var(--trading-light-line);
-    background: #ffffff;
+    background: var(--c-neutral-1000);
     color: var(--trading-light-text);
-    box-shadow: 0 8px 20px rgba(50, 70, 92, 0.18);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--c-blue-390) 18%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row .trading-chart-layout-info::before {
-    border-top-color: #ffffff;
+    border-top-color: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'] {
-    background: #d6dee7;
+    background: var(--c-slate-910);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'] i {
-    background: #ffffff;
+    background: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .trading-chart-layout-sync-row button[role='switch'].active {
-    background: #1688ff;
+    background: var(--c-blue-630);
   }
 }

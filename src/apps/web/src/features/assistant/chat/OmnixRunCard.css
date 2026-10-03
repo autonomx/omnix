@@ -320,7 +320,7 @@
   }
 
   .assistant-runtime-thinking-status[data-tone='failure'] {
-    color: #ff8b98;
+    color: var(--c-red-770);
   }
 
   .assistant-runtime-tool-call {
@@ -374,7 +374,7 @@
   }
 
   .assistant-runtime-tool-call[data-tool-status='failed'] > summary > span:nth-child(2) {
-    color: #ff8b98;
+    color: var(--c-red-770);
   }
 
   .assistant-runtime-tool-icon {
@@ -501,12 +501,12 @@
   }
 
   .assistant-runtime-changed-files b {
-    color: #70d89b;
+    color: var(--c-green-790-2);
     font-weight: 650;
   }
 
   .assistant-runtime-changed-files i {
-    color: #ff8b98;
+    color: var(--c-red-770);
     font-style: normal;
   }
 
@@ -615,7 +615,7 @@
   }
 
   .assistant-runtime-tool-call[data-tool-status='failed'] .assistant-runtime-tool-call-heading > span:nth-child(2) {
-    color: #ff8b98;
+    color: var(--c-red-770);
   }
 
   .assistant-runtime-tool-call .assistant-runtime-tool-body {
@@ -727,6 +727,6 @@
 /* Declarations that must win over every other layer. */
 @layer overrides {
   .assistant-runtime-error {
-    color: #ff8b98;
+    color: var(--c-red-770);
   }
 }

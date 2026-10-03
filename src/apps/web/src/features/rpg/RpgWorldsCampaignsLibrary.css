@@ -34,7 +34,7 @@
   .rpg-world-library-tabs {
     display: flex;
     gap: 0.5rem;
-    border-bottom: 1px solid var(--mantine-color-dark-4, #495057);
+    border-bottom: 1px solid var(--mantine-color-dark-4, var(--c-slate-430));
     padding-bottom: 0.5rem;
   }
 
@@ -42,9 +42,9 @@
   .rpg-world-library-actions button,
   .rpg-world-library-form button,
   .rpg-world-library-scenario-revision button {
-    border: 1px solid var(--mantine-color-dark-3, #5c636a);
+    border: 1px solid var(--mantine-color-dark-3, var(--c-slate-500));
     border-radius: 0.55rem;
-    background: var(--mantine-color-dark-7, #1a1b1e);
+    background: var(--mantine-color-dark-7, var(--c-neutral-220));
     color: inherit;
     cursor: pointer;
     padding: 0.55rem 0.8rem;
@@ -54,7 +54,7 @@
   .rpg-world-library-actions button:not(:disabled):hover,
   .rpg-world-library-form button:not(:disabled):hover,
   .rpg-world-library-scenario-revision button:not(:disabled):hover {
-    border-color: var(--mantine-primary-color-filled, #4c6ef5);
+    border-color: var(--mantine-primary-color-filled, var(--c-indigo-590));
   }
 
   .rpg-world-library button:disabled {
@@ -79,9 +79,9 @@
 
   .rpg-world-library-panel,
   .rpg-world-library-card {
-    border: 1px solid var(--mantine-color-dark-4, #495057);
+    border: 1px solid var(--mantine-color-dark-4, var(--c-slate-430));
     border-radius: 0.8rem;
-    background: var(--mantine-color-dark-8, #141517);
+    background: var(--mantine-color-dark-8, var(--c-neutral-200));
     padding: 1rem;
     min-width: 0;
   }
@@ -102,7 +102,7 @@
     display: grid;
     gap: 0.25rem;
     width: 100%;
-    border: 1px solid var(--mantine-color-dark-5, #373a40);
+    border: 1px solid var(--mantine-color-dark-5, var(--c-neutral-350));
     border-radius: 0.65rem;
     background: transparent;
     color: inherit;
@@ -115,8 +115,8 @@
   }
 
   .rpg-world-library-world-list button.is-selected {
-    border-color: var(--mantine-primary-color-filled, #4c6ef5);
-    box-shadow: inset 0 0 0 1px var(--mantine-primary-color-filled, #4c6ef5);
+    border-color: var(--mantine-primary-color-filled, var(--c-indigo-590));
+    box-shadow: inset 0 0 0 1px var(--mantine-primary-color-filled, var(--c-indigo-590));
   }
 
   .rpg-world-library-world-list span,
@@ -153,9 +153,9 @@
   .rpg-world-library textarea {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--mantine-color-dark-4, #495057);
+    border: 1px solid var(--mantine-color-dark-4, var(--c-slate-430));
     border-radius: 0.5rem;
-    background: var(--mantine-color-dark-7, #1a1b1e);
+    background: var(--mantine-color-dark-7, var(--c-neutral-220));
     color: inherit;
     padding: 0.55rem 0.65rem;
   }
@@ -205,14 +205,14 @@
     max-height: 22rem;
     overflow: auto;
     border-radius: 0.55rem;
-    background: var(--mantine-color-dark-9, #101113);
+    background: var(--mantine-color-dark-9, var(--c-neutral-180));
     padding: 0.75rem;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 
   .rpg-world-library-scenario-revision {
-    border-top: 1px solid var(--mantine-color-dark-5, #373a40);
+    border-top: 1px solid var(--mantine-color-dark-5, var(--c-neutral-350));
     margin-top: 0.5rem;
     padding-top: 0.5rem;
   }
@@ -226,15 +226,15 @@
   }
 
   .rpg-world-library-feedback {
-    border: 1px solid var(--mantine-color-green-7, #2b8a3e);
+    border: 1px solid var(--mantine-color-green-7, var(--c-green-560));
   }
 
   .rpg-world-library-error {
-    border: 1px solid var(--mantine-color-red-7, #c92a2a);
+    border: 1px solid var(--mantine-color-red-7, var(--c-orange-580));
   }
 
   .rpg-world-library-empty {
-    border: 1px dashed var(--mantine-color-dark-4, #495057);
+    border: 1px dashed var(--mantine-color-dark-4, var(--c-slate-430));
   }
 
   @media (max-width: 74rem) {

@@ -28,7 +28,7 @@
   .desktop-companion-control {
     min-height: 1.9rem;
     padding: 0.25rem 0.55rem;
-    border: 1px solid var(--omnix-border, rgba(255, 255, 255, 0.16));
+    border: 1px solid var(--omnix-border, color-mix(in srgb, var(--c-neutral-1000) 16%, transparent));
     border-radius: 0.45rem;
     background: transparent;
     color: inherit;

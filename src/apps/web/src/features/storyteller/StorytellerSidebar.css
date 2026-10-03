@@ -4,7 +4,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: 0.5rem;
-    color: #d8d3ea;
+    color: var(--c-slate-890);
     cursor: pointer;
     display: flex;
     justify-content: space-between;
@@ -17,8 +17,8 @@
   .storyteller-library nav button:hover,
   .storyteller-library nav button:focus-visible,
   .storyteller-trash.active {
-    background: rgba(124, 58, 237, 0.18);
-    border-color: rgba(151, 114, 255, 0.34);
+    background: color-mix(in srgb, var(--c-violet-540) 18%, transparent);
+    border-color: color-mix(in srgb, var(--c-violet-660) 34%, transparent);
     outline: none;
   }
 
@@ -30,10 +30,10 @@
   .storyteller-recent-list button,
   .storyteller-library-section article {
     align-items: center;
-    background: rgba(7, 6, 13, 0.52);
-    border: 1px solid rgba(151, 114, 255, 0.12);
+    background: color-mix(in srgb, var(--c-slate-130) 52%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 12%, transparent);
     border-radius: 0.5rem;
-    color: #f3f0ff;
+    color: var(--c-slate-970-2);
     display: grid;
     gap: 0.65rem;
     grid-template-columns: 2.5rem minmax(0, 1fr);
@@ -49,8 +49,8 @@
   .storyteller-recent-list button.active,
   .storyteller-recent-list button:hover,
   .storyteller-recent-list button:focus-visible {
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.28), rgba(21, 186, 196, 0.12));
-    border-color: rgba(34, 211, 238, 0.46);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c-violet-540) 28%, transparent), color-mix(in srgb, var(--c-cyan-720) 12%, transparent));
+    border-color: color-mix(in srgb, var(--c-sky-800) 46%, transparent);
     outline: none;
   }
 
@@ -62,10 +62,10 @@
   }
 
   .storyteller-library-empty button {
-    background: rgba(255, 255, 255, 0.035);
-    border: 1px solid rgba(151, 114, 255, 0.18);
+    background: color-mix(in srgb, var(--c-neutral-1000) 3.5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 18%, transparent);
     border-radius: 0.5rem;
-    color: #f3f0ff;
+    color: var(--c-slate-970-2);
     cursor: pointer;
     margin-top: 0.35rem;
     padding: 0.55rem 0.65rem;

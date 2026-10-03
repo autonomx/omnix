@@ -5,7 +5,7 @@
     z-index: 80;
     display: flex;
     justify-content: flex-end;
-    background: rgba(5, 9, 18, 0.62);
+    background: color-mix(in srgb, var(--c-slate-150-2) 62%, transparent);
     backdrop-filter: blur(2px);
   }
 
@@ -13,10 +13,10 @@
     width: min(620px, 94vw);
     height: 100%;
     overflow-y: auto;
-    background: #0d1421;
-    border-left: 1px solid #253148;
-    box-shadow: -18px 0 48px rgba(0, 0, 0, 0.35);
-    color: #d8e1ef;
+    background: var(--c-indigo-190);
+    border-left: 1px solid var(--c-blue-310);
+    box-shadow: -18px 0 48px color-mix(in srgb, var(--c-neutral-0) 35%, transparent);
+    color: var(--c-slate-910);
   }
 
   .paper-trade-drilldown-header {
@@ -28,8 +28,8 @@
     justify-content: space-between;
     gap: 18px;
     padding: 18px 20px;
-    background: rgba(13, 20, 33, 0.97);
-    border-bottom: 1px solid #253148;
+    background: color-mix(in srgb, var(--c-indigo-190) 97%, transparent);
+    border-bottom: 1px solid var(--c-blue-310);
   }
 
   .paper-trade-drilldown-header > div {
@@ -47,15 +47,15 @@
   }
 
   .paper-trade-drilldown-header span.auto {
-    color: #91dcff;
-    background: rgba(42, 151, 214, 0.16);
-    border: 1px solid rgba(72, 181, 242, 0.35);
+    color: var(--c-blue-870);
+    background: color-mix(in srgb, var(--c-sky-640) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-sky-750) 35%, transparent);
   }
 
   .paper-trade-drilldown-header span.shadow {
-    color: #ccb6ff;
-    background: rgba(132, 88, 210, 0.16);
-    border: 1px solid rgba(161, 119, 236, 0.34);
+    color: var(--c-violet-810);
+    background: color-mix(in srgb, var(--c-violet-570) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-violet-660) 34%, transparent);
   }
 
   .paper-trade-drilldown-header strong {
@@ -63,28 +63,28 @@
   }
 
   .paper-trade-drilldown-header small {
-    color: #8492a8;
+    color: var(--c-slate-660);
   }
 
   .paper-trade-drilldown-header button {
     width: 32px;
     height: 32px;
-    border: 1px solid #2e3a51;
+    border: 1px solid var(--c-blue-350);
     border-radius: 7px;
-    background: #131d2c;
-    color: #b7c4d7;
+    background: var(--c-blue-230);
+    color: var(--c-slate-810);
     font-size: 22px;
     line-height: 1;
     cursor: pointer;
   }
 
   .paper-trade-drilldown-header button:hover {
-    background: #1a2638;
-    color: #fff;
+    background: var(--c-slate-260-2);
+    color: var(--c-neutral-1000);
   }
 
   .paper-trade-drilldown-header button:focus-visible {
-    outline: 2px solid #6ba6e5;
+    outline: 2px solid var(--c-blue-720);
     outline-offset: 2px;
   }
 
@@ -94,9 +94,9 @@
     gap: 1px;
     margin: 16px 20px;
     overflow: hidden;
-    border: 1px solid #253148;
+    border: 1px solid var(--c-blue-310);
     border-radius: 9px;
-    background: #253148;
+    background: var(--c-blue-310);
   }
 
   .paper-trade-drilldown-summary > div,
@@ -104,14 +104,14 @@
     display: grid;
     gap: 4px;
     padding: 11px 12px;
-    background: #111a29;
+    background: var(--c-blue-230);
   }
 
   .paper-trade-drilldown-summary small,
   .paper-trade-drilldown-kpis small,
   .paper-trade-drilldown-features small,
   .paper-trade-drilldown-identity small {
-    color: #7f8da2;
+    color: var(--c-slate-630);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -120,26 +120,26 @@
   .paper-trade-drilldown-summary strong,
   .paper-trade-drilldown-kpis strong {
     overflow: hidden;
-    color: #dfe8f5;
+    color: var(--c-slate-930);
     font-size: 13px;
     text-overflow: ellipsis;
   }
 
   .paper-trade-drilldown .positive {
-    color: #55d69b;
+    color: var(--c-green-790-2);
   }
 
   .paper-trade-drilldown .negative {
-    color: #ff7485;
+    color: var(--c-red-720);
   }
 
   .paper-trade-drilldown-section,
   .paper-trade-drilldown-notice {
     margin: 14px 20px;
     padding: 14px;
-    border: 1px solid #253148;
+    border: 1px solid var(--c-blue-310);
     border-radius: 9px;
-    background: #101927;
+    background: var(--c-indigo-210);
   }
 
   .paper-trade-drilldown-review {
@@ -155,12 +155,12 @@
   }
 
   .paper-trade-drilldown-section > header strong {
-    color: #e1e9f5;
+    color: var(--c-slate-930);
     font-size: 13px;
   }
 
   .paper-trade-drilldown-section > header span {
-    color: #78869c;
+    color: var(--c-slate-630);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -175,7 +175,7 @@
   }
 
   .paper-trade-drilldown-kpis > span {
-    border: 1px solid #202c40;
+    border: 1px solid var(--c-blue-280-2);
     border-radius: 6px;
   }
 
@@ -184,23 +184,23 @@
   }
 
   .paper-trade-drilldown-notice.shadow {
-    border-left-color: #8f70dc;
-    background: rgba(111, 73, 180, 0.09);
+    border-left-color: var(--c-violet-650-2);
+    background: color-mix(in srgb, var(--c-violet-470) 9%, transparent);
   }
 
   .paper-trade-drilldown-notice.warning {
-    border-left-color: #e2a54b;
-    background: rgba(202, 139, 42, 0.08);
+    border-left-color: var(--c-yellow-770);
+    background: color-mix(in srgb, var(--c-yellow-720) 8%, transparent);
   }
 
   .paper-trade-drilldown-notice strong {
-    color: #e1e9f5;
+    color: var(--c-slate-930);
     font-size: 13px;
   }
 
   .paper-trade-drilldown-notice p {
     margin: 7px 0 0;
-    color: #9aa7b9;
+    color: var(--c-blue-710);
     font-size: 12px;
     line-height: 1.5;
   }
@@ -208,9 +208,9 @@
   .paper-trade-drilldown-loading {
     margin: 16px 20px;
     padding: 18px;
-    border: 1px dashed #2c3a53;
+    border: 1px dashed var(--c-blue-350);
     border-radius: 8px;
-    color: #90a0b6;
+    color: var(--c-blue-710);
     text-align: center;
     font-size: 12px;
   }
@@ -219,14 +219,14 @@
     display: grid;
     gap: 4px;
     padding: 9px 10px;
-    border: 1px solid #202c40;
+    border: 1px solid var(--c-blue-280-2);
     border-radius: 6px;
-    background: #0d1624;
+    background: var(--c-indigo-210);
   }
 
   .paper-trade-drilldown-features strong {
     overflow: hidden;
-    color: #d6e0ee;
+    color: var(--c-slate-910);
     font-size: 12px;
     text-overflow: ellipsis;
   }
@@ -236,7 +236,7 @@
     gap: 7px;
     margin: 0;
     padding-left: 20px;
-    color: #aebbd0;
+    color: var(--c-slate-790);
     font-size: 12px;
     line-height: 1.45;
   }
@@ -245,21 +245,21 @@
     display: grid;
     gap: 4px;
     padding: 8px 9px;
-    border: 1px solid #202c40;
+    border: 1px solid var(--c-blue-280-2);
     border-radius: 6px;
-    background: #0d1624;
+    background: var(--c-indigo-210);
   }
 
   .paper-trade-drilldown-identity code {
     overflow: hidden;
-    color: #a9c9ef;
+    color: var(--c-slate-820);
     font-size: 11px;
     text-overflow: ellipsis;
   }
 
   .paper-trade-drilldown-fills {
     margin: 11px 0 0;
-    color: #8d9bb0;
+    color: var(--c-slate-680);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
     line-height: 1.55;
@@ -269,9 +269,9 @@
     display: grid;
     gap: 1px;
     overflow: hidden;
-    border: 1px solid #202c40;
+    border: 1px solid var(--c-blue-280-2);
     border-radius: 7px;
-    background: #202c40;
+    background: var(--c-blue-280-2);
   }
 
   .paper-trade-drilldown-events > div {
@@ -279,11 +279,11 @@
     grid-template-columns: 118px 1fr;
     gap: 12px;
     padding: 9px 10px;
-    background: #0e1725;
+    background: var(--c-indigo-210);
   }
 
   .paper-trade-drilldown-events time {
-    color: #728198;
+    color: var(--c-slate-600);
     font-size: 10px;
   }
 
@@ -293,36 +293,36 @@
   }
 
   .paper-trade-drilldown-events strong {
-    color: #cbd7e8;
+    color: var(--c-slate-870);
     font-size: 11px;
   }
 
   .paper-trade-drilldown-events small {
-    color: #77869c;
+    color: var(--c-slate-630);
     font-size: 10px;
   }
 
   .paper-trade-drilldown-empty {
     margin: 0;
-    color: #7e8da3;
+    color: var(--c-slate-630);
     font-size: 12px;
   }
 
   .paper-trade-drilldown > footer {
     margin: 18px 20px 24px;
     padding-top: 12px;
-    border-top: 1px solid #202c40;
-    color: #6f7e93;
+    border-top: 1px solid var(--c-blue-280-2);
+    color: var(--c-slate-600);
     font-size: 10px;
     line-height: 1.45;
   }
 
   .paper-trade-view-button {
-    border: 1px solid #2d3b55;
+    border: 1px solid var(--c-blue-350);
     border-radius: 5px;
     padding: 4px 8px;
-    background: #111c2c;
-    color: #9fc7f2;
+    background: var(--c-blue-230);
+    color: var(--c-sky-830);
     font: inherit;
     font-size: 10px;
     cursor: pointer;
@@ -330,21 +330,21 @@
 
   .paper-trade-view-button:hover,
   .paper-trade-view-button:focus-visible {
-    border-color: #4c7fb5;
-    background: #17263a;
-    color: #d5e9ff;
+    border-color: var(--c-blue-580);
+    background: var(--c-indigo-260-3);
+    color: var(--c-blue-930);
     outline: none;
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown {
-    border-left-color: #d8e0ea;
-    background: #fff;
-    color: #172033;
+    border-left-color: var(--c-slate-910);
+    background: var(--c-neutral-1000);
+    color: var(--c-blue-240-2);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-header {
-    border-bottom-color: #dfe5ec;
-    background: rgba(255, 255, 255, 0.97);
+    border-bottom-color: var(--c-slate-930);
+    background: color-mix(in srgb, var(--c-neutral-1000) 97%, transparent);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-header small,
@@ -358,18 +358,18 @@
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-empty,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-fills,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown > footer {
-    color: #697b91;
+    color: var(--c-blue-560);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-header button {
-    border-color: #d8e0ea;
-    background: #f6f8fb;
-    color: #43536a;
+    border-color: var(--c-slate-910);
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-440);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-summary {
-    border-color: #dfe5ec;
-    background: #dfe5ec;
+    border-color: var(--c-slate-930);
+    background: var(--c-slate-930);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-summary > div,
@@ -378,8 +378,8 @@
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-notice,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-features > span,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-identity {
-    border-color: #e1e7ef;
-    background: #f9fbfd;
+    border-color: var(--c-slate-930);
+    background: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-summary strong,
@@ -388,27 +388,27 @@
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-notice strong,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-features strong,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-events strong {
-    color: #253248;
+    color: var(--c-blue-310);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-notice p,
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-observations {
-    color: #5f7188;
+    color: var(--c-slate-550);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-events {
-    border-color: #e1e7ef;
-    background: #e1e7ef;
+    border-color: var(--c-slate-930);
+    background: var(--c-slate-930);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-drilldown-events > div {
-    background: #fff;
+    background: var(--c-neutral-1000);
   }
 
   :root[data-omnix-appearance='light'] .paper-trade-view-button {
-    border-color: #cdd7e4;
-    background: #f7f9fc;
-    color: #3169a5;
+    border-color: var(--c-slate-870);
+    background: var(--c-slate-970-2);
+    color: var(--c-blue-510);
   }
 
   @media (max-width: 720px) {

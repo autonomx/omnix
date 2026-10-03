@@ -16,6 +16,7 @@ import {
 } from './tradingPaperAnalyticsApi';
 import './TradingPaperDashboard.css';
 import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
+import { chartPalette } from './chartPalette';
 
 type DashboardTab = 'overview' | 'diagnostics' | 'execution';
 type Point = { x: number; y: number; label?: string };
@@ -233,7 +234,7 @@ function WinLossDonut({ wins, losses }: { wins: number; losses: number }) {
   const percentage = winRate * 100;
   return (
     <div className="paper-win-loss">
-      <div className="paper-win-donut" style={{ background: `conic-gradient(#2fb879 0 ${percentage}%, #ec4b5d ${percentage}% 100%)` }} role="img" aria-label={`${wins} winning trades and ${losses} losing trades`}>
+      <div className="paper-win-donut" style={{ background: `conic-gradient(${chartPalette.gain} 0 ${percentage}%, ${chartPalette.loss} ${percentage}% 100%)` }} role="img" aria-label={`${wins} winning trades and ${losses} losing trades`}>
         <div><strong>{total}</strong><small>Total</small></div>
       </div>
       <div className="paper-win-legend">
