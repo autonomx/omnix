@@ -159,7 +159,13 @@ def register_live_chat_speculation_routes(router: APIRouter,
 
     @router.post(
         "/api/live/speculation/sessions/{session_id}/stream",
-        include_in_schema=False,
+        response_model=None,
+        responses={
+            200: {
+                "description": "Speculative generation events as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
     )
     async def stream_live_speculation(
         session_id: str,

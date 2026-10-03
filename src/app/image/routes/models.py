@@ -108,9 +108,14 @@ class ImageModelDownloadProgress(BaseModel):
 class ImageModelLocalStatus(BaseModel):
     model_config = ConfigDict(extra="allow")
 
+    ok: bool | None = None
+    exists: bool | None = None
     complete: bool | None = None
     missing: list[str] | None = None
     local_dir: str | None = None
+    repo_id: str | None = None
+    gated: bool | None = None
+    license: str | None = None
 
 
 class ImageModelEntry(BaseModel):
@@ -123,6 +128,13 @@ class ImageModelEntry(BaseModel):
     loaded: bool | None = None
     state: str | None = None
     downloaded: bool | None = None
+    supports_download: bool | None = None
+    supports_image_to_image: bool | None = None
+    repo_id: str | None = None
+    gated: bool | None = None
+    license: str | None = None
+    minimum_diffusers: str | None = None
+    minimum_torch: str | None = None
     local_model: ImageModelLocalStatus | None = None
     download_progress: ImageModelDownloadProgress | None = None
 
@@ -139,6 +151,16 @@ class ImageModelStatusResponse(BaseModel):
     state: str | None = None
     error: str | None = None
     explicit_load_required: bool | None = None
+    key: str | None = None
+    label: str | None = None
+    downloaded: bool | None = None
+    supports_download: bool | None = None
+    supports_image_to_image: bool | None = None
+    repo_id: str | None = None
+    gated: bool | None = None
+    license: str | None = None
+    minimum_diffusers: str | None = None
+    minimum_torch: str | None = None
     local_model: ImageModelLocalStatus | None = None
     download_progress: ImageModelDownloadProgress | None = None
     models: list[ImageModelEntry] | None = None

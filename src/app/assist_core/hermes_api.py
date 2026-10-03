@@ -60,7 +60,29 @@ class HermesRpgPlanRequest(BaseModel):
     enabled: bool | None = None
 
 
-@router.get("/status")
+class HermesDiagnosticsPaths(BaseModel):
+    status_path: str
+    test_path: str
+    test_dry_run_only: bool
+
+
+class HermesStatusResponse(BaseModel):
+    """Sidecar reachability and the runtime configuration that reaches it."""
+
+    enabled: bool
+    reachable: bool
+    state: str
+    message: str
+    base_url: str
+    health: dict[str, Any]
+    capabilities: dict[str, Any]
+    error: str | None
+    timeout_seconds: float
+    api_key_configured: bool
+    diagnostics: HermesDiagnosticsPaths
+
+
+@router.get("/status", response_model=HermesStatusResponse)
 def hermes_status() -> dict[str, Any]:
     from .hermes_diagnostics import hermes_diagnostics_status_payload
 

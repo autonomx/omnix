@@ -1,3 +1,5 @@
+import type { components } from '../../api/generated/types';
+import { createGatewayClient, type GatewayClient } from '../../api/http';
 import { liveConversationStore } from './live-conversation-store';
 
 let liveCallPrewarmInstalled = false;
@@ -8,16 +10,10 @@ const PERF_EVENT = 'omnix:assistant-voice-perf';
 const PREWARM_TTL_MS = 5 * 60_000;
 const PREWARM_RETRY_MS = 5_000;
 
-type RuntimePayload = {
-  voice_speaker_id?: string | null;
-  voiceSpeakerId?: string | null;
-  language?: string | null;
-  voice?: {
-    speaker_id?: string | null;
-    speakerId?: string | null;
-    language?: string | null;
-  } | null;
-};
+type LiveCallRuntime = components['schemas']['CharacterLiveCallRuntime'];
+
+// The live-call runtime names no language; English is the voice default.
+const PREWARM_LANGUAGE = 'English';
 
 const warmedAt = new Map<string, number>();
 const attemptedAt = new Map<string, number>();
@@ -70,19 +66,16 @@ async function runPrewarm(
   const startedAt = now();
   dispatchPerformance('live_call_prewarm_started', { sessionId });
   try {
-    const runtime = await fetchRuntime(fetchImpl, sessionId);
-    const speaker = resolveSpeaker(runtime);
-    const language = resolveLanguage(runtime);
-    const response = await fetchImpl(
-      `/api/live-call/sessions/${encodeURIComponent(sessionId)}/prewarm`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ speaker, language }),
-        keepalive: true,
-      },
-    );
-    const payload = await readJson(response);
+    const client = createGatewayClient({ fetchImpl });
+    const speaker = resolveSpeaker(await fetchRuntime(client, sessionId));
+    const language = PREWARM_LANGUAGE;
+    const { data, error, response } = await client.POST('/api/live-call/sessions/{session_id}/prewarm', {
+      params: { path: { session_id: sessionId } },
+      body: { speaker, language },
+      keepalive: true,
+    });
+    // The prewarm route answers with an untyped status object, on failure too.
+    const payload = asRecord(data ?? error);
     if (!response.ok) {
       throw new Error(
         typeof payload?.status === 'string'
@@ -121,58 +114,24 @@ async function runPrewarm(
   }
 }
 
-async function fetchRuntime(
-  fetchImpl: typeof fetch,
-  sessionId: string,
-): Promise<RuntimePayload | null> {
+async function fetchRuntime(client: GatewayClient, sessionId: string): Promise<LiveCallRuntime | null> {
   try {
-    const response = await fetchImpl(
-      `/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/runtime`,
-      {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-      },
-    );
-    if (!response.ok) return null;
-    const payload = await response.json() as unknown;
-    return payload && typeof payload === 'object'
-      ? payload as RuntimePayload
-      : null;
+    const { data } = await client.GET('/api/chat/sessions/{session_id}/live-call/runtime', {
+      params: { path: { session_id: sessionId } },
+      cache: 'no-store',
+    });
+    return data ?? null;
   } catch {
     return null;
   }
 }
 
-function resolveSpeaker(payload: RuntimePayload | null): string | null {
-  const value = payload?.voice_speaker_id
-    ?? payload?.voiceSpeakerId
-    ?? payload?.voice?.speaker_id
-    ?? payload?.voice?.speakerId
-    ?? null;
-  return typeof value === 'string' && value.trim()
-    ? value.trim()
-    : null;
+function resolveSpeaker(runtime: LiveCallRuntime | null): string | null {
+  return runtime?.voice_speaker_id?.trim() || null;
 }
 
-function resolveLanguage(payload: RuntimePayload | null): string {
-  const value = payload?.language ?? payload?.voice?.language;
-  return typeof value === 'string' && value.trim()
-    ? value.trim()
-    : 'English';
-}
-
-async function readJson(
-  response: Response,
-): Promise<Record<string, unknown> | null> {
-  try {
-    const payload = await response.json() as unknown;
-    return payload && typeof payload === 'object'
-      ? payload as Record<string, unknown>
-      : null;
-  } catch {
-    return null;
-  }
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
 function nestedStatus(value: unknown): string | null {

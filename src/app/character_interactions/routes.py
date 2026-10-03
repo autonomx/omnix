@@ -250,7 +250,13 @@ def register_character_integration_routes(
     @router.post(
         "/api/chat/sessions/{session_id}/live-call/greeting/stream",
         tags=["characters"],
-        include_in_schema=False,
+        response_model=None,
+        responses={
+            200: {
+                "description": "Live-call greeting generation events as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
     )
     def stream_live_call_greeting(
         session_id: str,

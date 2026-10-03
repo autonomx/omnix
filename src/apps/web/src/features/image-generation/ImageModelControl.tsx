@@ -9,7 +9,7 @@ export type {
   ImageLocalModelStatus,
   ImageModelAction,
   ImageModelRecord,
-  ImageModelStatusPayload,
+  ImageModelStatusView,
 } from './ImageModelControlCompat';
 export { imageModelGenerationBlockReason, selectedImageModel };
 

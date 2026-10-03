@@ -155,7 +155,13 @@ def register_live_chat_speculation_handshake_routes(router: APIRouter,
 
     @router.post(
         "/api/live/speculation/sessions/{session_id}/{generation_id}/stream",
-        include_in_schema=False,
+        response_model=None,
+        responses={
+            200: {
+                "description": "Events of a started speculative generation as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
     )
     def stream_started_live_speculation(
         session_id: str,

@@ -80,7 +80,17 @@ def register_core_jobs_routes(router: APIRouter, state, *, get_chat_store, get_j
             return page
         return page.model_copy(update={"jobs": [summarize_job(job) for job in page.jobs]})
 
-    @router.get("/events", include_in_schema=False)
+    @router.get(
+        "/events",
+        response_model=None,
+        responses={
+            200: {
+                "description": "Committed job lifecycle events as a resumable Server-Sent Events stream.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
+        tags=["jobs"],
+    )
     async def events(
         # An opaque cursor: "<tx_id>:<id>" (WP-5.4) or a legacy integer id.
         after_id: str | None = Query(default=None, max_length=64),

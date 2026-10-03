@@ -709,6 +709,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assistant/context/chat/sessions/{session_id}/messages/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assistant Context Stream Chat Message Endpoint */
+        post: operations["assistant_context_stream_chat_message_endpoint_api_assistant_context_chat_sessions__session_id__messages_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant/context/research/jobs/{job_id}/plan": {
         parameters: {
             query?: never;
@@ -2514,6 +2531,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/live-call/greeting/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream Live Call Greeting */
+        post: operations["stream_live_call_greeting_api_chat_sessions__session_id__live_call_greeting_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/live-call/runtime": {
         parameters: {
             query?: never;
@@ -3830,6 +3864,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/live/speculation/sessions/{session_id}/start-stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start And Stream Live Speculation */
+        post: operations["start_and_stream_live_speculation_api_live_speculation_sessions__session_id__start_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/speculation/sessions/{session_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream Live Speculation */
+        post: operations["stream_live_speculation_api_live_speculation_sessions__session_id__stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/live/speculation/sessions/{session_id}/{generation_id}/accept": {
         parameters: {
             query?: never;
@@ -3858,6 +3926,23 @@ export interface paths {
         put?: never;
         /** Cancel Started Live Speculation */
         post: operations["cancel_started_live_speculation_api_live_speculation_sessions__session_id___generation_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live/speculation/sessions/{session_id}/{generation_id}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream Started Live Speculation */
+        post: operations["stream_started_live_speculation_api_live_speculation_sessions__session_id___generation_id__stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8970,6 +9055,23 @@ export interface paths {
         put?: never;
         /** Start Workflow */
         post: operations["start_workflow_api_workflows__workflow_id__runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events */
+        get: operations["events_events_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -16649,6 +16751,15 @@ export interface components {
              */
             user_request: string;
         };
+        /** HermesDiagnosticsPaths */
+        HermesDiagnosticsPaths: {
+            /** Status Path */
+            status_path: string;
+            /** Test Dry Run Only */
+            test_dry_run_only: boolean;
+            /** Test Path */
+            test_path: string;
+        };
         /** HermesLookupRequest */
         HermesLookupRequest: {
             /** Args */
@@ -16716,6 +16827,37 @@ export interface components {
             turn?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * HermesStatusResponse
+         * @description Sidecar reachability and the runtime configuration that reaches it.
+         */
+        HermesStatusResponse: {
+            /** Api Key Configured */
+            api_key_configured: boolean;
+            /** Base Url */
+            base_url: string;
+            /** Capabilities */
+            capabilities: {
+                [key: string]: unknown;
+            };
+            diagnostics: components["schemas"]["HermesDiagnosticsPaths"];
+            /** Enabled */
+            enabled: boolean;
+            /** Error */
+            error: string | null;
+            /** Health */
+            health: {
+                [key: string]: unknown;
+            };
+            /** Message */
+            message: string;
+            /** Reachable */
+            reachable: boolean;
+            /** State */
+            state: string;
+            /** Timeout Seconds */
+            timeout_seconds: number;
         };
         /** HermesTestRequest */
         HermesTestRequest: {
@@ -16857,19 +16999,33 @@ export interface components {
             download_progress?: components["schemas"]["ImageModelDownloadProgress"] | null;
             /** Downloaded */
             downloaded?: boolean | null;
+            /** Gated */
+            gated?: boolean | null;
             /** Key */
             key?: string | null;
             /** Label */
             label?: string | null;
+            /** License */
+            license?: string | null;
             /** Loaded */
             loaded?: boolean | null;
             local_model?: components["schemas"]["ImageModelLocalStatus"] | null;
+            /** Minimum Diffusers */
+            minimum_diffusers?: string | null;
+            /** Minimum Torch */
+            minimum_torch?: string | null;
             /** Model */
             model?: string | null;
             /** Provider */
             provider?: string | null;
+            /** Repo Id */
+            repo_id?: string | null;
             /** State */
             state?: string | null;
+            /** Supports Download */
+            supports_download?: boolean | null;
+            /** Supports Image To Image */
+            supports_image_to_image?: boolean | null;
         } & {
             [key: string]: unknown;
         };
@@ -16877,25 +17033,49 @@ export interface components {
         ImageModelLocalStatus: {
             /** Complete */
             complete?: boolean | null;
+            /** Exists */
+            exists?: boolean | null;
+            /** Gated */
+            gated?: boolean | null;
+            /** License */
+            license?: string | null;
             /** Local Dir */
             local_dir?: string | null;
             /** Missing */
             missing?: string[] | null;
+            /** Ok */
+            ok?: boolean | null;
+            /** Repo Id */
+            repo_id?: string | null;
         } & {
             [key: string]: unknown;
         };
         /** ImageModelStatusResponse */
         ImageModelStatusResponse: {
             download_progress?: components["schemas"]["ImageModelDownloadProgress"] | null;
+            /** Downloaded */
+            downloaded?: boolean | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Error */
             error?: string | null;
             /** Explicit Load Required */
             explicit_load_required?: boolean | null;
+            /** Gated */
+            gated?: boolean | null;
+            /** Key */
+            key?: string | null;
+            /** Label */
+            label?: string | null;
+            /** License */
+            license?: string | null;
             /** Loaded */
             loaded?: boolean | null;
             local_model?: components["schemas"]["ImageModelLocalStatus"] | null;
+            /** Minimum Diffusers */
+            minimum_diffusers?: string | null;
+            /** Minimum Torch */
+            minimum_torch?: string | null;
             /** Model */
             model?: string | null;
             /** Models */
@@ -16904,10 +17084,16 @@ export interface components {
             ok?: boolean | null;
             /** Provider */
             provider?: string | null;
+            /** Repo Id */
+            repo_id?: string | null;
             /** Service */
             service?: string | null;
             /** State */
             state?: string | null;
+            /** Supports Download */
+            supports_download?: boolean | null;
+            /** Supports Image To Image */
+            supports_image_to_image?: boolean | null;
         } & {
             [key: string]: unknown;
         };
@@ -30611,6 +30797,42 @@ export interface operations {
             };
         };
     };
+    assistant_context_stream_chat_message_endpoint_api_assistant_context_chat_sessions__session_id__messages_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantContextChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Context-assembled chat generation events as Server-Sent Events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     assistant_deep_research_plan_update_endpoint_api_assistant_context_research_jobs__job_id__plan_patch: {
         parameters: {
             query?: never;
@@ -34680,6 +34902,42 @@ export interface operations {
             };
         };
     };
+    stream_live_call_greeting_api_chat_sessions__session_id__live_call_greeting_stream_post: {
+        parameters: {
+            query?: {
+                purpose?: string;
+                initiative_reason?: string;
+                state_summary?: string | null;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live-call greeting generation events as Server-Sent Events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_live_call_runtime_api_chat_sessions__session_id__live_call_runtime_get: {
         parameters: {
             query?: never;
@@ -36534,9 +36792,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["HermesStatusResponse"];
                 };
             };
         };
@@ -37412,6 +37668,78 @@ export interface operations {
             };
         };
     };
+    start_and_stream_live_speculation_api_live_speculation_sessions__session_id__start_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveSpeculationRequest"];
+            };
+        };
+        responses: {
+            /** @description Speculation start and generation events as Server-Sent Events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_live_speculation_api_live_speculation_sessions__session_id__stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveSpeculationRequest"];
+            };
+        };
+        responses: {
+            /** @description Speculative generation events as Server-Sent Events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     accept_live_speculation_api_live_speculation_sessions__session_id___generation_id__accept_post: {
         parameters: {
             query?: never;
@@ -37471,6 +37799,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_started_live_speculation_api_live_speculation_sessions__session_id___generation_id__stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Events of a started speculative generation as Server-Sent Events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */
@@ -48294,6 +48655,40 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_events_get: {
+        parameters: {
+            query?: {
+                after_id?: string | null;
+            };
+            header?: {
+                "Last-Event-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Committed job lifecycle events as a resumable Server-Sent Events stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */

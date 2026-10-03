@@ -292,7 +292,13 @@ def register_assistant_context_routes(
 
     @router.post(
         "/api/assistant/context/chat/sessions/{session_id}/messages/stream",
-        include_in_schema=False,
+        response_model=None,
+        responses={
+            200: {
+                "description": "Context-assembled chat generation events as Server-Sent Events.",
+                "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            }
+        },
         name=_STREAM_ROUTE_NAME,
     )
     async def assistant_context_stream_chat_message_endpoint(

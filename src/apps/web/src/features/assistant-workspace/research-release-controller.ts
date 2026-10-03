@@ -1,5 +1,7 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
+import type { components } from '../../api/generated/types';
+import { createGatewayClient } from '../../api/http';
 
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
@@ -10,15 +12,7 @@ type ReleaseAvailability = {
   hermes_planner: boolean;
 };
 
-type ResearchStatusPayload = {
-  release?: {
-    master_enabled?: boolean;
-    quick_percentage?: number;
-    deep_local_percentage?: number;
-    hermes_percentage?: number;
-    availability?: Partial<ReleaseAvailability>;
-  };
-};
+type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];
 
 type ResearchUnavailableDetail = {
   code?: string;
@@ -40,6 +34,7 @@ let availability: ReleaseAvailability = { disabled: true, quick: true, deep: tru
 let releaseMessage = 'Research availability is loading.';
 const MIDDLEWARE = 'research-release';
 const ownFetch = fetchBelow(MIDDLEWARE);
+const ownClient = createGatewayClient({ fetchImpl: ownFetch });
 let disposeController: (() => void) | null = null;
 
 export function initializeResearchReleaseController(root: ParentNode = document): () => void {
@@ -119,17 +114,17 @@ function installFetchWrapper(): () => void {
 }
 
 async function loadReleaseStatus(sessionId: string | null = activeSessionId): Promise<void> {
-  const fetcher = ownFetch;
   try {
-    const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
-    const response = await fetcher(`/api/assistant/research/status${query}`);
-    if (!response.ok) throw new Error('Research availability could not be loaded.');
-    const payload = await response.json() as ResearchStatusPayload;
+    const { data: payload, response } = await ownClient.GET('/api/assistant/research/status', {
+      params: { query: sessionId ? { session_id: sessionId } : {} },
+    });
+    if (!response.ok || !payload) throw new Error('Research availability could not be loaded.');
+    const released = payload.release.availability;
     availability = {
-      disabled: payload.release?.availability?.disabled !== false,
-      quick: payload.release?.availability?.quick !== false,
-      deep: payload.release?.availability?.deep === true,
-      hermes_planner: payload.release?.availability?.hermes_planner === true,
+      disabled: released.disabled !== false,
+      quick: released.quick !== false,
+      deep: released.deep === true,
+      hermes_planner: released.hermes_planner === true,
     };
     releaseMessage = releaseSummary(payload, availability);
   } catch (error) {
@@ -229,8 +224,8 @@ function setBooleanProperty<TElement extends Element, TKey extends keyof TElemen
   if (element[key] !== value) element[key] = value as TElement[TKey];
 }
 
-function releaseSummary(payload: ResearchStatusPayload, current: ReleaseAvailability): string {
-  if (payload.release?.master_enabled === false) return 'Research rollback is active.';
+function releaseSummary(payload: ResearchRuntimeStatus, current: ReleaseAvailability): string {
+  if (payload.release.master_enabled === false) return 'Research rollback is active.';
   if (current.deep) return current.hermes_planner ? 'Deep Research and Hermes planning are available.' : 'Deep Research is available with the local planner.';
   if (current.quick) return 'Quick Search is available. Deep Research is not released for this session.';
   return 'External research is unavailable for this session.';

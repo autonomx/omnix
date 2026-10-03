@@ -3,16 +3,16 @@ import { OmnixStatusPill } from '../../design/primitives';
 import {
   ImageModelControl as MultiModelControl,
   imageModelGenerationBlockReason as multiModelBlockReason,
-  type ImageModelStatusPayload,
+  type ImageModelStatusView,
 } from './ImageModelSelectorControl';
 
-export type { ImageLocalModelStatus, ImageModelRecord, ImageModelStatusPayload } from './ImageModelSelectorControl';
+export type { ImageLocalModelStatus, ImageModelRecord, ImageModelStatusView } from './ImageModelSelectorControl';
 export { selectedImageModel } from './ImageModelSelectorControl';
 
 export type ImageModelAction = { type: 'download' | 'load' | 'unload'; provider: string } | 'load' | 'unload' | null;
 
 type Props = {
-  status?: ImageModelStatusPayload;
+  status?: ImageModelStatusView;
   selectedProvider?: string;
   statusLoading: boolean;
   action: ImageModelAction;
@@ -59,7 +59,7 @@ export function ImageModelControl(props: Props) {
 }
 
 export function imageModelGenerationBlockReason(
-  status: ImageModelStatusPayload | undefined,
+  status: ImageModelStatusView | undefined,
   selectedProviderOrLoading: string | boolean,
   statusLoadingOrError: boolean,
   statusError?: boolean,

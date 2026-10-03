@@ -18646,6 +18646,29 @@
         "title": "HermesAssistantToolReviewPayload",
         "type": "object"
       },
+      "HermesDiagnosticsPaths": {
+        "properties": {
+          "status_path": {
+            "title": "Status Path",
+            "type": "string"
+          },
+          "test_dry_run_only": {
+            "title": "Test Dry Run Only",
+            "type": "boolean"
+          },
+          "test_path": {
+            "title": "Test Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status_path",
+          "test_path",
+          "test_dry_run_only"
+        ],
+        "title": "HermesDiagnosticsPaths",
+        "type": "object"
+      },
       "HermesLookupRequest": {
         "properties": {
           "args": {
@@ -18767,6 +18790,78 @@
           }
         },
         "title": "HermesRpgTurnReadoutRequest",
+        "type": "object"
+      },
+      "HermesStatusResponse": {
+        "description": "Sidecar reachability and the runtime configuration that reaches it.",
+        "properties": {
+          "api_key_configured": {
+            "title": "Api Key Configured",
+            "type": "boolean"
+          },
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "capabilities": {
+            "additionalProperties": true,
+            "title": "Capabilities",
+            "type": "object"
+          },
+          "diagnostics": {
+            "$ref": "#/components/schemas/HermesDiagnosticsPaths"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "health": {
+            "additionalProperties": true,
+            "title": "Health",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "title": "Timeout Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "reachable",
+          "state",
+          "message",
+          "base_url",
+          "health",
+          "capabilities",
+          "error",
+          "timeout_seconds",
+          "api_key_configured",
+          "diagnostics"
+        ],
+        "title": "HermesStatusResponse",
         "type": "object"
       },
       "HermesTestRequest": {
@@ -19146,6 +19241,17 @@
             ],
             "title": "Downloaded"
           },
+          "gated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated"
+          },
           "key": {
             "anyOf": [
               {
@@ -19168,6 +19274,17 @@
             ],
             "title": "Label"
           },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
           "loaded": {
             "anyOf": [
               {
@@ -19188,6 +19305,28 @@
                 "type": "null"
               }
             ]
+          },
+          "minimum_diffusers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Diffusers"
+          },
+          "minimum_torch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Torch"
           },
           "model": {
             "anyOf": [
@@ -19211,6 +19350,17 @@
             ],
             "title": "Provider"
           },
+          "repo_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Id"
+          },
           "state": {
             "anyOf": [
               {
@@ -19221,6 +19371,28 @@
               }
             ],
             "title": "State"
+          },
+          "supports_download": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Download"
+          },
+          "supports_image_to_image": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Image To Image"
           }
         },
         "title": "ImageModelEntry",
@@ -19239,6 +19411,39 @@
               }
             ],
             "title": "Complete"
+          },
+          "exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exists"
+          },
+          "gated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
           },
           "local_dir": {
             "anyOf": [
@@ -19264,6 +19469,28 @@
               }
             ],
             "title": "Missing"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "repo_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Id"
           }
         },
         "title": "ImageModelLocalStatus",
@@ -19281,6 +19508,17 @@
                 "type": "null"
               }
             ]
+          },
+          "downloaded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloaded"
           },
           "enabled": {
             "anyOf": [
@@ -19315,6 +19553,50 @@
             ],
             "title": "Explicit Load Required"
           },
+          "gated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
           "loaded": {
             "anyOf": [
               {
@@ -19335,6 +19617,28 @@
                 "type": "null"
               }
             ]
+          },
+          "minimum_diffusers": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Diffusers"
+          },
+          "minimum_torch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Torch"
           },
           "model": {
             "anyOf": [
@@ -19383,6 +19687,17 @@
             ],
             "title": "Provider"
           },
+          "repo_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Id"
+          },
           "service": {
             "anyOf": [
               {
@@ -19404,6 +19719,28 @@
               }
             ],
             "title": "State"
+          },
+          "supports_download": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Download"
+          },
+          "supports_image_to_image": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Image To Image"
           }
         },
         "title": "ImageModelStatusResponse",
@@ -52681,6 +53018,58 @@
         "summary": "Assistant Context Chat Message Endpoint"
       }
     },
+    "/api/assistant/context/chat/sessions/{session_id}/messages/stream": {
+      "post": {
+        "operationId": "assistant_context_stream_chat_message_endpoint_api_assistant_context_chat_sessions__session_id__messages_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantContextChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Context-assembled chat generation events as Server-Sent Events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Context Stream Chat Message Endpoint"
+      }
+    },
     "/api/assistant/context/research/jobs/{job_id}/plan": {
       "patch": {
         "operationId": "assistant_deep_research_plan_update_endpoint_api_assistant_context_research_jobs__job_id__plan_patch",
@@ -58610,6 +58999,89 @@
         ]
       }
     },
+    "/api/chat/sessions/{session_id}/live-call/greeting/stream": {
+      "post": {
+        "operationId": "stream_live_call_greeting_api_chat_sessions__session_id__live_call_greeting_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "default": "greeting",
+              "title": "Purpose",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "initiative_reason",
+            "required": false,
+            "schema": {
+              "default": "quiet_follow_up",
+              "maxLength": 120,
+              "title": "Initiative Reason",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state_summary",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State Summary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Live-call greeting generation events as Server-Sent Events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Live Call Greeting",
+        "tags": [
+          "characters"
+        ]
+      }
+    },
     "/api/chat/sessions/{session_id}/live-call/runtime": {
       "get": {
         "operationId": "get_live_call_runtime_api_chat_sessions__session_id__live_call_runtime_get",
@@ -61291,9 +61763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Hermes Status Api Hermes Status Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HermesStatusResponse"
                 }
               }
             },
@@ -62576,6 +63046,110 @@
         "summary": "Start Live Speculation"
       }
     },
+    "/api/live/speculation/sessions/{session_id}/start-stream": {
+      "post": {
+        "operationId": "start_and_stream_live_speculation_api_live_speculation_sessions__session_id__start_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveSpeculationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Speculation start and generation events as Server-Sent Events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start And Stream Live Speculation"
+      }
+    },
+    "/api/live/speculation/sessions/{session_id}/stream": {
+      "post": {
+        "operationId": "stream_live_speculation_api_live_speculation_sessions__session_id__stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveSpeculationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Speculative generation events as Server-Sent Events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Live Speculation"
+      }
+    },
     "/api/live/speculation/sessions/{session_id}/{generation_id}/accept": {
       "post": {
         "operationId": "accept_live_speculation_api_live_speculation_sessions__session_id___generation_id__accept_post",
@@ -62684,6 +63258,57 @@
           }
         },
         "summary": "Cancel Started Live Speculation"
+      }
+    },
+    "/api/live/speculation/sessions/{session_id}/{generation_id}/stream": {
+      "post": {
+        "operationId": "stream_started_live_speculation_api_live_speculation_sessions__session_id___generation_id__stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "title": "Generation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Events of a started speculative generation as Server-Sent Events."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Started Live Speculation"
       }
     },
     "/api/live/speculation/tts-prefetch": {
@@ -78043,6 +78668,75 @@
         "summary": "Start Workflow",
         "tags": [
           "workflow-runtime"
+        ]
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "events_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Committed job lifecycle events as a resumable Server-Sent Events stream."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Events",
+        "tags": [
+          "jobs"
         ]
       }
     },

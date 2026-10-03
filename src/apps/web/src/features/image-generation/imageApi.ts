@@ -1,15 +1,15 @@
 import type { AssetListResponse, JobListResponse, JobRecord } from '../../api/client';
 import type { components } from '../../api/generated/types';
 import { api, unwrap } from '../../api/http';
-import type { ImageModelStatusPayload } from './ImageModelControl';
+import { toImageModelStatusView, type ImageModelStatusView } from './ImageModelSelectorControl';
 import type { WorkerHealthPayload } from './imageReadinessModel';
 
 type ImageModelDownloadRequest = components['schemas']['ImageModelDownloadRequest'];
 export type ImageAssetDeleteResponse = components['schemas']['ImageAssetDeleteResponse'];
 
-// The model routes drop unset fields; the image service always sends what the view reads.
-const modelStatus = async (call: Promise<{ data?: unknown; error?: unknown; response: Response }>) =>
-  (await unwrap(call)) as ImageModelStatusPayload;
+type ModelStatusCall = Promise<{ data?: components['schemas']['ImageModelStatusResponse']; error?: unknown; response: Response }>;
+const modelStatus = async (call: ModelStatusCall): Promise<ImageModelStatusView> =>
+  toImageModelStatusView(await unwrap(call));
 
 /** The image workspace's gateway calls (WP-9.3). */
 export const imageApi = {

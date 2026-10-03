@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 import { speechOrigin, streamingSttUrl, type SpeechLocation } from './stt-url';
 
 export const LIVE_STT_SPECULATION_PARTIAL_EVENT = 'omnix:live-stt-speculation-partial';
@@ -9,12 +10,8 @@ const DEFAULT_ENDPOINT_THRESHOLD = 0.75;
 
 export type AuthorityMode = 'observational' | 'test' | 'auto';
 
-type AuthorityResponse = {
-  eligible?: boolean;
-  ok?: boolean;
-  reasons?: string[];
-  mode?: string;
-};
+// The speech service's authority probe; the gateway proxies it as /api/stt/authorityz.
+type AuthorityResponse = components['schemas']['STTProxyResponse'];
 
 export type AuthoritySelection = {
   websocketUrl: string;
@@ -63,7 +60,7 @@ export async function resolveAuthoritySelection(
   authorityUrl.searchParams.set('language', language);
   authorityUrl.searchParams.set('mode', mode);
 
-  let response: AuthorityResponse = {};
+  let response: Partial<AuthorityResponse> = {};
   let probeSucceeded = false;
   let reasons: string[] = [];
   try {
