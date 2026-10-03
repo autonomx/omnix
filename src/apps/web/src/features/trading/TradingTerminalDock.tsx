@@ -12,6 +12,7 @@ import './TradingTerminalDockMinimize.css';
 import './TradingTerminalDockLight.css';
 import './TradingTerminalDockData.css';
 import { downloadBlob } from '../../shared/download';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type DockTab = 'dashboard' | 'positions' | 'orders' | 'history' | 'balance' | 'journal';
 type OrderFilter = 'all' | 'working' | 'inactive' | 'filled' | 'cancelled' | 'rejected';
@@ -294,8 +295,7 @@ export function TradingTerminalDock({
   useEffect(() => { void refresh(preferredAccountId ?? undefined); }, [preferredAccountId]);
   useEffect(() => {
     if (!accountId) return;
-    const timer = window.setInterval(() => void refresh(accountId), 5_000);
-    return () => window.clearInterval(timer);
+    return startPolling(() => refresh(accountId), POLL_INTERVALS_MS.paperAccount);
   }, [accountId]);
   useEffect(() => {
     if (!modal) return;

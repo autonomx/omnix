@@ -8,18 +8,18 @@ import {
 import type { components } from '../../api/generated/types';
 import { downloadBlob } from '../../shared/download';
 import { emitOmnixEvent } from '../../events/bus';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 let researchProgressControllerInstalled = false;
 
 const RESEARCH_JOB_TYPE = 'assistant.deep_research';
-const POLL_INTERVAL_MS = 1_500;
 const ACTIVE_STATUSES = new Set(['queued', 'leased', 'running', 'waiting', 'retrying', 'cancel_requested']);
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
 
 type ChatMessage = components['schemas']['ChatMessage'];
 let activeSession: ChatSession | null = null;
 let activeJob: JobRecord | null = null;
-let pollTimer: number | null = null;
+let stopJobPolling: (() => void) | null = null;
 let pollingJobId: string | null = null;
 let currentSessionId: string | null = null;
 let recoveringSessionId: string | null = null;
@@ -70,7 +70,7 @@ export function dismissResearchJob(jobId: string): void {
 /** Cancels a research job (before it starts or while it runs). */
 export async function cancelResearchJob(job: JobRecord, reason: string): Promise<void> {
   activeJob = await omnixApiClient.cancelJob(job.id, reason);
-  if (!isActiveResearchJob(activeJob)) stopPolling();
+  if (!isActiveResearchJob(activeJob)) stopWatchingResearchJob();
   publish();
 }
 
@@ -85,7 +85,7 @@ export async function updateResearchPlanPages(job: JobRecord, pages: number): Pr
 /** Starts an approved plan (or restarts a stalled one) and follows it. */
 export async function startResearchJob(job: JobRecord): Promise<void> {
   activeJob = await omnixApiClient.startDeepResearchPlan(job.id);
-  startPolling(activeJob.id);
+  watchResearchJob(activeJob.id);
   publish();
 }
 
@@ -93,11 +93,11 @@ export function installResearchProgressController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   if (researchProgressControllerInstalled) return () => undefined;
   researchProgressControllerInstalled = true;
-  const handleUnload = () => stopPolling();
+  const handleUnload = () => stopWatchingResearchJob();
   window.addEventListener('beforeunload', handleUnload, { once: true });
   return () => {
     window.removeEventListener('beforeunload', handleUnload);
-    stopPolling();
+    stopWatchingResearchJob();
     activeSession = null;
     activeJob = null;
     currentSessionId = null;
@@ -120,7 +120,7 @@ export function noteChatMessageSent(sessionId: string, result: SendChatMessageRe
     activeJob = result.job;
     currentSessionId = sessionId;
     publish();
-    startPolling(result.job.id);
+    watchResearchJob(result.job.id);
   }
   return result;
 }
@@ -129,33 +129,34 @@ function captureSession(session: ChatSession): void {
   const sessionChanged = currentSessionId !== null && currentSessionId !== session.id;
   if (sessionChanged) {
     activeJob = null;
-    stopPolling();
+    stopWatchingResearchJob();
   }
   activeSession = session;
   currentSessionId = session.id;
   const jobId = preferredResearchJobId(session.messages ?? [], activeJob);
   if (!jobId) {
-    if (!isActiveResearchJob(activeJob)) stopPolling();
+    if (!isActiveResearchJob(activeJob)) stopWatchingResearchJob();
     void recoverLatestResearchJob(session.id);
     publish();
     return;
   }
   if (!isActiveResearchJob(activeJob)) void recoverLatestResearchJob(session.id, jobId);
-  if (activeJob?.id !== jobId || isActiveResearchJob(activeJob)) startPolling(jobId);
+  if (activeJob?.id !== jobId || isActiveResearchJob(activeJob)) watchResearchJob(jobId);
   publish();
 }
 
-function startPolling(jobId: string): void {
-  if (pollingJobId === jobId && pollTimer !== null) return;
-  stopPolling();
+// Progress (pages read, sources) is written without job events, so it is polled.
+function watchResearchJob(jobId: string): void {
+  if (pollingJobId === jobId && stopJobPolling !== null) return;
+  stopWatchingResearchJob();
   pollingJobId = jobId;
   void pollResearchJob(jobId);
-  pollTimer = window.setInterval(() => void pollResearchJob(jobId), POLL_INTERVAL_MS);
+  stopJobPolling = startPolling(() => pollResearchJob(jobId), POLL_INTERVALS_MS.researchProgress);
 }
 
-function stopPolling(): void {
-  if (pollTimer !== null) window.clearInterval(pollTimer);
-  pollTimer = null;
+function stopWatchingResearchJob(): void {
+  stopJobPolling?.();
+  stopJobPolling = null;
   pollingJobId = null;
 }
 
@@ -195,7 +196,7 @@ async function pollResearchJob(jobId: string): Promise<void> {
     publish();
     if (!TERMINAL_STATUSES.has(String(job.status))) return;
     if (currentSessionId && await recoverLatestResearchJob(currentSessionId, job.id)) return;
-    stopPolling();
+    stopWatchingResearchJob();
     if (currentSessionId) {
       activeSession = await omnixApiClient.getChatSession(currentSessionId);
       // Chat refetches its session and shows the research answer.
@@ -222,7 +223,7 @@ async function recoverLatestResearchJob(sessionId: string, excludeJobId?: string
     }
     activeJob = recovered;
     publish();
-    startPolling(recovered.id);
+    watchResearchJob(recovered.id);
     return true;
   } catch {
     return false;

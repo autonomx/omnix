@@ -8,6 +8,7 @@ import type {
   TradingStrategyConfig,
 } from './tradingStrategyTypes';
 import './TradingProspectiveEconomicPanel.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 function numeric(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || value === '') return null;
@@ -160,10 +161,7 @@ export function TradingProspectiveEconomicPanel() {
 
   useEffect(() => {
     if (!strategyId) return;
-    const timer = window.setInterval(() => {
-      void refreshStatus(strategyId).catch(() => undefined);
-    }, 30_000);
-    return () => window.clearInterval(timer);
+    return startPolling(() => refreshStatus(strategyId), POLL_INTERVALS_MS.strategyOperations);
   }, [strategyId]);
 
   const runAction = async (action: () => Promise<ProspectiveEconomicStatus>) => {

@@ -1,5 +1,6 @@
-export type TemporalCaptureMode = 'single' | 'temporal';
+import { startTicker } from '../../shared/timers';
 
+export type TemporalCaptureMode = 'single' | 'temporal';
 export type TemporalFrame = {
   dataUrl: string;
   capturedAtMs: number;
@@ -41,24 +42,24 @@ const TARGET_AGES_MS = [5_000, 2_000, 750, 250];
 export class DesktopTemporalCapture {
   private readonly options: TemporalCaptureOptions;
   private frames: TemporalFrame[] = [];
-  private timerId: number | null = null;
+  private stopCapture: (() => void) | null = null;
 
   constructor(private readonly video: HTMLVideoElement, options: Partial<TemporalCaptureOptions> = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
   }
 
   start(): void {
-    if (this.timerId !== null) return;
+    if (this.stopCapture !== null) return;
     this.captureHistoryFrame();
-    this.timerId = window.setInterval(
+    this.stopCapture = startTicker(
       () => this.captureHistoryFrame(),
       Math.max(100, Math.round(1_000 / this.options.captureFps)),
     );
   }
 
   stop(): void {
-    if (this.timerId !== null) window.clearInterval(this.timerId);
-    this.timerId = null;
+    this.stopCapture?.();
+    this.stopCapture = null;
     this.frames = [];
   }
 

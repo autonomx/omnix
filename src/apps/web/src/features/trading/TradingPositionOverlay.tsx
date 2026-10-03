@@ -8,6 +8,7 @@ import { useTradingStore } from './tradingStore';
 import { readPaperPositionProtection, writePaperPositionProtection, type PositionProtectionLevels } from './paperPositionProtection';
 import './TradingPositionOverlay.css';
 import { PAPER_POSITION_PROTECTION_CHANGED_EVENT } from '../../events/bus';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type ProtectionLevel = 'takeProfit' | 'stopLoss';
 type DraftProtection = { level: ProtectionLevel; value: number | null; dragging: boolean };
@@ -111,7 +112,7 @@ export function TradingPositionOverlay({
       }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 5_000);
+    const stopPolling = startPolling(refresh, POLL_INTERVALS_MS.paperAccount);
     const changed = (event: Event) => {
       const detail = (event as CustomEvent<{ accountId?: string; instrumentId?: string }>).detail;
       if (detail?.accountId === accountId && detail.instrumentId === instrumentId) {
@@ -122,7 +123,7 @@ export function TradingPositionOverlay({
     window.addEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      stopPolling();
       window.removeEventListener(PAPER_POSITION_PROTECTION_CHANGED_EVENT, changed);
     };
   }, [accountId, instrumentId, replayMode, replaySnapshot]);

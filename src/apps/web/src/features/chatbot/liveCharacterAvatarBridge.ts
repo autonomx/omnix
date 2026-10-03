@@ -4,6 +4,7 @@ import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterC
 import { liveCallPresentationStore } from '../assistant-workspace';
 import './liveCharacterAvatarBridge.css';
 import { CHARACTER_AVATAR_FRAME_EVENT, CHARACTER_AVATAR_PCM_EVENT, CHARACTER_AVATAR_RUNTIME_EVENT, emitOmnixEvent, LIVE_CALL_DIAGNOSTIC_EVENT } from '../../events/bus';
+import { startTicker } from '../../shared/timers';
 
 export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
 export type AvatarPresentationState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -363,13 +364,13 @@ function startAudioElementMonitor(audio: HTMLAudioElement): void {
   let context: AudioContext | null = null;
   let source: AudioNode | null = null;
   let analyser: AnalyserNode | null = null;
-  let timer: number | null = null;
+  let stopFrames: (() => void) | null = null;
   let stopped = false;
 
   const stop = (): void => {
     if (stopped) return;
     stopped = true;
-    if (timer !== null) window.clearInterval(timer);
+    stopFrames?.();
     audio.removeEventListener('pause', stop);
     audio.removeEventListener('ended', stop);
     audio.removeEventListener('error', stop);
@@ -398,7 +399,7 @@ function startAudioElementMonitor(audio: HTMLAudioElement): void {
     }
 
     const waveform = new Float32Array(analyser.fftSize);
-    timer = window.setInterval(() => {
+    stopFrames = startTicker(() => {
       if (!analyser || audio.paused || audio.ended) return;
       analyser.getFloatTimeDomainData(waveform);
       dispatchAvatarFrame(floatPcmMouthFrame(waveform));

@@ -2,6 +2,7 @@ import { desktopCompanionControlStore } from './desktop-companion-control-store'
 import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
 import { api, unwrap } from '../../api/http';
 import { DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../events/bus';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 let desktopCompanionOperationalGuardInstalled = false;
 
@@ -57,7 +58,7 @@ type OperationalStatus = {
 
 let circuit = new DesktopCompanionFailureCircuit();
 let resumeTimer: ReturnType<typeof setTimeout> | null = null;
-let operationalTimer: ReturnType<typeof setInterval> | null = null;
+let stopOperationalPolling: (() => void) | null = null;
 
 export function initializeDesktopCompanionOperationalGuard(): () => void {
   if (typeof window === 'undefined') return () => undefined;
@@ -75,14 +76,14 @@ export function initializeDesktopCompanionOperationalGuard(): () => void {
     if (action === 'stop') stopWatch('provider_failure_circuit_open');
   };
   window.addEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvaluation);
-  operationalTimer = setInterval(() => void checkOperationalStatus(), 30_000);
+  stopOperationalPolling = startPolling(checkOperationalStatus, POLL_INTERVALS_MS.desktopCompanionStatus);
   void checkOperationalStatus();
   return () => {
     window.removeEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvaluation);
     if (resumeTimer !== null) clearTimeout(resumeTimer);
-    if (operationalTimer !== null) clearInterval(operationalTimer);
+    stopOperationalPolling?.();
     resumeTimer = null;
-    operationalTimer = null;
+    stopOperationalPolling = null;
     circuit.reset();
     desktopCompanionOperationalGuardInstalled = false;
   };

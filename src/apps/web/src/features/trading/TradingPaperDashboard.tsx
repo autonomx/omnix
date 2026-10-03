@@ -15,6 +15,7 @@ import {
   type PaperSimulationEpoch,
 } from './tradingPaperAnalyticsApi';
 import './TradingPaperDashboard.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type DashboardTab = 'overview' | 'diagnostics' | 'execution';
 type Point = { x: number; y: number; label?: string };
@@ -395,10 +396,10 @@ export function TradingPaperDashboard() {
       });
     };
     refresh();
-    const timer = window.setInterval(refresh, 5_000);
+    const stopPolling = startPolling(refresh, POLL_INTERVALS_MS.paperAccount);
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [accountId]);
 

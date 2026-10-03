@@ -1,7 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient } from '../../api/client';
-import { CHAT_JOB_ACTIVE_POLL_MS, CHAT_JOB_TERMINAL_STATUSES } from './chatbotWorkspaceModel';
+import { useJobEventRefresh, useJobEventsOpen } from '../../events/useJobEvents';
+import { POLL_INTERVALS_MS } from '../../shared/timers';
+import { CHAT_JOB_TERMINAL_STATUSES } from './chatbotWorkspaceModel';
 
 /** The job generating the latest reply: tracked until it ends, then the session is refreshed. */
 export function useChatJob(selectedSessionId: string | null) {
@@ -9,15 +11,19 @@ export function useChatJob(selectedSessionId: string | null) {
   const [activeChatJobId, setActiveChatJobId] = useState<string | null>(null);
   const [chatJobError, setChatJobError] = useState<string | null>(null);
   const reconciledChatJobIdRef = useRef<string | null>(null);
+  const chatJobQueryKey = useMemo(() => ['feature', 'chatbot', 'generation-job', activeChatJobId], [activeChatJobId]);
+  const jobEventsOpen = useJobEventsOpen();
+  useJobEventRefresh(useMemo(() => [chatJobQueryKey], [chatJobQueryKey]), { jobId: activeChatJobId, enabled: Boolean(activeChatJobId) });
   const chatJobQuery = useQuery({
-    queryKey: ['feature', 'chatbot', 'generation-job', activeChatJobId],
+    queryKey: chatJobQueryKey,
     queryFn: () => omnixApiClient.getJob(activeChatJobId ?? ''),
     enabled: Boolean(activeChatJobId),
     retry: false,
+    // Job lifecycle events refetch the job; it is polled only while they cannot arrive.
     refetchInterval: (query) => (
-      CHAT_JOB_TERMINAL_STATUSES.has(String(query.state.data?.status ?? ''))
+      CHAT_JOB_TERMINAL_STATUSES.has(String(query.state.data?.status ?? '')) || jobEventsOpen
         ? false
-        : CHAT_JOB_ACTIVE_POLL_MS
+        : POLL_INTERVALS_MS.jobWithoutEvents
     ),
   });
   const chatJobInProgress = Boolean(

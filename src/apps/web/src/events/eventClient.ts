@@ -51,6 +51,7 @@ export const RESYNC_EVENT = 'resync';
 export class OmnixEventClient {
   private readonly endpoint: string;
   private readonly eventSourceFactory: (endpoint: string) => OmnixEventSource;
+  private readonly hasCustomEventSource: boolean;
   private readonly initialReconnectDelayMs: number;
   private readonly maxReconnectDelayMs: number;
   private readonly reconnectJitterRatio: number;
@@ -104,6 +105,7 @@ export class OmnixEventClient {
   constructor(options: OmnixEventClientOptions = {}) {
     this.endpoint = options.endpoint ?? '/events';
     this.eventSourceFactory = options.eventSourceFactory ?? ((endpoint) => new EventSource(endpoint));
+    this.hasCustomEventSource = Boolean(options.eventSourceFactory);
     this.initialReconnectDelayMs = options.initialReconnectDelayMs ?? DEFAULT_INITIAL_RECONNECT_DELAY_MS;
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS;
     this.reconnectJitterRatio = options.reconnectJitterRatio ?? DEFAULT_RECONNECT_JITTER_RATIO;
@@ -148,7 +150,7 @@ export class OmnixEventClient {
 
     handlersForEvent.add(handler as OmnixEventHandler<unknown>);
 
-    if (!this.source && !this.reconnectTimer) {
+    if (!this.source && !this.reconnectTimer && this.canConnect()) {
       this.openConnection('connecting');
     }
 
@@ -191,6 +193,11 @@ export class OmnixEventClient {
         reconnectAttempt: 0,
       });
     }
+  }
+
+  /** False where the browser has no EventSource (tests, old runtimes); subscribers then see no events. */
+  private canConnect(): boolean {
+    return this.hasCustomEventSource || typeof EventSource !== 'undefined';
   }
 
   private openConnection(state: OmnixEventConnectionState) {

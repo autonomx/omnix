@@ -3,6 +3,7 @@ import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from
 import { streamingSttUrl, type SpeechLocation } from './stt-url';
 import { streamingSttMessageSchema } from './live-voice-messages';
 import { parseJson } from '../../api/schemas/streams';
+import { startTicker } from '../../shared/timers';
 
 export type StreamingSttReady = {
   type: 'ready';
@@ -801,12 +802,12 @@ export class StreamingSttWebSocketClient {
 
   private async waitForExistingConnection(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const poll = setInterval(() => {
+      const stopWaiting = startTicker(() => {
         if (this.socket?.readyState === this.options.webSocketCtor.OPEN) {
-          clearInterval(poll);
+          stopWaiting();
           resolve();
         } else if (!this.connecting) {
-          clearInterval(poll);
+          stopWaiting();
           reject(new Error('WebSocket connection failed'));
         }
       }, 100);

@@ -7,6 +7,7 @@ import { advanceReplaySnapshot, createReplaySnapshot, placeReplayOrder } from '.
 import { useTradingReplayStore } from './tradingReplayStore';
 import { useTradingStore } from './tradingStore';
 import './TradingPaper.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 type PaperTicketTab = 'order' | 'dom';
 type PaperNotice = { kind: 'success' | 'error'; message: string };
@@ -183,8 +184,7 @@ export function TradingPaperPanel({
 
   useEffect(() => {
     if (!accountId) return;
-    const timer = window.setInterval(() => void refresh(accountId), 5_000);
-    return () => window.clearInterval(timer);
+    return startPolling(() => refresh(accountId), POLL_INTERVALS_MS.paperAccount);
   }, [accountId]);
 
   useEffect(() => {

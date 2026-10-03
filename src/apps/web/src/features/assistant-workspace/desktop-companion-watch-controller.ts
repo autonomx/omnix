@@ -18,6 +18,7 @@ import { liveConversationStore } from './live-conversation-store';
 import type { components } from '../../api/generated/types';
 import { api, unwrap } from '../../api/http';
 import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT, DESKTOP_COMPANION_STATUS_EVENT, emitOmnixEvent } from '../../events/bus';
+import { startTicker } from '../../shared/timers';
 
 let desktopCompanionWatchInstalled = false;
 
@@ -61,7 +62,7 @@ const behaviorTracker = new DesktopBehaviorTracker();
 let previousSample: Uint8Array | null = null;
 let previousSampleAtMs = -1;
 let requestController: AbortController | null = null;
-let timerId: number | null = null;
+let stopTicker: (() => void) | null = null;
 let settings: ShadowWatchSettings = disabledSettings();
 let settingsLoadedAtMs = 0;
 let lastObservationStartedMs: number | null = null;
@@ -125,7 +126,7 @@ export function initializeDesktopCompanionWatchController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   if (desktopCompanionWatchInstalled) return () => undefined;
   desktopCompanionWatchInstalled = true;
-  timerId = window.setInterval(() => void tick(), 500);
+  stopTicker = startTicker(() => void tick(), 500);
   const handleVisibility = () => runtime.handleVisibility(document.visibilityState === 'visible');
   const handleShareChange = () => void tick();
   const unsubscribeControls = desktopCompanionControlStore.subscribe(() => {
@@ -139,8 +140,8 @@ export function initializeDesktopCompanionWatchController(): () => void {
   window.addEventListener('omnix:desktop-share-changed', handleShareChange);
   void tick();
   return () => {
-    if (timerId !== null) window.clearInterval(timerId);
-    timerId = null;
+    stopTicker?.();
+    stopTicker = null;
     requestController?.abort('controller_disposed');
     requestController = null;
     unsubscribeControls();

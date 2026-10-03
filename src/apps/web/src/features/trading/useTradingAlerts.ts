@@ -2,14 +2,15 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { tradingApi } from './tradingApi';
 import type { TradingAlert } from './tradingTypes';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 export const TRADING_ALERTS_QUERY_KEY = ['trading', 'alerts'] as const;
 export const TRADING_ALERT_TRIGGERS_QUERY_KEY = ['trading', 'alert-triggers'] as const;
 
 let pollSubscribers = 0;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let stopAlertPolling: (() => void) | null = null;
 let triggerPollSubscribers = 0;
-let triggerPollTimer: ReturnType<typeof setInterval> | null = null;
+let stopTriggerPolling: (() => void) | null = null;
 
 export function useTradingAlerts(options: { poll?: boolean } = {}) {
   const queryClient = useQueryClient();
@@ -22,16 +23,14 @@ export function useTradingAlerts(options: { poll?: boolean } = {}) {
   useEffect(() => {
     if (!options.poll) return;
     pollSubscribers += 1;
-    if (!pollTimer) {
-      pollTimer = setInterval(() => {
-        void queryClient.invalidateQueries({ queryKey: TRADING_ALERTS_QUERY_KEY });
-      }, 10_000);
+    if (!stopAlertPolling) {
+      stopAlertPolling = startPolling(() => queryClient.invalidateQueries({ queryKey: TRADING_ALERTS_QUERY_KEY }), POLL_INTERVALS_MS.tradingAlerts);
     }
     return () => {
       pollSubscribers = Math.max(0, pollSubscribers - 1);
-      if (pollSubscribers === 0 && pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
+      if (pollSubscribers === 0 && stopAlertPolling) {
+        stopAlertPolling();
+        stopAlertPolling = null;
       }
     };
   }, [options.poll, queryClient]);
@@ -75,16 +74,14 @@ export function useTradingAlertTriggers(options: { poll?: boolean } = {}) {
   useEffect(() => {
     if (!options.poll) return;
     triggerPollSubscribers += 1;
-    if (!triggerPollTimer) {
-      triggerPollTimer = setInterval(() => {
-        void queryClient.invalidateQueries({ queryKey: TRADING_ALERT_TRIGGERS_QUERY_KEY });
-      }, 10_000);
+    if (!stopTriggerPolling) {
+      stopTriggerPolling = startPolling(() => queryClient.invalidateQueries({ queryKey: TRADING_ALERT_TRIGGERS_QUERY_KEY }), POLL_INTERVALS_MS.tradingAlerts);
     }
     return () => {
       triggerPollSubscribers = Math.max(0, triggerPollSubscribers - 1);
-      if (triggerPollSubscribers === 0 && triggerPollTimer) {
-        clearInterval(triggerPollTimer);
-        triggerPollTimer = null;
+      if (triggerPollSubscribers === 0 && stopTriggerPolling) {
+        stopTriggerPolling();
+        stopTriggerPolling = null;
       }
     };
   }, [options.poll, queryClient]);

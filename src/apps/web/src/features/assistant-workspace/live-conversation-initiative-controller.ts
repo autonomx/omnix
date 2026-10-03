@@ -8,6 +8,7 @@ import { api, unwrap } from '../../api/http';
 import { openStream } from '../../api/transport';
 import { liveCallPresentationStore } from './live-call-presentation-store';
 import { ASSISTANT_LIVE_VOICE_CALL_CONNECTED_EVENT, ASSISTANT_LIVE_VOICE_CALL_START_EVENT, ASSISTANT_LIVE_VOICE_STOP_EVENT, ASSISTANT_LIVE_VOICE_USER_SPEECH_EVENT, ASSISTANT_VOICE_INTERRUPT_EVENT, ASSISTANT_VOICE_PERF_EVENT, emitOmnixEvent, LIVE_CHAT_SESSION_CHANGED_EVENT, LIVE_CONVERSATION_PROACTIVE_DELIVERED_EVENT, LIVE_CONVERSATION_PROFILE_CHANGED_EVENT } from '../../events/bus';
+import { startTicker } from '../../shared/timers';
 
 let liveConversationInitiativeInstalled = false;
 
@@ -128,10 +129,10 @@ export function initializeLiveConversationInitiativeController(): () => void {
 
   const unsubscribe = liveConversationStore.subscribe(handleAuthoritativeStateChange);
   handleAuthoritativeStateChange();
-  const scheduler = window.setInterval(evaluateInitiative, SCHEDULER_INTERVAL_MS);
+  const stopScheduler = startTicker(evaluateInitiative, SCHEDULER_INTERVAL_MS);
 
   return () => {
-    window.clearInterval(scheduler);
+    stopScheduler();
     unsubscribe();
     window.removeEventListener(LIVE_CHAT_SESSION_CHANGED_EVENT, handleSession);
     window.removeEventListener(ASSISTANT_LIVE_VOICE_CALL_START_EVENT, handleCallStart);

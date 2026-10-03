@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { formatTradingTime, formatTradingTimezoneOffset, resolveTradingTimezone, TRADING_TIMEZONE_OPTIONS, writeTradingTimezoneId } from './tradingTime';
 import { ranges } from './tradingChartPanelModel';
 import type { TradingChartPanelModel } from './useTradingChartPanel';
 import { emitOmnixEvent, TRADING_CHART_TIMEZONE_CHANGE_EVENT } from '../../events/bus';
+import { useNow } from '../../shared/timers';
 
 /** The footer: replay controls, visible ranges, timezone, offset and clock. */
 export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
@@ -123,10 +123,6 @@ export function ChartPanelFooter({ ws }: { ws: TradingChartPanelModel }) {
 
 /** The chart footer's clock; it re-renders itself each second, not the chart panel (WP-9.9). */
 function TradingClock({ timezone }: { timezone: string }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useNow(1_000);
   return <>{`${formatTradingTime(now, timezone)} ${formatTradingTimezoneOffset(now, timezone)}`}</>;
 }

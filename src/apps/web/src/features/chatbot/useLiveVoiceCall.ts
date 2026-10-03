@@ -10,6 +10,7 @@ import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
 import { useStreamedVoiceTurns } from './useStreamedVoiceTurns';
 import { ASSISTANT_LIVE_VOICE_STOP_EVENT, emitOmnixEvent } from '../../events/bus';
+import { startTicker } from '../../shared/timers';
 
 type LiveVoiceCallOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio' | 'stopAssistantResponseAudio' | 'currentLiveCallSpeechStyle'>
   & Pick<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef' | 'markVoiceTurnPerformance' | 'recordVoiceTurnDiagnostic'>
@@ -119,8 +120,7 @@ export function useLiveVoiceCall({
     }
     const updateElapsed = () => setCallElapsedMs(Date.now() - callStartedAt);
     updateElapsed();
-    const intervalId = window.setInterval(updateElapsed, CALL_TIMER_TICK_MS);
-    return () => window.clearInterval(intervalId);
+    return startTicker(updateElapsed, CALL_TIMER_TICK_MS);
   }, [callStartedAt]);
 
   useEffect(() => {

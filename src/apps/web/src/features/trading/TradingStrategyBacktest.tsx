@@ -10,6 +10,7 @@ import type {
   StrategyEvent,
   StrategyRangeBacktestResult,
 } from './tradingStrategyTypes';
+import { startTicker } from '../../shared/timers';
 
 function isoDate(offsetDays = 0): string {
   const value = new Date();
@@ -77,10 +78,7 @@ export function TradingStrategyBacktest({ strategy }: { strategy: GapPullbackTra
       return;
     }
     const startedAt = Date.now();
-    const timer = window.setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-    return () => window.clearInterval(timer);
+    return startTicker(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
   }, [running]);
 
   useEffect(() => {

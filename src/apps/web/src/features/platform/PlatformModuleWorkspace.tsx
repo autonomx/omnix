@@ -14,10 +14,10 @@ import type {
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
-import { omnixEventClient, RESYNC_EVENT, type OmnixEventConnectionStatus } from '../../events/eventClient';
+import type { OmnixEventConnectionStatus } from '../../events/eventClient';
+import { useEventConnectionStatus, useJobEventRefresh } from '../../events/useJobEvents';
 import { jobProgressPercent } from '../../api/jobProgress';
 
-const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled', RESYNC_EVENT] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
 const diagnosticsEventQueryKeys: QueryKey[] = [['platform', 'diagnostics'], ['platform', 'jobs']];
 const artifactEventQueryKeys: QueryKey[] = [['platform', 'assets'], ['platform', 'reports']];
@@ -531,33 +531,6 @@ function QueryState<T>({
   }
 
   return <>{children(query.data)}</>;
-}
-
-function useEventConnectionStatus(): OmnixEventConnectionStatus {
-  const [status, setStatus] = useState(() => omnixEventClient.getStatus());
-
-  useEffect(() => omnixEventClient.subscribeStatus(setStatus), []);
-
-  return status;
-}
-
-function useJobEventRefresh(queryKeys: QueryKey[]) {
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const invalidate = () => {
-      for (const queryKey of queryKeys) {
-        queryClient.invalidateQueries({ queryKey });
-      }
-    };
-    const unsubscribes = jobEventNames.map((eventName) => omnixEventClient.subscribe(eventName, invalidate));
-
-    return () => {
-      for (const unsubscribe of unsubscribes) {
-        unsubscribe();
-      }
-    };
-  }, [queryClient, queryKeys]);
 }
 
 function DetailList({ rows }: { rows: Array<[string, string]> }) {

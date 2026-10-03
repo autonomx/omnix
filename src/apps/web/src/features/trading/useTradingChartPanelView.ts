@@ -10,6 +10,7 @@ import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
 import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
 import type { useChartSync } from './useTradingChartPanelSync';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 /** What the panel shows: quote, change, legend and visible indicator outputs. */
 export function useChartView(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle> & ReturnType<typeof useChartSync>) {
@@ -29,15 +30,13 @@ export function useChartView(ws: TradingChartPanelProps & ReturnType<typeof useC
     }
     if (isTradingFormulaInstrumentId(instrumentId)) {
       setStreamStatus('polling');
-      const poll = window.setInterval(() => void chartQuery.refetch(), 30_000);
-      return () => window.clearInterval(poll);
+      return startPolling(() => chartQuery.refetch(), POLL_INTERVALS_MS.chartFallback);
     }
     setStreamError(null);
     const derivedInterval = !resolved.supported_intervals.includes(interval);
     if (resolved.feed_type !== 'websocket_and_rest' || derivedInterval) {
       setStreamStatus('polling');
-      const poll = window.setInterval(() => void chartQuery.refetch(), 30_000);
-      return () => window.clearInterval(poll);
+      return startPolling(() => chartQuery.refetch(), POLL_INTERVALS_MS.chartFallback);
     }
     return tradingStreamHub.subscribe(
       chartId,

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BacktestRunResult, FrozenDatasetSnapshot } from './replayTypes';
 import { tradingReplayApi } from './tradingReplayApi';
+import { startTicker } from '../../shared/timers';
 
 export function TradingReplayPanel({
   instrumentId,
@@ -42,7 +43,7 @@ export function TradingReplayPanel({
   useEffect(() => {
     if (!playing || !selected) return;
     const numericSpeed = Math.max(0.25, Math.min(100, Number(speed) || 1));
-    const timer = window.setInterval(() => {
+    return startTicker(() => {
       setReplayIndex((current) => {
         if (current + 1 >= selected.bars.length) {
           setPlaying(false);
@@ -51,7 +52,6 @@ export function TradingReplayPanel({
         return current + 1;
       });
     }, Math.max(25, 1_000 / numericSpeed));
-    return () => window.clearInterval(timer);
   }, [playing, selected, speed]);
 
   const freeze = async () => {

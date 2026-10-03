@@ -7,6 +7,7 @@ import type { useChartPanelState } from './useTradingChartPanelState';
 import type { useChartIndicatorScheduling } from './useTradingChartPanelData';
 import type { useChartPanelData } from './useTradingChartPanelData';
 import type { useChartLifecycle } from './useTradingChartPanelLifecycle';
+import { startTicker } from '../../shared/timers';
 
 /** Keeps the chart in step with its data, replay, chart type, indicators and comparisons. */
 export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useChartPanelState> & ReturnType<typeof useChartIndicatorScheduling> & ReturnType<typeof useChartPanelData> & ReturnType<typeof useChartLifecycle>) {
@@ -102,7 +103,7 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
   useEffect(() => {
     if (!replayPlaying || !replayVisible || replayCursorIndex === null) return;
     const numericSpeed = Math.max(0.25, Math.min(8, Number(replaySpeed) || 1));
-    const timer = window.setInterval(() => {
+    return startTicker(() => {
       setReplayCursorIndex((current) => {
         const lastIndex = allBarsRef.current.length - 1;
         if (current === null || current >= lastIndex) {
@@ -112,7 +113,6 @@ export function useChartSync(ws: TradingChartPanelProps & ReturnType<typeof useC
         return current + 1;
       });
     }, Math.max(100, 1_000 / numericSpeed));
-    return () => window.clearInterval(timer);
   }, [replayCursorIndex, replayPlaying, replaySpeed, replayVisible, allBarsRef, setReplayCursorIndex, setReplayPlaying]);
 
   useEffect(() => {

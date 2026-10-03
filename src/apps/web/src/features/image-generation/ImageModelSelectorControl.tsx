@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { OmnixStatusPill } from '../../design/primitives';
 import type { components } from '../../api/generated/types';
 import { api } from '../../api/http';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 export type ImageLocalModelStatus = components['schemas']['ImageModelLocalStatus'];
 export type ImageDownloadProgress = components['schemas']['ImageModelDownloadProgress'];
@@ -181,10 +182,10 @@ export function ImageModelControl({
     };
 
     void poll();
-    const timer = window.setInterval(() => void poll(), 750);
+    const stopPolling = startPolling(poll, POLL_INTERVALS_MS.imageModelLoad);
     return () => {
       disposed = true;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [selectedAction, selectedProvider]);
 

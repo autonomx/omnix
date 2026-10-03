@@ -11,6 +11,7 @@ import {
 import { type DesktopCompanionEvaluationEvent } from './desktop-companion-watch-controller';
 import { api } from '../../api/http';
 import { DESKTOP_COMPANION_DELIVERY_EVENT, DESKTOP_COMPANION_EVALUATION_EVENT } from '../../events/bus';
+import { startTicker } from '../../shared/timers';
 
 let desktopCompanionShadowEvaluationInstalled = false;
 
@@ -38,7 +39,7 @@ let accumulator: DesktopCompanionEvaluationAccumulator | null = null;
 let identity: EvaluationIdentity | null = null;
 let recordedEvents = 0;
 let startedAt = new Date();
-let flushTimer: ReturnType<typeof setInterval> | null = null;
+let stopFlushTicker: (() => void) | null = null;
 let eventQueue: Promise<void> = Promise.resolve();
 
 export function initializeDesktopCompanionShadowEvaluationController(): () => void {
@@ -62,15 +63,15 @@ export function initializeDesktopCompanionShadowEvaluationController(): () => vo
   window.addEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvent);
   window.addEventListener(DESKTOP_COMPANION_DELIVERY_EVENT, handleDelivery);
   window.addEventListener('beforeunload', handleUnload);
-  flushTimer = setInterval(() => {
+  stopFlushTicker = startTicker(() => {
     eventQueue = eventQueue.then(() => flushAndRestart('interval')).catch(() => undefined);
   }, FLUSH_INTERVAL_MS);
   return () => {
     window.removeEventListener(DESKTOP_COMPANION_EVALUATION_EVENT, handleEvent);
     window.removeEventListener(DESKTOP_COMPANION_DELIVERY_EVENT, handleDelivery);
     window.removeEventListener('beforeunload', handleUnload);
-    if (flushTimer !== null) clearInterval(flushTimer);
-    flushTimer = null;
+    stopFlushTicker?.();
+    stopFlushTicker = null;
     const payload = finalizeCurrent();
     if (payload) void submitEvaluation(payload);
     desktopCompanionShadowEvaluationInstalled = false;

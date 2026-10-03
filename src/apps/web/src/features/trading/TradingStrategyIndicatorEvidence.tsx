@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { tradingStrategyApi, type StrategyRuntimeMonitorStatus, type TradingStrategyOperationsStatus } from './tradingStrategyApi';
 import type { StrategyEvent } from './tradingStrategyTypes';
 import './TradingStrategyIndicatorEvidence.css';
+import { POLL_INTERVALS_MS, startPolling } from '../../shared/timers';
 
 export type IndicatorSnapshotEvidence = {
   close: string | null;
@@ -279,10 +280,10 @@ export function TradingStrategyIndicatorEvidence({
       }
     };
     void refreshOperations();
-    const timer = window.setInterval(() => void refreshOperations(), 30_000);
+    const stopPolling = startPolling(refreshOperations, POLL_INTERVALS_MS.strategyOperations);
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      stopPolling();
     };
   }, [visible]);
 
