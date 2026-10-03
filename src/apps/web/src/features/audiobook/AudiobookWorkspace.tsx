@@ -3,6 +3,9 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
+import { ApiError } from '../../api/errors';
+import { api, unwrapAs } from '../../api/http';
+import { uploadBinary } from '../../api/transport';
 
 interface ProjectSummary {
   id: string;
@@ -283,15 +286,25 @@ const documentRoleOptions = [
   ['unknown', 'Unknown'],
 ] as const;
 
-async function responseError(response: Response): Promise<Error> {
-  const body = await response.json().catch(() => ({})) as { detail?: string };
-  return new Error(body.detail || `Request failed (${response.status})`);
+const failureMessage = (error: ApiError) => error.detail || `Request failed (${error.status})`;
+
+function audiobook<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  return unwrapAs(call, failureMessage);
 }
 
-function pageExclusionQuery(excludePageRanges: string): string {
-  const value = excludePageRanges.trim();
-  return value ? `&exclude_pages=${encodeURIComponent(value)}` : '';
+async function audiobookUpload(path: `/api/${string}`, file: Blob | null, query: Record<string, string | undefined>): Promise<void> {
+  try {
+    await uploadBinary<unknown>(path, file, { query });
+  } catch (error) {
+    throw error instanceof ApiError ? new Error(failureMessage(error)) : error;
+  }
 }
+
+function pageExclusion(excludePageRanges: string): string | undefined {
+  return excludePageRanges.trim() || undefined;
+}
+
+const projectPath = (projectId: string) => ({ project_id: projectId });
 
 async function saveClassificationRules(projectId: string, customRules: string): Promise<void> {
   await omnixApiClient.post<{ custom_rules: string }, { classification_rules: string }>(
@@ -305,41 +318,37 @@ async function uploadSource(projectId: string, file: File, excludePageRanges: st
     throw new Error(`Choose a ${sourceFormatsLabel} file.`);
   }
   if (customRules !== undefined) await saveClassificationRules(projectId, customRules);
-  const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}${pageExclusionQuery(excludePageRanges)}`;
-  const response = await fetch(url, { method: 'POST', body: file });
-  if (!response.ok) throw await responseError(response);
+  await audiobookUpload(`${base}/projects/${encodeURIComponent(projectId)}/source`, file, {
+    source_format: extension,
+    filename: file.name,
+    exclude_pages: pageExclusion(excludePageRanges),
+  });
 }
 
 async function importLibrarySource(projectId: string, filename: string, excludePageRanges: string, customRules: string): Promise<void> {
   await saveClassificationRules(projectId, customRules);
-  const url = `${base}/projects/${encodeURIComponent(projectId)}/source/library?filename=${encodeURIComponent(filename)}${pageExclusionQuery(excludePageRanges)}`;
-  const response = await fetch(url, { method: 'POST' });
-  if (!response.ok) throw await responseError(response);
+  const excludePages = pageExclusion(excludePageRanges);
+  await audiobook(api.POST('/api/audiobook/projects/{project_id}/source/library', {
+    params: { path: projectPath(projectId), query: { filename, ...(excludePages ? { exclude_pages: excludePages } : {}) } },
+  }));
 }
 
 async function uploadCover(projectId: string, file: File): Promise<void> {
-  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/cover?filename=${encodeURIComponent(file.name)}`,
-    { method: 'POST', body: file });
-  if (!response.ok) throw await responseError(response);
+  await audiobookUpload(`${base}/projects/${encodeURIComponent(projectId)}/cover`, file, { filename: file.name });
 }
 
 async function updateProjectMetadata(projectId: string, title: string, author: string): Promise<void> {
-  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, author }),
-  });
-  if (!response.ok) throw await responseError(response);
+  await audiobook(api.PATCH('/api/audiobook/projects/{project_id}', { params: { path: projectPath(projectId) }, body: { title, author } }));
 }
 
 async function deleteAudiobookProject(projectId: string): Promise<void> {
-  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
-  if (!response.ok) throw await responseError(response);
+  await audiobook(api.DELETE('/api/audiobook/projects/{project_id}', { params: { path: projectPath(projectId) } }));
 }
 
 async function deleteAudiobookAsset(projectId: string, assetId: string): Promise<void> {
-  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
-  if (!response.ok) throw await responseError(response);
+  await audiobook(api.DELETE('/api/audiobook/projects/{project_id}/assets/{asset_id}', {
+    params: { path: { project_id: projectId, asset_id: assetId } },
+  }));
 }
 
 async function reclassifyAudiobook(projectId: string, customRules: string): Promise<void> {
@@ -357,15 +366,7 @@ async function extractQuotes(projectId: string, customRules: string): Promise<vo
 async function setAudiobookReadingMode(
   projectId: string, mode: 'standard' | 'story_only' | 'verbatim',
 ): Promise<void> {
-  const response = await fetch(
-    `${base}/projects/${encodeURIComponent(projectId)}/reading-policy`,
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
-    },
-  );
-  if (!response.ok) throw await responseError(response);
+  await audiobook(api.PATCH('/api/audiobook/projects/{project_id}/reading-policy', { params: { path: projectPath(projectId) }, body: { mode } }));
 }
 
 async function setDocumentBlockAction(
@@ -373,20 +374,10 @@ async function setDocumentBlockAction(
   action: 'DEFAULT' | 'READ' | 'SKIP' | 'READ_ONCE',
   roleOverride: string | null = null,
 ): Promise<void> {
-  const response = await fetch(
-    `${base}/projects/${encodeURIComponent(projectId)}/document-overrides`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scope: 'BLOCK',
-        scope_key: blockId,
-        action,
-        role_override: roleOverride,
-      }),
-    },
-  );
-  if (!response.ok) throw await responseError(response);
+  await audiobook(api.POST('/api/audiobook/projects/{project_id}/document-overrides', {
+    params: { path: projectPath(projectId) },
+    body: { scope: 'BLOCK', scope_key: blockId, action, role_override: roleOverride },
+  }));
 }
 
 function formatDuration(seconds?: number): string {
@@ -1599,8 +1590,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                         {span.speech_exclusions?.map((item) => <div className="audiobook-span-removal" key={item.id}>
                           <span>Removed from audio: “{item.source_text}”</span>
                           <button type="button" disabled={busy} onClick={() => void action(async () => {
-                            const response = await fetch(`${base}/projects/${encodeURIComponent(project.id)}/speech-exclusions/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
-                            if (!response.ok) throw await responseError(response);
+                            await audiobook(api.DELETE('/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}', {
+                              params: { path: { project_id: project.id, exclusion_id: item.id } },
+                            }));
                           }, 'Text restored. Regenerate audio to hear the change.')}>Restore text</button>
                         </div>)}
                         {selectedPronunciation?.spanId === span.id && <form className="audiobook-span-pronunciation" onSubmit={submitPronunciation}>

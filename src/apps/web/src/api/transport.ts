@@ -22,19 +22,19 @@ async function failed(response: Response): Promise<never> {
   throw new ApiError(response.status, body, response.headers?.get('x-request-id') ?? undefined);
 }
 
-/** POSTs file bytes as the request body and returns the JSON response. */
+/** POSTs file bytes (or nothing) as the request body and returns the JSON response, if any. */
 export async function uploadBinary<T>(
   path: GatewayPath,
-  body: Blob,
+  body: Blob | null,
   options: { query?: Record<string, string | number | boolean | null | undefined>; contentType?: string; method?: 'POST' | 'PUT' } = {},
 ): Promise<T> {
   const response = await fetch(withQuery(path, options.query), {
     method: options.method ?? 'POST',
-    headers: { 'Content-Type': options.contentType || body.type || 'application/octet-stream' },
-    body,
+    ...(body ? { headers: { 'Content-Type': options.contentType || body.type || 'application/octet-stream' }, body } : {}),
   });
   if (!response.ok) return failed(response);
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /** An ApiError from these calls as `<label> failed with status <status>.` */
