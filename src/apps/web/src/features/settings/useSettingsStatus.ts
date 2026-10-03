@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
+import { api, unwrap } from '../../api/http';
 
 export type SettingsStatusSnapshot = {
   gateway: string;
@@ -27,7 +28,7 @@ export function useSettingsStatus() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     const [runtime, providers, residency] = await Promise.allSettled([
-      omnixApiClient.get<Record<string, unknown>>('/api/runtime/status'),
+      unwrap(api.GET('/api/runtime/status')) as Promise<Record<string, unknown>>,
       omnixApiClient.listProviders(),
       omnixApiClient.getModelResidency(),
     ]);

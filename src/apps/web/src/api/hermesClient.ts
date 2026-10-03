@@ -1,4 +1,4 @@
-import { omnixApiClient } from './client';
+import { api, unwrap } from './http';
 
 export type HermesStatusResponse = Record<string, unknown>;
 
@@ -119,34 +119,39 @@ export type HermesTestResponse = {
   error?: string | null;
 };
 
+// The Hermes routes return untyped objects; these are the fields the UI reads.
+async function hermes<T>(call: Promise<{ data?: unknown; error?: unknown; response: Response }>): Promise<T> {
+  return (await unwrap(call)) as T;
+}
+
 export function getHermesStatus(): Promise<HermesStatusResponse> {
-  return omnixApiClient.get<HermesStatusResponse>('/api/hermes/status');
+  return hermes(api.GET('/api/hermes/status'));
 }
 
 export function getHermesRecent(): Promise<HermesRecentResponse> {
-  return omnixApiClient.get<HermesRecentResponse>('/api/hermes/recent');
+  return hermes(api.GET('/api/hermes/recent'));
 }
 
 export function getHermesCandidateDemo(): Promise<HermesCandidatePreviewResponse> {
-  return omnixApiClient.get<HermesCandidatePreviewResponse>('/api/hermes/candidate/demo');
+  return hermes(api.GET('/api/hermes/candidate/demo'));
 }
 
 export function getHermesRouteDecision(mode = 'rpg'): Promise<HermesRouteDecisionResponse> {
-  return omnixApiClient.get<HermesRouteDecisionResponse>(`/api/hermes/route-decision?mode=${encodeURIComponent(mode)}`);
+  return hermes(api.GET('/api/hermes/route-decision', { params: { query: { mode } } }));
 }
 
 export function approveHermesCandidate(request: HermesApprovalRequest): Promise<HermesApprovalResponse> {
-  return omnixApiClient.post<HermesApprovalRequest, HermesApprovalResponse>('/api/hermes/approve', request);
+  return hermes(api.POST('/api/hermes/approve', { body: request }));
 }
 
 export function getHermesRpgSuggestions(request: HermesRpgSuggestionsRequest): Promise<HermesRpgSuggestionsResponse> {
-  return omnixApiClient.post<HermesRpgSuggestionsRequest, HermesRpgSuggestionsResponse>('/api/hermes/rpg/suggestions', request);
+  return hermes(api.POST('/api/hermes/rpg/suggestions', { body: request }));
 }
 
 export function readHermesRpgTurn(request: HermesRpgTurnReadoutRequest): Promise<HermesRpgTurnReadoutResponse> {
-  return omnixApiClient.post<HermesRpgTurnReadoutRequest, HermesRpgTurnReadoutResponse>('/api/hermes/rpg/turn-readout', request);
+  return hermes(api.POST('/api/hermes/rpg/turn-readout', { body: request }));
 }
 
 export function runHermesTest(request: HermesTestRequest = { content: 'house status', dry_run: true }): Promise<HermesTestResponse> {
-  return omnixApiClient.post<HermesTestRequest, HermesTestResponse>('/api/hermes/test', request);
+  return hermes(api.POST('/api/hermes/test', { body: request }));
 }

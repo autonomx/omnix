@@ -1,22 +1,21 @@
 import type { components } from '../../api/generated/types';
 import { api, unwrapLabelled } from '../../api/http';
 
-type Schemas = components['schemas'];
 
 // Trading research payloads as the gateway sends them (WP-9.3).
-export type HermesResearchCoverage = Schemas['ResearchCoverage'];
-export type HermesResearchReport = Schemas['TradingResearchReport'];
-export type HermesResearchEvidence = Schemas['TradingEvidence'];
-export type HermesMarketBriefItem = Schemas['TradingMarketBriefItem'];
-export type HermesMarketBrief = Schemas['TradingMarketBrief'];
-export type HermesSupplyFact = Schemas['SupplyFact'];
-export type HermesResearchFactSet = Schemas['TradingFactSet'];
-export type HermesResearchFeatures = Schemas['StrategyResearchFeatures'];
-export type HermesResearchAction = Schemas['ResearchActionRecord'];
-export type HermesShadowAnnotation = Schemas['NoveltyShadowAnnotation'];
-export type HermesResearchAudit = Schemas['TradingResearchAuditView'];
-export type HermesResearchValidation = Schemas['ResearchValidationReport'];
-export type HermesResearchStart = Schemas['TradingResearchCoordinatorResult'];
+export type HermesResearchCoverage = components['schemas']['ResearchCoverage'];
+export type HermesResearchReport = components['schemas']['TradingResearchReport'];
+export type HermesResearchEvidence = components['schemas']['TradingEvidence'];
+export type HermesMarketBriefItem = components['schemas']['TradingMarketBriefItem'];
+export type HermesMarketBrief = components['schemas']['TradingMarketBrief'];
+export type HermesSupplyFact = components['schemas']['SupplyFact'];
+export type HermesResearchFactSet = components['schemas']['TradingFactSet'];
+export type HermesResearchFeatures = components['schemas']['StrategyResearchFeatures'];
+export type HermesResearchAction = components['schemas']['ResearchActionRecord'];
+export type HermesShadowAnnotation = components['schemas']['NoveltyShadowAnnotation'];
+export type HermesResearchAudit = components['schemas']['TradingResearchAuditView'];
+export type HermesResearchValidation = components['schemas']['ResearchValidationReport'];
+export type HermesResearchStart = components['schemas']['TradingResearchCoordinatorResult'];
 export type ResearchCoverageState = HermesResearchCoverage['atm'];
 export type ResearchRecommendation = HermesResearchValidation['feature_results'][number]['recommendation'];
 

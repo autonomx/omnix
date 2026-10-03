@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { omnixApiClient } from '../../api/client';
 import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 import { SettingsAdvanced, SettingsField, SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 import type { ResearchProvider } from './settingsDocumentTypes';
 import type { components } from '../../api/generated/types';
+import { api, unwrap } from '../../api/http';
 
 
 type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];
@@ -26,7 +26,7 @@ export function ResearchSettingsSection() {
 
   useEffect(() => {
     let active = true;
-    omnixApiClient.get<ResearchRuntimeStatus>('/api/assistant/research/status').then((result) => {
+    unwrap(api.GET('/api/assistant/research/status')).then((result: ResearchRuntimeStatus) => {
       if (!active) return;
       setRuntime(result);
       setStatusMessage('Research runtime status loaded.');

@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { omnixApiClient } from '../../api/client';
 import { ResearchCredentialSettings } from './ResearchCredentialSettings';
 
 const credentialStatus = {
@@ -25,12 +24,13 @@ const credentialStatus = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('ResearchCredentialSettings', () => {
   it('captures the API key before React clears the event currentTarget', async () => {
-    vi.spyOn(omnixApiClient, 'get').mockResolvedValue(credentialStatus);
-    const post = vi.spyOn(omnixApiClient, 'post').mockResolvedValue(credentialStatus);
+    const fetchMock = vi.fn(async () => Response.json(credentialStatus));
+    vi.stubGlobal('fetch', fetchMock);
 
     render(<ResearchCredentialSettings />);
 
@@ -41,10 +41,10 @@ describe('ResearchCredentialSettings', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Save key' })[0]);
 
     await waitFor(() => {
-      expect(post).toHaveBeenCalledWith('/api/assistant/research/credentials', {
-        provider: 'brave',
-        api_key: 'brave-test-key',
-      });
+      expect(fetchMock).toHaveBeenCalledWith('/api/assistant/research/credentials', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ provider: 'brave', api_key: 'brave-test-key' }),
+      }));
     });
   });
 });

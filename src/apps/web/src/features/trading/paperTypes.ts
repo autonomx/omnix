@@ -1,18 +1,16 @@
 import type { components } from '../../api/generated/types';
 
-type Schemas = components['schemas'];
-
 // Paper trading payloads as the gateway sends them (WP-9.3).
-export type PaperAccount = Schemas['PaperAccount-Output'];
-export type PaperBalance = Schemas['PaperBalance-Output'];
-export type PaperPosition = Schemas['PaperPosition-Output'];
-export type PaperOrder = Schemas['PaperOrder-Output'];
-export type PaperFill = Schemas['PaperFill-Output'];
-export type PaperLedgerEntry = Schemas['PaperLedgerEntry-Output'];
-export type PaperAccountSnapshot = Schemas['PaperAccountSnapshot-Output'];
-export type PaperPositionProtection = Schemas['PaperPositionProtection'];
-export type PaperRiskPreview = Schemas['PaperRiskPreview'];
-export type PaperRiskOrderResult = Schemas['PaperRiskOrderResult'];
+export type PaperAccount = components['schemas']['PaperAccount-Output'];
+export type PaperBalance = components['schemas']['PaperBalance-Output'];
+export type PaperPosition = components['schemas']['PaperPosition-Output'];
+export type PaperOrder = components['schemas']['PaperOrder-Output'];
+export type PaperFill = components['schemas']['PaperFill-Output'];
+export type PaperLedgerEntry = components['schemas']['PaperLedgerEntry-Output'];
+export type PaperAccountSnapshot = components['schemas']['PaperAccountSnapshot-Output'];
+export type PaperPositionProtection = components['schemas']['PaperPositionProtection'];
+export type PaperRiskPreview = components['schemas']['PaperRiskPreview'];
+export type PaperRiskOrderResult = components['schemas']['PaperRiskOrderResult'];
 
 export type PaperSide = PaperOrder['side'];
 export type PaperOrderType = PaperOrder['order_type'];
@@ -20,8 +18,8 @@ export type PaperOrderStatus = PaperOrder['status'];
 export type PaperProtectionStatus = PaperPositionProtection['status'];
 
 // What the UI sends.
-export type PaperAccountCreateInput = Schemas['PaperAccountCreate'];
-export type PaperOrderInput = Schemas['PaperOrderRequest'];
-export type PaperProtectionInput = Schemas['PaperProtectionUpsert'];
-export type PaperRiskPreviewInput = Schemas['PaperRiskPreviewRequest'];
-export type PaperRiskOrderInput = Schemas['PaperRiskOrderRequest'];
+export type PaperAccountCreateInput = components['schemas']['PaperAccountCreate'];
+export type PaperOrderInput = components['schemas']['PaperOrderRequest'];
+export type PaperProtectionInput = components['schemas']['PaperProtectionUpsert'];
+export type PaperRiskPreviewInput = components['schemas']['PaperRiskPreviewRequest'];
+export type PaperRiskOrderInput = components['schemas']['PaperRiskOrderRequest'];

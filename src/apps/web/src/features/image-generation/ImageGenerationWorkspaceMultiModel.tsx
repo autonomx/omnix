@@ -3,7 +3,7 @@
 import { Text, Title } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { omnixApiClient, type AssetListResponse, type JobListResponse, type JobRecord } from '../../api/client';
+import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { imageGenerationDefaults } from '../settings/moduleDefaults';
@@ -19,14 +19,13 @@ import {
   imageModelGenerationBlockReason,
   selectedImageModel,
   type ImageModelAction,
-  type ImageModelStatusPayload,
 } from './ImageModelControl';
 import { ImageReadinessPanel } from './ImageReadinessPanel';
+import { imageApi } from './imageApi';
 import { ImageRequestForm } from './ImageRequestForm';
 import {
   readyImageProviders,
   resolveImageReadiness,
-  type WorkerHealthPayload,
 } from './imageReadinessModel';
 import { buildImageGenerateInput, type ImageRequestFormValues } from './imageRequestModel';
 import {
@@ -58,7 +57,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   const providersQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const workersQuery = useQuery({
     queryKey: ['image-generation', 'worker-health'],
-    queryFn: () => omnixApiClient.get<WorkerHealthPayload>('/api/workers/health'),
+    queryFn: imageApi.workerHealth,
     refetchInterval: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -66,9 +65,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   });
   const modelStatusQuery = useQuery({
     queryKey: [...IMAGE_MODEL_QUERY_ROOT, selectedModelProvider],
-    queryFn: () => omnixApiClient.get<ImageModelStatusPayload>(
-      `/api/image-generation/model/status?provider=${encodeURIComponent(selectedModelProvider)}`,
-    ),
+    queryFn: () => imageApi.modelStatus(selectedModelProvider),
     refetchInterval: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -76,12 +73,12 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
   });
   const jobsQuery = useQuery({
     queryKey: IMAGE_JOBS_QUERY_KEY,
-    queryFn: () => omnixApiClient.get<JobListResponse>('/api/image-generation/jobs'),
+    queryFn: imageApi.jobs,
     refetchInterval: (query) => (hasActiveImageJobs(query.state.data) ? 1_500 : false),
   });
   const assetsQuery = useQuery({
     queryKey: IMAGE_ASSETS_QUERY_KEY,
-    queryFn: () => omnixApiClient.get<AssetListResponse>('/api/image-generation/assets'),
+    queryFn: imageApi.assets,
   });
   const settingsQuery = useQuery({ queryKey: ['settings', 'profile'], queryFn: loadSettingsProfile });
   const moduleDefaults = useMemo(() => imageGenerationDefaults(settingsQuery.data?.profile), [settingsQuery.data?.profile]);
@@ -149,24 +146,15 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     queryClient.invalidateQueries({ queryKey: ['platform', 'providers'] }),
   ]);
   const downloadModelMutation = useMutation({
-    mutationFn: (request: ImageModelDownloadRequest) => omnixApiClient.post<ImageModelDownloadRequest, ImageModelStatusPayload>(
-      '/api/image-generation/model/download',
-      request,
-    ),
+    mutationFn: (request: ImageModelDownloadRequest) => imageApi.downloadModel(request),
     onSuccess: refreshModelQueries,
   });
   const loadModelMutation = useMutation({
-    mutationFn: (provider: string) => omnixApiClient.post<{ provider: string }, ImageModelStatusPayload>(
-      '/api/image-generation/model/load',
-      { provider },
-    ),
+    mutationFn: (provider: string) => imageApi.loadModel(provider),
     onSuccess: refreshModelQueries,
   });
   const unloadModelMutation = useMutation({
-    mutationFn: (provider: string) => omnixApiClient.post<{ provider: string }, ImageModelStatusPayload>(
-      '/api/image-generation/model/unload',
-      { provider },
-    ),
+    mutationFn: (provider: string) => imageApi.unloadModel(provider),
     onSuccess: refreshModelQueries,
   });
   const modelAction: ImageModelAction = downloadModelMutation.isPending
@@ -207,10 +195,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
   });
   const retryJobMutation = useMutation({
-    mutationFn: (jobId: string) => omnixApiClient.post<Record<string, never>, JobRecord>(
-      `/api/image-generation/jobs/${encodeURIComponent(jobId)}/retry`,
-      {},
-    ),
+    mutationFn: (jobId: string) => imageApi.retryJob(jobId),
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: IMAGE_JOBS_QUERY_KEY }),
   });
   const latestAsset = useMemo(

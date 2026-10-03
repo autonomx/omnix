@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { omnixApiClient, type ProviderFacadePayload } from '../../api/client';
 import { SettingsSection, SettingsStatusRow } from './SettingsPrimitives';
+import { api, unwrap } from '../../api/http';
 
 export type ServiceStatusPayload = {
   ok?: boolean;
@@ -34,7 +35,7 @@ export function ServicesSettings() {
     setLoading(true);
     const [providers, status] = await Promise.allSettled([
       omnixApiClient.listProviders(),
-      omnixApiClient.get<ServiceStatusPayload>('/api/hermes/status'),
+      unwrap(api.GET('/api/hermes/status')) as Promise<ServiceStatusPayload>,
     ]);
     if (providers.status === 'fulfilled') setPayload(providers.value);
     if (status.status === 'fulfilled') setService(status.value);

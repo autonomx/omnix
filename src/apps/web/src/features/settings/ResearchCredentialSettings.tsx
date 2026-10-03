@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { omnixApiClient } from '../../api/client';
 import { SettingsField } from './SettingsPrimitives';
+import { api, unwrap } from '../../api/http';
 
 type CredentialProvider = 'brave' | 'tavily';
 
@@ -50,7 +50,8 @@ export function ResearchCredentialSettings() {
 
   const load = useCallback(async () => {
     try {
-      const result = await omnixApiClient.get<ResearchCredentialStatus>('/api/assistant/research/credentials');
+      // The credential routes return untyped objects.
+      const result = (await unwrap(api.GET('/api/assistant/research/credentials'))) as unknown as ResearchCredentialStatus;
       setStatus(result);
       setMessage('Search credential status loaded.');
     } catch (error) {
@@ -63,10 +64,7 @@ export function ResearchCredentialSettings() {
   const updateCredential = async (provider: CredentialProvider, apiKey: string) => {
     setBusyProvider(provider);
     try {
-      const result = await omnixApiClient.post<
-        { provider: CredentialProvider; api_key: string },
-        ResearchCredentialStatus
-      >('/api/assistant/research/credentials', { provider, api_key: apiKey });
+      const result = (await unwrap(api.POST('/api/assistant/research/credentials', { body: { provider, api_key: apiKey } }))) as unknown as ResearchCredentialStatus;
       setStatus(result);
       setInputs((current) => ({ ...current, [provider]: '' }));
       setMessage(apiKey ? `${provider === 'brave' ? 'Brave' : 'Tavily'} credential saved.` : `${provider === 'brave' ? 'Brave' : 'Tavily'} credential cleared.`);
