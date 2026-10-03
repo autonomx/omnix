@@ -224,6 +224,13 @@ def configure_device_permits() -> None:
     except DatabaseConfigurationError:
         _LOG.warning("image service has no database; device permits are not coordinated")
         return
+    from app.persistence.startup import bootstrap_postgresql_runtime
+    from app.settings.access import install_database_settings_service
+
+    # Image provider settings (model directories, repositories) live in
+    # PostgreSQL and are read in the local workspace, as in the gateway.
+    bootstrap_postgresql_runtime(database)
+    install_database_settings_service(database)
     permit_config = DevicePermitSettings.from_environment(environment())
     configure_default_device_permit_service(
         database,

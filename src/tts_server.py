@@ -413,6 +413,13 @@ async def _enter_device_permit(permit: Any) -> None:
 async def on_startup() -> None:
     global _TTS_PROVIDER, _TTS_PROVIDER_ERROR, _TTS_MODEL_OWNER_GUARD
     try:
+        # Provider settings live in PostgreSQL and are read in the local
+        # workspace: the same bootstrap as the gateway, then the settings service.
+        from app.persistence.startup import bootstrap_postgresql_runtime
+        from app.settings.access import install_database_settings_service
+
+        bootstrap_postgresql_runtime(default_database())
+        install_database_settings_service(default_database())
         _claim_tts_model_owner()
         status = initialize_tts_provider()
         if status.get("ok") and _TTS_MODEL_OWNER_GUARD is not None:

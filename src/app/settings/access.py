@@ -31,6 +31,24 @@ def install_settings_service(service: SettingsService) -> None:
         _SERVICE = service
 
 
+def install_database_settings_service(database: Any) -> SettingsService:
+    """Install the PostgreSQL-backed settings in a process without the gateway's composition.
+
+    The TTS and image services read the same settings (provider configuration,
+    model directories) as the gateway. Idempotent: an installed service is kept.
+    """
+    from app.security.tenant_context import TenantProvider
+
+    from .registry import core_setting_specs
+
+    with _LOCK:
+        if _SERVICE is not None:
+            return _SERVICE
+    service = SettingsService(database, TenantProvider().current, specs=core_setting_specs())
+    install_settings_service(service)
+    return service
+
+
 def reset_settings_service_for_tests() -> None:
     global _SERVICE
     with _LOCK:

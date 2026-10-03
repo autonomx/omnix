@@ -73,3 +73,19 @@ def test_provider_rewrites_legacy_broken_local_default_before_loader_call():
     runtime_status = provider.get_runtime_status()
     assert runtime_status["configured_model_source"] == "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
     assert "faster-qwen3-tts-main" in runtime_status["runtime_code_dir"]
+
+
+def test_a_repository_id_resolves_through_the_local_hugging_face_cache(monkeypatch, tmp_path):
+    # Containers download the pinned snapshot into the cache (app.models) and load it offline.
+    from app.providers.vendor.qwen3_tts import loader as loader_module
+
+    monkeypatch.delenv("OMNIX_TTS_MODEL_DIR", raising=False)
+    monkeypatch.delenv("OMNIX_QWEN3_TTS_MODEL_DIR", raising=False)
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    monkeypatch.setattr(loader_module, "_find_cached_snapshot_dir", lambda name: snapshot if name == "Qwen/Qwen3-TTS-12Hz-0.6B-Base" else None)
+
+    assert not loader_module._looks_like_local_model_path("Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+    assert loader_module._resolve_model_source("Qwen/Qwen3-TTS-12Hz-0.6B-Base") == str(snapshot)
+    assert loader_module._looks_like_local_model_path("models/qwen/extra")
+    assert loader_module._looks_like_local_model_path(r"D:\models\qwen")

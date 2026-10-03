@@ -7,6 +7,7 @@ All other code should use this loader interface.
 from app.config.env import env_str as _env_str
 # Fix PyTorch DLL loading hang on Windows (PyTorch 2.9+)
 import os
+import re
 import platform
 
 if platform.system() == "Windows":
@@ -30,6 +31,8 @@ from .bootstrap import ensure_vendored_qwen3_tts_available
 from .runtime_status import validate_qwen3_tts_runtime
 
 logger = logging.getLogger(__name__)
+# A Hugging Face repository id: one "owner/name" pair.
+_REPO_ID = re.compile(r"[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*")
 
 # Global model cache
 _model_cache: Dict[str, Any] = {}
@@ -51,7 +54,12 @@ def _looks_like_local_model_path(model_name: str) -> bool:
         return True
     if value.startswith(".") or value.startswith(".."):
         return True
-    if "\\" in value or "/" in value:
+    if "\\" in value:
+        return True
+    if "/" in value:
+        # "org/name" is a Hugging Face repository id unless such a directory exists.
+        if _REPO_ID.fullmatch(value) and not Path(value).expanduser().exists():
+            return False
         return True
     return False
 

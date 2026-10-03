@@ -70,7 +70,10 @@ x-model-service: &model-service
     - /var/lib/omnix:uid=10001,gid=10001
   volumes:
     - omnix-models:/models
+    - ${OMNIX_RESOURCES:-omnix-resources}:/app/resources
   environment:
+    # GPU capacity is shared through PostgreSQL device permits (WP-6.2).
+    OMNIX_DATABASE_URL: postgresql://omnix_app:${OMNIX_APP_DB_PASSWORD:?set OMNIX_APP_DB_PASSWORD in .env}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}
     OMNIX_SERVICE_TOKEN: ${OMNIX_SERVICE_TOKEN:?set OMNIX_SERVICE_TOKEN in .env}
     OMNIX_SECRET_STORE: env
     OMNIX_BIND_HOST: 0.0.0.0
@@ -202,6 +205,7 @@ services:
     build: {context: ., dockerfile: deploy/docker/tts.Dockerfile}
     depends_on:
       tts-models: {condition: service_completed_successfully}
+      migrate: {condition: service_completed_successfully}
 
   stt-models:
     <<: *model-download
@@ -214,6 +218,7 @@ services:
     build: {context: ., dockerfile: deploy/docker/stt.Dockerfile}
     depends_on:
       stt-models: {condition: service_completed_successfully}
+      migrate: {condition: service_completed_successfully}
 
   image-models:
     <<: *model-download
@@ -226,6 +231,7 @@ services:
     build: {context: ., dockerfile: deploy/docker/image.Dockerfile}
     depends_on:
       image-models: {condition: service_completed_successfully}
+      migrate: {condition: service_completed_successfully}
 
   # --- storage -----------------------------------------------------------
   # S3-compatible blob store (SeaweedFS). Set OMNIX_BLOB_BACKEND=s3 and the
