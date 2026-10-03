@@ -50,6 +50,8 @@ import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
 import { LiveVoiceOrb } from './LiveVoiceOrb';
 import { ChatSidebarSessions } from './ChatSidebarSessions';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
+import { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from '../assistant-workspace/assistant-context-controls';
+import { assistantContextStore } from '../assistant-workspace/assistant-context-store';
 import { DesktopCompanionControls } from '../assistant-workspace/desktop-companion-controls';
 import { DesktopCompanionTextSurface } from '../assistant-workspace/desktop-companion-text-surface';
 import { stopAssistantPcmStream, toggleAssistantPcmStream, useAssistantPcmStream } from '../assistant-workspace/assistant-pcm-stream-websocket-player';
@@ -674,7 +676,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     onMutate: (values) => {
       markVoiceTurnPerformance('chatSubmitStartedAt');
       setChatJobError(null);
-      const researchMode = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value;
+      const researchMode = assistantContextStore.getState().researchMode;
       const content = values.content.trim() || attachmentDefaultMessage(pastedChatImages, pastedChatTextFile);
       setQuickSearchProgress(researchMode === 'quick' ? content : null);
       setPendingUserMessage({
@@ -2040,7 +2042,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {pastedChatTextFile ? <div className="assistant-chat-file-attachment" role="status"><span aria-hidden="true">📄</span><div><strong>{pastedChatTextFile.filename}</strong><small>{pastedChatTextFile.mimeType} · {(pastedChatTextFile.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove attached file" onClick={() => { setPastedChatTextFile(null); setChatImageError(null); }}>×</button></div> : null}
                 {chatImageError ? <p className="assistant-chat-image-error" role="alert">{chatImageError}</p> : null}
                 <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={handleComposerPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImages.length > 0 || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
-                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={toggleLiveCallFromControls}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
+                <div className="assistant-composer-actions"><DesktopShareButton /><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={toggleLiveCallFromControls}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Interrupt and send' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Interrupt & send' : 'Send message'}</button></div>
+              <AssistantContextControls />
               </form>
             </>
           ) : activeView === 'live' ? (
@@ -2124,7 +2127,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
               <div className="assistant-voice-transcript" ref={voiceTranscriptRef}><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
-              <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div><DesktopCompanionControls /><DesktopCompanionTextSurface /></div>
+              <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div><DesktopShareStatusRow /><DesktopCompanionControls /><DesktopCompanionTextSurface /></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
             <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading"><ToolExecutionPanel rows={toolExecutionRows} title="Tool execution" description="Review approvals and monitor tool execution results." /></section>

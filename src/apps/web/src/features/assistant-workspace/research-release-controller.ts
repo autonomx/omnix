@@ -1,16 +1,7 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
 import type { components } from '../../api/generated/types';
 import { createGatewayClient } from '../../api/http';
-
-type ResearchMode = 'disabled' | 'quick' | 'deep';
-
-type ReleaseAvailability = {
-  disabled: boolean;
-  quick: boolean;
-  deep: boolean;
-  hermes_planner: boolean;
-};
+import { assistantContextStore, type ReleaseAvailability, type ResearchMode } from './assistant-context-store';
 
 type ResearchRuntimeStatus = components['schemas']['ResearchRuntimeStatus'];
 
@@ -22,31 +13,25 @@ type ResearchUnavailableDetail = {
   downgrade_available?: boolean;
 };
 
-const CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
-const RELEASE_ATTRIBUTE = 'data-omnix-research-release';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const ENHANCED_MESSAGE_PATH = /^\/api\/assistant\/context\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
-
-let allowDowngrade = false;
-let activeSessionId: string | null = null;
-let availability: ReleaseAvailability = { disabled: true, quick: true, deep: true, hermes_planner: false };
-let releaseMessage = 'Research availability is loading.';
 const MIDDLEWARE = 'research-release';
-const ownFetch = fetchBelow(MIDDLEWARE);
-const ownClient = createGatewayClient({ fetchImpl: ownFetch });
+const ownClient = createGatewayClient({ fetchImpl: fetchBelow(MIDDLEWARE) });
+
+let activeSessionId: string | null = null;
 let disposeController: (() => void) | null = null;
 
-export function initializeResearchReleaseController(root: ParentNode = document): () => void {
+/**
+ * Keeps the research release availability in assistant-context-store (the
+ * composer renders it) and adds the Quick Search fallback consent to chat
+ * messages, reporting a refused research mode.
+ */
+export function initializeResearchReleaseController(): () => void {
   if (disposeController) return () => undefined;
   const removeMiddleware = installFetchWrapper();
-  injectReleaseControls(root);
   void loadReleaseStatus();
-  const observer = new MutationObserver(() => injectReleaseControls(root));
-  const target = root instanceof Document ? root.documentElement : root;
-  observer.observe(target, { childList: true, subtree: true });
   const dispose = () => {
-    observer.disconnect();
     removeMiddleware();
     if (disposeController === dispose) disposeController = null;
   };
@@ -74,13 +59,12 @@ export function researchReleaseMessage(detail: ResearchUnavailableDetail): strin
 
 function installFetchWrapper(): () => void {
   return registerFetchMiddleware(MIDDLEWARE, async (input, init, next) => {
-    const originalFetch = next;
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const inputUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
     const parsed = new URL(inputUrl, window.location.origin);
     const sessionMatch = parsed.pathname.match(SESSION_PATH);
     if (method === 'GET' && sessionMatch) {
-      const response = await originalFetch(input, init);
+      const response = await next(input, init);
       if (response.ok) {
         activeSessionId = sessionMatch[1] ? decodePathSegment(sessionMatch[1]) : null;
         void loadReleaseStatus(activeSessionId);
@@ -89,26 +73,25 @@ function installFetchWrapper(): () => void {
     }
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH) ?? parsed.pathname.match(ENHANCED_MESSAGE_PATH);
-    if (method !== 'POST' || !messageMatch) return originalFetch(input, init);
+    if (method !== 'POST' || !messageMatch) return next(input, init);
     activeSessionId = messageMatch[1] ? decodePathSegment(messageMatch[1]) : activeSessionId;
     const body = await requestBodyText(input, init);
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(body) as Record<string, unknown>;
     } catch {
-      return originalFetch(input, init);
+      return next(input, init);
     }
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     headers.set('Content-Type', 'application/json');
-    const response = await originalFetch(input, {
+    const response = await next(input, {
       ...init,
       method: 'POST',
       headers,
-      body: JSON.stringify(addResearchDowngradeConsent(payload, allowDowngrade)),
+      body: JSON.stringify(addResearchDowngradeConsent(payload, assistantContextStore.getState().allowDowngrade)),
     });
     if (response.status === 409) void showUnavailableResponse(response.clone());
-    else if (response.ok) releaseMessage = 'Research mode accepted for this turn.';
-    renderReleaseControls();
+    else if (response.ok) assistantContextStore.update({ releaseMessage: 'Research mode accepted for this turn.' });
     return response;
   });
 }
@@ -120,108 +103,25 @@ async function loadReleaseStatus(sessionId: string | null = activeSessionId): Pr
     });
     if (!response.ok || !payload) throw new Error('Research availability could not be loaded.');
     const released = payload.release.availability;
-    availability = {
+    const availability: ReleaseAvailability = {
       disabled: released.disabled !== false,
       quick: released.quick !== false,
       deep: released.deep === true,
       hermes_planner: released.hermes_planner === true,
     };
-    releaseMessage = releaseSummary(payload, availability);
+    assistantContextStore.update({ availability, releaseMessage: releaseSummary(payload, availability) });
   } catch (error) {
-    releaseMessage = error instanceof Error ? error.message : 'Research availability is unavailable.';
+    assistantContextStore.update({ releaseMessage: error instanceof Error ? error.message : 'Research availability is unavailable.' });
   }
-  renderReleaseControls();
 }
 
 async function showUnavailableResponse(response: Response): Promise<void> {
   try {
     const payload = await response.json() as { detail?: ResearchUnavailableDetail };
-    releaseMessage = researchReleaseMessage(payload.detail ?? {});
+    assistantContextStore.update({ releaseMessage: researchReleaseMessage(payload.detail ?? {}) });
   } catch {
-    releaseMessage = 'The selected research mode is unavailable.';
+    assistantContextStore.update({ releaseMessage: 'The selected research mode is unavailable.' });
   }
-  renderReleaseControls();
-}
-
-function injectReleaseControls(root: ParentNode): void {
-  const container = root.querySelector<HTMLElement>(`.assistant-composer > [${CONTROLS_ATTRIBUTE}]`)
-    ?? root.querySelector<HTMLElement>(`[${CONTROLS_ATTRIBUTE}]`);
-  if (!container || container.querySelector(`[${RELEASE_ATTRIBUTE}]`)) {
-    renderReleaseControls();
-    return;
-  }
-  const release = document.createElement('div');
-  release.className = 'assistant-research-release-controls';
-  release.setAttribute(RELEASE_ATTRIBUTE, 'true');
-  const fallback = document.createElement('label');
-  fallback.className = 'assistant-research-fallback';
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.setAttribute('aria-label', 'Allow Quick Search fallback');
-  checkbox.checked = allowDowngrade;
-  checkbox.addEventListener('change', () => {
-    allowDowngrade = checkbox.checked;
-    renderReleaseControls();
-  });
-  const fallbackText = document.createElement('span');
-  fallbackText.textContent = 'Allow Quick fallback';
-  fallback.append(checkbox, fallbackText);
-  const status = document.createElement('small');
-  status.className = 'assistant-research-release-status';
-  status.setAttribute('role', 'status');
-  release.append(fallback, status);
-  container.append(release);
-
-  const select = container.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
-  if (select && !select.dataset.releaseListener) {
-    select.dataset.releaseListener = 'true';
-    select.addEventListener('change', renderReleaseControls);
-  }
-  renderReleaseControls();
-}
-
-function renderReleaseControls(): void {
-  const select = visibleResearchModeSelect();
-  if (select) {
-    const quickOption = select.querySelector<HTMLOptionElement>('option[value="quick"]');
-    const deepOption = select.querySelector<HTMLOptionElement>('option[value="deep"]');
-    if (quickOption) {
-      setBooleanProperty(quickOption, 'disabled', !availability.quick);
-      setText(quickOption, availability.quick ? 'Quick search' : 'Quick search · unavailable');
-    }
-    if (deepOption) {
-      setBooleanProperty(deepOption, 'disabled', !availability.deep);
-      setText(deepOption, availability.deep ? 'Deep research' : 'Deep research · unavailable');
-    }
-  }
-  const mode = (select?.value ?? 'disabled') as ResearchMode;
-  document.querySelectorAll<HTMLElement>('.assistant-research-fallback').forEach((element) => {
-    const show = shouldOfferResearchDowngrade(mode, availability);
-    setBooleanProperty(element, 'hidden', !show);
-  });
-  document.querySelectorAll<HTMLInputElement>('input[aria-label="Allow Quick Search fallback"]').forEach((input) => {
-    setBooleanProperty(input, 'checked', allowDowngrade);
-  });
-  document.querySelectorAll<HTMLElement>('.assistant-research-release-status').forEach((element) => {
-    setText(element, releaseMessage);
-  });
-}
-
-function visibleResearchModeSelect(): HTMLSelectElement | null {
-  return document.querySelector<HTMLSelectElement>('.assistant-composer > [data-omnix-context-controls] select[aria-label="Web research mode"]')
-    ?? document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
-}
-
-function setText(element: Element, value: string): void {
-  if (element.textContent !== value) element.textContent = value;
-}
-
-function setBooleanProperty<TElement extends Element, TKey extends keyof TElement>(
-  element: TElement,
-  key: TKey,
-  value: boolean,
-): void {
-  if (element[key] !== value) element[key] = value as TElement[TKey];
 }
 
 function releaseSummary(payload: ResearchRuntimeStatus, current: ReleaseAvailability): string {

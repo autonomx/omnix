@@ -1,23 +1,26 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { fetchBelow, registerFetchMiddleware } from '../../api/fetchPipeline';
-import { DesktopTemporalCapture } from './desktop-temporal-capture';
-import type { components } from '../../api/generated/types';
+import {
+  adoptActiveSession,
+  applySessionResearchMode,
+  assistantContextStore,
+  deferResearchModePersistence,
+  dispatchPerformance,
+  loadProfileResearchDefault,
+  stopDesktopShare,
+  storeLocalWorkspace,
+} from './assistant-context-store';
+import type { DesktopTemporalCapture } from './desktop-temporal-capture';
 
-type ResearchMode = 'disabled' | 'quick' | 'deep';
-
-export type LocalWorkspaceSelection = {
-  path: string;
-  name: string;
-};
-
-type LocalWorkspacePickResponse = components['schemas']['LocalWorkspacePickResponse'];
-
-type DesktopShareSession = {
-  stream: MediaStream;
-  video: HTMLVideoElement;
-  capture: DesktopTemporalCapture;
-  sourceFingerprint: string;
-};
+export {
+  desktopStatusLabel,
+  localWorkspaceSummary,
+  normalizeDeepResearchPageLimit,
+  normalizeLocalWorkspaceSelection,
+  normalizeResearchMode,
+  readStoredAgentMode,
+  webResearchModeLabel,
+} from './assistant-context-store';
+export type { LocalWorkspaceSelection } from './assistant-context-store';
 
 export type DesktopCompanionCaptureSnapshot = {
   sessionId: string | null;
@@ -26,69 +29,29 @@ export type DesktopCompanionCaptureSnapshot = {
   capture: DesktopTemporalCapture;
 };
 
-type DisplayMediaDevices = MediaDevices & {
-  getDisplayMedia?: (constraints?: {
-    video?: boolean | MediaTrackConstraints;
-    audio?: boolean;
-  }) => Promise<MediaStream>;
-};
-
-const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
-const CONTEXT_TOOLS_ATTRIBUTE = 'data-omnix-context-tools';
-const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
-const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
-const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const AGENT_MODE_STORAGE_KEY = 'omnix.chat.mode';
-const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
-const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
-const DEFAULT_DEEP_RESEARCH_PAGES = 12;
-const MAX_DEEP_RESEARCH_PAGES = 30;
-const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
-const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
-const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-const SUPPORTED_CHAT_TEXT_FILE_SUFFIXES = new Set([
-  '.c', '.cpp', '.cs', '.css', '.csv', '.go', '.h', '.hpp', '.htm', '.html', '.java', '.js', '.json', '.jsx', '.md', '.markdown', '.py', '.rs', '.sh', '.sql', '.text', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
-]);
-const SUPPORTED_CHAT_TEXT_FILE_TYPES = new Set(['application/json', 'application/xml', 'text/csv', 'text/markdown', 'text/plain', 'text/xml']);
-
-let profileDefaultMode: ResearchMode = 'disabled';
-let researchMode: ResearchMode = 'disabled';
-let agentMode = readStoredAgentMode();
-let deepResearchMaxPages = DEFAULT_DEEP_RESEARCH_PAGES;
-let activeSessionId: string | null = null;
 const MIDDLEWARE = 'assistant-context';
-// The controller's own requests skip its rewriting but keep the transport layer.
-const ownFetch = fetchBelow(MIDDLEWARE);
-let disposeController: (() => void) | null = null;
-let desktopShare: DesktopShareSession | null = null;
-let desktopStatus = 'Off';
-let localWorkspace: LocalWorkspaceSelection | null = null;
-let localWorkspaceStatus: string | null = null;
-let openContextToolsMenu: { addButton: HTMLButtonElement; menu: HTMLElement; tools: HTMLElement } | null = null;
-const knownResearchModes = new Map<string, ResearchMode>();
-const researchModePersistenceQueues = new Map<string, Promise<void>>();
 
-export function initializeAssistantContextController(root: ParentNode = document): () => void {
+let disposeController: (() => void) | null = null;
+
+/**
+ * Sends chat messages through the context route when a context tool is on
+ * (research, agent mode, desktop sharing, a local folder) and follows the
+ * session's research mode. The composer renders the controls from
+ * assistant-context-store; this installs only the request handling.
+ */
+export function initializeAssistantContextController(): () => void {
   if (disposeController) return () => undefined;
+  assistantContextStore.useFetch(fetchBelow(MIDDLEWARE));
   const removeMiddleware = installFetchInterceptor();
   void loadProfileResearchDefault();
-  injectControls(root);
-  document.addEventListener('pointerdown', handleContextToolsOutsidePointerDown);
   window.addEventListener('omnix:chat-session-selected', handleChatSessionSelected);
-  const observer = new MutationObserver(() => {
-    if (assistantContextControlsMissing(root)) injectControls(root);
-  });
-  const observeTarget = root instanceof Document ? root.documentElement : root;
-  observer.observe(observeTarget, { childList: true, subtree: true });
   const handleUnload = () => stopDesktopShare();
   window.addEventListener('beforeunload', handleUnload, { once: true });
   const dispose = () => {
-    observer.disconnect();
     removeMiddleware();
-    document.removeEventListener('pointerdown', handleContextToolsOutsidePointerDown);
+    assistantContextStore.useFetch(null);
     window.removeEventListener('omnix:chat-session-selected', handleChatSessionSelected);
     window.removeEventListener('beforeunload', handleUnload);
     stopDesktopShare();
@@ -96,22 +59,6 @@ export function initializeAssistantContextController(root: ParentNode = document
   };
   disposeController = dispose;
   return dispose;
-}
-
-export function assistantContextControlsMissing(root: ParentNode = document): boolean {
-  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
-  const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
-  const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
-  const contextHost = assistantContextHost(composerActions, composerControls);
-  const composerMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`));
-  const toolsMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`));
-  const desktopActionMissing = Boolean(
-    composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`),
-  );
-  const desktopStatusMissing = Boolean(
-    audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`),
-  );
-  return composerMissing || toolsMissing || desktopActionMissing || desktopStatusMissing;
 }
 
 export function isAssistantMessageRequest(url: string, method: string): boolean {
@@ -127,45 +74,8 @@ export function enhancedAssistantMessageUrl(url: string): string | null {
   return parsed.toString();
 }
 
-export function webResearchModeLabel(mode: ResearchMode): string {
-  if (mode === 'quick') return 'Quick search';
-  if (mode === 'deep') return 'Deep research';
-  return 'Disabled';
-}
-
-export function normalizeLocalWorkspaceSelection(value: unknown): LocalWorkspaceSelection | null {
-  const record = asRecord(value);
-  const path = typeof record.path === 'string' ? record.path.trim() : '';
-  if (!path) return null;
-  const explicitName = typeof record.name === 'string' ? record.name.trim() : '';
-  const normalized = path.replace(/[\\/]+$/, '');
-  const inferredName = normalized.split(/[\\/]/).filter(Boolean).at(-1) || path;
-  return { path, name: explicitName || inferredName };
-}
-
-export function localWorkspaceSummary(selection: LocalWorkspaceSelection | null): string {
-  return selection ? `Local folder · ${selection.name}` : '';
-}
-
-export function normalizeResearchMode(value: unknown): ResearchMode {
-  if (value === 'quick' || value === 'deep' || value === 'disabled') return value;
-  return 'disabled';
-}
-
-export function normalizeDeepResearchPageLimit(
-  value: unknown,
-  fallback = DEFAULT_DEEP_RESEARCH_PAGES,
-): number {
-  const numeric = typeof value === 'number' ? value : Number(value);
-  const candidate = Number.isFinite(numeric) ? Math.trunc(numeric) : fallback;
-  return Math.max(1, Math.min(MAX_DEEP_RESEARCH_PAGES, candidate));
-}
-
-export function desktopStatusLabel(isSharing: boolean, status: string): string {
-  return isSharing || status !== 'Off' ? status : 'Off';
-}
-
 export function currentDesktopCompanionCapture(): DesktopCompanionCaptureSnapshot | null {
+  const { desktopShare, activeSessionId } = assistantContextStore.getState();
   if (!desktopShare) return null;
   return {
     sessionId: activeSessionId,
@@ -177,27 +87,27 @@ export function currentDesktopCompanionCapture(): DesktopCompanionCaptureSnapsho
 
 function installFetchInterceptor(): () => void {
   return registerFetchMiddleware(MIDDLEWARE, async (input, init, next) => {
-    const originalFetch = next;
     const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const inputUrl = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
     const parsed = new URL(inputUrl, window.location.origin);
     const sessionMatch = parsed.pathname.match(SESSION_PATH);
 
     if (method === 'GET' && sessionMatch) {
-      const response = await originalFetch(input, init);
-      if (response.ok) void applySessionResearchMode(decodePathSegment(sessionMatch[1]), response.clone());
+      const response = await next(input, init);
+      if (response.ok) void readSessionResearchMode(decodePathSegment(sessionMatch[1]), response.clone());
       return response;
     }
-    if (!isAssistantMessageRequest(inputUrl, method)) return originalFetch(input, init);
+    if (!isAssistantMessageRequest(inputUrl, method)) return next(input, init);
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
-    const messageSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
-    adoptActiveSession(messageSessionId);
+    adoptActiveSession(messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null);
+    const context = assistantContextStore.getState();
+    const { activeSessionId, agentMode, researchMode, desktopShare, localWorkspace } = context;
 
     if (activeSessionId && localWorkspace) storeLocalWorkspace(activeSessionId, localWorkspace);
     const shouldEnhance = agentMode || researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
     if (!shouldEnhance) {
-      const responsePromise = originalFetch(input, init);
+      const responsePromise = next(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
       dispatchPerformance('assistant_context_chat_request_dispatched', {
         sessionId: activeSessionId,
@@ -214,7 +124,7 @@ function installFetchInterceptor(): () => void {
     try {
       payload = JSON.parse(bodyText) as Record<string, unknown>;
     } catch {
-      const responsePromise = originalFetch(input, init);
+      const responsePromise = next(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
       return responsePromise;
     }
@@ -223,19 +133,20 @@ function installFetchInterceptor(): () => void {
     if (desktopShare) {
       try {
         desktopPayload = await desktopShare.capture.buildPayload();
-        desktopStatus = desktopPayload.captureMode === 'temporal'
-          ? `${desktopPayload.selectedHistoryFrames} history + current`
-          : 'Current frame attached';
+        assistantContextStore.update({
+          desktopStatus: desktopPayload.captureMode === 'temporal'
+            ? `${desktopPayload.selectedHistoryFrames} history + current`
+            : 'Current frame attached',
+        });
       } catch (error) {
-        desktopStatus = error instanceof Error ? error.message : 'Capture failed';
         stopDesktopShare({ resetStatus: false });
+        assistantContextStore.update({ desktopStatus: error instanceof Error ? error.message : 'Capture failed' });
       }
-      renderControls();
     }
 
     const enhancedUrl = enhancedAssistantMessageUrl(inputUrl);
     if (!enhancedUrl) {
-      const responsePromise = originalFetch(input, init);
+      const responsePromise = next(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
       return responsePromise;
     }
@@ -248,7 +159,7 @@ function installFetchInterceptor(): () => void {
       enhanced: true,
       persistenceDeferred: true,
     });
-    const enhancedResponse = await originalFetch(enhancedUrl, {
+    const enhancedResponse = await next(enhancedUrl, {
       ...init,
       method: 'POST',
       headers,
@@ -257,7 +168,7 @@ function installFetchInterceptor(): () => void {
         agent_mode: agentMode ? true : payload.agent_mode,
         dry_run: agentMode ? false : payload.dry_run,
         web_research_mode: researchMode,
-        deep_research_max_pages: researchMode === 'deep' ? deepResearchMaxPages : undefined,
+        deep_research_max_pages: researchMode === 'deep' ? context.deepResearchMaxPages : undefined,
         workspace_root: localWorkspace?.path,
         desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
         desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
@@ -267,7 +178,7 @@ function installFetchInterceptor(): () => void {
       }),
     });
     if (enhancedResponse.status === 404) {
-      const fallbackPromise = originalFetch(input, init);
+      const fallbackPromise = next(input, init);
       deferResearchModePersistence(fallbackPromise, activeSessionId, researchMode);
       return fallbackPromise;
     }
@@ -276,92 +187,17 @@ function installFetchInterceptor(): () => void {
   });
 }
 
-async function applySessionResearchMode(sessionId: string, response: Response): Promise<void> {
+async function readSessionResearchMode(sessionId: string, response: Response): Promise<void> {
   try {
     const session = await response.json() as { research_mode_override?: unknown };
-    adoptActiveSession(sessionId);
-    researchMode = session.research_mode_override == null
-      ? profileDefaultMode
-      : normalizeResearchMode(session.research_mode_override);
-    knownResearchModes.set(sessionId, researchMode);
-    renderControls();
+    applySessionResearchMode(sessionId, session.research_mode_override);
   } catch {
     // Session reads remain usable when research metadata is absent.
   }
 }
 
-async function loadProfileResearchDefault(): Promise<void> {
-  const fetchImpl = ownFetch;
-  try {
-    const response = await fetchImpl('/api/settings');
-    if (!response.ok) return;
-    const payload = await response.json() as Record<string, unknown>;
-    const settings = asRecord(payload.settings);
-    const profile = asRecord(settings.settings_control_center);
-    const assistant = asRecord(profile.assistant);
-    profileDefaultMode = normalizeResearchMode(assistant.researchDefaultMode);
-    const persistedPageLimit = readStoredDeepResearchPageLimit();
-    deepResearchMaxPages = normalizeDeepResearchPageLimit(
-      persistedPageLimit ?? assistant.researchMaxSources,
-      deepResearchMaxPages,
-    );
-    if (!activeSessionId) researchMode = profileDefaultMode;
-    renderControls();
-  } catch {
-    // Settings availability must not block chat.
-  }
-}
-
-function deferResearchModePersistence(
-  responsePromise: Promise<Response>,
-  sessionId: string | null,
-  mode: ResearchMode,
-): void {
-  if (!sessionId || knownResearchModes.get(sessionId) === mode) return;
-  void responsePromise.then(
-    () => scheduleConversationResearchModePersistence(sessionId, mode),
-    () => scheduleConversationResearchModePersistence(sessionId, mode),
-  );
-}
-
-function scheduleConversationResearchModePersistence(sessionId: string, mode: ResearchMode): void {
-  if (knownResearchModes.get(sessionId) === mode) return;
-  const previous = researchModePersistenceQueues.get(sessionId) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(async () => {
-      if (knownResearchModes.get(sessionId) === mode) return;
-      const persisted = await persistConversationResearchMode(sessionId, mode);
-      if (persisted) {
-        knownResearchModes.set(sessionId, mode);
-        dispatchPerformance('assistant_context_research_mode_persisted', {
-          sessionId,
-          researchMode: mode,
-        });
-      }
-    });
-  researchModePersistenceQueues.set(sessionId, next);
-  const cleanup = (): void => {
-    if (researchModePersistenceQueues.get(sessionId) === next) {
-      researchModePersistenceQueues.delete(sessionId);
-    }
-  };
-  void next.then(cleanup, cleanup);
-}
-
-async function persistConversationResearchMode(sessionId: string, mode: ResearchMode): Promise<boolean> {
-  const fetchImpl = ownFetch;
-  try {
-    const response = await fetchImpl(`/api/chat/sessions/${encodeURIComponent(sessionId)}/research-mode`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ research_mode_override: mode }),
-    });
-    return response.ok;
-  } catch {
-    // The selected turn still carries its explicit mode if session persistence is unavailable.
-    return false;
-  }
+function handleChatSessionSelected(event: Event): void {
+  adoptActiveSession((event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null);
 }
 
 async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Promise<string> {
@@ -370,744 +206,10 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
   return '';
 }
 
-export function injectControls(root: ParentNode): void {
-  const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
-  const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
-  const contextHost = assistantContextHost(composerActions, composerControls);
-  if (contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`)) {
-    const container = document.createElement('div');
-    container.className = 'assistant-context-controls';
-    container.setAttribute(CONTEXT_CONTROLS_ATTRIBUTE, 'true');
-
-    const webLabel = document.createElement('label');
-    webLabel.className = 'assistant-context-mode';
-    const webCaption = document.createElement('span');
-    webCaption.textContent = 'Web research';
-    const webSelect = document.createElement('select');
-    webSelect.setAttribute('aria-label', 'Web research mode');
-    for (const mode of ['disabled', 'quick', 'deep'] as const) {
-      const option = document.createElement('option');
-      option.value = mode;
-      option.textContent = webResearchModeLabel(mode);
-      webSelect.append(option);
-    }
-    webSelect.value = researchMode;
-    webSelect.addEventListener('change', () => setResearchMode(webSelect.value));
-    webLabel.append(webCaption, webSelect);
-
-    const pageBudget = document.createElement('label');
-    pageBudget.className = 'assistant-context-page-budget';
-    pageBudget.setAttribute('data-omnix-deep-research-pages', 'true');
-    const pageCaption = document.createElement('span');
-    pageCaption.textContent = 'Max pages';
-    const pageInput = document.createElement('input');
-    pageInput.type = 'number';
-    pageInput.min = '1';
-    pageInput.max = String(MAX_DEEP_RESEARCH_PAGES);
-    pageInput.step = '1';
-    pageInput.inputMode = 'numeric';
-    pageInput.setAttribute('aria-label', 'Maximum pages to search');
-    pageInput.value = String(deepResearchMaxPages);
-    pageInput.addEventListener('change', () => {
-      deepResearchMaxPages = normalizeDeepResearchPageLimit(pageInput.value, deepResearchMaxPages);
-      pageInput.value = String(deepResearchMaxPages);
-      storeDeepResearchPageLimit(deepResearchMaxPages);
-      renderControls();
-    });
-    pageBudget.append(pageCaption, pageInput);
-
-    webLabel.hidden = true;
-    pageBudget.hidden = true;
-    container.append(webLabel, pageBudget);
-    contextHost.append(container);
-  }
-
-  const contextControls = contextHost?.querySelector<HTMLElement>(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`);
-  if (contextControls && !contextControls.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`)) {
-    injectContextToolsMenu(contextControls);
-  }
-
-  if (composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`)) {
-    const desktopAction = document.createElement('button');
-    desktopAction.type = 'button';
-    desktopAction.className = 'assistant-context-desktop-inline assistant-context-desktop';
-    desktopAction.setAttribute(DESKTOP_ACTION_ATTRIBUTE, 'true');
-    desktopAction.addEventListener('click', () => void toggleDesktopShare());
-    composerActions.prepend(desktopAction);
-  }
-
-  const audioDevices = root.querySelector<HTMLElement>('.assistant-audio-devices');
-  if (audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`)) {
-    const row = document.createElement('div');
-    row.setAttribute(DESKTOP_STATUS_ATTRIBUTE, 'true');
-    const label = document.createElement('span');
-    label.textContent = 'Desktop';
-    const value = document.createElement('strong');
-    value.className = 'assistant-desktop-status-value';
-    const indicator = document.createElement('i');
-    indicator.setAttribute('aria-hidden', 'true');
-    row.append(label, value, indicator);
-    audioDevices.append(row);
-  }
-  renderControls();
-}
-
-function injectContextToolsMenu(container: HTMLElement): void {
-  const tools = document.createElement('div');
-  tools.className = 'assistant-context-tools';
-  tools.setAttribute(CONTEXT_TOOLS_ATTRIBUTE, 'true');
-
-  const addButton = document.createElement('button');
-  addButton.type = 'button';
-  addButton.className = 'assistant-context-add-button';
-  addButton.setAttribute('aria-label', 'Add tools');
-  addButton.setAttribute('aria-controls', 'assistant-context-tool-menu');
-  addButton.setAttribute('aria-expanded', 'false');
-  addButton.title = 'Add tools';
-  addButton.textContent = '+';
-
-  const summary = document.createElement('span');
-  summary.className = 'assistant-context-tool-summary';
-  summary.setAttribute('aria-live', 'polite');
-
-  const menu = document.createElement('div');
-  menu.id = 'assistant-context-tool-menu';
-  menu.className = 'assistant-context-tool-menu';
-  menu.setAttribute('role', 'menu');
-  menu.setAttribute('aria-label', 'Chat tools');
-  menu.hidden = true;
-
-  const heading = document.createElement('div');
-  heading.className = 'assistant-context-tool-menu-heading';
-  heading.textContent = 'Add to this chat';
-  menu.append(heading);
-  menu.append(
-    createChatAttachmentToolControl(),
-    createResearchToolItem('disabled', 'No web research', 'Use the assistant without live web results.'),
-    createResearchToolItem('quick', 'Quick search', 'Search the web for current information.'),
-    createResearchToolItem('deep', 'Deep research', 'Build a detailed, source-backed report.'),
-  );
-
-  const divider = document.createElement('div');
-  divider.className = 'assistant-context-tool-menu-divider';
-  divider.setAttribute('role', 'separator');
-  menu.append(divider, createAgentModeToolItem(), createDesktopToolItem(), createLocalFolderToolItem());
-
-  const pageBudget = container.querySelector<HTMLElement>('[data-omnix-deep-research-pages]');
-  if (pageBudget) {
-    pageBudget.classList.add('assistant-context-page-budget-menu');
-    pageBudget.hidden = true;
-    menu.append(pageBudget);
-  }
-
-  addButton.addEventListener('click', () => {
-    const isOpen = !menu.hidden;
-    if (!isOpen && openContextToolsMenu && openContextToolsMenu.menu !== menu) {
-      closeContextToolsMenu(openContextToolsMenu.addButton, openContextToolsMenu.menu);
-    }
-    menu.hidden = isOpen;
-    addButton.setAttribute('aria-expanded', String(!isOpen));
-    openContextToolsMenu = isOpen ? null : { addButton, menu, tools };
-    if (!isOpen) {
-      menu.querySelector<HTMLButtonElement>('[role="menuitemradio"], [role="menuitemcheckbox"]')?.focus();
-    }
-  });
-  addButton.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && !menu.hidden) {
-      closeContextToolsMenu(addButton, menu);
-      event.preventDefault();
-    }
-  });
-  menu.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      closeContextToolsMenu(addButton, menu);
-      addButton.focus();
-      event.preventDefault();
-    }
-  });
-
-  tools.append(addButton, summary, menu);
-  container.prepend(tools);
-}
-
-function createChatAttachmentToolControl(): HTMLElement {
-  const control = document.createElement('span');
-  control.className = 'assistant-context-tool-file-control';
-  control.setAttribute('role', 'none');
-
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'assistant-context-tool-item assistant-context-tool-item-file';
-  item.setAttribute('role', 'menuitem');
-  item.setAttribute('data-omnix-context-tool-files', 'true');
-
-  const icon = document.createElement('span');
-  icon.className = 'assistant-context-tool-icon';
-  icon.setAttribute('aria-hidden', 'true');
-  icon.textContent = '\u{1F4CE}';
-
-  const copy = document.createElement('span');
-  copy.className = 'assistant-context-tool-copy';
-  const label = document.createElement('strong');
-  label.textContent = 'Add photos & files';
-  const detail = document.createElement('small');
-  detail.textContent = 'Images or text documents from computer';
-  copy.append(label, detail);
-
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.className = 'visually-hidden';
-  input.accept = 'image/png,image/jpeg,image/webp,.txt,.text,.md,.markdown,.csv,.json,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sh,.sql';
-  input.multiple = true;
-  input.setAttribute('aria-label', 'Choose photos and files from computer');
-  input.addEventListener('click', (event) => event.stopPropagation());
-  input.addEventListener('change', () => {
-    const files = Array.from(input.files ?? []);
-    input.value = '';
-    if (files.length) void dispatchChatAttachments(files, item);
-  });
-
-  item.append(icon, copy);
-  item.addEventListener('click', () => input.click());
-  control.append(item, input);
-  return control;
-}
-
-async function dispatchChatAttachments(files: File[], item: HTMLButtonElement): Promise<void> {
-  const imageFiles = files.filter((file) => SUPPORTED_CHAT_IMAGE_TYPES.has(file.type));
-  if (imageFiles.length === files.length) {
-    if (imageFiles.length > MAX_CHAT_IMAGE_ATTACHMENTS) {
-      dispatchChatImageError(`Attach at most ${MAX_CHAT_IMAGE_ATTACHMENTS} images at a time.`);
-      return;
-    }
-    if (imageFiles.some((file) => file.size > MAX_CHAT_IMAGE_BYTES)) {
-      dispatchChatImageError('Each image must be 5 MB or smaller.');
-      return;
-    }
-    try {
-      const images = await Promise.all(imageFiles.map(async (file) => ({
-        dataUrl: await readFileAsDataUrl(file),
-        mimeType: file.type,
-        size: file.size,
-      })));
-      for (const image of images) {
-        window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', { detail: image }));
-      }
-      closeChatAttachmentMenu(item);
-    } catch {
-      dispatchChatImageError('Unable to read one or more selected images.');
-    }
-    return;
-  }
-
-  if (files.length !== 1) {
-    dispatchChatImageError('Select multiple images together, or attach one text document separately.');
-    return;
-  }
-  await dispatchChatAttachment(files[0], item);
-}
-
-async function dispatchChatAttachment(file: File, item: HTMLButtonElement): Promise<void> {
-  if (SUPPORTED_CHAT_IMAGE_TYPES.has(file.type)) {
-    if (file.size > MAX_CHAT_IMAGE_BYTES) {
-      dispatchChatImageError('That image is larger than 5 MB. Choose a smaller image.');
-      return;
-    }
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', {
-        detail: { dataUrl, mimeType: file.type, size: file.size },
-      }));
-      closeChatAttachmentMenu(item);
-    } catch {
-      dispatchChatImageError('Unable to read the selected image.');
-    }
-    return;
-  }
-
-  const mimeType = chatTextFileMimeType(file);
-  if (!mimeType) {
-    dispatchChatImageError('Choose a PNG, JPEG, WebP, or supported text document.');
-    return;
-  }
-  if (file.size > MAX_CHAT_TEXT_FILE_BYTES) {
-    dispatchChatImageError('That text file is larger than 100 KB. Choose a smaller file.');
-    return;
-  }
-  try {
-    const text = await file.text();
-    if (!text.trim() || text.length > MAX_CHAT_TEXT_FILE_BYTES) {
-      dispatchChatImageError('The selected text file is empty or larger than 100 KB.');
-      return;
-    }
-    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', {
-      detail: { filename: file.name, mimeType, size: file.size, text },
-    }));
-    closeChatAttachmentMenu(item);
-  } catch {
-    dispatchChatImageError('Unable to read the selected text file.');
-  }
-}
-
-function chatTextFileMimeType(file: File): string | null {
-  const name = file.name.toLowerCase();
-  const suffix = name.slice(name.lastIndexOf('.'));
-  if (!SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) && !SUPPORTED_CHAT_TEXT_FILE_SUFFIXES.has(suffix)) return null;
-  return SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) ? file.type : 'text/plain';
-}
-
-function closeChatAttachmentMenu(item: HTMLButtonElement): void {
-  const menu = item.closest<HTMLElement>('.assistant-context-tool-menu');
-  const addButton = menu?.closest<HTMLElement>('.assistant-context-tools')?.querySelector<HTMLButtonElement>('.assistant-context-add-button');
-  if (menu && addButton) closeContextToolsMenu(addButton, menu);
-}
-
-function dispatchChatImageError(message: string): void {
-  window.dispatchEvent(new CustomEvent('omnix:chat-image-error', { detail: { message } }));
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.'));
-    reader.onerror = () => reject(reader.error ?? new Error('Image read failed.'));
-    reader.readAsDataURL(file);
-  });
-}
-
-function createResearchToolItem(
-  mode: ResearchMode,
-  title: string,
-  description: string,
-): HTMLButtonElement {
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'assistant-context-tool-item';
-  item.setAttribute('role', 'menuitemradio');
-  item.setAttribute('data-omnix-context-tool-mode', mode);
-  item.setAttribute('aria-checked', 'false');
-
-  const copy = document.createElement('span');
-  copy.className = 'assistant-context-tool-copy';
-  const label = document.createElement('strong');
-  label.textContent = title;
-  const detail = document.createElement('small');
-  detail.textContent = description;
-  copy.append(label, detail);
-
-  const check = document.createElement('span');
-  check.className = 'assistant-context-tool-check';
-  check.setAttribute('aria-hidden', 'true');
-  check.textContent = '✓';
-  item.append(copy, check);
-  item.addEventListener('click', () => {
-    chooseResearchMode(mode);
-  });
-  return item;
-}
-
-function createDesktopToolItem(): HTMLButtonElement {
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'assistant-context-tool-item';
-  item.setAttribute('role', 'menuitemcheckbox');
-  item.setAttribute('data-omnix-context-tool-desktop', 'true');
-  item.setAttribute('aria-checked', 'false');
-
-  const copy = document.createElement('span');
-  copy.className = 'assistant-context-tool-copy';
-  const label = document.createElement('strong');
-  label.textContent = 'Desktop';
-  const detail = document.createElement('small');
-  detail.textContent = 'Share a live desktop view with the assistant.';
-  copy.append(label, detail);
-
-  const check = document.createElement('span');
-  check.className = 'assistant-context-tool-check';
-  check.setAttribute('aria-hidden', 'true');
-  check.textContent = '✓';
-  item.append(copy, check);
-  item.addEventListener('click', () => {
-    void toggleDesktopShare();
-  });
-  return item;
-}
-
-function createAgentModeToolItem(): HTMLButtonElement {
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'assistant-context-tool-item';
-  item.setAttribute('role', 'menuitemcheckbox');
-  item.setAttribute('data-omnix-context-tool-agent', 'true');
-  item.setAttribute('aria-checked', 'false');
-
-  const copy = document.createElement('span');
-  copy.className = 'assistant-context-tool-copy';
-  const label = document.createElement('strong');
-  label.textContent = 'Agent mode';
-  const detail = document.createElement('small');
-  detail.textContent = 'Route every request through the Pi coding agent.';
-  copy.append(label, detail);
-
-  const check = document.createElement('span');
-  check.className = 'assistant-context-tool-check';
-  check.setAttribute('aria-hidden', 'true');
-  check.textContent = '✓';
-  item.append(copy, check);
-  item.addEventListener('click', () => {
-    agentMode = !agentMode;
-    writeStoredAgentMode(agentMode);
-    renderControls();
-  });
-  return item;
-}
-
-function createLocalFolderToolItem(): HTMLButtonElement {
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'assistant-context-tool-item';
-  item.setAttribute('role', 'menuitemcheckbox');
-  item.setAttribute('data-omnix-context-tool-local-folder', 'true');
-  item.setAttribute('aria-checked', 'false');
-
-  const copy = document.createElement('span');
-  copy.className = 'assistant-context-tool-copy';
-  const label = document.createElement('strong');
-  label.textContent = 'Local folder';
-  const detail = document.createElement('small');
-  detail.setAttribute('data-omnix-local-folder-detail', 'true');
-  detail.textContent = 'Attach a local project or workspace folder.';
-  copy.append(label, detail);
-
-  const check = document.createElement('span');
-  check.className = 'assistant-context-tool-check';
-  check.setAttribute('aria-hidden', 'true');
-  check.textContent = '✓';
-  item.append(copy, check);
-  item.addEventListener('click', () => void toggleLocalWorkspace());
-  return item;
-}
-
-function closeContextToolsMenu(addButton: HTMLButtonElement, menu: HTMLElement): void {
-  menu.hidden = true;
-  addButton.setAttribute('aria-expanded', 'false');
-  if (openContextToolsMenu?.menu === menu) openContextToolsMenu = null;
-}
-
-function handleContextToolsOutsidePointerDown(event: PointerEvent): void {
-  const openMenu = openContextToolsMenu;
-  const target = event.target;
-  if (!openMenu || !(target instanceof Node) || openMenu.tools.contains(target)) return;
-  closeContextToolsMenu(openMenu.addButton, openMenu.menu);
-}
-
-function setResearchMode(value: unknown): void {
-  researchMode = normalizeResearchMode(value);
-  if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
-  renderControls();
-}
-
-function chooseResearchMode(mode: ResearchMode): void {
-  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
-  const option = select?.querySelector<HTMLOptionElement>(`option[value="${mode}"]`);
-  if (option?.disabled) return;
-  if (!select) {
-    setResearchMode(mode);
-    return;
-  }
-  select.value = mode;
-  select.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function assistantContextHost(
-  composerActions: HTMLElement | null,
-  composerControls: HTMLElement | null,
-): HTMLElement | null {
-  return composerActions?.closest<HTMLElement>('.assistant-composer') ?? composerControls;
-}
-
-function renderControls(): void {
-  document.querySelectorAll<HTMLSelectElement>('select[aria-label="Web research mode"]').forEach((select) => {
-    select.value = researchMode;
-  });
-  document.querySelectorAll<HTMLElement>('[data-omnix-deep-research-pages]').forEach((element) => {
-    element.hidden = researchMode !== 'deep';
-  });
-  document.querySelectorAll<HTMLInputElement>('input[aria-label="Maximum pages to search"]').forEach((input) => {
-    input.value = String(deepResearchMaxPages);
-  });
-  const researchSelect = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
-  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-mode]').forEach((item) => {
-    const active = item.getAttribute('data-omnix-context-tool-mode') === researchMode;
-    const option = researchSelect?.querySelector<HTMLOptionElement>(`option[value="${item.dataset.omnixContextToolMode}"]`);
-    const unavailable = option?.disabled ?? false;
-    item.classList.toggle('active', active);
-    item.classList.toggle('unavailable', unavailable);
-    item.disabled = unavailable;
-    item.setAttribute('aria-checked', String(active));
-    item.setAttribute('aria-disabled', String(unavailable));
-  });
-  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-desktop]').forEach((item) => {
-    const active = desktopShare !== null;
-    item.classList.toggle('active', active);
-    item.setAttribute('aria-checked', String(active));
-  });
-  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-agent]').forEach((item) => {
-    item.classList.toggle('active', agentMode);
-    item.setAttribute('aria-checked', String(agentMode));
-  });
-  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-local-folder]').forEach((item) => {
-    const active = localWorkspace !== null;
-    item.classList.toggle('active', active);
-    item.setAttribute('aria-checked', String(active));
-    item.title = localWorkspace?.path || localWorkspaceStatus || 'Attach a local project or workspace folder';
-  });
-  document.querySelectorAll<HTMLElement>('[data-omnix-local-folder-detail]').forEach((element) => {
-    element.textContent = localWorkspace?.path
-      || localWorkspaceStatus
-      || 'Attach a local project or workspace folder.';
-  });
-  document.querySelectorAll<HTMLElement>('.assistant-context-tool-summary').forEach((element) => {
-    const activeTools = [
-      agentMode ? 'Agent mode' : '',
-      researchMode !== 'disabled' ? webResearchModeLabel(researchMode) : '',
-      desktopShare !== null ? 'Desktop sharing' : '',
-      localWorkspaceSummary(localWorkspace),
-    ].filter(Boolean);
-    element.textContent = activeTools.join(' · ');
-    element.title = localWorkspace?.path || activeTools.join(' · ');
-    element.toggleAttribute('hidden', activeTools.length === 0);
-  });
-  document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
-    const active = desktopShare !== null;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-label', active ? 'Stop desktop sharing' : 'Start desktop sharing');
-    button.innerHTML = `<span>Desktop</span><strong>${active ? 'Sharing' : 'Off'}</strong>`;
-  });
-  document.querySelectorAll<HTMLElement>('.assistant-desktop-status-value').forEach((element) => {
-    element.textContent = desktopStatusLabel(desktopShare !== null, desktopStatus);
-  });
-}
-
-export function readStoredAgentMode(): boolean {
-  try {
-    return window.localStorage.getItem(AGENT_MODE_STORAGE_KEY) === 'agent';
-  } catch {
-    return false;
-  }
-}
-
-function writeStoredAgentMode(enabled: boolean): void {
-  try {
-    window.localStorage.setItem(AGENT_MODE_STORAGE_KEY, enabled ? 'agent' : 'normal');
-  } catch {
-    // Browser storage is optional; the in-memory choice still applies.
-  }
-}
-
 function decodePathSegment(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
     return value;
-  }
-}
-
-function adoptActiveSession(nextSessionId: string | null): void {
-  if (nextSessionId === activeSessionId) return;
-  if (nextSessionId && activeSessionId === null && localWorkspace) {
-    storeLocalWorkspace(nextSessionId, localWorkspace);
-  } else {
-    localWorkspace = nextSessionId ? readStoredLocalWorkspace(nextSessionId) : null;
-  }
-  activeSessionId = nextSessionId;
-  localWorkspaceStatus = null;
-}
-
-function handleChatSessionSelected(event: Event): void {
-  const nextSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
-  adoptActiveSession(nextSessionId);
-  renderControls();
-}
-
-async function toggleLocalWorkspace(): Promise<void> {
-  if (localWorkspace) {
-    localWorkspace = null;
-    localWorkspaceStatus = null;
-    if (activeSessionId) storeLocalWorkspace(activeSessionId, null);
-    renderControls();
-    return;
-  }
-  localWorkspaceStatus = 'Choose a folder…';
-  renderControls();
-  const fetchImpl = ownFetch;
-  try {
-    const response = await fetchImpl('/api/agent-runs/workspace-picker', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) {
-      let detail = 'Folder picker unavailable';
-      try {
-        const payload = await response.json() as { detail?: unknown };
-        if (typeof payload.detail === 'string' && payload.detail.trim()) detail = payload.detail.trim();
-      } catch {
-        // Keep the concise status when the endpoint does not return JSON.
-      }
-      localWorkspaceStatus = detail;
-      renderControls();
-      return;
-    }
-    const selection = normalizeLocalWorkspaceSelection(await response.json() as LocalWorkspacePickResponse);
-    if (!selection) {
-      localWorkspaceStatus = null;
-      renderControls();
-      return;
-    }
-    localWorkspace = selection;
-    localWorkspaceStatus = null;
-    if (activeSessionId) storeLocalWorkspace(activeSessionId, selection);
-    renderControls();
-  } catch (error) {
-    localWorkspaceStatus = error instanceof Error ? error.message : 'Folder picker unavailable';
-    renderControls();
-  }
-}
-
-async function toggleDesktopShare(): Promise<void> {
-  if (desktopShare) {
-    stopDesktopShare();
-    renderControls();
-    return;
-  }
-  const mediaDevices = navigator.mediaDevices as DisplayMediaDevices | undefined;
-  if (!mediaDevices?.getDisplayMedia) {
-    desktopStatus = 'Screen capture unavailable';
-    renderControls();
-    return;
-  }
-  try {
-    desktopStatus = 'Choose a screen or window';
-    renderControls();
-    const stream = await mediaDevices.getDisplayMedia({
-      video: { frameRate: { ideal: 5, max: 10 } },
-      audio: false,
-    });
-    const video = document.createElement('video');
-    video.muted = true;
-    video.playsInline = true;
-    video.srcObject = stream;
-    await video.play();
-    await waitForVideoDimensions(video);
-    const capture = new DesktopTemporalCapture(video);
-    capture.start();
-    desktopShare = {
-      stream,
-      video,
-      capture,
-      sourceFingerprint: desktopSourceFingerprint(stream),
-    };
-    desktopStatus = 'Buffering recent frames';
-    window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: true } }));
-    stream.getVideoTracks()[0]?.addEventListener('ended', () => {
-      stopDesktopShare();
-      renderControls();
-    }, { once: true });
-  } catch (error) {
-    desktopStatus = error instanceof Error && error.name === 'NotAllowedError'
-      ? 'Sharing cancelled'
-      : error instanceof Error ? error.message : 'Could not share desktop';
-    stopDesktopShare({ resetStatus: false });
-  }
-  renderControls();
-}
-
-function stopDesktopShare(options: { resetStatus?: boolean } = {}): void {
-  const current = desktopShare;
-  desktopShare = null;
-  current?.capture.stop();
-  current?.stream.getTracks().forEach((track) => track.stop());
-  if (current) current.video.srcObject = null;
-  if (options.resetStatus !== false) desktopStatus = 'Off';
-  if (current) window.dispatchEvent(new CustomEvent('omnix:desktop-share-changed', { detail: { sharing: false } }));
-}
-
-function desktopSourceFingerprint(stream: MediaStream): string {
-  const track = stream.getVideoTracks()[0];
-  const settings = track?.getSettings() as MediaTrackSettings & { displaySurface?: string };
-  const source = `${settings.displaySurface ?? 'unknown'}:${track?.label ?? 'desktop'}`;
-  let hash = 2166136261;
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `desktop-source:${(hash >>> 0).toString(16).padStart(8, '0')}`;
-}
-
-function waitForVideoDimensions(video: HTMLVideoElement): Promise<void> {
-  if (video.videoWidth > 0 && video.videoHeight > 0) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => reject(new Error('Desktop preview did not become ready')), 5_000);
-    video.addEventListener('loadedmetadata', () => {
-      window.clearTimeout(timeoutId);
-      resolve();
-    }, { once: true });
-  });
-}
-
-function dispatchPerformance(stage: string, detail: Record<string, unknown>): void {
-  window.dispatchEvent(new CustomEvent(LIVE_VOICE_PERF_EVENT, {
-    detail: { stage, timestamp: new Date().toISOString(), ...detail },
-  }));
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
-function readStoredLocalWorkspace(sessionId: string): LocalWorkspaceSelection | null {
-  if (!sessionId) return null;
-  try {
-    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
-    if (!raw) return null;
-    const payload = JSON.parse(raw) as Record<string, unknown>;
-    return normalizeLocalWorkspaceSelection(payload[sessionId]);
-  } catch {
-    return null;
-  }
-}
-
-function storeLocalWorkspace(
-  sessionId: string,
-  selection: LocalWorkspaceSelection | null,
-): void {
-  if (!sessionId) return;
-  try {
-    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
-    const payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
-    if (selection) payload[sessionId] = selection;
-    else delete payload[sessionId];
-    window.localStorage.setItem(LOCAL_WORKSPACES_STORAGE_KEY, JSON.stringify(payload));
-  } catch {
-    // Browser storage is optional; the selection remains active for this page.
-  }
-}
-
-function readStoredDeepResearchPageLimit(): number | null {
-  try {
-    const value = window.localStorage.getItem(DEEP_RESEARCH_PAGES_STORAGE_KEY);
-    return value === null ? null : normalizeDeepResearchPageLimit(value);
-  } catch {
-    return null;
-  }
-}
-
-function storeDeepResearchPageLimit(value: number): void {
-  try {
-    window.localStorage.setItem(DEEP_RESEARCH_PAGES_STORAGE_KEY, String(value));
-  } catch {
-    // Storage is optional; the chosen limit remains active for this page.
   }
 }

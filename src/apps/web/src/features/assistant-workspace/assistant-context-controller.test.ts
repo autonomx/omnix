@@ -1,72 +1,17 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { describe, expect, it } from 'vitest';
 
-const {
-  assistantContextControlsMissing,
+import {
   desktopStatusLabel,
   enhancedAssistantMessageUrl,
-  injectControls,
   isAssistantMessageRequest,
+  localWorkspaceSummary,
   normalizeDeepResearchPageLimit,
   normalizeLocalWorkspaceSelection,
-  localWorkspaceSummary,
   normalizeResearchMode,
   webResearchModeLabel,
-} = await import('./assistant-context-controller');
+} from './assistant-context-controller';
 
-describe('assistant context control mounting', () => {
-  it('requests injection only while a target is missing its Omnix control', () => {
-    const root = document.createElement('div');
-    root.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
-
-    expect(assistantContextControlsMissing(root)).toBe(true);
-
-    const contextControls = document.createElement('div');
-    contextControls.setAttribute('data-omnix-context-controls', 'true');
-    root.querySelector('.assistant-composer')?.append(contextControls);
-
-    expect(assistantContextControlsMissing(root)).toBe(true);
-
-    const contextTools = document.createElement('div');
-    contextTools.setAttribute('data-omnix-context-tools', 'true');
-    contextControls.append(contextTools);
-
-    const desktopAction = document.createElement('button');
-    desktopAction.setAttribute('data-omnix-desktop-action', 'true');
-    root.querySelector('.assistant-composer-actions')?.append(desktopAction);
-
-    const desktopStatus = document.createElement('div');
-    desktopStatus.setAttribute('data-omnix-desktop-status', 'true');
-    root.querySelector('.assistant-audio-devices')?.append(desktopStatus);
-
-    expect(assistantContextControlsMissing(root)).toBe(false);
-  });
-
-  it('uses radio research choices plus independent Agent, Desktop, and Local folder checkboxes', () => {
-    const root = document.createElement('div');
-    root.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
-
-    injectControls(root);
-
-    const menu = root.querySelector('[role="menu"]');
-    expect(menu).not.toBeNull();
-    expect(menu?.querySelectorAll('[role="menuitemradio"]')).toHaveLength(3);
-
-    const desktop = menu?.querySelector('[data-omnix-context-tool-desktop]');
-    const agent = menu?.querySelector('[data-omnix-context-tool-agent]');
-    const localFolder = menu?.querySelector('[data-omnix-context-tool-local-folder]');
-    expect(agent?.getAttribute('role')).toBe('menuitemcheckbox');
-    expect(agent?.textContent).toContain('Agent mode');
-    expect(desktop?.getAttribute('role')).toBe('menuitemcheckbox');
-    expect(localFolder?.getAttribute('role')).toBe('menuitemcheckbox');
-    expect(localFolder?.textContent).toContain('Local folder');
-  });
-
-  it('does not request injection before the chatbot targets exist', () => {
-    const root = document.createElement('div');
-    expect(assistantContextControlsMissing(root)).toBe(false);
-  });
-
+describe('assistant context helpers', () => {
   it('keeps non-sharing desktop status messages visible', () => {
     expect(desktopStatusLabel(false, 'Off')).toBe('Off');
     expect(desktopStatusLabel(false, 'Screen capture unavailable')).toBe('Screen capture unavailable');
@@ -80,7 +25,7 @@ describe('assistant context control mounting', () => {
     expect(normalizeResearchMode('unknown')).toBe('disabled');
   });
 
-  it('normalizes local workspace picker responses without changing research mode', () => {
+  it('normalizes local workspace picker responses', () => {
     expect(normalizeLocalWorkspaceSelection({ path: 'F:\\\\LLM\\\\omnix', name: 'omnix' })).toEqual({
       path: 'F:\\\\LLM\\\\omnix',
       name: 'omnix',
@@ -93,11 +38,7 @@ describe('assistant context control mounting', () => {
   });
 
   it('renders local folder as an independent context summary', () => {
-    const selection = normalizeLocalWorkspaceSelection({
-      path: 'F:\\\\LLM\\\\omnix',
-      name: 'omnix',
-    });
-    expect(localWorkspaceSummary(selection)).toBe('Local folder · omnix');
+    expect(localWorkspaceSummary(normalizeLocalWorkspaceSelection({ path: 'F:\\\\LLM\\\\omnix', name: 'omnix' }))).toBe('Local folder · omnix');
     expect(localWorkspaceSummary(null)).toBe('');
   });
 
