@@ -75,7 +75,7 @@ Web code types gateway calls with the generated OpenAPI types (`src/apps/web/src
 | `src/apps/web/src/features/assistant-workspace/live-voice-cue-asset-bridge.ts` | `*Payload` | Window event details between the voice cue modules |
 | `src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts` | `LiveVoiceRequestPayload` | The browser correlation id (`live_voice_turn_id`) the chat request carries for fetch middleware; the gateway ignores it |
 | `src/apps/web/src/features/storyteller/StoryAudioPanel.tsx` | `StoryAudioWebSocketPayload` | The start message on the `/ws/audiobook` WebSocket |
-| `src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx` | `StoryGenerationRequest` | Mutation variables; the wire body is `CreateJobRequest` |
+| `src/apps/web/src/features/storyteller/storyModel.ts` | `StoryGenerationRequest` | Mutation variables; the wire body is `CreateJobRequest` |
 | `src/apps/web/src/features/trading/indicators/indicatorWorkerProtocol.ts` | `IndicatorWorker*` | Messages to and from the indicator Web Worker |
 | `src/apps/web/src/features/trading/indicators/indicatorScheduler.ts` | `PendingRequest` | The scheduler's record of a worker request |
 | `src/apps/web/src/features/trading/persistence/workspaceDocument.ts` | `*` | Trading workspace document content, stored in `TradingDocument.payload` and owned by the web client |

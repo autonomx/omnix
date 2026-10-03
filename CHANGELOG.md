@@ -59,6 +59,10 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Web: gateway calls use a client generated from the OpenAPI contract, and
   chat, job, trading and voice stream messages are checked when they arrive;
   a malformed message is dropped or reported instead of breaking the view.
+- Web: Chat, Storyteller, Audiobook, the trading chart panel and the live
+  voice controller are split into hooks and components, and functions over
+  250 lines fail lint. Chat sends messages with research, agent mode, desktop
+  sharing or a local folder through the context route by an explicit call.
 
 ### Fixed
 
@@ -71,6 +75,8 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Immersive Live Chat shows the chat's messages, and opens one dialog.
 - A live voice error no longer replaces what you were saying in the
   transcript.
+- Typing in Chat no longer re-renders the conversation, and the Live Chat
+  message list and Storyteller library no longer rebuild on every render.
 
 ### Removed
 
