@@ -38,6 +38,7 @@ import {
   type LiveOutputOwnership,
   type LiveVoicePcmSession,
 } from './live-voice-pcm-session';
+import { openStream, statusError } from '../../api/transport';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_CALL_RUNTIME_PATH = /^\/api\/chat\/sessions\/([^/]+)\/live-call\/runtime$/;
@@ -326,14 +327,8 @@ function maybeStartGeneratedGreeting(): void {
   startup.started = true;
   const abortController = new AbortController();
   startup.requestAbortController = abortController;
-  const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream`;
-  void window.fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-    signal: abortController.signal,
-  }).then(async (response) => {
-    if (!response.ok) throw new Error(`Live-call greeting failed with status ${response.status}.`);
+  const path = `/api/chat/sessions/${encodeURIComponent(startup.sessionId)}/live-call/greeting/stream` as const;
+  void openStream(path, { body: {}, signal: abortController.signal }).catch(statusError('Live-call greeting')).then(async (response) => {
     await response.text();
   }).catch((error: unknown) => {
     if (abortController.signal.aborted) return;

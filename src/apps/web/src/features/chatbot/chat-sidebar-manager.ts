@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { startBlankChat } from './sessionTools';
+import { api, unwrapAs } from '../../api/http';
 
 let chatSidebarManagerInstalled = false;
 
@@ -165,13 +166,7 @@ async function refreshSidebar(): Promise<void> {
 
   let sessions: SessionSummary[] = [];
   try {
-    const response = await window.fetch('/api/chat/sessions', {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-    if (!response.ok) throw new Error(`status ${response.status}`);
-    const payload = await response.json() as SessionListPayload;
+    const payload: SessionListPayload = await unwrapAs(api.GET('/api/chat/sessions', { cache: 'no-store' }), (error) => `status ${error.status}`);
     sessions = Array.isArray(payload.sessions) ? payload.sessions.filter(isSessionSummary) : [];
   } catch (error) {
     if (generation !== refreshGeneration) return;
@@ -426,8 +421,7 @@ async function deleteSession(session: SessionSummary): Promise<void> {
   const title = displayTitle(session, readChatSidebarState()[session.id] ?? {});
   if (!window.confirm(`Delete "${title}"? This permanently removes the chat history.`)) return;
   try {
-    const response = await window.fetch(`/api/chat/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
-    if (!response.ok) throw new Error(`status ${response.status}`);
+    await unwrapAs(api.DELETE('/api/chat/sessions/{session_id}', { params: { path: { session_id: session.id } } }), (error) => `status ${error.status}`);
     const state = readChatSidebarState();
     delete state[session.id];
     writeChatSidebarState(state);

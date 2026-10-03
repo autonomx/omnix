@@ -3,6 +3,9 @@ import {
   VOICE_CUE_ASSETS_READY_EVENT,
 } from './live-voice-cue-asset-bridge';
 import type { LiveVoiceCueId } from './live-voice-cue-bank';
+import { ApiError } from '../../api/errors';
+import { api } from '../../api/http';
+import { fetchBytes } from '../../api/transport';
 
 const VOICE_SETTINGS_KEY = 'omnix.chatbot.assistantSettings';
 const CALL_START_EVENT = 'omnix:assistant-live-voice-call-start';
@@ -90,12 +93,9 @@ export function resetLiveVoiceCuePackLoaderState(): void {
 
 async function loadCuePack(voiceId: string): Promise<LiveVoiceCuePackLoadResult> {
   try {
-    const response = await window.fetch(`/api/voice/cues/${encodeURIComponent(voiceId)}/manifest`, {
-      headers: { Accept: 'application/json' },
-      credentials: 'same-origin',
-    });
-    if (!response.ok) return publish(result(voiceId, false, 0, 0, `manifest_http_${response.status}`));
-    const manifest = await response.json() as CueManifest;
+    const { data, response } = await api.GET('/api/voice/cues/{voice_id}/manifest', { params: { path: { voice_id: voiceId } } });
+    if (!response.ok || !data) return publish(result(voiceId, false, 0, 0, `manifest_http_${response.status}`));
+    const manifest = data as unknown as CueManifest;
     const assets = normalizeManifest(manifest, voiceId);
     if (!assets.length) {
       window.dispatchEvent(new CustomEvent(VOICE_CUE_ASSETS_CLEAR_EVENT, { detail: { voiceId } }));
@@ -161,11 +161,9 @@ async function fetchAndDecodeAsset(
   voiceId: string,
   asset: { cueId: LiveVoiceCueId; variantId: string; url: string; sizeBytes: number },
 ): Promise<DecodedCueAsset> {
-  const response = await window.fetch(asset.url, {
-    headers: { Accept: 'audio/wav' },
-    credentials: 'same-origin',
+  const response = await fetchBytes(asset.url, { headers: { Accept: 'audio/wav' } }).catch((error: unknown) => {
+    throw error instanceof ApiError ? new Error(`cue_http_${error.status}`) : error;
   });
-  if (!response.ok) throw new Error(`cue_http_${response.status}`);
   const bytes = await response.arrayBuffer();
   if (!bytes.byteLength || bytes.byteLength > MAX_ASSET_BYTES) throw new Error('cue_size_invalid');
   const buffer = await context.decodeAudioData(bytes.slice(0));

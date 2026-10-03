@@ -72,3 +72,9 @@ export async function fetchBytes(
   if (!response.ok) return failed(response);
   return response;
 }
+
+/**
+ * fetch for the live speech coordinator, which issues its own streamed
+ * speculation requests and reads them incrementally.
+ */
+export const liveStreamFetch: typeof fetch = (input, init) => fetch(input, init);

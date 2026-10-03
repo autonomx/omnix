@@ -1,4 +1,5 @@
 import { observeAssistantDiagnostic } from './live-conversation-assistant-summary';
+import { api } from '../../api/http';
 
 const LIVE_CALL_DIAGNOSTICS_PATH = '/api/tts/live-call/diagnostics';
 const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
@@ -46,12 +47,7 @@ export function createLiveCallDiagnosticsReporter(traceId: string): LiveCallDiag
     queue = [];
     pendingFlush = pendingFlush.catch(() => undefined).then(async () => {
       try {
-        await window.fetch(LIVE_CALL_DIAGNOSTICS_PATH, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ trace_id: traceId, events }),
-          keepalive: true,
-        });
+        await api.POST(LIVE_CALL_DIAGNOSTICS_PATH, { body: { trace_id: traceId, events }, keepalive: true });
       } catch {
         // Diagnostics must never interrupt live playback.
       }

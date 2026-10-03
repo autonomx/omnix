@@ -16,6 +16,7 @@ import {
   type LiveVoicePcmSession,
   type LiveVoicePcmSessionOptions,
 } from './live-voice-pcm-session';
+import { liveStreamFetch } from '../../api/transport';
 
 
 const LIVE_OBSERVATION_GENERATION_PATH = (sessionId: string): string =>
@@ -288,7 +289,7 @@ function isTerminal(item: LiveOutputItem): boolean {
 
 export const liveOutputCoordinator = new LiveOutputCoordinator({
   store: liveConversationStore,
-  fetcher: (input, init) => window.fetch(input, init),
+  fetcher: liveStreamFetch,
   createPcmSession: createLiveVoicePcmSession,
   createReporter: createLiveCallDiagnosticsReporter,
   createTraceId: createLiveCallTraceId,

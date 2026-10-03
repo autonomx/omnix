@@ -1,3 +1,4 @@
+import { api, unwrapAs } from '../../api/http';
 type CreatedChatSession = {
   id?: unknown;
   [key: string]: unknown;
@@ -80,16 +81,10 @@ async function createAndSelectNewChat(button: HTMLButtonElement): Promise<void> 
   button.setAttribute('aria-busy', 'true');
 
   try {
-    const response = await window.fetch('/api/chat/sessions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'New chat' }),
-    });
-    if (!response.ok) {
-      throw new Error(`New chat request failed with status ${response.status}.`);
-    }
-
-    const session = await response.json() as CreatedChatSession;
+    const session: CreatedChatSession = await unwrapAs(
+      api.POST('/api/chat/sessions', { body: { title: 'New chat' } }),
+      (error) => `New chat request failed with status ${error.status}.`,
+    );
     const sessionId = typeof session.id === 'string' ? session.id.trim() : '';
     if (!sessionId) throw new Error('New chat response did not include a session id.');
 
