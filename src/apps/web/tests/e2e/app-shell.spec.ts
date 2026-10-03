@@ -178,7 +178,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
             module: 'image-generation',
             type: 'image',
             mime_type: 'image/png',
-            storage_path: 'resources/data/generated_images/release.png',
+            file_name: 'release.png',
             created_at: '2026-06-15T00:00:00Z',
           },
         ],
@@ -210,7 +210,7 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
 
   await page.goto('/assets');
   await expect(page.getByRole('heading', { name: 'image / image-generation' })).toBeVisible();
-  await expect(page.getByText('resources/data/generated_images/release.png')).toBeVisible();
+  await expect(page.getByText('release.png')).toBeVisible();
 
   await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'release/smoke.json' })).toBeVisible();
@@ -436,7 +436,7 @@ test('stt module queues a shared transcription job', async ({ page }) => {
             module: 'voice',
             type: 'audio',
             mime_type: 'audio/wav',
-            storage_path: 'artifacts/input.wav',
+            file_name: 'input.wav',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],
@@ -761,7 +761,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
             module: 'voice-cloning',
             type: 'voice_sample',
             mime_type: 'audio/wav',
-            storage_path: 'samples/ref.wav',
+            file_name: 'ref.wav',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],
@@ -829,7 +829,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
             module: 'rpg',
             type: 'rpg_checkpoint',
             mime_type: 'application/json',
-            storage_path: 'checkpoints/session.json',
+            file_name: 'session.json',
             created_at: '2026-06-14T00:00:00Z',
           },
         ],
