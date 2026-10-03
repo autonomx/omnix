@@ -24,8 +24,9 @@ from .research.runtime_policy import forbid_external_web_search
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import TradingStrategyConfigDocument
-from .us_equity_calendar import early_close_time, regular_holidays
+from .us_equity_calendar import regular_holidays
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -166,7 +167,7 @@ def choose_causal_universe(
 
 
 def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
-    close = early_close_time(session_date) or time(16, 0)
+    close = regular_close_time(session_date)
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
     end = datetime.combine(session_date, close, tzinfo=_ET)
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)

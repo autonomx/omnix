@@ -19,6 +19,7 @@ from .strategy_stoch_rsi_5m import (
     evaluate_stoch_rsi_5m,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 LATE_STAGE_ENTRY_START_ET = time(13, 0)
@@ -36,7 +37,7 @@ def _current_regular_bars(
             and bar.session == "regular"
             and time(9, 30)
             <= bar.start_time.astimezone(_ET).time()
-            < time(16, 0)
+            < regular_close_time(bar.start_time.astimezone(_ET).date())
         ),
         key=lambda bar: bar.start_time,
     )

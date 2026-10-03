@@ -47,6 +47,7 @@ from .strategy_data_integrity import (
     finviz_atomic_source_locator,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,6 @@ YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION = YAHOO_HARDENED_EVIDENCE_POLICY_VERSION
 
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 _ALLOWED_DISCOVERY_SKEW_SECONDS = 120
 _TICKER_PATHS = {"/quote", "/quote.ashx", "/stock"}
 _HREF_RE = re.compile(r"href\s*=\s*([\"'])(.*?)\1", re.IGNORECASE | re.DOTALL)
@@ -256,7 +256,7 @@ def _yahoo_chart_snapshot(
                     nonzero_count_by_date[observed.date()] += 1
         if observed.date() == current_date and _PREMARKET_OPEN <= clock <= same_clock:
             latest_current = (observed, close)
-        if observed.date() < current_date and _REGULAR_OPEN <= clock < _REGULAR_CLOSE:
+        if observed.date() < current_date and _REGULAR_OPEN <= clock < regular_close_time(observed.date()):
             regular_closes_by_date[observed.date()].append((observed, close))
 
     if latest_current is None:

@@ -36,6 +36,7 @@ from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
 from app.trading.us_equity_calendar import EASTERN
+from app.trading.us_equity_calendar import regular_close_time
 
 
 def _coalesced_gap_ranges(starts: set[datetime], step):
@@ -211,7 +212,7 @@ class TradingMarketDataService:
                 session_date, time(9, 30), tzinfo=et
             ).astimezone(timezone.utc)
             session_close = datetime.combine(
-                session_date, time(16, 0), tzinfo=et
+                session_date, regular_close_time(session_date), tzinfo=et
             ).astimezone(timezone.utc)
             bounded_end = min(observed, session_close)
             if bounded_end > session_open:

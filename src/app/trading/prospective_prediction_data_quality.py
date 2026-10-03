@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import AnalysisSessionPrices
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 DATA_QUALITY_POLICY_VERSION = "prospective-price-crosscheck-v1"
 
@@ -53,7 +54,7 @@ def cross_check_analysis_prices(
     """Validate SIP-selected prices without allowing validators to replace them."""
 
     session_start = datetime.combine(prices.session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
-    session_end = datetime.combine(prices.session_date, time(16, 0), tzinfo=_ET).astimezone(timezone.utc)
+    session_end = datetime.combine(prices.session_date, regular_close_time(prices.session_date), tzinfo=_ET).astimezone(timezone.utc)
     raw = sorted(
         [
             bar

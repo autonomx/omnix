@@ -5,14 +5,14 @@ from __future__ import annotations
 from datetime import datetime, time
 from typing import Any
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 
 
 def regular_session_reference(at: datetime) -> bool:
     local = at.astimezone(_ET)
-    return _REGULAR_OPEN <= local.time() <= _REGULAR_CLOSE
+    return _REGULAR_OPEN <= local.time() <= regular_close_time(local.date())
 
 
 def episode_reference_is_valid(*, started_at: datetime, ended_at: datetime | None) -> bool:

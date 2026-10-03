@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.trading.us_equity_calendar import after_regular_close
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -884,7 +886,7 @@ async def _label_episodes_policy(
     events,
     now,
 ):
-    if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
+    if not after_regular_close(now):
         return
 
     existing_episodes = {
@@ -1208,7 +1210,7 @@ async def _summary_policy(
     session_date,
     now,
 ):
-    if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
+    if not after_regular_close(now):
         return
 
     arm_metrics: dict[str, dict[str, object]] = {}

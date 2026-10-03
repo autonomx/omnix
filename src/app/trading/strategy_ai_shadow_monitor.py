@@ -20,7 +20,7 @@ import time as _clock
 from collections import OrderedDict
 from collections.abc import Callable
 from contextlib import suppress
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -78,6 +78,7 @@ from .strategy_session_evidence import (
 )
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import after_regular_close
 
 logger = logging.getLogger(__name__)
 
@@ -1910,7 +1911,7 @@ class TradingAIShadowMonitor:
         now: datetime,
     ) -> None:
         now_et = now.astimezone(_ET)
-        if now_et.time() < config.risk.force_flat_et or now_et.time() >= time(16, 0):
+        if now_et.time() < config.risk.force_flat_et or after_regular_close(now_et):
             return
         for policy in ("minute", "event"):
             for row in rows:
@@ -1976,7 +1977,7 @@ class TradingAIShadowMonitor:
         session_date,
         now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
         for policy in ("minute", "event"):
             instrument_ids = {
@@ -2069,7 +2070,7 @@ class TradingAIShadowMonitor:
         now: datetime,
     ) -> None:
         events = _events_with_data_gap_aliases(events)
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
         for policy in ("minute", "event"):
             all_trades = sorted(
@@ -2209,7 +2210,7 @@ class TradingAIShadowMonitor:
         now: datetime,
     ) -> None:
         events = _events_with_data_gap_aliases(events)
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
 
         deterministic_replays = sorted(

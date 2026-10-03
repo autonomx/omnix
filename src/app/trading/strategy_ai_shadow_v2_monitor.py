@@ -48,6 +48,7 @@ from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_session_evidence import _CurrentSessionMarketDataProxy
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import after_regular_close
 
 logger = logging.getLogger(__name__)
 
@@ -739,7 +740,7 @@ class TradingAIShadowV2Monitor:
         self, *, rows: list[dict[str, object]], config: TradingStrategyConfigDocument,
         repository: TradingStrategyRepository, events: list[StrategyEvent], now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
         existing = {
             str(e.payload.get("episode_id")) for e in events if e.event_type == "ai_v2_opportunity_episode"
@@ -827,7 +828,7 @@ class TradingAIShadowV2Monitor:
         self, *, config: TradingStrategyConfigDocument, repository: TradingStrategyRepository,
         events: list[StrategyEvent], session_date, now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < time(16, 0):
+        if not after_regular_close(now):
             return
 
         def arm_metrics(arm: AIShadowV2Arm) -> dict[str, object]:

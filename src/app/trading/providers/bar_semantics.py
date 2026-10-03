@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _INTERVAL = re.compile(r"^(?P<count>[1-9][0-9]*)(?P<unit>mo|m|h|d|w)$", re.IGNORECASE)
@@ -41,7 +42,7 @@ def equity_session_bounds(
 ) -> tuple[datetime, datetime]:
     zone = ZoneInfo(timezone_name)
     session_open = datetime.combine(session_date, time(9, 30), tzinfo=zone)
-    session_close = datetime.combine(session_date, time(16, 0), tzinfo=zone)
+    session_close = datetime.combine(session_date, regular_close_time(session_date), tzinfo=zone)
     return session_open.astimezone(timezone.utc), session_close.astimezone(timezone.utc)
 
 
@@ -64,7 +65,7 @@ def equity_bar_times(
     local_time = local.timetz().replace(tzinfo=None)
     if local_time < time(9, 30):
         session = "extended_pre"
-    elif local_time >= time(16, 0):
+    elif local_time >= regular_close_time(local.date()):
         session = "extended_post"
     else:
         session = "regular"

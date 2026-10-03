@@ -94,6 +94,21 @@ def early_close_time(session_date: date) -> time | None:
     return None
 
 
+REGULAR_OPEN = time(9, 30)
+REGULAR_CLOSE = time(16, 0)
+
+
+def regular_close_time(session_date: date) -> time:
+    """The regular session's close: 13:00 ET on a scheduled early close, else 16:00."""
+    return early_close_time(session_date) or REGULAR_CLOSE
+
+
+def after_regular_close(moment: datetime) -> bool:
+    """Whether an aware timestamp is at or after its day's regular close (ET)."""
+    local = moment.astimezone(_ET)
+    return local.time() >= regular_close_time(local.date())
+
+
 def us_equity_session(source_time: datetime) -> str:
     """Classify the standard U.S. listed-equity session from an aware timestamp.
 
@@ -109,7 +124,7 @@ def us_equity_session(source_time: datetime) -> str:
         return "closed"
     clock = local.timetz().replace(tzinfo=None)
     early_close = early_close_time(session_date)
-    regular_close = early_close or time(16, 0)
+    regular_close = early_close or REGULAR_CLOSE
     # Nasdaq extended trading ends at 17:00 ET on standard 13:00 early-close
     # sessions rather than the normal 20:00 ET. Keep this explicit so a fresh
     # quote after that cutoff cannot be mislabeled as executable extended-post.

@@ -34,8 +34,9 @@ from .strategy_v2_qualification import (
     v2_qualification_profile_fingerprint,
 )
 from .trade_logging import trade_log
-from .us_equity_calendar import early_close_time, regular_holidays
+from .us_equity_calendar import regular_holidays
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _STATE_KEY = "_omnix_trading_strategy_v2_qualification_monitor"
@@ -81,7 +82,7 @@ def _session_finalized(session_date: date, now: datetime) -> bool:
     if now.tzinfo is None:
         raise ValueError("v2 qualification clock must be timezone-aware")
     now_et = now.astimezone(_ET)
-    close = early_close_time(session_date) or time(16, 0)
+    close = regular_close_time(session_date)
     finalized = datetime.combine(session_date, close, tzinfo=_ET) + timedelta(minutes=_REPLAY_CLOSE_GRACE_MINUTES)
     return now_et >= finalized
 

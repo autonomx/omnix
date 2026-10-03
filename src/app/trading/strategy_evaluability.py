@@ -16,10 +16,10 @@ from .market_evidence import (
     premarket_evidence_feature_compatible,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 _MAX_LATEST_BAR_LATENCY_SECONDS = Decimal("90")
 
 
@@ -43,7 +43,7 @@ def _expected_latest_start(observed_at: datetime, session_date: date) -> datetim
         return None
     floor = _minute_floor(observed_et)
     expected = floor - timedelta(minutes=1)
-    close = datetime.combine(session_date, _REGULAR_CLOSE, tzinfo=_ET)
+    close = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET)
     return min(max(expected, opening), close - timedelta(minutes=1)).astimezone(timezone.utc)
 
 
@@ -65,7 +65,7 @@ def assess_bar_coverage(
             and bar.start_time.astimezone(_ET).date() == session_date
             and _REGULAR_OPEN
             <= bar.start_time.astimezone(_ET).timetz().replace(tzinfo=None)
-            < _REGULAR_CLOSE
+            < regular_close_time(session_date)
             and bar.end_time <= observed_at.astimezone(timezone.utc)
         ],
         key=lambda bar: bar.start_time,

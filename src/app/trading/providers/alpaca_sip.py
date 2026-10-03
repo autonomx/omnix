@@ -21,6 +21,7 @@ from .alpaca_iex import alpaca_iex_auth_headers
 from .errors import ProviderContractError, ProviderDataUnavailableError
 from .http_runtime import ProviderHttpRuntime
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 ALPACA_DATA_URL = "https://data.alpaca.markets"
@@ -67,7 +68,7 @@ def _symbol(instrument_id: str) -> str:
 
 def _regular_window(session_date: date) -> tuple[datetime, datetime]:
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
-    end = datetime.combine(session_date, time(16, 0), tzinfo=_ET)
+    end = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET)
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 

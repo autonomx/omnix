@@ -12,8 +12,8 @@ from .providers.alpaca_iex import alpaca_iex_auth_headers
 from .providers.errors import ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
 from .strategy_replay_reliability import historical_replay_http_runtime
-from .us_equity_calendar import early_close_time
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def alpaca_historical_session_bars(
         "alpaca_strategy_range_backtest"
     )
     headers = alpaca_iex_auth_headers()
-    close_time = early_close_time(session_date) or time(16, 0)
+    close_time = regular_close_time(session_date)
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
     end = datetime.combine(session_date, close_time, tzinfo=_ET).astimezone(timezone.utc)
     symbol_to_candidate = {

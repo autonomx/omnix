@@ -46,12 +46,12 @@ from .strategy_repository import (
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .trade_logging import trade_log
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 logger = logging.getLogger(__name__)
 
 
 _STATE_KEY = "_omnix_trading_session_reconciliation_monitor"
-_SESSION_CLOSE = time(16, 0)
 _DEFAULT_CREATE_AFTER = time(16, 5)
 
 
@@ -113,7 +113,7 @@ def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
 def _formal_close(session_date: date) -> datetime:
     return datetime.combine(
         session_date,
-        _SESSION_CLOSE,
+        regular_close_time(session_date),
         tzinfo=_ET,
     ).astimezone(timezone.utc)
 

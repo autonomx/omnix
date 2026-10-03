@@ -16,8 +16,9 @@ from app.runtime.features import FeatureContext
 
 
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
-from .us_equity_calendar import early_close_time, regular_holidays
+from .us_equity_calendar import regular_holidays
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _STATE_KEY = "_omnix_prospective_gap_monitor"
@@ -96,7 +97,7 @@ class ProspectiveGapMonitor:
             self.confirmation_run_count += 1
             return 1
 
-        regular_close = early_close_time(local.date()) or time(16, 0)
+        regular_close = regular_close_time(local.date())
         finalize_after = (
             datetime.combine(local.date(), regular_close, tzinfo=_ET)
             + timedelta(minutes=20)

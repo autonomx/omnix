@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.trading.us_equity_calendar import after_regular_close
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -454,7 +456,7 @@ async def label_opportunity_episodes(
 ):
     from . import strategy_ai_shadow_v2_monitor as monitor
 
-    if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
+    if not after_regular_close(now):
         return
     existing = {
         str(event.payload.get("episode_id"))
@@ -579,7 +581,7 @@ async def write_catalyst_lift_summary(
         session_date=session_date,
         now=now,
     )
-    if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
+    if not after_regular_close(now):
         return
     lift = _lift_metrics(events)
     await self._append(

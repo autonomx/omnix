@@ -34,6 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import AdjustmentMode, MarketBar
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _PREMARKET_OPEN = time(4, 0)
@@ -494,7 +495,7 @@ class YahooEvidenceStore:
             clock = local.timetz().replace(tzinfo=None)
             if clock < _REGULAR_OPEN:
                 session = "extended_pre"
-            elif clock >= time(16, 0):
+            elif clock >= regular_close_time(local.date()):
                 session = "extended_post"
             else:
                 session = "regular"

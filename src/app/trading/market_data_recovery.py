@@ -25,10 +25,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 
 ContinuityMode = Literal["session", "rolling"]
 KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
@@ -176,7 +176,7 @@ def _utc(value: datetime) -> datetime:
 
 def _session_bounds(session_date: date) -> tuple[datetime, datetime]:
     opening = datetime.combine(session_date, _REGULAR_OPEN, tzinfo=_ET)
-    close = datetime.combine(session_date, _REGULAR_CLOSE, tzinfo=_ET)
+    close = datetime.combine(session_date, regular_close_time(session_date), tzinfo=_ET)
     return opening.astimezone(timezone.utc), close.astimezone(timezone.utc)
 
 

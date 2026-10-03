@@ -14,10 +14,10 @@ from .models import (
     StrategySignal,
 )
 from app.trading.us_equity_calendar import EASTERN as _ET
+from app.trading.us_equity_calendar import regular_close_time
 
 
 _REGULAR_OPEN = time(9, 30)
-_REGULAR_CLOSE = time(16, 0)
 
 
 def _regular_bars(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketBar]:
@@ -29,7 +29,7 @@ def _regular_bars(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketB
         local = bar.start_time.astimezone(_ET)
         if local.date() != latest_date:
             continue
-        if _REGULAR_OPEN <= local.time() < _REGULAR_CLOSE:
+        if _REGULAR_OPEN <= local.time() < regular_close_time(local.date()):
             result.append(bar)
     return result
 
