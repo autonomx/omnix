@@ -10,6 +10,9 @@ const brokerUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/a
 // Take the run token out of the environment before any tool runs (WP-4.6).
 runTokenState();
 const approvalPolicy = process.env.OMNIX_AGENT_APPROVAL_POLICY || "ask_sensitive";
+// Set only inside the Docker sandbox (WP-4.7). Safe validation commands are
+// approved automatically there; outside it every command asks.
+const sandboxed = process.env.OMNIX_AGENT_SANDBOXED === "1";
 
 function stringList(name: string, fallback: string[]): string[] {
   try {
@@ -676,7 +679,7 @@ export default function (pi: ExtensionAPI) {
 
       const commandNeedsApproval = localCapabilities.has("workspace.command")
         && approvalPolicy !== "allow_automatic"
-        && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability);
+        && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability || !sandboxed);
       if (commandNeedsApproval) {
         const permissionRejection = await authorizeBlockedCommand(input.command as string, input.cwd);
         if (permissionRejection) return { block: true, reason: permissionRejection };

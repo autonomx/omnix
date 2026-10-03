@@ -1017,3 +1017,27 @@ or `:` on POSIX. The default roots are the repository and
 `resources/agent_workspaces`. Empty configuration denies every root. Relative
 configured roots are anchored to the repository; request roots must be absolute.
 Resolved symlinks and parent traversal are checked before a run starts.
+The same roots bound the local folders attached to Chat agent runs and any
+workspace an agent changes in place.
+
+## Agent sandbox
+
+Agent runs that can change their workspace (the `coding` and `ops` profiles)
+run in a Docker sandbox: read-only, without capabilities, with resource
+limits, a private home and a network that reaches only the broker. Build its
+image once per host, then check it:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m app.agent_runtime.sandbox build
+python -m app.agent_runtime.sandbox check-egress   # exits 1 if the sandbox can reach anything but the relay
+```
+
+Without Docker or the image, such a run fails with the reason. To run them
+unsandboxed instead (every command then asks for approval, each run is audited
+and shows a warning), set `OMNIX_AGENT_ALLOW_UNSANDBOXED=true`. On Windows
+hosts, dependencies installed on the host (node_modules, virtualenvs) do not
+run in the Linux sandbox: give projects that validate with them a sandbox image
+with their toolchain (`OMNIX_AGENT_DOCKER_IMAGE`), or use the override. At most
+`OMNIX_AGENT_MAX_CONCURRENT_RUNS` (default 2) agents run at once. Details:
+[security/AGENT_SANDBOX.md](security/AGENT_SANDBOX.md).

@@ -158,6 +158,12 @@ jobs:
         run: python scripts/run_architecture_gates.py --group unit
       - name: Run non-service Python tests
         run: python -m pytest -m "not postgres and not multiprocess and not gpu and not live_provider and not playwright and not live_codex" -n auto
+      - name: Build the agent sandbox image (WP-4.7)
+        run: python -m app.agent_runtime.sandbox build
+        env:
+          PYTHONPATH: src
+      - name: Check the agent sandbox network and preview isolation
+        run: python -m pytest src/tests/agent_runtime/test_agent_sandbox_docker.py -q --tb=short
 
   test-postgres:
     name: test-postgres

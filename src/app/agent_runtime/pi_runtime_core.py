@@ -22,7 +22,8 @@ import uuid
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from app.observability.agent_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
-from .isolation import launch_agent_process
+from .isolation import IsolationPlan, plan_isolation
+from .run_slots import AgentRunSlot, PostgresAgentRunSlots, default_agent_run_slots
 from app.runtime.process_environment import (
     NEVER_FORWARDED_ENVIRONMENT_KEYS,
     bounded_process_environment,
@@ -224,7 +225,15 @@ def build_agent_environment(
     *,
     parent_environment: dict[str, str] | None = None,
     model_session_id: str | None = None,
+    sandboxed: bool = False,
+    home: str | None = None,
 ) -> dict[str, str]:
+    """The agent's environment: minimal, never the user's home (WP-4.7).
+
+    ``home`` replaces HOME/USERPROFILE with the run's private directory;
+    ``sandboxed`` tells the guard extension it runs inside the Docker sandbox,
+    where safe validation commands may run without approval.
+    """
     source = parent_environment if parent_environment is not None else _process_environment()
     if spec.execution.environment_policy != "minimal":
         raise PiRuntimeError(
@@ -280,6 +289,14 @@ def build_agent_environment(
     )
     if model_session_id:
         env["OMNIX_AGENT_MODEL_SESSION_ID"] = str(model_session_id)
+    if home is not None:
+        env["HOME"] = home
+        if "USERPROFILE" in env or os.name == "nt":
+            env["USERPROFILE"] = home
+    if sandboxed:
+        env["OMNIX_AGENT_SANDBOXED"] = "1"
+    else:
+        env.pop("OMNIX_AGENT_SANDBOXED", None)
     return normalize_windows_process_environment(env)
 
 
@@ -618,6 +635,8 @@ class PiRpcSession:
         argv_builder: Callable[..., list[str]] | None = None,
         event_normalizer: Callable[..., AgentEvent | None] | None = None,
         run_token_issuer: Callable[[AgentRunSpec], str] | None = None,
+        isolation_planner: Callable[[AgentRunSpec], IsolationPlan] | None = None,
+        run_slots_factory: Callable[[], PostgresAgentRunSlots | None] | None = None,
     ) -> None:
         configure_agent_debug_logging()
         self.spec = spec
@@ -636,6 +655,8 @@ class PiRpcSession:
         self._terminal_assistant_text_emitted = False
         self._stderr: deque[str] = deque(maxlen=200)
         self._temporary_cwd: Path | None = None
+        self._home: Path | None = None
+        self._slot: AgentRunSlot | None = None
         if spec.workspace is None:
             self._temporary_cwd = Path(
                 tempfile.mkdtemp(prefix=f"omnix-agent-{spec.run_id[:8]}-")
@@ -651,10 +672,22 @@ class PiRpcSession:
             fields={"workspace": str(cwd)},
         )
         try:
+            # Decide the isolation first: the environment says whether the run
+            # is sandboxed, and a refused sandbox must fail before any launch.
+            plan = None if process_factory is not None else (isolation_planner or plan_isolation)(spec)
+            sandboxed = plan is not None and plan.sandboxed
+            # At most OMNIX_AGENT_MAX_CONCURRENT_RUNS agents run at once, across processes.
+            slots = (run_slots_factory or (default_agent_run_slots if process_factory is None else lambda: None))()
+            if slots is not None:
+                self._slot = slots.acquire(spec.run_id)
+            if not sandboxed:
+                self._home = Path(tempfile.mkdtemp(prefix=f"omnix-agent-home-{spec.run_id[:8]}-"))
             env = build_agent_environment(
                 spec,
                 cwd,
                 model_session_id=uuid.uuid4().hex,
+                sandboxed=sandboxed,
+                home=str(self._home) if self._home is not None else None,
             )
             if self._run_token_issuer is not None:
                 # The extensions take it out of their environment before any
@@ -681,7 +714,10 @@ class PiRpcSession:
                     bufsize=1,
                 )
             else:
-                self.process = launch_agent_process(spec, argv=argv, cwd=cwd, env=env)
+                assert plan is not None
+                if plan.unsandboxed_reason is not None:
+                    self._record_unsandboxed(plan.unsandboxed_reason)
+                self.process = plan.launch(spec, argv=argv, cwd=cwd, env=env)
         except Exception as exc:
             log_agent_activity(
                 "pi.process.start_failed",
@@ -695,6 +731,10 @@ class PiRpcSession:
             if self._temporary_cwd is not None:
                 shutil.rmtree(self._temporary_cwd, ignore_errors=True)
                 self._temporary_cwd = None
+            if self._home is not None:
+                shutil.rmtree(self._home, ignore_errors=True)
+                self._home = None
+            self._release_slot()
             raise
         log_agent_activity(
             "pi.process.started",
@@ -871,12 +911,51 @@ class PiRpcSession:
         if self._temporary_cwd is not None:
             shutil.rmtree(self._temporary_cwd, ignore_errors=True)
             self._temporary_cwd = None
+        if self._home is not None:
+            shutil.rmtree(self._home, ignore_errors=True)
+            self._home = None
+        self._release_slot()
         log_agent_activity(
             "pi.session.closed",
             category="lifecycle",
             run_id=self.spec.run_id,
             fields={"pid": getattr(self.process, "pid", None), "returncode": self.process.poll()},
         )
+
+    def _release_slot(self) -> None:
+        slot, self._slot = self._slot, None
+        if slot is not None:
+            slot.release()
+
+    def _record_unsandboxed(self, reason: str) -> None:
+        """An operator override lets this run go unsandboxed: audit it and tell the UI."""
+        from app.security import audit
+
+        audit.record(
+            "agent.run.unsandboxed",
+            target_type="agent_run",
+            target_id=self.spec.run_id,
+            outcome="success",
+            details={"reason": reason[:300], "profile": self.spec.profile},
+        )
+        event = AgentEvent(
+            run_id=self.spec.run_id,
+            event_type="run.unsandboxed",
+            payload={"reason": reason[:300], "commands_need_approval": True},
+        )
+        self._events.append(event)
+        log_agent_activity(
+            "pi.isolation.unsandboxed",
+            category="lifecycle",
+            level="warning",
+            run_id=self.spec.run_id,
+            fields={"reason": reason[:300]},
+        )
+        if self.on_event is not None:
+            try:
+                self.on_event(event)
+            except Exception as exc:
+                log_recovered_exception("unsandboxed run event delivery", exc)
 
     def _monitor_process(self) -> None:
         returncode: int | None = None
@@ -888,6 +967,7 @@ class PiRpcSession:
             )
         except Exception as exc:
             prefix = f"Pi RPC process monitor failed: {type(exc).__name__}: {exc}"
+        self._release_slot()
         log_agent_activity(
             "pi.process.exit_observed",
             category="lifecycle",

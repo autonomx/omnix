@@ -154,10 +154,24 @@
     "type": "string"
   },
   {
+    "default": "false",
+    "description": "Controls agent allow unsandboxed for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_ALLOW_UNSANDBOXED",
+    "type": "boolean"
+  },
+  {
     "default": "true",
     "description": "Controls agent auto install dependencies for agent-runtime.",
     "feature": "agent-runtime",
     "name": "OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES",
+    "type": "string"
+  },
+  {
+    "default": "http://127.0.0.1:8000/api/agent-runs",
+    "description": "Controls agent broker url for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_BROKER_URL",
     "type": "string"
   },
   {
@@ -294,6 +308,13 @@
     "type": "string"
   },
   {
+    "default": "2",
+    "description": "Controls agent max concurrent runs for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_MAX_CONCURRENT_RUNS",
+    "type": "integer"
+  },
+  {
     "default": "",
     "description": "Controls agent mcporter command for assistant-tools.",
     "feature": "assistant-tools",
@@ -375,6 +396,13 @@
     "description": "Controls agent reasoning effort for agent-runtime.",
     "feature": "agent-runtime",
     "name": "OMNIX_AGENT_REASONING_EFFORT",
+    "type": "string"
+  },
+  {
+    "default": "host.docker.internal",
+    "description": "Controls agent sandbox gateway host for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_SANDBOX_GATEWAY_HOST",
     "type": "string"
   },
   {
@@ -460,6 +488,13 @@
     "feature": "agent-runtime",
     "name": "OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS",
     "type": "string"
+  },
+  {
+    "default": null,
+    "description": "Controls agent slot wait seconds for agent-runtime.",
+    "feature": "agent-runtime",
+    "name": "OMNIX_AGENT_SLOT_WAIT_SECONDS",
+    "type": "integer"
   },
   {
     "default": "",

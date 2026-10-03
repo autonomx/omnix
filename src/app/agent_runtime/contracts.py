@@ -41,6 +41,8 @@ AgentEventType = Literal[
     "run.recovery_requested",
     "run.recovery_failed",
     "run.stall_suspected",
+    # The run went unsandboxed under OMNIX_AGENT_ALLOW_UNSANDBOXED (WP-4.7).
+    "run.unsandboxed",
     "model.message",
     "tool.requested",
     "tool.started",

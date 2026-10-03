@@ -32,7 +32,7 @@ def test_public_request_normalizes_windows_path_patterns():
 @pytest.mark.parametrize("path", ["../secrets", "src/../../secrets", "..\\secrets", "/etc/**", "C:\\secrets\\**", "C:secrets", "\\\\server\\share", "", "src/\x00secret"])
 def test_allowed_paths_cannot_escape_workspace(path):
     with pytest.raises(ValueError, match="relative workspace"):
-        validate_request_policy(get_agent_profile("coding"), approval_policy="ask_sensitive", isolation_policy="supervised_worktree", allowed_paths=[path])
+        validate_request_policy(get_agent_profile("coding"), approval_policy="ask_sensitive", isolation_policy="docker_strong", allowed_paths=[path])
 
 
 @pytest.mark.parametrize("paths", [["src/**"], ["src/component.py"], ["src\\components\\**"]])

@@ -178,6 +178,7 @@ function acceptanceActivityLabel(event: { event_type: string; payload: Metadata 
   }
   if (event.event_type === 'run.recovery_failed') return { label: 'Automatic recovery failed', tone: 'failure' };
   if (event.event_type === 'run.stall_suspected') return { label: 'Pi may be stalled; automatic recovery was not started', tone: 'neutral' };
+  if (event.event_type === 'run.unsandboxed') return { label: 'Running without the sandbox: every command needs approval', tone: 'failure' };
   if (event.event_type === 'steering.received') return { label: 'Steering received', tone: 'neutral' };
   if (event.event_type === 'acceptance.started') return { label: 'Verifying acceptance', tone: 'neutral' };
   if (event.event_type === 'acceptance.completed') {
@@ -680,6 +681,8 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   };
   const runEvents = (events.data ?? []).map((event) => ({ ...event, payload: event.payload ?? {} }));
   const stallWarning = unresolvedStallWarning(runEvents);
+  // WP-4.7: an operator let this run go unsandboxed; say so for the run's whole life.
+  const unsandboxed = runEvents.find((event) => event.event_type === 'run.unsandboxed');
   const clarificationQuestion = status === 'waiting_for_input'
     ? [...runEvents].reverse().find((event) => (
         event.event_type === 'model.message'
@@ -767,6 +770,15 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         <div><strong>Output tokens</strong><span title={query.data.usage?.output_tokens_reported ? undefined : 'Not reported'}>{outputTokens}</span></div>
       </div>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {unsandboxed ? (
+        <section className="assistant-runtime-stall-warning" role="region" aria-label="Running without the sandbox">
+          <div>
+            <strong>Running without the sandbox</strong>
+            <p>{stringField(unsandboxed.payload.reason) || 'The agent sandbox is unavailable.'}</p>
+            <small>An operator allowed unsandboxed agent runs; every command this agent runs needs your approval.</small>
+          </div>
+        </section>
+      ) : null}
       {stallWarning && query.data.spec.profile === 'coding' && live ? (
         <section className="assistant-runtime-stall-warning" aria-live="polite" aria-label="Possible Pi stall">
           <div>

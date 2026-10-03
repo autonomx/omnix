@@ -62,7 +62,8 @@ class StartAgentRunRequest(BaseModel):
     repository: str | None = None
     workspace_root: str | None = None
     base_ref: str = "main"
-    isolation_policy: str = "supervised_worktree"
+    # None takes the profile's default (the sandbox for profiles that change workspaces).
+    isolation_policy: str | None = None
     capabilities: list[str] | None = None
     external_capabilities: list[str] | None = None
     resource_scopes: list[ResourceScope] = Field(default_factory=list)
@@ -81,8 +82,11 @@ class StartAgentRunRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_profile_policy(self) -> StartAgentRunRequest:
+        profile = get_agent_profile(self.profile)
+        if self.isolation_policy is None:
+            self.isolation_policy = profile.isolation_policy
         validate_request_policy(
-            get_agent_profile(self.profile), approval_policy=self.approval_policy,
+            profile, approval_policy=self.approval_policy,
             isolation_policy=self.isolation_policy, allowed_paths=self.allowed_paths,
         )
         self.allowed_paths = [value.replace("\\", "/") for value in self.allowed_paths]
@@ -182,7 +186,7 @@ def start_agent_run(request: StartAgentRunRequest, http_request: Request) -> Age
                 root=str(root),
                 repository=repository,
                 base_ref=request.base_ref,
-                isolation_policy=request.isolation_policy,
+                isolation_policy=request.isolation_policy or get_agent_profile(request.profile).isolation_policy,
                 allowed_paths=request.allowed_paths,
                 forbidden_paths=request.forbidden_paths,
             )

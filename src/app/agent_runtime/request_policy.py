@@ -27,12 +27,12 @@ def validate_request_policy(
         raise ValueError("approval policy may only tighten the profile default")
     if isolation_policy not in _ISOLATION_STRENGTH:
         raise ValueError("unknown isolation policy")
-    if _ISOLATION_STRENGTH[isolation_policy] < _ISOLATION_STRENGTH[profile.isolation_policy]:
-        raise ValueError("isolation policy may only raise the profile default")
     if isolation_policy == "immutable_review_snapshot" and profile.id != "coding-reviewer":
         raise ValueError("immutable review isolation requires the reviewer profile")
     if profile.id == "coding-reviewer" and isolation_policy != "immutable_review_snapshot":
         raise ValueError("reviewer requests require immutable review isolation")
+    if _ISOLATION_STRENGTH[isolation_policy] < _ISOLATION_STRENGTH[profile.isolation_policy]:
+        raise ValueError("isolation policy may only raise the profile default")
     ceiling = tuple(value.replace("\\", "/") for value in profile.allowed_paths)
     requested_paths = tuple(allowed_paths)
     if not requested_paths:

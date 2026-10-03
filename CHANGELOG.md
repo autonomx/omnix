@@ -34,6 +34,12 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   RPG turn, live speech and agent step spans, with the trace id in log lines.
 - `scripts/backup_omnix.py` and `scripts/restore_rehearsal.py`, with a nightly
   restore rehearsal.
+- Agent sandbox: coding and ops agents run in a Docker sandbox (read-only,
+  resource-limited, private home, network reaching only the Omnix broker);
+  `python -m app.agent_runtime.sandbox build` builds its image. Without
+  Docker such runs stop unless `OMNIX_AGENT_ALLOW_UNSANDBOXED=true`, which
+  makes every command ask for approval. At most
+  `OMNIX_AGENT_MAX_CONCURRENT_RUNS` (default 2) agents run at once.
 - Memory v2 switch: curated memory can move from Memory v1 to Memory v2
   (`python -m app.assistant_memory_v2.shadow_runner`, then
   `python -m app.assistant_memory_v2.cutover activate`). After the switch,

@@ -31,6 +31,7 @@ MAX_BATCHES_PER_POLICY = 50
 AGENT_EVENT_KEEP_PREFIXES = ("evidence.", "approval.", "acceptance.", "artifact.")
 AGENT_EVENT_KEEP_TYPES = (
     "run.created", "run.started", "run.completed", "run.failed", "run.settled", "run.superseded",
+    "run.unsandboxed",
     "task.revised", "quality.review_completed", "quality.self_review_completed", "quality.validation_recorded",
 )
 

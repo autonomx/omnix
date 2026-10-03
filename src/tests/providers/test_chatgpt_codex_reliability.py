@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 
 import pytest
@@ -269,12 +270,23 @@ def test_json_object_does_not_send_generic_native_object_schema(monkeypatch):
 
 def test_model_discovery_falls_back_when_turn_lock_is_busy():
     provider = _provider()
-    provider._lock.acquire()
+    # The turn lock is re-entrant: another thread must hold it for it to be busy.
+    held, done = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with provider._lock:
+            held.set()
+            done.wait(10)
+
+    holder = threading.Thread(target=hold, daemon=True)
+    holder.start()
+    assert held.wait(5)
     try:
         started = time.monotonic()
         models = provider.get_models()
     finally:
-        provider._lock.release()
+        done.set()
+        holder.join(5)
 
     assert time.monotonic() - started < 2
     assert len(models) == 1

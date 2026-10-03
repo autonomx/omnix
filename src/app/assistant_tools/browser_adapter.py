@@ -37,6 +37,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
@@ -106,7 +107,16 @@ _PLAYWRIGHT_SESSION_TTL_SECONDS = 1800.0
 _MAX_PLAYWRIGHT_COMMANDS_PER_SESSION = 64
 _MAX_PREVIEW_ENTRIES = 64
 _MAX_PREVIEW_TTL_SECONDS = 1800.0
-_PREVIEW_PACKAGE_PATH = "src/apps/web"
+_DEFAULT_PREVIEW_PACKAGE_PATH = "src/apps/web"
+
+
+def _preview_package_path() -> str:
+    """The web package a workspace preview runs (OMNIX_AGENT_PREVIEW_PACKAGE_PATH)."""
+    value = (_env_str("OMNIX_AGENT_PREVIEW_PACKAGE_PATH", _DEFAULT_PREVIEW_PACKAGE_PATH) or "").strip().replace("\\", "/")
+    parts = value.split("/")
+    if not value or value.startswith("/") or ":" in value or ".." in parts:
+        raise ValueError("OMNIX_AGENT_PREVIEW_PACKAGE_PATH must be a relative path inside the workspace")
+    return value
 _PREVIEW_ROUTE = re.compile(r"^/[^\r\n\x00]{0,2047}$", re.S)
 # Some Windows hosts reject Chrome's out-of-process GPU child with
 # STATUS_ACCESS_DENIED (0xC0000022), which closes the CDP channel before
@@ -145,6 +155,8 @@ class _WorkspacePreview:
     port: int
     timer: threading.Timer | None = None
     expires_at: float = 0.0
+    # Sandboxed previews remove their containers here (WP-4.7).
+    cleanup: Callable[[], None] | None = None
 
 
 _PREVIEW_LOCK = threading.RLock()
@@ -931,7 +943,7 @@ def _run_id_from_request(request: AssistantToolRequest) -> str | None:
     return _run_id_from_proposal(request.proposal_id)
 
 
-def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path]:
+def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path, Any]:
     run_id = _run_id_from_request(request)
     if not run_id:
         raise ValueError("workspace preview requires a run-scoped broker proposal")
@@ -945,10 +957,14 @@ def _workspace_for_preview(request: AssistantToolRequest) -> tuple[str, Path]:
         raise ValueError("workspace preview requires an issued Agent workspace")
     workspace = snapshot.spec.workspace
     root = Path(workspace.worktree or workspace.root).resolve()
-    package_json = root / _PREVIEW_PACKAGE_PATH / "package.json"
+    package = _preview_package_path()
+    package_json = root / package / "package.json"
     if not package_json.is_file():
-        raise ValueError(f"workspace preview package is missing: {_PREVIEW_PACKAGE_PATH}")
-    return run_id, root
+        raise ValueError(f"workspace preview package is missing: {package}")
+    # A sandboxed run's preview runs in the sandbox too: the dev server executes
+    # code the agent may have changed (WP-4.7).
+    launcher = default_agent_run_service().workspace_preview_launcher(snapshot.spec)
+    return run_id, root, launcher
 
 
 def _preview_npm_command() -> str:
@@ -985,16 +1001,31 @@ def _allocate_loopback_port() -> int:
         return int(listener.getsockname()[1])
 
 
-def _wait_for_preview(process: subprocess.Popen[str], port: int) -> bool:
+def _wait_for_preview(process: subprocess.Popen[str], port: int, *, http: bool = False) -> bool:
+    """Wait until the preview listens; ``http`` waits for an HTTP answer instead.
+
+    A sandboxed preview sits behind a relay that accepts connections before
+    the dev server listens, so only an HTTP response proves it is up.
+    """
     deadline = time.monotonic() + _preview_start_timeout_seconds()
     while time.monotonic() < deadline:
         if process.poll() is not None:
             return False
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.25):
-                return True
+            if http:
+                import urllib.error
+                import urllib.request
+
+                try:
+                    with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2):  # noqa: S310 - loopback preview
+                        return True
+                except urllib.error.HTTPError:
+                    return True
+            else:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.25):
+                    return True
         except OSError:
-            time.sleep(0.1)
+            time.sleep(0.25 if http else 0.1)
     return False
 
 
@@ -1038,13 +1069,19 @@ def _terminate_preview_process(process: subprocess.Popen[str]) -> None:
             pass
 
 
+def _terminate_preview(preview: _WorkspacePreview) -> None:
+    _terminate_preview_process(preview.process)
+    if preview.cleanup is not None:
+        preview.cleanup()
+
+
 def _expire_workspace_preview(run_id: str, pid: int) -> None:
     with _PREVIEW_LOCK:
         preview = _PREVIEWS.get(run_id)
         if preview is None or preview.process.pid != pid:
             return
         _PREVIEWS.pop(run_id, None)
-    _terminate_preview_process(preview.process)
+    _terminate_preview(preview)
 
 
 def _prune_expired_workspace_previews() -> None:
@@ -1060,7 +1097,7 @@ def _prune_expired_workspace_previews() -> None:
     for _run_id, preview in expired:
         if preview.timer is not None:
             preview.timer.cancel()
-        _terminate_preview_process(preview.process)
+        _terminate_preview(preview)
 
 
 def _stop_workspace_preview(request: AssistantToolRequest) -> bool:
@@ -1073,7 +1110,7 @@ def _stop_workspace_preview(request: AssistantToolRequest) -> bool:
         return False
     if preview.timer is not None:
         preview.timer.cancel()
-    _terminate_preview_process(preview.process)
+    _terminate_preview(preview)
     return True
 
 
@@ -1084,28 +1121,30 @@ def _stop_all_workspace_previews() -> None:
     for preview in previews:
         if preview.timer is not None:
             preview.timer.cancel()
-        _terminate_preview_process(preview.process)
+        _terminate_preview(preview)
 
 
 def _start_workspace_preview(
     request: AssistantToolRequest,
     payload: dict[str, Any],
 ) -> tuple[str, dict[str, Any]]:
-    run_id, root = _workspace_for_preview(request)
+    run_id, root, launcher = _workspace_for_preview(request)
+    package = _preview_package_path()
     route = str(payload.get("path") or "/").strip()
     if not _PREVIEW_ROUTE.fullmatch(route) or "\\" in route:
         raise ValueError("workspace preview path must be a bounded absolute browser route")
 
     _stop_workspace_preview(request)
     _prune_expired_workspace_previews()
-    npm = _preview_npm_command()
+    npm = _preview_npm_command() if launcher is None else ""
     last_error = "workspace preview failed to become ready"
     for _attempt in range(3):
         port = _allocate_loopback_port()
+        cleanup: Callable[[], None] | None = None
         argv = [
             npm,
             "--prefix",
-            _PREVIEW_PACKAGE_PATH,
+            package,
             "run",
             "dev",
             "--",
@@ -1129,13 +1168,16 @@ def _start_workspace_preview(
         else:
             popen_kwargs["start_new_session"] = True
         try:
-            process = subprocess.Popen(argv, **popen_kwargs)
+            if launcher is not None:
+                process, cleanup = launcher(root=root, package=package, port=port)
+            else:
+                process = subprocess.Popen(argv, **popen_kwargs)
         except OSError as exc:
             raise ValueError(f"workspace preview could not start npm: {type(exc).__name__}") from exc
 
-        if not _wait_for_preview(process, port):
+        if not _wait_for_preview(process, port, http=launcher is not None):
             code = process.poll()
-            _terminate_preview_process(process)
+            _terminate_preview(_WorkspacePreview(process=process, url="", port=port, cleanup=cleanup))
             last_error = (
                 f"workspace preview process exited with code {code}"
                 if code is not None
@@ -1145,7 +1187,7 @@ def _start_workspace_preview(
 
         base_url = f"http://127.0.0.1:{port}"
         url = f"{base_url}{route}"
-        preview = _WorkspacePreview(process=process, url=base_url, port=port)
+        preview = _WorkspacePreview(process=process, url=base_url, port=port, cleanup=cleanup)
         preview_ttl = _preview_ttl_seconds()
         preview.expires_at = time.monotonic() + preview_ttl
         timer = threading.Timer(
@@ -1161,7 +1203,7 @@ def _start_workspace_preview(
                 _PREVIEWS[run_id] = preview
         if capacity_reached:
             timer.cancel()
-            _terminate_preview_process(process)
+            _terminate_preview(preview)
             raise ValueError("workspace preview capacity is full")
         timer.start()
         return url, {
@@ -1169,7 +1211,8 @@ def _start_workspace_preview(
             "workspace_preview_url": base_url,
             "workspace_preview_port": port,
             "workspace_preview_path": route,
-            "workspace_preview_package": _PREVIEW_PACKAGE_PATH,
+            "workspace_preview_package": package,
+            "workspace_preview_sandboxed": launcher is not None,
         }
 
     raise ValueError(last_error)

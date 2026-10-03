@@ -130,6 +130,33 @@ describe('OmnixRunCard', () => {
     ));
   });
 
+  it('keeps a warning on a run that went unsandboxed', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-unsandboxed',
+      status: 'running',
+      desired_state: 'running',
+      revision: 2,
+      spec: { profile: 'coding', task: 'Fix the editor' },
+    } as never);
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
+      event_id: 'unsandboxed-1',
+      run_id: 'run-unsandboxed',
+      sequence: 2,
+      event_type: 'run.unsandboxed',
+      payload: { reason: 'the agent sandbox needs Docker, which is not running', commands_need_approval: true },
+      created_at: '2026-10-03T01:00:00Z',
+    })]);
+    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+
+    renderCard({ agent_run: { run_id: 'run-unsandboxed', status: 'running', profile: 'coding', task: 'Fix the editor', revision: 2 } });
+
+    const warning = await screen.findByRole('region', { name: 'Running without the sandbox' });
+    expect(warning.textContent).toContain('Docker, which is not running');
+    expect(warning.textContent).toContain('needs your approval');
+  });
+
   it('renders an agent run from durable chat metadata', () => {
     renderCard({ agent_run: { run_id: 'run-1', status: 'paused', profile: 'coding', task: 'Fix tests', revision: 2 } });
     expect(screen.getByText('Agent · coding')).toBeTruthy();

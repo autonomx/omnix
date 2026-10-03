@@ -59,6 +59,7 @@ _PROFILES = {
             *_BROWSER,
         ),
         requires_workspace=True,
+        isolation_policy="docker_strong",
     ),
     "coding-reviewer": AgentProfile(
         id="coding-reviewer",
@@ -77,7 +78,7 @@ _PROFILES = {
         requires_workspace=False,
     ),
     "personal-assistant": AgentProfile(id="personal-assistant", description="Governed email, calendar, and contacts.", external_capabilities=("gmail.read_email", "gmail.create_draft", "gmail.send_email", "calendar.read_availability", "calendar.create_event", "contacts.search_contacts", "contacts.resolve_recipient"), context_sources=("assistant_memory",)),
-    "ops": AgentProfile(id="ops", description="Workspace-scoped diagnostics and controlled commands.", capabilities=(*_READ, "workspace.command", "workspace.test"), requires_workspace=True),
+    "ops": AgentProfile(id="ops", description="Workspace-scoped diagnostics and controlled commands.", capabilities=(*_READ, "workspace.command", "workspace.test"), requires_workspace=True, isolation_policy="docker_strong"),
     "trading-research": AgentProfile(
         id="trading-research",
         description="Read-only market investigation using governed research services; broker/order mutation authority is intentionally absent.",

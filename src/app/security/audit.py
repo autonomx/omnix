@@ -34,6 +34,7 @@ ACTIONS = frozenset({
     "agent.run.start",
     "agent.run.stop",
     "agent.run.promote",
+    "agent.run.unsandboxed",
     "trading.control.update",
     "trading.paper.order",
     "feature.toggle",

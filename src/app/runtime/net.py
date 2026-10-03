@@ -11,6 +11,11 @@ import logging
 from urllib.parse import urlsplit
 
 _LOGGER = logging.getLogger(__name__)
+
+# Every interface of a container's own network namespace: only for servers
+# inside a sandbox container, which the host reaches through a relay published
+# on loopback (WP-4.7). Host listeners use bind_host().
+CONTAINER_ALL_INTERFACES = "0.0.0.0"
 _DEFAULT_ORIGINS = (
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",

@@ -916,6 +916,7 @@
               "run.recovery_requested",
               "run.recovery_failed",
               "run.stall_suspected",
+              "run.unsandboxed",
               "model.message",
               "tool.requested",
               "tool.started",

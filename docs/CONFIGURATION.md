@@ -26,7 +26,9 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `LIVE_SPEECH_VAD_PROVIDER` | string | `energy` | live-speech | Controls live speech vad provider for live-speech. |
 | `LM_API_TOKEN` | string | — | live-speech | Controls lm api token for live-speech. |
 | `LOCALAPPDATA` | string | — | launcher, security | Controls localappdata for launcher, security. |
+| `OMNIX_AGENT_ALLOW_UNSANDBOXED` | boolean | `false` | agent-runtime | Controls agent allow unsandboxed for agent-runtime. |
 | `OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES` | string | `true` | agent-runtime | Controls agent auto install dependencies for agent-runtime. |
+| `OMNIX_AGENT_BROKER_URL` | string | `http://127.0.0.1:8000/api/agent-runs` | agent-runtime | Controls agent broker url for agent-runtime. |
 | `OMNIX_AGENT_BROWSER_BACKEND` | string | — | launcher | Controls agent browser backend for launcher. |
 | `OMNIX_AGENT_BROWSER_ENABLED` | boolean | `true` | assistant-tools | Controls agent browser enabled for assistant-tools. |
 | `OMNIX_AGENT_CONTAINER_BROKER_URL` | string | — | agent-runtime | Controls agent container broker url for agent-runtime. |
@@ -46,6 +48,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_LOG_DIR` | string | — | launcher, observability | Controls agent log dir for launcher, observability. |
 | `OMNIX_AGENT_LOG_MAX_FIELD_CHARS` | string | — | launcher, observability | Controls agent log max field chars for launcher, observability. |
 | `OMNIX_AGENT_LOG_RETENTION_DAYS` | string | — | launcher, observability | Controls agent log retention days for launcher, observability. |
+| `OMNIX_AGENT_MAX_CONCURRENT_RUNS` | integer | `2` | agent-runtime | Controls agent max concurrent runs for agent-runtime. |
 | `OMNIX_AGENT_MCPORTER_COMMAND` | string | — | assistant-tools | Controls agent mcporter command for assistant-tools. |
 | `OMNIX_AGENT_MCP_ENABLED` | boolean | `true` | assistant-tools | Controls agent mcp enabled for assistant-tools. |
 | `OMNIX_AGENT_MCP_TIMEOUT_SECONDS` | string | `60` | assistant-tools | Controls agent mcp timeout seconds for assistant-tools. |
@@ -58,6 +61,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS` | string | `180` | agent-runtime | Controls agent plan review timeout seconds for agent-runtime. |
 | `OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS` | string | `2` | agent-runtime | Controls agent plan review transport attempts for agent-runtime. |
 | `OMNIX_AGENT_REASONING_EFFORT` | string | — | agent-runtime | Controls agent reasoning effort for agent-runtime. |
+| `OMNIX_AGENT_SANDBOX_GATEWAY_HOST` | string | `host.docker.internal` | agent-runtime | Controls agent sandbox gateway host for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MIN_CONFIDENCE` | string | `0.60` | agent-runtime | Controls agent semantic classifier min confidence for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE` | string | `auto` | agent-runtime | Controls agent semantic classifier mode for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL` | string | — | agent-runtime | Controls agent semantic classifier model for agent-runtime. |
@@ -70,6 +74,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODEL` | string | — | agent-runtime | Controls agent semantic task parser model for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER` | string | — | agent-runtime | Controls agent semantic task parser provider for agent-runtime. |
 | `OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS` | string | — | agent-runtime | Controls agent semantic task parser timeout seconds for agent-runtime. |
+| `OMNIX_AGENT_SLOT_WAIT_SECONDS` | integer | — | agent-runtime | Controls agent slot wait seconds for agent-runtime. |
 | `OMNIX_ALLOWED_PRIVATE_NETWORKS` | string | — | security | Controls allowed private networks for security. |
 | `OMNIX_ALLOW_LEGACY_IMPORT` | boolean | `false` | kernel | Controls allow legacy import for kernel. |
 | `OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE` | boolean | `false` | kernel | Controls allow legacy test persistence for kernel. |

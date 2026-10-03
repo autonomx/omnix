@@ -128,6 +128,7 @@ def test_docker_receives_the_token_by_name_only(tmp_path, monkeypatch) -> None:
     spec = AgentRunSpec(run_id="run-1", task="t", model=ModelRef(provider_id="p", model_id="m"))
     runner = isolation.DockerStrongIsolation.__new__(isolation.DockerStrongIsolation)
     runner.docker, runner.image, runner.network = "docker", "image", "none"
+    runner.operator_network = "none"
     runner.limits = SimpleNamespace(memory="1g", cpus="1", pids=64, tmpfs_size="64m")
     monkeypatch.setattr(runner, "validate", lambda: None, raising=False)
     env = {"OMNIX_AGENT_RUN_TOKEN": "secret-token", "OMNIX_AGENT_RUN_ID": "run-1"}

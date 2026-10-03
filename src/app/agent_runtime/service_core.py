@@ -35,7 +35,9 @@ from .evidence import (
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
+from .isolation import run_mutates
 from .profiles import get_agent_profile, resolve_profile_capabilities
+from .request_policy import allowed_workspace_root
 from .budget import AgentBudgetError, AgentBudgetManager, apply_default_run_limits
 from .contracts import (
     AgentArtifact,
@@ -3198,6 +3200,26 @@ class AgentRunService:
             "paths": list(result.paths),
         }
 
+    @staticmethod
+    def workspace_preview_launcher(spec: AgentRunSpec):
+        """How a run's workspace preview starts: inside the sandbox when the run is sandboxed.
+
+        Returns a ``launch(root=..., package=..., port=...)`` callable giving
+        ``(process, cleanup)``, where ``cleanup()`` removes the preview's
+        containers, or None for a preview on the host (a run the operator let
+        go unsandboxed) (WP-4.7).
+        """
+        from .isolation import plan_isolation, remove_containers, start_sandboxed_preview
+
+        if not plan_isolation(spec).sandboxed:
+            return None
+
+        def launch(*, root, package, port):
+            process, containers = start_sandboxed_preview(spec, root=root, package=package, port=port)
+            return process, lambda: remove_containers(containers)
+
+        return launch
+
     def _prepare_workspace(self, spec: AgentRunSpec) -> AgentRunSpec:
         workspace = spec.workspace
         if workspace is None:
@@ -3205,14 +3227,19 @@ class AgentRunService:
             # explicit None workspace. PiRpcSession supplies an ephemeral cwd
             # without turning it into repository authority.
             return spec
-        if not workspace.repository or workspace.worktree:
-            return spec
         root = Path(
             _env_str(
                 "OMNIX_AGENT_WORKTREE_ROOT",
                 str(Path(tempfile.gettempdir()) / "omnix-agent-worktrees"),
             )
         ).expanduser().resolve()
+        if not workspace.repository or workspace.worktree:
+            # In place: a run that changes this folder needs it allow-listed
+            # (or an Omnix-managed worktree) (WP-4.7).
+            in_place = Path(workspace.worktree or workspace.root).expanduser().resolve()
+            if run_mutates(spec) and not in_place.is_relative_to(root):
+                allowed_workspace_root(str(in_place))
+            return spec
         root.mkdir(parents=True, exist_ok=True)
         target = root / spec.run_id
         authority = self.workspace_authority_factory.create_worktree(

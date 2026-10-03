@@ -31,7 +31,7 @@ Assets, most sensitive first:
 | B4 | Omnix → PostgreSQL | database role; row-level security per workspace |
 | B5 | Omnix → blob store | S3 credentials or local filesystem |
 | B6 | Omnix → model services, tool APIs, trading providers | provider credentials; outbound URL policy |
-| B7 | Agent sandbox → host and network | process or container isolation (WP-4.7 pending) |
+| B7 | Agent sandbox → host and network | Docker sandbox for every run that can change its workspace; internal network reaching only the broker relay (WP-4.7) |
 
 ## Components
 
@@ -70,10 +70,10 @@ Assets, most sensitive first:
 | STRIDE | Threat | Mitigation | Residual |
 |---|---|---|---|
 | S | Another local process calls the broker as an agent | Run tokens (HMAC, run-bound, 15-minute TTL, owner and capability bound) on every agent route (WP-4.6) | — |
-| T | An agent edits files outside its workspace | Issued path roots, guard extension, workspace authorization (existing); sandbox by default is WP-4.7 | WP-4.7 pending (owner decision on defaults) |
+| T | An agent edits files outside its workspace | Issued path roots, guard extension, workspace authorization; mutating runs in a read-only container that mounts only the workspace; in-place folders must be allow-listed (WP-4.7) | An operator may allow unsandboxed runs (`OMNIX_AGENT_ALLOW_UNSANDBOXED`): audited, every command needs approval |
 | R | An agent action without a record | Capability executions and approvals audited (WP-4.8) | — |
 | I | A shell tool reads the run token | Token removed from `process.env` before tools run; never in argv; never forwarded to children (WP-4.6) | — |
-| D | Unbounded tool use | Server-side tool budget per capability execution (WP-4.5) and step/wall-time limits | Global concurrency limit is WP-4.7 |
+| D | Unbounded tool use | Server-side tool budget per capability execution (WP-4.5), step/wall-time limits, container memory/CPU/pid limits and a global concurrent-run limit across processes (WP-4.7) | — |
 | E | An agent approves its own request | Agent principals carry `agent_run` (no approve) (WP-4.6); approvals bound to principals (WP-4.5) | — |
 | E | Prompt injection widens authority | Profiles are ceilings; capabilities issued per run; executor fails closed on unknown adapters (WP-4.5) | Model behaviour itself remains untrusted by design |
 
@@ -132,17 +132,24 @@ Assets, most sensitive first:
 
 ### Agent sandbox
 
-Pending WP-4.7: Docker isolation by default for mutating profiles, broker-only
-egress, global run limits. Today the agent runs supervised in a worktree, with
-path roots enforced by the guard extension and the broker.
+See [AGENT_SANDBOX.md](AGENT_SANDBOX.md). Runs that can change their workspace
+run in a read-only, capability-free container with resource limits and a
+private home, on an internal network whose only reachable endpoint is the
+broker relay; their workspace previews run there too. Safe validation commands
+are approved automatically only inside it. Without Docker such a run fails
+closed unless the operator allows unsandboxed runs (audited; every command
+asks). At most `OMNIX_AGENT_MAX_CONCURRENT_RUNS` agents run at once.
+
+| STRIDE | Threat | Mitigation | Residual |
+|---|---|---|---|
+| I | An agent exfiltrates workspace data over the network | Internal Docker network; the relay forwards only the gateway's broker and model-gateway ports; the run token is accepted only for that run's routes (WP-4.6/4.7) | Data can still leave through governed capabilities the run was issued (e.g. a web search query) |
+| E | Agent-edited code runs on the host (dev server, test runner) | Commands and the workspace preview run inside the sandbox | On Windows hosts, host-installed native dependencies (node_modules, virtualenvs) do not run in the Linux sandbox; projects need a sandbox image with their toolchain or the unsandboxed override |
+| T | An agent reads the person's home (SSH keys, tokens) | Home is a per-run directory (`/tmp/home` in the container) | — |
 
 ## Open items
 
-- WP-4.7: sandbox by default, egress control, global concurrency. It
-  changes defaults for existing local installs and waits for the owner.
 - WP-4.1: sign-in on by default (owner decision: later).
 - WP-4.10: remove `storage_path` from asset responses; error envelope
   (WP-10.5).
 - WP-11.3: ingress CSP for the web app and global rate limits.
-- ASVS L2 checklist (`docs/security/ASVS_L2_CHECKLIST.md`): to be written once
-  WP-4.7 is settled.
+- ASVS L2 checklist (`docs/security/ASVS_L2_CHECKLIST.md`), WP-4.11.

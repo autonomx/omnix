@@ -2517,12 +2517,14 @@ def _agent_result(
                 repository=selected_repository,
                 worktree=selected_workspace if selected_repository else None,
                 base_ref="HEAD",
+                isolation_policy=profile.isolation_policy,
             )
         else:
             workspace = WorkspaceSpec(
                 root=repository,
                 repository=repository,
                 base_ref=env_str("OMNIX_AGENT_DEFAULT_BASE_REF", "HEAD").strip() or "HEAD",
+                isolation_policy=profile.isolation_policy,
             )
     spec = AgentRunSpec(
         session_id=str(session.id),
