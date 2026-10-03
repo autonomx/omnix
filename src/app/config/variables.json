@@ -777,6 +777,13 @@
     "type": "string"
   },
   {
+    "default": "2",
+    "description": "Controls codex process pool size for providers.",
+    "feature": "providers",
+    "name": "OMNIX_CODEX_PROCESS_POOL_SIZE",
+    "type": "integer"
+  },
+  {
     "default": null,
     "description": "Controls companion rollout stage for assistant-memory.",
     "feature": "assistant-memory",

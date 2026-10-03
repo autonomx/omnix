@@ -115,6 +115,7 @@ This file is generated from `app.config.registry`. Values are intentionally neve
 | `OMNIX_CHAT_INPUT_TOKEN_BUDGET` | string | — | chat | Controls chat input token budget for chat. |
 | `OMNIX_CHAT_PROFILE_ID` | string | — | assistant-memory | Controls chat profile id for assistant-memory. |
 | `OMNIX_CHAT_WORKSPACE_ID` | string | — | assistant-memory | Controls chat workspace id for assistant-memory. |
+| `OMNIX_CODEX_PROCESS_POOL_SIZE` | integer | `2` | providers | Controls codex process pool size for providers. |
 | `OMNIX_COMPANION_ROLLOUT_STAGE` | string | — | assistant-memory | Controls companion rollout stage for assistant-memory. |
 | `OMNIX_DATABASE_APPLICATION_NAME` | string | `omnix` | kernel | Controls database application name for kernel. |
 | `OMNIX_DATABASE_POOL_MAX` | string | — | kernel | Controls database pool max for kernel. |

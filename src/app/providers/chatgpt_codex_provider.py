@@ -4,11 +4,16 @@ This provider deliberately does not read, copy, or persist ChatGPT OAuth tokens.
 Authentication remains owned by the locally installed Codex client (``codex login``).
 Omnix communicates with ``codex app-server`` over its supported stdio JSONL
 protocol and presents that transport through the normal BaseProvider interface.
+
+One app-server process runs one turn at a time, so the provider keeps a small
+pool of them (``OMNIX_CODEX_PROCESS_POOL_SIZE``, default 2, WP-7.2): a turn runs
+on an idle process, or on the process that already holds its conversation's
+thread; a cancel ends only the process running that job's turn.
 """
 from __future__ import annotations
 
 import logging
-from app.config.env import environment_copy as _process_environment
+from app.config.env import env_int, environment_copy as _process_environment
 
 import atexit
 from contextlib import contextmanager
@@ -75,6 +80,8 @@ FAST_SERVICE_TIER = "fast"
 DEFAULT_CODEX_PATH = "codex"
 DEFAULT_TRANSPORT = "app_server"
 _MODEL_DISCOVERY_LOCK_TIMEOUT_SECONDS = 0.5
+DEFAULT_PROCESS_POOL_SIZE = 2
+MAX_PROCESS_POOL_SIZE = 8
 _LOGIN_URL_RE = re.compile(r"https://auth\.openai\.com/oauth/authorize\?[^\s\x1b\"'<>]+")
 _LOGIN_URL_CAPTURE_TIMEOUT_SECONDS = 2.0
 
@@ -140,6 +147,18 @@ class ChatGPTCodexProvider(BaseProvider):
         self._active_owner: str | None = None
         self._cancelled_owners: deque[str] = deque(maxlen=64)
         self._closed = False
+        # The process pool: this instance is the first member; more are created
+        # when every member is busy, up to the pool size. ``_member_turns``
+        # counts the turns reserved on each member.
+        self._members: list[ChatGPTCodexProvider] = [self]
+        self._member_turns: dict[int, int] = {}
+        self._pool_lock = threading.Lock()
+        self._pool_size = env_int(
+            "OMNIX_CODEX_PROCESS_POOL_SIZE",
+            DEFAULT_PROCESS_POOL_SIZE,
+            minimum=1,
+            maximum=MAX_PROCESS_POOL_SIZE,
+        )
         super().__init__(config)
         atexit.register(self.close)
 
@@ -545,6 +564,62 @@ class ChatGPTCodexProvider(BaseProvider):
         self,
         messages: list[ChatMessage],
         *,
+        conversation_id: str | None,
+        **turn: Any,
+    ) -> Iterator[ChatResponse]:
+        member = self._reserve_member(conversation_id)
+        try:
+            yield from member._run_turn(messages, conversation_id=conversation_id, **turn)
+        finally:
+            self._release_member(member)
+
+    def _reserve_member(self, conversation_id: str | None) -> "ChatGPTCodexProvider":
+        """The member to run a turn on.
+
+        A conversation's thread and any pending tool call live in one process,
+        so its turns stay on that member. Otherwise an idle member, a new one
+        while the pool has room, or the least busy one (the turn waits).
+        """
+        with self._pool_lock:
+            if self._closed:
+                raise ConnectionError("ChatGPT Codex provider is closed")
+            member = None
+            if conversation_id:
+                member = next(
+                    (
+                        candidate
+                        for candidate in self._members
+                        if conversation_id in candidate._threads
+                        or conversation_id in candidate._pending_dynamic_calls
+                    ),
+                    None,
+                )
+            if member is None:
+                member = next(
+                    (candidate for candidate in self._members if not self._member_turns.get(id(candidate))),
+                    None,
+                )
+            if member is None and len(self._members) < self._pool_size:
+                member = type(self)(config=_member_config(self.config))
+                member._cancelled_owners = self._cancelled_owners
+                self._members.append(member)
+            if member is None:
+                member = min(self._members, key=lambda candidate: self._member_turns.get(id(candidate), 0))
+            self._member_turns[id(member)] = self._member_turns.get(id(member), 0) + 1
+            return member
+
+    def _release_member(self, member: "ChatGPTCodexProvider") -> None:
+        with self._pool_lock:
+            remaining = self._member_turns.get(id(member), 0) - 1
+            if remaining > 0:
+                self._member_turns[id(member)] = remaining
+            else:
+                self._member_turns.pop(id(member), None)
+
+    def _run_turn(
+        self,
+        messages: list[ChatMessage],
+        *,
         model: str,
         effort: str,
         fast_mode: bool,
@@ -554,6 +629,7 @@ class ChatGPTCodexProvider(BaseProvider):
         output_schema: dict[str, Any] | None,
         owner: str | None = None,
     ) -> Iterator[ChatResponse]:
+        """One turn on this member's app-server process."""
         deadline_at = time.monotonic() + request_timeout_seconds
         system_instructions = self._system_instructions(messages)
         fingerprint = hashlib.sha256(system_instructions.encode("utf-8")).hexdigest()
@@ -1271,13 +1347,26 @@ class ChatGPTCodexProvider(BaseProvider):
     def cancel_active_request(self, owner: str | None = None) -> bool:
         """Interrupt a Codex turn without permanently closing the provider.
 
-        With ``owner``, only that job's turn is interrupted: a job still
-        waiting for the provider is marked so its turn ends as it starts.
+        With ``owner``, only the process running that job's turn is stopped:
+        a job still waiting for a process is marked so its turn ends as it
+        starts. Without one, every running turn is stopped.
         """
-        if owner is not None and owner != self._active_owner:
+        members = list(self._members)
+        if owner is None:
+            return any([member._terminate_process() for member in members])
+
+        def running() -> "ChatGPTCodexProvider | None":
+            return next((member for member in members if member._active_owner == owner), None)
+
+        member = running()
+        if member is None:
             self._cancelled_owners.append(owner)
-            if owner != self._active_owner:  # it may have started meanwhile
+            member = running()  # it may have started meanwhile
+            if member is None:
                 return True
+        return member._terminate_process()
+
+    def _terminate_process(self) -> bool:
         process = self._process
         if process is None or process.poll() is not None:
             return False
@@ -1292,8 +1381,16 @@ class ChatGPTCodexProvider(BaseProvider):
         return True
 
     def close(self) -> None:
-        with self._lock:
-            if self._closed:
-                return
+        with self._pool_lock:
+            members = list(self._members)
             self._closed = True
-            self._reset_process_state()
+        for member in members:
+            with member._lock:
+                member._closed = True
+                member._reset_process_state()
+
+
+def _member_config(config: Any) -> Any:
+    from dataclasses import replace
+
+    return replace(config, extra_params=dict(config.extra_params or {}))
