@@ -1500,7 +1500,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     });
   }
 
-  function deleteChatSession(session: ApiChatSession): void {
+  function deleteChatSession(session: SessionListEntry): void {
     const title = sessionTitle(session);
     if (!window.confirm(`Delete "${title}"? This removes the chat history from this device.`)) return;
     deleteSessionMutation.mutate(session.id);
@@ -2349,9 +2349,12 @@ function readAssistantToolReturn(): { message: string | null; toolId: string | n
 function getLatestAssistantMessage(messages: ChatMessage[]): ChatMessage | undefined { return [...messages].reverse().find((message) => message.role === 'assistant' && message.content.trim()); }
 function isScrolledNearBottom(element: HTMLElement): boolean { return element.scrollHeight - element.scrollTop - element.clientHeight < 160; }
 function getSynthesizedAudioSource(response: TtsSynthesisResponse): string { if (response.audioUrl) return response.audioUrl; if (response.audioBase64) return `data:${response.mimeType ?? 'audio/wav'};base64,${response.audioBase64}`; throw new Error('TTS service did not return playable audio.'); }
-function isPinnedSession(session: ApiChatSession): boolean { const metadata = 'metadata' in session ? (session as { metadata?: Record<string, unknown> }).metadata : undefined; return metadata?.pinned === true || metadata?.starred === true; }
-function sessionTitle(session: ApiChatSession): string { return session.title?.trim() || 'Untitled chat'; }
-function formatSessionTime(session: ApiChatSession): string { const timestamp = session.updated_at || session.created_at; if (!timestamp) return 'Recent'; return timestamp.includes('T') ? formatMessageTime(timestamp) : timestamp; }
+/** The fields the session list reads; summaries and full sessions both have them. */
+type SessionListEntry = Pick<ApiChatSession, 'id' | 'title' | 'created_at' | 'updated_at'>;
+
+function isPinnedSession(session: SessionListEntry): boolean { const metadata = 'metadata' in session ? (session as { metadata?: Record<string, unknown> }).metadata : undefined; return metadata?.pinned === true || metadata?.starred === true; }
+function sessionTitle(session: SessionListEntry): string { return session.title?.trim() || 'Untitled chat'; }
+function formatSessionTime(session: SessionListEntry): string { const timestamp = session.updated_at || session.created_at; if (!timestamp) return 'Recent'; return timestamp.includes('T') ? formatMessageTime(timestamp) : timestamp; }
 function mergeTranscript(current: string, next: string): string { return [current.trim(), next.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(); }
 function shouldFlushStreamedSpeechBuffer(value: string): boolean { const text = value.trim(); if (text.length < STREAMED_TTS_MIN_PHRASE_CHARS) return false; return /[.!?]["')\]]?$/.test(text) || text.length >= STREAMED_TTS_MIN_PHRASE_CHARS * 2; }
 function elapsedMs(start: number | undefined, end: number | undefined): number | null { return start === undefined || end === undefined ? null : Math.round(end - start); }

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MarketBar } from '../tradingTypes';
 import { TradingIndicatorScheduler } from './indicatorScheduler';
+import { fixture } from '../../../test/fixture';
 
 function bars(count: number): MarketBar[] {
-  return Array.from({ length: count }, (_, index) => ({
+  return fixture(Array.from({ length: count }, (_, index) => ({
     instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
     interval: '1m',
     start_time: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
@@ -19,7 +20,7 @@ function bars(count: number): MarketBar[] {
     provider: 'binance',
     ingestion_revision: 1,
     received_at: '2026-01-01T00:00:00Z',
-  }));
+  })));
 }
 
 describe('TradingIndicatorScheduler', () => {

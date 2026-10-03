@@ -1,13 +1,5 @@
-export type AlpacaIexCredentialStatus = {
-  provider: 'alpaca_iex';
-  configured: boolean;
-  api_key_id_masked: string;
-  api_key_source: 'environment' | 'os_protected_store' | 'missing';
-  secret_key_source: 'environment' | 'os_protected_store' | 'missing';
-  api_key_editable: boolean;
-  secret_key_editable: boolean;
-  storage: string;
-};
+import type { components } from '../../api/generated/types';
+export type AlpacaIexCredentialStatus = components['schemas']['AlpacaIexCredentialStatus'];
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {

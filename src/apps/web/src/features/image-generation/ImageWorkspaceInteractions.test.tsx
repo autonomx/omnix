@@ -7,9 +7,10 @@ import { omnixTheme } from '../../design/theme';
 import { ImageAssetGallery } from './ImageAssetGallery';
 import { ImageJobList } from './ImageJobList';
 import { ImageLatestResult } from './ImageLatestResult';
+import { fixture } from '../../test/fixture';
 
 const assets: AssetListResponse['assets'] = [
-  {
+  fixture({
     id: 'asset-one',
     module: 'image-generation',
     type: 'image',
@@ -23,8 +24,8 @@ const assets: AssetListResponse['assets'] = [
       width: 1024,
       height: 768,
     },
-  },
-  {
+  }),
+  fixture({
     id: 'asset-two',
     module: 'image-generation',
     type: 'image',
@@ -38,7 +39,7 @@ const assets: AssetListResponse['assets'] = [
       width: 768,
       height: 768,
     },
-  },
+  }),
 ];
 
 function renderWithTheme(node: React.ReactNode) {
@@ -92,7 +93,7 @@ describe('ImageJobList interactions', () => {
     const onCancel = vi.fn();
     const onRetry = vi.fn();
     const onSelectAsset = vi.fn();
-    const jobs = [
+    const jobs = fixture<JobRecord[]>([
       {
         id: 'job-completed',
         module: 'image-generation',
@@ -151,7 +152,7 @@ describe('ImageJobList interactions', () => {
         updated_at: '2026-06-14T00:04:00Z',
         input_payload: { prompt: 'Fifth image' },
       },
-    ] as JobRecord[];
+    ]);
 
     renderWithTheme(
       <ImageJobList jobs={jobs} onCancel={onCancel} onRetry={onRetry} onSelectAsset={onSelectAsset} />,

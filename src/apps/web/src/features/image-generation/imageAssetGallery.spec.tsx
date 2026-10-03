@@ -4,10 +4,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AssetListResponse } from '../../api/client';
 import { ImageAssetGallery, filterImageAssets } from './ImageAssetGallery';
+import { fixture } from '../../test/fixture';
 
 type ImageAsset = AssetListResponse['assets'][number];
 
-const assets = [
+const assets = fixture<ImageAsset[]>([
   {
     id: 'image:forest',
     module: 'image-generation',
@@ -26,7 +27,7 @@ const assets = [
     created_at: '2026-07-02T00:00:00Z',
     metadata: { title: 'Night city', prompt: 'neon street', provider_key: 'mock' },
   },
-] as ImageAsset[];
+]);
 
 function renderGallery(node: React.ReactNode) {
   const queryClient = new QueryClient({

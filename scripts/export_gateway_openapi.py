@@ -117,21 +117,57 @@ def _closure(roots: set[str], schemas: dict[str, object]) -> set[str]:
     return seen
 
 
+def _rewrite_refs(value: object, names: set[str], suffix: str) -> None:
+    if isinstance(value, dict):
+        reference = value.get("$ref")
+        if isinstance(reference, str) and reference.startswith(_SCHEMA_REF) and reference[len(_SCHEMA_REF):] in names:
+            value["$ref"] = f"{reference}{suffix}"
+        for item in value.values():
+            _rewrite_refs(item, names, suffix)
+    elif isinstance(value, list):
+        for item in value:
+            _rewrite_refs(item, names, suffix)
+
+
+def _defaulted_fields(name: str, component: object, factory_fields: dict[str, frozenset[str]]) -> list[str]:
+    """Fields the server fills when a caller leaves them out.
+
+    The document records most defaults, but not default factories, and FastAPI
+    drops ``"default": null``; ``factory_fields`` carries those from the models.
+    """
+    properties = component.get("properties") if isinstance(component, dict) else None
+    if not isinstance(properties, dict):
+        return []
+    factories = factory_fields.get(name.removesuffix("-Output"), frozenset())
+    return [
+        key for key, value in properties.items()
+        if isinstance(value, dict) and ("default" in value or key in factories)
+    ]
+
+
 def _require_serialized_defaults(
     schema: dict[str, object],
     lenient_operations: frozenset[tuple[str, str]] = frozenset(),
+    factory_fields: dict[str, frozenset[str]] | None = None,
 ) -> None:
-    """Mark fields with defaults as required in schemas only responses use (WP-9.3).
+    """Make the contract say which response fields are always present (WP-9.3).
 
     Pydantic omits fields with defaults from ``required``, which is right for
     request bodies (callers may leave them out) but not for responses: the
     gateway always serializes them. Clients generated from the contract would
     otherwise treat every defaulted response field as possibly missing.
-    Schemas reachable from a request body or parameter keep Pydantic's view, and
-    so do responses of operations that drop unset, None or default fields
-    (``lenient_operations``, as ``(METHOD, path)``).
+
+    Schemas only responses use get their defaulted fields marked required.
+    Schemas both requests and responses use are split the way FastAPI splits
+    models whose input and output differ: ``Name`` describes the response and
+    a ``Name-Input`` copy, referenced from request bodies and parameters, keeps
+    Pydantic's request view. Responses of operations that drop unset, None or
+    default fields (``lenient_operations``, as ``(METHOD, path)``) keep
+    Pydantic's view too. ``factory_fields`` names, per component, the
+    defaulted fields the document does not mark with ``default``.
     """
 
+    factory_fields = factory_fields or {}
     components = schema.get("components")
     schemas = components.get("schemas") if isinstance(components, dict) else None
     paths = schema.get("paths")
@@ -140,40 +176,110 @@ def _require_serialized_defaults(
     inputs: set[str] = set()
     outputs: set[str] = set()
     lenient: set[str] = set()
+    request_parts: list[object] = []
     for path, operations in paths.items():
         if not isinstance(operations, dict):
             continue
         for method, operation in operations.items():
             if not isinstance(operation, dict):
                 continue
+            request_parts += [operation.get("requestBody"), operation.get("parameters")]
             inputs |= _referenced_schemas(operation.get("requestBody")) | _referenced_schemas(operation.get("parameters"))
             responses = _referenced_schemas(operation.get("responses"))
             outputs |= responses
             if (method.upper(), path) in lenient_operations:
                 lenient |= responses
-    response_only = _closure(outputs, schemas) - _closure(inputs, schemas) - _closure(lenient, schemas)
-    for name in sorted(response_only):
+    input_closure = _closure(inputs, schemas)
+    output_closure = _closure(outputs, schemas)
+    lenient_closure = _closure(lenient, schemas)
+
+    shared = {
+        name for name in (input_closure & output_closure) - lenient_closure
+        if not name.endswith(("-Input", "-Output")) and f"{name}-Input" not in schemas
+    }
+    # Split a shared schema when it, or a shared schema it references, has defaults.
+    split = {name for name in shared if _defaulted_fields(name, schemas[name], factory_fields)}
+    while True:
+        more = {name for name in shared - split if _referenced_schemas(schemas[name]) & split}
+        if not more:
+            break
+        split |= more
+    for name in sorted(split):
+        schemas[f"{name}-Input"] = copy.deepcopy(schemas[name])
+    # Request copies and request-only schemas reference the request copies.
+    for name in split:
+        _rewrite_refs(schemas[f"{name}-Input"], split, "-Input")
+    for name in input_closure - output_closure:
+        _rewrite_refs(schemas[name], split, "-Input")
+    for part in request_parts:
+        _rewrite_refs(part, split, "-Input")
+
+    for name in sorted((output_closure - input_closure - lenient_closure) | split):
         component = schemas[name]
-        properties = component.get("properties") if isinstance(component, dict) else None
-        if not isinstance(properties, dict):
+        defaulted = _defaulted_fields(name, component, factory_fields)
+        if not defaulted:
             continue
         required = list(component.get("required", []))
-        required += [key for key, value in properties.items() if isinstance(value, dict) and "default" in value and key not in required]
-        if required:
-            component["required"] = required
+        component["required"] = required + [key for key in defaulted if key not in required]
+
+
+def _model_default_fields(app: object) -> dict[str, frozenset[str]]:
+    """Per model name, the fields with a default or default factory, from the models the routes use."""
+    import typing
+
+    from pydantic import BaseModel
+
+    found: dict[str, set[str]] = {}
+    seen: set[type] = set()
+
+    def visit(annotation: object) -> None:
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            if annotation in seen:
+                return
+            seen.add(annotation)
+            for field_name, field in annotation.model_fields.items():
+                if not field.is_required():
+                    key = field.serialization_alias or field.alias or field_name
+                    found.setdefault(annotation.__name__, set()).add(key)
+                visit(field.annotation)
+            return
+        for argument in typing.get_args(annotation):
+            visit(argument)
+
+    for _path, route in _api_routes(app):
+        visit(route.response_model)
+        body = getattr(route, "body_field", None)
+        visit(getattr(body, "type_", None) or getattr(getattr(body, "field_info", None), "annotation", None))
+    return {name: frozenset(fields) for name, fields in found.items()}
+
+
+def normalize_contract(schema: dict[str, object], app: object) -> dict[str, object]:
+    """The gateway's OpenAPI document as the web contract stores it."""
+    _stabilize_equivalent_io_schemas(schema)
+    _require_serialized_defaults(schema, _lenient_operations(app), _model_default_fields(app))
+    return _stabilize_integral_json_numbers(schema)
+
+
+def _api_routes(app: object) -> list[tuple[str, object]]:
+    """Every API route with its full path; included routers stay nested in FastAPI >= 0.141."""
+    from fastapi.routing import APIRoute, iter_route_contexts
+
+    return [
+        (context.path or context.original_route.path, context.original_route)
+        for context in iter_route_contexts(getattr(app, "routes", []))
+        if isinstance(context.original_route, APIRoute)
+    ]
 
 
 def _lenient_operations(app: object) -> frozenset[tuple[str, str]]:
-    from fastapi.routing import APIRoute
-
     operations: set[tuple[str, str]] = set()
-    for route in getattr(app, "routes", []):
-        if isinstance(route, APIRoute) and (
+    for path, route in _api_routes(app):
+        if (
             route.response_model_exclude_unset
             or route.response_model_exclude_none
             or route.response_model_exclude_defaults
         ):
-            operations.update((method, route.path) for method in route.methods)
+            operations.update((method, path) for method in route.methods)
     return frozenset(operations)
 
 
@@ -186,10 +292,7 @@ def export_schema() -> dict[str, object]:
     from app.gateway.main import create_gateway_app
 
     app = create_gateway_app()
-    schema = app.openapi()
-    _stabilize_equivalent_io_schemas(schema)
-    _require_serialized_defaults(schema, _lenient_operations(app))
-    return _stabilize_integral_json_numbers(schema)
+    return normalize_contract(app.openapi(), app)
 
 
 def main(argv: list[str]) -> int:

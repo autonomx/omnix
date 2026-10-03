@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 export type PaperSide = 'buy' | 'sell';
 export type PaperOrderType = 'market' | 'limit' | 'stop';
 export type PaperOrderStatus = 'open' | 'filled' | 'cancelled' | 'rejected';
@@ -74,20 +75,7 @@ export interface PaperLedgerEntry {
   created_at?: string | null;
 }
 
-export interface PaperPositionProtection {
-  account_id: string;
-  instrument_id: string;
-  binding_id?: string | null;
-  entry_order_id?: string | null;
-  exit_order_id?: string | null;
-  take_profit?: string | null;
-  stop_loss?: string | null;
-  status: PaperProtectionStatus;
-  trigger_reason?: string | null;
-  revision: number;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
+export type PaperPositionProtection = components['schemas']['PaperPositionProtection'];
 
 export interface PaperAccountSnapshot {
   account: PaperAccount;
@@ -136,29 +124,7 @@ export interface PaperRiskPreviewInput {
   desired_risk_pct: string;
 }
 
-export interface PaperRiskPreview {
-  allowed: boolean;
-  policy_version: string;
-  reason_codes: string[];
-  limiting_reason_code?: string | null;
-  recommended_quantity: string;
-  account_equity: string;
-  desired_risk_pct: string;
-  actual_risk_dollars: string;
-  actual_risk_pct: string;
-  estimated_notional: string;
-  buying_power_before: string;
-  buying_power_after: string;
-  aggregate_open_risk_dollars: string;
-  aggregate_open_risk_pct: string;
-  daily_realized_pnl: string;
-  daily_loss_remaining: string;
-  spread_bps?: string | null;
-  observation_age_seconds?: string | null;
-  freshness_mode: string;
-  execution_eligible: boolean;
-  unprotected_exposure_count: number;
-}
+export type PaperRiskPreview = components['schemas']['PaperRiskPreview'];
 
 export interface PaperRiskOrderInput {
   order_id: string;
@@ -172,8 +138,4 @@ export interface PaperRiskOrderInput {
   idempotency_key: string;
 }
 
-export interface PaperRiskOrderResult {
-  preview: PaperRiskPreview;
-  order: PaperOrder;
-  protection: PaperPositionProtection;
-}
+export type PaperRiskOrderResult = components['schemas']['PaperRiskOrderResult'];

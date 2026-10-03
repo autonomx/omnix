@@ -944,8 +944,10 @@ export function TradingStrategiesPanel() {
     try {
       const response = await tradingStrategyApi.captureYahooResearch(draft.strategy_id);
       if (response.strategy.strategy_kind !== 'gap_pullback_v1') throw new Error('Unexpected strategy kind returned for catalyst capture.');
-      setStrategies((current) => [response.strategy, ...current.filter((item) => item.strategy_id !== response.strategy.strategy_id)]);
-      setDraft(structuredClone(response.strategy));
+      // The contract types kind and config separately; the check above pairs them.
+      const strategy = response.strategy as GapPullbackTradingStrategyConfig;
+      setStrategies((current) => [strategy, ...current.filter((item) => item.strategy_id !== strategy.strategy_id)]);
+      setDraft(structuredClone(strategy));
       setUniverse(response.universe);
       setUniverseJson(JSON.stringify(response.universe, null, 2));
       setSelectedCandidates(new Set(response.universe.candidates.map((candidate) => candidate.instrument_id)));

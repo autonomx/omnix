@@ -68,5 +68,51 @@ def test_response_only_schemas_require_their_defaulted_fields():
     assert schemas["Job"]["required"] == ["id", "status", "note"]
     assert schemas["Stage"]["required"] == ["label"]
     assert "required" not in schemas["Create"]
-    assert "required" not in schemas["Shared"]
     assert "required" not in schemas["Sparse"]
+    # A schema both directions use is split: the response requires its defaults, the request copy does not.
+    assert schemas["Shared"]["required"] == ["flag"]
+    assert "required" not in schemas["Shared-Input"]
+    shared = schema["paths"]["/shared"]["post"]
+    assert shared["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith("/Shared-Input")
+    assert shared["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("/Shared")
+
+
+def test_a_split_schema_request_copy_references_request_copies():
+    def ref(name):
+        return {"$ref": f"#/components/schemas/{name}"}
+
+    schema = {
+        "components": {"schemas": {
+            "Outer": {"properties": {"inner": ref("Inner"), "plain": ref("Plain")}},
+            "Inner": {"properties": {"size": {"default": 1}}},
+            "Plain": {"properties": {"name": {"type": "string"}}},
+            "Create": {"properties": {"inner": ref("Inner")}},
+        }},
+        "paths": {
+            "/x": {"put": {
+                "requestBody": {"content": {"application/json": {"schema": ref("Outer")}}},
+                "responses": {"200": {"content": {"application/json": {"schema": ref("Outer")}}}},
+            }},
+            "/create": {"post": {"requestBody": {"content": {"application/json": {"schema": ref("Create")}}}}},
+        },
+    }
+
+    _require_serialized_defaults(schema)
+
+    schemas = schema["components"]["schemas"]
+    assert schemas["Outer-Input"]["properties"]["inner"]["$ref"].endswith("/Inner-Input")
+    assert schemas["Outer"]["properties"]["inner"]["$ref"].endswith("/Inner")
+    assert "Plain-Input" not in schemas
+    # A request-only schema references the request copy as well.
+    assert schemas["Create"]["properties"]["inner"]["$ref"].endswith("/Inner-Input")
+
+
+def test_factory_defaults_count_as_defaults():
+    schema = {
+        "components": {"schemas": {"Alert": {"properties": {"id": {"type": "string"}, "tags": {"type": "array"}}, "required": ["id"]}}},
+        "paths": {"/alerts": {"get": {"responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Alert"}}}}}}}},
+    }
+
+    _require_serialized_defaults(schema, factory_fields={"Alert": frozenset({"tags"})})
+
+    assert schema["components"]["schemas"]["Alert"]["required"] == ["id", "tags"]

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { collectProspectiveIndicatorEvidence } from './TradingStrategyIndicatorEvidence';
 import type { StrategyEvent } from './tradingStrategyTypes';
+import { fixture } from '../../test/fixture';
 
 function event(execution: Record<string, unknown>): StrategyEvent {
-  return {
+  return fixture({
     event_id: 'event-1',
     strategy_id: 'strategy-1',
     event_type: 'shadow_execution',
@@ -13,7 +14,7 @@ function event(execution: Record<string, unknown>): StrategyEvent {
     reason_code: 'FAILED_SELL_OFF_CONFIRMED',
     idempotency_key: 'strategy-1:event-1',
     payload: { execution },
-  };
+  });
 }
 
 describe('prospective indicator entry evidence', () => {

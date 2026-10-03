@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { ImageRequestForm } from './ImageRequestForm';
 import type { ImageRequestFormValues } from './imageRequestModel';
+import { fixture } from '../../test/fixture';
 
 function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
   const queryClient = new QueryClient({
@@ -15,14 +16,14 @@ function renderForm(onSubmit: (values: ImageRequestFormValues) => void) {
       <QueryClientProvider client={queryClient}>
         <ImageRequestForm
           defaults={{ providerId: 'image:flux_klein', width: 768, height: 768, unloadAfterGeneration: false }}
-          providers={[{
+          providers={[fixture({
             id: 'image:flux_klein',
             label: 'FLUX.2 [klein] 4B',
             family: 'image',
             source: 'settings',
             status: 'configured',
             capabilities: ['image'],
-          }]}
+          })]}
           pending={false}
           onSubmit={onSubmit}
         />

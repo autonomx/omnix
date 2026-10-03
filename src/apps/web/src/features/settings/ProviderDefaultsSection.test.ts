@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { codexReasoningOptions } from './ProviderDefaultsSection';
+import { fixture } from '../../test/fixture';
 
 describe('Codex reasoning effort options', () => {
   it('offers extra high for GPT-5.6 Luna even when the catalog stops at high', () => {
@@ -23,14 +24,14 @@ describe('Codex reasoning effort options', () => {
   it('does not duplicate extra high when Codex advertises it', () => {
     const options = codexReasoningOptions({
       providers: [],
-      models: [{
+      models: [fixture({
         id: 'llm:chatgpt_codex:gpt-5.6-luna',
         label: 'GPT-5.6 Luna',
         provider_id: 'llm:chatgpt_codex',
         capabilities: ['chat'],
         location: 'unknown',
         metadata: { supported_reasoning_efforts: ['none', 'high', 'xhigh'] },
-      }],
+      })],
     }, 'gpt-5.6-luna', 'xhigh');
 
     expect(options.map((option) => option.id)).toEqual(['none', 'high', 'xhigh']);

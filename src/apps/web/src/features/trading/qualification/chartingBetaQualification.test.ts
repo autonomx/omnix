@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { indicatorPoints, type CoreIndicatorInstance } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
+import { fixture } from '../../../test/fixture';
 
 // Deterministic synthetic bars: a drifting wave with stable wicks and volume.
 function syntheticBars(count: number, startTime: number, intervalSeconds: number) {
@@ -24,7 +25,7 @@ function syntheticBars(count: number, startTime: number, intervalSeconds: number
 }
 
 function marketBars(count: number, intervalSeconds: number): MarketBar[] {
-  return syntheticBars(count, 1_700_000_000, intervalSeconds).map((bar) => ({
+  return syntheticBars(count, 1_700_000_000, intervalSeconds).map((bar) => (fixture({
     instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
     interval: `${intervalSeconds}s`,
     start_time: new Date(bar.time * 1_000).toISOString(),
@@ -32,7 +33,7 @@ function marketBars(count: number, intervalSeconds: number): MarketBar[] {
     open: String(bar.open), high: String(bar.high), low: String(bar.low), close: String(bar.close), volume: String(bar.volume),
     is_final: bar.isFinal, adjustment_mode: 'raw', session: '24x7', provider: 'binance', ingestion_revision: bar.ingestionRevision,
     received_at: new Date((bar.time + intervalSeconds) * 1_000).toISOString(),
-  }));
+  })));
 }
 
 const indicators: CoreIndicatorInstance[] = [

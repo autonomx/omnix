@@ -9070,20 +9070,20 @@ export interface components {
         /** AcceptancePlan */
         AcceptancePlan: {
             /** Allowed Modified Paths */
-            allowed_modified_paths?: string[];
+            allowed_modified_paths: string[];
             /** Checks */
-            checks?: string[];
+            checks: string[];
             /** Forbidden Modified Paths */
-            forbidden_modified_paths?: string[];
+            forbidden_modified_paths: string[];
             /**
              * Require Diff
              * @default false
              */
             require_diff: boolean;
             /** Required Artifacts */
-            required_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
+            required_artifacts: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
             /** Required Commands */
-            required_commands?: string[][];
+            required_commands: string[][];
         };
         /** AccountRiskHealth */
         AccountRiskHealth: {
@@ -9286,7 +9286,7 @@ export interface components {
             /** New Strategy */
             new_strategy: unknown;
             /** Previous Strategy */
-            previous_strategy?: unknown | null;
+            previous_strategy: unknown | null;
             /**
              * Proposition Ids
              * @default []
@@ -9335,24 +9335,24 @@ export interface components {
         /** AgentApproval */
         AgentApproval: {
             /** Approval Id */
-            approval_id?: string;
+            approval_id: string;
             /** Capability Id */
             capability_id: string;
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Request Payload */
-            request_payload?: {
+            request_payload: {
                 [key: string]: unknown;
             };
             /** Resolution Payload */
-            resolution_payload?: {
+            resolution_payload: {
                 [key: string]: unknown;
             };
             /** Resolved At */
-            resolved_at?: string | null;
+            resolved_at: string | null;
             /** Run Id */
             run_id: string;
             /**
@@ -9365,21 +9365,21 @@ export interface components {
         /** AgentArtifact */
         AgentArtifact: {
             /** Artifact Id */
-            artifact_id?: string;
+            artifact_id: string;
             /** Checksum */
-            checksum?: string | null;
+            checksum: string | null;
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /**
              * Kind
              * @enum {string}
              */
             kind: "diff" | "test_result" | "log" | "report" | "file" | "other";
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Name */
@@ -9387,7 +9387,7 @@ export interface components {
             /** Run Id */
             run_id: string;
             /** Storage Ref */
-            storage_ref?: string | null;
+            storage_ref: string | null;
         };
         /** AgentChatCompletionRequest */
         AgentChatCompletionRequest: {
@@ -9432,29 +9432,29 @@ export interface components {
         /** AgentEvent */
         AgentEvent: {
             /** Causation Id */
-            causation_id?: string | null;
+            causation_id: string | null;
             /** Correlation Id */
-            correlation_id?: string | null;
+            correlation_id: string | null;
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Event Id */
-            event_id?: string;
+            event_id: string;
             /**
              * Event Type
              * @enum {string}
              */
             event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "run.recovery_requested" | "run.recovery_failed" | "run.stall_suspected" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.self_review_protocol_retry_requested" | "quality.self_review_protocol_exhausted" | "quality.validation_recorded" | "quality.validation_requested" | "quality.validation_retry_requested" | "quality.validation_retry_exhausted" | "quality.validation_repair_requested" | "quality.review_started" | "quality.review_attempt_started" | "quality.review_attempt_completed" | "quality.review_retry_requested" | "quality.review_runtime_exhausted" | "quality.review_completed" | "quality.implementation_continuation_requested" | "quality.implementation_candidate_exhausted" | "quality.repair_requested" | "planning.conformance_evaluated";
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
             /** Run Id */
             run_id: string;
             /** Sequence */
-            sequence?: number | null;
+            sequence: number | null;
         };
         /** AgentModelMessage */
         AgentModelMessage: {
@@ -9479,12 +9479,12 @@ export interface components {
         /** AgentRunSnapshot */
         AgentRunSnapshot: {
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /**
              * Desired State
              * @default running
@@ -9492,14 +9492,14 @@ export interface components {
              */
             desired_state: "running" | "paused" | "cancelled";
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /**
              * Quality Attempt
              * @default 0
              */
             quality_attempt: number;
             /** Quality Stage */
-            quality_stage?: ("inspect" | "planning" | "implementing" | "self_review" | "validating" | "reviewing" | "repairing" | "acceptance") | null;
+            quality_stage: ("inspect" | "planning" | "implementing" | "self_review" | "validating" | "reviewing" | "repairing" | "acceptance") | null;
             /**
              * Revision
              * @default 1
@@ -9509,7 +9509,7 @@ export interface components {
             run_id: string;
             spec: components["schemas"]["AgentRunSpec"];
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             /**
              * Status
              * @default queued
@@ -9517,21 +9517,21 @@ export interface components {
              */
             status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_input" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
             /** Superseded By Run Id */
-            superseded_by_run_id?: string | null;
+            superseded_by_run_id: string | null;
             /**
              * Updated At
              * Format: date-time
              */
-            updated_at?: string;
-            usage?: components["schemas"]["AgentRunUsage"];
+            updated_at: string;
+            usage: components["schemas"]["AgentRunUsage"];
             /** Worker Id */
-            worker_id?: string | null;
+            worker_id: string | null;
             /** Workspace State Id */
-            workspace_state_id?: string | null;
+            workspace_state_id: string | null;
         };
         /** AgentRunSpec */
         AgentRunSpec: {
-            acceptance_plan?: components["schemas"]["AcceptancePlan"] | null;
+            acceptance_plan: components["schemas"]["AcceptancePlan"] | null;
             /**
              * Approval Policy
              * @default ask_sensitive
@@ -9544,16 +9544,16 @@ export interface components {
              */
             artifact_policy: string;
             /** Capabilities */
-            capabilities?: string[];
+            capabilities: string[];
             /** Context Sources */
-            context_sources?: string[];
-            evidence_policy?: components["schemas"]["EvidencePolicy"];
-            execution?: components["schemas"]["ExecutionPolicy"];
+            context_sources: string[];
+            evidence_policy: components["schemas"]["EvidencePolicy"];
+            execution: components["schemas"]["ExecutionPolicy"];
             /** Expected Artifacts */
-            expected_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
+            expected_artifacts: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
             /** External Capabilities */
-            external_capabilities?: string[];
-            limits?: components["schemas"]["RunLimits"];
+            external_capabilities: string[];
+            limits: components["schemas"]["RunLimits"];
             model: components["schemas"]["ModelRef"];
             /**
              * Objective
@@ -9561,7 +9561,7 @@ export interface components {
              */
             objective: string;
             /** Parent Run Id */
-            parent_run_id?: string | null;
+            parent_run_id: string | null;
             /**
              * Persistence Policy
              * @default postgresql
@@ -9583,25 +9583,25 @@ export interface components {
              * @default 0.25
              */
             quality_reserve_fraction: number;
-            request_mode?: components["schemas"]["RequestModeSelection"] | null;
+            request_mode: components["schemas"]["RequestModeSelection"] | null;
             /** Resource Scopes */
-            resource_scopes?: components["schemas"]["ResourceScope"][];
+            resource_scopes: components["schemas"]["ResourceScope"][];
             /** Run Id */
-            run_id?: string;
+            run_id: string;
             /**
              * Runtime
              * @default pi
              */
             runtime: string;
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /** Success Criteria */
-            success_criteria?: components["schemas"]["SuccessCriterion"][];
+            success_criteria: components["schemas"]["SuccessCriterion"][];
             /** Supersedes Run Id */
-            supersedes_run_id?: string | null;
+            supersedes_run_id: string | null;
             /** Task */
             task: string;
-            workspace?: components["schemas"]["WorkspaceSpec"] | null;
+            workspace: components["schemas"]["WorkspaceSpec"] | null;
         };
         /** AgentRunUsage */
         AgentRunUsage: {
@@ -9769,23 +9769,23 @@ export interface components {
         /** AssetLegacyImportDryRun */
         AssetLegacyImportDryRun: {
             /** Assets */
-            assets?: components["schemas"]["AssetRecord"][];
+            assets: components["schemas"]["AssetRecord"][];
             /** Category Counts */
-            category_counts?: {
+            category_counts: {
                 [key: string]: number;
             };
             /** Collision Asset Ids */
-            collision_asset_ids?: string[];
+            collision_asset_ids: string[];
             /** Roots Scanned */
-            roots_scanned?: components["schemas"]["AssetLegacyRootScan"][];
+            roots_scanned: components["schemas"]["AssetLegacyRootScan"][];
             /** Skipped Files */
-            skipped_files?: {
+            skipped_files: {
                 [key: string]: unknown;
             }[];
             /** Source */
             source: string;
             /** Warnings */
-            warnings?: string[];
+            warnings: string[];
             /** Would Import */
             would_import: number;
         };
@@ -9811,14 +9811,14 @@ export interface components {
              */
             has_more: boolean;
             /** Next Cursor */
-            next_cursor?: string | null;
+            next_cursor: string | null;
         };
         /** AssetMigrationPreview */
         AssetMigrationPreview: {
             /** Assets */
-            assets?: components["schemas"]["AssetRecord"][];
+            assets: components["schemas"]["AssetRecord"][];
             /** Missing Files */
-            missing_files?: {
+            missing_files: {
                 [key: string]: unknown;
             }[];
             /** Source */
@@ -9829,19 +9829,19 @@ export interface components {
         /** AssetRecord */
         AssetRecord: {
             /** Checksum Sha256 */
-            checksum_sha256?: string | null;
+            checksum_sha256: string | null;
             /** Compat */
-            compat?: {
+            compat: {
                 [key: string]: unknown;
             };
             /** Created At */
             created_at: string;
             /** Derived Asset Ids */
-            derived_asset_ids?: string[];
+            derived_asset_ids: string[];
             /** Id */
             id: string;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Mime Type */
@@ -9849,13 +9849,13 @@ export interface components {
             /** Module */
             module: string;
             /** Owner Id */
-            owner_id?: string | null;
+            owner_id: string | null;
             /** Parent Asset Ids */
-            parent_asset_ids?: string[];
+            parent_asset_ids: string[];
             /** Source Job Id */
-            source_job_id?: string | null;
+            source_job_id: string | null;
             /** Storage Key */
-            storage_key?: string | null;
+            storage_key: string | null;
             /**
              * Storage Path
              * @default
@@ -9875,6 +9875,22 @@ export interface components {
         };
         /** AssistantActionConfigRecord */
         AssistantActionConfigRecord: {
+            /** Action Id */
+            action_id: string;
+            /**
+             * Approval Policy
+             * @default allow_automatic
+             * @enum {string}
+             */
+            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** AssistantActionConfigRecord */
+        "AssistantActionConfigRecord-Input": {
             /** Action Id */
             action_id: string;
             /**
@@ -9907,7 +9923,7 @@ export interface components {
              */
             recent_execution_count: number;
             /** Tools */
-            tools?: components["schemas"]["AssistantCapabilityStatus"][];
+            tools: components["schemas"]["AssistantCapabilityStatus"][];
             /**
              * Total Tools
              * @default 0
@@ -10136,7 +10152,7 @@ export interface components {
              */
             diagnostics_policy: string;
             /** Environment Overrides */
-            environment_overrides?: string[];
+            environment_overrides: string[];
             settings: components["schemas"]["AssistantMemoryRuntimeSettings"];
             /** Settings Source */
             settings_source: string;
@@ -10230,11 +10246,37 @@ export interface components {
         /** AssistantToolConfigRecord */
         AssistantToolConfigRecord: {
             /** Account Email */
+            account_email: string | null;
+            /** Account Label */
+            account_label: string | null;
+            /** Actions */
+            actions: components["schemas"]["AssistantActionConfigRecord"][];
+            /** Approval Policy */
+            approval_policy: ("allow_automatic" | "ask_sensitive" | "always_ask" | "disabled") | null;
+            /** Connected At */
+            connected_at: string | null;
+            /**
+             * Connection Status
+             * @default not_configured
+             * @enum {string}
+             */
+            connection_status: "not_configured" | "connected" | "error";
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Tool Id */
+            tool_id: string;
+        };
+        /** AssistantToolConfigRecord */
+        "AssistantToolConfigRecord-Input": {
+            /** Account Email */
             account_email?: string | null;
             /** Account Label */
             account_label?: string | null;
             /** Actions */
-            actions?: components["schemas"]["AssistantActionConfigRecord"][];
+            actions?: components["schemas"]["AssistantActionConfigRecord-Input"][];
             /** Approval Policy */
             approval_policy?: ("allow_automatic" | "ask_sensitive" | "always_ask" | "disabled") | null;
             /** Connected At */
@@ -10256,7 +10298,7 @@ export interface components {
         /** AssistantToolConnectionStartPayload */
         AssistantToolConnectionStartPayload: {
             /** Auth Url */
-            auth_url?: string | null;
+            auth_url: string | null;
             /**
              * Configured
              * @default false
@@ -10268,16 +10310,16 @@ export interface components {
              */
             message: string;
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
             /** Redirect Uri */
-            redirect_uri?: string | null;
+            redirect_uri: string | null;
             /** Tool Id */
             tool_id: string;
         };
         /** AssistantToolIntent */
         AssistantToolIntent: {
             /** Action Id */
-            action_id?: string | null;
+            action_id: string | null;
             /**
              * Confidence
              * @default 0
@@ -10289,7 +10331,7 @@ export interface components {
              */
             detected: boolean;
             /** Input */
-            input?: {
+            input: {
                 [key: string]: unknown;
             };
             /**
@@ -10303,7 +10345,7 @@ export interface components {
              */
             preview_title: string;
             /** Tool Id */
-            tool_id?: string | null;
+            tool_id: string | null;
         };
         /** AssistantToolIntentRequest */
         AssistantToolIntentRequest: {
@@ -10323,25 +10365,25 @@ export interface components {
              */
             approval_source: string;
             /** Created At */
-            created_at?: string;
+            created_at: string;
             /** Error */
-            error?: string | null;
+            error: string | null;
             /** Execution Id */
-            execution_id?: string;
+            execution_id: string;
             /**
              * Input Summary
              * @default
              */
             input_summary: string;
             /** Proposal Id */
-            proposal_id?: string | null;
+            proposal_id: string | null;
             /**
              * Result Summary
              * @default
              */
             result_summary: string;
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /**
              * State Changed
              * @default false
@@ -10353,7 +10395,7 @@ export interface components {
         /** AssistantToolLedgerPayload */
         AssistantToolLedgerPayload: {
             /** Entries */
-            entries?: components["schemas"]["AssistantToolLedgerEntry"][];
+            entries: components["schemas"]["AssistantToolLedgerEntry"][];
         };
         /** AssistantToolOAuthClientPayload */
         AssistantToolOAuthClientPayload: {
@@ -10406,6 +10448,24 @@ export interface components {
             /** Action Id */
             action_id: string;
             /** Input */
+            input: {
+                [key: string]: unknown;
+            };
+            /** Proposal Id */
+            proposal_id: string | null;
+            /** Session Id */
+            session_id: string | null;
+            /** Tool Id */
+            tool_id: string;
+        };
+        /**
+         * AssistantToolRequest
+         * @description Canonical request envelope required before any tool action can run.
+         */
+        "AssistantToolRequest-Input": {
+            /** Action Id */
+            action_id: string;
+            /** Input */
             input?: {
                 [key: string]: unknown;
             };
@@ -10424,9 +10484,9 @@ export interface components {
             /** Action Id */
             action_id: string;
             /** Error */
-            error?: string | null;
+            error: string | null;
             /** Output */
-            output?: {
+            output: {
                 [key: string]: unknown;
             };
             /**
@@ -10441,7 +10501,7 @@ export interface components {
              */
             risk_level: "low" | "medium" | "high";
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /**
              * State Changed
              * @default false
@@ -10453,7 +10513,7 @@ export interface components {
         /** AssistantToolResultContext */
         AssistantToolResultContext: {
             /** Ledger Ref */
-            ledger_ref?: string | null;
+            ledger_ref: string | null;
             /** Message */
             message: string;
             /**
@@ -10490,7 +10550,7 @@ export interface components {
              */
             executable: boolean;
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
             /**
              * Result Summary
              * @default
@@ -10503,7 +10563,7 @@ export interface components {
              */
             risk_level: "low" | "medium" | "high";
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /**
              * State Changed
              * @default false
@@ -10518,7 +10578,7 @@ export interface components {
          */
         AssistantToolSpec: {
             /** Actions */
-            actions?: components["schemas"]["AssistantToolAction"][];
+            actions: components["schemas"]["AssistantToolAction"][];
             /** Category */
             category: string;
             /**
@@ -10539,12 +10599,12 @@ export interface components {
             /** Name */
             name: string;
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
         };
         /** AssistantToolsConfigPayload */
         "AssistantToolsConfigPayload-Input": {
             /** Tools */
-            tools: components["schemas"]["AssistantToolConfigRecord"][];
+            tools: components["schemas"]["AssistantToolConfigRecord-Input"][];
         };
         /** AssistantToolsConfigPayload */
         "AssistantToolsConfigPayload-Output": {
@@ -10554,7 +10614,7 @@ export interface components {
         /** AuthSessionResponse */
         AuthSessionResponse: {
             /** Auth Method */
-            auth_method?: string | null;
+            auth_method: string | null;
             /** Authenticated */
             authenticated: boolean;
             /** Enforced */
@@ -10565,11 +10625,11 @@ export interface components {
              */
             mode: "local" | "oidc" | "disabled";
             /** Roles */
-            roles?: string[];
+            roles: string[];
             /** User Id */
-            user_id?: string | null;
+            user_id: string | null;
             /** Workspace Id */
-            workspace_id?: string | null;
+            workspace_id: string | null;
         };
         /** BackfillClonedVoiceCharactersRequest */
         BackfillClonedVoiceCharactersRequest: {
@@ -10602,7 +10662,7 @@ export interface components {
         /** BackfillClonedVoiceCharactersResponse */
         BackfillClonedVoiceCharactersResponse: {
             /** Items */
-            items?: components["schemas"]["ClonedVoiceCharacterBackfillItem"][];
+            items: components["schemas"]["ClonedVoiceCharacterBackfillItem"][];
         };
         /** BacktestArtifactReference */
         BacktestArtifactReference: {
@@ -10677,7 +10737,7 @@ export interface components {
         /** BacktestLogEntry */
         BacktestLogEntry: {
             /** Bar Time */
-            bar_time?: string | null;
+            bar_time: string | null;
             /**
              * Level
              * @default info
@@ -10689,7 +10749,7 @@ export interface components {
             /** Message */
             message: string;
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
         };
@@ -10716,7 +10776,7 @@ export interface components {
         };
         /** BacktestRunResult */
         BacktestRunResult: {
-            artifact?: components["schemas"]["BacktestArtifactReference"] | null;
+            artifact: components["schemas"]["BacktestArtifactReference"] | null;
             /** Dataset Fingerprint */
             dataset_fingerprint: string;
             /** Dataset Id */
@@ -10732,7 +10792,7 @@ export interface components {
             /** Equity Curve */
             equity_curve: components["schemas"]["BacktestEquityPoint"][];
             /** Error Message */
-            error_message?: string | null;
+            error_message: string | null;
             /** Execution Policy */
             execution_policy: {
                 [key: string]: unknown;
@@ -10838,23 +10898,23 @@ export interface components {
         /** BinaryForecastMetrics */
         BinaryForecastMetrics: {
             /** Accuracy */
-            accuracy?: string | null;
+            accuracy: string | null;
             /** Base Rate */
-            base_rate?: string | null;
+            base_rate: string | null;
             /** Brier Score */
-            brier_score?: string | null;
+            brier_score: string | null;
             /** Brier Skill */
-            brier_skill?: string | null;
+            brier_skill: string | null;
             /** Bullish Precision */
-            bullish_precision?: string | null;
+            bullish_precision: string | null;
             /** Bullish Recall */
-            bullish_recall?: string | null;
+            bullish_recall: string | null;
             /** Climatology Brier */
-            climatology_brier?: string | null;
+            climatology_brier: string | null;
             /** Climatology Probability */
-            climatology_probability?: string | null;
+            climatology_probability: string | null;
             /** Log Loss */
-            log_loss?: string | null;
+            log_loss: string | null;
             /** N */
             n: number;
         };
@@ -10930,7 +10990,7 @@ export interface components {
              */
             dilution_flag: string;
             /** Float Shares Log10 */
-            float_shares_log10?: string | null;
+            float_shares_log10: string | null;
             /** Gap Pct */
             gap_pct: string;
             /** Hod Distance Pct */
@@ -10938,7 +10998,7 @@ export interface components {
             /** L2 Over L1 */
             l2_over_l1: string;
             /** Market Cap Log10 */
-            market_cap_log10?: string | null;
+            market_cap_log10: string | null;
             /** Minutes Since Open */
             minutes_since_open: string;
             /** Opening Impulse Pct */
@@ -11228,7 +11288,7 @@ export interface components {
         /** BrokerCapabilityResponse */
         BrokerCapabilityResponse: {
             /** Approval Id */
-            approval_id?: string | null;
+            approval_id: string | null;
             /**
              * Approval Required
              * @default false
@@ -11242,9 +11302,9 @@ export interface components {
              */
             executed: boolean;
             /** Execution Key */
-            execution_key?: string | null;
+            execution_key: string | null;
             /** Result */
-            result?: {
+            result: {
                 [key: string]: unknown;
             };
         };
@@ -11265,14 +11325,14 @@ export interface components {
              */
             allowed: boolean;
             /** Approval Id */
-            approval_id?: string | null;
+            approval_id: string | null;
             /**
              * Approval Required
              * @default false
              */
             approval_required: boolean;
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
         };
         /** BrokerRunChangeSetResponse */
         BrokerRunChangeSetResponse: {
@@ -11300,7 +11360,7 @@ export interface components {
              */
             allowed: boolean;
             /** Usage */
-            usage?: {
+            usage: {
                 [key: string]: unknown;
             };
         };
@@ -11391,16 +11451,16 @@ export interface components {
         /** CancelState */
         CancelState: {
             /** Acknowledged At */
-            acknowledged_at?: string | null;
+            acknowledged_at: string | null;
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
             /**
              * Requested
              * @default false
              */
             requested: boolean;
             /** Requested At */
-            requested_at?: string | null;
+            requested_at: string | null;
         };
         /** CandidateCleanupRequest */
         CandidateCleanupRequest: {
@@ -11426,7 +11486,7 @@ export interface components {
         CanonicalInstrument: {
             asset_class: components["schemas"]["AssetClass"];
             /** Base Currency */
-            base_currency?: string | null;
+            base_currency: string | null;
             /** Display Symbol */
             display_symbol: string;
             /**
@@ -11448,7 +11508,7 @@ export interface components {
              */
             price_scale: number;
             /** Quote Currency */
-            quote_currency?: string | null;
+            quote_currency: string | null;
             /**
              * Session Calendar
              * @default 24x7
@@ -11539,11 +11599,11 @@ export interface components {
             /** Evidence Id */
             evidence_id: string;
             /** Facts */
-            facts?: {
+            facts: {
                 [key: string]: unknown;
             };
             /** Headline */
-            headline?: string | null;
+            headline: string | null;
             /** Immutable Fingerprint */
             immutable_fingerprint: string;
             /** Instrument Id */
@@ -11623,7 +11683,7 @@ export interface components {
              */
             official_filing_present: boolean;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /**
              * Primary Confirmed
              * @default false
@@ -11655,7 +11715,7 @@ export interface components {
              */
             source_evidence_ids: string[];
             /** Source Published At */
-            source_published_at?: string | null;
+            source_published_at: string | null;
             /**
              * Unresolved
              * @default true
@@ -11743,11 +11803,11 @@ export interface components {
         /** CharacterAvatarGenerationBatch */
         CharacterAvatarGenerationBatch: {
             /** Asset Ids */
-            asset_ids?: {
+            asset_ids: {
                 [key: string]: string;
             };
             /** Avatar Pack Version */
-            avatar_pack_version?: number | null;
+            avatar_pack_version: number | null;
             /** Base Job Id */
             base_job_id: string;
             /** Character Id */
@@ -11770,14 +11830,14 @@ export interface components {
             /** Updated At */
             updated_at: string;
             /** Variant Job Ids */
-            variant_job_ids?: {
+            variant_job_ids: {
                 [key: string]: string;
             };
         };
         /** CharacterAvatarGenerationListResponse */
         CharacterAvatarGenerationListResponse: {
             /** Batches */
-            batches?: components["schemas"]["CharacterAvatarGenerationBatch"][];
+            batches: components["schemas"]["CharacterAvatarGenerationBatch"][];
         };
         /**
          * CharacterAvatarPack
@@ -11785,17 +11845,17 @@ export interface components {
          */
         CharacterAvatarPack: {
             /** Active Background */
-            active_background?: string | null;
+            active_background: string | null;
             /** Active Outfit */
-            active_outfit?: string | null;
+            active_outfit: string | null;
             /** Background Asset Ids */
-            background_asset_ids?: {
+            background_asset_ids: {
                 [key: string]: string;
             };
             /** Base Asset Id */
-            base_asset_id?: string | null;
+            base_asset_id: string | null;
             /** Blink Frames */
-            blink_frames?: {
+            blink_frames: {
                 [key: string]: string;
             };
             /** Character Id */
@@ -11803,19 +11863,19 @@ export interface components {
             /** Created At */
             created_at: string;
             /** Expression Frames */
-            expression_frames?: {
+            expression_frames: {
                 [key: string]: string;
             };
             /** Mouth Anchor */
-            mouth_anchor?: {
+            mouth_anchor: {
                 [key: string]: number;
             };
             /** Mouth Frames */
-            mouth_frames?: {
+            mouth_frames: {
                 [key: string]: string;
             };
             /** Outfit Frames */
-            outfit_frames?: {
+            outfit_frames: {
                 [key: string]: string;
             };
             /**
@@ -11831,7 +11891,7 @@ export interface components {
              */
             renderer: "sprite" | "live2d" | "rive";
             /** Rig Asset Id */
-            rig_asset_id?: string | null;
+            rig_asset_id: string | null;
             /** Updated At */
             updated_at: string;
             /**
@@ -11923,33 +11983,33 @@ export interface components {
             /** Enabled */
             enabled: boolean;
             /** Exported Memory Ids */
-            exported_memory_ids?: string[];
+            exported_memory_ids: string[];
             /** Imported Candidate Ids */
-            imported_candidate_ids?: string[];
+            imported_candidate_ids: string[];
             /** Memory Dir */
             memory_dir: string;
             /** Skipped Reasons */
-            skipped_reasons?: string[];
+            skipped_reasons: string[];
         };
         /** CharacterListResponse */
         CharacterListResponse: {
             /** Characters */
-            characters?: components["schemas"]["CharacterProfile"][];
+            characters: components["schemas"]["CharacterProfile"][];
         };
         /**
          * CharacterLiveCallRuntime
          * @description Trusted browser-safe runtime used to start and render a live call.
          */
         CharacterLiveCallRuntime: {
-            avatar_pack?: components["schemas"]["CharacterAvatarPack"] | null;
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Character Profile Version */
-            character_profile_version?: number | null;
+            character_profile_version: number | null;
             /** Display Name */
             display_name: string;
             /** Effective Identity Hash */
-            effective_identity_hash?: string | null;
+            effective_identity_hash: string | null;
             /**
              * Greeting
              * @default
@@ -11961,7 +12021,7 @@ export interface components {
              */
             interaction_mode: "system" | "character";
             /** Memory Snapshot Id */
-            memory_snapshot_id?: string | null;
+            memory_snapshot_id: string | null;
             preload: components["schemas"]["LiveCallPreloadState"];
             /**
              * Read Memory
@@ -11978,9 +12038,9 @@ export interface components {
             shared_memory_access: "none" | "read_only";
             speech_style: components["schemas"]["LiveCallSpeechStyle"];
             /** Voice Asset Id */
-            voice_asset_id?: string | null;
+            voice_asset_id: string | null;
             /** Voice Speaker Id */
-            voice_speaker_id?: string | null;
+            voice_speaker_id: string | null;
             /**
              * Write Memory
              * @default false
@@ -12005,7 +12065,7 @@ export interface components {
              */
             default_greeting: string;
             /** Default Voice Asset Id */
-            default_voice_asset_id?: string | null;
+            default_voice_asset_id: string | null;
             /**
              * Description
              * @default
@@ -12021,17 +12081,17 @@ export interface components {
             /** Id */
             id: string;
             /** Identity Policy */
-            identity_policy?: {
+            identity_policy: {
                 [key: string]: unknown;
             };
             /** Personality Prompt */
             personality_prompt: string;
             /** Shared Memory Policy */
-            shared_memory_policy?: {
+            shared_memory_policy: {
                 [key: string]: unknown;
             };
             /** Speech Style */
-            speech_style?: {
+            speech_style: {
                 [key: string]: unknown;
             };
             /**
@@ -12058,7 +12118,7 @@ export interface components {
              */
             default_greeting: string;
             /** Default Voice Asset Id */
-            default_voice_asset_id?: string | null;
+            default_voice_asset_id: string | null;
             /**
              * Description
              * @default
@@ -12067,17 +12127,17 @@ export interface components {
             /** Display Name */
             display_name: string;
             /** Identity Policy */
-            identity_policy?: {
+            identity_policy: {
                 [key: string]: unknown;
             };
             /** Personality Prompt */
             personality_prompt: string;
             /** Shared Memory Policy */
-            shared_memory_policy?: {
+            shared_memory_policy: {
                 [key: string]: unknown;
             };
             /** Speech Style */
-            speech_style?: {
+            speech_style: {
                 [key: string]: unknown;
             };
             /** Version */
@@ -12101,20 +12161,20 @@ export interface components {
         /** CharacterVersionListResponse */
         CharacterVersionListResponse: {
             /** Versions */
-            versions?: components["schemas"]["CharacterProfileVersion"][];
+            versions: components["schemas"]["CharacterProfileVersion"][];
         };
         /** CharacterVisemeGenerationBatch */
         CharacterVisemeGenerationBatch: {
             /** Asset Ids */
-            asset_ids?: {
+            asset_ids: {
                 [key: string]: string;
             };
             /** Attempts */
-            attempts?: {
+            attempts: {
                 [key: string]: number;
             };
             /** Avatar Pack Version */
-            avatar_pack_version?: number | null;
+            avatar_pack_version: number | null;
             /** Character Id */
             character_id: string;
             /** Created At */
@@ -12127,11 +12187,11 @@ export interface components {
             /** Id */
             id: string;
             /** Job Ids */
-            job_ids?: {
+            job_ids: {
                 [key: string]: string;
             };
             /** Quality Fallbacks */
-            quality_fallbacks?: {
+            quality_fallbacks: {
                 [key: string]: string;
             };
             /**
@@ -12151,7 +12211,7 @@ export interface components {
             /** Id */
             id: string;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /**
@@ -12163,15 +12223,15 @@ export interface components {
         /** ChatSession */
         ChatSession: {
             /** Active Segment Id */
-            active_segment_id?: string | null;
+            active_segment_id: string | null;
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Character Profile Version */
-            character_profile_version?: number | null;
+            character_profile_version: number | null;
             /** Created At */
             created_at: string;
             /** Effective Identity Hash */
-            effective_identity_hash?: string | null;
+            effective_identity_hash: string | null;
             /** Id */
             id: string;
             /**
@@ -12186,41 +12246,41 @@ export interface components {
              */
             memory_enabled: boolean;
             /** Memory Last Refreshed At */
-            memory_last_refreshed_at?: string | null;
+            memory_last_refreshed_at: string | null;
             /**
              * Memory Record Count
              * @default 0
              */
             memory_record_count: number;
             /** Memory Snapshot Id */
-            memory_snapshot_id?: string | null;
+            memory_snapshot_id: string | null;
             /** Memory Snapshot Revision */
-            memory_snapshot_revision?: number | null;
+            memory_snapshot_revision: number | null;
             /**
              * Message Count
              * @default 0
              */
             message_count: number;
             /** Messages */
-            messages?: components["schemas"]["ChatMessage"][];
+            messages: components["schemas"]["ChatMessage"][];
             /** Model Id */
-            model_id?: string | null;
+            model_id: string | null;
             /**
              * Profile Id
              * @default profile:local
              */
             profile_id: string;
             /** Project Id */
-            project_id?: string | null;
+            project_id: string | null;
             /** Provider Id */
-            provider_id?: string | null;
+            provider_id: string | null;
             /**
              * Read Memory
              * @default false
              */
             read_memory: boolean;
             /** Research Mode Override */
-            research_mode_override?: ("disabled" | "quick" | "deep") | null;
+            research_mode_override: ("disabled" | "quick" | "deep") | null;
             /**
              * Shared Memory Access
              * @default none
@@ -12238,7 +12298,7 @@ export interface components {
             /** Updated At */
             updated_at: string;
             /** Voice Asset Id */
-            voice_asset_id?: string | null;
+            voice_asset_id: string | null;
             /**
              * Workspace Id
              * @default workspace:default
@@ -12253,22 +12313,22 @@ export interface components {
         /** ChatSessionListResponse */
         ChatSessionListResponse: {
             /** Next Cursor */
-            next_cursor?: string | null;
+            next_cursor: string | null;
             /** Sessions */
             sessions: components["schemas"]["ChatSessionSummary"][];
         };
         /** ChatSessionSummary */
         ChatSessionSummary: {
             /** Active Segment Id */
-            active_segment_id?: string | null;
+            active_segment_id: string | null;
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Character Profile Version */
-            character_profile_version?: number | null;
+            character_profile_version: number | null;
             /** Created At */
             created_at: string;
             /** Effective Identity Hash */
-            effective_identity_hash?: string | null;
+            effective_identity_hash: string | null;
             /** Id */
             id: string;
             /**
@@ -12283,39 +12343,39 @@ export interface components {
              */
             memory_enabled: boolean;
             /** Memory Last Refreshed At */
-            memory_last_refreshed_at?: string | null;
+            memory_last_refreshed_at: string | null;
             /**
              * Memory Record Count
              * @default 0
              */
             memory_record_count: number;
             /** Memory Snapshot Id */
-            memory_snapshot_id?: string | null;
+            memory_snapshot_id: string | null;
             /** Memory Snapshot Revision */
-            memory_snapshot_revision?: number | null;
+            memory_snapshot_revision: number | null;
             /**
              * Message Count
              * @default 0
              */
             message_count: number;
             /** Model Id */
-            model_id?: string | null;
+            model_id: string | null;
             /**
              * Profile Id
              * @default profile:local
              */
             profile_id: string;
             /** Project Id */
-            project_id?: string | null;
+            project_id: string | null;
             /** Provider Id */
-            provider_id?: string | null;
+            provider_id: string | null;
             /**
              * Read Memory
              * @default false
              */
             read_memory: boolean;
             /** Research Mode Override */
-            research_mode_override?: ("disabled" | "quick" | "deep") | null;
+            research_mode_override: ("disabled" | "quick" | "deep") | null;
             /**
              * Shared Memory Access
              * @default none
@@ -12333,7 +12393,7 @@ export interface components {
             /** Updated At */
             updated_at: string;
             /** Voice Asset Id */
-            voice_asset_id?: string | null;
+            voice_asset_id: string | null;
             /**
              * Workspace Id
              * @default workspace:default
@@ -12382,7 +12442,7 @@ export interface components {
             /** Checksum */
             checksum: string;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Payload */
@@ -12400,7 +12460,7 @@ export interface components {
             capabilities?: string[];
             /** External Capabilities */
             external_capabilities?: string[];
-            limits?: components["schemas"]["RunLimits"] | null;
+            limits?: components["schemas"]["RunLimits-Input"] | null;
             /** Model Id */
             model_id?: string | null;
             /**
@@ -12415,7 +12475,7 @@ export interface components {
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /** Resource Scopes */
-            resource_scopes?: components["schemas"]["ResourceScope"][] | null;
+            resource_scopes?: components["schemas"]["ResourceScope-Input"][] | null;
             /** Success Criteria */
             success_criteria?: string[];
             /** Task */
@@ -12442,11 +12502,11 @@ export interface components {
         };
         /** ClaimJobResponse */
         ClaimJobResponse: {
-            job?: components["schemas"]["JobRecord"] | null;
+            job: components["schemas"]["JobRecord"] | null;
             /** Ok */
             ok: boolean;
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
         };
         /** ClassificationRequest */
         ClassificationRequest: {
@@ -12487,11 +12547,11 @@ export interface components {
         /** ClonedVoiceCharacterBackfillItem */
         ClonedVoiceCharacterBackfillItem: {
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Display Name */
             display_name: string;
             /** Generation Batch Id */
-            generation_batch_id?: string | null;
+            generation_batch_id: string | null;
             /**
              * Reason
              * @default
@@ -12508,16 +12568,16 @@ export interface components {
         /** CodexAuthStatus */
         CodexAuthStatus: {
             /** Auth Mode */
-            auth_mode?: string | null;
+            auth_mode: string | null;
             /** Auth Url */
-            auth_url?: string | null;
+            auth_url: string | null;
             /**
              * Authenticated
              * @default false
              */
             authenticated: boolean;
             /** Cli Version */
-            cli_version?: string | null;
+            cli_version: string | null;
             /**
              * Detail
              * @default
@@ -12529,7 +12589,7 @@ export interface components {
              */
             installed: boolean;
             /** Pid */
-            pid?: number | null;
+            pid: number | null;
             /**
              * Started
              * @default false
@@ -12589,13 +12649,13 @@ export interface components {
              */
             blockers: string[];
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Fields */
-            fields?: {
+            fields: {
                 [key: string]: components["schemas"]["ActivityField"];
             };
             /** Generation */
-            generation?: string | null;
+            generation: string | null;
             /**
              * Last Meaningful Change At
              * Format: date-time
@@ -12642,7 +12702,7 @@ export interface components {
         /** CompanionAttentionDecision */
         CompanionAttentionDecision: {
             /** Eligible In Ms */
-            eligible_in_ms?: number | null;
+            eligible_in_ms: number | null;
             /**
              * Policy Version
              * @default 1
@@ -12662,7 +12722,7 @@ export interface components {
              */
             reaction: "ignore" | "observe_silently" | "glance" | "deep";
             /** Scores */
-            scores?: {
+            scores: {
                 [key: string]: number;
             };
             /** Should Deliver */
@@ -12678,7 +12738,7 @@ export interface components {
         /** CompanionMemoryMetrics */
         CompanionMemoryMetrics: {
             /** Counters */
-            counters?: {
+            counters: {
                 [key: string]: number;
             };
             /**
@@ -12687,11 +12747,11 @@ export interface components {
              */
             diagnostics_policy: string;
             /** Maxima */
-            maxima?: {
+            maxima: {
                 [key: string]: number;
             };
             /** Totals */
-            totals?: {
+            totals: {
                 [key: string]: number;
             };
             /**
@@ -12718,7 +12778,7 @@ export interface components {
              */
             format_version: string;
             /** Handoff Targets */
-            handoff_targets?: {
+            handoff_targets: {
                 [key: string]: string;
             }[];
             /**
@@ -12843,6 +12903,88 @@ export interface components {
         };
         /** CreateCharacterAvatarGenerationRequest */
         CreateCharacterAvatarGenerationRequest: {
+            /**
+             * Appearance Prompt
+             * @default
+             */
+            appearance_prompt: string;
+            /**
+             * Background Prompt
+             * @default
+             */
+            background_prompt: string;
+            /** Guidance Scale */
+            guidance_scale: number | null;
+            /**
+             * Height
+             * @default 768
+             */
+            height: number;
+            /**
+             * Include Background
+             * @default true
+             */
+            include_background: boolean;
+            /**
+             * Include Blink
+             * @default true
+             */
+            include_blink: boolean;
+            /**
+             * Include Expressions
+             * @default true
+             */
+            include_expressions: boolean;
+            /**
+             * Include Outfit
+             * @default true
+             */
+            include_outfit: boolean;
+            /**
+             * Outfit Prompt
+             * @default
+             */
+            outfit_prompt: string;
+            /**
+             * Provider Id
+             * @default image:flux_klein
+             */
+            provider_id: string;
+            /** Seed */
+            seed: number | null;
+            /**
+             * Source Asset Id
+             * @default
+             */
+            source_asset_id: string;
+            /**
+             * Source Image Consent Confirmed
+             * @default false
+             */
+            source_image_consent_confirmed: boolean;
+            /**
+             * Steps
+             * @default 4
+             */
+            steps: number;
+            /**
+             * Style
+             * @default illustrated character portrait
+             */
+            style: string;
+            /**
+             * Unload After Generation
+             * @default false
+             */
+            unload_after_generation: boolean;
+            /**
+             * Width
+             * @default 768
+             */
+            width: number;
+        };
+        /** CreateCharacterAvatarGenerationRequest */
+        "CreateCharacterAvatarGenerationRequest-Input": {
             /**
              * Appearance Prompt
              * @default
@@ -13037,7 +13179,7 @@ export interface components {
             priority?: number;
             resource_class: components["schemas"]["ResourceClass"];
             /** Stages */
-            stages?: components["schemas"]["JobStage"][];
+            stages?: components["schemas"]["JobStage-Input"][];
             /** Type */
             type: string;
         };
@@ -13107,11 +13249,11 @@ export interface components {
             degraded_evidence_count: number;
             /** Insufficient Evidence Count */
             insufficient_evidence_count: number;
-            legacy_portfolio_scores?: components["schemas"]["LegacyPortfolioScoreBundle"] | null;
+            legacy_portfolio_scores: components["schemas"]["LegacyPortfolioScoreBundle"] | null;
             paired_metrics: components["schemas"]["PairedForecastMetrics"];
-            portfolio_e_performance?: components["schemas"]["PortfolioEPerformance"] | null;
-            portfolio_f_performance?: components["schemas"]["PortfolioEPerformance"] | null;
-            portfolio_g_performance?: components["schemas"]["PortfolioEPerformance"] | null;
+            portfolio_e_performance: components["schemas"]["PortfolioEPerformance"] | null;
+            portfolio_f_performance: components["schemas"]["PortfolioEPerformance"] | null;
+            portfolio_g_performance: components["schemas"]["PortfolioEPerformance"] | null;
             /**
              * Runtime Version
              * @default prospective-gap-runtime-v1
@@ -13126,11 +13268,11 @@ export interface components {
             /** Unresolved Premarket Bar Count */
             unresolved_premarket_bar_count: number;
             v3_metrics: components["schemas"]["BinaryForecastMetrics"];
-            v42_comparison?: components["schemas"]["V42ComparisonMetrics"];
-            v42_metrics?: components["schemas"]["BinaryForecastMetrics"];
-            v42_return_metrics?: components["schemas"]["V42ReturnMetrics"];
-            v43_comparison?: components["schemas"]["V43ComparisonMetrics"];
-            v43_metrics?: components["schemas"]["BinaryForecastMetrics"];
+            v42_comparison: components["schemas"]["V42ComparisonMetrics"];
+            v42_metrics: components["schemas"]["BinaryForecastMetrics"];
+            v42_return_metrics: components["schemas"]["V42ReturnMetrics"];
+            v43_comparison: components["schemas"]["V43ComparisonMetrics"];
+            v43_metrics: components["schemas"]["BinaryForecastMetrics"];
             v4_metrics: components["schemas"]["BinaryForecastMetrics"];
         };
         /** DatasetListResponse */
@@ -13158,7 +13300,7 @@ export interface components {
              */
             delay_seconds: number;
             /** Fallback Reason */
-            fallback_reason?: string | null;
+            fallback_reason: string | null;
             /**
              * Freshness Mode
              * @enum {string}
@@ -13250,6 +13392,62 @@ export interface components {
              * @default unknown
              * @enum {string}
              */
+            activity: "static" | "micro_change" | "translation_like" | "localized_change" | "continuous_motion" | "full_scene_change" | "unknown";
+            /**
+             * Changed Ratio
+             * @default 0
+             */
+            changed_ratio: number;
+            /**
+             * Confidence
+             * @default 0
+             */
+            confidence: number;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /**
+             * Focus
+             * @default 0
+             */
+            focus: number;
+            /**
+             * Horizontal Shift
+             * @default 0
+             */
+            horizontal_shift: number;
+            /**
+             * Hypothesis
+             * @default none
+             * @enum {string}
+             */
+            hypothesis: "none" | "likely_scroll" | "likely_typing" | "likely_navigation" | "likely_app_switch" | "likely_media";
+            /**
+             * Mean Difference
+             * @default 0
+             */
+            mean_difference: number;
+            /** Source Height */
+            source_height: number | null;
+            /** Source Width */
+            source_width: number | null;
+            /**
+             * Vertical Shift
+             * @default 0
+             */
+            vertical_shift: number;
+        };
+        /**
+         * DesktopActivitySignal
+         * @description Conservative browser-side visual activity classification.
+         */
+        "DesktopActivitySignal-Input": {
+            /**
+             * Activity
+             * @default unknown
+             * @enum {string}
+             */
             activity?: "static" | "micro_change" | "translation_like" | "localized_change" | "continuous_motion" | "full_scene_change" | "unknown";
             /**
              * Changed Ratio
@@ -13305,6 +13503,50 @@ export interface components {
              * Browsing Pace
              * @default 0
              */
+            browsing_pace: number;
+            /**
+             * Current Pattern
+             * @default starting
+             * @enum {string}
+             */
+            current_pattern: "starting" | "settled" | "browsing" | "rapid_switching" | "exploring" | "watching" | "typing" | "mixed";
+            /**
+             * Likely Media
+             * @default false
+             */
+            likely_media: boolean;
+            /**
+             * Likely Typing
+             * @default false
+             */
+            likely_typing: boolean;
+            /**
+             * Rapid Browsing
+             * @default false
+             */
+            rapid_browsing: boolean;
+            /**
+             * Sample Count
+             * @default 0
+             */
+            sample_count: number;
+            /**
+             * Settled Seconds
+             * @default 0
+             */
+            settled_seconds: number;
+            /** Transition */
+            transition: string | null;
+        };
+        /**
+         * DesktopBehaviorState
+         * @description Bounded temporal interpretation of recent activity signals.
+         */
+        "DesktopBehaviorState-Input": {
+            /**
+             * Browsing Pace
+             * @default 0
+             */
             browsing_pace?: number;
             /**
              * Current Pattern
@@ -13350,9 +13592,9 @@ export interface components {
             /** Capture Generation */
             capture_generation: string;
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Checkpoint Reason */
-            checkpoint_reason?: ("activity_started" | "objective_established" | "strategy_changed" | "major_progress" | "significant_event" | "open_loop_changed" | "user_correction" | "activity_ended" | "manual") | null;
+            checkpoint_reason: ("activity_started" | "objective_established" | "strategy_changed" | "major_progress" | "significant_event" | "open_loop_changed" | "user_correction" | "activity_ended" | "manual") | null;
             /**
              * Checkpoint Status
              * @default not_needed
@@ -13400,7 +13642,7 @@ export interface components {
             /** Activity Thread */
             activity_thread: string;
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Importance */
             importance: number;
             /** Observation Count */
@@ -13529,7 +13771,7 @@ export interface components {
              */
             character_id: string;
             /** Counts */
-            counts?: {
+            counts: {
                 [key: string]: number;
             };
             /** Created At */
@@ -13541,7 +13783,7 @@ export interface components {
             /** Exact Commit Sha */
             exact_commit_sha: string;
             /** Latency Ms */
-            latency_ms?: {
+            latency_ms: {
                 [key: string]: number | null;
             };
             /**
@@ -13555,9 +13797,9 @@ export interface components {
              */
             os_version: string;
             /** Profile Version */
-            profile_version?: number | null;
+            profile_version: number | null;
             /** Rates */
-            rates?: {
+            rates: {
                 [key: string]: number | null;
             };
             /**
@@ -13574,15 +13816,15 @@ export interface components {
             /** Run Id */
             run_id: string;
             /** Scenario Labels */
-            scenario_labels?: string[];
+            scenario_labels: string[];
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /** Started At */
             started_at: string;
             /** Updated At */
             updated_at: string;
             /** Vision Model Hash */
-            vision_model_hash?: string | null;
+            vision_model_hash: string | null;
             /**
              * Vision Provider
              * @default unknown
@@ -13606,7 +13848,7 @@ export interface components {
             /** Name */
             name: string;
             /** Observed */
-            observed?: number | null;
+            observed: number | null;
             /** Samples */
             samples: number;
             /**
@@ -13620,13 +13862,13 @@ export interface components {
          * @description One browser-authorized, bounded background observation request.
          */
         DesktopCompanionObserveRequest: {
-            activity?: components["schemas"]["DesktopActivitySignal"];
+            activity?: components["schemas"]["DesktopActivitySignal-Input"];
             /**
              * Assistant Busy
              * @default false
              */
             assistant_busy?: boolean;
-            behavior?: components["schemas"]["DesktopBehaviorState"];
+            behavior?: components["schemas"]["DesktopBehaviorState-Input"];
             /** Capture Generation */
             capture_generation: string;
             /**
@@ -13692,9 +13934,9 @@ export interface components {
              */
             activity_confidence: number;
             /** Activity Grounding Ids */
-            activity_grounding_ids?: string[];
+            activity_grounding_ids: string[];
             /** Activity Intent */
-            activity_intent?: string | null;
+            activity_intent: string | null;
             /**
              * Activity Salience
              * @default 0
@@ -13705,9 +13947,9 @@ export interface components {
              * @default
              */
             activity_summary: string;
-            attention?: components["schemas"]["CompanionAttentionDecision"] | null;
+            attention: components["schemas"]["CompanionAttentionDecision"] | null;
             /** Coordinator */
-            coordinator?: {
+            coordinator: {
                 [key: string]: number | string | null;
             };
             /**
@@ -13716,8 +13958,8 @@ export interface components {
              */
             delivery_eligible: boolean;
             /** Evaluation Scenario */
-            evaluation_scenario?: "screen-prompt-injection" | null;
-            observation?: components["schemas"]["DesktopObservation"] | null;
+            evaluation_scenario: "screen-prompt-injection" | null;
+            observation: components["schemas"]["DesktopObservation"] | null;
             /** Reason */
             reason: string;
             /**
@@ -13861,11 +14103,11 @@ export interface components {
         /** DesktopCompanionPreflightResult */
         DesktopCompanionPreflightResult: {
             /** Endpoint */
-            endpoint?: string | null;
+            endpoint: string | null;
             /** Latency Ms */
-            latency_ms?: number | null;
+            latency_ms: number | null;
             /** Model Id */
-            model_id?: string | null;
+            model_id: string | null;
             /** Ready */
             ready: boolean;
             /** Reason */
@@ -13950,8 +14192,8 @@ export interface components {
          * @description A factual, uncertain and revisable vision result.
          */
         DesktopObservation: {
-            activity?: components["schemas"]["DesktopActivitySignal"];
-            behavior?: components["schemas"]["DesktopBehaviorState"];
+            activity: components["schemas"]["DesktopActivitySignal"];
+            behavior: components["schemas"]["DesktopBehaviorState"];
             /** Capture Generation */
             capture_generation: string;
             /**
@@ -13966,12 +14208,12 @@ export interface components {
              */
             change_kind: "none" | "delta" | "scene_change";
             /** Character Id */
-            character_id?: string | null;
+            character_id: string | null;
             /** Client Sequence */
             client_sequence: number;
-            current_scene?: components["schemas"]["DesktopObservedValue"];
+            current_scene: components["schemas"]["DesktopObservedValue"];
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: unknown;
             };
             /**
@@ -13990,11 +14232,11 @@ export interface components {
              * Observed At
              * Format: date-time
              */
-            observed_at?: string;
+            observed_at: string;
             /** Plain Text Fallback */
-            plain_text_fallback?: string | null;
+            plain_text_fallback: string | null;
             /** Possible Events */
-            possible_events?: components["schemas"]["DesktopObservedChange"][];
+            possible_events: components["schemas"]["DesktopObservedChange"][];
             /**
              * Schema Version
              * @default 1
@@ -14006,16 +14248,16 @@ export interface components {
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Uncertainties */
-            uncertainties?: string[];
+            uncertainties: string[];
             /** Visible Changes */
-            visible_changes?: components["schemas"]["DesktopObservedChange"][];
+            visible_changes: components["schemas"]["DesktopObservedChange"][];
             /** Visible Text */
-            visible_text?: string[];
+            visible_text: string[];
         };
         /** DesktopObservedChange */
         DesktopObservedChange: {
             /** Between */
-            between?: [
+            between: [
                 number,
                 number
             ] | null;
@@ -14027,7 +14269,7 @@ export interface components {
             /** Event */
             event: string;
             /** Fingerprint */
-            fingerprint?: string | null;
+            fingerprint: string | null;
         };
         /** DesktopObservedValue */
         DesktopObservedValue: {
@@ -14045,22 +14287,22 @@ export interface components {
         /** DiagnosticsPayload */
         DiagnosticsPayload: {
             /** Device Permits */
-            device_permits?: {
+            device_permits: {
                 [key: string]: unknown;
             }[];
             /** Event Stream */
-            event_stream?: {
+            event_stream: {
                 [key: string]: string;
             };
             /** Logs */
-            logs?: {
+            logs: {
                 [key: string]: string;
             }[];
-            model_residency?: components["schemas"]["ModelResidencyDiagnostics"];
+            model_residency: components["schemas"]["ModelResidencyDiagnostics"];
             /** Ok */
             ok: boolean;
-            provider_model_cache?: components["schemas"]["ProviderModelCachePayload"];
-            runtime?: components["schemas"]["RuntimeDiagnostics"] | null;
+            provider_model_cache: components["schemas"]["ProviderModelCachePayload"];
+            runtime: components["schemas"]["RuntimeDiagnostics"] | null;
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
@@ -14098,7 +14340,7 @@ export interface components {
             /** Capability Id */
             capability_id: string;
             /** Coverage */
-            coverage?: components["schemas"]["EvidenceCoverage"][];
+            coverage: components["schemas"]["EvidenceCoverage"][];
             /** Fallback Policy */
             fallback_policy: string;
             /** Freshness */
@@ -14122,10 +14364,10 @@ export interface components {
          */
         EvidenceCoverage: {
             /** Coverage Key */
-            coverage_key?: string | null;
+            coverage_key: string | null;
             /** Kind */
             kind: string;
-            subject?: components["schemas"]["SubjectRef"] | null;
+            subject: components["schemas"]["SubjectRef"] | null;
         };
         /** EvidenceDecision */
         EvidenceDecision: {
@@ -14140,7 +14382,7 @@ export interface components {
              * @default 1
              */
             confidence: number;
-            policy?: components["schemas"]["EvidencePolicy"];
+            policy: components["schemas"]["EvidencePolicy"];
             /**
              * Reason
              * @default model_knowledge_sufficient
@@ -14162,8 +14404,8 @@ export interface components {
              */
             requirement: "none" | "optional" | "required";
             /** Requirements */
-            requirements?: components["schemas"]["EvidenceRequirement"][];
-            retrieval?: components["schemas"]["RetrievalPolicy"];
+            requirements: components["schemas"]["EvidenceRequirement"][];
+            retrieval: components["schemas"]["RetrievalPolicy"];
             /**
              * User Visible Attribution
              * @default when_used
@@ -14176,29 +14418,29 @@ export interface components {
             /** Capability Id */
             capability_id: string;
             /** Coverage */
-            coverage?: components["schemas"]["EvidenceCoverage"][];
+            coverage: components["schemas"]["EvidenceCoverage"][];
             /**
              * Executed At
              * Format: date-time
              */
-            executed_at?: string;
+            executed_at: string;
             /** Freshest Source At */
-            freshest_source_at?: string | null;
+            freshest_source_at: string | null;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /**
              * Observed At
              * Format: date-time
              */
-            observed_at?: string;
+            observed_at: string;
             /** Origin */
-            origin?: string | null;
+            origin: string | null;
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
             /** Receipt Id */
-            receipt_id?: string;
+            receipt_id: string;
             /** Request Digest */
             request_digest: string;
             /** Result Digest */
@@ -14213,10 +14455,10 @@ export interface components {
              */
             source_count: number;
             /** Source Manifest Id */
-            source_manifest_id?: string | null;
-            subject?: components["schemas"]["SubjectRef"] | null;
+            source_manifest_id: string | null;
+            subject: components["schemas"]["SubjectRef"] | null;
             /** Task Revision Id */
-            task_revision_id?: string | null;
+            task_revision_id: string | null;
             /**
              * Trust Level
              * @default general
@@ -14227,10 +14469,10 @@ export interface components {
         /** EvidenceRequirement */
         EvidenceRequirement: {
             /** Acceptable Sources */
-            acceptable_sources?: components["schemas"]["EvidenceSourceOption"][];
+            acceptable_sources: components["schemas"]["EvidenceSourceOption"][];
             /** As Of Date */
-            as_of_date?: string | null;
-            coverage?: components["schemas"]["EvidenceCoverage"] | null;
+            as_of_date: string | null;
+            coverage: components["schemas"]["EvidenceCoverage"] | null;
             /**
              * Fallback Policy
              * @default fail_closed
@@ -14246,7 +14488,7 @@ export interface components {
             /** Id */
             id: string;
             /** Max Age Seconds */
-            max_age_seconds?: number | null;
+            max_age_seconds: number | null;
             /**
              * Minimum Matches
              * @default 1
@@ -14259,7 +14501,7 @@ export interface components {
             purpose: string;
             /** Source Class */
             source_class: string;
-            subject?: components["schemas"]["SubjectRef"] | null;
+            subject: components["schemas"]["SubjectRef"] | null;
             /**
              * Trust Floor
              * @default general
@@ -14270,11 +14512,11 @@ export interface components {
         /** EvidenceRequirementEvaluation */
         EvidenceRequirementEvaluation: {
             /** Matching Receipt Ids */
-            matching_receipt_ids?: string[];
+            matching_receipt_ids: string[];
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
             /** Rejected Receipt Ids */
-            rejected_receipt_ids?: string[];
+            rejected_receipt_ids: string[];
             /** Requirement Id */
             requirement_id: string;
             /**
@@ -14286,31 +14528,31 @@ export interface components {
         /** EvidenceSet */
         EvidenceSet: {
             /** Attribution Refs */
-            attribution_refs?: string[];
+            attribution_refs: string[];
             /**
              * Evaluated At
              * Format: date-time
              */
-            evaluated_at?: string;
+            evaluated_at: string;
             /** Insufficient Trust Receipts */
-            insufficient_trust_receipts?: string[];
+            insufficient_trust_receipts: string[];
             /** Missing Requirements */
-            missing_requirements?: string[];
+            missing_requirements: string[];
             /**
              * Passed
              * @default true
              */
             passed: boolean;
             /** Requirements */
-            requirements?: components["schemas"]["EvidenceRequirementEvaluation"][];
+            requirements: components["schemas"]["EvidenceRequirementEvaluation"][];
             /** Run Id */
             run_id: string;
             /** Source Manifest Ids */
-            source_manifest_ids?: string[];
+            source_manifest_ids: string[];
             /** Stale Receipts */
-            stale_receipts?: string[];
+            stale_receipts: string[];
             /** Wrong Subject Receipts */
-            wrong_subject_receipts?: string[];
+            wrong_subject_receipts: string[];
         };
         /** EvidenceSourceOption */
         EvidenceSourceOption: {
@@ -14320,7 +14562,7 @@ export interface components {
              */
             preference: number;
             /** Provider Hint */
-            provider_hint?: string | null;
+            provider_hint: string | null;
             /** Source Class */
             source_class: string;
             /**
@@ -14369,32 +14611,32 @@ export interface components {
              */
             execution_eligible: boolean;
             /** Freshness Mode */
-            freshness_mode?: string | null;
+            freshness_mode: string | null;
             /** Halted */
-            halted?: boolean | null;
+            halted: boolean | null;
             /** Instrument Id */
-            instrument_id?: string | null;
+            instrument_id: string | null;
             /** Observation Age Ms */
-            observation_age_ms?: string | null;
+            observation_age_ms: string | null;
             /** Policy Version */
-            policy_version?: string | null;
+            policy_version: string | null;
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
             /**
              * Reason Codes
              * @default []
              */
             reason_codes: string[];
             /** Requested Binding Id */
-            requested_binding_id?: string | null;
+            requested_binding_id: string | null;
             /** Resolved Binding Id */
-            resolved_binding_id?: string | null;
+            resolved_binding_id: string | null;
             /** Session */
-            session?: string | null;
+            session: string | null;
             /** Source Time */
-            source_time?: string | null;
+            source_time: string | null;
             /** Spread Bps */
-            spread_bps?: string | null;
+            spread_bps: string | null;
             /**
              * State
              * @enum {string}
@@ -14407,17 +14649,17 @@ export interface components {
          */
         ExecutionObservation: {
             /** Ask */
-            ask?: string | null;
+            ask: string | null;
             /** Ask Size */
-            ask_size?: string | null;
+            ask_size: string | null;
             /** Bar Start Time */
-            bar_start_time?: string | null;
+            bar_start_time: string | null;
             /** Bar Volume */
-            bar_volume?: string | null;
+            bar_volume: string | null;
             /** Bid */
-            bid?: string | null;
+            bid: string | null;
             /** Bid Size */
-            bid_size?: string | null;
+            bid_size: string | null;
             /** Binding Id */
             binding_id: string;
             /**
@@ -14432,9 +14674,9 @@ export interface components {
              */
             broker_execution_authorized: boolean;
             /** Contract Id */
-            contract_id?: string | null;
+            contract_id: string | null;
             /** Cumulative Volume */
-            cumulative_volume?: string | null;
+            cumulative_volume: string | null;
             /**
              * Execution Eligible
              * @default false
@@ -14447,19 +14689,19 @@ export interface components {
              */
             freshness_mode: "live" | "polled" | "delayed" | "cached" | "fallback" | "unknown";
             /** Halted */
-            halted?: boolean | null;
+            halted: boolean | null;
             /** High */
-            high?: string | null;
+            high: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Last */
             last: string;
             /** Live Entitled */
-            live_entitled?: boolean | null;
+            live_entitled: boolean | null;
             /** Local Symbol */
-            local_symbol?: string | null;
+            local_symbol: string | null;
             /** Low */
-            low?: string | null;
+            low: string | null;
             /**
              * Market Data Eligible
              * @default false
@@ -14481,16 +14723,16 @@ export interface components {
              */
             policy_version: string;
             /** Primary Exchange */
-            primary_exchange?: string | null;
+            primary_exchange: string | null;
             /** Provider */
             provider: string;
             /** Provider Sequence */
-            provider_sequence?: number | null;
+            provider_sequence: number | null;
             /**
              * Received At
              * Format: date-time
              */
-            received_at?: string;
+            received_at: string;
             /**
              * Rejection Reasons
              * @default []
@@ -14511,7 +14753,7 @@ export interface components {
         /** ExecutionPolicy */
         ExecutionPolicy: {
             /** Allowed Environment Keys */
-            allowed_environment_keys?: string[];
+            allowed_environment_keys: string[];
             /**
              * Command Policy
              * @default safe-development
@@ -14736,9 +14978,9 @@ export interface components {
             /** Provider */
             provider: string;
             /** Provider Event Id */
-            provider_event_id?: string | null;
+            provider_event_id: string | null;
             /** Provider Sequence */
-            provider_sequence?: number | null;
+            provider_sequence: number | null;
             /**
              * Received At
              * Format: date-time
@@ -14764,7 +15006,7 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Dataset Fingerprint */
             dataset_fingerprint: string;
             /** Dataset Id */
@@ -14783,7 +15025,7 @@ export interface components {
             /** Provider */
             provider: string;
             /** Requested Binding Id */
-            requested_binding_id?: string | null;
+            requested_binding_id: string | null;
             /** Resolved Binding Id */
             resolved_binding_id: string;
             /** Session Calendar */
@@ -14847,9 +15089,9 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Mae Bucket */
-            mae_bucket?: ("low" | "moderate" | "high") | null;
+            mae_bucket: ("low" | "moderate" | "high") | null;
             /** Mfe Bucket */
-            mfe_bucket?: ("low" | "moderate" | "high") | null;
+            mfe_bucket: ("low" | "moderate" | "high") | null;
             /** P Close Above Open */
             p_close_above_open: string;
             /** P Persistent Uptrend */
@@ -14860,11 +15102,11 @@ export interface components {
              */
             predictor_version: string;
             /** Return Q10 */
-            return_q10?: string | null;
+            return_q10: string | null;
             /** Return Q50 */
-            return_q50?: string | null;
+            return_q50: string | null;
             /** Return Q90 */
-            return_q90?: string | null;
+            return_q90: string | null;
             /**
              * Uncertainty
              * @default high
@@ -14902,12 +15144,12 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Mae Bucket */
-            mae_bucket?: ("low" | "moderate" | "high") | null;
+            mae_bucket: ("low" | "moderate" | "high") | null;
             /** Market State Snapshot Id */
             market_state_snapshot_id: string;
             mechanism_scores: components["schemas"]["MechanismRiskScores-Output"];
             /** Mfe Bucket */
-            mfe_bucket?: ("low" | "moderate" | "high") | null;
+            mfe_bucket: ("low" | "moderate" | "high") | null;
             /** Model Spec Fingerprint */
             model_spec_fingerprint: string;
             /**
@@ -14917,9 +15159,9 @@ export interface components {
              */
             model_state: "PRODUCED" | "FAILED" | "NOT_APPLICABLE";
             /** P Return Gt 2Pct */
-            p_return_gt_2pct?: string | null;
+            p_return_gt_2pct: string | null;
             /** P Return Lt Minus 5Pct */
-            p_return_lt_minus_5pct?: string | null;
+            p_return_lt_minus_5pct: string | null;
             /**
              * Predictor Version
              * @default prospective-gap-v4-shadow
@@ -14929,20 +15171,20 @@ export interface components {
             /** Raw P Close Above Open */
             raw_p_close_above_open: string;
             /** Regime Confidence */
-            regime_confidence?: string | null;
+            regime_confidence: string | null;
             /** Regime Primary */
-            regime_primary?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
+            regime_primary: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
             /**
              * Regime Tags
              * @default []
              */
             regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
             /** Return Q10 */
-            return_q10?: string | null;
+            return_q10: string | null;
             /** Return Q50 */
-            return_q50?: string | null;
+            return_q50: string | null;
             /** Return Q90 */
-            return_q90?: string | null;
+            return_q90: string | null;
             /**
              * Session Date
              * Format: date
@@ -14980,13 +15222,13 @@ export interface components {
         FrozenPortfolioPosition: {
             /** Allocation */
             allocation: string;
-            factors?: components["schemas"]["ConfidenceRiskFactors"] | null;
+            factors: components["schemas"]["ConfidenceRiskFactors"] | null;
             /** Instrument Id */
             instrument_id: string;
             /** P Close Above Open */
             p_close_above_open: string;
             /** Score */
-            score?: string | null;
+            score: string | null;
             /** Weight */
             weight: string;
         };
@@ -14998,17 +15240,17 @@ export interface components {
              */
             decision_at: string;
             /** Discovery Rank */
-            discovery_rank?: number | null;
+            discovery_rank: number | null;
             /** Entry Time */
-            entry_time?: string | null;
+            entry_time: string | null;
             /** Exit Time */
-            exit_time?: string | null;
+            exit_time: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Quality Score */
-            quality_score?: number | null;
+            quality_score: number | null;
             /** Rejection Reason */
-            rejection_reason?: string | null;
+            rejection_reason: string | null;
             /**
              * Selected Trade
              * @default false
@@ -15112,9 +15354,9 @@ export interface components {
             /** Expectancy R */
             expectancy_r: string;
             /** Expectancy R Ci95 High */
-            expectancy_r_ci95_high?: string | null;
+            expectancy_r_ci95_high: string | null;
             /** Expectancy R Ci95 Low */
-            expectancy_r_ci95_low?: string | null;
+            expectancy_r_ci95_low: string | null;
             /** Indicator Exit Count */
             indicator_exit_count: number;
             /** Invalid Risk Count */
@@ -15135,13 +15377,13 @@ export interface components {
              */
             research_rejection_count: number;
             /** Research Rejection Reasons */
-            research_rejection_reasons?: {
+            research_rejection_reasons: {
                 [key: string]: number;
             };
             /** Risk Rejection Count */
             risk_rejection_count: number;
             /** Risk Rejection Reasons */
-            risk_rejection_reasons?: {
+            risk_rejection_reasons: {
                 [key: string]: number;
             };
             /** Stop Count */
@@ -15164,7 +15406,7 @@ export interface components {
         /** GapPullbackBacktestTrade */
         GapPullbackBacktestTrade: {
             /** Discovery Rank */
-            discovery_rank?: number | null;
+            discovery_rank: number | null;
             /** Entry Bar Index */
             entry_bar_index: number;
             /** Entry Fill Quantity */
@@ -15823,11 +16065,11 @@ export interface components {
         /** GapPullbackFeatures */
         GapPullbackFeatures: {
             /** B1 */
-            b1?: string | null;
+            b1: string | null;
             /** Breakout Hold Bars */
-            breakout_hold_bars?: number | null;
+            breakout_hold_bars: number | null;
             /** Breakout Volume Ratio */
-            breakout_volume_ratio?: string | null;
+            breakout_volume_ratio: string | null;
             /**
              * Catalyst Evidence Count
              * @default 0
@@ -15844,39 +16086,39 @@ export interface components {
              */
             dilution_flags: string[];
             /** Float Shares */
-            float_shares?: string | null;
+            float_shares: string | null;
             /** Gap Pct */
             gap_pct: string;
             /** Impulse Average Volume */
-            impulse_average_volume?: string | null;
+            impulse_average_volume: string | null;
             /** L1 */
-            l1?: string | null;
+            l1: string | null;
             /** L1 To B1 Minutes */
-            l1_to_b1_minutes?: number | null;
+            l1_to_b1_minutes: number | null;
             /** L2 */
-            l2?: string | null;
+            l2: string | null;
             /** L2 To Signal Minutes */
-            l2_to_signal_minutes?: number | null;
+            l2_to_signal_minutes: number | null;
             /** Minutes Since Open */
-            minutes_since_open?: number | null;
+            minutes_since_open: number | null;
             /** Opening Impulse Pct */
-            opening_impulse_pct?: string | null;
+            opening_impulse_pct: string | null;
             /**
              * Opening Structure Score
              * @default 0
              */
             opening_structure_score: number;
             /** Pullback Depth Pct */
-            pullback_depth_pct?: string | null;
+            pullback_depth_pct: string | null;
             /**
              * Pullback Quality Score
              * @default 0
              */
             pullback_quality_score: number;
             /** Pullback Selling Average Volume */
-            pullback_selling_average_volume?: string | null;
+            pullback_selling_average_volume: string | null;
             /** Pullback Volume Ratio */
-            pullback_volume_ratio?: string | null;
+            pullback_volume_ratio: string | null;
             /**
              * Quality Score
              * @default 0
@@ -15888,20 +16130,20 @@ export interface components {
              */
             reclaim_break_score: number;
             /** Second Pullback Depth Pct */
-            second_pullback_depth_pct?: string | null;
+            second_pullback_depth_pct: string | null;
             /** Session Vwap */
-            session_vwap?: string | null;
+            session_vwap: string | null;
             /** Spread Bps */
-            spread_bps?: string | null;
+            spread_bps: string | null;
             /**
              * Supply Score
              * @default 0
              */
             supply_score: number;
             /** Tod Rvol */
-            tod_rvol?: string | null;
+            tod_rvol: string | null;
             /** Vwap Distance Pct */
-            vwap_distance_pct?: string | null;
+            vwap_distance_pct: string | null;
         };
         /** GapPullbackResult */
         GapPullbackResult: {
@@ -15912,7 +16154,7 @@ export interface components {
             instrument_id: string;
             /** Reason Code */
             reason_code: string;
-            signal?: components["schemas"]["StrategySignal"] | null;
+            signal: components["schemas"]["StrategySignal"] | null;
             /**
              * State
              * @enum {string}
@@ -16029,7 +16271,7 @@ export interface components {
          */
         "GapperCandidate-Output": {
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /**
              * Catalyst Evidence Ids
              * @default []
@@ -16051,36 +16293,36 @@ export interface components {
              */
             dilution_flags: string[];
             /** Discovery Rank */
-            discovery_rank?: number | null;
+            discovery_rank: number | null;
             /** Evidence Observed At */
-            evidence_observed_at?: {
+            evidence_observed_at: {
                 [key: string]: string;
             };
             /** Float Shares */
-            float_shares?: string | null;
+            float_shares: string | null;
             /** Gap Pct */
             gap_pct: string;
             /** Instrument Id */
             instrument_id: string;
             /** Market Cap */
-            market_cap?: string | null;
+            market_cap: string | null;
             /**
              * Market Data Complete
              * @default true
              */
             market_data_complete: boolean;
             /** Market Evidence Policy Version */
-            market_evidence_policy_version?: string | null;
+            market_evidence_policy_version: string | null;
             /** Observed At */
-            observed_at?: string | null;
+            observed_at: string | null;
             /** Premarket Bar Count */
-            premarket_bar_count?: number | null;
+            premarket_bar_count: number | null;
             /**
              * Premarket Dollar Volume
              * @default 0
              */
             premarket_dollar_volume: string;
-            premarket_liquidity?: components["schemas"]["PremarketLiquidityEvidence-Output"] | null;
+            premarket_liquidity: components["schemas"]["PremarketLiquidityEvidence-Output"] | null;
             /** Premarket Price */
             premarket_price: string;
             /**
@@ -16091,7 +16333,7 @@ export interface components {
             /** Previous Close */
             previous_close: string;
             /** Raw Previous Close */
-            raw_previous_close?: string | null;
+            raw_previous_close: string | null;
             /**
              * Research Quality Flags
              * @default []
@@ -16103,9 +16345,9 @@ export interface components {
              */
             split_adjustment_factor: string;
             /** Spread Bps */
-            spread_bps?: string | null;
+            spread_bps: string | null;
             /** Tod Rvol */
-            tod_rvol?: string | null;
+            tod_rvol: string | null;
         };
         /** GapperUniverseFreezeRequest */
         GapperUniverseFreezeRequest: {
@@ -16173,7 +16415,7 @@ export interface components {
              * Source Member Dispositions
              * @default []
              */
-            source_member_dispositions?: components["schemas"]["SourceMemberDisposition"][];
+            source_member_dispositions?: components["schemas"]["SourceMemberDisposition-Input"][];
             /** Universe Id */
             universe_id: string;
         };
@@ -16211,7 +16453,7 @@ export interface components {
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Source Locator */
-            source_locator?: string | null;
+            source_locator: string | null;
             /**
              * Source Member Dispositions
              * @default []
@@ -16251,25 +16493,25 @@ export interface components {
          */
         GatewayReadinessPayload: {
             /** Authority State */
-            authority_state?: string | null;
+            authority_state: string | null;
             /** Backend */
-            backend?: string | null;
+            backend: string | null;
             /** Background Ready */
-            background_ready?: boolean | null;
+            background_ready: boolean | null;
             /** Background Role */
-            background_role?: string | null;
+            background_role: string | null;
             /** Build Revision */
-            build_revision?: string | null;
+            build_revision: string | null;
             /** Execution Owner Ready */
-            execution_owner_ready?: boolean | null;
+            execution_owner_ready: boolean | null;
             /** Migrations Pending */
-            migrations_pending?: string[];
+            migrations_pending: string[];
             /** Ready */
             ready: boolean;
             /** Reason */
-            reason?: string | null;
+            reason: string | null;
             /** Required Workers Unavailable */
-            required_workers_unavailable?: string[];
+            required_workers_unavailable: string[];
         } & {
             [key: string]: unknown;
         };
@@ -16296,12 +16538,12 @@ export interface components {
              */
             allow_matching_compatibility_group: boolean;
             /** Compatible Model Pairs */
-            compatible_model_pairs?: [
+            compatible_model_pairs: [
                 string,
                 string
             ][];
             /** Total Vram Mb */
-            total_vram_mb?: number | null;
+            total_vram_mb: number | null;
         };
         /** GrossReturnDistribution */
         GrossReturnDistribution: {
@@ -16350,7 +16592,7 @@ export interface components {
         HermesAssistantToolExecutePayload: {
             approval_decision: components["schemas"]["AssistantToolReviewDecision"];
             execution_result: components["schemas"]["AssistantToolResult"];
-            result_context?: components["schemas"]["AssistantToolResultContext"] | null;
+            result_context: components["schemas"]["AssistantToolResultContext"] | null;
             /** Selected Action Id */
             selected_action_id: string;
             /** Selected Tool Id */
@@ -16368,7 +16610,7 @@ export interface components {
         };
         /** HermesAssistantToolRequestEnvelope */
         HermesAssistantToolRequestEnvelope: {
-            request?: components["schemas"]["AssistantToolRequest"];
+            request?: components["schemas"]["AssistantToolRequest-Input"];
             /**
              * User Request
              * @default
@@ -16511,11 +16753,11 @@ export interface components {
              */
             connection_status: "disabled" | "client_unavailable" | "connected" | "disconnected";
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: unknown;
             };
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Official Ibapi Available */
             official_ibapi_available: boolean;
             /**
@@ -16715,14 +16957,14 @@ export interface components {
              */
             captured_at: string;
             /** Cik */
-            cik?: string | null;
+            cik: string | null;
             /**
              * Confidence
              * @default 1
              */
             confidence: string;
             /** Exchange */
-            exchange?: string | null;
+            exchange: string | null;
             /** Identity Id */
             identity_id: string;
             /** Immutable Fingerprint */
@@ -16730,18 +16972,34 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Legal Name */
-            legal_name?: string | null;
+            legal_name: string | null;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /** Source */
             source: string;
             /** Source Available At */
-            source_available_at?: string | null;
+            source_available_at: string | null;
             /** Symbol */
             symbol: string;
         };
         /** JobError */
         JobError: {
+            /** Code */
+            code: string;
+            /** Details */
+            details: {
+                [key: string]: unknown;
+            };
+            /** Message */
+            message: string;
+            /**
+             * Retryable
+             * @default false
+             */
+            retryable: boolean;
+        };
+        /** JobError */
+        "JobError-Input": {
             /** Code */
             code: string;
             /** Details */
@@ -16780,10 +17038,25 @@ export interface components {
             /** Jobs */
             jobs: components["schemas"]["JobRecord"][];
             /** Next Cursor */
-            next_cursor?: string | null;
+            next_cursor: string | null;
         };
         /** JobProgress */
         JobProgress: {
+            /**
+             * Current
+             * @default 0
+             */
+            current: number;
+            /** Message */
+            message: string | null;
+            /**
+             * Total
+             * @default 1
+             */
+            total: number;
+        };
+        /** JobProgress */
+        "JobProgress-Input": {
             /**
              * Current
              * @default 0
@@ -16799,52 +17072,52 @@ export interface components {
         };
         /** JobRecord */
         JobRecord: {
-            cancel?: components["schemas"]["CancelState"];
+            cancel: components["schemas"]["CancelState"];
             /** Compat */
-            compat?: {
+            compat: {
                 [key: string]: unknown;
             };
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /** Correlation Id */
-            correlation_id?: string | null;
+            correlation_id: string | null;
             /** Created At */
             created_at: string;
-            error?: components["schemas"]["JobError"] | null;
+            error: components["schemas"]["JobError"] | null;
             /** Id */
             id: string;
             /** Input Payload */
-            input_payload?: {
+            input_payload: {
                 [key: string]: unknown;
             } | null;
             /** Input Ref */
-            input_ref?: {
+            input_ref: {
                 [key: string]: unknown;
             } | null;
-            lease?: components["schemas"]["JobLease"] | null;
+            lease: components["schemas"]["JobLease"] | null;
             /** Logs */
-            logs?: {
+            logs: {
                 [key: string]: unknown;
             }[];
             /** Module */
             module: string;
             /** Output Refs */
-            output_refs?: {
+            output_refs: {
                 [key: string]: unknown;
             }[];
             /** Owner Id */
-            owner_id?: string | null;
+            owner_id: string | null;
             /**
              * Priority
              * @default 0
              */
             priority: number;
-            progress?: components["schemas"]["JobProgress"];
+            progress: components["schemas"]["JobProgress"];
             resource_class: components["schemas"]["ResourceClass"];
             /** Stages */
-            stages?: components["schemas"]["JobStage"][];
+            stages: components["schemas"]["JobStage"][];
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             status: components["schemas"]["JobStatus"];
             /** Type */
             type: string;
@@ -16854,12 +17127,37 @@ export interface components {
         /** JobStage */
         JobStage: {
             /** Checkpoint Ref */
+            checkpoint_ref: {
+                [key: string]: unknown;
+            } | null;
+            /** Completed At */
+            completed_at: string | null;
+            error: components["schemas"]["JobError"] | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Output Refs */
+            output_refs: {
+                [key: string]: unknown;
+            }[];
+            progress: components["schemas"]["JobProgress"];
+            resource_class: components["schemas"]["ResourceClass"];
+            retry: components["schemas"]["RetryState"];
+            /** Started At */
+            started_at: string | null;
+            /** @default queued */
+            status: components["schemas"]["JobStatus"];
+        };
+        /** JobStage */
+        "JobStage-Input": {
+            /** Checkpoint Ref */
             checkpoint_ref?: {
                 [key: string]: unknown;
             } | null;
             /** Completed At */
             completed_at?: string | null;
-            error?: components["schemas"]["JobError"] | null;
+            error?: components["schemas"]["JobError-Input"] | null;
             /** Id */
             id: string;
             /** Label */
@@ -16868,9 +17166,9 @@ export interface components {
             output_refs?: {
                 [key: string]: unknown;
             }[];
-            progress?: components["schemas"]["JobProgress"];
+            progress?: components["schemas"]["JobProgress-Input"];
             resource_class: components["schemas"]["ResourceClass"];
-            retry?: components["schemas"]["RetryState"];
+            retry?: components["schemas"]["RetryState-Input"];
             /** Started At */
             started_at?: string | null;
             /** @default queued */
@@ -16953,7 +17251,7 @@ export interface components {
         /** LegacySessionListResponse */
         LegacySessionListResponse: {
             /** Sessions */
-            sessions?: components["schemas"]["LegacySessionListItem"][];
+            sessions: components["schemas"]["LegacySessionListItem"][];
             /**
              * Success
              * @default true
@@ -16989,7 +17287,7 @@ export interface components {
         };
         /** Live2DAvatarActionResponse */
         Live2DAvatarActionResponse: {
-            avatar_pack?: components["schemas"]["CharacterAvatarPack"] | null;
+            avatar_pack: components["schemas"]["CharacterAvatarPack"] | null;
             /** Character Id */
             character_id: string;
             /**
@@ -17067,7 +17365,7 @@ export interface components {
             /** Resolved At */
             resolved_at: string;
             /** Voice Error */
-            voice_error?: string | null;
+            voice_error: string | null;
             /** Voice Resolved */
             voice_resolved: boolean;
         };
@@ -17169,6 +17467,49 @@ export interface components {
             /** Browser Version */
             browser_version: string;
             /** Calibration Version */
+            calibration_version: string | null;
+            /**
+             * Character Id
+             * @default system-assistant
+             */
+            character_id: string;
+            /**
+             * Configured Duplex Mode
+             * @default automatic
+             */
+            configured_duplex_mode: string;
+            /** Exact Commit Sha */
+            exact_commit_sha: string;
+            /** Input Device Hash */
+            input_device_hash: string;
+            /** Os Version */
+            os_version: string;
+            /** Output Device Hash */
+            output_device_hash: string;
+            /**
+             * Presence Preset
+             * @default natural
+             */
+            presence_preset: string;
+            /**
+             * Profile Version
+             * @default 1
+             */
+            profile_version: number;
+            /**
+             * Resolved Duplex Mode
+             * @default half_duplex
+             */
+            resolved_duplex_mode: string;
+        };
+        /**
+         * LiveChatEvidenceMetadata
+         * @description Runtime identity without transcript, prompt, memory, or audio content.
+         */
+        "LiveChatEvidenceMetadata-Input": {
+            /** Browser Version */
+            browser_version: string;
+            /** Calibration Version */
             calibration_version?: string | null;
             /**
              * Character Id
@@ -17255,7 +17596,7 @@ export interface components {
         LiveChatReleaseGateEvaluationRequest: {
             /** Events */
             events: components["schemas"]["LiveChatEvidenceEvent"][];
-            metadata: components["schemas"]["LiveChatEvidenceMetadata"];
+            metadata: components["schemas"]["LiveChatEvidenceMetadata-Input"];
             thresholds?: components["schemas"]["LiveChatReleaseThresholds"];
         };
         /** LiveChatReleaseGateReport */
@@ -17270,7 +17611,7 @@ export interface components {
             insufficient: string[];
             metadata: components["schemas"]["LiveChatEvidenceMetadata"];
             /** Metadata Records */
-            metadata_records?: components["schemas"]["LiveChatEvidenceMetadata"][];
+            metadata_records: components["schemas"]["LiveChatEvidenceMetadata"][];
             /** Metrics */
             metrics: components["schemas"]["LiveChatMetricResult"][];
             /** Missing Scenarios */
@@ -17443,7 +17784,7 @@ export interface components {
         /** LiveConversationProfileEnvelope */
         LiveConversationProfileEnvelope: {
             effective: components["schemas"]["LiveConversationProfile"];
-            session_override?: components["schemas"]["LiveConversationProfile"] | null;
+            session_override: components["schemas"]["LiveConversationProfile"] | null;
             /**
              * Source
              * @enum {string}
@@ -17525,7 +17866,7 @@ export interface components {
              * @enum {string}
              */
             retention: "ephemeral_session" | "visible_transcript" | "durable_conversation";
-            security?: components["schemas"]["LiveMaterialSecurityPolicy"];
+            security: components["schemas"]["LiveMaterialSecurityPolicy"];
             /** Segment Id */
             segment_id: string;
             /** Task Contract Id */
@@ -17647,7 +17988,7 @@ export interface components {
              * @enum {string}
              */
             retention: "ephemeral_session" | "visible_transcript" | "durable_conversation";
-            security?: components["schemas"]["LiveMaterialSecurityPolicy"];
+            security: components["schemas"]["LiveMaterialSecurityPolicy"];
             /** Session Id */
             session_id: string;
             /** Summary Chars */
@@ -17756,7 +18097,7 @@ export interface components {
              */
             cue_id: "mhm" | "hmm" | "inhale" | "amused_exhale";
             /** Sample Rate */
-            sample_rate?: number | null;
+            sample_rate: number | null;
             /** Sha256 */
             sha256: string;
             /** Size Bytes */
@@ -17769,7 +18110,7 @@ export interface components {
         /** LiveVoiceCueManifest */
         LiveVoiceCueManifest: {
             /** Assets */
-            assets?: components["schemas"]["LiveVoiceCueAsset"][];
+            assets: components["schemas"]["LiveVoiceCueAsset"][];
             /** Available */
             available: boolean;
             /**
@@ -17809,7 +18150,7 @@ export interface components {
             /** Name */
             name: string;
             /** Observed */
-            observed?: number | null;
+            observed: number | null;
             /** Samples */
             samples: number;
             /**
@@ -17856,22 +18197,22 @@ export interface components {
         /** LiveVoiceReleaseGateReport */
         LiveVoiceReleaseGateReport: {
             /** Failures */
-            failures?: string[];
+            failures: string[];
             /** Generated At */
             generated_at: string;
             /** Insufficient */
-            insufficient?: string[];
+            insufficient: string[];
             /** Metrics */
-            metrics?: components["schemas"]["LiveVoiceMetricResult"][];
+            metrics: components["schemas"]["LiveVoiceMetricResult"][];
             /** Missing Scenarios */
-            missing_scenarios?: string[];
+            missing_scenarios: string[];
             /**
              * Records Scanned
              * @default 0
              */
             records_scanned: number;
             /** Scenarios */
-            scenarios?: string[];
+            scenarios: string[];
             /**
              * Status
              * @enum {string}
@@ -17883,7 +18224,7 @@ export interface components {
              */
             traces: number;
             /** Window Start */
-            window_start?: string | null;
+            window_start: string | null;
         };
         /** LiveVoiceReleaseThresholds */
         LiveVoiceReleaseThresholds: {
@@ -17968,9 +18309,9 @@ export interface components {
              */
             cancelled: boolean;
             /** Name */
-            name?: string | null;
+            name: string | null;
             /** Path */
-            path?: string | null;
+            path: string | null;
         };
         /** LoreDiscoveryRequest */
         LoreDiscoveryRequest: {
@@ -18205,14 +18546,14 @@ export interface components {
             /** Provider */
             provider: string;
             /** Provider Event Id */
-            provider_event_id?: string | null;
+            provider_event_id: string | null;
             /** Provider Sequence */
-            provider_sequence?: number | null;
+            provider_sequence: number | null;
             /**
              * Received At
              * Format: date-time
              */
-            received_at?: string;
+            received_at: string;
             /**
              * Session
              * @default regular
@@ -18256,7 +18597,7 @@ export interface components {
             /** Interval */
             interval: string;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Metric */
@@ -18282,11 +18623,11 @@ export interface components {
              */
             kind: "line" | "histogram";
             /** Points */
-            points?: components["schemas"]["MarketMetricPoint"][];
+            points: components["schemas"]["MarketMetricPoint"][];
             /** Title */
             title: string;
             /** Unit */
-            unit?: string | null;
+            unit: string | null;
         };
         /** MarketResearchRequest */
         MarketResearchRequest: {
@@ -18394,7 +18735,7 @@ export interface components {
         /** MemoryExportResponse */
         MemoryExportResponse: {
             /** Candidates */
-            candidates?: components["schemas"]["app__memory_contracts__MemoryCandidate"][];
+            candidates: components["schemas"]["app__memory_contracts__MemoryCandidate"][];
             /** Exported At */
             exported_at: string;
             /** Owner Id */
@@ -18402,7 +18743,7 @@ export interface components {
             /** Owner Type */
             owner_type: string;
             /** Records */
-            records?: components["schemas"]["MemoryRecord"][];
+            records: components["schemas"]["MemoryRecord"][];
         };
         /** MemoryListResponse */
         MemoryListResponse: {
@@ -18431,11 +18772,11 @@ export interface components {
             /** Content */
             content: string;
             /** Contradiction Group */
-            contradiction_group?: string | null;
+            contradiction_group: string | null;
             /** Created At */
             created_at: string;
             /** Expires At */
-            expires_at?: string | null;
+            expires_at: string | null;
             /** Id */
             id: string;
             /**
@@ -18463,7 +18804,7 @@ export interface components {
              */
             pinned: boolean;
             /** Provenance Id */
-            provenance_id?: string | null;
+            provenance_id: string | null;
             /**
              * Provenance Type
              * @enum {string}
@@ -18499,11 +18840,11 @@ export interface components {
              */
             status: "active" | "superseded" | "archived";
             /** Structured Payload */
-            structured_payload?: {
+            structured_payload: {
                 [key: string]: unknown;
             };
             /** Supersedes Memory Id */
-            supersedes_memory_id?: string | null;
+            supersedes_memory_id: string | null;
             /**
              * Trust Level
              * @default user_approved
@@ -18541,9 +18882,9 @@ export interface components {
             /** Invalidated Count */
             invalidated_count: number;
             /** Items */
-            items?: components["schemas"]["MemorySnapshotViewItem"][];
+            items: components["schemas"]["MemorySnapshotViewItem"][];
             /** Refreshed At */
-            refreshed_at?: string | null;
+            refreshed_at: string | null;
             /** Revision */
             revision: number;
             /** Session Id */
@@ -18560,7 +18901,7 @@ export interface components {
             /** Content */
             content: string;
             /** Invalidation Reason */
-            invalidation_reason?: string | null;
+            invalidation_reason: string | null;
             /** Memory Record Id */
             memory_record_id: string;
             /** Record Revision */
@@ -18601,26 +18942,55 @@ export interface components {
             /** Model Id */
             model_id: string;
             /** Parameters */
-            parameters?: {
+            parameters: {
                 [key: string]: unknown;
             };
             /** Provider Id */
             provider_id: string;
             /** Reasoning Effort */
-            reasoning_effort?: string | null;
+            reasoning_effort: string | null;
         };
         /** ModelResidencyDiagnostics */
         ModelResidencyDiagnostics: {
             policy: components["schemas"]["GpuResidencyPolicy"];
             /** Records */
-            records?: components["schemas"]["ModelResidencyRecord"][];
+            records: components["schemas"]["ModelResidencyRecord"][];
             /** Status */
             status: string;
             /** Warnings */
-            warnings?: string[];
+            warnings: string[];
         };
         /** ModelResidencyRecord */
         ModelResidencyRecord: {
+            /** Compatibility Group */
+            compatibility_group: string | null;
+            /** Error */
+            error: string | null;
+            /** Estimated Vram Mb */
+            estimated_vram_mb: number | null;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Model Name
+             * @default
+             */
+            model_name: string;
+            /** Module */
+            module: string;
+            /** Provider Id */
+            provider_id: string;
+            resource_class: components["schemas"]["ResourceClass"];
+            /** @default unloaded */
+            status: components["schemas"]["ModelResidencyStatus"];
+            /** Worker Endpoint */
+            worker_endpoint: string | null;
+            /** Worker Id */
+            worker_id: string | null;
+        };
+        /** ModelResidencyRecord */
+        "ModelResidencyRecord-Input": {
             /** Compatibility Group */
             compatibility_group?: string | null;
             /** Error */
@@ -18668,13 +19038,13 @@ export interface components {
              */
             location: "local" | "remote" | "unknown";
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Provider Id */
             provider_id: string;
             /** Vram Hint Mb */
-            vram_hint_mb?: number | null;
+            vram_hint_mb: number | null;
         };
         /** MoveManagedMemoryRequest */
         MoveManagedMemoryRequest: {
@@ -18719,6 +19089,29 @@ export interface components {
         };
         /** NonverbalEligibility */
         NonverbalEligibility: {
+            /**
+             * Acknowledgement
+             * @default false
+             */
+            acknowledgement: boolean;
+            /**
+             * Amused Exhale
+             * @default false
+             */
+            amused_exhale: boolean;
+            /**
+             * Breath
+             * @default false
+             */
+            breath: boolean;
+            /**
+             * Sigh
+             * @default false
+             */
+            sigh: boolean;
+        };
+        /** NonverbalEligibility */
+        "NonverbalEligibility-Input": {
             /**
              * Acknowledgement
              * @default false
@@ -18819,7 +19212,7 @@ export interface components {
         /** OmnixRouteDecision */
         OmnixRouteDecision: {
             /** Capability Id */
-            capability_id?: string | null;
+            capability_id: string | null;
             /** Confidence */
             confidence: number;
             /**
@@ -18840,7 +19233,7 @@ export interface components {
             /** Reason */
             reason: string;
             /** Workflow Id */
-            workflow_id?: string | null;
+            workflow_id: string | null;
         };
         /** OpenLoopEffect */
         OpenLoopEffect: {
@@ -18860,11 +19253,11 @@ export interface components {
         /** OperationalPremarketState */
         OperationalPremarketState: {
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /** Coverage Ratio */
-            coverage_ratio?: string | null;
+            coverage_ratio: string | null;
             /** Dataset Fingerprint */
-            dataset_fingerprint?: string | null;
+            dataset_fingerprint: string | null;
             evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
             /** Instrument Id */
             instrument_id: string;
@@ -18874,7 +19267,7 @@ export interface components {
              */
             late_window_bar_count: number;
             /** Latest Bar Lag Seconds */
-            latest_bar_lag_seconds?: number | null;
+            latest_bar_lag_seconds: number | null;
             market_state: components["schemas"]["PremarketMarketStateSnapshot"];
             /** Raw Bar Count */
             raw_bar_count: number;
@@ -19014,7 +19407,7 @@ export interface components {
             /** Commission Bps */
             commission_bps: string;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /**
              * Enabled
              * @default true
@@ -19028,7 +19421,7 @@ export interface components {
              */
             revision: number;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** PaperAccountCreate */
         PaperAccountCreate: {
@@ -19081,7 +19474,7 @@ export interface components {
             /** Open Orders */
             open_orders: components["schemas"]["PaperOrder-Output"][];
             /** Order History */
-            order_history?: components["schemas"]["PaperOrder-Output"][];
+            order_history: components["schemas"]["PaperOrder-Output"][];
             /** Positions */
             positions: components["schemas"]["PaperPosition-Output"][];
             /** Recent Fills */
@@ -19099,48 +19492,48 @@ export interface components {
              */
             archived_strategy_count: number;
             /** Daily R */
-            daily_r?: components["schemas"]["PaperDailyR"][];
+            daily_r: components["schemas"]["PaperDailyR"][];
             /** Drawdown */
-            drawdown?: components["schemas"]["PaperDrawdownPoint"][];
+            drawdown: components["schemas"]["PaperDrawdownPoint"][];
             /** End Date */
-            end_date?: string | null;
+            end_date: string | null;
             /** Epoch Id */
-            epoch_id?: string | null;
+            epoch_id: string | null;
             /** Epochs */
-            epochs?: components["schemas"]["PaperSimulationEpoch"][];
+            epochs: components["schemas"]["PaperSimulationEpoch"][];
             /** Equity */
-            equity?: components["schemas"]["PaperEquityPoint"][];
-            execution?: components["schemas"]["PaperExecutionSummary"];
+            equity: components["schemas"]["PaperEquityPoint"][];
+            execution: components["schemas"]["PaperExecutionSummary"];
             /** Factors */
-            factors?: components["schemas"]["PaperFactorStudy"][];
+            factors: components["schemas"]["PaperFactorStudy"][];
             /** Funnel */
-            funnel?: components["schemas"]["PaperFunnelStage"][];
+            funnel: components["schemas"]["PaperFunnelStage"][];
             /** Mae Mfe */
-            mae_mfe?: components["schemas"]["PaperMaeMfePoint"][];
+            mae_mfe: components["schemas"]["PaperMaeMfePoint"][];
             /**
              * Mode
              * @default shadow
              * @enum {string}
              */
             mode: "all" | "shadow" | "auto_paper";
-            mode_comparison?: components["schemas"]["PaperModeComparison"];
-            qualification?: components["schemas"]["V2ProspectiveQualification"] | null;
+            mode_comparison: components["schemas"]["PaperModeComparison"];
+            qualification: components["schemas"]["V2ProspectiveQualification"] | null;
             /** R Distribution */
-            r_distribution?: components["schemas"]["PaperRDistributionBucket"][];
+            r_distribution: components["schemas"]["PaperRDistributionBucket"][];
             /** Recent Trades */
-            recent_trades?: components["schemas"]["PaperAnalyticsTrade"][];
+            recent_trades: components["schemas"]["PaperAnalyticsTrade"][];
             /** Rolling Expectancy */
-            rolling_expectancy?: components["schemas"]["PaperRollingExpectancyPoint"][];
+            rolling_expectancy: components["schemas"]["PaperRollingExpectancyPoint"][];
             /**
              * Rolling Window
              * @default 20
              */
             rolling_window: number;
             /** Start Date */
-            start_date?: string | null;
+            start_date: string | null;
             /** Strategy Id */
-            strategy_id?: string | null;
-            summary?: components["schemas"]["PaperPerformanceSummary"];
+            strategy_id: string | null;
+            summary: components["schemas"]["PaperPerformanceSummary"];
         };
         /** PaperAnalyticsTrade */
         PaperAnalyticsTrade: {
@@ -19150,47 +19543,47 @@ export interface components {
              */
             entry_time: string;
             /** Epoch Id */
-            epoch_id?: string | null;
+            epoch_id: string | null;
             /** Exit Reason */
-            exit_reason?: string | null;
+            exit_reason: string | null;
             /**
              * Exit Time
              * Format: date-time
              */
             exit_time: string;
             /** Fill Slippage Bps */
-            fill_slippage_bps?: string | null;
+            fill_slippage_bps: string | null;
             /** Implementation Shortfall Bps */
-            implementation_shortfall_bps?: string | null;
+            implementation_shortfall_bps: string | null;
             /** Initial Stop */
-            initial_stop?: string | null;
+            initial_stop: string | null;
             /** Initial Target */
-            initial_target?: string | null;
+            initial_target: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Mae R */
-            mae_r?: string | null;
+            mae_r: string | null;
             /** Mfe R */
-            mfe_r?: string | null;
+            mfe_r: string | null;
             /** Profile Fingerprint */
-            profile_fingerprint?: string | null;
+            profile_fingerprint: string | null;
             /** Quantity */
-            quantity?: string | null;
+            quantity: string | null;
             /** R Result */
             r_result: string;
             /** Realized Pnl */
-            realized_pnl?: string | null;
+            realized_pnl: string | null;
             /**
              * Session Date
              * Format: date
              */
             session_date: string;
             /** Setup Features */
-            setup_features?: {
+            setup_features: {
                 [key: string]: unknown;
             };
             /** Signal To Executable Bps */
-            signal_to_executable_bps?: string | null;
+            signal_to_executable_bps: string | null;
             /**
              * Source
              * @enum {string}
@@ -19199,11 +19592,11 @@ export interface components {
             /** Strategy Id */
             strategy_id: string;
             /** Strategy Version */
-            strategy_version?: string | null;
+            strategy_version: string | null;
             /** Trade Id */
             trade_id: string;
             /** Universe Id */
-            universe_id?: string | null;
+            universe_id: string | null;
         };
         /** PaperBalance */
         "PaperBalance-Input": {
@@ -19333,11 +19726,11 @@ export interface components {
         /** PaperExecutionSummary */
         PaperExecutionSummary: {
             /** Average Fill Slippage Bps */
-            average_fill_slippage_bps?: string | null;
+            average_fill_slippage_bps: string | null;
             /** Average Implementation Shortfall Bps */
-            average_implementation_shortfall_bps?: string | null;
+            average_implementation_shortfall_bps: string | null;
             /** Average Signal To Executable Bps */
-            average_signal_to_executable_bps?: string | null;
+            average_signal_to_executable_bps: string | null;
             /**
              * Trade Count
              * @default 0
@@ -19434,7 +19827,7 @@ export interface components {
         /** PaperFunnelStage */
         PaperFunnelStage: {
             /** Conversion From Previous */
-            conversion_from_previous?: string | null;
+            conversion_from_previous: string | null;
             /** Count */
             count: number;
             /**
@@ -19443,7 +19836,7 @@ export interface components {
              */
             dominant_drop_count: number;
             /** Dominant Drop Reason */
-            dominant_drop_reason?: string | null;
+            dominant_drop_reason: string | null;
             /** Stage */
             stage: string;
         };
@@ -19478,7 +19871,7 @@ export interface components {
             /** Amount */
             amount: string;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /** Currency */
             currency: string;
             /**
@@ -19487,22 +19880,22 @@ export interface components {
              */
             entry_type: "deposit" | "withdrawal" | "trade_cash" | "commission" | "realized_pnl";
             /** Fill Id */
-            fill_id?: string | null;
+            fill_id: string | null;
             /** Idempotency Key */
             idempotency_key: string;
             /** Ledger Id */
             ledger_id: string;
             /** Order Id */
-            order_id?: string | null;
+            order_id: string | null;
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
         };
         /** PaperMaeMfePoint */
         PaperMaeMfePoint: {
             /** Exit Reason */
-            exit_reason?: string | null;
+            exit_reason: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Mae R */
@@ -19512,7 +19905,7 @@ export interface components {
             /** R Result */
             r_result: string;
             /** Risk Dollars */
-            risk_dollars?: string | null;
+            risk_dollars: string | null;
             /**
              * Session Date
              * Format: date
@@ -19582,10 +19975,10 @@ export interface components {
         };
         /** PaperModeComparison */
         PaperModeComparison: {
-            auto_paper?: components["schemas"]["PaperPerformanceSummary"];
+            auto_paper: components["schemas"]["PaperPerformanceSummary"];
             /** Expectancy Delta R */
-            expectancy_delta_r?: string | null;
-            shadow?: components["schemas"]["PaperPerformanceSummary"];
+            expectancy_delta_r: string | null;
+            shadow: components["schemas"]["PaperPerformanceSummary"];
         };
         /** PaperOrder */
         "PaperOrder-Input": {
@@ -19647,11 +20040,11 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** Average Fill Price */
-            average_fill_price?: string | null;
+            average_fill_price: string | null;
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /**
              * Filled Quantity
              * @default 0
@@ -19662,7 +20055,7 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Limit Price */
-            limit_price?: string | null;
+            limit_price: string | null;
             /** Order Id */
             order_id: string;
             /**
@@ -19673,9 +20066,9 @@ export interface components {
             /** Quantity */
             quantity: string;
             /** Reference Price */
-            reference_price?: string | null;
+            reference_price: string | null;
             /** Rejection Reason */
-            rejection_reason?: string | null;
+            rejection_reason: string | null;
             /**
              * Reserved Cash
              * @default 0
@@ -19693,9 +20086,9 @@ export interface components {
              */
             status: "open" | "filled" | "cancelled" | "rejected";
             /** Stop Price */
-            stop_price?: string | null;
+            stop_price: string | null;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** PaperOrderReplaceRequest */
         PaperOrderReplaceRequest: {
@@ -19738,20 +20131,20 @@ export interface components {
         /** PaperPerformanceSummary */
         PaperPerformanceSummary: {
             /** Average Mae R */
-            average_mae_r?: string | null;
+            average_mae_r: string | null;
             /** Average Mfe R */
-            average_mfe_r?: string | null;
+            average_mfe_r: string | null;
             /** Expectancy R */
-            expectancy_r?: string | null;
+            expectancy_r: string | null;
             /**
              * Losses
              * @default 0
              */
             losses: number;
             /** Max Drawdown R */
-            max_drawdown_r?: string | null;
+            max_drawdown_r: string | null;
             /** Profit Factor */
-            profit_factor?: string | null;
+            profit_factor: string | null;
             /**
              * Total R
              * @default 0
@@ -19763,7 +20156,7 @@ export interface components {
              */
             trade_count: number;
             /** Win Rate */
-            win_rate?: string | null;
+            win_rate: string | null;
             /**
              * Wins
              * @default 0
@@ -19800,7 +20193,7 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Last Price */
-            last_price?: string | null;
+            last_price: string | null;
             /** Quantity */
             quantity: string;
             /** Realized Pnl */
@@ -19821,7 +20214,7 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /**
              * Binding Purpose
              * @default EXECUTION
@@ -19829,11 +20222,11 @@ export interface components {
              */
             binding_purpose: "LIVE_DATA" | "EXECUTION" | "REPLAY" | "RESEARCH";
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /** Entry Order Id */
-            entry_order_id?: string | null;
+            entry_order_id: string | null;
             /** Exit Order Id */
-            exit_order_id?: string | null;
+            exit_order_id: string | null;
             /** Instrument Id */
             instrument_id: string;
             /**
@@ -19847,13 +20240,13 @@ export interface components {
              */
             status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled" | "quarantined";
             /** Stop Loss */
-            stop_loss?: string | null;
+            stop_loss: string | null;
             /** Take Profit */
-            take_profit?: string | null;
+            take_profit: string | null;
             /** Trigger Reason */
-            trigger_reason?: string | null;
+            trigger_reason: string | null;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** PaperProtectionListResponse */
         PaperProtectionListResponse: {
@@ -19883,9 +20276,9 @@ export interface components {
             /** Label */
             label: string;
             /** Maximum R */
-            maximum_r?: string | null;
+            maximum_r: string | null;
             /** Minimum R */
-            minimum_r?: string | null;
+            minimum_r: string | null;
         };
         /** PaperResetRequest */
         PaperResetRequest: {
@@ -19999,9 +20392,9 @@ export interface components {
              */
             freshness_mode: string;
             /** Limiting Reason Code */
-            limiting_reason_code?: string | null;
+            limiting_reason_code: string | null;
             /** Observation Age Seconds */
-            observation_age_seconds?: string | null;
+            observation_age_seconds: string | null;
             /** Policy Version */
             policy_version: string;
             /** Reason Codes */
@@ -20012,7 +20405,7 @@ export interface components {
              */
             recommended_quantity: string;
             /** Spread Bps */
-            spread_bps?: string | null;
+            spread_bps: string | null;
             /**
              * Unprotected Exposure Count
              * @default 0
@@ -20045,7 +20438,7 @@ export interface components {
              */
             observed_at: string;
             /** One Sided 90 Lcb R */
-            one_sided_90_lcb_r?: string | null;
+            one_sided_90_lcb_r: string | null;
             /** Sample Size */
             sample_size: number;
         };
@@ -20054,9 +20447,9 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** End Reason */
-            end_reason?: string | null;
+            end_reason: string | null;
             /** Ended At */
-            ended_at?: string | null;
+            ended_at: string | null;
             /** Epoch Id */
             epoch_id: string;
             /** Initial Cash */
@@ -20079,17 +20472,17 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** Automatic Observations */
-            automatic_observations?: string[];
+            automatic_observations: string[];
             /** Average Entry Price */
             average_entry_price: string;
             /** Average Exit Price */
             average_exit_price: string;
             /** Entry Fill Ids */
-            entry_fill_ids?: string[];
+            entry_fill_ids: string[];
             /** Entry Order Id */
             entry_order_id: string;
             /** Entry Signal Event Id */
-            entry_signal_event_id?: string | null;
+            entry_signal_event_id: string | null;
             /**
              * Entry Time
              * Format: date-time
@@ -20098,90 +20491,90 @@ export interface components {
             /** Epoch Id */
             epoch_id: string;
             /** Events */
-            events?: components["schemas"]["PaperTradeJournalEvent"][];
+            events: components["schemas"]["PaperTradeJournalEvent"][];
             /** Execution Features */
-            execution_features?: {
+            execution_features: {
                 [key: string]: unknown;
             };
             /** Exit Fill Ids */
-            exit_fill_ids?: string[];
+            exit_fill_ids: string[];
             /** Exit Order Id */
             exit_order_id: string;
             /** Exit Reason */
-            exit_reason?: string | null;
+            exit_reason: string | null;
             /**
              * Exit Time
              * Format: date-time
              */
             exit_time: string;
             /** Fill Slippage Bps */
-            fill_slippage_bps?: string | null;
+            fill_slippage_bps: string | null;
             /** Holding Seconds */
             holding_seconds: number;
             /** Implementation Shortfall Bps */
-            implementation_shortfall_bps?: string | null;
+            implementation_shortfall_bps: string | null;
             /** Initial Risk Dollars */
-            initial_risk_dollars?: string | null;
+            initial_risk_dollars: string | null;
             /** Initial Stop */
-            initial_stop?: string | null;
+            initial_stop: string | null;
             /** Initial Target */
-            initial_target?: string | null;
+            initial_target: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Lifecycle State */
             lifecycle_state: string;
             /** Mae R */
-            mae_r?: string | null;
+            mae_r: string | null;
             /** Mfe R */
-            mfe_r?: string | null;
+            mfe_r: string | null;
             /**
              * Outcome
              * @enum {string}
              */
             outcome: "win" | "loss" | "flat";
             /** Profile Fingerprint */
-            profile_fingerprint?: string | null;
+            profile_fingerprint: string | null;
             /** Protection Id */
-            protection_id?: string | null;
+            protection_id: string | null;
             /** Quantity */
             quantity: string;
             /** R Result */
-            r_result?: string | null;
+            r_result: string | null;
             /** Realized Pnl */
             realized_pnl: string;
             /** Review State */
             review_state: string;
             /** Risk Decision Id */
-            risk_decision_id?: string | null;
+            risk_decision_id: string | null;
             /**
              * Session Date
              * Format: date
              */
             session_date: string;
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /** Setup Features */
-            setup_features?: {
+            setup_features: {
                 [key: string]: unknown;
             };
             /** Setup Id */
-            setup_id?: string | null;
+            setup_id: string | null;
             /** Signal To Executable Bps */
-            signal_to_executable_bps?: string | null;
+            signal_to_executable_bps: string | null;
             /** Strategy Id */
             strategy_id: string;
             /** Strategy Revision */
-            strategy_revision?: number | null;
+            strategy_revision: number | null;
             /** Strategy Run Id */
-            strategy_run_id?: string | null;
+            strategy_run_id: string | null;
             /** Strategy Version */
-            strategy_version?: string | null;
+            strategy_version: string | null;
             /** Trade Id */
             trade_id: string;
             /** Trade Intent Id */
-            trade_intent_id?: string | null;
+            trade_intent_id: string | null;
             /** Universe Id */
-            universe_id?: string | null;
+            universe_id: string | null;
         };
         /** PaperTradeJournalEvent */
         PaperTradeJournalEvent: {
@@ -20195,9 +20588,9 @@ export interface components {
              */
             observed_at: string;
             /** Reason Code */
-            reason_code?: string | null;
+            reason_code: string | null;
             /** Run Id */
-            run_id?: string | null;
+            run_id: string | null;
             /** State */
             state: string;
         };
@@ -20206,24 +20599,24 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** End Date */
-            end_date?: string | null;
+            end_date: string | null;
             /** Entries */
-            entries?: components["schemas"]["PaperTradeJournalEntry"][];
+            entries: components["schemas"]["PaperTradeJournalEntry"][];
             /** Epoch Id */
-            epoch_id?: string | null;
+            epoch_id: string | null;
             /** Start Date */
-            start_date?: string | null;
+            start_date: string | null;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
         };
         /** PersistenceInventory */
         PersistenceInventory: {
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: unknown;
             }[];
             /** Sessions */
-            sessions?: {
+            sessions: {
                 [key: string]: unknown;
             }[];
         };
@@ -20559,11 +20952,11 @@ export interface components {
             /** Available To Live Forecaster */
             available_to_live_forecaster: boolean;
             /** Event At */
-            event_at?: string | null;
+            event_at: string | null;
             /** Freshness Seconds */
-            freshness_seconds?: number | null;
+            freshness_seconds: number | null;
             /** Ingested At */
-            ingested_at?: string | null;
+            ingested_at: string | null;
             /**
              * Ingestion Time Basis
              * @default provider_receipt
@@ -20573,22 +20966,22 @@ export interface components {
             /** Name */
             name: string;
             /** Observed At */
-            observed_at?: string | null;
+            observed_at: string | null;
             /** Provenance Fingerprint */
-            provenance_fingerprint?: string | null;
+            provenance_fingerprint: string | null;
             /**
              * Quality
              * @enum {string}
              */
             quality: "GOOD" | "STALE" | "RECOVERED" | "MISSING" | "CONFLICT" | "PROXY";
             /** Recovered At */
-            recovered_at?: string | null;
+            recovered_at: string | null;
             /** Source */
             source: string;
             /** Unit */
-            unit?: string | null;
+            unit: string | null;
             /** Value */
-            value?: string | null;
+            value: string | null;
         };
         /** PremarketFreezeRequest */
         PremarketFreezeRequest: {
@@ -20664,14 +21057,14 @@ export interface components {
             market_state: components["schemas"]["OperationalPremarketState"];
             v3_forecast: components["schemas"]["FrozenForecast-Output"];
             /** V42 Failure Reason */
-            v42_failure_reason?: string | null;
-            v42_forecast?: components["schemas"]["V42Forecast"] | null;
+            v42_failure_reason: string | null;
+            v42_forecast: components["schemas"]["V42Forecast"] | null;
             /** V43 Failure Reason */
-            v43_failure_reason?: string | null;
-            v43_forecast?: components["schemas"]["V43Forecast"] | null;
+            v43_failure_reason: string | null;
+            v43_forecast: components["schemas"]["V43Forecast"] | null;
             /** V4 Failure Reason */
-            v4_failure_reason?: string | null;
-            v4_forecast?: components["schemas"]["FrozenForecastV4"] | null;
+            v4_failure_reason: string | null;
+            v4_forecast: components["schemas"]["FrozenForecastV4"] | null;
         };
         /** PremarketLiquidityEvidence */
         "PremarketLiquidityEvidence-Input": {
@@ -20740,7 +21133,7 @@ export interface components {
              */
             consolidated_volume_authority: false;
             /** Coverage Ratio */
-            coverage_ratio?: string | null;
+            coverage_ratio: string | null;
             /** Current Premarket Dollar Volume */
             current_premarket_dollar_volume: string;
             /** Current Premarket Volume */
@@ -20771,9 +21164,9 @@ export interface components {
              */
             reason_codes: string[];
             /** Tod Rvol */
-            tod_rvol?: string | null;
+            tod_rvol: string | null;
             /** Tod Rvol Denominator Mean */
-            tod_rvol_denominator_mean?: string | null;
+            tod_rvol_denominator_mean: string | null;
             /** Tod Rvol Numerator */
             tod_rvol_numerator: string;
             /**
@@ -20783,7 +21176,7 @@ export interface components {
              */
             volume_authority: "provider_relative" | "consolidated" | "unknown";
             /** Volume Basis */
-            volume_basis?: string | null;
+            volume_basis: string | null;
         };
         /** PremarketMarketStateSnapshot */
         PremarketMarketStateSnapshot: {
@@ -20978,7 +21371,7 @@ export interface components {
         /** PronunciationListResponse */
         PronunciationListResponse: {
             /** Entries */
-            entries?: components["schemas"]["PronunciationEntry"][];
+            entries: components["schemas"]["PronunciationEntry"][];
             /** Session Id */
             session_id: string;
         };
@@ -21027,9 +21420,9 @@ export interface components {
              */
             distinct_symbols: number;
             /** Execution Match Rate */
-            execution_match_rate?: string | null;
+            execution_match_rate: string | null;
             /** Expectancy R */
-            expectancy_r?: string | null;
+            expectancy_r: string | null;
             /**
              * Matched Outcome Count
              * @default 0
@@ -21041,9 +21434,9 @@ export interface components {
              */
             matched_signal_count: number;
             /** Max Drawdown R */
-            max_drawdown_r?: string | null;
+            max_drawdown_r: string | null;
             /** One Sided 90 Lcb R */
-            one_sided_90_lcb_r?: string | null;
+            one_sided_90_lcb_r: string | null;
             /**
              * Signal Count
              * @default 0
@@ -21055,7 +21448,7 @@ export interface components {
              */
             win_count: number;
             /** Win Rate */
-            win_rate?: string | null;
+            win_rate: string | null;
         };
         /** ProspectiveEconomicStatus */
         ProspectiveEconomicStatus: {
@@ -21070,7 +21463,7 @@ export interface components {
              */
             auto_paper_reviewed: boolean;
             /** Evaluation Event Id */
-            evaluation_event_id?: string | null;
+            evaluation_event_id: string | null;
             /**
              * Evaluation Passed
              * @default false
@@ -21084,7 +21477,7 @@ export interface components {
             /** Evidence Fingerprint */
             evidence_fingerprint: string;
             /** Holdout Event Id */
-            holdout_event_id?: string | null;
+            holdout_event_id: string | null;
             /**
              * Holdout Reviewed
              * @default false
@@ -21126,7 +21519,7 @@ export interface components {
              * @default false
              */
             sealed_holdout_unlocked: boolean;
-            soak_metrics?: components["schemas"]["ProspectiveEconomicMetrics"];
+            soak_metrics: components["schemas"]["ProspectiveEconomicMetrics"];
             /**
              * Soak Passed
              * @default false
@@ -21134,7 +21527,7 @@ export interface components {
             soak_passed: boolean;
             /** Strategy Id */
             strategy_id: string;
-            thresholds?: components["schemas"]["ProspectiveEconomicThresholds"];
+            thresholds: components["schemas"]["ProspectiveEconomicThresholds"];
         };
         /** ProspectiveEconomicThresholds */
         ProspectiveEconomicThresholds: {
@@ -21323,7 +21716,7 @@ export interface components {
             policy: components["schemas"]["ProviderPolicy"];
             /** Provider */
             provider: string;
-            runtime?: components["schemas"]["ProviderRuntimeStatus"];
+            runtime: components["schemas"]["ProviderRuntimeStatus"];
             /**
              * Status
              * @enum {string}
@@ -21340,7 +21733,7 @@ export interface components {
         /** ProviderModelCacheEntry */
         ProviderModelCacheEntry: {
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: string;
             }[];
             /** Id */
@@ -21351,7 +21744,7 @@ export interface components {
              */
             model_id: string;
             /** Path */
-            path?: string | null;
+            path: string | null;
             /** Provider Id */
             provider_id: string;
             /** Source */
@@ -21365,11 +21758,11 @@ export interface components {
         /** ProviderModelCachePayload */
         ProviderModelCachePayload: {
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: string;
             }[];
             /** Entries */
-            entries?: components["schemas"]["ProviderModelCacheEntry"][];
+            entries: components["schemas"]["ProviderModelCacheEntry"][];
             /** Status */
             status: string;
         };
@@ -21451,7 +21844,7 @@ export interface components {
              */
             circuit_open_count: number;
             /** Circuit Open Until */
-            circuit_open_until?: string | null;
+            circuit_open_until: string | null;
             /**
              * Circuit Suppression Count
              * @default 0
@@ -21473,11 +21866,11 @@ export interface components {
              */
             in_flight: number;
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Last Failure At */
-            last_failure_at?: string | null;
+            last_failure_at: string | null;
             /** Last Success At */
-            last_success_at?: string | null;
+            last_success_at: string | null;
             /**
              * Max Concurrency
              * @default 0
@@ -21525,7 +21918,7 @@ export interface components {
             /** Label */
             label: string;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Source */
@@ -21557,7 +21950,7 @@ export interface components {
         /** RecentAutomaticMemoryResponse */
         RecentAutomaticMemoryResponse: {
             /** Records */
-            records?: components["schemas"]["MemoryRecord"][];
+            records: components["schemas"]["MemoryRecord"][];
             /** Session Id */
             session_id: string;
         };
@@ -21574,7 +21967,7 @@ export interface components {
         /** RenderedPrompt */
         RenderedPrompt: {
             /** Grounding Metadata */
-            grounding_metadata?: {
+            grounding_metadata: {
                 [key: string]: unknown;
             };
             /** Module */
@@ -21587,15 +21980,15 @@ export interface components {
             /** Rendered Text */
             rendered_text: string;
             /** Rendering Metadata */
-            rendering_metadata?: {
+            rendering_metadata: {
                 [key: string]: unknown;
             };
             /** Replay Metadata */
-            replay_metadata?: {
+            replay_metadata: {
                 [key: string]: unknown;
             };
             /** Safety Metadata */
-            safety_metadata?: {
+            safety_metadata: {
                 [key: string]: unknown;
             };
             /** Template Id */
@@ -21667,7 +22060,7 @@ export interface components {
             /** Compatibility Policy */
             compatibility_policy: string;
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: unknown;
             };
             /**
@@ -21699,7 +22092,7 @@ export interface components {
         /** ReportListResponse */
         ReportListResponse: {
             /** Reports */
-            reports?: components["schemas"]["ReportArtifact"][];
+            reports: components["schemas"]["ReportArtifact"][];
         };
         /** RequestModeCandidate */
         RequestModeCandidate: {
@@ -21731,7 +22124,7 @@ export interface components {
              */
             source: "explicit_command" | "turn_setting" | "persistent_setting" | "classifier" | "default";
             /** Suppressed */
-            suppressed?: components["schemas"]["RequestModeCandidate"][];
+            suppressed: components["schemas"]["RequestModeCandidate"][];
         };
         /** RequirementPlanCoverage */
         RequirementPlanCoverage: {
@@ -21747,13 +22140,13 @@ export interface components {
             /** Action Id */
             action_id: string;
             /** Args */
-            args?: {
+            args: {
                 [key: string]: unknown;
             };
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /** Error Code */
-            error_code?: string | null;
+            error_code: string | null;
             /**
              * Evidence Ids
              * @default []
@@ -21764,7 +22157,7 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /**
              * Operation
              * @enum {string}
@@ -21781,7 +22174,7 @@ export interface components {
              */
             requested_at: string;
             /** Result Summary */
-            result_summary?: {
+            result_summary: {
                 [key: string]: unknown;
             };
             /**
@@ -21792,7 +22185,7 @@ export interface components {
             /** Step */
             step: number;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
             /** Trace Id */
             trace_id: string;
         };
@@ -21812,7 +22205,7 @@ export interface components {
         /** ResearchCompatibilityStatus */
         ResearchCompatibilityStatus: {
             /** Alias Counts */
-            alias_counts?: {
+            alias_counts: {
                 [key: string]: number;
             };
             /** Aliases Enabled */
@@ -21823,7 +22216,7 @@ export interface components {
              */
             canonical_field: string;
             /** Sunset */
-            sunset?: string | null;
+            sunset: string | null;
             /**
              * Total Legacy Requests
              * @default 0
@@ -21918,10 +22311,10 @@ export interface components {
              * Format: date-time
              */
             decision_at: string;
-            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            features: components["schemas"]["StrategyResearchFeatures"] | null;
             /** Strategy Version */
             strategy_version: string;
-            validation?: components["schemas"]["ResearchValidationReport"] | null;
+            validation: components["schemas"]["ResearchValidationReport"] | null;
         };
         /** ResearchProviderStatus */
         ResearchProviderStatus: {
@@ -21992,12 +22385,12 @@ export interface components {
             /** Hermes Planner Enabled */
             hermes_planner_enabled: boolean;
             /** Privacy */
-            privacy?: {
+            privacy: {
                 [key: string]: unknown;
             };
             provider: components["schemas"]["ResearchProviderStatus"];
             /** Provider Chain */
-            provider_chain?: components["schemas"]["ResearchProviderStatus"][];
+            provider_chain: components["schemas"]["ResearchProviderStatus"][];
             release: components["schemas"]["ResearchReleaseStatus"];
             retention: components["schemas"]["ResearchRetentionStatus"];
         };
@@ -22026,7 +22419,7 @@ export interface components {
             /** Provider */
             provider: string;
             /** Requested Binding Id */
-            requested_binding_id?: string | null;
+            requested_binding_id: string | null;
             /** Resolved Binding Id */
             resolved_binding_id: string;
         };
@@ -22085,6 +22478,19 @@ export interface components {
             /** Capability */
             capability: string;
             /** Constraints */
+            constraints: {
+                [key: string]: unknown;
+            };
+            /** Resource Id */
+            resource_id: string;
+            /** Resource Type */
+            resource_type: string;
+        };
+        /** ResourceScope */
+        "ResourceScope-Input": {
+            /** Capability */
+            capability: string;
+            /** Constraints */
             constraints?: {
                 [key: string]: unknown;
             };
@@ -22099,15 +22505,15 @@ export interface components {
          */
         RetentionRunDiagnostics: {
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /** Deleted */
-            deleted?: {
+            deleted: {
                 [key: string]: number;
             };
             /** Error Class */
-            error_class?: string | null;
+            error_class: string | null;
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             /** Status */
             status: string;
         };
@@ -22151,6 +22557,24 @@ export interface components {
              * Attempts
              * @default 0
              */
+            attempts: number;
+            /**
+             * Max Attempts
+             * @default 0
+             */
+            max_attempts: number;
+            /**
+             * Policy
+             * @default none
+             */
+            policy: string;
+        };
+        /** RetryState */
+        "RetryState-Input": {
+            /**
+             * Attempts
+             * @default 0
+             */
             attempts?: number;
             /**
              * Max Attempts
@@ -22182,15 +22606,15 @@ export interface components {
              */
             category: string;
             /** Context Paths */
-            context_paths?: string[];
+            context_paths: string[];
             /** File */
-            file?: string | null;
+            file: string | null;
             /** Location */
-            location?: string | null;
+            location: string | null;
             /** Problem */
             problem: string;
             /** Recommended Fix */
-            recommended_fix?: string | null;
+            recommended_fix: string | null;
             /**
              * Severity
              * @default medium
@@ -22198,7 +22622,7 @@ export interface components {
              */
             severity: "blocker" | "high" | "medium" | "low";
             /** Subject Paths */
-            subject_paths?: string[];
+            subject_paths: string[];
         };
         /** ReviewRequirementResult */
         ReviewRequirementResult: {
@@ -22221,17 +22645,17 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Findings */
-            findings?: components["schemas"]["ReviewFinding"][];
+            findings: components["schemas"]["ReviewFinding"][];
             /** Missing Tests */
-            missing_tests?: string[];
+            missing_tests: string[];
             /** Requirements */
-            requirements?: components["schemas"]["ReviewRequirementResult"][];
+            requirements: components["schemas"]["ReviewRequirementResult"][];
             /** Residual Risks */
-            residual_risks?: string[];
+            residual_risks: string[];
             /** Review Result Id */
-            review_result_id?: string;
+            review_result_id: string;
             /** Review Snapshot Id */
             review_snapshot_id: string;
             /** Reviewer Run Id */
@@ -22239,7 +22663,7 @@ export interface components {
             /** Run Id */
             run_id: string;
             /** Task Revision Id */
-            task_revision_id?: string | null;
+            task_revision_id: string | null;
             /**
              * Verdict
              * @enum {string}
@@ -23515,9 +23939,9 @@ export interface components {
          */
         RunChangeSet: {
             /** Baseline Conflicts */
-            baseline_conflicts?: string[];
+            baseline_conflicts: string[];
             /** Baseline Context Paths */
-            baseline_context_paths?: string[];
+            baseline_context_paths: string[];
             /** Baseline Head Sha */
             baseline_head_sha: string;
             /** Baseline Id */
@@ -23530,29 +23954,29 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Deletions */
-            deletions?: string[];
+            deletions: string[];
             /** Mode Changes */
-            mode_changes?: string[];
+            mode_changes: string[];
             /** Patch Checksum */
             patch_checksum: string;
             /** Patch Storage Ref */
             patch_storage_ref: string;
             /** Renames */
-            renames?: {
+            renames: {
                 [key: string]: string;
             }[];
             /** Run Id */
             run_id: string;
             /** Run Owned Paths */
-            run_owned_paths?: string[];
+            run_owned_paths: string[];
             /** Task Revision Id */
-            task_revision_id?: string | null;
+            task_revision_id: string | null;
             /** Tracked Patch Sha256 */
             tracked_patch_sha256: string;
             /** Untracked Manifest */
-            untracked_manifest?: {
+            untracked_manifest: {
                 [key: string]: {
                     [key: string]: unknown;
                 };
@@ -23560,6 +23984,28 @@ export interface components {
         };
         /** RunLimits */
         RunLimits: {
+            /** Max Cost */
+            max_cost: number | null;
+            /**
+             * Max Steps
+             * @default 200
+             */
+            max_steps: number;
+            /** Max Tokens */
+            max_tokens: number | null;
+            /**
+             * Max Tool Calls
+             * @default 500
+             */
+            max_tool_calls: number;
+            /**
+             * Max Wall Time Seconds
+             * @default 3600
+             */
+            max_wall_time_seconds: number;
+        };
+        /** RunLimits */
+        "RunLimits-Input": {
             /** Max Cost */
             max_cost?: number | null;
             /**
@@ -23586,35 +24032,35 @@ export interface components {
          */
         RuntimeDiagnostics: {
             /** Background */
-            background?: {
+            background: {
                 [key: string]: unknown;
             };
             /** Chat */
-            chat?: {
+            chat: {
                 [key: string]: unknown;
             };
-            events?: components["schemas"]["EventReaderDiagnostics"];
+            events: components["schemas"]["EventReaderDiagnostics"];
             /** Features */
-            features?: string[];
+            features: string[];
             /** Jobs */
-            jobs?: {
+            jobs: {
                 [key: string]: unknown;
             };
             /** Postgresql */
-            postgresql?: {
+            postgresql: {
                 [key: string]: unknown;
             };
             /** Process */
-            process?: {
+            process: {
                 [key: string]: unknown;
             };
             /** Replicas */
-            replicas?: {
+            replicas: {
                 [key: string]: unknown;
             };
-            retention?: components["schemas"]["RetentionRunDiagnostics"] | null;
+            retention: components["schemas"]["RetentionRunDiagnostics"] | null;
             /** Scheduler */
-            scheduler?: {
+            scheduler: {
                 [key: string]: unknown;
             };
             /**
@@ -23623,15 +24069,15 @@ export interface components {
              */
             schema_version: number;
             /** Tts */
-            tts?: {
+            tts: {
                 [key: string]: unknown;
             };
-            version?: components["schemas"]["VersionDiagnostics"] | null;
+            version: components["schemas"]["VersionDiagnostics"] | null;
         };
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: {
             /** Compatibility */
-            compatibility?: {
+            compatibility: {
                 [key: string]: unknown;
             };
             /**
@@ -23639,7 +24085,7 @@ export interface components {
              * @default omnix_gateway_foundation_v1
              */
             format_version: string;
-            gateway?: components["schemas"]["GatewayHealth"];
+            gateway: components["schemas"]["GatewayHealth"];
             /**
              * Ok
              * @default true
@@ -23651,7 +24097,7 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "degraded";
-            workers?: components["schemas"]["WorkerHealthPayload"];
+            workers: components["schemas"]["WorkerHealthPayload"];
         };
         /**
          * STTProxyResponse
@@ -23659,27 +24105,27 @@ export interface components {
          */
         STTProxyResponse: {
             /** Duration */
-            duration?: number | null;
+            duration: number | null;
             /** Eligible */
-            eligible?: boolean | null;
+            eligible: boolean | null;
             /** Inference Ms */
-            inference_ms?: number | null;
+            inference_ms: number | null;
             /** Mode */
-            mode?: string | null;
+            mode: string | null;
             /** Ok */
-            ok?: boolean | null;
+            ok: boolean | null;
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
             /** Reasons */
-            reasons?: string[] | null;
+            reasons: string[] | null;
             /** Segments */
-            segments?: {
+            segments: {
                 [key: string]: unknown;
             }[] | null;
             /** Success */
-            success?: boolean | null;
+            success: boolean | null;
             /** Text */
-            text?: string | null;
+            text: string | null;
         } & {
             [key: string]: unknown;
         };
@@ -23771,18 +24217,18 @@ export interface components {
              */
             event_timestamp: string;
             /** Exchange */
-            exchange?: string | null;
+            exchange: string | null;
             /** Price */
             price: string;
             /** Provider Event Id */
-            provider_event_id?: string | null;
+            provider_event_id: string | null;
             /**
              * Received Timestamp
              * Format: date-time
              */
             received_timestamp: string;
             /** Sequence */
-            sequence?: number | null;
+            sequence: number | null;
             /** Sip Feed */
             sip_feed: string;
             /**
@@ -23800,21 +24246,21 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Findings */
-            findings?: components["schemas"]["ReviewFinding"][];
+            findings: components["schemas"]["ReviewFinding"][];
             /** Missing Tests */
-            missing_tests?: string[];
+            missing_tests: string[];
             /** Requirements */
-            requirements?: components["schemas"]["ReviewRequirementResult"][];
+            requirements: components["schemas"]["ReviewRequirementResult"][];
             /** Residual Risks */
-            residual_risks?: string[];
+            residual_risks: string[];
             /** Run Id */
             run_id: string;
             /** Self Review Result Id */
-            self_review_result_id?: string;
+            self_review_result_id: string;
             /** Task Revision Id */
-            task_revision_id?: string | null;
+            task_revision_id: string | null;
             /**
              * Verdict
              * @enum {string}
@@ -23876,7 +24322,7 @@ export interface components {
         /** SessionMemoryState */
         SessionMemoryState: {
             /** Last Refreshed At */
-            last_refreshed_at?: string | null;
+            last_refreshed_at: string | null;
             /** Memory Enabled */
             memory_enabled: boolean;
             /**
@@ -23901,11 +24347,11 @@ export interface components {
             read_memory: boolean;
             /** Session Id */
             session_id: string;
-            snapshot?: components["schemas"]["MemorySnapshotView"] | null;
+            snapshot: components["schemas"]["MemorySnapshotView"] | null;
             /** Snapshot Id */
-            snapshot_id?: string | null;
+            snapshot_id: string | null;
             /** Snapshot Revision */
-            snapshot_revision?: number | null;
+            snapshot_revision: number | null;
             /**
              * Write Memory
              * @default false
@@ -23995,11 +24441,11 @@ export interface components {
             /** Audio Provider Tts */
             audio_provider_tts: string;
             /** Hermes Commands */
-            hermes_commands?: {
+            hermes_commands: {
                 [key: string]: string;
             };
             /** Hermes Status */
-            hermes_status?: {
+            hermes_status: {
                 [key: string]: unknown;
             };
             /** Image Enabled */
@@ -24007,13 +24453,13 @@ export interface components {
             /** Provider */
             provider: string;
             /** Revisions */
-            revisions?: {
+            revisions: {
                 [key: string]: number;
             };
             /** Rpg Visual Enabled */
             rpg_visual_enabled: boolean;
             /** Settings */
-            settings?: {
+            settings: {
                 [key: string]: unknown;
             };
             /**
@@ -24022,7 +24468,7 @@ export interface components {
              */
             success: boolean;
             /** Worker Urls */
-            worker_urls?: {
+            worker_urls: {
                 [key: string]: string;
             };
         };
@@ -24106,9 +24552,9 @@ export interface components {
              */
             instrument_id: string;
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Last Run At */
-            last_run_at?: string | null;
+            last_run_at: string | null;
             /**
              * Mode
              * @default shadow
@@ -24144,6 +24590,25 @@ export interface components {
         };
         /** SourceMemberDisposition */
         SourceMemberDisposition: {
+            /** Instrument Id */
+            instrument_id: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Source Rank */
+            source_rank: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "materialized" | "filtered_gap" | "filtered_price" | "unsupported_instrument" | "enrichment_failed" | "provider_unavailable";
+            /** Symbol */
+            symbol: string;
+        };
+        /** SourceMemberDisposition */
+        "SourceMemberDisposition-Input": {
             /** Instrument Id */
             instrument_id?: string | null;
             /**
@@ -24221,6 +24686,19 @@ export interface components {
              * Desired Perceived Onset Ms
              * @default 450
              */
+            desired_perceived_onset_ms: number;
+            /**
+             * Maximum Additional Delay Ms
+             * @default 350
+             */
+            maximum_additional_delay_ms: number;
+        };
+        /** SpeechOnsetPolicy */
+        "SpeechOnsetPolicy-Input": {
+            /**
+             * Desired Perceived Onset Ms
+             * @default 450
+             */
             desired_perceived_onset_ms?: number;
             /**
              * Maximum Additional Delay Ms
@@ -24230,6 +24708,55 @@ export interface components {
         };
         /** SpeechPerformancePlan */
         SpeechPerformancePlan: {
+            /**
+             * Certainty
+             * @default moderate
+             * @enum {string}
+             */
+            certainty: "low" | "moderate" | "high";
+            /**
+             * Clause Pause
+             * @default medium
+             * @enum {string}
+             */
+            clause_pause: "short" | "medium" | "long";
+            /** Emphasis */
+            emphasis: string[];
+            /**
+             * Energy
+             * @default moderate
+             * @enum {string}
+             */
+            energy: "low" | "moderate" | "high";
+            nonverbal_eligibility: components["schemas"]["NonverbalEligibility"];
+            onset_policy: components["schemas"]["SpeechOnsetPolicy"];
+            /**
+             * Pace
+             * @default natural
+             * @enum {string}
+             */
+            pace: "slightly_slow" | "natural" | "slightly_fast";
+            /**
+             * Schema Version
+             * @default 1
+             * @constant
+             */
+            schema_version: 1;
+            /**
+             * Speech Act
+             * @default answer
+             * @enum {string}
+             */
+            speech_act: "acknowledgement" | "answer" | "question" | "reassurance" | "reflection" | "instruction";
+            /**
+             * Warmth
+             * @default moderate
+             * @enum {string}
+             */
+            warmth: "low" | "moderate" | "high";
+        };
+        /** SpeechPerformancePlan */
+        "SpeechPerformancePlan-Input": {
             /**
              * Certainty
              * @default moderate
@@ -24250,8 +24777,8 @@ export interface components {
              * @enum {string}
              */
             energy?: "low" | "moderate" | "high";
-            nonverbal_eligibility?: components["schemas"]["NonverbalEligibility"];
-            onset_policy?: components["schemas"]["SpeechOnsetPolicy"];
+            nonverbal_eligibility?: components["schemas"]["NonverbalEligibility-Input"];
+            onset_policy?: components["schemas"]["SpeechOnsetPolicy-Input"];
             /**
              * Pace
              * @default natural
@@ -24303,7 +24830,7 @@ export interface components {
              * @default supervised_worktree
              */
             isolation_policy?: string;
-            limits?: components["schemas"]["RunLimits"] | null;
+            limits?: components["schemas"]["RunLimits-Input"] | null;
             /** Model Id */
             model_id: string;
             /**
@@ -24334,7 +24861,7 @@ export interface components {
             /** Repository */
             repository?: string | null;
             /** Resource Scopes */
-            resource_scopes?: components["schemas"]["ResourceScope"][];
+            resource_scopes?: components["schemas"]["ResourceScope-Input"][];
             /** Success Criteria */
             success_criteria?: string[];
             /** Task */
@@ -24806,19 +25333,19 @@ export interface components {
         /** StochRsi5mSnapshot */
         StochRsi5mSnapshot: {
             /** As Of */
-            as_of?: string | null;
+            as_of: string | null;
             /** Data Gap Resume */
-            data_gap_resume?: string | null;
+            data_gap_resume: string | null;
             /** Data Gap Start */
-            data_gap_start?: string | null;
+            data_gap_start: string | null;
             /** Ema 50 5M */
-            ema_50_5m?: string | null;
+            ema_50_5m: string | null;
             /** Entry Price */
-            entry_price?: string | null;
+            entry_price: string | null;
             /** Entry Signal Time */
-            entry_signal_time?: string | null;
+            entry_signal_time: string | null;
             /** Entry Time */
-            entry_time?: string | null;
+            entry_time: string | null;
             /**
              * Execution Authority
              * @default false
@@ -24826,20 +25353,20 @@ export interface components {
              */
             execution_authority: false;
             /** Exit Price */
-            exit_price?: string | null;
+            exit_price: string | null;
             /** Exit Signal Time */
-            exit_signal_time?: string | null;
+            exit_signal_time: string | null;
             /** Exit Time */
-            exit_time?: string | null;
+            exit_time: string | null;
             /**
              * Five Minute Bar Count
              * @default 0
              */
             five_minute_bar_count: number;
             /** Momentum Cross Time */
-            momentum_cross_time?: string | null;
+            momentum_cross_time: string | null;
             /** Oversold Arm Time */
-            oversold_arm_time?: string | null;
+            oversold_arm_time: string | null;
             /**
              * Policy Version
              * @default stoch-rsi-5min-v15
@@ -24847,24 +25374,24 @@ export interface components {
              */
             policy_version: "stoch-rsi-5min-v15";
             /** Previous Stochastic Rsi D */
-            previous_stochastic_rsi_d?: string | null;
+            previous_stochastic_rsi_d: string | null;
             /** Previous Stochastic Rsi K */
-            previous_stochastic_rsi_k?: string | null;
+            previous_stochastic_rsi_k: string | null;
             /** Reason Code */
             reason_code: string;
             /** Return Pct */
-            return_pct?: string | null;
+            return_pct: string | null;
             /** Session Date */
-            session_date?: string | null;
+            session_date: string | null;
             /**
              * State
              * @enum {string}
              */
             state: "waiting_data" | "data_gap" | "waiting_oversold" | "setup_armed" | "entry_armed" | "long_active" | "exit_armed" | "exited" | "force_flat";
             /** Stochastic Rsi D */
-            stochastic_rsi_d?: string | null;
+            stochastic_rsi_d: string | null;
             /** Stochastic Rsi K */
-            stochastic_rsi_k?: string | null;
+            stochastic_rsi_k: string | null;
             /**
              * Trades
              * @default []
@@ -24890,7 +25417,7 @@ export interface components {
             /** Exit Reason Code */
             exit_reason_code: string;
             /** Exit Signal Time */
-            exit_signal_time?: string | null;
+            exit_signal_time: string | null;
             /**
              * Exit Time
              * Format: date-time
@@ -24927,7 +25454,7 @@ export interface components {
             /** Candidates With Evidence */
             candidates_with_evidence: number;
             /** Errors */
-            errors?: {
+            errors: {
                 [key: string]: string;
             };
             /** Evidence Count */
@@ -24953,7 +25480,7 @@ export interface components {
         /** StrategyEvent */
         StrategyEvent: {
             /** Correlation Version */
-            correlation_version?: string | null;
+            correlation_version: string | null;
             /** Event Id */
             event_id: string;
             /** Event Type */
@@ -24968,29 +25495,29 @@ export interface components {
              */
             observed_at: string;
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
             /** Reason Code */
-            reason_code?: string | null;
+            reason_code: string | null;
             /** Risk Decision Id */
-            risk_decision_id?: string | null;
+            risk_decision_id: string | null;
             /** Run Id */
-            run_id?: string | null;
+            run_id: string | null;
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /** Setup Id */
-            setup_id?: string | null;
+            setup_id: string | null;
             /** State */
             state: string;
             /** Strategy Id */
             strategy_id: string;
             /** Strategy Revision */
-            strategy_revision?: number | null;
+            strategy_revision: number | null;
             /** Trade Attempt Id */
-            trade_attempt_id?: string | null;
+            trade_attempt_id: string | null;
             /** Trade Intent Id */
-            trade_intent_id?: string | null;
+            trade_intent_id: string | null;
         };
         /** StrategyEventListResponse */
         StrategyEventListResponse: {
@@ -25064,21 +25591,21 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /** Entry Order Id */
             entry_order_id: string;
             /** Exit Order Id */
-            exit_order_id?: string | null;
+            exit_order_id: string | null;
             /** Initial Stop Price */
-            initial_stop_price?: string | null;
+            initial_stop_price: string | null;
             /** Initial Target Price */
-            initial_target_price?: string | null;
+            initial_target_price: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Mae Price */
-            mae_price?: string | null;
+            mae_price: string | null;
             /** Mfe Price */
-            mfe_price?: string | null;
+            mfe_price: string | null;
             /** Protection Id */
             protection_id: string;
             /** Quantity */
@@ -25101,9 +25628,9 @@ export interface components {
             /** Target Price */
             target_price: string;
             /** Trigger Reason */
-            trigger_reason?: string | null;
+            trigger_reason: string | null;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** StrategyProtectionListResponse */
         StrategyProtectionListResponse: {
@@ -25131,11 +25658,11 @@ export interface components {
              */
             candidate_count: number;
             /** Detail */
-            detail?: string | null;
+            detail: string | null;
             /** Ending Cash */
             ending_cash: string;
             /** Fidelity */
-            fidelity?: string | null;
+            fidelity: string | null;
             /**
              * Fidelity Warnings
              * @default []
@@ -25146,7 +25673,7 @@ export interface components {
              * @default 0
              */
             pnl: string;
-            result?: components["schemas"]["GapPullbackBacktestResult"] | null;
+            result: components["schemas"]["GapPullbackBacktestResult"] | null;
             /**
              * Session Date
              * Format: date
@@ -25175,23 +25702,23 @@ export interface components {
              */
             trigger_count: number;
             /** Universe Evaluation Time */
-            universe_evaluation_time?: string | null;
+            universe_evaluation_time: string | null;
             /** Universe Id */
-            universe_id?: string | null;
+            universe_id: string | null;
             /** Universe Origin */
-            universe_origin?: ("captured" | "reconstructed") | null;
+            universe_origin: ("captured" | "reconstructed") | null;
         };
         /** StrategyRangeBacktestProgressResponse */
         StrategyRangeBacktestProgressResponse: {
             /** Completed Sessions */
             completed_sessions: number;
             /** Current Session */
-            current_session?: string | null;
+            current_session: string | null;
             /** Error */
-            error?: string | null;
+            error: string | null;
             /** Percent */
             percent: number;
-            result?: components["schemas"]["StrategyRangeBacktestResult"] | null;
+            result: components["schemas"]["StrategyRangeBacktestResult"] | null;
             /** Run Id */
             run_id: string;
             /**
@@ -25345,7 +25872,7 @@ export interface components {
         /** StrategyResearchFeatures */
         StrategyResearchFeatures: {
             /** Catalyst Age Minutes */
-            catalyst_age_minutes?: number | null;
+            catalyst_age_minutes: number | null;
             /**
              * Catalyst Fresh
              * @default false
@@ -25366,13 +25893,13 @@ export interface components {
             /** Feature Id */
             feature_id: string;
             /** Immediate Supply Risk */
-            immediate_supply_risk?: boolean | null;
+            immediate_supply_risk: boolean | null;
             /** Immutable Fingerprint */
             immutable_fingerprint: string;
             /** Instrument Id */
             instrument_id: string;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /**
              * Primary Catalyst Confirmed
              * @default false
@@ -25400,7 +25927,7 @@ export interface components {
              */
             source_authority_sufficient: boolean;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
             /**
              * Supply Resolution Status
              * @default unresolved
@@ -25415,9 +25942,9 @@ export interface components {
         };
         /** StrategyResearchReview */
         StrategyResearchReview: {
-            classification?: components["schemas"]["CatalystShadowClassification"] | null;
+            classification: components["schemas"]["CatalystShadowClassification"] | null;
             /** Detail */
-            detail?: string | null;
+            detail: string | null;
             /** Instrument Id */
             instrument_id: string;
             /**
@@ -25583,19 +26110,19 @@ export interface components {
             /** Configured Enabled */
             configured_enabled: boolean;
             /** Counters */
-            counters?: {
+            counters: {
                 [key: string]: number;
             };
             /** Details */
-            details?: {
+            details: {
                 [key: string]: unknown;
             };
             /** Interval Seconds */
-            interval_seconds?: number | null;
+            interval_seconds: number | null;
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Last Run At */
-            last_run_at?: string | null;
+            last_run_at: string | null;
             /** Registered */
             registered: boolean;
             /** Running */
@@ -25631,9 +26158,9 @@ export interface components {
             /** Canonical Id */
             canonical_id: string;
             /** Display Name */
-            display_name?: string | null;
+            display_name: string | null;
             /** Qualifiers */
-            qualifiers?: {
+            qualifiers: {
                 [key: string]: unknown;
             };
             /** Type */
@@ -25659,11 +26186,11 @@ export interface components {
              */
             confidence: string;
             /** Effective At */
-            effective_at?: string | null;
+            effective_at: string | null;
             /** Exercise Status */
-            exercise_status?: string | null;
+            exercise_status: string | null;
             /** Expires At */
-            expires_at?: string | null;
+            expires_at: string | null;
             /**
              * Extractor Version
              * @default supply-parser-1
@@ -25681,11 +26208,11 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /** Registration Status */
-            registration_status?: string | null;
+            registration_status: string | null;
             /** Remaining Capacity Usd */
-            remaining_capacity_usd?: string | null;
+            remaining_capacity_usd: string | null;
             /**
              * Resolution Status
              * @default unresolved
@@ -25698,7 +26225,7 @@ export interface components {
              */
             schema_version: string;
             /** Shares */
-            shares?: string | null;
+            shares: string | null;
             /** Source Evidence Ids */
             source_evidence_ids: string[];
             /**
@@ -25708,7 +26235,7 @@ export interface components {
              */
             status: "active" | "terminated" | "exhausted" | "expired" | "redeemed" | "exercisable" | "locked" | "withdrawn" | "unknown";
             /** Strike Price */
-            strike_price?: string | null;
+            strike_price: string | null;
             /**
              * Supply Type
              * @enum {string}
@@ -25718,15 +26245,15 @@ export interface components {
         /** SupplyMetrics */
         SupplyMetrics: {
             /** Immediate Supply Risk */
-            immediate_supply_risk?: boolean | null;
+            immediate_supply_risk: boolean | null;
             /** In The Money Warrant Pct Float */
-            in_the_money_warrant_pct_float?: string | null;
+            in_the_money_warrant_pct_float: string | null;
             /** Potential Dilution Pct Float */
-            potential_dilution_pct_float?: string | null;
+            potential_dilution_pct_float: string | null;
             /** Registered Resale Pct Float */
-            registered_resale_pct_float?: string | null;
+            registered_resale_pct_float: string | null;
             /** Remaining Atm Pct Market Cap */
-            remaining_atm_pct_market_cap?: string | null;
+            remaining_atm_pct_market_cap: string | null;
             /**
              * Supply Resolution Status
              * @default unresolved
@@ -25778,7 +26305,7 @@ export interface components {
         /** TaskEdge */
         TaskEdge: {
             /** Expected Value */
-            expected_value?: unknown | null;
+            expected_value: unknown | null;
             /**
              * Kind
              * @default control
@@ -25788,11 +26315,11 @@ export interface components {
             /** Source */
             source: string;
             /** Source Output */
-            source_output?: string | null;
+            source_output: string | null;
             /** Target */
             target: string;
             /** Target Input */
-            target_input?: string | null;
+            target_input: string | null;
         };
         /** TaskGraph */
         TaskGraph: {
@@ -25800,11 +26327,11 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Edges */
-            edges?: components["schemas"]["TaskEdge"][];
+            edges: components["schemas"]["TaskEdge"][];
             /** Graph Id */
-            graph_id?: string;
+            graph_id: string;
             /**
              * Max Parallel Nodes
              * @default 4
@@ -25813,7 +26340,7 @@ export interface components {
             /** Nodes */
             nodes: components["schemas"]["TaskNode"][];
             /** Output Contract */
-            output_contract?: {
+            output_contract: {
                 [key: string]: unknown;
             };
             /**
@@ -25847,55 +26374,55 @@ export interface components {
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Event Id */
-            event_id?: string;
+            event_id: string;
             /** Event Type */
             event_type: string;
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
             /** Run Id */
             run_id: string;
             /** Sequence */
-            sequence?: number | null;
+            sequence: number | null;
         };
         /** TaskGraphOptimizationPlan */
         TaskGraphOptimizationPlan: {
             /** Cache Keys */
-            cache_keys?: {
+            cache_keys: {
                 [key: string]: string;
             };
             /** Cost Priority */
-            cost_priority?: string[];
+            cost_priority: string[];
             /** Evidence Batches */
-            evidence_batches?: components["schemas"]["EvidenceAcquisitionBatch"][];
+            evidence_batches: components["schemas"]["EvidenceAcquisitionBatch"][];
             /** Model Selections */
-            model_selections?: {
+            model_selections: {
                 [key: string]: components["schemas"]["ModelRef"];
             };
             /** Parallel Groups */
-            parallel_groups?: string[][];
+            parallel_groups: string[][];
             /** Speculative Read Nodes */
-            speculative_read_nodes?: string[];
+            speculative_read_nodes: string[];
         };
         /** TaskGraphRunSnapshot */
         TaskGraphRunSnapshot: {
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             graph: components["schemas"]["TaskGraph"];
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Node States */
-            node_states?: components["schemas"]["TaskNodeRunState"][];
+            node_states: components["schemas"]["TaskNodeRunState"][];
             /** Result */
-            result?: unknown | null;
+            result: unknown | null;
             /**
              * Revision
              * @default 1
@@ -25913,11 +26440,11 @@ export interface components {
              * Updated At
              * Format: date-time
              */
-            updated_at?: string;
+            updated_at: string;
         };
         /** TaskNode */
         TaskNode: {
-            acceptance_plan?: components["schemas"]["AcceptancePlan"] | null;
+            acceptance_plan: components["schemas"]["AcceptancePlan"] | null;
             /**
              * Approval Policy
              * @default ask_sensitive
@@ -25930,19 +26457,19 @@ export interface components {
              */
             cacheable: boolean;
             /** Capability Id */
-            capability_id?: string | null;
+            capability_id: string | null;
             /** Condition */
-            condition?: string | null;
+            condition: string | null;
             /**
              * Estimated Cost
              * @default 1
              */
             estimated_cost: number;
-            evidence_policy?: components["schemas"]["EvidencePolicy"];
+            evidence_policy: components["schemas"]["EvidencePolicy"];
             /** Id */
             id: string;
             /** Input Template */
-            input_template?: {
+            input_template: {
                 [key: string]: unknown;
             };
             /**
@@ -25951,8 +26478,8 @@ export interface components {
              * @enum {string}
              */
             kind: "evidence_read" | "agent" | "synthesis" | "capability" | "condition" | "approval" | "join";
-            limits?: components["schemas"]["RunLimits"];
-            model?: components["schemas"]["ModelRef"] | null;
+            limits: components["schemas"]["RunLimits"];
+            model: components["schemas"]["ModelRef"] | null;
             /**
              * Objective
              * @default
@@ -25964,22 +26491,22 @@ export interface components {
              */
             optional: boolean;
             /** Output Keys */
-            output_keys?: string[];
+            output_keys: string[];
             /** Profile Id */
-            profile_id?: string | null;
+            profile_id: string | null;
             /** Required External Capabilities */
-            required_external_capabilities?: string[];
+            required_external_capabilities: string[];
             /** Required Local Capabilities */
-            required_local_capabilities?: string[];
+            required_local_capabilities: string[];
             /** Resource Scopes */
-            resource_scopes?: components["schemas"]["ResourceScope"][];
+            resource_scopes: components["schemas"]["ResourceScope"][];
             /** Semantic Action Intents */
-            semantic_action_intents?: string[];
+            semantic_action_intents: string[];
             /** Semantic Targets */
-            semantic_targets?: string[];
+            semantic_targets: string[];
             /** Success Criteria */
-            success_criteria?: components["schemas"]["SuccessCriterion"][];
-            workspace?: components["schemas"]["WorkspaceSpec"] | null;
+            success_criteria: components["schemas"]["SuccessCriterion"][];
+            workspace: components["schemas"]["WorkspaceSpec"] | null;
         };
         /** TaskNodeRunState */
         TaskNodeRunState: {
@@ -25989,21 +26516,21 @@ export interface components {
              */
             attempts: number;
             /** Child Run Id */
-            child_run_id?: string | null;
+            child_run_id: string | null;
             /** Completed At */
-            completed_at?: string | null;
+            completed_at: string | null;
             /** Fingerprint */
             fingerprint: string;
             /** Last Error */
-            last_error?: string | null;
+            last_error: string | null;
             /** Node Id */
             node_id: string;
             /** Output */
-            output?: {
+            output: {
                 [key: string]: unknown;
             };
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             /**
              * Status
              * @default pending
@@ -26029,53 +26556,53 @@ export interface components {
              */
             source: "user" | "repository" | "policy" | "derived";
             /** Validation Ids */
-            validation_ids?: string[];
+            validation_ids: string[];
         };
         /** TaskRevision */
         TaskRevision: {
             /** Acceptance Checks */
-            acceptance_checks?: string[];
+            acceptance_checks: string[];
             /** Constraints */
-            constraints?: components["schemas"]["TaskConstraint"][];
+            constraints: components["schemas"]["TaskConstraint"][];
             /**
              * Created At
              * Format: date-time
              */
-            created_at?: string;
+            created_at: string;
             /** Effective Objective */
             effective_objective: string;
             /** Effective Success Criteria */
-            effective_success_criteria?: components["schemas"]["SuccessCriterion"][];
-            evidence_decision?: components["schemas"]["EvidenceDecision"];
+            effective_success_criteria: components["schemas"]["SuccessCriterion"][];
+            evidence_decision: components["schemas"]["EvidenceDecision"];
             /** Expected Artifacts */
-            expected_artifacts?: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
+            expected_artifacts: ("diff" | "test_result" | "log" | "report" | "file" | "other")[];
             /** Previous Revision Id */
-            previous_revision_id?: string | null;
+            previous_revision_id: string | null;
             /** Required External Capabilities */
-            required_external_capabilities?: string[];
+            required_external_capabilities: string[];
             /** Required Local Capabilities */
-            required_local_capabilities?: string[];
+            required_local_capabilities: string[];
             /** Requirements */
-            requirements?: components["schemas"]["TaskRequirement"][];
+            requirements: components["schemas"]["TaskRequirement"][];
             /** Revision Id */
-            revision_id?: string;
+            revision_id: string;
             /** Run Id */
             run_id: string;
             /** Sequence */
             sequence: number;
             /** Source Command Id */
-            source_command_id?: string | null;
+            source_command_id: string | null;
             /** User Instruction */
             user_instruction: string;
             /** Validation Plan */
-            validation_plan?: components["schemas"]["ValidationSpec"][];
+            validation_plan: components["schemas"]["ValidationSpec"][];
         };
         /** TradingAlert */
         TradingAlert: {
             /** Alert Id */
             alert_id: string;
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /**
              * Condition Type
              * @enum {string}
@@ -26087,24 +26614,24 @@ export interface components {
              */
             cooldown_seconds: number;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /**
              * Enabled
              * @default true
              */
             enabled: boolean;
-            evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            evaluation_policy: components["schemas"]["TradingAlertEvaluationPolicy"];
             /** Expires At */
-            expires_at?: string | null;
+            expires_at: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Last Observed Price */
-            last_observed_price?: string | null;
+            last_observed_price: string | null;
             /** Last Observed Value */
-            last_observed_value?: string | null;
+            last_observed_value: string | null;
             /** Last Triggered At */
-            last_triggered_at?: string | null;
-            parameters?: components["schemas"]["TradingAlertParameters-Output"];
+            last_triggered_at: string | null;
+            parameters: components["schemas"]["TradingAlertParameters-Output"];
             /**
              * Revision
              * @default 1
@@ -26113,7 +26640,7 @@ export interface components {
             /** Threshold */
             threshold: string;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** TradingAlertCreate */
         TradingAlertCreate: {
@@ -26131,7 +26658,7 @@ export interface components {
              * @default 0
              */
             cooldown_seconds?: number;
-            evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy-Input"];
             /** Expires At */
             expires_at?: string | null;
             /** Instrument Id */
@@ -26185,6 +26712,24 @@ export interface components {
         };
         /** TradingAlertEvaluationPolicy */
         TradingAlertEvaluationPolicy: {
+            /**
+             * Allow Partial Bars
+             * @default false
+             */
+            allow_partial_bars: boolean;
+            /**
+             * Formula Version
+             * @default omnix-indicators-v2
+             */
+            formula_version: string;
+            /**
+             * Interval
+             * @default 1m
+             */
+            interval: string;
+        };
+        /** TradingAlertEvaluationPolicy */
+        "TradingAlertEvaluationPolicy-Input": {
             /**
              * Allow Partial Bars
              * @default false
@@ -26283,7 +26828,7 @@ export interface components {
              */
             fast_period: number;
             /** Indicator Id */
-            indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
+            indicator_id: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1
@@ -26295,7 +26840,7 @@ export interface components {
              */
             message: string;
             /** Notification Channels */
-            notification_channels?: ("app" | "toast" | "sound")[];
+            notification_channels: ("app" | "toast" | "sound")[];
             /**
              * Period
              * @default 14
@@ -26312,9 +26857,9 @@ export interface components {
              */
             slow_period: number;
             /** Trendline Mode */
-            trendline_mode?: ("crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than") | null;
+            trendline_mode: ("crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than") | null;
             /** Trendline Points */
-            trendline_points?: components["schemas"]["TrendlineAlertPoint-Output"][] | null;
+            trendline_points: components["schemas"]["TrendlineAlertPoint-Output"][] | null;
             /**
              * Trigger Policy
              * @default every_time
@@ -26327,7 +26872,7 @@ export interface components {
             /** Alert Id */
             alert_id: string;
             /** Binding Id */
-            binding_id?: string | null;
+            binding_id: string | null;
             /**
              * Condition Type
              * @enum {string}
@@ -26352,11 +26897,11 @@ export interface components {
             /** Observed Value */
             observed_value: string;
             /** Payload */
-            payload?: {
+            payload: {
                 [key: string]: unknown;
             };
             /** Provider */
-            provider?: string | null;
+            provider: string | null;
             /** Threshold */
             threshold: string;
             /** Trigger Id */
@@ -26386,7 +26931,7 @@ export interface components {
              * @default true
              */
             enabled?: boolean;
-            evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
+            evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy-Input"];
             /** Expires At */
             expires_at?: string | null;
             /** Instrument Id */
@@ -26439,7 +26984,7 @@ export interface components {
              */
             status: string;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** TradingEvidence */
         TradingEvidence: {
@@ -26467,36 +27012,36 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Issuer Identity Id */
-            issuer_identity_id?: string | null;
+            issuer_identity_id: string | null;
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /**
              * Source Authority Tier
              * @enum {integer}
              */
             source_authority_tier: 1 | 2 | 3 | 4;
             /** Source Available At */
-            source_available_at?: string | null;
+            source_available_at: string | null;
             /** Source Locator */
             source_locator: string;
             /** Source Published At */
-            source_published_at?: string | null;
+            source_published_at: string | null;
             /**
              * Source Type
              * @enum {string}
              */
             source_type: "sec" | "company_ir" | "news" | "web" | "manual";
             /** Title */
-            title?: string | null;
+            title: string | null;
         };
         /** TradingFactSet */
         TradingFactSet: {
             catalyst: components["schemas"]["CatalystFactSet"];
-            completeness?: components["schemas"]["ResearchCoverage"];
+            completeness: components["schemas"]["ResearchCoverage"];
             /**
              * Evidence Ids
              * @default []
@@ -26519,22 +27064,22 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /** Report Id */
-            report_id?: string | null;
+            report_id: string | null;
             /**
              * Schema Version
              * @default trading-facts-1
              */
             schema_version: string;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
             /**
              * Supply
              * @default []
              */
             supply: components["schemas"]["SupplyFact"][];
-            supply_metrics?: components["schemas"]["SupplyMetrics"];
+            supply_metrics: components["schemas"]["SupplyMetrics"];
             /**
              * Unresolved Facts
              * @default []
@@ -26565,7 +27110,7 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Key Points */
-            key_points?: components["schemas"]["TradingMarketBriefItem"][];
+            key_points: components["schemas"]["TradingMarketBriefItem"][];
             /** Model */
             model: string;
             /** Provider */
@@ -26577,18 +27122,18 @@ export interface components {
              */
             read_only: true;
             /** Risks */
-            risks?: components["schemas"]["TradingMarketBriefItem"][];
+            risks: components["schemas"]["TradingMarketBriefItem"][];
             /** Source Evidence Ids */
-            source_evidence_ids?: string[];
+            source_evidence_ids: string[];
             /** Summary */
             summary: string;
             /** Watch Items */
-            watch_items?: components["schemas"]["TradingMarketBriefItem"][];
+            watch_items: components["schemas"]["TradingMarketBriefItem"][];
         };
         /** TradingMarketBriefItem */
         TradingMarketBriefItem: {
             /** Source Evidence Ids */
-            source_evidence_ids?: string[];
+            source_evidence_ids: string[];
             /** Text */
             text: string;
         };
@@ -26642,29 +27187,29 @@ export interface components {
              * @default []
              */
             evidence: components["schemas"]["TradingEvidence"][];
-            fact_set?: components["schemas"]["TradingFactSet"] | null;
-            features?: components["schemas"]["StrategyResearchFeatures"] | null;
+            fact_set: components["schemas"]["TradingFactSet"] | null;
+            features: components["schemas"]["StrategyResearchFeatures"] | null;
             /**
              * Hermes Actions
              * @default []
              */
             hermes_actions: components["schemas"]["ResearchActionRecord"][];
-            identity?: components["schemas"]["IssuerIdentity"] | null;
+            identity: components["schemas"]["IssuerIdentity"] | null;
             /** Instrument Id */
             instrument_id: string;
-            latest_report?: components["schemas"]["TradingResearchReport"] | null;
+            latest_report: components["schemas"]["TradingResearchReport"] | null;
             /**
              * Report Timeline
              * @default []
              */
             report_timeline: components["schemas"]["TradingResearchReport"][];
-            shadow?: components["schemas"]["NoveltyShadowAnnotation"] | null;
+            shadow: components["schemas"]["NoveltyShadowAnnotation"] | null;
         };
         /** TradingResearchCoordinatorResult */
         TradingResearchCoordinatorResult: {
-            brief?: components["schemas"]["TradingMarketBrief"] | null;
+            brief: components["schemas"]["TradingMarketBrief"] | null;
             /** Brief Warning */
-            brief_warning?: string | null;
+            brief_warning: string | null;
             fact_set: components["schemas"]["TradingFactSet"];
             features: components["schemas"]["StrategyResearchFeatures"];
             /** Planner Backend */
@@ -26692,20 +27237,20 @@ export interface components {
              * @default trading-research-1
              */
             contract_version: string;
-            coverage?: components["schemas"]["ResearchCoverage"];
+            coverage: components["schemas"]["ResearchCoverage"];
             /**
              * Evidence Cutoff At
              * Format: date-time
              */
             evidence_cutoff_at: string;
             /** Hermes Trace Id */
-            hermes_trace_id?: string | null;
+            hermes_trace_id: string | null;
             /** Immutable Fingerprint */
             immutable_fingerprint: string;
             /** Instrument Id */
             instrument_id: string;
             /** Omnix Known At */
-            omnix_known_at?: string | null;
+            omnix_known_at: string | null;
             /**
              * Planner Backend
              * @default local
@@ -26716,7 +27261,7 @@ export interface components {
             /** Report Version */
             report_version: number;
             /** Research Completed At */
-            research_completed_at?: string | null;
+            research_completed_at: string | null;
             /**
              * Research Started At
              * Format: date-time
@@ -26734,9 +27279,9 @@ export interface components {
              */
             source_evidence_ids: string[];
             /** Stop Reason */
-            stop_reason?: string | null;
+            stop_reason: string | null;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
             /**
              * Supply Status
              * @default unresolved
@@ -26789,7 +27334,7 @@ export interface components {
             /** Instrument Id */
             instrument_id: string;
             /** Issuer Identity Id */
-            issuer_identity_id?: string | null;
+            issuer_identity_id: string | null;
             /**
              * Known Filings
              * @default []
@@ -26833,7 +27378,7 @@ export interface components {
              */
             requested_at: string;
             /** Strategy Id */
-            strategy_id?: string | null;
+            strategy_id: string | null;
         };
         /** TradingScannerDefinition */
         "TradingScannerDefinition-Input": {
@@ -26897,11 +27442,11 @@ export interface components {
         /** TradingScannerDefinition */
         "TradingScannerDefinition-Output": {
             /** Binding Ids */
-            binding_ids?: {
+            binding_ids: {
                 [key: string]: string;
             };
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /**
              * Enabled
              * @default true
@@ -26951,7 +27496,7 @@ export interface components {
             /** Scanner Id */
             scanner_id: string;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** TradingScannerResult */
         TradingScannerResult: {
@@ -26972,7 +27517,7 @@ export interface components {
             /** Rank */
             rank: number;
             /** Requested Binding Id */
-            requested_binding_id?: string | null;
+            requested_binding_id: string | null;
             /** Resolved Binding Id */
             resolved_binding_id: string;
             /** Run Id */
@@ -27052,15 +27597,15 @@ export interface components {
              */
             completed_count: number;
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /** Definition Snapshot */
             definition_snapshot: {
                 [key: string]: unknown;
             };
             /** Error Message */
-            error_message?: string | null;
+            error_message: string | null;
             /** Finished At */
-            finished_at?: string | null;
+            finished_at: string | null;
             /**
              * Matched Count
              * @default 0
@@ -27071,7 +27616,7 @@ export interface components {
             /** Scanner Id */
             scanner_id: string;
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             /**
              * Status
              * @enum {string}
@@ -27083,7 +27628,7 @@ export interface components {
              */
             universe_count: number;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** TradingStrategyConfigDocument */
         "TradingStrategyConfigDocument-Input": {
@@ -27139,15 +27684,15 @@ export interface components {
             /** Account Id */
             account_id: string;
             /** Active Universe Id */
-            active_universe_id?: string | null;
+            active_universe_id: string | null;
             /** Archived At */
-            archived_at?: string | null;
+            archived_at: string | null;
             /** Archived Reason */
-            archived_reason?: string | null;
+            archived_reason: string | null;
             /** Config */
-            config?: components["schemas"]["GapPullbackConfig-Output"] | components["schemas"]["StochRsi5mConfig-Output"];
+            config: components["schemas"]["GapPullbackConfig-Output"] | components["schemas"]["StochRsi5mConfig-Output"];
             /** Created At */
-            created_at?: string | null;
+            created_at: string | null;
             /**
              * Enabled
              * @default true
@@ -27160,13 +27705,13 @@ export interface components {
              */
             mode: "off" | "shadow" | "auto_paper";
             /** Parent Strategy Id */
-            parent_strategy_id?: string | null;
+            parent_strategy_id: string | null;
             /**
              * Revision
              * @default 1
              */
             revision: number;
-            risk?: components["schemas"]["StrategyRiskProfile-Output"];
+            risk: components["schemas"]["StrategyRiskProfile-Output"];
             /** Strategy Id */
             strategy_id: string;
             /**
@@ -27181,7 +27726,7 @@ export interface components {
              */
             strategy_version: string;
             /** Updated At */
-            updated_at?: string | null;
+            updated_at: string | null;
         };
         /** TrendlineAlertPoint */
         "TrendlineAlertPoint-Input": {
@@ -27227,7 +27772,7 @@ export interface components {
              * @default 12
              */
             chunk_size?: number;
-            delivery_plan?: components["schemas"]["SpeechPerformancePlan"] | null;
+            delivery_plan?: components["schemas"]["SpeechPerformancePlan-Input"] | null;
             /** Diagnostics Stream Id */
             diagnostics_stream_id?: string | null;
             /**
@@ -27450,9 +27995,9 @@ export interface components {
             /** Evidence Fingerprint */
             evidence_fingerprint: string;
             /** Execution Match Rate */
-            execution_match_rate?: string | null;
+            execution_match_rate: string | null;
             /** Expectancy R */
-            expectancy_r?: string | null;
+            expectancy_r: string | null;
             /** Expected Profile Fingerprint */
             expected_profile_fingerprint: string;
             /**
@@ -27463,9 +28008,9 @@ export interface components {
             /** Matched Eligible Trade Count */
             matched_eligible_trade_count: number;
             /** Max Drawdown R */
-            max_drawdown_r?: string | null;
+            max_drawdown_r: string | null;
             /** One Sided 90 Lcb R */
-            one_sided_90_lcb_r?: string | null;
+            one_sided_90_lcb_r: string | null;
             /** Profile Match */
             profile_match: boolean;
             /**
@@ -27503,7 +28048,7 @@ export interface components {
             reviewed: boolean;
             /** Strategy Id */
             strategy_id: string;
-            thresholds?: components["schemas"]["V2QualificationThresholds"];
+            thresholds: components["schemas"]["V2QualificationThresholds"];
         };
         /** V2QualificationReviewRequest */
         V2QualificationReviewRequest: {
@@ -27562,11 +28107,11 @@ export interface components {
         /** V42ComparisonMetrics */
         V42ComparisonMetrics: {
             /** Accuracy Delta V42 Minus V3 */
-            accuracy_delta_v42_minus_v3?: string | null;
+            accuracy_delta_v42_minus_v3: string | null;
             /** Brier Delta V42 Minus V3 */
-            brier_delta_v42_minus_v3?: string | null;
+            brier_delta_v42_minus_v3: string | null;
             /** Log Loss Delta V42 Minus V3 */
-            log_loss_delta_v42_minus_v3?: string | null;
+            log_loss_delta_v42_minus_v3: string | null;
             /** N */
             n: number;
         };
@@ -27659,25 +28204,25 @@ export interface components {
         /** V42ReturnMetrics */
         V42ReturnMetrics: {
             /** Expected Return Mae */
-            expected_return_mae?: string | null;
+            expected_return_mae: string | null;
             /** Mean Predicted Expected Return */
-            mean_predicted_expected_return?: string | null;
+            mean_predicted_expected_return: string | null;
             /** Mean Realized Return */
-            mean_realized_return?: string | null;
+            mean_realized_return: string | null;
             /** N */
             n: number;
             /** P Gt 2 Brier */
-            p_gt_2_brier?: string | null;
+            p_gt_2_brier: string | null;
             /** P Lt Minus 5 Brier */
-            p_lt_minus_5_brier?: string | null;
+            p_lt_minus_5_brier: string | null;
             /** Q10 Breach Rate */
-            q10_breach_rate?: string | null;
+            q10_breach_rate: string | null;
             /** Q10 Pinball Loss */
-            q10_pinball_loss?: string | null;
+            q10_pinball_loss: string | null;
             /** Q50 Pinball Loss */
-            q50_pinball_loss?: string | null;
+            q50_pinball_loss: string | null;
             /** Q90 Pinball Loss */
-            q90_pinball_loss?: string | null;
+            q90_pinball_loss: string | null;
         };
         /** V42RiskInteractions */
         V42RiskInteractions: {
@@ -27718,11 +28263,11 @@ export interface components {
         /** V43ComparisonMetrics */
         V43ComparisonMetrics: {
             /** Accuracy Delta V43 Minus V3 */
-            accuracy_delta_v43_minus_v3?: string | null;
+            accuracy_delta_v43_minus_v3: string | null;
             /** Brier Delta V43 Minus V3 */
-            brier_delta_v43_minus_v3?: string | null;
+            brier_delta_v43_minus_v3: string | null;
             /** Log Loss Delta V43 Minus V3 */
-            log_loss_delta_v43_minus_v3?: string | null;
+            log_loss_delta_v43_minus_v3: string | null;
             /** N */
             n: number;
         };
@@ -27736,29 +28281,29 @@ export interface components {
             /** Demand Resilience Score */
             demand_resilience_score: string;
             /** Distance From Low Score */
-            distance_from_low_score?: string | null;
+            distance_from_low_score: string | null;
             /** Float Turnover Score */
-            float_turnover_score?: string | null;
+            float_turnover_score: string | null;
             /** Gap Extension Score */
             gap_extension_score: string;
             /** Input Fingerprint */
             input_fingerprint: string;
             /** Late Deceleration Score */
-            late_deceleration_score?: string | null;
+            late_deceleration_score: string | null;
             /** Late Volume Fade Score */
-            late_volume_fade_score?: string | null;
+            late_volume_fade_score: string | null;
             /** Missing Components */
             missing_components: string[];
             /** Multi Day Extension Score */
-            multi_day_extension_score?: string | null;
+            multi_day_extension_score: string | null;
             /** Premarket Repricing Complete Score */
             premarket_repricing_complete_score: string;
             /** Range Position Score */
-            range_position_score?: string | null;
+            range_position_score: string | null;
             /** Used Components */
             used_components: string[];
             /** Vwap Extension Score */
-            vwap_extension_score?: string | null;
+            vwap_extension_score: string | null;
         };
         /** V43Forecast */
         V43Forecast: {
@@ -27786,7 +28331,7 @@ export interface components {
              */
             frozen_at: string;
             /** Frozen Climatology Probability */
-            frozen_climatology_probability?: string | null;
+            frozen_climatology_probability: string | null;
             /** Instrument Id */
             instrument_id: string;
             /** Model Spec Fingerprint */
@@ -27804,7 +28349,7 @@ export interface components {
             /** Premarket Repricing Complete Score */
             premarket_repricing_complete_score: string;
             /** Probability Edge Over Climatology */
-            probability_edge_over_climatology?: string | null;
+            probability_edge_over_climatology: string | null;
             /** Remaining Upside Score */
             remaining_upside_score: string;
             /**
@@ -27847,17 +28392,17 @@ export interface components {
         /** ValidationFeatureResult */
         ValidationFeatureResult: {
             /** Confidence Interval High */
-            confidence_interval_high?: string | null;
+            confidence_interval_high: string | null;
             /** Confidence Interval Low */
-            confidence_interval_low?: string | null;
+            confidence_interval_low: string | null;
             /** Exact Sample Size */
             exact_sample_size: number;
             /** Feature */
             feature: string;
             /** In Sample Effect R */
-            in_sample_effect_r?: string | null;
+            in_sample_effect_r: string | null;
             /** Out Of Sample Effect R */
-            out_of_sample_effect_r?: string | null;
+            out_of_sample_effect_r: string | null;
             /**
              * Reason
              * @default
@@ -27872,7 +28417,7 @@ export interface components {
             /** Sample Size */
             sample_size: number;
             /** Win Probability Delta */
-            win_probability_delta?: string | null;
+            win_probability_delta: string | null;
         };
         /** ValidationInput */
         ValidationInput: {
@@ -27899,21 +28444,21 @@ export interface components {
             /** Command */
             command: string;
             /** Covers Requirement Ids */
-            covers_requirement_ids?: string[];
+            covers_requirement_ids: string[];
             /** Exit Code */
-            exit_code?: number | null;
+            exit_code: number | null;
             /**
              * Finished At
              * Format: date-time
              */
-            finished_at?: string;
+            finished_at: string;
             /**
              * Kind
              * @enum {string}
              */
             kind: "test" | "typecheck" | "lint" | "build" | "diff_review" | "browser" | "custom";
             /** Metadata */
-            metadata?: {
+            metadata: {
                 [key: string]: unknown;
             };
             /**
@@ -27925,15 +28470,15 @@ export interface components {
             /** Output Digest */
             output_digest: string;
             /** Result Id */
-            result_id?: string;
+            result_id: string;
             /** Run Id */
             run_id: string;
             /** Started At */
-            started_at?: string | null;
+            started_at: string | null;
             /** Success */
             success: boolean;
             /** Task Revision Id */
-            task_revision_id?: string | null;
+            task_revision_id: string | null;
             /** Validation Id */
             validation_id: string;
             /** Workspace State Id */
@@ -27942,9 +28487,9 @@ export interface components {
         /** ValidationSpec */
         ValidationSpec: {
             /** Command Hint */
-            command_hint?: string | null;
+            command_hint: string | null;
             /** Covers */
-            covers?: string[];
+            covers: string[];
             /** Description */
             description: string;
             /** Id */
@@ -27965,7 +28510,7 @@ export interface components {
             /** Application Schema */
             application_schema: string;
             /** Build Revision */
-            build_revision?: string | null;
+            build_revision: string | null;
         };
         /** VersionedOutcomeLabels */
         VersionedOutcomeLabels: {
@@ -28003,11 +28548,11 @@ export interface components {
         /** VoiceProfileGovernance */
         VoiceProfileGovernance: {
             /** Allowed Uses */
-            allowed_uses?: ("character" | "live_call" | "system_assistant" | "general_tts")[];
+            allowed_uses: ("character" | "live_call" | "system_assistant" | "general_tts")[];
             /** Asset Id */
             asset_id: string;
             /** Consent Recorded At */
-            consent_recorded_at?: string | null;
+            consent_recorded_at: string | null;
             /**
              * Consent Status
              * @default granted
@@ -28020,14 +28565,14 @@ export interface components {
              */
             creator_id: string;
             /** Deleted At */
-            deleted_at?: string | null;
+            deleted_at: string | null;
             /**
              * Deletion Reason
              * @default
              */
             deletion_reason: string;
             /** Deletion Requested At */
-            deletion_requested_at?: string | null;
+            deletion_requested_at: string | null;
             /**
              * Deletion State
              * @default active
@@ -28040,7 +28585,7 @@ export interface components {
              */
             source_reference: string;
             /** Source Sha256 */
-            source_sha256?: string | null;
+            source_sha256: string | null;
             /**
              * Source Type
              * @default unknown
@@ -28160,7 +28705,7 @@ export interface components {
              */
             browser_version: string;
             /** Calibration Version */
-            calibration_version?: string | null;
+            calibration_version: string | null;
             /** Call Id */
             call_id: string;
             /**
@@ -28184,9 +28729,9 @@ export interface components {
             /** Ended At */
             ended_at: string;
             /** Environment Hash */
-            environment_hash?: string | null;
+            environment_hash: string | null;
             /** Eos Termination Counts */
-            eos_termination_counts?: {
+            eos_termination_counts: {
                 [key: string]: number;
             };
             /** Evaluation Id */
@@ -28194,20 +28739,20 @@ export interface components {
             /** Exact Commit Sha */
             exact_commit_sha: string;
             /** Input Device Hash */
-            input_device_hash?: string | null;
+            input_device_hash: string | null;
             /** Latency Summary */
-            latency_summary?: {
+            latency_summary: {
                 [key: string]: number | null;
             };
             /** Listening Score */
-            listening_score?: number | null;
+            listening_score: number | null;
             /**
              * Os Version
              * @default unknown
              */
             os_version: string;
             /** Output Device Hash */
-            output_device_hash?: string | null;
+            output_device_hash: string | null;
             /**
              * Presence Preset
              * @default natural
@@ -28215,11 +28760,11 @@ export interface components {
              */
             presence_preset: "quiet" | "natural" | "engaged" | "listener";
             /** Pressure Score */
-            pressure_score?: number | null;
+            pressure_score: number | null;
             /** Profile Version */
-            profile_version?: number | null;
+            profile_version: number | null;
             /** Quality Metrics */
-            quality_metrics?: {
+            quality_metrics: {
                 [key: string]: number | null;
             };
             /**
@@ -28235,9 +28780,9 @@ export interface components {
              */
             resolved_duplex_mode: "half_duplex" | "echo_aware";
             /** Scenario Labels */
-            scenario_labels?: string[];
+            scenario_labels: string[];
             /** Session Id */
-            session_id?: string | null;
+            session_id: string | null;
             /** Started At */
             started_at: string;
             /** Updated At */
@@ -28246,13 +28791,13 @@ export interface components {
         /** WorkerHealth */
         WorkerHealth: {
             /** Capabilities */
-            capabilities?: string[];
+            capabilities: string[];
             /** Details */
-            details?: {
+            details: {
                 [key: string]: unknown;
             };
             /** Error */
-            error?: string | null;
+            error: string | null;
             /** Id */
             id: string;
             /**
@@ -28283,7 +28828,7 @@ export interface components {
              */
             contract_version: string;
             /** Diagnostics */
-            diagnostics?: {
+            diagnostics: {
                 [key: string]: unknown;
             }[];
             /**
@@ -28301,9 +28846,9 @@ export interface components {
              * @default not_configured
              */
             status: string;
-            summary?: components["schemas"]["WorkerHealthSummary"];
+            summary: components["schemas"]["WorkerHealthSummary"];
             /** Workers */
-            workers?: components["schemas"]["WorkerHealth"][];
+            workers: components["schemas"]["WorkerHealth"][];
         };
         /** WorkerHealthSummary */
         WorkerHealthSummary: {
@@ -28361,7 +28906,7 @@ export interface components {
              */
             generated_artifacts: string;
             /** Notes */
-            notes?: string[];
+            notes: string[];
             /**
              * Ok
              * @default true
@@ -28389,13 +28934,32 @@ export interface components {
              * Description
              * @default
              */
+            description: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Steps */
+            steps: components["schemas"]["WorkflowStepDefinition"][];
+            /**
+             * Version
+             * @default 1
+             */
+            version: number;
+        };
+        /** WorkflowDefinition */
+        "WorkflowDefinition-Input": {
+            /**
+             * Description
+             * @default
+             */
             description?: string;
             /** Id */
             id: string;
             /** Name */
             name: string;
             /** Steps */
-            steps?: components["schemas"]["WorkflowStepDefinition"][];
+            steps?: components["schemas"]["WorkflowStepDefinition-Input"][];
             /**
              * Version
              * @default 1
@@ -28411,6 +28975,43 @@ export interface components {
         };
         /** WorkflowStepDefinition */
         WorkflowStepDefinition: {
+            /** Capability Id */
+            capability_id: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Id */
+            id: string;
+            /** Input Template */
+            input_template: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @default capability
+             * @enum {string}
+             */
+            kind: "capability" | "condition" | "approval";
+            /** Next Step Id */
+            next_step_id: string | null;
+            /** On False Step Id */
+            on_false_step_id: string | null;
+            /** On True Step Id */
+            on_true_step_id: string | null;
+            /**
+             * Requires Approval
+             * @default false
+             */
+            requires_approval: boolean;
+            /**
+             * Retry Limit
+             * @default 0
+             */
+            retry_limit: number;
+            /** Timeout Seconds */
+            timeout_seconds: number | null;
+        };
+        /** WorkflowStepDefinition */
+        "WorkflowStepDefinition-Input": {
             /** Capability Id */
             capability_id?: string | null;
             /** Condition */
@@ -28449,25 +29050,25 @@ export interface components {
         /** WorkspaceSpec */
         WorkspaceSpec: {
             /** Allowed Paths */
-            allowed_paths?: string[];
+            allowed_paths: string[];
             /**
              * Base Ref
              * @default main
              */
             base_ref: string;
             /** Forbidden Paths */
-            forbidden_paths?: string[];
+            forbidden_paths: string[];
             /**
              * Isolation Policy
              * @default supervised_worktree
              */
             isolation_policy: string;
             /** Repository */
-            repository?: string | null;
+            repository: string | null;
             /** Root */
             root: string;
             /** Worktree */
-            worktree?: string | null;
+            worktree: string | null;
         };
         /** YahooGapperDiscoveryRequest */
         YahooGapperDiscoveryRequest: {
@@ -31135,7 +31736,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AssistantToolRequest"];
+                "application/json": components["schemas"]["AssistantToolRequest-Input"];
             };
         };
         responses: {
@@ -31240,7 +31841,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["AssistantToolRequest"] | null;
+                "application/json": components["schemas"]["AssistantToolRequest-Input"] | null;
             };
         };
         responses: {
@@ -31273,7 +31874,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AssistantToolRequest"];
+                "application/json": components["schemas"]["AssistantToolRequest-Input"];
             };
         };
         responses: {
@@ -33343,7 +33944,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateCharacterAvatarGenerationRequest"];
+                "application/json": components["schemas"]["CreateCharacterAvatarGenerationRequest-Input"];
             };
         };
         responses: {
@@ -36966,7 +37567,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ModelResidencyRecord"];
+                "application/json": components["schemas"]["ModelResidencyRecord-Input"];
             };
         };
         responses: {
@@ -47523,7 +48124,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["WorkflowDefinition"];
+                "application/json": components["schemas"]["WorkflowDefinition-Input"];
             };
         };
         responses: {

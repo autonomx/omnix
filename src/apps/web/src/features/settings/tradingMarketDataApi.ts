@@ -1,11 +1,5 @@
-export type CoinMarketCapCredentialStatus = {
-  provider: 'coinmarketcap';
-  configured: boolean;
-  api_key_masked: string;
-  api_key_source: 'environment' | 'os_protected_store' | 'missing';
-  api_key_editable: boolean;
-  storage: string;
-};
+import type { components } from '../../api/generated/types';
+export type CoinMarketCapCredentialStatus = components['schemas']['CoinMarketCapCredentialStatus'];
 
 export type IbkrSettings = {
   enabled: boolean;
@@ -17,16 +11,7 @@ export type IbkrSettings = {
   recovery_authority_enabled: boolean;
 };
 
-export type IbkrSettingsStatus = {
-  provider: 'ibkr';
-  settings: IbkrSettings;
-  settings_source: 'defaults' | 'environment' | 'omnix_settings' | 'runtime_arguments';
-  connection_status: 'disabled' | 'client_unavailable' | 'connected' | 'disconnected';
-  official_ibapi_available: boolean;
-  connected: boolean;
-  last_error: string | null;
-  diagnostics: Record<string, unknown>;
-};
+export type IbkrSettingsStatus = components['schemas']['IbkrSettingsStatus'];
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {

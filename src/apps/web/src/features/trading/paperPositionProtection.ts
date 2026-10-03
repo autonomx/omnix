@@ -1,13 +1,14 @@
 import { tradingPaperApi } from './tradingPaperApi';
 
-export type PaperPositionProtection = {
+/** Take-profit and stop-loss prices the chart overlay draws for a paper position. */
+export type PositionProtectionLevels = {
   takeProfit: number | null;
   stopLoss: number | null;
 };
 
 export const PAPER_POSITION_PROTECTION_EVENT = 'omnix:paper-position-protection-changed';
 
-const cache = new Map<string, PaperPositionProtection>();
+const cache = new Map<string, PositionProtectionLevels>();
 const inflight = new Set<string>();
 
 function entryKey(accountId: string, instrumentId: string): string {
@@ -20,11 +21,11 @@ function validPrice(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function normalized(value: PaperPositionProtection): PaperPositionProtection {
+function normalized(value: PositionProtectionLevels): PositionProtectionLevels {
   return { takeProfit: validPrice(value.takeProfit), stopLoss: validPrice(value.stopLoss) };
 }
 
-function equal(left: PaperPositionProtection, right: PaperPositionProtection): boolean {
+function equal(left: PositionProtectionLevels, right: PositionProtectionLevels): boolean {
   return left.takeProfit === right.takeProfit && left.stopLoss === right.stopLoss;
 }
 
@@ -39,7 +40,7 @@ async function hydrate(accountId: string, instrumentId: string): Promise<void> {
   inflight.add(key);
   try {
     const value = await tradingPaperApi.protection(accountId, instrumentId);
-    const next: PaperPositionProtection = value
+    const next: PositionProtectionLevels = value
       ? { takeProfit: validPrice(value.take_profit), stopLoss: validPrice(value.stop_loss) }
       : { takeProfit: null, stopLoss: null };
     const previous = cache.get(key) ?? { takeProfit: null, stopLoss: null };
@@ -53,7 +54,7 @@ async function hydrate(accountId: string, instrumentId: string): Promise<void> {
   }
 }
 
-export function readPaperPositionProtection(accountId: string, instrumentId: string): PaperPositionProtection {
+export function readPaperPositionProtection(accountId: string, instrumentId: string): PositionProtectionLevels {
   if (typeof window !== 'undefined') void hydrate(accountId, instrumentId);
   return cache.get(entryKey(accountId, instrumentId)) ?? { takeProfit: null, stopLoss: null };
 }
@@ -61,7 +62,7 @@ export function readPaperPositionProtection(accountId: string, instrumentId: str
 export function writePaperPositionProtection(
   accountId: string,
   instrumentId: string,
-  protection: PaperPositionProtection,
+  protection: PositionProtectionLevels,
 ): void {
   const next = normalized(protection);
   cache.set(entryKey(accountId, instrumentId), next);

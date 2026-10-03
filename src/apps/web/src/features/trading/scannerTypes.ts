@@ -1,3 +1,4 @@
+import type { components } from '../../api/generated/types';
 export type TradingScannerMetric = 'close' | 'percent_change' | 'volume' | 'sma' | 'ema' | 'rsi' | 'atr';
 export type TradingScannerOperator = 'gt' | 'gte' | 'lt' | 'lte';
 export type TradingScannerRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
@@ -29,33 +30,6 @@ export interface TradingScannerDefinition {
   updated_at?: string | null;
 }
 
-export interface TradingScannerRun {
-  run_id: string;
-  scanner_id: string;
-  status: TradingScannerRunStatus;
-  cancellation_requested: boolean;
-  universe_count: number;
-  completed_count: number;
-  matched_count: number;
-  started_at?: string | null;
-  finished_at?: string | null;
-  error_message?: string | null;
-  definition_snapshot: Record<string, unknown>;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
+export type TradingScannerRun = components['schemas']['TradingScannerRun'];
 
-export interface TradingScannerResult {
-  run_id: string;
-  instrument_id: string;
-  requested_binding_id?: string | null;
-  resolved_binding_id: string;
-  provider: string;
-  dataset_fingerprint: string;
-  source_as_of: string;
-  formula_version: string;
-  metrics: Record<string, string>;
-  matched_rules: string[];
-  rank: number;
-  score: string;
-}
+export type TradingScannerResult = components['schemas']['TradingScannerResult'];

@@ -9,7 +9,7 @@ import {
   PAPER_POSITION_PROTECTION_EVENT,
   readPaperPositionProtection,
   writePaperPositionProtection,
-  type PaperPositionProtection,
+  type PositionProtectionLevels,
 } from './paperPositionProtection';
 import './TradingPositionOverlay.css';
 
@@ -52,7 +52,7 @@ export function TradingPositionOverlay({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<OverlayPosition | null>(null);
-  const [protection, setProtection] = useState<PaperPositionProtection>({ takeProfit: null, stopLoss: null });
+  const [protection, setProtection] = useState<PositionProtectionLevels>({ takeProfit: null, stopLoss: null });
   const [draft, setDraft] = useState<DraftProtection | null>(null);
   const [action, setAction] = useState<PositionAction | null>(null);
   const [actionStatus, setActionStatus] = useState<'idle' | 'saving'>('idle');
@@ -157,7 +157,7 @@ export function TradingPositionOverlay({
 
   const entryPrice = position ? Number(position.average_cost) : null;
   const entryY = adapter && entryPrice !== null ? adapter.priceToCoordinate(entryPrice) : null;
-  const currentProtection = useMemo<PaperPositionProtection>(() => {
+  const currentProtection = useMemo<PositionProtectionLevels>(() => {
     if (!draft) return protection;
     return { ...protection, [draft.level]: draft.value };
   }, [draft, protection]);

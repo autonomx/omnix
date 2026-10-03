@@ -5,8 +5,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
 import { IMAGE_GALLERY_BATCH, ImageAssetGallery, type ImageAsset } from './ImageAssetGallery';
+import { fixture } from '../../test/fixture';
 
-const asset = {
+const asset = fixture<ImageAsset>({
   id: 'image:castle',
   module: 'image-generation',
   type: 'image',
@@ -21,7 +22,7 @@ const asset = {
     provider_key: 'flux_klein',
   },
   compat: {},
-} as ImageAsset;
+});
 
 function renderGallery(assets: ImageAsset[] = [asset]) {
   const queryClient = new QueryClient({

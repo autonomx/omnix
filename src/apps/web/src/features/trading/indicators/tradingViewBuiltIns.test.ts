@@ -5,9 +5,10 @@ import {
   calculateTradingViewBuiltInOutputs,
   isTradingViewBuiltInId,
 } from './tradingViewBuiltIns';
+import { fixture } from '../../../test/fixture';
 
 function fixtureBars(count = 720): MarketBar[] {
-  return Array.from({ length: count }, (_, index) => {
+  return fixture(Array.from({ length: count }, (_, index) => {
     const trend = 100 + index * 0.035;
     const wave = Math.sin(index / 9) * 4 + Math.sin(index / 29) * 7;
     const close = trend + wave;
@@ -31,7 +32,7 @@ function fixtureBars(count = 720): MarketBar[] {
       ingestion_revision: 1,
       received_at: new Date().toISOString(),
     };
-  });
+  }));
 }
 
 describe('TradingView built-in indicator catalog', () => {

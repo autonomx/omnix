@@ -75,7 +75,7 @@ describe('OmnixRunCard', () => {
       revision: 2,
       spec: { profile: 'coding', task: 'Fix the editor' },
     } as never);
-    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([{
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([fixture({
       event_id: 'stall-1',
       run_id: 'run-stall-warning',
       sequence: 9,
@@ -85,7 +85,7 @@ describe('OmnixRunCard', () => {
         automatic_recovery: false,
       },
       created_at: '2026-09-12T01:00:00Z',
-    }]);
+    })]);
     vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
@@ -176,7 +176,7 @@ describe('OmnixRunCard', () => {
 
   it('shows when an Agent is waiting for the user to answer a clarification', async () => {
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
-      {
+      fixture({
         event_id: 'event-clarification',
         run_id: 'run-waiting',
         sequence: 4,
@@ -187,7 +187,7 @@ describe('OmnixRunCard', () => {
           text: 'Which header control should move?',
         },
         created_at: '2026-09-05T00:00:00Z',
-      },
+      }),
     ]);
     renderCard({
       agent_run: {
@@ -322,15 +322,15 @@ describe('OmnixRunCard', () => {
       spec: { profile: 'coding', task: 'Fix the issue in code', evidence_policy: { requirements: [] } },
     }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
-      {
+      fixture({
         event_id: 'activity-1',
         run_id: 'run-repair',
         sequence: 1,
         event_type: 'model.message',
         payload: { text: 'I found the validation failure and I am correcting the implementation.' },
         created_at: '2026-08-29T00:00:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-2',
         run_id: 'run-repair',
         sequence: 2,
@@ -341,8 +341,8 @@ describe('OmnixRunCard', () => {
           args: { command: 'python -m pytest src/tests/live_speech -q' },
         },
         created_at: '2026-08-29T00:00:01Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-3',
         run_id: 'run-repair',
         sequence: 3,
@@ -354,8 +354,8 @@ describe('OmnixRunCard', () => {
           result: { details: { exitCode: 1, stderr: '2 failed, 18 passed' } },
         },
         created_at: '2026-08-29T00:00:02Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-4b',
         run_id: 'run-repair',
         sequence: 4,
@@ -366,8 +366,8 @@ describe('OmnixRunCard', () => {
           args: { path: 'src/apps/web/src/features/chatbot/OmnixRunCard.tsx' },
         },
         created_at: '2026-08-29T00:00:02Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-4c',
         run_id: 'run-repair',
         sequence: 5,
@@ -379,8 +379,8 @@ describe('OmnixRunCard', () => {
           result: { output: 'source loaded' },
         },
         created_at: '2026-08-29T00:00:02Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-4',
         run_id: 'run-repair',
         sequence: 4,
@@ -391,15 +391,15 @@ describe('OmnixRunCard', () => {
           failures: ['successful_test_command'],
         },
         created_at: '2026-08-29T00:00:03Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'activity-5',
         run_id: 'run-repair',
         sequence: 5,
         event_type: 'acceptance.retry_requested',
         payload: { attempt: 1, failures: ['successful_test_command'] },
         created_at: '2026-08-29T00:00:04Z',
-      },
+      }),
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
@@ -455,7 +455,7 @@ describe('OmnixRunCard', () => {
       spec: { profile: 'coding', task: 'Inspect the repository', evidence_policy: { requirements: [] } },
     }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
-      {
+      fixture({
         event_id: 'thinking-tool-1',
         run_id: 'run-thinking',
         sequence: 1,
@@ -466,8 +466,8 @@ describe('OmnixRunCard', () => {
           args: { command: 'git status --short --branch' },
         },
         created_at: '2026-09-03T00:00:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'thinking-tool-2',
         run_id: 'run-thinking',
         sequence: 2,
@@ -478,7 +478,7 @@ describe('OmnixRunCard', () => {
           args: { path: 'src/apps/web/src/features/chatbot/OmnixRunCardCore.tsx' },
         },
         created_at: '2026-09-03T00:00:01Z',
-      },
+      }),
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
@@ -535,7 +535,7 @@ describe('OmnixRunCard', () => {
       spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
     }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
-      {
+      fixture({
         event_id: 'event-plan',
         run_id: 'run-evidence',
         sequence: 0,
@@ -545,8 +545,8 @@ describe('OmnixRunCard', () => {
           text: 'I will inspect the repository and make the requested change.',
         },
         created_at: '2026-08-27T00:00:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-1',
         run_id: 'run-evidence',
         sequence: 1,
@@ -557,16 +557,16 @@ describe('OmnixRunCard', () => {
           args: { command: 'python -m pytest src/tests/agent_runtime -q' },
         },
         created_at: '2026-08-27T00:00:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-2',
         run_id: 'run-evidence',
         sequence: 2,
         event_type: 'tool.completed',
         payload: { tool_call_id: 'tool-1', tool: 'bash', is_error: false },
         created_at: '2026-08-27T00:00:01Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-3',
         run_id: 'run-evidence',
         sequence: 3,
@@ -575,16 +575,16 @@ describe('OmnixRunCard', () => {
           text: 'Implemented the requested fix.\n\n- Updated the runtime UI.\n\nVerification:\n\n- `npm test` passed.',
         },
         created_at: '2026-08-27T00:00:01Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-review-stage',
         run_id: 'run-evidence',
         sequence: 4,
         event_type: 'quality.stage',
         payload: { stage: 'self_review' },
         created_at: '2026-08-27T00:01:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-review',
         run_id: 'run-evidence',
         sequence: 5,
@@ -594,15 +594,15 @@ describe('OmnixRunCard', () => {
           text: '{"verdict":"approve","requirements":[],"findings":[],"missing_tests":[],"residual_risks":[]}',
         },
         created_at: '2026-08-27T00:01:01Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'event-4',
         run_id: 'run-evidence',
         sequence: 6,
         event_type: 'acceptance.completed',
         payload: { passed: true },
         created_at: '2026-08-27T00:01:37Z',
-      },
+      }),
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue(fixture([{
       revision_id: 'revision-1',
@@ -690,15 +690,15 @@ describe('OmnixRunCard', () => {
       spec: { profile: 'coding', task: 'Add the sidebar collapse control' },
     } as never);
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
-      {
+      fixture({
         event_id: 'fallback-plan',
         run_id: 'run-fallback-summary',
         sequence: 1,
         event_type: 'model.message',
         payload: { phase: 'message_end', text: 'I will inspect the sidebar first.' },
         created_at: '2026-09-09T00:00:00Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'fallback-tool-start',
         run_id: 'run-fallback-summary',
         sequence: 2,
@@ -709,23 +709,23 @@ describe('OmnixRunCard', () => {
           args: { command: 'npm run test -- sidebar' },
         },
         created_at: '2026-09-09T00:00:01Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'fallback-tool-complete',
         run_id: 'run-fallback-summary',
         sequence: 3,
         event_type: 'tool.completed',
         payload: { tool_call_id: 'fallback-tool', tool: 'bash', is_error: false },
         created_at: '2026-09-09T00:00:02Z',
-      },
-      {
+      }),
+      fixture({
         event_id: 'fallback-acceptance',
         run_id: 'run-fallback-summary',
         sequence: 4,
         event_type: 'acceptance.completed',
         payload: { passed: true },
         created_at: '2026-09-09T00:00:03Z',
-      },
+      }),
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({

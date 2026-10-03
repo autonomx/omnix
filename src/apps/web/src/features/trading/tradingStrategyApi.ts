@@ -17,6 +17,7 @@ import type {
   V2ProspectiveQualification,
   YahooGapperDiscoveryInput,
 } from './tradingStrategyTypes';
+import type { components } from '../../api/generated/types';
 
 const DEEP_RECOVERY_EVENT_TYPES = new Set(['deep_recovery_state', 'deep_recovery_shadow']);
 const PROSPECTIVE_ECONOMIC_EVENT_TYPES = new Set([
@@ -28,15 +29,7 @@ const PROSPECTIVE_ECONOMIC_EVENT_TYPES = new Set([
   'prospective_economic_auto_paper_review',
 ]);
 
-export type StrategyRuntimeMonitorStatus = {
-  configured_enabled: boolean;
-  registered: boolean;
-  running: boolean;
-  interval_seconds: number | null;
-  last_run_at: string | null;
-  last_error: string | null;
-  counters: Record<string, number>;
-};
+export type StrategyRuntimeMonitorStatus = components['schemas']['StrategyRuntimeMonitorStatus'];
 
 export type TradingStrategyOperationsStatus = {
   observed_at: string;

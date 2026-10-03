@@ -1,6 +1,6 @@
 import type { components } from '../../api/generated/types';
 
-type ToolRequest = components['schemas']['AssistantToolRequest'];
+type ToolRequest = components['schemas']['AssistantToolRequest-Input'];
 type ToolProposal = components['schemas']['AssistantToolProposalPayload'];
 type ToolExecution = components['schemas']['HermesAssistantToolExecutePayload'];
 

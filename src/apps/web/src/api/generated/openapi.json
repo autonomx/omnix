@@ -57,7 +57,12 @@
           }
         },
         "required": [
-          "require_diff"
+          "required_commands",
+          "allowed_modified_paths",
+          "forbidden_modified_paths",
+          "required_artifacts",
+          "require_diff",
+          "checks"
         ],
         "title": "AcceptancePlan",
         "type": "object"
@@ -526,6 +531,7 @@
           "change_id",
           "new_strategy",
           "changed_at",
+          "previous_strategy",
           "proposition_ids"
         ],
         "title": "ActivityStrategyChange",
@@ -667,7 +673,12 @@
         "required": [
           "run_id",
           "capability_id",
-          "state"
+          "approval_id",
+          "state",
+          "request_payload",
+          "resolution_payload",
+          "created_at",
+          "resolved_at"
         ],
         "title": "AgentApproval",
         "type": "object"
@@ -735,7 +746,12 @@
         "required": [
           "run_id",
           "kind",
-          "name"
+          "name",
+          "artifact_id",
+          "storage_ref",
+          "checksum",
+          "metadata",
+          "created_at"
         ],
         "title": "AgentArtifact",
         "type": "object"
@@ -962,7 +978,13 @@
         },
         "required": [
           "run_id",
-          "event_type"
+          "event_type",
+          "event_id",
+          "sequence",
+          "payload",
+          "correlation_id",
+          "causation_id",
+          "created_at"
         ],
         "title": "AgentEvent",
         "type": "object"
@@ -1182,7 +1204,17 @@
           "status",
           "desired_state",
           "revision",
-          "quality_attempt"
+          "worker_id",
+          "superseded_by_run_id",
+          "quality_stage",
+          "quality_attempt",
+          "workspace_state_id",
+          "usage",
+          "started_at",
+          "completed_at",
+          "last_error",
+          "created_at",
+          "updated_at"
         ],
         "title": "AgentRunSnapshot",
         "type": "object"
@@ -1381,14 +1413,30 @@
         "required": [
           "task",
           "model",
+          "run_id",
+          "session_id",
+          "parent_run_id",
           "objective",
+          "success_criteria",
           "runtime",
           "profile",
+          "capabilities",
+          "resource_scopes",
+          "external_capabilities",
+          "request_mode",
+          "evidence_policy",
+          "supersedes_run_id",
+          "workspace",
+          "execution",
+          "limits",
           "approval_policy",
           "quality_policy",
           "quality_reserve_fraction",
+          "context_sources",
           "artifact_policy",
-          "persistence_policy"
+          "expected_artifacts",
+          "persistence_policy",
+          "acceptance_plan"
         ],
         "title": "AgentRunSpec",
         "type": "object"
@@ -1778,7 +1826,13 @@
         },
         "required": [
           "source",
-          "would_import"
+          "would_import",
+          "category_counts",
+          "roots_scanned",
+          "collision_asset_ids",
+          "skipped_files",
+          "warnings",
+          "assets"
         ],
         "title": "AssetLegacyImportDryRun",
         "type": "object"
@@ -1835,6 +1889,7 @@
         },
         "required": [
           "assets",
+          "next_cursor",
           "has_more"
         ],
         "title": "AssetListResponse",
@@ -1868,7 +1923,9 @@
         },
         "required": [
           "source",
-          "would_import"
+          "would_import",
+          "missing_files",
+          "assets"
         ],
         "title": "AssetMigrationPreview",
         "type": "object"
@@ -1974,7 +2031,15 @@
           "type",
           "mime_type",
           "created_at",
-          "storage_path"
+          "owner_id",
+          "storage_path",
+          "storage_key",
+          "checksum_sha256",
+          "metadata",
+          "source_job_id",
+          "parent_asset_ids",
+          "derived_asset_ids",
+          "compat"
         ],
         "title": "AssetRecord",
         "type": "object"
@@ -2039,6 +2104,37 @@
           }
         },
         "required": [
+          "action_id",
+          "enabled",
+          "approval_policy"
+        ],
+        "title": "AssistantActionConfigRecord",
+        "type": "object"
+      },
+      "AssistantActionConfigRecord-Input": {
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "approval_policy": {
+            "default": "allow_automatic",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
           "action_id"
         ],
         "title": "AssistantActionConfigRecord",
@@ -2075,6 +2171,7 @@
           }
         },
         "required": [
+          "tools",
           "total_tools",
           "enabled_tools",
           "recent_execution_count",
@@ -2571,6 +2668,7 @@
         "required": [
           "settings",
           "settings_source",
+          "environment_overrides",
           "approval_policy_locked",
           "diagnostics_policy"
         ],
@@ -2944,6 +3042,98 @@
           }
         },
         "required": [
+          "tool_id",
+          "enabled",
+          "connection_status",
+          "account_label",
+          "account_email",
+          "connected_at",
+          "approval_policy",
+          "actions"
+        ],
+        "title": "AssistantToolConfigRecord",
+        "type": "object"
+      },
+      "AssistantToolConfigRecord-Input": {
+        "properties": {
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantActionConfigRecord-Input"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "approval_policy": {
+            "anyOf": [
+              {
+                "enum": [
+                  "allow_automatic",
+                  "ask_sensitive",
+                  "always_ask",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Policy"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "connection_status": {
+            "default": "not_configured",
+            "enum": [
+              "not_configured",
+              "connected",
+              "error"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
           "tool_id"
         ],
         "title": "AssistantToolConfigRecord",
@@ -3001,7 +3191,10 @@
         },
         "required": [
           "tool_id",
+          "provider",
           "configured",
+          "auth_url",
+          "redirect_uri",
           "message"
         ],
         "title": "AssistantToolConnectionStartPayload",
@@ -3059,9 +3252,12 @@
         },
         "required": [
           "detected",
+          "tool_id",
+          "action_id",
           "confidence",
           "preview_title",
-          "preview_summary"
+          "preview_summary",
+          "input"
         ],
         "title": "AssistantToolIntent",
         "type": "object"
@@ -3152,10 +3348,15 @@
         "required": [
           "tool_id",
           "action_id",
+          "execution_id",
+          "session_id",
+          "proposal_id",
           "approval_source",
           "input_summary",
           "result_summary",
-          "state_changed"
+          "state_changed",
+          "error",
+          "created_at"
         ],
         "title": "AssistantToolLedgerEntry",
         "type": "object"
@@ -3170,6 +3371,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "entries"
+        ],
         "title": "AssistantToolLedgerPayload",
         "type": "object"
       },
@@ -3308,6 +3512,56 @@
         },
         "required": [
           "tool_id",
+          "action_id",
+          "session_id",
+          "proposal_id",
+          "input"
+        ],
+        "title": "AssistantToolRequest",
+        "type": "object"
+      },
+      "AssistantToolRequest-Input": {
+        "additionalProperties": false,
+        "description": "Canonical request envelope required before any tool action can run.",
+        "properties": {
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "tool_id": {
+            "title": "Tool Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_id",
           "action_id"
         ],
         "title": "AssistantToolRequest",
@@ -3375,9 +3629,12 @@
         "required": [
           "tool_id",
           "action_id",
+          "session_id",
           "risk_level",
           "state_changed",
-          "result_summary"
+          "result_summary",
+          "output",
+          "error"
         ],
         "title": "AssistantToolResult",
         "type": "object"
@@ -3412,6 +3669,7 @@
         },
         "required": [
           "message",
+          "ledger_ref",
           "state_changed",
           "sensitive_summary"
         ],
@@ -3490,11 +3748,13 @@
         "required": [
           "tool_id",
           "action_id",
+          "session_id",
           "allowed",
           "executable",
           "approval_required",
           "risk_level",
           "state_changed",
+          "reason",
           "result_summary"
         ],
         "title": "AssistantToolReviewDecision",
@@ -3558,8 +3818,10 @@
           "name",
           "description",
           "category",
+          "provider",
           "enabled",
-          "connection_status"
+          "connection_status",
+          "actions"
         ],
         "title": "AssistantToolSpec",
         "type": "object"
@@ -3568,7 +3830,7 @@
         "properties": {
           "tools": {
             "items": {
-              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+              "$ref": "#/components/schemas/AssistantToolConfigRecord-Input"
             },
             "title": "Tools",
             "type": "array"
@@ -3659,7 +3921,11 @@
         "required": [
           "enforced",
           "mode",
-          "authenticated"
+          "authenticated",
+          "user_id",
+          "workspace_id",
+          "roles",
+          "auth_method"
         ],
         "title": "AuthSessionResponse",
         "type": "object"
@@ -3709,6 +3975,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "items"
+        ],
         "title": "BackfillClonedVoiceCharactersResponse",
         "type": "object"
       },
@@ -3915,7 +4184,9 @@
         "required": [
           "log_index",
           "message",
-          "level"
+          "bar_time",
+          "level",
+          "payload"
         ],
         "title": "BacktestLogEntry",
         "type": "object"
@@ -4168,7 +4439,9 @@
           "trades",
           "equity_curve",
           "logs",
-          "mark_to_market_policy"
+          "mark_to_market_policy",
+          "artifact",
+          "error_message"
         ],
         "title": "BacktestRunResult",
         "type": "object"
@@ -4401,7 +4674,16 @@
           }
         },
         "required": [
-          "n"
+          "n",
+          "base_rate",
+          "accuracy",
+          "brier_score",
+          "log_loss",
+          "bullish_precision",
+          "bullish_recall",
+          "climatology_probability",
+          "climatology_brier",
+          "brier_skill"
         ],
         "title": "BinaryForecastMetrics",
         "type": "object"
@@ -4797,6 +5079,8 @@
           "breakout_volume_ratio",
           "atr_pct",
           "minutes_since_open",
+          "float_shares_log10",
+          "market_cap_log10",
           "catalyst_positive",
           "catalyst_negative",
           "dilution_flag"
@@ -5440,7 +5724,10 @@
         "required": [
           "capability_id",
           "executed",
-          "approval_required"
+          "approval_required",
+          "approval_id",
+          "execution_key",
+          "result"
         ],
         "title": "BrokerCapabilityResponse",
         "type": "object"
@@ -5517,7 +5804,9 @@
         },
         "required": [
           "allowed",
-          "approval_required"
+          "approval_required",
+          "approval_id",
+          "reason"
         ],
         "title": "BrokerCommandAuthorizationResponse",
         "type": "object"
@@ -5584,7 +5873,8 @@
           }
         },
         "required": [
-          "allowed"
+          "allowed",
+          "usage"
         ],
         "title": "BrokerToolBudgetResponse",
         "type": "object"
@@ -5841,7 +6131,10 @@
           }
         },
         "required": [
-          "requested"
+          "requested",
+          "requested_at",
+          "acknowledged_at",
+          "reason"
         ],
         "title": "CancelState",
         "type": "object"
@@ -5992,6 +6285,8 @@
           "venue",
           "venue_symbol",
           "display_symbol",
+          "base_currency",
+          "quote_currency",
           "exchange_timezone",
           "session_calendar",
           "price_scale",
@@ -6273,6 +6568,8 @@
           "content",
           "text_hash",
           "immutable_fingerprint",
+          "headline",
+          "facts",
           "dilution_flags"
         ],
         "title": "CatalystEvidence",
@@ -6467,10 +6764,12 @@
           "source_count_primary",
           "source_count_secondary",
           "catalyst_type",
+          "source_published_at",
           "official_filing_present",
           "company_release_present",
           "unresolved",
-          "source_evidence_ids"
+          "source_evidence_ids",
+          "omnix_known_at"
         ],
         "title": "CatalystFactSet",
         "type": "object"
@@ -6709,6 +7008,9 @@
           "base_job_id",
           "created_at",
           "updated_at",
+          "variant_job_ids",
+          "asset_ids",
+          "avatar_pack_version",
           "error"
         ],
         "title": "CharacterAvatarGenerationBatch",
@@ -6724,6 +7026,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "batches"
+        ],
         "title": "CharacterAvatarGenerationListResponse",
         "type": "object"
       },
@@ -6868,7 +7173,17 @@
           "updated_at",
           "version",
           "render_mode",
-          "renderer"
+          "renderer",
+          "rig_asset_id",
+          "base_asset_id",
+          "mouth_frames",
+          "blink_frames",
+          "expression_frames",
+          "outfit_frames",
+          "background_asset_ids",
+          "active_outfit",
+          "active_background",
+          "mouth_anchor"
         ],
         "title": "CharacterAvatarPack",
         "type": "object"
@@ -7063,7 +7378,10 @@
           "enabled",
           "available",
           "character_id",
-          "memory_dir"
+          "memory_dir",
+          "imported_candidate_ids",
+          "exported_memory_ids",
+          "skipped_reasons"
         ],
         "title": "CharacterHermesSyncStatus",
         "type": "object"
@@ -7078,6 +7396,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "characters"
+        ],
         "title": "CharacterListResponse",
         "type": "object"
       },
@@ -7218,10 +7539,17 @@
           "display_name",
           "speech_style",
           "preload",
+          "character_id",
+          "character_profile_version",
+          "effective_identity_hash",
+          "voice_asset_id",
+          "voice_speaker_id",
           "greeting",
+          "avatar_pack",
           "read_memory",
           "write_memory",
-          "shared_memory_access"
+          "shared_memory_access",
+          "memory_snapshot_id"
         ],
         "title": "CharacterLiveCallRuntime",
         "type": "object"
@@ -7323,6 +7651,10 @@
           "updated_at",
           "description",
           "default_greeting",
+          "default_voice_asset_id",
+          "speech_style",
+          "identity_policy",
+          "shared_memory_policy",
           "active_version",
           "enabled",
           "status"
@@ -7407,7 +7739,11 @@
           "personality_prompt",
           "created_at",
           "description",
-          "default_greeting"
+          "default_greeting",
+          "default_voice_asset_id",
+          "speech_style",
+          "identity_policy",
+          "shared_memory_policy"
         ],
         "title": "CharacterProfileVersion",
         "type": "object"
@@ -7463,6 +7799,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "versions"
+        ],
         "title": "CharacterVersionListResponse",
         "type": "object"
       },
@@ -7545,6 +7884,11 @@
           "status",
           "created_at",
           "updated_at",
+          "job_ids",
+          "asset_ids",
+          "attempts",
+          "quality_fallbacks",
+          "avatar_pack_version",
           "error"
         ],
         "title": "CharacterVisemeGenerationBatch",
@@ -7583,7 +7927,8 @@
           "id",
           "role",
           "content",
-          "created_at"
+          "created_at",
+          "metadata"
         ],
         "title": "ChatMessage",
         "type": "object"
@@ -7827,16 +8172,29 @@
           "title",
           "created_at",
           "updated_at",
+          "provider_id",
+          "model_id",
+          "research_mode_override",
           "profile_id",
           "workspace_id",
+          "project_id",
           "memory_enabled",
+          "memory_snapshot_id",
+          "memory_snapshot_revision",
           "memory_record_count",
+          "memory_last_refreshed_at",
           "interaction_mode",
+          "character_id",
+          "voice_asset_id",
           "read_memory",
           "write_memory",
           "shared_memory_access",
           "transcript_policy",
-          "message_count"
+          "active_segment_id",
+          "character_profile_version",
+          "effective_identity_hash",
+          "message_count",
+          "messages"
         ],
         "title": "ChatSession",
         "type": "object"
@@ -7863,7 +8221,8 @@
           }
         },
         "required": [
-          "sessions"
+          "sessions",
+          "next_cursor"
         ],
         "title": "ChatSessionListResponse",
         "type": "object"
@@ -8100,15 +8459,27 @@
           "title",
           "created_at",
           "updated_at",
+          "provider_id",
+          "model_id",
+          "research_mode_override",
           "profile_id",
           "workspace_id",
+          "project_id",
           "memory_enabled",
+          "memory_snapshot_id",
+          "memory_snapshot_revision",
           "memory_record_count",
+          "memory_last_refreshed_at",
           "interaction_mode",
+          "character_id",
+          "voice_asset_id",
           "read_memory",
           "write_memory",
           "shared_memory_access",
           "transcript_policy",
+          "active_segment_id",
+          "character_profile_version",
+          "effective_identity_hash",
           "message_count"
         ],
         "title": "ChatSessionSummary",
@@ -8203,7 +8574,8 @@
           "version",
           "source",
           "checksum",
-          "payload"
+          "payload",
+          "metadata"
         ],
         "title": "CheckpointEnvelope",
         "type": "object"
@@ -8227,7 +8599,7 @@
           "limits": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RunLimits"
+                "$ref": "#/components/schemas/RunLimits-Input"
               },
               {
                 "type": "null"
@@ -8287,7 +8659,7 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ResourceScope"
+                  "$ref": "#/components/schemas/ResourceScope-Input"
                 },
                 "type": "array"
               },
@@ -8385,7 +8757,9 @@
           }
         },
         "required": [
-          "ok"
+          "ok",
+          "job",
+          "reason"
         ],
         "title": "ClaimJobResponse",
         "type": "object"
@@ -8551,6 +8925,8 @@
           "voice_asset_id",
           "display_name",
           "result",
+          "character_id",
+          "generation_batch_id",
           "reason"
         ],
         "title": "ClonedVoiceCharacterBackfillItem",
@@ -8626,8 +9002,12 @@
         "required": [
           "installed",
           "authenticated",
+          "auth_mode",
+          "cli_version",
           "detail",
-          "started"
+          "started",
+          "pid",
+          "auth_url"
         ],
         "title": "CodexAuthStatus",
         "type": "object"
@@ -8842,7 +9222,10 @@
           "session_id",
           "started_at",
           "last_meaningful_change_at",
+          "character_id",
           "revision",
+          "generation",
+          "fields",
           "pending_transitions",
           "progress_markers",
           "recent_meaningful_events",
@@ -8938,7 +9321,9 @@
           "rationale",
           "target_sentences",
           "priority",
-          "policy_version"
+          "scores",
+          "policy_version",
+          "eligible_in_ms"
         ],
         "title": "CompanionAttentionDecision",
         "type": "object"
@@ -8980,6 +9365,9 @@
         },
         "required": [
           "turns",
+          "counters",
+          "totals",
+          "maxima",
           "diagnostics_policy"
         ],
         "title": "CompanionMemoryMetrics",
@@ -9035,7 +9423,8 @@
           "legacy_ui_status",
           "existing_fastapi_app",
           "domain_logic_policy",
-          "migration_note"
+          "migration_note",
+          "handoff_targets"
         ],
         "title": "CompatibilityHandoffPayload",
         "type": "object"
@@ -9254,6 +9643,146 @@
         "type": "object"
       },
       "CreateCharacterAvatarGenerationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "appearance_prompt": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Appearance Prompt",
+            "type": "string"
+          },
+          "background_prompt": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Background Prompt",
+            "type": "string"
+          },
+          "guidance_scale": {
+            "anyOf": [
+              {
+                "maximum": 30,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guidance Scale"
+          },
+          "height": {
+            "default": 768,
+            "maximum": 2048,
+            "minimum": 256,
+            "multipleOf": 64,
+            "title": "Height",
+            "type": "integer"
+          },
+          "include_background": {
+            "default": true,
+            "title": "Include Background",
+            "type": "boolean"
+          },
+          "include_blink": {
+            "default": true,
+            "title": "Include Blink",
+            "type": "boolean"
+          },
+          "include_expressions": {
+            "default": true,
+            "title": "Include Expressions",
+            "type": "boolean"
+          },
+          "include_outfit": {
+            "default": true,
+            "title": "Include Outfit",
+            "type": "boolean"
+          },
+          "outfit_prompt": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Outfit Prompt",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "image:flux_klein",
+            "maxLength": 200,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "source_asset_id": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Source Asset Id",
+            "type": "string"
+          },
+          "source_image_consent_confirmed": {
+            "default": false,
+            "title": "Source Image Consent Confirmed",
+            "type": "boolean"
+          },
+          "steps": {
+            "default": 4,
+            "maximum": 80,
+            "minimum": 1,
+            "title": "Steps",
+            "type": "integer"
+          },
+          "style": {
+            "default": "illustrated character portrait",
+            "maxLength": 200,
+            "title": "Style",
+            "type": "string"
+          },
+          "unload_after_generation": {
+            "default": false,
+            "title": "Unload After Generation",
+            "type": "boolean"
+          },
+          "width": {
+            "default": 768,
+            "maximum": 2048,
+            "minimum": 256,
+            "multipleOf": 64,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "appearance_prompt",
+          "style",
+          "outfit_prompt",
+          "background_prompt",
+          "provider_id",
+          "width",
+          "height",
+          "seed",
+          "steps",
+          "guidance_scale",
+          "include_blink",
+          "include_expressions",
+          "include_outfit",
+          "include_background",
+          "unload_after_generation",
+          "source_asset_id",
+          "source_image_consent_confirmed"
+        ],
+        "title": "CreateCharacterAvatarGenerationRequest",
+        "type": "object"
+      },
+      "CreateCharacterAvatarGenerationRequest-Input": {
         "additionalProperties": false,
         "properties": {
           "appearance_prompt": {
@@ -9638,7 +10167,7 @@
           },
           "stages": {
             "items": {
-              "$ref": "#/components/schemas/JobStage"
+              "$ref": "#/components/schemas/JobStage-Input"
             },
             "title": "Stages",
             "type": "array"
@@ -9906,7 +10435,16 @@
           "confirmed_long_count",
           "authorization_long_count",
           "authorization_no_trade_count",
-          "runtime_version"
+          "runtime_version",
+          "v42_metrics",
+          "v42_comparison",
+          "v42_return_metrics",
+          "v43_metrics",
+          "v43_comparison",
+          "legacy_portfolio_scores",
+          "portfolio_e_performance",
+          "portfolio_f_performance",
+          "portfolio_g_performance"
         ],
         "title": "DailyProspectiveScorecard",
         "type": "object"
@@ -10003,6 +10541,7 @@
           "freshness_mode",
           "as_of",
           "received_at",
+          "fallback_reason",
           "delay_seconds",
           "cached",
           "history_complete"
@@ -10237,10 +10776,204 @@
             "type": "number"
           }
         },
+        "required": [
+          "activity",
+          "hypothesis",
+          "confidence",
+          "changed_ratio",
+          "mean_difference",
+          "horizontal_shift",
+          "vertical_shift",
+          "focus",
+          "source_width",
+          "source_height",
+          "details"
+        ],
+        "title": "DesktopActivitySignal",
+        "type": "object"
+      },
+      "DesktopActivitySignal-Input": {
+        "additionalProperties": false,
+        "description": "Conservative browser-side visual activity classification.",
+        "properties": {
+          "activity": {
+            "default": "unknown",
+            "enum": [
+              "static",
+              "micro_change",
+              "translation_like",
+              "localized_change",
+              "continuous_motion",
+              "full_scene_change",
+              "unknown"
+            ],
+            "title": "Activity",
+            "type": "string"
+          },
+          "changed_ratio": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Changed Ratio",
+            "type": "number"
+          },
+          "confidence": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "focus": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Focus",
+            "type": "number"
+          },
+          "horizontal_shift": {
+            "default": 0,
+            "title": "Horizontal Shift",
+            "type": "number"
+          },
+          "hypothesis": {
+            "default": "none",
+            "enum": [
+              "none",
+              "likely_scroll",
+              "likely_typing",
+              "likely_navigation",
+              "likely_app_switch",
+              "likely_media"
+            ],
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "mean_difference": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Mean Difference",
+            "type": "number"
+          },
+          "source_height": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Height"
+          },
+          "source_width": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Width"
+          },
+          "vertical_shift": {
+            "default": 0,
+            "title": "Vertical Shift",
+            "type": "number"
+          }
+        },
         "title": "DesktopActivitySignal",
         "type": "object"
       },
       "DesktopBehaviorState": {
+        "additionalProperties": false,
+        "description": "Bounded temporal interpretation of recent activity signals.",
+        "properties": {
+          "browsing_pace": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Browsing Pace",
+            "type": "number"
+          },
+          "current_pattern": {
+            "default": "starting",
+            "enum": [
+              "starting",
+              "settled",
+              "browsing",
+              "rapid_switching",
+              "exploring",
+              "watching",
+              "typing",
+              "mixed"
+            ],
+            "title": "Current Pattern",
+            "type": "string"
+          },
+          "likely_media": {
+            "default": false,
+            "title": "Likely Media",
+            "type": "boolean"
+          },
+          "likely_typing": {
+            "default": false,
+            "title": "Likely Typing",
+            "type": "boolean"
+          },
+          "rapid_browsing": {
+            "default": false,
+            "title": "Rapid Browsing",
+            "type": "boolean"
+          },
+          "sample_count": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Sample Count",
+            "type": "integer"
+          },
+          "settled_seconds": {
+            "default": 0,
+            "minimum": 0,
+            "title": "Settled Seconds",
+            "type": "number"
+          },
+          "transition": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transition"
+          }
+        },
+        "required": [
+          "current_pattern",
+          "settled_seconds",
+          "browsing_pace",
+          "rapid_browsing",
+          "likely_typing",
+          "likely_media",
+          "transition",
+          "sample_count"
+        ],
+        "title": "DesktopBehaviorState",
+        "type": "object"
+      },
+      "DesktopBehaviorState-Input": {
         "additionalProperties": false,
         "description": "Bounded temporal interpretation of recent activity signals.",
         "properties": {
@@ -10419,12 +11152,14 @@
           "observation_id",
           "state",
           "cognition",
+          "character_id",
           "activity_summary",
           "processed_proposition_ids",
           "ignored_proposition_ids",
           "prompt_injection_suppressed",
           "recovered_from_checkpoint",
-          "checkpoint_status"
+          "checkpoint_status",
+          "checkpoint_reason"
         ],
         "title": "DesktopCompanionActivitySnapshot",
         "type": "object"
@@ -10515,7 +11250,8 @@
           "activity_thread",
           "importance",
           "observed_at",
-          "observation_count"
+          "observation_count",
+          "character_id"
         ],
         "title": "DesktopCompanionContextSnapshot",
         "type": "object"
@@ -10917,15 +11653,22 @@
           "evaluation_id",
           "created_at",
           "updated_at",
+          "session_id",
           "app_version",
           "browser_version",
           "os_version",
           "character_id",
+          "profile_version",
           "observation_schema_version",
           "attention_policy_version",
           "rollout_stage",
           "vision_provider",
-          "remote_provider"
+          "vision_model_hash",
+          "remote_provider",
+          "counts",
+          "latency_ms",
+          "rates",
+          "scenario_labels"
         ],
         "title": "DesktopCompanionEvaluationRecord",
         "type": "object"
@@ -10990,7 +11733,8 @@
           "status",
           "samples",
           "limit",
-          "comparison"
+          "comparison",
+          "observed"
         ],
         "title": "DesktopCompanionGateMetric",
         "type": "object"
@@ -11000,7 +11744,7 @@
         "description": "One browser-authorized, bounded background observation request.",
         "properties": {
           "activity": {
-            "$ref": "#/components/schemas/DesktopActivitySignal"
+            "$ref": "#/components/schemas/DesktopActivitySignal-Input"
           },
           "assistant_busy": {
             "default": false,
@@ -11008,7 +11752,7 @@
             "type": "boolean"
           },
           "behavior": {
-            "$ref": "#/components/schemas/DesktopBehaviorState"
+            "$ref": "#/components/schemas/DesktopBehaviorState-Input"
           },
           "capture_generation": {
             "maxLength": 160,
@@ -11286,11 +12030,17 @@
         "required": [
           "status",
           "reason",
+          "observation",
+          "attention",
           "scene_summary",
           "activity_summary",
+          "activity_intent",
+          "activity_grounding_ids",
           "activity_confidence",
           "activity_salience",
-          "delivery_eligible"
+          "delivery_eligible",
+          "evaluation_scenario",
+          "coordinator"
         ],
         "title": "DesktopCompanionObserveResponse",
         "type": "object"
@@ -11538,7 +12288,10 @@
         "required": [
           "ready",
           "reason",
-          "remote"
+          "model_id",
+          "endpoint",
+          "remote",
+          "latency_ms"
         ],
         "title": "DesktopCompanionPreflightResult",
         "type": "object"
@@ -11901,8 +12654,19 @@
           "captured_at",
           "expires_at",
           "schema_version",
+          "character_id",
+          "observed_at",
+          "activity",
+          "behavior",
           "change_kind",
-          "importance"
+          "current_scene",
+          "visible_changes",
+          "visible_text",
+          "possible_events",
+          "uncertainties",
+          "importance",
+          "plain_text_fallback",
+          "diagnostics"
         ],
         "title": "DesktopObservation",
         "type": "object"
@@ -11959,7 +12723,9 @@
         },
         "required": [
           "event",
-          "confidence"
+          "confidence",
+          "between",
+          "fingerprint"
         ],
         "title": "DesktopObservedChange",
         "type": "object"
@@ -12046,7 +12812,13 @@
         "required": [
           "ok",
           "status",
-          "workers"
+          "workers",
+          "event_stream",
+          "model_residency",
+          "device_permits",
+          "provider_model_cache",
+          "logs",
+          "runtime"
         ],
         "title": "DiagnosticsPayload",
         "type": "object"
@@ -12141,7 +12913,8 @@
           "freshness",
           "fallback_policy",
           "node_ids",
-          "requirement_ids"
+          "requirement_ids",
+          "coverage"
         ],
         "title": "EvidenceAcquisitionBatch",
         "type": "object"
@@ -12181,7 +12954,9 @@
           }
         },
         "required": [
-          "kind"
+          "kind",
+          "subject",
+          "coverage_key"
         ],
         "title": "EvidenceCoverage",
         "type": "object"
@@ -12216,6 +12991,7 @@
           }
         },
         "required": [
+          "policy",
           "confidence",
           "reason",
           "classifier"
@@ -12269,7 +13045,9 @@
         "required": [
           "requirement",
           "external_access",
-          "user_visible_attribution"
+          "requirements",
+          "user_visible_attribution",
+          "retrieval"
         ],
         "title": "EvidencePolicy",
         "type": "object"
@@ -12413,8 +13191,19 @@
           "source_class",
           "request_digest",
           "result_digest",
+          "receipt_id",
+          "task_revision_id",
+          "subject",
+          "coverage",
+          "provider",
+          "origin",
+          "source_manifest_id",
           "source_count",
-          "trust_level"
+          "executed_at",
+          "observed_at",
+          "freshest_source_at",
+          "trust_level",
+          "metadata"
         ],
         "title": "EvidenceReceipt",
         "type": "object"
@@ -12529,11 +13318,16 @@
         "required": [
           "id",
           "source_class",
+          "subject",
+          "coverage",
           "purpose",
           "freshness",
           "trust_floor",
+          "acceptable_sources",
           "minimum_matches",
-          "fallback_policy"
+          "fallback_policy",
+          "as_of_date",
+          "max_age_seconds"
         ],
         "title": "EvidenceRequirement",
         "type": "object"
@@ -12586,7 +13380,10 @@
         },
         "required": [
           "requirement_id",
-          "status"
+          "status",
+          "matching_receipt_ids",
+          "rejected_receipt_ids",
+          "reason"
         ],
         "title": "EvidenceRequirementEvaluation",
         "type": "object"
@@ -12660,6 +13457,14 @@
         },
         "required": [
           "run_id",
+          "evaluated_at",
+          "requirements",
+          "missing_requirements",
+          "stale_receipts",
+          "wrong_subject_receipts",
+          "insufficient_trust_receipts",
+          "source_manifest_ids",
+          "attribution_refs",
           "passed"
         ],
         "title": "EvidenceSet",
@@ -12705,6 +13510,7 @@
         "required": [
           "source_class",
           "trust_floor",
+          "provider_hint",
           "preference"
         ],
         "title": "EvidenceSourceOption",
@@ -12941,7 +13747,18 @@
         "required": [
           "state",
           "reason_codes",
-          "execution_eligible"
+          "instrument_id",
+          "requested_binding_id",
+          "resolved_binding_id",
+          "provider",
+          "policy_version",
+          "execution_eligible",
+          "source_time",
+          "observation_age_ms",
+          "spread_bps",
+          "freshness_mode",
+          "session",
+          "halted"
         ],
         "title": "ExecutionHealth",
         "type": "object"
@@ -13233,9 +14050,25 @@
           "last",
           "source_time",
           "binding_purpose",
+          "bid",
+          "ask",
+          "bid_size",
+          "ask_size",
+          "high",
+          "low",
+          "bar_volume",
+          "bar_start_time",
+          "cumulative_volume",
+          "received_at",
           "session",
           "freshness_mode",
+          "provider_sequence",
           "market_data_type",
+          "live_entitled",
+          "contract_id",
+          "primary_exchange",
+          "local_symbol",
+          "halted",
           "market_data_eligible",
           "paper_fill_eligible",
           "broker_execution_authorized",
@@ -13275,7 +14108,8 @@
         "required": [
           "command_policy",
           "network_policy",
-          "environment_policy"
+          "environment_policy",
+          "allowed_environment_keys"
         ],
         "title": "ExecutionPolicy",
         "type": "object"
@@ -13768,6 +14602,8 @@
           "session",
           "provider",
           "received_at",
+          "provider_event_id",
+          "provider_sequence",
           "ingestion_revision"
         ],
         "title": "FrozenBar",
@@ -13863,7 +14699,9 @@
           "gap_policy",
           "dataset_fingerprint",
           "source_as_of",
-          "bars"
+          "bars",
+          "requested_binding_id",
+          "created_at"
         ],
         "title": "FrozenDatasetSnapshot",
         "type": "object"
@@ -14142,6 +14980,11 @@
           "p_close_above_open",
           "p_persistent_uptrend",
           "predictor_version",
+          "return_q10",
+          "return_q50",
+          "return_q90",
+          "mae_bucket",
+          "mfe_bucket",
           "uncertainty"
         ],
         "title": "FrozenForecast",
@@ -14406,8 +15249,17 @@
           "predictor_version",
           "feature_schema_version",
           "model_state",
+          "return_q10",
+          "return_q50",
+          "return_q90",
+          "p_return_gt_2pct",
+          "p_return_lt_minus_5pct",
+          "mae_bucket",
+          "mfe_bucket",
           "uncertainty",
-          "regime_tags"
+          "regime_tags",
+          "regime_primary",
+          "regime_confidence"
         ],
         "title": "FrozenForecastV4",
         "type": "object"
@@ -14507,7 +15359,9 @@
           "instrument_id",
           "weight",
           "allocation",
-          "p_close_above_open"
+          "p_close_above_open",
+          "score",
+          "factors"
         ],
         "title": "FrozenPortfolioPosition",
         "type": "object"
@@ -14602,8 +15456,13 @@
           "instrument_id",
           "decision_at",
           "state",
+          "discovery_rank",
+          "rejection_reason",
           "triggered",
-          "selected_trade"
+          "quality_score",
+          "selected_trade",
+          "entry_time",
+          "exit_time"
         ],
         "title": "GapPullbackBacktestCandidateDecision",
         "type": "object"
@@ -14955,7 +15814,11 @@
           "stop_count",
           "target_count",
           "indicator_exit_count",
-          "research_rejection_count"
+          "risk_rejection_reasons",
+          "research_rejection_count",
+          "research_rejection_reasons",
+          "expectancy_r_ci95_low",
+          "expectancy_r_ci95_high"
         ],
         "title": "GapPullbackBacktestSummary",
         "type": "object"
@@ -15122,6 +15985,7 @@
           "hold_minutes",
           "trigger_bar_index",
           "entry_bar_index",
+          "discovery_rank",
           "quality_score",
           "structure_interval",
           "execution_interval"
@@ -16381,6 +17245,24 @@
         },
         "required": [
           "gap_pct",
+          "opening_impulse_pct",
+          "pullback_depth_pct",
+          "impulse_average_volume",
+          "pullback_selling_average_volume",
+          "pullback_volume_ratio",
+          "l1",
+          "b1",
+          "l2",
+          "second_pullback_depth_pct",
+          "l1_to_b1_minutes",
+          "l2_to_signal_minutes",
+          "session_vwap",
+          "vwap_distance_pct",
+          "breakout_volume_ratio",
+          "breakout_hold_bars",
+          "spread_bps",
+          "tod_rvol",
+          "float_shares",
           "catalyst_evidence_count",
           "dilution_flags",
           "catalyst_score",
@@ -16388,7 +17270,8 @@
           "opening_structure_score",
           "pullback_quality_score",
           "reclaim_break_score",
-          "quality_score"
+          "quality_score",
+          "minutes_since_open"
         ],
         "title": "GapPullbackFeatures",
         "type": "object"
@@ -16472,7 +17355,8 @@
           "reason_code",
           "features",
           "transitions",
-          "evaluated_bar_count"
+          "evaluated_bar_count",
+          "signal"
         ],
         "title": "GapPullbackResult",
         "type": "object"
@@ -17012,15 +17896,27 @@
           "previous_close",
           "premarket_price",
           "gap_pct",
+          "binding_id",
+          "observed_at",
+          "evidence_observed_at",
+          "raw_previous_close",
           "split_adjustment_factor",
           "corporate_action_evidence_ids",
           "premarket_volume",
           "premarket_dollar_volume",
+          "premarket_bar_count",
+          "tod_rvol",
+          "premarket_liquidity",
+          "market_evidence_policy_version",
           "market_data_complete",
           "data_quality_flags",
           "research_quality_flags",
+          "market_cap",
+          "float_shares",
+          "spread_bps",
           "catalyst_evidence_ids",
-          "dilution_flags"
+          "dilution_flags",
+          "discovery_rank"
         ],
         "title": "GapperCandidate",
         "type": "object"
@@ -17156,7 +18052,7 @@
           "source_member_dispositions": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/SourceMemberDisposition"
+              "$ref": "#/components/schemas/SourceMemberDisposition-Input"
             },
             "title": "Source Member Dispositions",
             "type": "array"
@@ -17259,6 +18155,7 @@
           "discovery_source",
           "candidates",
           "source_fingerprint",
+          "source_locator",
           "source_candidate_symbols",
           "source_member_dispositions"
         ],
@@ -17400,7 +18297,16 @@
           }
         },
         "required": [
-          "ready"
+          "ready",
+          "backend",
+          "authority_state",
+          "migrations_pending",
+          "required_workers_unavailable",
+          "execution_owner_ready",
+          "background_role",
+          "background_ready",
+          "build_revision",
+          "reason"
         ],
         "title": "GatewayReadinessPayload",
         "type": "object"
@@ -17485,7 +18391,9 @@
           }
         },
         "required": [
+          "total_vram_mb",
           "allow_co_residency",
+          "compatible_model_pairs",
           "allow_matching_compatibility_group"
         ],
         "title": "GpuResidencyPolicy",
@@ -17685,6 +18593,7 @@
           "approval_decision",
           "execution_result",
           "user_request",
+          "result_context",
           "state_changed"
         ],
         "title": "HermesAssistantToolExecutePayload",
@@ -17694,7 +18603,7 @@
         "additionalProperties": false,
         "properties": {
           "request": {
-            "$ref": "#/components/schemas/AssistantToolRequest"
+            "$ref": "#/components/schemas/AssistantToolRequest-Input"
           },
           "user_request": {
             "default": "",
@@ -18002,7 +18911,9 @@
           "connection_status",
           "official_ibapi_available",
           "connected",
-          "provider"
+          "provider",
+          "last_error",
+          "diagnostics"
         ],
         "title": "IbkrSettingsStatus",
         "type": "object"
@@ -18744,12 +19655,47 @@
           "source",
           "captured_at",
           "immutable_fingerprint",
+          "exchange",
+          "legal_name",
+          "cik",
+          "source_available_at",
+          "omnix_known_at",
           "confidence"
         ],
         "title": "IssuerIdentity",
         "type": "object"
       },
       "JobError": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "retryable",
+          "details"
+        ],
+        "title": "JobError",
+        "type": "object"
+      },
+      "JobError-Input": {
         "properties": {
           "code": {
             "title": "Code",
@@ -18834,12 +19780,52 @@
         },
         "required": [
           "jobs",
+          "next_cursor",
           "has_more"
         ],
         "title": "JobListResponse",
         "type": "object"
       },
       "JobProgress": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "default": 0,
+            "title": "Current"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "total": {
+            "default": 1,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current",
+          "total",
+          "message"
+        ],
+        "title": "JobProgress",
+        "type": "object"
+      },
+      "JobProgress-Input": {
         "properties": {
           "current": {
             "anyOf": [
@@ -19037,7 +20023,21 @@
           "resource_class",
           "created_at",
           "updated_at",
-          "priority"
+          "owner_id",
+          "priority",
+          "stages",
+          "progress",
+          "logs",
+          "input_ref",
+          "input_payload",
+          "output_refs",
+          "error",
+          "lease",
+          "started_at",
+          "completed_at",
+          "cancel",
+          "compat",
+          "correlation_id"
         ],
         "title": "JobRecord",
         "type": "object"
@@ -19101,6 +20101,98 @@
           },
           "retry": {
             "$ref": "#/components/schemas/RetryState"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus",
+            "default": "queued"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "resource_class",
+          "status",
+          "progress",
+          "checkpoint_ref",
+          "output_refs",
+          "error",
+          "started_at",
+          "completed_at",
+          "retry"
+        ],
+        "title": "JobStage",
+        "type": "object"
+      },
+      "JobStage-Input": {
+        "properties": {
+          "checkpoint_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Ref"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobError-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "output_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Output Refs",
+            "type": "array"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/JobProgress-Input"
+          },
+          "resource_class": {
+            "$ref": "#/components/schemas/ResourceClass"
+          },
+          "retry": {
+            "$ref": "#/components/schemas/RetryState-Input"
           },
           "started_at": {
             "anyOf": [
@@ -19299,7 +20391,8 @@
           }
         },
         "required": [
-          "success"
+          "success",
+          "sessions"
         ],
         "title": "LegacySessionListResponse",
         "type": "object"
@@ -19396,6 +20489,7 @@
         "required": [
           "character_id",
           "ok",
+          "avatar_pack",
           "downloaded"
         ],
         "title": "Live2DAvatarActionResponse",
@@ -19547,6 +20641,7 @@
           "memory_snapshot_loaded",
           "preload_ms",
           "resolved_at",
+          "voice_error",
           "avatar_pack_loaded",
           "memory_record_count"
         ],
@@ -19829,6 +20924,103 @@
           "browser_version",
           "os_version",
           "input_device_hash",
+          "output_device_hash",
+          "character_id",
+          "profile_version",
+          "presence_preset",
+          "configured_duplex_mode",
+          "resolved_duplex_mode",
+          "calibration_version"
+        ],
+        "title": "LiveChatEvidenceMetadata",
+        "type": "object"
+      },
+      "LiveChatEvidenceMetadata-Input": {
+        "additionalProperties": false,
+        "description": "Runtime identity without transcript, prompt, memory, or audio content.",
+        "properties": {
+          "browser_version": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Browser Version",
+            "type": "string"
+          },
+          "calibration_version": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Version"
+          },
+          "character_id": {
+            "default": "system-assistant",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Character Id",
+            "type": "string"
+          },
+          "configured_duplex_mode": {
+            "default": "automatic",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Configured Duplex Mode",
+            "type": "string"
+          },
+          "exact_commit_sha": {
+            "maxLength": 64,
+            "minLength": 7,
+            "title": "Exact Commit Sha",
+            "type": "string"
+          },
+          "input_device_hash": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Input Device Hash",
+            "type": "string"
+          },
+          "os_version": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Os Version",
+            "type": "string"
+          },
+          "output_device_hash": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Output Device Hash",
+            "type": "string"
+          },
+          "presence_preset": {
+            "default": "natural",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Presence Preset",
+            "type": "string"
+          },
+          "profile_version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "resolved_duplex_mode": {
+            "default": "half_duplex",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Resolved Duplex Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exact_commit_sha",
+          "browser_version",
+          "os_version",
+          "input_device_hash",
           "output_device_hash"
         ],
         "title": "LiveChatEvidenceMetadata",
@@ -19952,7 +21144,7 @@
             "type": "array"
           },
           "metadata": {
-            "$ref": "#/components/schemas/LiveChatEvidenceMetadata"
+            "$ref": "#/components/schemas/LiveChatEvidenceMetadata-Input"
           },
           "thresholds": {
             "$ref": "#/components/schemas/LiveChatReleaseThresholds"
@@ -20053,7 +21245,8 @@
           "character_modes",
           "metrics",
           "failures",
-          "insufficient"
+          "insufficient",
+          "metadata_records"
         ],
         "title": "LiveChatReleaseGateReport",
         "type": "object"
@@ -20336,7 +21529,8 @@
         "required": [
           "user_defaults",
           "effective",
-          "source"
+          "source",
+          "session_override"
         ],
         "title": "LiveConversationProfileEnvelope",
         "type": "object"
@@ -20708,7 +21902,8 @@
           "response_policy",
           "idempotent",
           "exact_segment_count",
-          "exact_text_chars"
+          "exact_text_chars",
+          "security"
         ],
         "title": "LiveMaterialAcknowledgement",
         "type": "object"
@@ -20956,7 +22151,8 @@
           "summary_chars",
           "retention",
           "task_contract_id",
-          "task_contract_version"
+          "task_contract_version",
+          "security"
         ],
         "title": "LiveMaterialSnapshot",
         "type": "object"
@@ -21292,7 +22488,8 @@
           "variant_id",
           "url",
           "size_bytes",
-          "sha256"
+          "sha256",
+          "sample_rate"
         ],
         "title": "LiveVoiceCueAsset",
         "type": "object"
@@ -21324,7 +22521,8 @@
         "required": [
           "voice_id",
           "available",
-          "schema_version"
+          "schema_version",
+          "assets"
         ],
         "title": "LiveVoiceCueManifest",
         "type": "object"
@@ -21429,7 +22627,8 @@
           "status",
           "samples",
           "limit",
-          "unit"
+          "unit",
+          "observed"
         ],
         "title": "LiveVoiceMetricResult",
         "type": "object"
@@ -21616,8 +22815,14 @@
         "required": [
           "status",
           "generated_at",
+          "window_start",
           "records_scanned",
-          "traces"
+          "traces",
+          "scenarios",
+          "missing_scenarios",
+          "metrics",
+          "failures",
+          "insufficient"
         ],
         "title": "LiveVoiceReleaseGateReport",
         "type": "object"
@@ -21759,6 +22964,8 @@
           }
         },
         "required": [
+          "path",
+          "name",
           "cancelled"
         ],
         "title": "LocalWorkspacePickResponse",
@@ -22340,7 +23547,10 @@
           "is_final",
           "adjustment_mode",
           "session",
-          "ingestion_revision"
+          "provider_event_id",
+          "provider_sequence",
+          "ingestion_revision",
+          "received_at"
         ],
         "title": "MarketBar",
         "type": "object"
@@ -22426,7 +23636,8 @@
           "series",
           "received_at",
           "freshness_mode",
-          "history_complete"
+          "history_complete",
+          "metadata"
         ],
         "title": "MarketMetricResponse",
         "type": "object"
@@ -22473,7 +23684,9 @@
         "required": [
           "key",
           "title",
-          "kind"
+          "unit",
+          "kind",
+          "points"
         ],
         "title": "MarketMetricSeries",
         "type": "object"
@@ -22803,7 +24016,9 @@
         "required": [
           "exported_at",
           "owner_type",
-          "owner_id"
+          "owner_id",
+          "records",
+          "candidates"
         ],
         "title": "MemoryExportResponse",
         "type": "object"
@@ -23064,12 +24279,17 @@
           "owner_type",
           "owner_id",
           "kind",
+          "structured_payload",
+          "supersedes_memory_id",
+          "contradiction_group",
           "confidence",
           "pinned",
           "trust_level",
           "sensitivity",
+          "provenance_id",
           "status",
-          "revision"
+          "revision",
+          "expires_at"
         ],
         "title": "MemoryRecord",
         "type": "object"
@@ -23179,7 +24399,9 @@
           "token_estimate",
           "created_at",
           "active_count",
-          "invalidated_count"
+          "invalidated_count",
+          "refreshed_at",
+          "items"
         ],
         "title": "MemorySnapshotView",
         "type": "object"
@@ -23220,7 +24442,8 @@
           "memory_record_id",
           "record_revision",
           "content",
-          "active"
+          "active",
+          "invalidation_reason"
         ],
         "title": "MemorySnapshotViewItem",
         "type": "object"
@@ -23324,7 +24547,9 @@
         },
         "required": [
           "provider_id",
-          "model_id"
+          "model_id",
+          "reasoning_effort",
+          "parameters"
         ],
         "title": "ModelRef",
         "type": "object"
@@ -23355,12 +24580,125 @@
         },
         "required": [
           "status",
-          "policy"
+          "policy",
+          "records",
+          "warnings"
         ],
         "title": "ModelResidencyDiagnostics",
         "type": "object"
       },
       "ModelResidencyRecord": {
+        "properties": {
+          "compatibility_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compatibility Group"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "estimated_vram_mb": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Vram Mb"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_name": {
+            "default": "",
+            "title": "Model Name",
+            "type": "string"
+          },
+          "module": {
+            "title": "Module",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "resource_class": {
+            "$ref": "#/components/schemas/ResourceClass"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ModelResidencyStatus",
+            "default": "unloaded"
+          },
+          "worker_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Endpoint"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          }
+        },
+        "required": [
+          "model_id",
+          "provider_id",
+          "module",
+          "resource_class",
+          "model_name",
+          "status",
+          "worker_id",
+          "worker_endpoint",
+          "estimated_vram_mb",
+          "compatibility_group",
+          "last_used_at",
+          "error"
+        ],
+        "title": "ModelResidencyRecord",
+        "type": "object"
+      },
+      "ModelResidencyRecord-Input": {
         "properties": {
           "compatibility_group": {
             "anyOf": [
@@ -23527,7 +24865,9 @@
           "label",
           "provider_id",
           "capabilities",
-          "location"
+          "location",
+          "vram_hint_mb",
+          "metadata"
         ],
         "title": "ModelSummary",
         "type": "object"
@@ -23611,6 +24951,39 @@
         "type": "object"
       },
       "NonverbalEligibility": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgement": {
+            "default": false,
+            "title": "Acknowledgement",
+            "type": "boolean"
+          },
+          "amused_exhale": {
+            "default": false,
+            "title": "Amused Exhale",
+            "type": "boolean"
+          },
+          "breath": {
+            "default": false,
+            "title": "Breath",
+            "type": "boolean"
+          },
+          "sigh": {
+            "default": false,
+            "title": "Sigh",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "breath",
+          "acknowledgement",
+          "amused_exhale",
+          "sigh"
+        ],
+        "title": "NonverbalEligibility",
+        "type": "object"
+      },
+      "NonverbalEligibility-Input": {
         "additionalProperties": false,
         "properties": {
           "acknowledgement": {
@@ -23878,7 +25251,9 @@
           "confidence",
           "reason",
           "explicit",
-          "hermes_recommended"
+          "hermes_recommended",
+          "workflow_id",
+          "capability_id"
         ],
         "title": "OmnixRouteDecision",
         "type": "object"
@@ -24025,8 +25400,12 @@
           "market_state",
           "evidence_quality",
           "version",
+          "binding_id",
+          "coverage_ratio",
           "unresolved_gap_count",
+          "latest_bar_lag_seconds",
           "late_window_bar_count",
+          "dataset_fingerprint",
           "warnings"
         ],
         "title": "OperationalPremarketState",
@@ -24386,7 +25765,9 @@
           "base_currency",
           "commission_bps",
           "enabled",
-          "revision"
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "PaperAccount",
         "type": "object"
@@ -24581,7 +25962,8 @@
           "positions",
           "open_orders",
           "recent_fills",
-          "recent_ledger"
+          "recent_ledger",
+          "order_history"
         ],
         "title": "PaperAccountSnapshot",
         "type": "object"
@@ -24750,8 +26132,26 @@
         },
         "required": [
           "account_id",
+          "strategy_id",
+          "epoch_id",
           "mode",
+          "start_date",
+          "end_date",
           "rolling_window",
+          "epochs",
+          "qualification",
+          "summary",
+          "mode_comparison",
+          "equity",
+          "drawdown",
+          "daily_r",
+          "rolling_expectancy",
+          "r_distribution",
+          "mae_mfe",
+          "funnel",
+          "execution",
+          "factors",
+          "recent_trades",
           "archived_strategy_count"
         ],
         "title": "PaperAnalyticsOverview",
@@ -24976,7 +26376,22 @@
           "session_date",
           "entry_time",
           "exit_time",
-          "r_result"
+          "r_result",
+          "strategy_version",
+          "profile_fingerprint",
+          "epoch_id",
+          "universe_id",
+          "exit_reason",
+          "quantity",
+          "realized_pnl",
+          "mae_r",
+          "mfe_r",
+          "signal_to_executable_bps",
+          "fill_slippage_bps",
+          "implementation_shortfall_bps",
+          "initial_stop",
+          "initial_target",
+          "setup_features"
         ],
         "title": "PaperAnalyticsTrade",
         "type": "object"
@@ -25309,7 +26724,10 @@
           }
         },
         "required": [
-          "trade_count"
+          "trade_count",
+          "average_signal_to_executable_bps",
+          "average_fill_slippage_bps",
+          "average_implementation_shortfall_bps"
         ],
         "title": "PaperExecutionSummary",
         "type": "object"
@@ -25580,6 +26998,8 @@
         "required": [
           "stage",
           "count",
+          "conversion_from_previous",
+          "dominant_drop_reason",
           "dominant_drop_count"
         ],
         "title": "PaperFunnelStage",
@@ -25749,7 +27169,11 @@
           "entry_type",
           "currency",
           "amount",
-          "idempotency_key"
+          "idempotency_key",
+          "order_id",
+          "fill_id",
+          "payload",
+          "created_at"
         ],
         "title": "PaperLedgerEntry",
         "type": "object"
@@ -25814,7 +27238,9 @@
           "session_date",
           "r_result",
           "mae_r",
-          "mfe_r"
+          "mfe_r",
+          "risk_dollars",
+          "exit_reason"
         ],
         "title": "PaperMaeMfePoint",
         "type": "object"
@@ -26059,6 +27485,11 @@
             "$ref": "#/components/schemas/PaperPerformanceSummary"
           }
         },
+        "required": [
+          "shadow",
+          "auto_paper",
+          "expectancy_delta_r"
+        ],
         "title": "PaperModeComparison",
         "type": "object"
       },
@@ -26433,9 +27864,17 @@
           "order_type",
           "quantity",
           "idempotency_key",
+          "binding_id",
+          "limit_price",
+          "stop_price",
+          "reference_price",
           "status",
           "filled_quantity",
-          "reserved_cash"
+          "average_fill_price",
+          "rejection_reason",
+          "reserved_cash",
+          "created_at",
+          "updated_at"
         ],
         "title": "PaperOrder",
         "type": "object"
@@ -26693,7 +28132,13 @@
           "trade_count",
           "wins",
           "losses",
-          "total_r"
+          "win_rate",
+          "expectancy_r",
+          "total_r",
+          "profit_factor",
+          "average_mae_r",
+          "average_mfe_r",
+          "max_drawdown_r"
         ],
         "title": "PaperPerformanceSummary",
         "type": "object"
@@ -26845,6 +28290,7 @@
           "average_cost",
           "realized_pnl",
           "reserved_quantity",
+          "last_price",
           "unrealized_pnl"
         ],
         "title": "PaperPosition",
@@ -26987,8 +28433,16 @@
           "account_id",
           "instrument_id",
           "status",
+          "binding_id",
           "binding_purpose",
-          "revision"
+          "entry_order_id",
+          "exit_order_id",
+          "take_profit",
+          "stop_loss",
+          "trigger_reason",
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "PaperPositionProtection",
         "type": "object"
@@ -27119,7 +28573,9 @@
         },
         "required": [
           "label",
-          "count"
+          "count",
+          "minimum_r",
+          "maximum_r"
         ],
         "title": "PaperRDistributionBucket",
         "type": "object"
@@ -27425,6 +28881,7 @@
           "policy_version",
           "reason_codes",
           "desired_risk_pct",
+          "limiting_reason_code",
           "recommended_quantity",
           "account_equity",
           "actual_risk_dollars",
@@ -27436,6 +28893,8 @@
           "aggregate_open_risk_pct",
           "daily_realized_pnl",
           "daily_loss_remaining",
+          "spread_bps",
+          "observation_age_seconds",
           "freshness_mode",
           "execution_eligible",
           "unprotected_exposure_count"
@@ -27546,7 +29005,8 @@
         "required": [
           "observed_at",
           "sample_size",
-          "expectancy_r"
+          "expectancy_r",
+          "one_sided_90_lcb_r"
         ],
         "title": "PaperRollingExpectancyPoint",
         "type": "object"
@@ -27609,7 +29069,9 @@
           "ordinal",
           "initial_cash",
           "started_at",
-          "is_current"
+          "is_current",
+          "ended_at",
+          "end_reason"
         ],
         "title": "PaperSimulationEpoch",
         "type": "object"
@@ -27998,7 +29460,34 @@
           "average_exit_price",
           "quantity",
           "realized_pnl",
-          "outcome"
+          "outcome",
+          "strategy_version",
+          "strategy_revision",
+          "strategy_run_id",
+          "profile_fingerprint",
+          "universe_id",
+          "entry_signal_event_id",
+          "entry_fill_ids",
+          "exit_fill_ids",
+          "session_id",
+          "setup_id",
+          "trade_intent_id",
+          "risk_decision_id",
+          "protection_id",
+          "initial_risk_dollars",
+          "initial_stop",
+          "initial_target",
+          "r_result",
+          "mae_r",
+          "mfe_r",
+          "signal_to_executable_bps",
+          "fill_slippage_bps",
+          "implementation_shortfall_bps",
+          "exit_reason",
+          "setup_features",
+          "execution_features",
+          "automatic_observations",
+          "events"
         ],
         "title": "PaperTradeJournalEntry",
         "type": "object"
@@ -28049,7 +29538,9 @@
           "event_id",
           "event_type",
           "state",
-          "observed_at"
+          "observed_at",
+          "run_id",
+          "reason_code"
         ],
         "title": "PaperTradeJournalEvent",
         "type": "object"
@@ -28115,7 +29606,12 @@
           }
         },
         "required": [
-          "account_id"
+          "account_id",
+          "strategy_id",
+          "epoch_id",
+          "start_date",
+          "end_date",
+          "entries"
         ],
         "title": "PaperTradeJournalResponse",
         "type": "object"
@@ -28139,6 +29635,10 @@
             "type": "array"
           }
         },
+        "required": [
+          "sessions",
+          "diagnostics"
+        ],
         "title": "PersistenceInventory",
         "type": "object"
       },
@@ -29120,6 +30620,14 @@
           "quality",
           "available",
           "available_to_live_forecaster",
+          "value",
+          "unit",
+          "event_at",
+          "observed_at",
+          "ingested_at",
+          "recovered_at",
+          "freshness_seconds",
+          "provenance_fingerprint",
           "ingestion_time_basis"
         ],
         "title": "PremarketFeature",
@@ -29467,7 +30975,13 @@
         "required": [
           "instrument_id",
           "market_state",
-          "v3_forecast"
+          "v3_forecast",
+          "v4_forecast",
+          "v4_failure_reason",
+          "v42_forecast",
+          "v42_failure_reason",
+          "v43_forecast",
+          "v43_failure_reason"
         ],
         "title": "PremarketInstrumentResult",
         "type": "object"
@@ -29791,8 +31305,12 @@
           "nonzero_volume_bar_count",
           "ready",
           "policy_version",
+          "tod_rvol",
+          "tod_rvol_denominator_mean",
+          "coverage_ratio",
           "reason_codes",
           "volume_authority",
+          "volume_basis",
           "consolidated_volume_authority"
         ],
         "title": "PremarketLiquidityEvidence",
@@ -30282,7 +31800,8 @@
           }
         },
         "required": [
-          "session_id"
+          "session_id",
+          "entries"
         ],
         "title": "PronunciationListResponse",
         "type": "object"
@@ -30521,7 +32040,12 @@
           "matched_outcome_count",
           "distinct_sessions",
           "distinct_symbols",
-          "win_count"
+          "execution_match_rate",
+          "win_count",
+          "win_rate",
+          "expectancy_r",
+          "one_sided_90_lcb_r",
+          "max_drawdown_r"
         ],
         "title": "ProspectiveEconomicMetrics",
         "type": "object"
@@ -30653,13 +32177,17 @@
           "evidence_fingerprint",
           "pipeline_evidence_fingerprint",
           "policy_version",
+          "thresholds",
           "sample_ready",
           "quantitative_pass",
           "evaluation_recorded",
           "evaluation_passed",
+          "evaluation_event_id",
           "sealed_holdout_unlocked",
           "holdout_reviewed",
           "holdout_verdict",
+          "holdout_event_id",
+          "soak_metrics",
           "soak_passed",
           "auto_paper_reviewed",
           "auto_paper_research_authorized",
@@ -31038,7 +32566,8 @@
           "enabled",
           "status",
           "policy",
-          "bindings"
+          "bindings",
+          "runtime"
         ],
         "title": "ProviderDescriptor",
         "type": "object"
@@ -31124,7 +32653,9 @@
           "provider_id",
           "status",
           "source",
-          "model_id"
+          "model_id",
+          "path",
+          "diagnostics"
         ],
         "title": "ProviderModelCacheEntry",
         "type": "object"
@@ -31154,7 +32685,9 @@
           }
         },
         "required": [
-          "status"
+          "status",
+          "entries",
+          "diagnostics"
         ],
         "title": "ProviderModelCachePayload",
         "type": "object"
@@ -31373,7 +32906,11 @@
           "in_flight",
           "max_concurrency",
           "circuit_open_count",
-          "circuit_suppression_count"
+          "circuit_suppression_count",
+          "circuit_open_until",
+          "last_success_at",
+          "last_failure_at",
+          "last_error"
         ],
         "title": "ProviderRuntimeStatus",
         "type": "object"
@@ -31455,7 +32992,8 @@
           "family",
           "capabilities",
           "source",
-          "status"
+          "status",
+          "metadata"
         ],
         "title": "ProviderSummary",
         "type": "object"
@@ -31515,7 +33053,8 @@
           }
         },
         "required": [
-          "session_id"
+          "session_id",
+          "records"
         ],
         "title": "RecentAutomaticMemoryResponse",
         "type": "object"
@@ -31606,7 +33145,11 @@
           "module",
           "rendered_text",
           "variables",
-          "provider_payload_format"
+          "provider_payload_format",
+          "rendering_metadata",
+          "safety_metadata",
+          "grounding_metadata",
+          "replay_metadata"
         ],
         "title": "RenderedPrompt",
         "type": "object"
@@ -31821,7 +33364,8 @@
           "source",
           "owner_module",
           "behavior",
-          "compatibility_policy"
+          "compatibility_policy",
+          "diagnostics"
         ],
         "title": "ReplayPrimitive",
         "type": "object"
@@ -31880,6 +33424,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "reports"
+        ],
         "title": "ReportListResponse",
         "type": "object"
       },
@@ -31961,7 +33508,8 @@
         "required": [
           "mode",
           "source",
-          "priority"
+          "priority",
+          "suppressed"
         ],
         "title": "RequestModeSelection",
         "type": "object"
@@ -32127,8 +33675,14 @@
           "status",
           "requested_at",
           "immutable_fingerprint",
+          "strategy_id",
+          "args",
           "reason",
-          "evidence_ids"
+          "result_summary",
+          "evidence_ids",
+          "completed_at",
+          "omnix_known_at",
+          "error_code"
         ],
         "title": "ResearchActionRecord",
         "type": "object"
@@ -32203,7 +33757,9 @@
         },
         "required": [
           "aliases_enabled",
+          "sunset",
           "total_legacy_requests",
+          "alias_counts",
           "canonical_field"
         ],
         "title": "ResearchCompatibilityStatus",
@@ -32411,7 +33967,9 @@
         "required": [
           "strategy_version",
           "decision_at",
-          "decision"
+          "decision",
+          "features",
+          "validation"
         ],
         "title": "ResearchPolicyStatus",
         "type": "object"
@@ -32608,7 +34166,9 @@
           "compatibility",
           "deep_enabled",
           "hermes_planner_enabled",
-          "diagnostics_enabled"
+          "diagnostics_enabled",
+          "provider_chain",
+          "privacy"
         ],
         "title": "ResearchRuntimeStatus",
         "type": "object"
@@ -32677,6 +34237,7 @@
           "as_of",
           "freshness_mode",
           "bar_count",
+          "requested_binding_id",
           "formula_version"
         ],
         "title": "ResearchSource",
@@ -32811,6 +34372,36 @@
         "required": [
           "capability",
           "resource_type",
+          "resource_id",
+          "constraints"
+        ],
+        "title": "ResourceScope",
+        "type": "object"
+      },
+      "ResourceScope-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "resource_type",
           "resource_id"
         ],
         "title": "ResourceScope",
@@ -32865,7 +34456,11 @@
           }
         },
         "required": [
-          "status"
+          "status",
+          "started_at",
+          "completed_at",
+          "deleted",
+          "error_class"
         ],
         "title": "RetentionRunDiagnostics",
         "type": "object"
@@ -32936,6 +34531,32 @@
         "type": "object"
       },
       "RetryState": {
+        "properties": {
+          "attempts": {
+            "default": 0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "max_attempts": {
+            "default": 0,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "policy": {
+            "default": "none",
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempts",
+          "max_attempts",
+          "policy"
+        ],
+        "title": "RetryState",
+        "type": "object"
+      },
+      "RetryState-Input": {
         "properties": {
           "attempts": {
             "default": 0,
@@ -33047,6 +34668,11 @@
           "problem",
           "severity",
           "category",
+          "file",
+          "location",
+          "recommended_fix",
+          "subject_paths",
+          "context_paths",
           "attribution",
           "blocking"
         ],
@@ -33166,7 +34792,14 @@
           "reviewer_run_id",
           "review_snapshot_id",
           "workspace_state_id",
-          "verdict"
+          "verdict",
+          "review_result_id",
+          "task_revision_id",
+          "requirements",
+          "findings",
+          "missing_tests",
+          "residual_risks",
+          "created_at"
         ],
         "title": "ReviewResult",
         "type": "object"
@@ -35775,12 +37408,79 @@
           "candidate_workspace_state_id",
           "tracked_patch_sha256",
           "patch_checksum",
-          "patch_storage_ref"
+          "patch_storage_ref",
+          "task_revision_id",
+          "run_owned_paths",
+          "baseline_context_paths",
+          "untracked_manifest",
+          "deletions",
+          "renames",
+          "mode_changes",
+          "baseline_conflicts",
+          "created_at"
         ],
         "title": "RunChangeSet",
         "type": "object"
       },
       "RunLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "max_cost": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost"
+          },
+          "max_steps": {
+            "default": 200,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "max_tool_calls": {
+            "default": 500,
+            "maximum": 100000,
+            "minimum": 1,
+            "title": "Max Tool Calls",
+            "type": "integer"
+          },
+          "max_wall_time_seconds": {
+            "default": 3600,
+            "minimum": 1,
+            "title": "Max Wall Time Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_steps",
+          "max_wall_time_seconds",
+          "max_tokens",
+          "max_cost",
+          "max_tool_calls"
+        ],
+        "title": "RunLimits",
+        "type": "object"
+      },
+      "RunLimits-Input": {
         "additionalProperties": false,
         "properties": {
           "max_cost": {
@@ -35911,7 +37611,19 @@
           }
         },
         "required": [
-          "schema_version"
+          "schema_version",
+          "version",
+          "features",
+          "events",
+          "retention",
+          "process",
+          "postgresql",
+          "background",
+          "jobs",
+          "chat",
+          "scheduler",
+          "tts",
+          "replicas"
         ],
         "title": "RuntimeDiagnostics",
         "type": "object"
@@ -35952,7 +37664,10 @@
         "required": [
           "ok",
           "status",
-          "format_version"
+          "format_version",
+          "gateway",
+          "workers",
+          "compatibility"
         ],
         "title": "RuntimeStatusPayload",
         "type": "object"
@@ -36079,6 +37794,18 @@
             "title": "Text"
           }
         },
+        "required": [
+          "ok",
+          "eligible",
+          "mode",
+          "provider",
+          "reasons",
+          "success",
+          "text",
+          "segments",
+          "duration",
+          "inference_ms"
+        ],
         "title": "STTProxyResponse",
         "type": "object"
       },
@@ -36304,7 +38031,10 @@
           "received_timestamp",
           "sip_feed",
           "eligibility_policy_version",
-          "trade_condition_codes"
+          "exchange",
+          "trade_condition_codes",
+          "provider_event_id",
+          "sequence"
         ],
         "title": "SelectedPriceEvent",
         "type": "object"
@@ -36382,7 +38112,14 @@
         "required": [
           "run_id",
           "workspace_state_id",
-          "verdict"
+          "verdict",
+          "self_review_result_id",
+          "task_revision_id",
+          "requirements",
+          "findings",
+          "missing_tests",
+          "residual_risks",
+          "created_at"
         ],
         "title": "SelfReviewResult",
         "type": "object"
@@ -36643,7 +38380,11 @@
           "write_memory",
           "owner_type",
           "owner_id",
-          "memory_record_count"
+          "snapshot_id",
+          "snapshot_revision",
+          "memory_record_count",
+          "last_refreshed_at",
+          "snapshot"
         ],
         "title": "SessionMemoryState",
         "type": "object"
@@ -36878,7 +38619,12 @@
           "audio_provider_stt",
           "image_enabled",
           "rpg_visual_enabled",
-          "success"
+          "success",
+          "worker_urls",
+          "hermes_status",
+          "hermes_commands",
+          "settings",
+          "revisions"
         ],
         "title": "SettingsPayload",
         "type": "object"
@@ -37082,6 +38828,8 @@
           "binding_id",
           "chart_interval",
           "mode",
+          "last_run_at",
+          "last_error",
           "decision_count",
           "signal_count",
           "research_only",
@@ -37091,6 +38839,63 @@
         "type": "object"
       },
       "SourceMemberDisposition": {
+        "additionalProperties": false,
+        "properties": {
+          "instrument_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Id"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "source_rank": {
+            "minimum": 1,
+            "title": "Source Rank",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "materialized",
+              "filtered_gap",
+              "filtered_price",
+              "unsupported_instrument",
+              "enrichment_failed",
+              "provider_unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "source_rank",
+          "status",
+          "reason_codes",
+          "instrument_id"
+        ],
+        "title": "SourceMemberDisposition",
+        "type": "object"
+      },
+      "SourceMemberDisposition-Input": {
         "additionalProperties": false,
         "properties": {
           "instrument_id": {
@@ -37245,6 +39050,31 @@
             "type": "integer"
           }
         },
+        "required": [
+          "desired_perceived_onset_ms",
+          "maximum_additional_delay_ms"
+        ],
+        "title": "SpeechOnsetPolicy",
+        "type": "object"
+      },
+      "SpeechOnsetPolicy-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "desired_perceived_onset_ms": {
+            "default": 450,
+            "maximum": 2000,
+            "minimum": 0,
+            "title": "Desired Perceived Onset Ms",
+            "type": "integer"
+          },
+          "maximum_additional_delay_ms": {
+            "default": 350,
+            "maximum": 1000,
+            "minimum": 0,
+            "title": "Maximum Additional Delay Ms",
+            "type": "integer"
+          }
+        },
         "title": "SpeechOnsetPolicy",
         "type": "object"
       },
@@ -37294,6 +39124,108 @@
           },
           "onset_policy": {
             "$ref": "#/components/schemas/SpeechOnsetPolicy"
+          },
+          "pace": {
+            "default": "natural",
+            "enum": [
+              "slightly_slow",
+              "natural",
+              "slightly_fast"
+            ],
+            "title": "Pace",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "speech_act": {
+            "default": "answer",
+            "enum": [
+              "acknowledgement",
+              "answer",
+              "question",
+              "reassurance",
+              "reflection",
+              "instruction"
+            ],
+            "title": "Speech Act",
+            "type": "string"
+          },
+          "warmth": {
+            "default": "moderate",
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ],
+            "title": "Warmth",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "speech_act",
+          "energy",
+          "warmth",
+          "certainty",
+          "pace",
+          "clause_pause",
+          "emphasis",
+          "onset_policy",
+          "nonverbal_eligibility"
+        ],
+        "title": "SpeechPerformancePlan",
+        "type": "object"
+      },
+      "SpeechPerformancePlan-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "certainty": {
+            "default": "moderate",
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ],
+            "title": "Certainty",
+            "type": "string"
+          },
+          "clause_pause": {
+            "default": "medium",
+            "enum": [
+              "short",
+              "medium",
+              "long"
+            ],
+            "title": "Clause Pause",
+            "type": "string"
+          },
+          "emphasis": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Emphasis",
+            "type": "array"
+          },
+          "energy": {
+            "default": "moderate",
+            "enum": [
+              "low",
+              "moderate",
+              "high"
+            ],
+            "title": "Energy",
+            "type": "string"
+          },
+          "nonverbal_eligibility": {
+            "$ref": "#/components/schemas/NonverbalEligibility-Input"
+          },
+          "onset_policy": {
+            "$ref": "#/components/schemas/SpeechOnsetPolicy-Input"
           },
           "pace": {
             "default": "natural",
@@ -37406,7 +39338,7 @@
           "limits": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RunLimits"
+                "$ref": "#/components/schemas/RunLimits-Input"
               },
               {
                 "type": "null"
@@ -37473,7 +39405,7 @@
           },
           "resource_scopes": {
             "items": {
-              "$ref": "#/components/schemas/ResourceScope"
+              "$ref": "#/components/schemas/ResourceScope-Input"
             },
             "title": "Resource Scopes",
             "type": "array"
@@ -38566,8 +40498,26 @@
           "state",
           "reason_code",
           "policy_version",
+          "session_date",
+          "as_of",
           "five_minute_bar_count",
+          "ema_50_5m",
+          "stochastic_rsi_k",
+          "stochastic_rsi_d",
+          "previous_stochastic_rsi_k",
+          "previous_stochastic_rsi_d",
+          "oversold_arm_time",
+          "momentum_cross_time",
+          "entry_signal_time",
+          "entry_time",
+          "entry_price",
+          "exit_signal_time",
+          "exit_time",
+          "exit_price",
+          "return_pct",
           "trades",
+          "data_gap_start",
+          "data_gap_resume",
           "execution_authority"
         ],
         "title": "StochRsi5mSnapshot",
@@ -38642,7 +40592,8 @@
           "exit_time",
           "exit_price",
           "exit_reason_code",
-          "return_pct"
+          "return_pct",
+          "exit_signal_time"
         ],
         "title": "StochRsi5mTrade",
         "type": "object"
@@ -38698,7 +40649,8 @@
           "strategy",
           "universe",
           "evidence_count",
-          "candidates_with_evidence"
+          "candidates_with_evidence",
+          "errors"
         ],
         "title": "StrategyCatalystCaptureResponse",
         "type": "object"
@@ -38889,7 +40841,17 @@
           "event_type",
           "state",
           "observed_at",
-          "idempotency_key"
+          "idempotency_key",
+          "run_id",
+          "reason_code",
+          "correlation_version",
+          "strategy_revision",
+          "session_id",
+          "setup_id",
+          "trade_attempt_id",
+          "trade_intent_id",
+          "risk_decision_id",
+          "payload"
         ],
         "title": "StrategyEvent",
         "type": "object"
@@ -39167,8 +41129,16 @@
           "stop_price",
           "target_price",
           "quantity",
+          "exit_order_id",
+          "initial_stop_price",
+          "initial_target_price",
+          "mae_price",
+          "mfe_price",
           "status",
-          "revision"
+          "trigger_reason",
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "StrategyProtection",
         "type": "object"
@@ -39356,12 +41326,18 @@
           "status",
           "starting_cash",
           "ending_cash",
+          "universe_id",
+          "universe_evaluation_time",
+          "universe_origin",
+          "fidelity",
           "fidelity_warnings",
           "strategy_fidelity_adjustments",
           "candidate_count",
           "pnl",
           "trigger_count",
-          "trade_count"
+          "trade_count",
+          "detail",
+          "result"
         ],
         "title": "StrategyRangeBacktestDay",
         "type": "object"
@@ -39438,7 +41414,10 @@
           "status",
           "completed_sessions",
           "total_sessions",
-          "percent"
+          "percent",
+          "current_session",
+          "error",
+          "result"
         ],
         "title": "StrategyRangeBacktestProgressResponse",
         "type": "object"
@@ -39891,9 +41870,13 @@
           "immutable_fingerprint",
           "projection_version",
           "research_policy_version",
+          "strategy_id",
+          "omnix_known_at",
           "primary_catalyst_confirmed",
           "catalyst_same_day",
           "catalyst_fresh",
+          "catalyst_age_minutes",
+          "immediate_supply_risk",
           "supply_resolution_status",
           "research_status",
           "unresolved_supply",
@@ -39942,7 +41925,9 @@
         },
         "required": [
           "instrument_id",
-          "status"
+          "status",
+          "classification",
+          "detail"
         ],
         "title": "StrategyResearchReview",
         "type": "object"
@@ -40279,7 +42264,12 @@
         "required": [
           "configured_enabled",
           "registered",
-          "running"
+          "running",
+          "interval_seconds",
+          "last_run_at",
+          "last_error",
+          "counters",
+          "details"
         ],
         "title": "StrategyRuntimeMonitorStatus",
         "type": "object"
@@ -40386,7 +42376,9 @@
         },
         "required": [
           "type",
-          "canonical_id"
+          "canonical_id",
+          "display_name",
+          "qualifiers"
         ],
         "title": "SubjectRef",
         "type": "object"
@@ -40603,8 +42595,16 @@
           "schema_version",
           "extractor_version",
           "status",
+          "shares",
+          "remaining_capacity_usd",
+          "strike_price",
+          "exercise_status",
+          "registration_status",
+          "effective_at",
+          "expires_at",
           "resolution_status",
-          "confidence"
+          "confidence",
+          "omnix_known_at"
         ],
         "title": "SupplyFact",
         "type": "object"
@@ -40683,6 +42683,11 @@
           }
         },
         "required": [
+          "potential_dilution_pct_float",
+          "remaining_atm_pct_market_cap",
+          "in_the_money_warrant_pct_float",
+          "registered_resale_pct_float",
+          "immediate_supply_risk",
           "supply_resolution_status"
         ],
         "title": "SupplyMetrics",
@@ -40822,7 +42827,10 @@
         "required": [
           "source",
           "target",
-          "kind"
+          "kind",
+          "source_output",
+          "target_input",
+          "expected_value"
         ],
         "title": "TaskEdge",
         "type": "object"
@@ -40885,9 +42893,13 @@
         "required": [
           "user_request_digest",
           "nodes",
+          "graph_id",
           "revision",
+          "edges",
+          "output_contract",
           "reference_context",
-          "max_parallel_nodes"
+          "max_parallel_nodes",
+          "created_at"
         ],
         "title": "TaskGraph",
         "type": "object"
@@ -40973,7 +42985,11 @@
         },
         "required": [
           "run_id",
-          "event_type"
+          "event_type",
+          "event_id",
+          "sequence",
+          "payload",
+          "created_at"
         ],
         "title": "TaskGraphEvent",
         "type": "object"
@@ -41027,6 +43043,14 @@
             "type": "array"
           }
         },
+        "required": [
+          "evidence_batches",
+          "parallel_groups",
+          "speculative_read_nodes",
+          "cache_keys",
+          "cost_priority",
+          "model_selections"
+        ],
         "title": "TaskGraphOptimizationPlan",
         "type": "object"
       },
@@ -41113,7 +43137,13 @@
           "run_id",
           "graph",
           "status",
-          "revision"
+          "revision",
+          "node_states",
+          "result",
+          "last_error",
+          "created_at",
+          "updated_at",
+          "completed_at"
         ],
         "title": "TaskGraphRunSnapshot",
         "type": "object"
@@ -41300,8 +43330,24 @@
         "required": [
           "id",
           "kind",
+          "profile_id",
           "objective",
+          "semantic_targets",
+          "semantic_action_intents",
+          "required_local_capabilities",
+          "required_external_capabilities",
+          "resource_scopes",
+          "evidence_policy",
+          "success_criteria",
+          "acceptance_plan",
           "approval_policy",
+          "workspace",
+          "model",
+          "limits",
+          "capability_id",
+          "input_template",
+          "condition",
+          "output_keys",
           "optional",
           "estimated_cost",
           "cacheable"
@@ -41397,7 +43443,12 @@
           "node_id",
           "fingerprint",
           "status",
-          "attempts"
+          "attempts",
+          "child_run_id",
+          "output",
+          "last_error",
+          "started_at",
+          "completed_at"
         ],
         "title": "TaskNodeRunState",
         "type": "object"
@@ -41445,7 +43496,8 @@
           "id",
           "description",
           "source",
-          "required"
+          "required",
+          "validation_ids"
         ],
         "title": "TaskRequirement",
         "type": "object"
@@ -41573,7 +43625,20 @@
           "run_id",
           "sequence",
           "user_instruction",
-          "effective_objective"
+          "effective_objective",
+          "revision_id",
+          "previous_revision_id",
+          "source_command_id",
+          "effective_success_criteria",
+          "requirements",
+          "constraints",
+          "validation_plan",
+          "evidence_decision",
+          "required_local_capabilities",
+          "required_external_capabilities",
+          "expected_artifacts",
+          "acceptance_checks",
+          "created_at"
         ],
         "title": "TaskRevision",
         "type": "object"
@@ -41731,9 +43796,18 @@
           "condition_type",
           "threshold",
           "alert_id",
+          "binding_id",
+          "parameters",
+          "evaluation_policy",
           "cooldown_seconds",
+          "expires_at",
           "enabled",
-          "revision"
+          "last_observed_price",
+          "last_observed_value",
+          "last_triggered_at",
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "TradingAlert",
         "type": "object"
@@ -41788,7 +43862,7 @@
             "type": "integer"
           },
           "evaluation_policy": {
-            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy-Input"
           },
           "expires_at": {
             "anyOf": [
@@ -41959,6 +44033,35 @@
         "type": "object"
       },
       "TradingAlertEvaluationPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_partial_bars": {
+            "default": false,
+            "title": "Allow Partial Bars",
+            "type": "boolean"
+          },
+          "formula_version": {
+            "default": "omnix-indicators-v2",
+            "title": "Formula Version",
+            "type": "string"
+          },
+          "interval": {
+            "default": "1m",
+            "maxLength": 16,
+            "minLength": 1,
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interval",
+          "allow_partial_bars",
+          "formula_version"
+        ],
+        "title": "TradingAlertEvaluationPolicy",
+        "type": "object"
+      },
+      "TradingAlertEvaluationPolicy-Input": {
         "additionalProperties": false,
         "properties": {
           "allow_partial_bars": {
@@ -42291,6 +44394,7 @@
         },
         "required": [
           "lookback_bars",
+          "indicator_id",
           "period",
           "fast_period",
           "slow_period",
@@ -42298,7 +44402,10 @@
           "component",
           "anchor_bars_ago",
           "message",
-          "trigger_policy"
+          "notification_channels",
+          "trigger_policy",
+          "trendline_points",
+          "trendline_mode"
         ],
         "title": "TradingAlertParameters",
         "type": "object"
@@ -42406,7 +44513,10 @@
           "condition_type",
           "observed_at",
           "evaluated_at",
-          "idempotency_key"
+          "idempotency_key",
+          "binding_id",
+          "provider",
+          "payload"
         ],
         "title": "TradingAlertTrigger",
         "type": "object"
@@ -42476,7 +44586,7 @@
             "type": "boolean"
           },
           "evaluation_policy": {
-            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy"
+            "$ref": "#/components/schemas/TradingAlertEvaluationPolicy-Input"
           },
           "expires_at": {
             "anyOf": [
@@ -42618,7 +44728,8 @@
           "record_type",
           "revision",
           "payload",
-          "status"
+          "status",
+          "updated_at"
         ],
         "title": "TradingDocumentResponse",
         "type": "object"
@@ -42770,7 +44881,13 @@
           "content",
           "content_hash",
           "immutable_fingerprint",
-          "extraction_status"
+          "issuer_identity_id",
+          "source_published_at",
+          "source_available_at",
+          "omnix_known_at",
+          "title",
+          "extraction_status",
+          "metadata"
         ],
         "title": "TradingEvidence",
         "type": "object"
@@ -42881,7 +44998,12 @@
           "immutable_fingerprint",
           "schema_version",
           "extractor_version",
+          "strategy_id",
+          "report_id",
+          "omnix_known_at",
           "supply",
+          "supply_metrics",
+          "completeness",
           "unresolved_facts",
           "evidence_ids"
         ],
@@ -42983,7 +45105,11 @@
           "model",
           "headline",
           "summary",
+          "key_points",
+          "risks",
+          "watch_items",
           "confidence",
+          "source_evidence_ids",
           "read_only",
           "disclaimer"
         ],
@@ -43009,7 +45135,8 @@
           }
         },
         "required": [
-          "text"
+          "text",
+          "source_evidence_ids"
         ],
         "title": "TradingMarketBriefItem",
         "type": "object"
@@ -43168,8 +45295,13 @@
         "required": [
           "instrument_id",
           "as_of",
+          "identity",
+          "latest_report",
           "report_timeline",
           "evidence",
+          "fact_set",
+          "features",
+          "shadow",
           "hermes_actions"
         ],
         "title": "TradingResearchAuditView",
@@ -43235,7 +45367,9 @@
           "features",
           "trace_id",
           "planner_backend",
-          "warnings"
+          "warnings",
+          "brief",
+          "brief_warning"
         ],
         "title": "TradingResearchCoordinatorResult",
         "type": "object"
@@ -43397,12 +45531,18 @@
           "evidence_cutoff_at",
           "immutable_fingerprint",
           "contract_version",
+          "strategy_id",
+          "research_completed_at",
+          "omnix_known_at",
           "catalyst_status",
           "supply_status",
           "research_status",
+          "coverage",
           "unresolved_facts",
           "source_evidence_ids",
-          "planner_backend"
+          "hermes_trace_id",
+          "planner_backend",
+          "stop_reason"
         ],
         "title": "TradingResearchReport",
         "type": "object"
@@ -43554,6 +45694,8 @@
           "evidence_cutoff_at",
           "deadline_at",
           "contract_version",
+          "strategy_id",
+          "issuer_identity_id",
           "known_headlines",
           "known_filings",
           "objectives",
@@ -43812,6 +45954,7 @@
           "name",
           "instrument_ids",
           "rules",
+          "binding_ids",
           "interval",
           "history_limit",
           "max_concurrency",
@@ -43819,7 +45962,9 @@
           "run_timeout_seconds",
           "formula_version",
           "enabled",
-          "revision"
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "TradingScannerDefinition",
         "type": "object"
@@ -43904,7 +46049,8 @@
           "metrics",
           "matched_rules",
           "rank",
-          "score"
+          "score",
+          "requested_binding_id"
         ],
         "title": "TradingScannerResult",
         "type": "object"
@@ -44156,7 +46302,12 @@
           "cancellation_requested",
           "universe_count",
           "completed_count",
-          "matched_count"
+          "matched_count",
+          "started_at",
+          "finished_at",
+          "error_message",
+          "created_at",
+          "updated_at"
         ],
         "title": "TradingScannerRun",
         "type": "object"
@@ -44443,11 +46594,19 @@
         "required": [
           "strategy_id",
           "account_id",
+          "parent_strategy_id",
           "strategy_kind",
           "strategy_version",
           "mode",
+          "active_universe_id",
+          "config",
+          "risk",
           "enabled",
-          "revision"
+          "archived_at",
+          "archived_reason",
+          "revision",
+          "created_at",
+          "updated_at"
         ],
         "title": "TradingStrategyConfigDocument",
         "type": "object"
@@ -44553,7 +46712,7 @@
           "delivery_plan": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SpeechPerformancePlan"
+                "$ref": "#/components/schemas/SpeechPerformancePlan-Input"
               },
               {
                 "type": "null"
@@ -45288,6 +47447,11 @@
           "qualification_version",
           "prospective_start",
           "market_evidence_policy_version",
+          "execution_match_rate",
+          "expectancy_r",
+          "one_sided_90_lcb_r",
+          "max_drawdown_r",
+          "thresholds",
           "prospective_economic_reviewed",
           "qualified",
           "reviewed",
@@ -45425,7 +47589,10 @@
           }
         },
         "required": [
-          "n"
+          "n",
+          "brier_delta_v42_minus_v3",
+          "log_loss_delta_v42_minus_v3",
+          "accuracy_delta_v42_minus_v3"
         ],
         "title": "V42ComparisonMetrics",
         "type": "object"
@@ -45749,7 +47916,16 @@
           }
         },
         "required": [
-          "n"
+          "n",
+          "expected_return_mae",
+          "q10_pinball_loss",
+          "q50_pinball_loss",
+          "q90_pinball_loss",
+          "p_gt_2_brier",
+          "p_lt_minus_5_brier",
+          "q10_breach_rate",
+          "mean_predicted_expected_return",
+          "mean_realized_return"
         ],
         "title": "V42ReturnMetrics",
         "type": "object"
@@ -45894,7 +48070,10 @@
           }
         },
         "required": [
-          "n"
+          "n",
+          "brier_delta_v43_minus_v3",
+          "log_loss_delta_v43_minus_v3",
+          "accuracy_delta_v43_minus_v3"
         ],
         "title": "V43ComparisonMetrics",
         "type": "object"
@@ -46033,7 +48212,14 @@
           "premarket_repricing_complete_score",
           "used_components",
           "missing_components",
-          "input_fingerprint"
+          "input_fingerprint",
+          "vwap_extension_score",
+          "distance_from_low_score",
+          "range_position_score",
+          "multi_day_extension_score",
+          "float_turnover_score",
+          "late_deceleration_score",
+          "late_volume_fade_score"
         ],
         "title": "V43ExtensionExhaustionOverlay",
         "type": "object"
@@ -46170,7 +48356,9 @@
           "cohort_regime",
           "uncertainty",
           "predictor_version",
-          "feature_schema_version"
+          "feature_schema_version",
+          "frozen_climatology_probability",
+          "probability_edge_over_climatology"
         ],
         "title": "V43Forecast",
         "type": "object"
@@ -46335,6 +48523,11 @@
           "feature",
           "sample_size",
           "exact_sample_size",
+          "in_sample_effect_r",
+          "out_of_sample_effect_r",
+          "win_probability_delta",
+          "confidence_interval_low",
+          "confidence_interval_high",
           "recommendation",
           "reason"
         ],
@@ -46494,7 +48687,14 @@
           "command",
           "success",
           "output_digest",
-          "outcome"
+          "result_id",
+          "task_revision_id",
+          "exit_code",
+          "outcome",
+          "covers_requirement_ids",
+          "started_at",
+          "finished_at",
+          "metadata"
         ],
         "title": "ValidationResult",
         "type": "object"
@@ -46556,7 +48756,9 @@
           "id",
           "kind",
           "description",
-          "required"
+          "covers",
+          "required",
+          "command_hint"
         ],
         "title": "ValidationSpec",
         "type": "object"
@@ -46580,7 +48782,8 @@
           }
         },
         "required": [
-          "application_schema"
+          "application_schema",
+          "build_revision"
         ],
         "title": "VersionDiagnostics",
         "type": "object"
@@ -46770,7 +48973,12 @@
           "source_reference",
           "creator_id",
           "consent_status",
+          "consent_recorded_at",
+          "allowed_uses",
+          "source_sha256",
           "deletion_state",
+          "deletion_requested_at",
+          "deleted_at",
           "deletion_reason"
         ],
         "title": "VoiceProfileGovernance",
@@ -47300,15 +49508,27 @@
           "evaluation_id",
           "created_at",
           "updated_at",
+          "session_id",
           "app_version",
           "browser_version",
           "os_version",
           "character_id",
+          "profile_version",
           "presence_preset",
           "conversation_stance",
           "configured_duplex_mode",
           "resolved_duplex_mode",
-          "release_gate_status"
+          "calibration_version",
+          "input_device_hash",
+          "output_device_hash",
+          "environment_hash",
+          "latency_summary",
+          "quality_metrics",
+          "eos_termination_counts",
+          "scenario_labels",
+          "release_gate_status",
+          "listening_score",
+          "pressure_score"
         ],
         "title": "VoiceSessionEvaluationRecord",
         "type": "object"
@@ -47370,7 +49590,10 @@
           "id",
           "ok",
           "status",
+          "details",
+          "error",
           "url",
+          "capabilities",
           "source_env",
           "mocked"
         ],
@@ -47422,7 +49645,10 @@
           "ok",
           "status",
           "format_version",
-          "contract_version"
+          "contract_version",
+          "workers",
+          "summary",
+          "diagnostics"
         ],
         "title": "WorkerHealthPayload",
         "type": "object"
@@ -47517,7 +49743,8 @@
           "generated_artifacts",
           "base64_media_payloads",
           "browser_worker_access",
-          "gateway_worker_access"
+          "gateway_worker_access",
+          "notes"
         ],
         "title": "WorkerPayloadPolicy",
         "type": "object"
@@ -47585,6 +49812,46 @@
         },
         "required": [
           "id",
+          "name",
+          "version",
+          "description",
+          "steps"
+        ],
+        "title": "WorkflowDefinition",
+        "type": "object"
+      },
+      "WorkflowDefinition-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepDefinition-Input"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
           "name"
         ],
         "title": "WorkflowDefinition",
@@ -47602,6 +49869,125 @@
         "type": "object"
       },
       "WorkflowStepDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_template": {
+            "additionalProperties": true,
+            "title": "Input Template",
+            "type": "object"
+          },
+          "kind": {
+            "default": "capability",
+            "enum": [
+              "capability",
+              "condition",
+              "approval"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step Id"
+          },
+          "on_false_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On False Step Id"
+          },
+          "on_true_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On True Step Id"
+          },
+          "requires_approval": {
+            "default": false,
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "retry_limit": {
+            "default": 0,
+            "maximum": 20,
+            "minimum": 0,
+            "title": "Retry Limit",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "capability_id",
+          "input_template",
+          "condition",
+          "retry_limit",
+          "timeout_seconds",
+          "requires_approval",
+          "next_step_id",
+          "on_true_step_id",
+          "on_false_step_id"
+        ],
+        "title": "WorkflowStepDefinition",
+        "type": "object"
+      },
+      "WorkflowStepDefinition-Input": {
         "additionalProperties": false,
         "properties": {
           "capability_id": {
@@ -47766,8 +50152,12 @@
         },
         "required": [
           "root",
+          "repository",
           "base_ref",
-          "isolation_policy"
+          "worktree",
+          "isolation_policy",
+          "allowed_paths",
+          "forbidden_paths"
         ],
         "title": "WorkspaceSpec",
         "type": "object"
@@ -51799,7 +54189,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantToolRequest"
+                "$ref": "#/components/schemas/AssistantToolRequest-Input"
               }
             }
           },
@@ -51957,7 +54347,7 @@
               "schema": {
                 "anyOf": [
                   {
-                    "$ref": "#/components/schemas/AssistantToolRequest"
+                    "$ref": "#/components/schemas/AssistantToolRequest-Input"
                   },
                   {
                     "type": "null"
@@ -52003,7 +54393,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AssistantToolRequest"
+                "$ref": "#/components/schemas/AssistantToolRequest-Input"
               }
             }
           },
@@ -55124,7 +57514,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateCharacterAvatarGenerationRequest"
+                "$ref": "#/components/schemas/CreateCharacterAvatarGenerationRequest-Input"
               }
             }
           },
@@ -60316,7 +62706,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ModelResidencyRecord"
+                "$ref": "#/components/schemas/ModelResidencyRecord-Input"
               }
             }
           },
@@ -75360,7 +77750,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WorkflowDefinition"
+                "$ref": "#/components/schemas/WorkflowDefinition-Input"
               }
             }
           },

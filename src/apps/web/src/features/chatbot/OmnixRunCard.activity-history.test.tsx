@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
 import { OmnixRunCard } from './OmnixRunCardCore';
+import { fixture } from '../../test/fixture';
 
 function renderCard(metadata: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -100,7 +101,7 @@ describe('OmnixRunCard activity history', () => {
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockImplementation(async (_runId, afterSequence = 0) => {
       const start = afterSequence === 0 ? 0 : 500;
       const count = start === 0 ? 500 : 7;
-      return Array.from({ length: count }, (_, index) => ({
+      return fixture(Array.from({ length: count }, (_, index) => ({
         event_id: `paged-tool-event-${start + index}`,
         run_id: 'run-paged-history',
         sequence: start + index + 1,
@@ -111,7 +112,7 @@ describe('OmnixRunCard activity history', () => {
           args: { path: `src/paged-file-${start + index}.ts` },
         },
         created_at: '2026-09-10T04:10:00Z',
-      }));
+      })));
     });
 
     vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({

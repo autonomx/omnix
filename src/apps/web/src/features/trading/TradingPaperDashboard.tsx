@@ -495,8 +495,9 @@ export function TradingPaperDashboard() {
       trade_count: manualPerformance.tradeCount,
       wins: manualPerformance.wins,
       losses: manualPerformance.losses,
-      win_rate: manualPerformance.winRate,
-      profit_factor: manualPerformance.profitFactor,
+      // The gateway sends decimals as strings; keep the same shape.
+      win_rate: manualPerformance.winRate === null ? null : String(manualPerformance.winRate),
+      profit_factor: manualPerformance.profitFactor === null ? null : String(manualPerformance.profitFactor),
       expectancy_r: null,
     };
   }

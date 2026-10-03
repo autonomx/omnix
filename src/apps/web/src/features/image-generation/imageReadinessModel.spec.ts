@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderFacadePayload } from '../../api/client';
 import { readyImageProviders, resolveImageReadiness } from './imageReadinessModel';
+import { fixture } from '../../test/fixture';
 
-const providers = {
+const providers = fixture<ProviderFacadePayload>({
   providers: [
     { id: 'image:flux_klein', label: 'FLUX', family: 'image', capabilities: ['image'], status: 'configured', source: 'settings' },
     { id: 'image:broken', label: 'Broken', family: 'image', capabilities: ['image'], status: 'degraded', source: 'settings' },
     { id: 'llm:local', label: 'Local', family: 'llm', capabilities: ['chat'], status: 'configured', source: 'settings' },
   ],
   models: [],
-} as ProviderFacadePayload;
+});
 
 describe('image runtime readiness', () => {
   it('keeps only usable standalone image providers', () => {

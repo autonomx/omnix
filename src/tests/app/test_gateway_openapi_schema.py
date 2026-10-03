@@ -10,7 +10,7 @@ from typing import Any
 from fastapi.routing import APIRoute
 
 from app.gateway.main import create_gateway_app
-from scripts.export_gateway_openapi import _stabilize_equivalent_io_schemas
+from scripts.export_gateway_openapi import normalize_contract
 
 
 _ROUTE_SURFACE_KEYS = ("openapi", "info", "paths")
@@ -85,8 +85,8 @@ def test_generated_gateway_openapi_schema_is_current() -> None:
     generated_path = repo_root / "src" / "apps" / "web" / "src" / "api" / "generated" / "openapi.json"
 
     generated_schema = _normalize_openapi(_route_surface(json.loads(generated_path.read_text(encoding="utf-8"))))
-    live_schema = create_gateway_app().openapi()
-    _stabilize_equivalent_io_schemas(live_schema)
+    app = create_gateway_app()
+    live_schema = normalize_contract(app.openapi(), app)
     current_schema = _normalize_openapi(_route_surface(live_schema))
 
     if generated_schema != current_schema:
