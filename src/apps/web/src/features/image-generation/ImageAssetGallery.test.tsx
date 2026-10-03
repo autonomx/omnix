@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixTheme } from '../../design/theme';
-import { ImageAssetGallery, type ImageAsset } from './ImageAssetGallery';
+import { IMAGE_GALLERY_BATCH, ImageAssetGallery, type ImageAsset } from './ImageAssetGallery';
 
 const asset = {
   id: 'image:castle',
@@ -23,7 +23,7 @@ const asset = {
   compat: {},
 } as ImageAsset;
 
-function renderGallery() {
+function renderGallery(assets: ImageAsset[] = [asset]) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -33,7 +33,7 @@ function renderGallery() {
   return render(
     <MantineProvider theme={omnixTheme} defaultColorScheme="dark">
       <QueryClientProvider client={queryClient}>
-        <ImageAssetGallery assets={[asset]} selectedAssetId={null} onSelect={vi.fn()} />
+        <ImageAssetGallery assets={assets} selectedAssetId={null} onSelect={vi.fn()} />
       </QueryClientProvider>
     </MantineProvider>,
   );
@@ -42,6 +42,22 @@ function renderGallery() {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('ImageAssetGallery batches', () => {
+  it('renders a batch of cards and adds more on request', () => {
+    const many = Array.from({ length: IMAGE_GALLERY_BATCH + 5 }, (_, index) => ({
+      ...asset,
+      id: `image:${index}`,
+      metadata: { ...asset.metadata, title: `Image ${index}` },
+    }) as ImageAsset);
+    renderGallery(many);
+
+    expect(screen.getAllByRole('article')).toHaveLength(IMAGE_GALLERY_BATCH);
+    fireEvent.click(screen.getByRole('button', { name: 'Show more images (5 more)' }));
+    expect(screen.getAllByRole('article')).toHaveLength(IMAGE_GALLERY_BATCH + 5);
+    expect(screen.queryByRole('button', { name: /Show more images/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('ImageAssetGallery deletion', () => {
