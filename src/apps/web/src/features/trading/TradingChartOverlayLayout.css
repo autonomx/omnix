@@ -1,2 +1,4 @@
-.trading-chart-header .trading-drawing-manager{right:118px}
-.trading-chart-stage:has(.trading-drawing-overlay:not(.tool-cursor)) .trading-indicator-pane-resize-handle{display:none}
+@layer features {
+  .trading-chart-header .trading-drawing-manager{right:118px}
+  .trading-chart-stage:has(.trading-drawing-overlay:not(.tool-cursor)) .trading-indicator-pane-resize-handle{display:none}
+}

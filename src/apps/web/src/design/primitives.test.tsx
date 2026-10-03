@@ -3,8 +3,9 @@ import { cleanup, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { OmnixAssetCard, OmnixAudioControls, OmnixDiagnosticsView, OmnixProgressLog, OmnixTopBar, OmnixTranscriptView } from './primitives';
 import { renderWithProviders } from '../test/renderWithProviders';
+import { unlayeredCss } from '../test/unlayeredCss';
 
-const styles = readFileSync('src/styles.css', 'utf8');
+const styles = unlayeredCss(readFileSync('src/styles.css', 'utf8'));
 const themePresets = readFileSync('src/theme-presets.css', 'utf8');
 const styleElement = document.createElement('style');
 document.head.appendChild(styleElement);

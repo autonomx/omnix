@@ -1,1 +1,3 @@
-.settings-sr-only{display:none}
+@layer features {
+  .settings-sr-only{display:none}
+}

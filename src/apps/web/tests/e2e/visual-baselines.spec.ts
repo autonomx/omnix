@@ -37,6 +37,20 @@ const workspaces = [
 
 const themes = ['aurora', 'graphite', 'liquid-glass', 'evergreen'] as const;
 
+// Waits until no request has started for longer than React Query's retry delay,
+// so every screen is captured after its failed requests settle. Trading polls,
+// so the wait is bounded.
+async function settle(page: Page): Promise<void> {
+  let lastRequest = Date.now();
+  const onRequest = () => { lastRequest = Date.now(); };
+  page.on('request', onRequest);
+  const deadline = Date.now() + 12_000;
+  while (Date.now() - lastRequest < 2_500 && Date.now() < deadline) {
+    await page.waitForTimeout(250);
+  }
+  page.off('request', onRequest);
+}
+
 async function openWith(page: Page, route: string, mode: 'dark' | 'light', theme: string): Promise<void> {
   await page.addInitScript(([storedMode, storedTheme]) => {
     window.localStorage.setItem('omnix.appearance.mode', storedMode);
@@ -44,8 +58,7 @@ async function openWith(page: Page, route: string, mode: 'dark' | 'light', theme
   }, [mode, theme]);
   await page.goto(route);
   await expect(page.getByText(/^Loading .* workspace…$/)).toHaveCount(0, { timeout: 30_000 });
-  // Trading polls, so it never goes network-idle; settle for a bounded time instead.
-  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+  await settle(page);
   await page.evaluate(() => document.fonts.ready);
 }
 

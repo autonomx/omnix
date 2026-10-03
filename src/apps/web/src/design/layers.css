@@ -1,0 +1,13 @@
+/*
+ * Cascade layer order (WP-9.8). A rule in a later layer wins over a rule in an
+ * earlier one whatever their selector specificity, so no stylesheet needs
+ * `!important`:
+ *   reset, tokens, base - element defaults and design tokens;
+ *   mantine             - @mantine/core/styles.layer.css;
+ *   components, features - shared components and feature stylesheets;
+ *   themes              - theme presets, which set tokens;
+ *   overrides           - declarations that must win (accessibility, reduced motion,
+ *                         and the former `!important` declarations).
+ * This file is imported first, so the order holds for stylesheets loaded later.
+ */
+@layer reset, tokens, base, mantine, components, features, themes, overrides;
