@@ -13,6 +13,7 @@
   "omnix_jobs.input_payload": "indexed; session_id has the expression index idx on (workspace_id, input_payload->>'session_id') for chat jobs; awaiting_plan_approval and submission_id filter rows already selected by job type and status",
   "omnix_jobs.metadata": "keep; compat_contract fields are evaluated on claim candidates already selected by status and availability",
   "omnix_memory_v2_derived_policy_envelopes.source_observation_ids": "keep; containment is evaluated after the (principal, owner) filter of one owner's envelopes",
+  "omnix_memory_v2_observations.payload": "keep; record ids (memory_record/legacy_record id) are found through the expression index of migration 0119 within one principal; status, pinned and updated_at are read from one owner's current revisions",
   "omnix_memory_v2_search_index_entries.evidence_observation_ids": "keep; containment is evaluated after the (principal, owner) filter of one owner's entries",
   "omnix_module_records.payload": "indexed for chat summaries (session_id, migration 0111); character_id, proposal_id, error and created_at filter one record type of one workspace, already narrowed by the module index",
   "omnix_retention_policies.metadata": "keep; maintenance_only is read from a table of about a dozen policies",
