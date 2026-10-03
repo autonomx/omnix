@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import {
-  captureChatSessionResponseMetrics,
+  ChatResponseMetricsRow,
   formatLmStudioStopReason,
   initializeChatResponseMetricsController,
   readChatResponseMetrics,
-  renderChatResponseMetrics,
   resetChatResponseMetricsForTests,
 } from './chat-response-metrics-controller';
 import { pipelineFetch } from '../../api/fetchPipeline';
@@ -15,7 +14,7 @@ afterEach(() => {
   resetChatResponseMetricsForTests();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  document.body.replaceChildren();
+  cleanup();
 });
 
 describe('chat response metrics', () => {
@@ -38,62 +37,29 @@ describe('chat response metrics', () => {
     });
   });
 
-  it('renders compact metrics below the matching assistant response', () => {
-    document.body.innerHTML = `
-      <div class="assistant-chat-messages">
-        <article class="assistant-chat-message assistant">
-          <div class="assistant-chat-bubble">
-            <p>Howdy right back at ya!</p>
-            <div class="assistant-message-actions"></div>
-          </div>
-        </article>
-      </div>
-    `;
-    captureChatSessionResponseMetrics({
-      messages: [
-        {
-          id: 'assistant:1',
-          role: 'assistant',
-          metadata: {
-            usage: { completion_tokens: 37 },
-            provider_metrics: {
-              provider: 'lmstudio',
-              tokens_per_second: 127.26,
-              generation_time_seconds: 0.38,
-              time_to_first_token_seconds: 0.11,
-              stop_reason: 'eosFound',
-            },
-          },
-        },
-      ],
-    });
+  it('renders compact metrics for an assistant reply', () => {
+    render(<ChatResponseMetricsRow metadata={{
+      usage: { completion_tokens: 37 },
+      provider_metrics: {
+        provider: 'lmstudio',
+        tokens_per_second: 127.26,
+        generation_time_seconds: 0.38,
+        time_to_first_token_seconds: 0.11,
+        stop_reason: 'eosFound',
+      },
+    }} />);
 
-    renderChatResponseMetrics();
-
-    const row = document.querySelector<HTMLElement>('.assistant-response-metrics');
-    expect(row?.textContent).toContain('127.26 tok/sec');
-    expect(row?.textContent).toContain('37 tokens');
-    expect(row?.textContent).toContain('0.38s');
-    expect(row?.textContent).toContain('Stop reason: EOS Token Found');
-    expect(row?.dataset.timeToFirstTokenSeconds).toBe('0.11');
-    expect(row?.nextElementSibling).toHaveClass('assistant-message-actions');
+    const row = screen.getByLabelText('LM Studio response metrics');
+    expect(row).toHaveTextContent('127.26 tok/sec');
+    expect(row).toHaveTextContent('37 tokens');
+    expect(row).toHaveTextContent('0.38s');
+    expect(row).toHaveTextContent('Stop reason: EOS Token Found');
+    expect(row.dataset.timeToFirstTokenSeconds).toBe('0.11');
   });
 
-  it('does not render a row for messages without provider metrics', () => {
-    document.body.innerHTML = `
-      <div class="assistant-chat-messages">
-        <article class="assistant-chat-message assistant">
-          <div class="assistant-chat-bubble"><p>No metrics</p></div>
-        </article>
-      </div>
-    `;
-    captureChatSessionResponseMetrics({
-      messages: [{ id: 'assistant:1', role: 'assistant', metadata: {} }],
-    });
-
-    renderChatResponseMetrics();
-
-    expect(document.querySelector('.assistant-response-metrics')).toBeNull();
+  it('renders nothing for replies without LM Studio metrics', () => {
+    const { container } = render(<ChatResponseMetricsRow metadata={{ provider_metrics: { provider: 'openrouter', tokens_per_second: 5 } }} />);
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('formats LM Studio stop reason identifiers for display', () => {

@@ -1,5 +1,4 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
- 
 import { registerFetchMiddleware, type FetchNext } from '../../api/fetchPipeline';
 import { createLiveCallDiagnosticsReporter } from '../assistant-workspace/live-call-diagnostics-client';
 
@@ -13,20 +12,10 @@ type ChatResponseMetrics = {
   stopReason?: string;
 };
 
-type AssistantMessageSnapshot = {
-  id: string;
-  metrics: ChatResponseMetrics | null;
-};
-
-const CHAT_SESSION_PATH = /^\/api\/chat\/sessions\/[^/]+$/;
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/[^/]+\/messages\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
-const METRICS_ROW_CLASS = 'assistant-response-metrics';
 
 let removeMiddleware: (() => void) | null = null;
-let observer: MutationObserver | null = null;
-let assistantMessages: AssistantMessageSnapshot[] = [];
-let renderQueued = false;
 
 function record(value: unknown): JsonRecord {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
@@ -99,98 +88,33 @@ function formatSeconds(value: number): string {
   return `${value < 10 ? value.toFixed(2) : value.toFixed(1)}s`;
 }
 
-function metricChip(icon: string, label: string, title?: string): HTMLSpanElement {
-  const chip = document.createElement('span');
-  chip.className = 'assistant-response-metric';
-  if (title) chip.title = title;
-
-  const iconNode = document.createElement('span');
-  iconNode.className = 'assistant-response-metric-icon';
-  iconNode.setAttribute('aria-hidden', 'true');
-  iconNode.textContent = icon;
-
-  const labelNode = document.createElement('span');
-  labelNode.textContent = label;
-  chip.append(iconNode, labelNode);
-  return chip;
-}
-
-function metricsSignature(metrics: ChatResponseMetrics): string {
-  return JSON.stringify(metrics);
-}
-
-function populateMetricsRow(row: HTMLDivElement, metrics: ChatResponseMetrics): void {
-  const signature = metricsSignature(metrics);
-  if (row.dataset.metricsSignature === signature) return;
-  row.dataset.metricsSignature = signature;
-  row.replaceChildren();
-
-  if (metrics.tokensPerSecond !== undefined) {
-    row.append(metricChip('◴', `${metrics.tokensPerSecond.toFixed(2)} tok/sec`, 'LM Studio generation speed'));
-  }
-  if (metrics.outputTokens !== undefined) {
-    row.append(metricChip('▤', `${metrics.outputTokens} tokens`, 'LM Studio output tokens'));
-  }
-  if (metrics.generationTimeSeconds !== undefined) {
-    row.append(metricChip('◷', formatSeconds(metrics.generationTimeSeconds), 'LM Studio generation time'));
-  }
-  if (metrics.stopReason) {
-    row.append(metricChip('', `Stop reason: ${formatLmStudioStopReason(metrics.stopReason)}`));
-  }
-  if (metrics.timeToFirstTokenSeconds !== undefined) {
-    row.dataset.timeToFirstTokenSeconds = String(metrics.timeToFirstTokenSeconds);
-    row.title = `Time to first token: ${formatSeconds(metrics.timeToFirstTokenSeconds)}`;
-  } else {
-    delete row.dataset.timeToFirstTokenSeconds;
-    row.removeAttribute('title');
-  }
-}
-
-export function captureChatSessionResponseMetrics(sessionValue: unknown): void {
-  const session = record(sessionValue);
-  const messages = Array.isArray(session.messages) ? session.messages : [];
-  assistantMessages = messages
-    .map((value) => record(value))
-    .filter((message) => message.role === 'assistant')
-    .map((message, index) => ({
-      id: nonEmptyText(message.id) ?? `assistant:${index}`,
-      metrics: readChatResponseMetrics(message.metadata),
-    }));
-  scheduleMetricsRender();
-}
-
-export function renderChatResponseMetrics(root: ParentNode = document): void {
-  const articles = Array.from(
-    root.querySelectorAll<HTMLElement>('.assistant-chat-messages .assistant-chat-message.assistant'),
+function MetricChip({ icon, label, title }: { icon: string; label: string; title?: string }) {
+  return (
+    <span className="assistant-response-metric" title={title}>
+      <span className="assistant-response-metric-icon" aria-hidden="true">{icon}</span>
+      <span>{label}</span>
+    </span>
   );
-  articles.forEach((article, index) => {
-    const bubble = article.querySelector<HTMLElement>('.assistant-chat-bubble');
-    if (!bubble) return;
-    const metrics = assistantMessages[index]?.metrics ?? null;
-    const existing = bubble.querySelector<HTMLDivElement>(`:scope > .${METRICS_ROW_CLASS}`);
-    if (!metrics) {
-      existing?.remove();
-      return;
-    }
-
-    const row = existing ?? document.createElement('div');
-    row.className = METRICS_ROW_CLASS;
-    row.setAttribute('aria-label', 'LM Studio response metrics');
-    populateMetricsRow(row, metrics);
-    if (!existing) {
-      const actions = bubble.querySelector<HTMLElement>(':scope > .assistant-message-actions');
-      bubble.insertBefore(row, actions);
-    }
-  });
 }
 
-function scheduleMetricsRender(): void {
-  if (renderQueued) return;
-  renderQueued = true;
-  queueMicrotask(() => {
-    renderQueued = false;
-    renderChatResponseMetrics();
-  });
+/** LM Studio's speed, token count, time and stop reason for one assistant reply (nothing for other providers). */
+export function ChatResponseMetricsRow({ metadata }: { metadata: unknown }) {
+  const metrics = readChatResponseMetrics(metadata);
+  if (!metrics) return null;
+  const firstToken = metrics.timeToFirstTokenSeconds;
+  return (
+    <div
+      className="assistant-response-metrics"
+      aria-label="LM Studio response metrics"
+      data-time-to-first-token-seconds={firstToken !== undefined ? String(firstToken) : undefined}
+      title={firstToken !== undefined ? `Time to first token: ${formatSeconds(firstToken)}` : undefined}
+    >
+      {metrics.tokensPerSecond !== undefined ? <MetricChip icon="◴" label={`${metrics.tokensPerSecond.toFixed(2)} tok/sec`} title="LM Studio generation speed" /> : null}
+      {metrics.outputTokens !== undefined ? <MetricChip icon="▤" label={`${metrics.outputTokens} tokens`} title="LM Studio output tokens" /> : null}
+      {metrics.generationTimeSeconds !== undefined ? <MetricChip icon="◷" label={formatSeconds(metrics.generationTimeSeconds)} title="LM Studio generation time" /> : null}
+      {metrics.stopReason ? <MetricChip icon="" label={`Stop reason: ${formatLmStudioStopReason(metrics.stopReason)}`} /> : null}
+    </div>
+  );
 }
 
 function requestVoiceTurnId(input: RequestInfo | URL, init?: RequestInit): string | undefined {
@@ -237,16 +161,11 @@ async function interceptChatMetricsFetch(input: RequestInfo | URL, init: Request
   const url = new URL(rawUrl, window.location.origin);
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
 
-  if (method === 'GET' && CHAT_SESSION_PATH.test(url.pathname)) {
-    void response.clone().json()
-      .then(captureChatSessionResponseMetrics)
-      .catch(() => undefined);
-  } else if (method === 'POST' && CHAT_STREAM_PATH.test(url.pathname)) {
+  if (method === 'POST' && CHAT_STREAM_PATH.test(url.pathname)) {
     dispatchSseTransportObservation(response, requestVoiceTurnId(input, init));
   }
-  // Never clone or consume a live SSE response here. The session query is
-  // invalidated after the stream completes and supplies the same persisted
-  // metrics without teeing the latency-critical response body.
+  // Never clone or consume a live SSE response here. Metrics come from the
+  // persisted messages the session query returns after the stream.
   return response;
 }
 
@@ -255,13 +174,8 @@ export function initializeChatResponseMetricsController(): () => void {
   if (removeMiddleware) return () => undefined;
 
   removeMiddleware = registerFetchMiddleware('chat-response-metrics', interceptChatMetricsFetch);
-  observer = new MutationObserver(scheduleMetricsRender);
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  scheduleMetricsRender();
 
   return () => {
-    observer?.disconnect();
-    observer = null;
     removeMiddleware?.();
     removeMiddleware = null;
   };
@@ -270,8 +184,4 @@ export function initializeChatResponseMetricsController(): () => void {
 export function resetChatResponseMetricsForTests(): void {
   removeMiddleware?.();
   removeMiddleware = null;
-  assistantMessages = [];
-  renderQueued = false;
-  observer?.disconnect();
-  observer = null;
 }
