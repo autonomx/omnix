@@ -8,6 +8,8 @@ import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
+import { api, unwrap } from '../../api/http';
+import { openStream } from '../../api/transport';
 
 let liveConversationInitiativeInstalled = false;
 
@@ -307,11 +309,10 @@ async function startProactiveTurn(
   });
   try {
     if (timing.responseOnsetMs) await waitForOnset(timing.responseOnsetMs, controller.signal);
-    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, {
+    const response = await openStream(`/api/chat/sessions/${encodeURIComponent(sessionId)}/live-call/greeting/stream?${params}`, {
       method: 'POST',
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`Proactive turn failed with status ${response.status}.`);
     const parsed = parseProactiveSse(await response.text());
     if (!parsed || controller.signal.aborted) return;
     const turn: PendingProactive = {
@@ -366,17 +367,15 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
   turn.committing = true;
   clearAudioStartTimer();
   try {
-    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(turn.sessionId)}/live-conversation/proactive/delivery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    await unwrap(api.POST('/api/chat/sessions/{session_id}/live-conversation/proactive/delivery', {
+      params: { path: { session_id: turn.sessionId } },
+      body: {
         turn_id: turn.turnId,
         content: turn.content,
         initiative_reason: turn.reason,
         delivery_status: status,
-      }),
-    });
-    if (!response.ok) throw new Error(`Proactive delivery commit failed with status ${response.status}.`);
+      },
+    }));
     promptCount += 1;
     lastPromptAtMs = performance.now();
     lastActivityAtMs = lastPromptAtMs;
@@ -464,12 +463,13 @@ async function refreshDesktopContext(sessionId: string, force: boolean): Promise
   if (desktopContextRequest) return desktopContextRequest;
   desktopContextRequest = (async () => {
     try {
-      const response = await fetch(`/api/desktop-companion/context?session_id=${encodeURIComponent(sessionId)}`, {
-        headers: { Accept: 'application/json' },
+      const { data, response } = await api.GET('/api/desktop-companion/context', {
+        params: { query: { session_id: sessionId } },
         cache: 'no-store',
       });
       if (!response.ok) return;
-      const payload = await response.json() as DesktopContext | null;
+      // The context route returns an untyped object (or null).
+      const payload = (data ?? null) as DesktopContext | null;
       desktopContext = payload && payload.session_id === sessionId ? payload : null;
       desktopContextSessionId = sessionId;
       desktopContextLoadedAtMs = Date.now();

@@ -17,6 +17,7 @@ import {
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import { VirtualList } from '../../design/VirtualList';
+import { fetchBytes, openStream, statusError } from '../../api/transport';
 import {
   ToolExecutionPanel,
   createFetchSpeechServiceTransport,
@@ -1383,18 +1384,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     let responseText = '';
     let speechBuffer = '';
     try {
-      const response = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await openStream(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
+        body: {
           content,
           provider_id: providerId,
           model_id: modelId,
           coding_approval_policy: assistantSettings.codingApprovalPolicy,
           live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
-        }),
-      });
-      if (!response.ok || !response.body) throw new Error(`Chat stream failed with status ${response.status}.`);
+        },
+      }).catch(statusError('Chat stream'));
+      if (!response.body) throw new Error(`Chat stream failed with status ${response.status}.`);
       markVoiceTurnPerformance('chatResponseReceivedAt');
       recordVoiceTurnDiagnostic('chat_response_opened', { status: response.status });
       const reader = response.body.getReader();
@@ -1693,7 +1692,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: STREAMING_TTS_SAMPLE_RATE });
     if (audioContext.state !== 'running') await audioContext.resume();
     const abortController = new AbortController();
-    const streamingUrl = '/api/tts/stream/server-sent-events';
+    const streamingUrl = '/api/tts/stream/server-sent-events' as const;
     console.info('[Omnix Voice Perf] streaming TTS connect', {
       requestId,
       url: streamingUrl,
@@ -1718,10 +1717,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     let receivedChunkCount = 0;
     let scheduledAudioSeconds = 0;
 
-    const response = await fetch(streamingUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // No gateway route serves this path since the audio transport consolidation (#1205); see WP-9.3 notes.
+    const response = await openStream(streamingUrl, {
+      body: {
         text,
         speaker: resolvedVoiceId || null,
         language: 'English',
@@ -1735,10 +1733,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         non_streaming_mode: false,
         parity_mode: true,
         request_id: requestId,
-      }),
+      },
       signal: abortController.signal,
-    });
-    if (!response.ok || !response.body) throw new Error(`Streaming TTS SSE failed with status ${response.status}.`);
+    }).catch(statusError('Streaming TTS SSE'));
+    if (!response.body) throw new Error(`Streaming TTS SSE failed with status ${response.status}.`);
     console.info('[Omnix Voice Perf] streaming TTS response opened', {
       requestId,
       status: response.status,
@@ -2363,7 +2361,7 @@ function parseStreamingTtsSseEvent(value: string): { type?: string; message?: st
 function parseChatStreamEvent(value: string): ChatStreamEvent | null { const line = value.split(/\r?\n/).find((entry) => entry.startsWith('data:')); if (!line) return null; try { return JSON.parse(line.slice(5).trim()) as ChatStreamEvent; } catch { return null; } }
 function makePlayableAudioSource(source: string): { url: string; revoke?: () => void } { if (!source.startsWith('data:audio/') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return { url: source }; const blob = dataUrlToBlob(source); const url = URL.createObjectURL(blob); return { url, revoke: () => URL.revokeObjectURL(url) }; }
 function dataUrlToBlob(source: string): Blob { const [header, encoded = ''] = source.split(',', 2); const mime = /^data:([^;,]+)/.exec(header)?.[1] || 'audio/wav'; const binary = window.atob(encoded); const bytes = new Uint8Array(binary.length); for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index); return new Blob([bytes], { type: mime }); }
-async function audioSourceToArrayBuffer(source: string): Promise<ArrayBuffer> { if (source.startsWith('data:')) return dataUrlToArrayBuffer(source); const response = await fetch(source); if (!response.ok) throw new Error(`Audio fetch failed with status ${response.status}.`); return response.arrayBuffer(); }
+async function audioSourceToArrayBuffer(source: string): Promise<ArrayBuffer> { if (source.startsWith('data:')) return dataUrlToArrayBuffer(source); const response = await fetchBytes(source).catch(statusError('Audio fetch')); return response.arrayBuffer(); }
 function dataUrlToArrayBuffer(source: string): ArrayBuffer { const [, encoded = ''] = source.split(',', 2); return base64ToArrayBuffer(encoded); }
 function waitForAudioElementPlaying(audio: HTMLAudioElement): Promise<void> { return new Promise((resolve, reject) => { if (typeof audio.addEventListener !== 'function') { resolve(); return; } if (!audio.paused && audio.readyState >= 3) { resolve(); return; } let timeoutId: ReturnType<typeof setTimeout> | null = null; const cleanup = () => { audio.removeEventListener('playing', onPlaying); audio.removeEventListener('error', onError); if (timeoutId !== null) clearTimeout(timeoutId); }; const onPlaying = () => { cleanup(); resolve(); }; const onError = () => { cleanup(); reject(new Error(audio.error?.message || 'Audio playback failed before it started.')); }; audio.addEventListener('playing', onPlaying, { once: true }); audio.addEventListener('error', onError, { once: true }); timeoutId = setTimeout(() => { cleanup(); reject(new Error('Audio element did not start playing within 3s.')); }, 3000); }); }
 function waitForAudioElementToFinish(audio: HTMLAudioElement): Promise<void> { return new Promise((resolve) => { if (audio.ended || audio.paused || typeof audio.addEventListener !== 'function') { resolve(); return; } const done = () => resolve(); audio.addEventListener('ended', done, { once: true }); audio.addEventListener('pause', done, { once: true }); audio.addEventListener('error', done, { once: true }); }); }

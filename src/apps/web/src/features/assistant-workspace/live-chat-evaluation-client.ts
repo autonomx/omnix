@@ -1,4 +1,5 @@
 import type { components } from '../../api/generated/types';
+import { api, unwrapAs } from '../../api/http';
 export type PresencePreset = 'quiet' | 'natural' | 'engaged' | 'listener';
 export type ReleaseGateStatus = 'pass' | 'fail' | 'insufficient';
 
@@ -22,63 +23,53 @@ export type LiveChatReleaseMetric = {
 
 export type LiveChatReleaseGateReport = components['schemas']['LiveChatReleaseGateReport'];
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Live Chat evaluation request failed with status ${response.status}.`);
-  }
-  return response.json() as Promise<T>;
+function evaluation<T>(call: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  return unwrapAs(call, (error) => error.body || `Live Chat evaluation request failed with status ${error.status}.`);
 }
 
-function jsonInit(method: string, body?: unknown): RequestInit {
-  return {
-    method,
-    ...(body === undefined ? {} : {
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  };
-}
+const presetPath = (preset: PresencePreset) => ({ preset });
 
 export const liveChatEvaluationClient = {
   upsert(input: VoiceSessionEvaluationCreate): Promise<VoiceSessionEvaluationRecord> {
-    return request('/api/tts/live-call/evaluations', jsonInit('POST', input));
+    return evaluation(api.POST('/api/tts/live-call/evaluations', { body: input }));
   },
   list(options: { sessionId?: string | null; preset?: PresencePreset | null; limit?: number } = {}): Promise<VoiceSessionEvaluationRecord[]> {
-    const params = new URLSearchParams();
-    if (options.sessionId) params.set('session_id', options.sessionId);
-    if (options.preset) params.set('presence_preset', options.preset);
-    params.set('limit', String(options.limit ?? 100));
-    return request(`/api/tts/live-call/evaluations?${params}`);
+    return evaluation(api.GET('/api/tts/live-call/evaluations', {
+      params: {
+        query: {
+          ...(options.sessionId ? { session_id: options.sessionId } : {}),
+          ...(options.preset ? { presence_preset: options.preset } : {}),
+          limit: options.limit ?? 100,
+        },
+      },
+    }));
   },
   releaseGate(options: { limit?: number; persistStatus?: boolean } = {}): Promise<LiveChatReleaseGateReport> {
-    const params = new URLSearchParams({
-      limit: String(options.limit ?? 1_000),
-      persist_status: String(options.persistStatus ?? true),
-    });
-    return request(`/api/tts/live-call/evaluations/release-gate?${params}`);
+    return evaluation(api.GET('/api/tts/live-call/evaluations/release-gate', {
+      params: { query: { limit: options.limit ?? 1_000, persist_status: options.persistStatus ?? true } },
+    }));
   },
   export(): Promise<Record<string, unknown>> {
-    return request('/api/tts/live-call/evaluations/export');
+    return evaluation(api.GET('/api/tts/live-call/evaluations/export'));
   },
-  activePolicies(): Promise<Record<PresencePreset, PresencePolicyVersion>> {
-    return request('/api/tts/live-call/presence-presets');
+  async activePolicies(): Promise<Record<PresencePreset, PresencePolicyVersion>> {
+    // The route returns an untyped map of preset to active policy version.
+    return (await evaluation(api.GET('/api/tts/live-call/presence-presets'))) as Record<PresencePreset, PresencePolicyVersion>;
   },
   policyVersions(preset?: PresencePreset): Promise<PresencePolicyVersion[]> {
-    return request(`/api/tts/live-call/presence-presets/versions${preset ? `?preset=${preset}` : ''}`);
+    return evaluation(api.GET('/api/tts/live-call/presence-presets/versions', { params: { query: preset ? { preset } : {} } }));
   },
   createPolicyVersion(
     preset: PresencePreset,
     input: { values: PresencePolicyValues; reason: string; evidence_evaluation_ids: string[] },
   ): Promise<PresencePolicyVersion> {
-    return request(`/api/tts/live-call/presence-presets/${preset}/versions`, jsonInit('POST', input));
+    return evaluation(api.POST('/api/tts/live-call/presence-presets/{preset}/versions', { params: { path: presetPath(preset) }, body: input }));
   },
   activatePolicy(preset: PresencePreset, version: number): Promise<PresencePolicyVersion> {
-    return request(`/api/tts/live-call/presence-presets/${preset}/activate/${version}`, jsonInit('POST'));
+    return evaluation(api.POST('/api/tts/live-call/presence-presets/{preset}/activate/{version}', { params: { path: { preset, version } } }));
   },
   rollbackPolicy(preset: PresencePreset): Promise<PresencePolicyVersion> {
-    return request(`/api/tts/live-call/presence-presets/${preset}/rollback`, jsonInit('POST'));
+    return evaluation(api.POST('/api/tts/live-call/presence-presets/{preset}/rollback', { params: { path: presetPath(preset) } }));
   },
 };
 

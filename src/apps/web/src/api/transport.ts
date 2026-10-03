@@ -37,6 +37,13 @@ export async function uploadBinary<T>(
   return response.json() as Promise<T>;
 }
 
+/** An ApiError from these calls as `<label> failed with status <status>.` */
+export function statusError(label: string) {
+  return (error: unknown): never => {
+    throw error instanceof ApiError ? new Error(`${label} failed with status ${error.status}.`) : error;
+  };
+}
+
 /**
  * Opens a streamed response (SSE or a chunked body) and returns it once the
  * status is OK; the caller reads `response.body`. A JSON `body` is sent as such.
@@ -56,9 +63,9 @@ export async function openStream(
   return response;
 }
 
-/** Fetches asset or file bytes (images, audio, Live2D models, preview files). */
+/** Fetches asset or file bytes (images, audio, Live2D models, preview files); blob: and data: URLs work too. */
 export async function fetchBytes(
-  path: GatewayPath,
+  path: GatewayPath | `blob:${string}` | `data:${string}` | string,
   init: { signal?: AbortSignal; headers?: Record<string, string>; cache?: RequestCache } = {},
 ): Promise<Response> {
   const response = await fetch(path, init);

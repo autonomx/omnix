@@ -16,6 +16,8 @@ import {
 import { DesktopCompanionRuntime, type DesktopCompanionSnapshot } from './desktop-companion-runtime';
 import { currentDesktopCompanionCapture } from './assistant-context-controller';
 import { liveConversationStore } from './live-conversation-store';
+import type { components } from '../../api/generated/types';
+import { api, unwrap } from '../../api/http';
 
 let desktopCompanionWatchInstalled = false;
 
@@ -52,25 +54,9 @@ export type DesktopCompanionEvaluationEvent = {
   reason?: string;
 };
 
-type ObserveResponse = {
-  status: 'completed' | 'deferred' | 'suppressed' | 'error';
-  reason: string;
-  observation?: { observation_id?: string } | null;
-  attention?: { reaction?: string; rationale?: string; should_generate?: boolean } | null;
-  scene_summary?: string;
-  delivery_eligible?: boolean;
-  evaluation_scenario?: 'screen-prompt-injection' | null;
-  coordinator?: Record<string, unknown>;
-};
+type ObserveResponse = components['schemas']['DesktopCompanionObserveResponse'];
 
-type PreflightResponse = {
-  ready: boolean;
-  model_id: string | null;
-  endpoint: string | null;
-  remote: boolean;
-  latency_ms: number | null;
-  reason: string;
-};
+type PreflightResponse = components['schemas']['DesktopCompanionPreflightResult'];
 
 const runtime = new DesktopCompanionRuntime();
 const behaviorTracker = new DesktopBehaviorTracker();
@@ -352,11 +338,10 @@ async function tickOnce(): Promise<void> {
     const payload = await capture.capture.buildPayload();
     const conversation = liveConversationStore.getState().conversation;
     const effectiveStage = rollout.effective_stage;
-    const response = await fetch('/api/desktop-companion/observe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    // openapi-fetch reads tuple fields (possible_events[].between) as arrays.
+    const result = await unwrap(api.POST('/api/desktop-companion/observe', {
       signal: controller.signal,
-      body: JSON.stringify({
+      body: {
         session_id: sequence.binding.sessionId,
         character_id: sequence.binding.characterId,
         capture_generation: sequence.binding.captureGeneration,
@@ -395,10 +380,8 @@ async function tickOnce(): Promise<void> {
         user_floor_active: conversation.floorOwner === 'user' || conversation.userTurn === 'speaking',
         assistant_busy: conversation.floorOwner === 'assistant' || conversation.assistantTurn !== 'idle',
         request_in_flight: false,
-      }),
-    });
-    if (!response.ok) throw new Error(`Desktop observation failed with status ${response.status}.`);
-    const result = await response.json() as ObserveResponse;
+      },
+    })) as ObserveResponse;
     const callsThisMinute = numberValue(result.coordinator?.background_calls_in_window);
     dispatchEvaluation({
       kind: 'vision_result',
@@ -476,16 +459,12 @@ async function tickOnce(): Promise<void> {
 
 async function runPreflight(): Promise<PreflightResponse> {
   try {
-    const response = await fetch('/api/desktop-companion/preflight', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    return await unwrap(api.POST('/api/desktop-companion/preflight', {
+      body: {
         vision_model_id: settings.visionModelId || null,
         remote_vision_allowed: settings.remoteVisionAllowed,
-      }),
-    });
-    if (!response.ok) throw new Error(`Vision preflight failed with status ${response.status}.`);
-    return response.json() as Promise<PreflightResponse>;
+      },
+    }));
   } catch (error) {
     return {
       ready: false,
@@ -533,9 +512,7 @@ async function refreshRollout(force: boolean): Promise<void> {
 async function refreshSettings(nowMs: number): Promise<void> {
   settingsLoadedAtMs = nowMs;
   try {
-    const response = await fetch('/api/settings');
-    if (!response.ok) return;
-    const next = parseShadowWatchSettings(await response.json());
+    const next = parseShadowWatchSettings(await unwrap(api.GET('/api/settings')));
     if (
       next.visionModelId !== settings.visionModelId
       || next.remoteVisionAllowed !== settings.remoteVisionAllowed
@@ -573,13 +550,11 @@ async function stopAndReset(reason: string): Promise<void> {
       reason,
     });
     try {
-      await fetch('/api/desktop-companion/reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      await api.POST('/api/desktop-companion/reset', {
+        body: {
           session_id: previous.sessionId,
           capture_generation: previous.captureGeneration,
-        }),
+        },
       });
     } catch {
       // Reset is best effort; generation IDs still reject stale browser results.

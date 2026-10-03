@@ -1,6 +1,5 @@
 const DEFAULT_SAMPLE_RATE = 24_000;
 const STREAMING_TTS_WEBSOCKET_PATH = '/api/tts/stream/websocket';
-const STREAMING_TTS_SSE_PATH = '/api/tts/stream/server-sent-events';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const PLAYBACK_LEAD_SECONDS = 0.08;
 
@@ -122,15 +121,9 @@ async function synthesizePcm(
   voiceId: string | null,
   signal: AbortSignal,
 ): Promise<PcmSynthesisResult> {
-  try {
-    return await synthesizePcmWebSocket(text, voiceId, signal);
-  } catch (error) {
-    if (signal.aborted) throw abortError();
-    console.info('[Omnix Audio] WebSocket TTS unavailable; falling back to SSE.', {
-      reason: error instanceof Error ? error.message : String(error),
-    });
-    return synthesizePcmSse(text, voiceId, signal);
-  }
+  // The PCM WebSocket is the gateway's only streamed TTS transport; the
+  // Server-Sent Events route was removed with the audio transport consolidation.
+  return synthesizePcmWebSocket(text, voiceId, signal);
 }
 
 function synthesizePcmWebSocket(
@@ -217,61 +210,6 @@ function synthesizePcmWebSocket(
   });
 }
 
-async function synthesizePcmSse(
-  text: string,
-  voiceId: string | null,
-  signal: AbortSignal,
-): Promise<PcmSynthesisResult> {
-  const response = await fetch(STREAMING_TTS_SSE_PATH, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      speaker: voiceId,
-      language: 'English',
-      chunk_size: 8,
-      temperature: 0.6,
-      top_k: 20,
-      top_p: 0.85,
-      repetition_penalty: 1,
-      append_silence: false,
-      max_new_tokens: 320,
-      non_streaming_mode: false,
-      parity_mode: true,
-      request_id: createRequestId('chat-audio-sse'),
-    }),
-    signal,
-  });
-  if (!response.ok || !response.body) throw new Error(`Streaming TTS failed with status ${response.status}.`);
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  const chunks: Int16Array[] = [];
-  let sampleRate = DEFAULT_SAMPLE_RATE;
-  let pending = '';
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      pending += decoder.decode(value, { stream: true });
-      const blocks = pending.split(/\n\n/);
-      pending = blocks.pop() ?? '';
-      for (const block of blocks) {
-        const message = parseSseEvent(block);
-        if (!message) continue;
-        if (message.type === 'error') throw new Error(String(message.message || 'Streaming TTS failed.'));
-        if (message.type !== 'chunk' || typeof message.audio_b64 !== 'string') continue;
-        sampleRate = Number(message.sample_rate) > 0 ? Number(message.sample_rate) : sampleRate;
-        const samples = base64Pcm16(message.audio_b64);
-        if (samples.length) chunks.push(samples);
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return { sampleRate, samples: mergePcmChunks(chunks) };
-}
-
 export function mergePcmChunks(chunks: readonly Int16Array[]): Int16Array {
   const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0);
   const merged = new Int16Array(totalLength);
@@ -309,31 +247,11 @@ function pcm16ToAudioBuffer(
   return audioBuffer;
 }
 
-function base64Pcm16(value: string): Int16Array {
-  try {
-    const binary = window.atob(value);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    const evenBytes = bytes.byteLength - (bytes.byteLength % 2);
-    return evenBytes ? new Int16Array(bytes.buffer.slice(0, evenBytes)) : new Int16Array();
-  } catch {
-    return new Int16Array();
-  }
-}
 
 function parseControlEvent(value: string): TtsControlEvent | null {
   try { return JSON.parse(value) as TtsControlEvent; } catch { return null; }
 }
 
-function parseSseEvent(block: string): Record<string, unknown> | null {
-  const data = block
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trimStart())
-    .join('\n');
-  if (!data) return null;
-  try { return JSON.parse(data) as Record<string, unknown>; } catch { return null; }
-}
 
 function createRequestId(prefix: string): string {
   const suffix = typeof globalThis.crypto?.randomUUID === 'function'

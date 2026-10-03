@@ -1,5 +1,7 @@
 import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import { liveConversationStore, type LiveConversationRuntimeState } from './live-conversation-store';
+import { api, unwrap } from '../../api/http';
+import { openStream } from '../../api/transport';
 
 let desktopCompanionDeliveryInstalled = false;
 
@@ -212,11 +214,10 @@ async function startDesktopTurn(request: DesktopCompanionDeliveryRequest, initia
     presentation: request.presentation,
   });
   try {
-    const response = await fetch(
+    const response = await openStream(
       `/api/chat/sessions/${encodeURIComponent(request.sessionId)}/live-call/greeting/stream?${params}`,
       { method: 'POST', signal: controller.signal },
     );
-    if (!response.ok) throw new Error(`Desktop companion turn failed with status ${response.status}.`);
     const parsed = parseDesktopCompanionSse(await response.text());
     if (!parsed || controller.signal.aborted) return;
     if (parsed.content.trim().toUpperCase().replace(/[.!]+$/, '') === 'SKIP') {
@@ -325,10 +326,9 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
   if (!turn || turn.committing) return;
   turn.committing = true;
   try {
-    const response = await fetch(`/api/chat/sessions/${encodeURIComponent(turn.sessionId)}/live-conversation/proactive/delivery`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    await unwrap(api.POST('/api/chat/sessions/{session_id}/live-conversation/proactive/delivery', {
+      params: { path: { session_id: turn.sessionId } },
+      body: {
         turn_id: turn.turnId,
         content: turn.content,
         initiative_reason: `${turn.purpose}:${turn.observationId}`,
@@ -336,9 +336,8 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
         observation_id: turn.observationId,
         grounding_ids: turn.groundingIds,
         delivery_status: status,
-      }),
-    });
-    if (!response.ok) throw new Error(`Desktop delivery commit failed with status ${response.status}.`);
+      },
+    }));
     dispatchDelivery(status, pendingRequest(turn), { turnId: turn.turnId, content: turn.content, presentation: turn.presentation });
     dispatchPerf('desktop_companion_delivery_committed', {
       turn_id: turn.turnId,

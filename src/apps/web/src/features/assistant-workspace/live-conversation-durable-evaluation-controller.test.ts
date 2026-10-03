@@ -228,7 +228,7 @@ describe('durable Live Conversation evaluation controller', () => {
     expect(body.release_gate_status).toBe('insufficient');
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/tts/live-call/evaluations/release-gate?limit=1000&persist_status=true',
-      undefined,
+      { method: 'GET' },
     );
     dispose();
   });

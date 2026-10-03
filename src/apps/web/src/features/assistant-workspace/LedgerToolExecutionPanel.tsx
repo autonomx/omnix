@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { ToolExecutionPanel as BaseToolExecutionPanel, type ToolExecutionPanelProps } from './ToolExecutionPanel';
 import type { ToolExecutionRow } from './tool-execution-view';
 import type { components } from '../../api/generated/types';
+import { api } from '../../api/http';
 
 type AssistantToolLedgerEntry = components['schemas']['AssistantToolLedgerEntry'];
 
 type AssistantToolLedgerPayload = components['schemas']['AssistantToolLedgerPayload'];
 
 async function loadLedger(): Promise<AssistantToolLedgerPayload> {
-  const response = await fetch('/api/assistant/tools/ledger');
-  if (!response.ok) return { entries: [] };
-  return response.json() as Promise<AssistantToolLedgerPayload>;
+  const { data, response } = await api.GET('/api/assistant/tools/ledger');
+  return response.ok && data ? data : { entries: [] };
 }
 
 function ledgerRows(entries: AssistantToolLedgerEntry[]): ToolExecutionRow[] {

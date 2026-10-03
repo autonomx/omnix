@@ -1,3 +1,5 @@
+import { api, unwrap } from '../../api/http';
+
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 
 export type LiveTtsCapabilities = {
@@ -26,14 +28,12 @@ export function initializeLiveTtsCapabilityController(): () => void {
   if (installed) return () => undefined;
   installed = true;
   const abortController = new AbortController();
-  void fetch('/api/tts/live-call/capabilities', {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
+  void unwrap(api.GET('/api/tts/live-call/capabilities', {
     cache: 'no-store',
     signal: abortController.signal,
-  }).then(async (response) => {
-    if (!response.ok) throw new Error(`Live TTS capability request failed with status ${response.status}.`);
-    const capabilities = await response.json() as LiveTtsCapabilities;
+  })).then((payload) => {
+    // The capability route returns an untyped object.
+    const capabilities = payload as unknown as LiveTtsCapabilities;
     negotiatedCapabilities = capabilities;
     window.dispatchEvent(new CustomEvent(PERF_EVENT, {
       detail: {

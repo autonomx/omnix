@@ -1,5 +1,6 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
+import { api, unwrap } from '../../api/http';
 
 export type DesktopCompanionEvaluationPayload = {
   run_id: string;
@@ -131,12 +132,7 @@ export class DesktopCompanionEvaluationAccumulator {
 }
 
 export async function submitDesktopCompanionEvaluation(payload: DesktopCompanionEvaluationPayload): Promise<void> {
-  const response = await fetch('/api/desktop-companion/evaluations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(`Desktop Companion evaluation failed with status ${response.status}.`);
+  await unwrap(api.POST('/api/desktop-companion/evaluations', { body: payload }));
 }
 
 function rate(numerator: number | undefined, denominator: number): number | null {

@@ -13,6 +13,7 @@ import {
   DESKTOP_COMPANION_EVALUATION_EVENT,
   type DesktopCompanionEvaluationEvent,
 } from './desktop-companion-watch-controller';
+import { api } from '../../api/http';
 
 let desktopCompanionShadowEvaluationInstalled = false;
 
@@ -254,11 +255,7 @@ function createAccumulator(value: EvaluationIdentity, start: Date): DesktopCompa
 
 async function submitEvaluation(payload: DesktopCompanionEvaluationPayload): Promise<void> {
   try {
-    await fetch('/api/desktop-companion/evaluations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    await api.POST('/api/desktop-companion/evaluations', { body: payload });
   } catch {
     // Evidence submission must never interrupt Desktop Companion observation.
   }
@@ -266,12 +263,7 @@ async function submitEvaluation(payload: DesktopCompanionEvaluationPayload): Pro
 
 function submitEvaluationKeepalive(payload: DesktopCompanionEvaluationPayload): void {
   try {
-    void fetch('/api/desktop-companion/evaluations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    });
+    void api.POST('/api/desktop-companion/evaluations', { body: payload, keepalive: true });
   } catch {
     // Browser teardown remains best effort.
   }

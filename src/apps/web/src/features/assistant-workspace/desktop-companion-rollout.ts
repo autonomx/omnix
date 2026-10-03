@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 import type { AssistantSettings, DesktopCompanionRolloutStage } from '../settings/settingsDocumentTypes';
 import type { components } from '../../api/generated/types';
+import { api, unwrap } from '../../api/http';
 
 export type DesktopCompanionRolloutStatus = components['schemas']['DesktopCompanionRolloutStatus'];
 
@@ -55,18 +56,18 @@ export async function fetchDesktopCompanionRolloutStatus(
   identity?: DesktopCompanionRolloutEvidenceIdentity,
   signal?: AbortSignal,
 ): Promise<DesktopCompanionRolloutStatus> {
-  const params = new URLSearchParams({ requested_stage: stage });
-  if (identity) {
-    params.set('exact_commit_sha', identity.exactCommitSha);
-    params.set('observation_schema_version', String(identity.observationSchemaVersion ?? 1));
-    params.set('attention_policy_version', String(identity.attentionPolicyVersion ?? 1));
-    if (identity.visionProvider) params.set('vision_provider', identity.visionProvider);
-    if (identity.visionModelHash) params.set('vision_model_hash', identity.visionModelHash);
-    params.set('remote_provider', String(identity.remoteProvider === true));
-  }
-  const response = await fetch(`/api/desktop-companion/rollout-status?${params}`, { signal });
-  if (!response.ok) throw new Error(`Desktop Companion rollout status failed with status ${response.status}.`);
-  return response.json() as Promise<DesktopCompanionRolloutStatus>;
+  const evidence = identity ? {
+    exact_commit_sha: identity.exactCommitSha,
+    observation_schema_version: identity.observationSchemaVersion ?? 1,
+    attention_policy_version: identity.attentionPolicyVersion ?? 1,
+    ...(identity.visionProvider ? { vision_provider: identity.visionProvider } : {}),
+    ...(identity.visionModelHash ? { vision_model_hash: identity.visionModelHash } : {}),
+    remote_provider: identity.remoteProvider === true,
+  } : {};
+  return unwrap(api.GET('/api/desktop-companion/rollout-status', {
+    params: { query: { requested_stage: stage, ...evidence } },
+    signal,
+  }));
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

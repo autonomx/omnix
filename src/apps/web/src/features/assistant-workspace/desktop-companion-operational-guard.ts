@@ -4,6 +4,7 @@ import {
   DESKTOP_COMPANION_STATUS_EVENT,
   type DesktopCompanionEvaluationEvent,
 } from './desktop-companion-watch-controller';
+import { api, unwrap } from '../../api/http';
 
 let desktopCompanionOperationalGuardInstalled = false;
 
@@ -105,9 +106,7 @@ export function normalizeOperationalStatus(value: unknown): OperationalStatus | 
 
 async function checkOperationalStatus(): Promise<void> {
   try {
-    const response = await fetch('/api/desktop-companion/operational-status');
-    if (!response.ok) return;
-    const status = normalizeOperationalStatus(await response.json());
+    const status = normalizeOperationalStatus(await unwrap(api.GET('/api/desktop-companion/operational-status')));
     if (!status) return;
     circuit = new DesktopCompanionFailureCircuit(
       Math.min(3, status.max_consecutive_provider_failures),

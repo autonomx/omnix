@@ -1,4 +1,5 @@
 import type { DesktopCompanionRolloutEvidenceIdentity } from './desktop-companion-rollout';
+import { api, unwrap } from '../../api/http';
 
 type BuildIdentity = {
   exact_commit_sha: string;
@@ -25,11 +26,7 @@ export async function desktopCompanionRolloutEvidenceIdentity(input: {
 
 export function loadDesktopCompanionBuildIdentity(): Promise<BuildIdentity> {
   if (!buildIdentityPromise) {
-    buildIdentityPromise = fetch('/api/desktop-companion/build-identity')
-      .then((response) => {
-        if (!response.ok) throw new Error(`Build identity failed with status ${response.status}.`);
-        return response.json() as Promise<BuildIdentity>;
-      })
+    buildIdentityPromise = unwrap(api.GET('/api/desktop-companion/build-identity'))
       .catch(() => ({ exact_commit_sha: 'unknown-local-build', app_version: '1.0.0', source: 'browser-fallback' }));
   }
   return buildIdentityPromise;

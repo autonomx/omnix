@@ -77,7 +77,7 @@ describe('live chat evaluation client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/tts/live-call/evaluations/release-gate?limit=250&persist_status=true',
-      undefined,
+      { method: 'GET' },
     );
   });
 });
