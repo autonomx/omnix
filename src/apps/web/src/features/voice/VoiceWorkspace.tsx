@@ -17,6 +17,7 @@ import { firstResultAsset } from './resultList';
 import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type ScriptSpeakerRow } from './scriptLines';
 import './VoiceStudioWorkspace.css';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { isFallbackOutputRef, jobOutputRefs, type JobOutputRef } from '../../api/schemas/streams';
 
 interface VoiceFormValues {
   text: string;
@@ -35,20 +36,6 @@ interface VoiceCloneFormValues {
   generateTranscript: boolean;
 }
 
-interface VoiceOutputRef {
-  asset_id?: string;
-  audio_url?: string;
-  content?: string;
-  data_url?: string;
-  duration?: number;
-  mime_type?: string;
-  provider_fallback?: boolean;
-  provider_success?: boolean;
-  segments?: unknown[];
-  storage_path?: string;
-  title?: string;
-  type?: string;
-}
 
 interface PlayableVoiceOutput {
   dataUrl: string;
@@ -677,8 +664,7 @@ function mergeVoiceJobs(jobs: Array<JobRecord | undefined>): JobRecord[] {
 function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
   const outputs: PlayableVoiceOutput[] = [];
   for (const job of jobs) {
-    const refs = (job.output_refs ?? []) as VoiceOutputRef[];
-    for (const ref of refs) {
+    for (const ref of jobOutputRefs(job)) {
       if (isPlayableAudioRef(ref)) {
         const title = ref.title || job.type || 'voice_output';
         outputs.push({ dataUrl: playableAudioUrl(ref), duration: Number(ref.duration || 0), jobId: job.id, key: `${job.id}:${ref.asset_id || ref.title || outputs.length}`, title });
@@ -689,35 +675,20 @@ function extractPlayableOutputs(jobs: JobRecord[]): PlayableVoiceOutput[] {
 }
 
 function transcriptFromJob(job: JobRecord): string {
-  const refs = (job.output_refs ?? []) as VoiceOutputRef[];
-  const transcript = refs.find((ref) => ref.type === 'transcript' && typeof ref.content === 'string')?.content;
-  return transcript?.trim() ?? '';
+  const transcript = jobOutputRefs(job).find((ref) => ref.type === 'transcript' && typeof ref.content === 'string')?.content;
+  return typeof transcript === 'string' ? transcript.trim() : '';
 }
 
 // New outputs reference the stored asset (audio_url); older job rows embed
 // the audio as a data URL.
-function playableAudioUrl(ref: VoiceOutputRef): string {
+function playableAudioUrl(ref: JobOutputRef): string {
   if (typeof ref.audio_url === 'string' && ref.audio_url.startsWith('/api/assets/')) return ref.audio_url;
   if (typeof ref.data_url === 'string' && ref.data_url.startsWith('data:audio/')) return ref.data_url;
   return '';
 }
 
-function isPlayableAudioRef(ref: VoiceOutputRef): boolean {
-  return playableAudioUrl(ref) !== '' && !isFallbackOutput(ref);
-}
-
-function isFallbackOutput(ref: VoiceOutputRef): boolean {
-  if (ref.provider_fallback || ref.provider_success === false) {
-    return true;
-  }
-  const segments = Array.isArray(ref.segments) ? ref.segments : [];
-  return segments.some((segment) => {
-    if (!segment || typeof segment !== 'object') {
-      return false;
-    }
-    const row = segment as { provider_fallback?: unknown; provider_success?: unknown };
-    return row.provider_fallback === true || row.provider_success === false;
-  });
+function isPlayableAudioRef(ref: JobOutputRef): boolean {
+  return playableAudioUrl(ref) !== '' && !isFallbackOutputRef(ref);
 }
 
 function selectFirstJobOutput(job: JobRecord, setSelectedOutputKey: (key: string) => void): void {

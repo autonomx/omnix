@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
 import { jobProgressPercent } from '../../api/jobProgress';
+import { isFallbackOutputRef, jobOutputRefs } from '../../api/schemas/streams';
+import { storyAudioStreamControlMessageSchema } from './storyAudioMessages';
+import { parseJson } from '../../api/schemas/streams';
 
 export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
 
 type StoryAudioStatus = 'ready' | 'loading_voices' | 'queued' | 'running' | 'completed' | 'failed';
-type StoryAudioJobOutputRef = { data_url?: unknown; audio_url?: unknown; url?: unknown; provider_fallback?: unknown; provider_success?: unknown; segments?: unknown };
-type StoryAudioStreamControlMessage =
+export type StoryAudioStreamControlMessage =
   | { type: 'start'; total_segments?: number }
   | { type: 'segment'; index?: number; speaker?: string; text?: string }
   | { type: 'done'; job_id?: string }
@@ -541,7 +543,9 @@ function streamStoryAudioViaWebSocket(payload: StoryAudioWebSocketPayload, callb
       }
 
       try {
-        const message = JSON.parse(String(event.data)) as StoryAudioStreamControlMessage;
+        // Messages of other or malformed shapes are ignored.
+        const message = parseJson(storyAudioStreamControlMessageSchema, String(event.data));
+        if (!message) return;
         if (message.type === 'start') {
           totalSegments = typeof message.total_segments === 'number' && message.total_segments > 0 ? message.total_segments : totalSegments;
           callbacks.onStatusMessage('Realtime narration buffering through the story audio player…');
@@ -669,10 +673,8 @@ function makeAbortError(message: string): Error { const error = new Error(messag
 function isAbortError(error: unknown): boolean { return error instanceof Error && error.name === 'AbortError'; }
 
 function playableAudioSource(job: JobRecord): string {
-  const refs = Array.isArray(job.output_refs) ? job.output_refs : [];
-  for (const ref of refs) {
-    const output = ref as StoryAudioJobOutputRef | null;
-    if (!output || isFallbackVoiceOutput(output)) continue;
+  for (const output of jobOutputRefs(job)) {
+    if (isFallbackOutputRef(output)) continue;
     const dataUrl = typeof output.data_url === 'string' ? output.data_url : '';
     if (dataUrl.startsWith('data:audio/')) return dataUrl;
     const audioUrl = typeof output.audio_url === 'string' ? output.audio_url : '';
@@ -683,14 +685,6 @@ function playableAudioSource(job: JobRecord): string {
   return '';
 }
 
-function isFallbackVoiceOutput(ref: StoryAudioJobOutputRef): boolean {
-  if (ref.provider_fallback === true || ref.provider_success === false) return true;
-  const segments = Array.isArray(ref.segments) ? ref.segments : [];
-  return segments.some((segment) => {
-    const row = segment as { provider_fallback?: unknown; provider_success?: unknown } | null;
-    return row?.provider_fallback === true || row?.provider_success === false;
-  });
-}
 function isTerminalJob(job: JobRecord): boolean { return job.status === 'completed' || job.status === 'failed' || job.status === 'canceled'; }
 function jobErrorMessage(job: JobRecord): string { const error = job.error as { message?: unknown } | null | undefined; return typeof error?.message === 'string' ? error.message : 'Voice Studio audio generation failed.'; }
 function readStoryTitle(): string { const heading = document.querySelector('.storyteller-project-copy h1') as HTMLElement | null; return (heading?.innerText ?? heading?.textContent ?? '').trim() || 'Untitled story'; }

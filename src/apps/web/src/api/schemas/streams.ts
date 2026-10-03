@@ -78,8 +78,19 @@ export const jobOutputRefSchema = z.looseObject({
   mime_type: z.string().nullish(),
   duration: z.unknown().optional(),
   content: z.unknown().optional(),
+  provider_fallback: z.unknown().optional(),
+  provider_success: z.unknown().optional(),
+  segments: z.unknown().optional(),
 });
 export type JobOutputRef = z.infer<typeof jobOutputRefSchema>;
+
+/**
+ * An optional field whose Python producer sends None when the value is
+ * absent: null is accepted and read as undefined.
+ */
+export function absentWhenNull<T extends z.ZodType>(schema: T) {
+  return schema.nullish().transform((value) => value ?? undefined).optional();
+}
 
 /** Parses JSON and checks it against a schema; null when either fails. */
 export function parseJson<T>(schema: z.ZodType<T>, text: string): T | null {
@@ -105,5 +116,16 @@ export function jobOutputRefs(job: { output_refs?: unknown } | null | undefined)
   return refs.flatMap((ref) => {
     const parsed = jobOutputRefSchema.safeParse(ref);
     return parsed.success ? [parsed.data] : [];
+  });
+}
+
+/** True when a speech provider fell back (for the whole output or any segment) instead of producing the audio. */
+export function isFallbackOutputRef(ref: JobOutputRef): boolean {
+  if (ref.provider_fallback === true || ref.provider_success === false) return true;
+  const segments = Array.isArray(ref.segments) ? ref.segments : [];
+  return segments.some((segment) => {
+    if (!segment || typeof segment !== 'object') return false;
+    const row = segment as { provider_fallback?: unknown; provider_success?: unknown };
+    return row.provider_fallback === true || row.provider_success === false;
   });
 }

@@ -11,6 +11,8 @@ import {
   type SilenceReason,
 } from './live-voice-playback-contract';
 import { LIVE_VOICE_PCM_WORKLET_NAME, LIVE_VOICE_PCM_WORKLET_URL } from './live-voice-pcm-worklet';
+import { pcmControlEventSchema } from './live-voice-messages';
+import { parseJson } from '../../api/schemas/streams';
 
 const REQUESTED_SAMPLE_RATE = 24_000;
 const START_BUFFER_SECONDS = 0.4;
@@ -42,7 +44,7 @@ type StreamingAudioWindow = Window & typeof globalThis & {
   WebSocket?: typeof WebSocket;
 };
 
-type ControlEvent = {
+export type PcmControlEvent = {
   type?: string;
   message?: string;
   sample_rate?: number;
@@ -440,7 +442,7 @@ export async function createLiveVoicePcmSession(
     }));
   };
 
-  const controlMatchesPhrase = (message: ControlEvent, phrase: ActivePhrase): boolean => {
+  const controlMatchesPhrase = (message: PcmControlEvent, phrase: ActivePhrase): boolean => {
     if (message.stream_id && message.stream_id !== phrase.phraseStreamId) return false;
     if (!phrase.ownership) return true;
     if (message.output_id && message.output_id !== phrase.ownership.outputId) return false;
@@ -449,7 +451,7 @@ export async function createLiveVoicePcmSession(
     return true;
   };
 
-  const handleControlMessage = (message: ControlEvent): void => {
+  const handleControlMessage = (message: PcmControlEvent): void => {
     if (message.type === 'cancel_accepted' || message.type === 'cancelled') {
       const outputId = message.output_id ?? '';
       const generationEpoch = message.generation_epoch ?? 0;
@@ -1034,13 +1036,8 @@ function createPhraseStreamId(
   return `chat-live-${base}-${suffix}`.slice(0, 80);
 }
 
-function parseControlEvent(data: string): ControlEvent | null {
-  try {
-    const parsed = JSON.parse(data) as ControlEvent;
-    return parsed && typeof parsed === 'object' ? parsed : null;
-  } catch {
-    return null;
-  }
+function parseControlEvent(data: string): PcmControlEvent | null {
+  return parseJson(pcmControlEventSchema, data);
 }
 
 function pcm16ToFloat32(source: Int16Array, sourceRate: number, targetRate: number): Float32Array {

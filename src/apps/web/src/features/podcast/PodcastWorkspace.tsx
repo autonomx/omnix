@@ -17,6 +17,7 @@ import './PodcastWorkspace.css';
 import './PodcastWorkspaceLayoutFix.css';
 import { ApiError } from '../../api/errors';
 import { fetchBytes } from '../../api/transport';
+import { jobOutputRefs } from '../../api/schemas/streams';
 
 type VoiceAsset = AssetListResponse['assets'][number];
 type SpeakerDraft = ReturnType<typeof toSpeakerDraft>;
@@ -85,7 +86,7 @@ function stages() {
 }
 
 function outputsFrom(jobs: Array<JobRecord | undefined>): Output[] {
-  return jobs.flatMap((job) => ((job?.output_refs ?? []) as any[]).map((ref, index) => {
+  return jobs.flatMap((job) => jobOutputRefs(job).map((ref, index) => {
     const url = typeof ref.data_url === 'string' ? ref.data_url : typeof ref.audio_url === 'string' ? ref.audio_url : '';
     if (!(url.startsWith('data:audio/') || url.startsWith('blob:') || url.startsWith('/api/'))) return null;
     return { dataUrl: url, duration: Number(ref.duration || 0), jobId: job?.id || 'job', key: `${job?.id}:${ref.asset_id || index}`, title: ref.title || jobTitle(job) };

@@ -1,5 +1,7 @@
 import type { AcceptedVoiceFinal, LiveFinalRoutingResult, LiveSttProtocol } from './live-accepted-final';
 import { streamingSttUrl, type SpeechLocation } from './stt-url';
+import { streamingSttMessageSchema } from './live-voice-messages';
+import { parseJson } from '../../api/schemas/streams';
 
 export type StreamingSttReady = {
   type: 'ready';
@@ -820,10 +822,8 @@ export class StreamingSttWebSocketClient {
   }
 
   private async handleMessage(rawData: string): Promise<void> {
-    let message: StreamingSttMessage;
-    try {
-      message = JSON.parse(rawData) as StreamingSttMessage;
-    } catch {
+    const message = parseJson(streamingSttMessageSchema, rawData);
+    if (!message) {
       this.options.onError?.('Could not parse live voice transcript message.');
       return;
     }

@@ -8,6 +8,8 @@ import {
   LIVE_STT_SPECULATION_PARTIAL_EVENT,
 } from './live-stt-authority-controller';
 import { StableClauseAccumulator } from './live-voice-clause-stabilizer';
+import { speculationEventSchema } from './live-voice-messages';
+import { parseJson } from '../../api/schemas/streams';
 
 const CHAT_STREAM_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -52,7 +54,7 @@ type SttCandidateDetail = SttPartialDetail & {
   modelTimeMs?: number;
 };
 
-type SpeculationEvent = {
+export type SpeculationEvent = {
   type?: string;
   generation_id?: string;
   text?: string;
@@ -998,7 +1000,7 @@ function parseSseBlock(block: string): SpeculationEvent | null {
     .map((line) => line.slice(5).trimStart())
     .join('\n');
   if (!data) return null;
-  try { return JSON.parse(data) as SpeculationEvent; } catch { return null; }
+  return parseJson(speculationEventSchema, data);
 }
 
 function selectedVoiceId(): string | null {
