@@ -173,7 +173,7 @@ export function ChatIdentityModeControl({
     : 'Select character';
 
   return (
-    <div className="chat-identity-mode-control" aria-label="Chat identity controls">
+    <div role="group" className="chat-identity-mode-control" aria-label="Chat identity controls">
       <div className="chat-identity-mode-toggle" role="group" aria-label="Chat mode">
         <button
           type="button"

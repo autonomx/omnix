@@ -75,7 +75,7 @@ export function ImagePreviewDialog(props: ImagePreviewDialogProps) {
           <Text size="xs">{metadata}</Text>
           <div className="image-preview-controls">
             <Button aria-label="Zoom out" disabled={zoom <= 1} size="compact-sm" variant="default" onClick={() => updateZoom(zoom - 0.25)}>-</Button>
-            <span aria-label="Image zoom level">{Math.round(zoom * 100)}%</span>
+            <span role="status" aria-label="Image zoom level">{Math.round(zoom * 100)}%</span>
             <Button aria-label="Zoom in" disabled={zoom >= 4} size="compact-sm" variant="default" onClick={() => updateZoom(zoom + 0.25)}>+</Button>
             <Button aria-label="Reset zoom" disabled={zoom === 1} size="compact-sm" variant="default" onClick={() => updateZoom(1)}>Reset</Button>
             {downloadUrl ? <Button aria-label={`Download ${title}`} component="a" href={downloadUrl} download size="compact-sm" variant="default">Download</Button> : null}

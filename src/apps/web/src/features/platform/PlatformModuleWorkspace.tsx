@@ -31,7 +31,7 @@ export { isPlatformModule } from '../../app/modules';
 
 export function PlatformModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   return (
-    <WorkspacePanel>
+    <WorkspacePanel labelledBy="module-title">
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Platform module</p>

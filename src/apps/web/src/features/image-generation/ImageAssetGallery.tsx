@@ -105,7 +105,7 @@ export function ImageAssetGallery({ assets, selectedAssetId, onSelect }: ImageAs
       {!activeAssets.length ? (
         <div className="image-empty-state" role="status"><span aria-hidden="true">▣</span><strong>No image assets yet</strong><small>Generated images will be saved here.</small></div>
       ) : visibleAssets.length ? (
-        <div className={`image-assets-grid ${viewMode}`} aria-label="Image asset gallery">
+        <div role="group" className={`image-assets-grid ${viewMode}`} aria-label="Image asset gallery">
           {visibleAssets.map((asset) => {
             const title = imageAssetTitle(asset);
             const selected = asset.id === selectedAssetId;

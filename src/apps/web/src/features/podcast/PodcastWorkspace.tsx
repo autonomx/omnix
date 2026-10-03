@@ -512,7 +512,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
   async function copyEpisodeLink() { try { await navigator.clipboard?.writeText(`${location.href.split('#')[0]}#${connectedJob?.id ?? 'podcast'}`); setMessage('Podcast link copied.'); } catch {} }
 
   return (
-    <WorkspacePanel className="podcast-workspace-panel">
+    <WorkspacePanel labelledBy="module-title" className="podcast-workspace-panel">
       <div className="podcast-studio-shell">
         <header className="podcast-studio-header">
           <div>
@@ -550,16 +550,16 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="card-heading-row"><h3>2. Participants and voice casting</h3><small>{voices.length ? `Loaded ${voices.length} Voice Library voice${voices.length === 1 ? '' : 's'}` : 'No Voice Library voices found'}</small></div>
               <div className="speaker-table editable-speaker-table">
                 <div className="speaker-row speaker-header"><span>Speaker</span><span>Identity</span><span>Voice</span><span>Beliefs</span><span>Personality</span><span>Speaking style</span><span>Goal this episode</span><span>Instructions</span></div>
-                {speakers.map((speaker) => (
+                {speakers.map((speaker, index) => (
                   <div className="speaker-row editable-speaker-row" key={speaker.id}>
-                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span>
-                    <span><input value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span>
+                    <span className="speaker-cell-main"><b className={`speaker-avatar ${speaker.id}`}>{speaker.avatar}</b><span><input aria-label={`Speaker ${index + 1} name`} value={speaker.name} onChange={(event) => updateSpeaker(speaker.id, 'name', event.target.value)} /><input aria-label={`Speaker ${index + 1} role`} value={speaker.role} onChange={(event) => updateSpeaker(speaker.id, 'role', event.target.value)} /></span></span>
+                    <span><input aria-label={`Speaker ${index + 1} identity`} value={speaker.identity} onChange={(event) => updateSpeaker(speaker.id, 'identity', event.target.value)} /></span>
                     <span><select aria-label={`${speaker.name} voice`} value={speaker.voice} onChange={(event) => updateSpeaker(speaker.id, 'voice', event.target.value)}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}{!voices.length ? <option value="">No cloned voices</option> : null}</select></span>
-                    <span><textarea rows={2} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span>
-                    <span><textarea rows={2} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} beliefs`} value={speaker.beliefs} onChange={(event) => updateSpeaker(speaker.id, 'beliefs', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} personality`} value={speaker.personality} onChange={(event) => updateSpeaker(speaker.id, 'personality', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} speaking style`} value={speaker.speakingStyle} onChange={(event) => updateSpeaker(speaker.id, 'speakingStyle', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} goal this episode`} value={speaker.goal} onChange={(event) => updateSpeaker(speaker.id, 'goal', event.target.value)} /></span>
+                    <span><textarea rows={2} aria-label={`Speaker ${index + 1} instructions`} value={speaker.instructions} onChange={(event) => updateSpeaker(speaker.id, 'instructions', event.target.value)} /></span>
                   </div>
                 ))}
               </div>
@@ -586,7 +586,7 @@ export function PodcastWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 </div>
               </section>
 
-              <div className="podcast-audio-player" aria-label="Podcast audio player">
+              <div role="group" className="podcast-audio-player" aria-label="Podcast audio player">
                 <div className="audio-player-heading">
                   <span>{current ? current.title : selectedOutputKey === '__script__' ? 'Generating podcast script...' : selectedOutputKey === '__streaming__' || selectedOutputKey === stitchedKey ? 'Waiting for first stitched live audio segment...' : 'No podcast audio yet'}</span>
                   <small>{current?.live ? `LIVE STITCHED ${pieces.length} / ${rows.length || pieces.length}` : current ? 'AUDIO READY' : createJobMutation.isPending ? liveStatus : 'Generate a completed podcast to enable playback'}</small>

@@ -558,7 +558,7 @@ export function StorytellerWorkspace({ module }: { module: OmnixModuleDefinition
   };
 
   return (
-    <WorkspacePanel>
+    <WorkspacePanel labelledBy="module-title">
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <div className="storyteller-workspace" aria-labelledby="module-title">
         <StoryLibrary

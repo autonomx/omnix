@@ -77,7 +77,7 @@ export function RpgWorldDossierQualityPanel({ worldId }: RpgWorldDossierQualityP
         <strong>{metrics.coverage_percent}%</strong>
       </header>
 
-      <div className="rpg-dossier-quality-meter" aria-label={`${metrics.coverage_percent} percent rich dossier coverage`}>
+      <div role="img" className="rpg-dossier-quality-meter" aria-label={`${metrics.coverage_percent} percent rich dossier coverage`}>
         <i style={{ width: `${Math.max(0, Math.min(100, metrics.coverage_percent))}%` }} />
       </div>
 

@@ -346,7 +346,7 @@ export function TradingPositionOverlay({
   };
 
   return (
-    <div ref={rootRef} className={`trading-position-overlay${draft?.dragging ? ' is-dragging' : ''}`} aria-label={`${instrumentId} paper position`}>
+    <div role="group" ref={rootRef} className={`trading-position-overlay${draft?.dragging ? ' is-dragging' : ''}`} aria-label={`${instrumentId} paper position`}>
       {draft ? zone(takeProfitY, 'rgba(32, 201, 151, .18)') : null}
       {draft ? zone(stopLossY, 'rgba(255, 159, 67, .18)') : null}
       {levelVisual('takeProfit', currentProtection.takeProfit, takeProfitY, '#20c997', 'TP')}

@@ -165,7 +165,7 @@ function TradingObjectTree({
 
   return (
     <div className="trading-object-tree" data-status={drawings.status}>
-      <div className="trading-object-toolbar" aria-label="Object tree actions">
+      <div role="group" className="trading-object-toolbar" aria-label="Object tree actions">
         <button type="button" aria-label="Delete all drawings" title="Delete all drawings" onClick={() => drawings.removeAll()}><TrashIcon /></button>
         <span>{drawings.state.drawings.length + enabledIndicators.length} objects</span>
         <span className="trading-object-status">{drawings.status === 'saving' ? 'Saving…' : drawings.status === 'conflict' ? 'Conflict' : ''}</span>
@@ -335,7 +335,7 @@ export function TradingObjectPanel({
   const [view, setView] = useState<ObjectPanelView>('object-tree');
   const instrument = instruments.find((item) => item.instrument_id === activeInstrumentId);
   return (
-    <div className="trading-object-panel" aria-label="Chart objects and data window">
+    <div role="group" className="trading-object-panel" aria-label="Chart objects and data window">
       <nav className="trading-object-panel-tabs" role="tablist" aria-label="Chart side views">
         <button type="button" role="tab" aria-selected={view === 'object-tree'} onClick={() => setView('object-tree')}>Object tree</button>
         <button type="button" role="tab" aria-selected={view === 'data-window'} onClick={() => setView('data-window')}>Data window</button>

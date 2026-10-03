@@ -284,7 +284,7 @@ export function ImageModelControl({
           <OmnixStatusPill>{state}</OmnixStatusPill>
         </div>
         {downloading ? (
-          <div aria-label="Model download progress">
+          <div role="group" aria-label="Model download progress">
             <Progress
               animated
               aria-label="Model download progress bar"

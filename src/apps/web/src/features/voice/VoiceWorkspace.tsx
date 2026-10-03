@@ -525,7 +525,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }
 
   return (
-    <WorkspacePanel>
+    <WorkspacePanel label={module.label}>
       <div className="voice-studio-app">
         <main className="voice-workspace-final">
           <header className="voice-final-header">
@@ -558,7 +558,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
             <section className="voice-panel-final library-panel-final">
               <Group justify="space-between"><div><Title order={4}>Voice Library</Title><Text size="sm">Your cloned voices stored in Omnix resources.</Text></div><Button aria-label="Refresh voice library" size="xs" variant="subtle" loading={assetsQuery.isFetching} onClick={() => void assetsQuery.refetch()}>Refresh ⟳</Button></Group>
               <label className="voice-search"><span>Search voices</span><input aria-label="Search voices" value={voiceSearch} onChange={(event) => setVoiceSearch(event.currentTarget.value)} placeholder="Search voices..." /></label>
-              <div className="voice-library-table" aria-label="Voice library">
+              <div role="group" className="voice-library-table" aria-label="Voice library">
                 <div className="voice-library-row table-head"><span>Name</span><span>ID / Prefix</span><span>Status</span><span>Actions</span></div>
                 {assetsQuery.isLoading ? <div className="platform-empty" role="status">Loading cloned voices…</div> : assetsQuery.isError ? <div className="platform-empty" role="alert">Voice Library failed to load. The local asset index may be unavailable.<Button aria-label="Retry voice library" size="xs" variant="subtle" onClick={() => void assetsQuery.refetch()}>Retry</Button></div> : visibleProfileAssets.length ? visibleProfileAssets.map((asset) => <VoiceLibraryRow asset={asset} deleting={Boolean(deleteVoiceMutation.isPending && deleteVoiceMutation.variables && voiceAssetId(deleteVoiceMutation.variables) === voiceAssetId(asset))} key={voiceAssetId(asset)} onDelete={() => requestVoiceDelete(asset)} onPreview={() => previewVoiceMutation.mutate(asset)} onUse={() => useVoice(asset, setValue, setSaveMessage)} />) : <div className="platform-empty" role="status">No cloned voices were indexed. Create a clone or refresh the library to rescan local voice files.</div>}
               </div>

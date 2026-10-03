@@ -472,7 +472,7 @@ export function RpgActionComposer({
             {launcherView === 'campaign_wizard' ? renderNewCampaign(closeLauncher) : null}
 
             {launcherView === 'new_game' ? (
-              <div className="rpg-launcher-panel" aria-label="New Game setup">
+              <div role="group" className="rpg-launcher-panel" aria-label="New Game setup">
                 <div className="rpg-launcher-section-heading">
                   <div>
                     <p className="eyebrow">New Game setup</p>
@@ -605,7 +605,7 @@ export function RpgActionComposer({
                   {BUILD_OPTIONS.find((option) => option.value === playerBuild)?.detail}
                 </div>
 
-                <div className="rpg-launcher-toggle-grid" aria-label="New Game feature toggles">
+                <div role="group" className="rpg-launcher-toggle-grid" aria-label="New Game feature toggles">
                   <label><input type="checkbox" checked={autosaveEnabled} onChange={(event) => setAutosaveEnabled(event.currentTarget.checked)} /><span>Autosave</span></label>
                   <label><input type="checkbox" checked={companionsEnabled} onChange={(event) => setCompanionsEnabled(event.currentTarget.checked)} /><span>Companions enabled</span></label>
                   <label><input type="checkbox" checked={permadeathEnabled} onChange={(event) => setPermadeathEnabled(event.currentTarget.checked)} /><span>Permadeath</span></label>
@@ -626,7 +626,7 @@ export function RpgActionComposer({
             ) : null}
 
             {launcherView === 'settings' ? (
-              <div className="rpg-launcher-panel" aria-label="RPG launcher settings">
+              <div role="group" className="rpg-launcher-panel" aria-label="RPG launcher settings">
                 <div className="rpg-launcher-section-heading">
                   <div>
                     <p className="eyebrow">RPG settings</p>
@@ -639,7 +639,7 @@ export function RpgActionComposer({
                 <p className="rpg-settings-note">
                   These defaults are copied into the next New Campaign setup. Demo Session keeps its curated showcase defaults.
                 </p>
-                <div className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
+                <div role="group" className="rpg-launcher-toggle-grid" aria-label="RPG feature toggles">
                   <label><input type="checkbox" checked={autosaveEnabled} onChange={(event) => setAutosaveEnabled(event.currentTarget.checked)} /><span>Autosave</span></label>
                   <label><input type="checkbox" checked={validatorEnabled} onChange={(event) => setValidatorEnabled(event.currentTarget.checked)} /><span>Grounding validator</span></label>
                   <label><input type="checkbox" checked={backgroundSoftAuditEnabled} onChange={(event) => setBackgroundSoftAuditEnabled(event.currentTarget.checked)} /><span>Background soft audit</span></label>
@@ -654,7 +654,7 @@ export function RpgActionComposer({
             ) : null}
 
             {launcherView === 'load_game' ? (
-              <div className="rpg-launcher-panel" aria-label="Load Game browser">
+              <div role="group" className="rpg-launcher-panel" aria-label="Load Game browser">
                 <div className="rpg-launcher-section-heading">
                   <div>
                     <p className="eyebrow">Load Game</p>
@@ -720,7 +720,7 @@ export function RpgActionComposer({
           {isPending ? 'Queueing...' : 'Submit'}
         </Button>
       </form>
-      <div className="rpg-quick-actions" aria-label="Quick RPG actions">
+      <div role="group" className="rpg-quick-actions" aria-label="Quick RPG actions">
         {quickActions.map((action) => (
           <button key={`${action.label}:${action.command}`} type="button" onClick={() => onQuickAction(action.command)}>
             <span className="rpg-quick-action-icon" aria-hidden="true">{action.icon}</span>

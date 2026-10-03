@@ -380,7 +380,7 @@ export function RpgLorePanel({
 
   return (
     <div aria-labelledby={labelledById} className="rpg-journal-grid" id={panelId} role={role}>
-      <div className="rpg-journal-list" aria-label="Campaign Bible navigation">
+      <div role="group" className="rpg-journal-list" aria-label="Campaign Bible navigation">
         <article
           aria-pressed={selectedId === 'overview'}
           className={selectedId === 'overview' ? 'active' : undefined}

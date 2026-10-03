@@ -44,7 +44,7 @@ test('module navigation keeps features in the shared shell', async ({ page }) =>
 
   await expect(page).toHaveURL(/\/podcast$/);
   await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Episode request' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Podcast' })).toBeVisible();
 });
 
 test('top bar trading option navigates to the trading view', async ({ page }) => {

@@ -68,7 +68,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
             <span>{selectedSessionSummary.updatedAt}</span>
           </div>
         </div>
-        <div
+        <div role="img"
           className={isPreview ? 'rpg-scene-art rpg-scene-art-has-image' : 'rpg-scene-art'}
           aria-label={isPreview ? `${selectedSessionSummary.location} scene preview` : `${selectedSessionSummary.location} scene`}
         >
@@ -76,7 +76,7 @@ export function RpgStoryScene({ children, heroSummary, recentEvents, selectedSes
         </div>
       </div>
       <p className="rpg-scene-copy">{selectedSessionSummary.summary}</p>
-      <div ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
+      <div role="log" ref={dialogueRef} className="rpg-dialogue-stack" aria-label="Conversation" aria-live="polite">
         {isPreview ? (
           <>
             <article>

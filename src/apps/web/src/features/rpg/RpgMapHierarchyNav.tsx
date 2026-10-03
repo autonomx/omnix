@@ -37,7 +37,7 @@ export function RpgMapChildControls({
   onPeek: () => void;
 }) {
   return (
-    <div className="rpg-map-child-controls" aria-label="Map hierarchy actions">
+    <div role="group" className="rpg-map-child-controls" aria-label="Map hierarchy actions">
       <button className="rpg-secondary-button" onClick={onPeek} type="button">
         Peek inside
       </button>

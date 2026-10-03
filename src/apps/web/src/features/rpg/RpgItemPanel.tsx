@@ -85,7 +85,7 @@ export function RpgItemPanel({
       />
 
       {hasMerchantEntries ? (
-        <div className="rpg-item-merchant" aria-label="Merchant entries">
+        <div role="group" className="rpg-item-merchant" aria-label="Merchant entries">
           <h4>Merchant service</h4>
           {merchantEntries.map((entry) => (
             <button
@@ -142,7 +142,7 @@ function ItemDetailCard({ detail, isPending }: { detail: RpgItemDetailPreview; i
         </div>
       </dl>
       {detail.tags.length ? (
-        <div className="rpg-item-detail-tags" aria-label="Item detail tags">
+        <div role="group" className="rpg-item-detail-tags" aria-label="Item detail tags">
           {detail.tags.map((tag) => (
             <span key={tag}>{tag}</span>
           ))}
@@ -167,7 +167,7 @@ function ActionList({ actions, emptyLabel, hasMerchantContext, isPending, onAppl
   }
 
   return (
-    <div className="rpg-item-actions" aria-label="Selected item actions">
+    <div role="group" className="rpg-item-actions" aria-label="Selected item actions">
       <div className="rpg-item-action-toolbar" role="toolbar" aria-label="Selected item contextual actions">
         {actions.map((action) => {
           const disabledReason = itemActionDisabledReason(action, { hasMerchantContext, isPending });

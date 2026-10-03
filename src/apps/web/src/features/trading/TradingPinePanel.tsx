@@ -34,7 +34,7 @@ export function TradingPinePanel({
   }
 
   return (
-    <div className="trading-pine-panel" aria-label="Pine Editor">
+    <div role="group" className="trading-pine-panel" aria-label="Pine Editor">
       <header className="trading-pine-header">
         <div className="trading-pine-heading"><span className="trading-pine-glyph" aria-hidden="true">{'{}'}</span><strong>Pine Editor</strong></div>
         <span className="trading-pine-readonly">Read-only</span>

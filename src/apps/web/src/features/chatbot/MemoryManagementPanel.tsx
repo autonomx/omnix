@@ -128,7 +128,7 @@ export function MemoryManagementPanel({ sessionId }: { sessionId: string | null 
     <section className="assistant-view-panel memory-management-panel" aria-label="Memory view">
       <header className="memory-page-header">
         <div><p className="eyebrow">Omnix Assistant</p><h2>Memory</h2><p>Review saved memory, approve suggestions, and control what this Chat can use.</p></div>
-        <div className="memory-page-stats" aria-label="Memory totals"><span><strong>{records.length}</strong> saved</span><span><strong>{archived.length}</strong> archived</span><span><strong>{candidates.length}</strong> pending</span><span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span><span><strong>{metricsQuery.data?.turns ?? 0}</strong> observed turns</span></div>
+        <div role="group" className="memory-page-stats" aria-label="Memory totals"><span><strong>{records.length}</strong> saved</span><span><strong>{archived.length}</strong> archived</span><span><strong>{candidates.length}</strong> pending</span><span><strong>{snapshot?.memory_record_count ?? 0}</strong> active</span><span><strong>{metricsQuery.data?.turns ?? 0}</strong> observed turns</span></div>
       </header>
       {status ? <p className="memory-status" role="status">{status}</p> : null}
       {automatic[0] ? <aside className="memory-status" aria-label="Automatically remembered memory"><strong>Remembered —</strong> {automatic[0].content} <button type="button" disabled={undoMutation.isPending} onClick={() => undoMutation.mutate(automatic[0])}>Undo</button></aside> : null}

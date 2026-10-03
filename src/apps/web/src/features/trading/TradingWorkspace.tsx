@@ -98,6 +98,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [symbolQuery, setSymbolQuery] = useState('');
   const [symbolSearchResults, setSymbolSearchResults] = useState<CanonicalInstrument[]>([]);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [intervalMenuOpen, setIntervalMenuOpen] = useState(false);
   const [symbolSearchChartId, setSymbolSearchChartId] = useState<string | null>(null);
   const [symbolSearchLoading, setSymbolSearchLoading] = useState(false);
   const [formulaResolution, setFormulaResolution] = useState<FormulaResolution | null>(null);
@@ -499,7 +500,7 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
       </div>
       <section className="trading-command-bar" aria-label="Trading command bar">
         <div className="trading-chart-controls" role="group" aria-label="Chart controls">
-        <div className="trading-chart-symbol-options" aria-label="Chart symbol options">
+        <div role="group" className="trading-chart-symbol-options" aria-label="Chart symbol options">
         <button type="button" className="trading-symbol-trigger" aria-label="Open symbol search" onClick={() => openSymbolSearch()}>
           <span className="trading-symbol-trigger-icon" aria-hidden="true" />
           <span className="trading-symbol-trigger-copy">
@@ -555,11 +556,12 @@ export function TradingWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {intervalLabel(item)}
             </button>
           ))}
-          <details className="trading-interval-manager">
+          <details className="trading-interval-manager" onToggle={(event) => setIntervalMenuOpen(event.currentTarget.open)}>
             <summary
               role="combobox"
               aria-label="All supported Trading intervals"
               aria-haspopup="listbox"
+              aria-expanded={intervalMenuOpen}
             >
               <span>{intervalLabel(activeChart.interval)}</span>
               <span className="trading-menu-caret" aria-hidden="true">⌄</span>

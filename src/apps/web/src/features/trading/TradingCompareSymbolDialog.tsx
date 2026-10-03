@@ -157,7 +157,7 @@ export function TradingCompareSymbolDialog({
             <div className="trading-symbol-search-empty"><span className="trading-symbol-search-empty-icon" aria-hidden="true">⌕</span><strong>No symbols found</strong><p>Try a ticker, company name, or exchange.</p></div>
           )}
         </div>
-        <div className="trading-compare-placement" aria-label="Comparison placement">
+        <div role="group" className="trading-compare-placement" aria-label="Comparison placement">
           <span>Place selected symbol</span>
           <div>
             <button type="button" disabled={!selected} onClick={() => add('percent')}>Same % scale</button>

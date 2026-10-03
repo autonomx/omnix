@@ -237,7 +237,7 @@ function ProspectiveFeatures({ value }: { value: ProspectiveFeatureEvidence }) {
     ? `${value.haltEventCount} halt event${value.haltEventCount === 1 ? '' : 's'}`
     : 'halt history incomplete';
   return (
-    <div className="indicator-evidence-meta" aria-label="Prospective win-rate feature coverage">
+    <div role="group" className="indicator-evidence-meta" aria-label="Prospective win-rate feature coverage">
       <span className={value.allCoreAvailable ? 'pass' : 'warn'}>{value.allCoreAvailable ? 'All core features captured' : 'Partial prospective features'}</span>
       <span>{value.premarketAvailable ? `PM range ${percent(value.premarketRangePct)} · vs high ${percent(value.premarketCloseVsHighPct)}` : 'PM structure unavailable'}</span>
       <span>{value.premarketAvailable ? `PM last 30m ${percent(value.premarketLast30mReturnPct)}` : 'PM trend unavailable'}</span>
@@ -298,7 +298,7 @@ export function TradingStrategyIndicatorEvidence({
         <span>{evidence.length} signals</span>
       </header>
       {operations ? (
-        <div className="indicator-runtime-grid" aria-label="Prospective capture runtime">
+        <div role="group" className="indicator-runtime-grid" aria-label="Prospective capture runtime">
           <RuntimeMonitor label="Morning archive" purpose="09:20 ET immutable raw universe capture" status={operations.universe_archive_monitor} />
           <RuntimeMonitor label="SHADOW evaluator" purpose="Deterministic structural/live execution observation" status={operations.strategy_monitor} />
           <RuntimeMonitor label="SOL AI / 1m" purpose="AI-only SOL/USDT shadow decision loop" status={operations.solana_ai_monitor} />

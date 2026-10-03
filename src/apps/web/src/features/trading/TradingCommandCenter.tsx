@@ -226,7 +226,7 @@ export function TradingCommandCenter({
       </div>
 
       {solanaStrategy ? (
-        <div className="command-center-attention" aria-label="Solana AI strategy history">
+        <div role="group" className="command-center-attention" aria-label="Solana AI strategy history">
           <strong>{solanaStrategy.display_name}</strong>
           <span>
             {solanaStrategy.instrument_id} · {solanaStrategy.chart_interval} · research-only · no execution authority

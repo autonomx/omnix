@@ -321,7 +321,7 @@ function ToolCallGroup({ tools }: { tools: ToolActivityItem[] }) {
         <span>{tools.length === 1 ? '1 tool call' : `${tools.length} tool calls`}</span>
         <small>{toolNames}</small>
       </summary>
-      <div className="assistant-runtime-tool-group-body" aria-label="Tool calls">
+      <div role="group" className="assistant-runtime-tool-group-body" aria-label="Tool calls">
         {tools.map((item) => {
           const command = stringField(item.args.command);
           const path = stringField(item.args.path) || stringField(item.args.file_path);
@@ -745,7 +745,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       </header>
       <p>{query.data.spec.task}</p>
       <small>{id}</small>
-      <div className="assistant-runtime-metrics" aria-label="Run metrics">
+      <div role="group" className="assistant-runtime-metrics" aria-label="Run metrics">
         <div><strong>Duration</strong><span>{elapsed || 'not available'}</span></div>
         <div><strong>Input tokens</strong><span title={query.data.usage?.input_tokens_reported ? undefined : 'Not reported'}>{inputTokens}</span></div>
         <div><strong>Output tokens</strong><span title={query.data.usage?.output_tokens_reported ? undefined : 'Not reported'}>{outputTokens}</span></div>
@@ -938,7 +938,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
               </button>
             </div>
           ) : null}
-          <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
+          <div role="group" className="assistant-runtime-thinking-stream" aria-label="Agent activity">
             {sections.map((section) => {
               if (section.kind === 'thinking') {
                 return (

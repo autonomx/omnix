@@ -402,7 +402,7 @@ export function TradingTerminalDock({
         </header>
 
         {!minimized ? <>
-          {tab !== 'dashboard' ? <div className="trading-dock-summary" aria-label="Paper trading account summary">
+          {tab !== 'dashboard' ? <div role="group" className="trading-dock-summary" aria-label="Paper trading account summary">
             {[['Account balance', accountBalance, activeAccount?.base_currency], ['Equity', equity, activeAccount?.base_currency], ['Realized PnL', realizedPnl, activeAccount?.base_currency], ['Unrealized PnL', unrealizedPnl, activeAccount?.base_currency], ['Account margin', accountMargin, activeAccount?.base_currency], ['Available funds', Number(baseBalance?.available ?? 0), activeAccount?.base_currency], ['Orders margin', ordersMargin, activeAccount?.base_currency], ['Margin buffer', marginBuffer, '%']].map(([label, value, suffix]) => <div key={String(label)} className="trading-dock-summary-item"><span>{label}</span><strong className={label === 'Realized PnL' || label === 'Unrealized PnL' ? signedClass(value as number) : undefined}>{displayedSnapshot ? number(value as number) : '—'}{displayedSnapshot && suffix ? <small> {suffix}</small> : null}</strong></div>)}
           </div> : null}
           <nav className="trading-dock-tabs" role="tablist" aria-label="Paper trading activity">{tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); if (item.id === 'history' && !historyFilters.some((filter) => filter.id === orderFilter)) setOrderFilter('all'); }}>{item.id === 'positions' && displayedPositions.length > 0 ? `${item.label} ${displayedPositions.length}` : item.label}</button>)}</nav>

@@ -790,7 +790,7 @@ export function RpgWorkspace({ module }: { module: OmnixModuleDefinition }) {
     : storyMessages;
 
   return (
-    <WorkspacePanel className="rpg-workstation">
+    <WorkspacePanel labelledBy="module-title" className="rpg-workstation">
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <header className="rpg-unified-header" aria-label="Campaign menu header">
         <div className="rpg-campaign-menu-host" ref={setCampaignMenuHost} />

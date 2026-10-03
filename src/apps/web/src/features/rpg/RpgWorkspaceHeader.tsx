@@ -160,7 +160,7 @@ export function RpgWorkspaceHeader(props: RpgWorkspaceHeaderProps) {
         >
           Worlds &amp; Campaigns
         </button>
-        <div className="rpg-unified-header-controls" aria-label="Workspace layout controls">
+        <div role="group" className="rpg-unified-header-controls" aria-label="Workspace layout controls">
           <button className="rpg-secondary-button rpg-header-toggle" type="button" onClick={() => setIsHidden((value) => !value)}>
             {isHidden ? 'Show header' : 'Hide header'}
           </button>

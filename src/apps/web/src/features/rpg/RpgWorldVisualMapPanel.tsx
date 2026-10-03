@@ -375,7 +375,7 @@ export function RpgWorldVisualMapPanel({ worldId }: RpgWorldVisualMapPanelProps)
               role="application"
             >
               <div className="rpg-atlas-coordinate-readout">x {Math.round(-pan.x / zoom)} · y {Math.round(-pan.y / zoom)} · {Math.round(zoom * 100)}%</div>
-              <div className="rpg-atlas-toolbar" aria-label="Map controls">
+              <div role="group" className="rpg-atlas-toolbar" aria-label="Map controls">
                 <button type="button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_ZOOM, value + 0.2))}>+</button>
                 <button type="button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_ZOOM, value - 0.2))}>−</button>
                 <button type="button" aria-label="Reset map view" onClick={resetView}>⌖</button>

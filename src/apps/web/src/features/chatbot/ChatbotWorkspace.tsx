@@ -2070,11 +2070,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   return (
-    <WorkspacePanel className={`assistant-chat-page${isChatFullscreen ? ' assistant-chat-page-fullscreen' : ''}`}>
+    <WorkspacePanel labelledBy="module-title" className={`assistant-chat-page${isChatFullscreen ? ' assistant-chat-page-fullscreen' : ''}`}>
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
       <div className={`assistant-chat-layout${isAssistantSidebarMinimized ? ' assistant-chat-layout-sidebar-minimized' : ''}${isSidePanelMinimized ? ' assistant-chat-layout-side-minimized' : ''}`}>
         <aside className={`assistant-chat-sidebar${isAssistantSidebarMinimized ? ' assistant-chat-sidebar-minimized' : ''}`} aria-label="Omnix assistant navigation">
-          <div className="assistant-chat-sidebar-controls" aria-label="Assistant navigation controls">
+          <div role="group" className="assistant-chat-sidebar-controls" aria-label="Assistant navigation controls">
             <button
               type="button"
               className="assistant-chat-sidebar-minimize"
@@ -2186,7 +2186,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                       />
                       {liveAgentToolProposals(message.metadata).map((proposal) => <LiveAgentToolProposalCard key={proposal.proposal_id} proposal={proposal} sessionId={displayedSessionId} onOpenTools={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }} />)}
                       <OmnixRunCard metadata={message.metadata} />
-                      {message.role === 'assistant' ? <div className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
+                      {message.role === 'assistant' ? <div role="group" className="assistant-message-actions" aria-label="Assistant message actions"><button type="button" className={assistantMessageFeedback[message.id] === 'liked' ? 'active' : undefined} aria-label="Like response" aria-pressed={assistantMessageFeedback[message.id] === 'liked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'liked')}>♡</button><button type="button" className={assistantMessageFeedback[message.id] === 'disliked' ? 'active' : undefined} aria-label="Dislike response" aria-pressed={assistantMessageFeedback[message.id] === 'disliked'} onClick={() => toggleAssistantMessageFeedback(message.id, 'disliked')}>↯</button><button type="button" aria-label="Copy response" onClick={() => void copyAssistantResponse(message)}>□</button><button type="button" aria-label="Play response audio" onClick={() => void playAssistantResponseAudio(message.content)}>▶</button><button type="button" aria-label="More response actions" aria-expanded={openMessageActionMenuId === message.id} onClick={() => setOpenMessageActionMenuId((current) => current === message.id ? null : message.id)}>⋮</button>{openMessageActionMenuId === message.id ? <div className="assistant-message-action-menu" role="menu"><button type="button" role="menuitem" onClick={() => void copyAssistantResponse(message)}>Copy text</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); void playAssistantResponseAudio(message.content); }}>Play audio</button><button type="button" role="menuitem" onClick={() => { setOpenMessageActionMenuId(null); applySuggestedPrompt(`Continue from: ${message.content.slice(0, 120)}`); }}>Continue</button></div> : null}</div> : null}
                     </div>
                   </article>
                 )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
@@ -2195,11 +2195,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
               <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>
-                <div className="assistant-suggestion-row" aria-label="Suggested prompts">
+                <div role="group" className="assistant-suggestion-row" aria-label="Suggested prompts">
                   {suggestedPrompts.map((prompt) => <button key={prompt} type="button" onClick={() => applySuggestedPrompt(prompt)}>{prompt}</button>)}
                   <button type="button" onClick={() => applySuggestedPrompt('Give me more options for this conversation')}>More</button>
                 </div>
-                <div className="assistant-composer-controls" aria-label="Conversation controls">
+                <div role="group" className="assistant-composer-controls" aria-label="Conversation controls">
                   <label><span>Provider</span><select {...register('providerId')} aria-label="Provider"><option value="">Default provider</option>{chatProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></label>
                   <label><span>Model</span><select {...register('modelId')} aria-label="Model"><option value="">Default model</option>{chatModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
                   <button type="button" className="assistant-composer-chip" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}><span>Voice</span><strong>{ttsOutputLabel}</strong></button>
@@ -2253,7 +2253,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         </section>
 
         <aside className={`assistant-chat-side${isSidePanelMinimized ? ' assistant-chat-side-minimized' : ''}`} aria-label="Live voice and tool execution">
-          <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel">
+          <div role="group" className="assistant-side-panel-toggle" aria-label="Assistant utility panel">
             <button type="button" className={activeUtilityPanel === 'voice' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button>
             <button
               type="button"
@@ -2271,12 +2271,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
                 ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
-                : <div className="assistant-live-state" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
+                : <div className="assistant-live-state" role="status" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
               <div
                 key={liveCallRuntime?.avatar_pack?.renderer === 'live2d'
                   ? `${liveCallRuntime.avatar_pack.character_id}:${liveCallRuntime.avatar_pack.version}:${liveCallRuntime.avatar_pack.rig_asset_id}`
                   : 'voice-orb'}
                 className="assistant-live-visual-stage"
+                role="img"
                 aria-label="Live character visual"
               >
                 <div className="assistant-voice-orb" data-voice-mode={liveVoiceVisualMode} aria-hidden="true">

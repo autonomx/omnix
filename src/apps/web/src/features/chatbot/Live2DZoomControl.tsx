@@ -35,7 +35,7 @@ export function Live2DZoomControl() {
   }, []);
 
   return (
-    <div className="assistant-live2d-zoom-control" aria-label="Live2D view controls">
+    <div role="group" className="assistant-live2d-zoom-control" aria-label="Live2D view controls">
       <div className="assistant-live2d-framing" role="group" aria-label="Live2D framing">
         {(['full', 'head'] as const).map((value) => (
           <button

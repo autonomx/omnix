@@ -119,7 +119,7 @@ export function TradingReplayPanel({
         <button type="button" disabled={!selected || status === 'saving'} onClick={() => void run()}>Run backtest</button>
       </div>
       {backtest ? (
-        <dl className="trading-backtest-summary" aria-label="Backtest evidence summary">
+        <dl role="group" className="trading-backtest-summary" aria-label="Backtest evidence summary">
           <div><dt>Status</dt><dd>{backtest.status}</dd></div>
           <div><dt>Final equity</dt><dd>{backtest.final_equity}</dd></div>
           <div><dt>Return</dt><dd>{backtest.total_return_percent}%</dd></div>

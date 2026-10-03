@@ -17,7 +17,7 @@ export function AssistantWorkspaceDashboard({ dashboard }: { dashboard: Assistan
         <OmnixStatusPill>{dashboard.statusLabel}</OmnixStatusPill>
       </Group>
 
-      <div className="feature-list" aria-label="Workspace context metrics">
+      <div role="group" className="feature-list" aria-label="Workspace context metrics">
         {dashboard.metrics.map((metric) => (
           <div key={metric.id}>
             <span>{metric.label}</span>

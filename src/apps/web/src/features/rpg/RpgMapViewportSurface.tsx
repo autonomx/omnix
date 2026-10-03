@@ -184,7 +184,7 @@ export function RpgMapViewportSurface({
 
   return (
     <div className="rpg-map-viewport-shell">
-      <div className="rpg-map-viewport-controls" aria-label="Map viewport controls">
+      <div role="group" className="rpg-map-viewport-controls" aria-label="Map viewport controls">
         <button aria-label="Zoom out" disabled={viewport.zoom <= RPG_MAP_MIN_ZOOM} onClick={() => zoomBy(1 / RPG_MAP_ZOOM_STEP)} type="button">−</button>
         <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
         <button aria-label="Zoom in" disabled={viewport.zoom >= RPG_MAP_MAX_ZOOM} onClick={() => zoomBy(RPG_MAP_ZOOM_STEP)} type="button">+</button>

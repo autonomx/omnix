@@ -53,7 +53,7 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   else {
     const capabilities = moduleCapabilities[module.id] ?? [];
     content = (
-      <WorkspacePanel>
+      <WorkspacePanel labelledBy="module-title">
         <div className="workspace-heading">
           <div><p className="eyebrow">Module workspace</p><h2 id="module-title">{module.label}</h2></div>
           <code>{module.route}</code>
@@ -75,7 +75,7 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   }
   return (
     <RouteErrorBoundary resetKey={module.id}>
-      <Suspense fallback={<WorkspacePanel><p className="workspace-summary">Loading {module.label} workspace…</p></WorkspacePanel>}>{content}</Suspense>
+      <Suspense fallback={<WorkspacePanel label={module.label}><p className="workspace-summary">Loading {module.label} workspace…</p></WorkspacePanel>}>{content}</Suspense>
     </RouteErrorBoundary>
   );
 }

@@ -1519,7 +1519,7 @@ export function TradingChartPanel({
               onClick={() => setCompareDialogOpen(true)}
             >+</button>
             <span>· {intervalLabel(interval)} · {chartQuery.data?.instrument.venue ?? resolvedBinding?.provider ?? 'Omnix'}</span>
-            <i className={`trading-stream-dot ${streamStatus}`} aria-label={`Feed ${streamStatus}`} />
+            <i className={`trading-stream-dot ${streamStatus}`} role="img" aria-label={`Feed ${streamStatus}`} />
           </div>
           {latest ? (
             <div className="trading-chart-ohlc">
@@ -1582,7 +1582,7 @@ export function TradingChartPanel({
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}
       >
-        <div ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} />
+        <div role="group" ref={hostRef} className={`trading-chart-canvas${drawingTool === 'cursor' && !replayMode ? ' is-pan-ready' : ''}${chartPanning ? ' is-grabbing' : ''}`} data-panning-indicator={panningIndicatorPane ?? undefined} aria-label={`${instrumentId} ${interval} chart`} />
         {adapter ? <TradingIndicatorBackgroundOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {adapter ? <TradingVolumeProfileOverlay adapter={adapter} outputs={visibleIndicatorOutputs} /> : null}
         {!fullscreenIndicator && !fullscreenMainPane ? paneIndicators.flatMap((indicator) => {

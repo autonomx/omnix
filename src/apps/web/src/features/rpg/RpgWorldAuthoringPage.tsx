@@ -339,7 +339,7 @@ export function RpgWorldAuthoringPage({
               <option value="featured">Featured first</option>
               <option value="type">Sort by type</option>
             </select>
-            <div className="rpg-authoring-collection-view-toggle" aria-label="Collection view">
+            <div role="group" className="rpg-authoring-collection-view-toggle" aria-label="Collection view">
               <button className={collectionView === 'grid' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('grid')}>Grid</button>
               <button className={collectionView === 'list' ? 'is-active' : ''} type="button" onClick={() => setCollectionView('list')}>List</button>
             </div>

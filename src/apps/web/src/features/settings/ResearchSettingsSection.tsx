@@ -194,7 +194,7 @@ export function ResearchSettingsSection() {
         </div>
       </SettingsAdvanced>
 
-      <div className="settings-status-list" aria-label="Research runtime status">
+      <div role="group" className="settings-status-list" aria-label="Research runtime status">
         <SettingsStatusRow
           label="Primary provider"
           value={runtime ? `${providerLabel(runtime.provider.provider)} · ${runtime.provider.available ? 'Ready' : 'Credential required'}` : 'Checking'}

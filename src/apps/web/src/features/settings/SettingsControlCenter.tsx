@@ -55,7 +55,7 @@ export function SettingsControlCenter() {
   }, [activeCategory]);
   return (
     <SettingsProfileProvider>
-      <WorkspacePanel className="settings-control-panel">
+      <WorkspacePanel label="Settings" className="settings-control-panel">
         <a className="settings-skip-link" href="#settings-main">Skip to settings content</a>
         <div className="settings-control-center">
           <SettingsCategoryRail activeCategory={activeCategory} query={query} onQueryChange={setQuery} onSelect={setActiveCategory} />

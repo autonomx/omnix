@@ -70,7 +70,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const submitStatus = createJobMutation.isPending ? 'queueing' : createJobMutation.isError ? 'error' : createJobMutation.data?.status ?? 'ready';
 
   return (
-    <WorkspacePanel>
+    <WorkspacePanel labelledBy="module-title">
       <div className="workspace-heading">
         <div>
           <p className="eyebrow">Feature module</p>

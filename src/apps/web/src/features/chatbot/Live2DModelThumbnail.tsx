@@ -145,7 +145,7 @@ export function Live2DModelThumbnail({ model, className }: Props) {
   }, [model.id, model.installed]);
 
   const classes = ['character-live2d-model-thumbnail', className, `is-${state}`].filter(Boolean).join(' ');
-  return <span ref={hostRef} className={classes} aria-label={state === 'ready' ? `${model.name} Live2D preview` : undefined}>
+  return <span ref={hostRef} className={classes} role={state === 'ready' ? 'img' : undefined} aria-label={state === 'ready' ? `${model.name} Live2D preview` : undefined}>
     {!model.installed ? <img className="character-live2d-model-poster" src={model.preview_url} alt="" aria-hidden="true" loading="lazy" /> : null}
   </span>;
 }

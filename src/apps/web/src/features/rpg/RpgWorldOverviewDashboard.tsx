@@ -127,7 +127,7 @@ export function RpgWorldOverviewDashboard({
         <button className="rpg-secondary-button" type="button" onClick={onEdit}>Edit world details</button>
       </div>
 
-      <div className="rpg-world-overview-stat-strip" aria-label="World statistics">
+      <div role="group" className="rpg-world-overview-stat-strip" aria-label="World statistics">
         {stats.map((stat) => (
           <button key={stat.label} type="button" onClick={() => stat.section && onOpenSection?.(stat.section.id)} disabled={!stat.section}>
             <strong>{stat.value ?? stat.section?.entity_count ?? 0}</strong>

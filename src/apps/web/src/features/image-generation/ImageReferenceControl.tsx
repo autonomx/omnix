@@ -134,7 +134,7 @@ export function ImageReferenceControl({ selectedAssetIds, onChange }: ImageRefer
       {limitMessage ? <Text c="yellow" size="xs" role="status">{limitMessage}</Text> : null}
 
       {selectedAssets.length ? (
-        <div className="image-reference-grid" aria-label="Attached reference images">
+        <div role="group" className="image-reference-grid" aria-label="Attached reference images">
           {selectedAssets.map((asset) => (
             <article key={asset.id} className="image-reference-card">
               <img alt="" loading="lazy" src={imageAssetUrl(asset.id)} />

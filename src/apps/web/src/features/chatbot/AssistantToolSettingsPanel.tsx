@@ -175,7 +175,7 @@ export function AssistantToolSettingsPanel({ enabledToolCount, initialConnection
             </form>
           ) : null}
         </section>
-        <div className="assistant-tool-action-list" aria-label={`${activeTool.metadata.name} actions`}>
+        <div role="group" className="assistant-tool-action-list" aria-label={`${activeTool.metadata.name} actions`}>
           {activeActions.map((action) => {
             const gate = canExecuteToolAction(action);
             return (
@@ -210,7 +210,7 @@ export function AssistantToolSettingsPanel({ enabledToolCount, initialConnection
       <h2>Tools</h2>
       <p>Configure assistant-only tool access, action approval, and connection readiness. Every action is governed before it can become an executable capability.</p>
       {configQuery.isError ? <p className="assistant-view-note">Tool configuration could not be loaded. Safe local defaults are shown until the backend is reachable.</p> : null}
-      <div className="assistant-tool-config-list" aria-label="Registered assistant tools">
+      <div role="group" className="assistant-tool-config-list" aria-label="Registered assistant tools">
         {tools.map((tool) => {
           const record = getToolRecord(configPayload, tool);
           const config = toToolConfig(record);

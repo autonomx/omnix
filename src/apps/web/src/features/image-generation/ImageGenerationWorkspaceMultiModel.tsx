@@ -267,7 +267,7 @@ export function ImageGenerationWorkspaceImpl({ module }: { module: OmnixModuleDe
       : 'Download the selected model, then load it explicitly.';
 
   return (
-    <WorkspacePanel className="image-workspace">
+    <WorkspacePanel labelledBy="module-title" className="image-workspace">
       <h2 id="module-title" className="visually-hidden">{module.label}</h2>
 
       <div className="image-workspace-status-row">

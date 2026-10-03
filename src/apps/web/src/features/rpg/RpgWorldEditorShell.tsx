@@ -289,7 +289,7 @@ export function RpgWorldEditorShell({
     <section className={`rpg-authoring-editor rpg-world-product-shell${sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} aria-label="World editor">
       <div className="rpg-world-shell-layout">
         <aside className="rpg-world-sidebar">
-          <div className="rpg-world-brand" aria-label="Worlds and Campaigns">
+          <div role="group" className="rpg-world-brand" aria-label="Worlds and Campaigns">
             <span className="rpg-world-brand-mark">✥</span>
             <strong><span>Worlds &amp;</span><span>Campaigns</span></strong>
           </div>

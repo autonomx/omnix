@@ -212,7 +212,7 @@ export function RpgLoadoutTabs({ inventoryItems, hotbarAbilities, isApplyingLoad
         ))}
       </div>
 
-      <div className="rpg-ability-summary" aria-label="Ability tree summary">
+      <div role="group" className="rpg-ability-summary" aria-label="Ability tree summary">
         <strong>{abilityOverview.className}</strong>
         <span>
           {abilityOverview.source === 'live'
@@ -295,7 +295,7 @@ function InventoryPanel({
 }: InventoryPanelProps) {
   return (
     <div aria-labelledby="rpg-inventory-loadout-tab" className="rpg-loadout-layout rpg-item-loadout-layout" id="rpg-inventory-loadout-panel" role="tabpanel">
-      <div className="rpg-inventory-grid" aria-label="Inventory item slots">
+      <div role="group" className="rpg-inventory-grid" aria-label="Inventory item slots">
         {inventoryItems.map((item, index) => (
           <button
             aria-label={item.label}
@@ -319,7 +319,7 @@ function InventoryPanel({
         >
           +
         </button>
-        <div className="rpg-hotbar" aria-label="Ability hotbar">
+        <div role="group" className="rpg-hotbar" aria-label="Ability hotbar">
           {hotbarAbilities.map((ability) => (
             <InventoryHotbarAbilityButton
               ability={ability}
@@ -476,7 +476,7 @@ function AbilitiesPanel({ abilityOverview, activeAbility, activeAbilityIndex, is
 
   return (
     <div aria-labelledby="rpg-abilities-loadout-tab" className="rpg-loadout-layout rpg-ability-tree-layout" id="rpg-abilities-loadout-panel" role="tabpanel">
-      <div className="rpg-ability-tree" aria-label="Ability tree categories">
+      <div role="group" className="rpg-ability-tree" aria-label="Ability tree categories">
         {abilityOverview.categories.map((category) => (
           <section className="rpg-ability-category" key={category.id}>
             <header>
@@ -539,7 +539,7 @@ function HotbarPanel({ abilityOverview, activeHotbarSlot, isApplyingLoadoutActio
 
   return (
     <div aria-labelledby="rpg-hotbar-loadout-tab" className="rpg-loadout-layout" id="rpg-hotbar-loadout-panel" role="tabpanel">
-      <div className="rpg-hotbar-slot-list" aria-label="Active ability hotbar">
+      <div role="group" className="rpg-hotbar-slot-list" aria-label="Active ability hotbar">
         {abilityOverview.hotbarSlots.map((slot) => (
           <article className="rpg-hotbar-slot-row" key={slot.slot}>
             <button
@@ -599,7 +599,7 @@ function SkillsPanel({ disabled, onSelectCommand, skills }: { disabled: boolean;
           <div>
             <strong>{skills.length ? skill.label : 'No skill progress yet'}</strong>
             <span>{skills.length ? `Rank ${skill.rank} • ${skill.xp} XP${skill.source ? ` • ${skill.source}` : ''}` : 'Using abilities grants deterministic skill XP by capability.'}</span>
-            <div className="rpg-loadout-actions" aria-label={`${skill.label} skill actions`}>
+            <div role="group" className="rpg-loadout-actions" aria-label={`${skill.label} skill actions`}>
               <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Check my ${skill.label} skill rank, XP, and recent training progress.`)} type="button">
                 Check skills
               </button>
@@ -624,7 +624,7 @@ function TraitsPanel({ disabled, onSelectCommand, traits }: { disabled: boolean;
             <div>
               <strong>{trait.name}</strong>
               <span>{trait.statusLabel} • {trait.influenceTags.length ? trait.influenceTags.map(titleCase).join(', ') : 'No influence tags indexed'}</span>
-              <div className="rpg-loadout-actions" aria-label={`${trait.name} trait actions`}>
+              <div role="group" className="rpg-loadout-actions" aria-label={`${trait.name} trait actions`}>
                 <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Inspect the ${trait.name} trait and explain how it affects the current situation.`)} type="button">
                   Inspect trait
                 </button>
@@ -641,7 +641,7 @@ function TraitsPanel({ disabled, onSelectCommand, traits }: { disabled: boolean;
           <div>
             <strong>No narrative traits indexed</strong>
             <span>Traits appear here once the selected session has a saved ability tree.</span>
-            <div className="rpg-loadout-actions" aria-label="Trait actions">
+            <div role="group" className="rpg-loadout-actions" aria-label="Trait actions">
               <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand('Inspect my current traits and personality hooks for this scene.')} type="button">
                 Inspect traits
               </button>
@@ -663,7 +663,7 @@ function EffectsPanel({ disabled, effects, onSelectCommand }: { disabled: boolea
             <div>
               <strong>{effect.name}</strong>
               <span>{effect.detail}{effect.remaining !== undefined ? ` • ${effect.remaining} turn(s) remaining` : ''}</span>
-              <div className="rpg-loadout-actions" aria-label={`${effect.name} effect actions`}>
+              <div role="group" className="rpg-loadout-actions" aria-label={`${effect.name} effect actions`}>
                 <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand(`Inspect the active effect ${effect.name} and summarize its current modifier.`)} type="button">
                   Inspect effect
                 </button>
@@ -680,7 +680,7 @@ function EffectsPanel({ disabled, effects, onSelectCommand }: { disabled: boolea
           <div>
             <strong>No active effects</strong>
             <span>Temporary ability effects and runtime modifiers appear here after ability use.</span>
-            <div className="rpg-loadout-actions" aria-label="Effect actions">
+            <div role="group" className="rpg-loadout-actions" aria-label="Effect actions">
               <button className="rpg-mini-button" disabled={disabled} onClick={() => onSelectCommand('Inspect current active effects and temporary modifiers.')} type="button">
                 Inspect effects
               </button>
@@ -709,11 +709,11 @@ function CoveragePanel({ coverage, disabled, onRefreshCoverage, onSelectCommand 
           <strong>{percent}%</strong>
           <span>{coverage.ok ? 'All required dimensions covered' : `${coverage.missingDimensions.length} dimension${coverage.missingDimensions.length === 1 ? '' : 's'} still missing`}</span>
         </div>
-        <div className="rpg-coverage-meter" aria-label={`Ability dimension coverage ${percent}%`}>
+        <div role="img" className="rpg-coverage-meter" aria-label={`Ability dimension coverage ${percent}%`}>
           <span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
         </div>
         <small>{coverage.totalObservations} deterministic observation{coverage.totalObservations === 1 ? '' : 's'} indexed from ability traces, world effects, passives, traits, and timeline events.</small>
-        <div className="rpg-loadout-actions" aria-label="Coverage actions">
+        <div role="group" className="rpg-loadout-actions" aria-label="Coverage actions">
           <button className="rpg-mini-button" disabled={disabled} onClick={onRefreshCoverage} type="button">
             Refresh coverage
           </button>
@@ -723,7 +723,7 @@ function CoveragePanel({ coverage, disabled, onRefreshCoverage, onSelectCommand 
         </div>
       </section>
 
-      <div className="rpg-coverage-grid" aria-label="Ability dimension coverage">
+      <div role="group" className="rpg-coverage-grid" aria-label="Ability dimension coverage">
         {dimensionRows.map((row) => (
           <article className={row.covered ? 'rpg-coverage-dimension covered' : 'rpg-coverage-dimension missing'} key={row.dimension}>
             <strong>{titleCase(row.dimension)}</strong>
@@ -783,7 +783,7 @@ function LoadoutDetailCard({ actions, detail, disabled, eyebrow, onSelectCommand
       <p className="eyebrow">{eyebrow}</p>
       <strong>{title}</strong>
       <span>{detail}</span>
-      <div className="rpg-loadout-actions" aria-label={`${title} actions`}>
+      <div role="group" className="rpg-loadout-actions" aria-label={`${title} actions`}>
         {actions.map((action) => (
           <button className="rpg-mini-button" disabled={disabled} key={action.label} onClick={() => (action.apply ? action.apply() : onSelectCommand(action.command))} type="button">
             {action.label}

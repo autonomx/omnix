@@ -132,7 +132,7 @@ export function LiveConversationControls({ sessionId }: LiveConversationControls
       </header>
 
       {!profile ? <p role="status">{status ?? 'Loading Live Chat profile…'}</p> : <>
-        <div className="live-chat-mode-profiles" aria-label="Conversation profiles">
+        <div role="group" className="live-chat-mode-profiles" aria-label="Conversation profiles">
           <div className="live-chat-mode-profile-heading">
             <div>
               <strong>Conversation profile</strong>

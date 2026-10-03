@@ -512,6 +512,7 @@ function normalizeLiveVoiceLayout(): {
   if (!stage) {
     stage = document.createElement('div');
     stage.className = LIVE_VISUAL_STAGE_CLASS;
+    stage.setAttribute('role', 'img');
     stage.setAttribute('aria-label', 'Live character visual');
     orb.insertAdjacentElement('beforebegin', stage);
   }
