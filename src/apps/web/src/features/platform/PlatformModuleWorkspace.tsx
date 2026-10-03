@@ -15,6 +15,7 @@ import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { omnixEventClient, RESYNC_EVENT, type OmnixEventConnectionStatus } from '../../events/eventClient';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled', RESYNC_EVENT] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
@@ -195,7 +196,7 @@ function JobsView() {
         {() => (
           <div className="platform-list">
             {jobs.map((job) => {
-              const progressValue = progressPercent(job.progress);
+              const progressValue = jobProgressPercent(job.progress);
               const canCancel = ['queued', 'leased', 'running', 'waiting', 'retrying'].includes(job.status);
 
               return (
@@ -592,13 +593,6 @@ function eventStatusText(status: OmnixEventConnectionStatus): string {
   return status.lastError ? `${status.state} (${status.lastError})` : status.state;
 }
 
-function progressPercent(progress: JobRecord['progress']): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}
 
 function providerOptions(payload: ProviderFacadePayload | undefined, family: 'llm' | 'tts' | 'stt', fallbackIds: string[]) {
   const options = new Map<string, { id: string; label: string }>();

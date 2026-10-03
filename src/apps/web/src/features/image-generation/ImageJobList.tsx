@@ -4,6 +4,7 @@ import type { JobRecord } from '../../api/client';
 import { OmnixStatusPill } from '../../design/primitives';
 import { imageAssetUrl } from './imageWorkspaceModel';
 import { ImagePreviewDialog } from './ImagePreviewDialog';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 const ACTIVE_STATUSES = new Set(['queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested']);
 const RETRYABLE_STATUSES = new Set(['failed', 'canceled', 'stale']);
@@ -132,7 +133,7 @@ interface ImageJobProgressPresentation {
 function imageJobProgressPresentation(job: JobRecord): ImageJobProgressPresentation {
   const status = String(job.status);
   const message = job.progress?.message?.trim();
-  const percent = progressPercent(job.progress);
+  const percent = jobProgressPercent(job.progress);
   if (status === 'completed') return { indeterminate: false, label: 'Completed successfully', value: 100 };
   if (status === 'failed') return { indeterminate: false, label: 'Generation failed', value: percent };
   if (status === 'canceled') return { indeterminate: false, label: 'Canceled', value: percent };
@@ -145,11 +146,6 @@ function imageJobProgressPresentation(job: JobRecord): ImageJobProgressPresentat
   }
   if (message) return { indeterminate: false, label: message, value: percent };
   return { indeterminate: false, label: 'Waiting in queue', value: percent };
-}
-
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) return 0;
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
 export function imageJobDurationLabel(job: JobRecord, now = Date.now()): string | undefined {

@@ -88,6 +88,95 @@ def _stabilize_equivalent_io_schemas(schema: dict[str, object]) -> None:
     rewrite(schema)
 
 
+_SCHEMA_REF = "#/components/schemas/"
+
+
+def _referenced_schemas(value: object) -> set[str]:
+    names: set[str] = set()
+    if isinstance(value, dict):
+        reference = value.get("$ref")
+        if isinstance(reference, str) and reference.startswith(_SCHEMA_REF):
+            names.add(reference[len(_SCHEMA_REF):])
+        for item in value.values():
+            names |= _referenced_schemas(item)
+    elif isinstance(value, list):
+        for item in value:
+            names |= _referenced_schemas(item)
+    return names
+
+
+def _closure(roots: set[str], schemas: dict[str, object]) -> set[str]:
+    seen: set[str] = set()
+    pending = list(roots)
+    while pending:
+        name = pending.pop()
+        if name in seen or name not in schemas:
+            continue
+        seen.add(name)
+        pending.extend(_referenced_schemas(schemas[name]) - seen)
+    return seen
+
+
+def _require_serialized_defaults(
+    schema: dict[str, object],
+    lenient_operations: frozenset[tuple[str, str]] = frozenset(),
+) -> None:
+    """Mark fields with defaults as required in schemas only responses use (WP-9.3).
+
+    Pydantic omits fields with defaults from ``required``, which is right for
+    request bodies (callers may leave them out) but not for responses: the
+    gateway always serializes them. Clients generated from the contract would
+    otherwise treat every defaulted response field as possibly missing.
+    Schemas reachable from a request body or parameter keep Pydantic's view, and
+    so do responses of operations that drop unset, None or default fields
+    (``lenient_operations``, as ``(METHOD, path)``).
+    """
+
+    components = schema.get("components")
+    schemas = components.get("schemas") if isinstance(components, dict) else None
+    paths = schema.get("paths")
+    if not isinstance(schemas, dict) or not isinstance(paths, dict):
+        return
+    inputs: set[str] = set()
+    outputs: set[str] = set()
+    lenient: set[str] = set()
+    for path, operations in paths.items():
+        if not isinstance(operations, dict):
+            continue
+        for method, operation in operations.items():
+            if not isinstance(operation, dict):
+                continue
+            inputs |= _referenced_schemas(operation.get("requestBody")) | _referenced_schemas(operation.get("parameters"))
+            responses = _referenced_schemas(operation.get("responses"))
+            outputs |= responses
+            if (method.upper(), path) in lenient_operations:
+                lenient |= responses
+    response_only = _closure(outputs, schemas) - _closure(inputs, schemas) - _closure(lenient, schemas)
+    for name in sorted(response_only):
+        component = schemas[name]
+        properties = component.get("properties") if isinstance(component, dict) else None
+        if not isinstance(properties, dict):
+            continue
+        required = list(component.get("required", []))
+        required += [key for key, value in properties.items() if isinstance(value, dict) and "default" in value and key not in required]
+        if required:
+            component["required"] = required
+
+
+def _lenient_operations(app: object) -> frozenset[tuple[str, str]]:
+    from fastapi.routing import APIRoute
+
+    operations: set[tuple[str, str]] = set()
+    for route in getattr(app, "routes", []):
+        if isinstance(route, APIRoute) and (
+            route.response_model_exclude_unset
+            or route.response_model_exclude_none
+            or route.response_model_exclude_defaults
+        ):
+            operations.update((method, route.path) for method in route.methods)
+    return frozenset(operations)
+
+
 def export_schema() -> dict[str, object]:
     """Return the gateway OpenAPI document exactly as the web contract stores it."""
     src_dir = _repo_root() / "src"
@@ -96,8 +185,10 @@ def export_schema() -> dict[str, object]:
 
     from app.gateway.main import create_gateway_app
 
-    schema = create_gateway_app().openapi()
+    app = create_gateway_app()
+    schema = app.openapi()
     _stabilize_equivalent_io_schemas(schema)
+    _require_serialized_defaults(schema, _lenient_operations(app))
     return _stabilize_integral_json_numbers(schema)
 
 

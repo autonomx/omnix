@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
 
+// Fixtures carry only the fields each test reads.
+function fixture<T>(value: unknown): T {
+  return value as T;
+}
+
 function renderCard(metadata: Record<string, unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}><OmnixRunCard metadata={metadata} /></QueryClientProvider>);
@@ -309,13 +314,13 @@ describe('OmnixRunCard', () => {
   });
 
   it('shows thinking inline while tool details stay collapsible', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-repair',
       status: 'running',
       desired_state: 'running',
       revision: 3,
       spec: { profile: 'coding', task: 'Fix the issue in code', evidence_policy: { requirements: [] } },
-    });
+    }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
       {
         event_id: 'activity-1',
@@ -442,13 +447,13 @@ describe('OmnixRunCard', () => {
   });
 
   it('keeps an in-flight Pi tool inspectable directly under Thinking', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-thinking',
       status: 'running',
       desired_state: 'running',
       revision: 1,
       spec: { profile: 'coding', task: 'Inspect the repository', evidence_policy: { requirements: [] } },
-    });
+    }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
       {
         event_id: 'thinking-tool-1',
@@ -519,7 +524,7 @@ describe('OmnixRunCard', () => {
   });
 
   it('shows durable progress, tests, and diff evidence', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue(fixture({
       run_id: 'run-evidence',
       status: 'completed',
       desired_state: 'running',
@@ -528,7 +533,7 @@ describe('OmnixRunCard', () => {
       completed_at: '2026-08-27T00:01:37Z',
       usage: { input_tokens: 1234, output_tokens: 567, input_tokens_reported: true, output_tokens_reported: true },
       spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
-    });
+    }));
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
       {
         event_id: 'event-plan',
@@ -599,7 +604,7 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-27T00:01:37Z',
       },
     ]);
-    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([{
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue(fixture([{
       revision_id: 'revision-1',
       run_id: 'run-evidence',
       sequence: 1,
@@ -611,7 +616,7 @@ describe('OmnixRunCard', () => {
       expected_artifacts: ['diff'],
       acceptance_checks: ['successful_test_command'],
       created_at: '2026-08-27T00:00:00Z',
-    }]);
+    }]));
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
       run_id: 'run-evidence',
       evaluated_at: '2026-08-27T00:00:02Z',

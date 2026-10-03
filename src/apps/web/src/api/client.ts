@@ -1,5 +1,9 @@
 import type { components, paths } from './generated/types';
+import { ApiError, ApiTimeoutError } from './errors';
+import { createGatewayClient, requestTimeout, unwrap, type GatewayClient } from './http';
 import { withRpgGenesisContract } from './rpgGenesisPresentation';
+
+export { ApiError, ApiTimeoutError } from './errors';
 
 export type GatewayApiPaths = paths;
 export type GatewayApiPath = keyof GatewayApiPaths & string;
@@ -12,13 +16,13 @@ export type ChatSessionListResponse = components['schemas']['ChatSessionListResp
 export type ChatSessionAttachments = Record<string, string[]>;
 export type CheckpointEnvelope = components['schemas']['CheckpointEnvelope'];
 export type CodexAuthStatus = components['schemas']['CodexAuthStatus'];
-type GeneratedCreateChatSessionRequest = components['schemas']['CreateChatSessionRequest'];
-export type CreateChatSessionRequest = Partial<GeneratedCreateChatSessionRequest>;
+export type CreateChatSessionRequest = components['schemas']['CreateChatSessionRequest'];
 export type CreateJobRequest = components['schemas']['CreateJobRequest'];
 export type DiagnosticsPayload = components['schemas']['DiagnosticsPayload'];
 export type JobListResponse = components['schemas']['JobListResponse'];
 export type ListJobsOptions = { limit?: number; full?: boolean; cursor?: string | null };
-export type ListAssetsOptions = { type?: string; module?: string; limit?: number; cursor?: string | null };
+type AssetListQuery = NonNullable<paths['/api/assets']['get']['parameters']['query']>;
+export type ListAssetsOptions = { type?: AssetListQuery['type']; module?: string; limit?: number; cursor?: string | null };
 export type JobRecord = components['schemas']['JobRecord'];
 export type ModelResidencyDiagnostics = components['schemas']['ModelResidencyDiagnostics'];
 export type ModelResidencyRecord = components['schemas']['ModelResidencyRecord'];
@@ -26,126 +30,28 @@ export type PersistenceInventory = components['schemas']['PersistenceInventory']
 export type ProviderFacadePayload = components['schemas']['ProviderFacadePayload'];
 export type ProviderModelRefreshRequest = components['schemas']['ProviderModelRefreshRequest'];
 export type ReportListResponse = components['schemas']['ReportListResponse'];
-type GeneratedSendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
-export type CodingApprovalPolicy = 'always_ask' | 'ask_sensitive' | 'allow_automatic';
-export type SendChatMessageRequest = Pick<GeneratedSendChatMessageRequest, 'content'>
-  & Partial<Omit<GeneratedSendChatMessageRequest, 'content'>>
-  & { coding_approval_policy?: CodingApprovalPolicy };
+export type SendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
+export type CodingApprovalPolicy = NonNullable<SendChatMessageRequest['coding_approval_policy']>;
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
-export interface AgentRunSnapshot {
-  run_id: string;
-  status: string;
-  desired_state: string;
-  revision: number;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    input_tokens_reported: boolean;
-    output_tokens_reported: boolean;
-  };
-  started_at?: string | null;
-  completed_at?: string | null;
-  last_error?: string | null;
-  superseded_by_run_id?: string | null;
-  spec: {
-    profile: string;
-    task: string;
-    objective?: string;
-    supersedes_run_id?: string | null;
-    request_mode?: Record<string, unknown> | null;
-    evidence_policy?: Record<string, unknown>;
-  };
-}
+export type AgentRunSnapshot = components['schemas']['AgentRunSnapshot'];
+export type AgentRunEvent = components['schemas']['AgentEvent'];
+export type AgentArtifact = components['schemas']['AgentArtifact'];
+export type AgentApproval = components['schemas']['AgentApproval'];
+export type AgentTaskRevision = components['schemas']['TaskRevision'];
+export type AgentEvidenceReceipt = components['schemas']['EvidenceReceipt'];
+export type AgentEvidenceSet = components['schemas']['EvidenceSet'];
+export type TaskGraphRunSnapshot = components['schemas']['TaskGraphRunSnapshot'];
+export type TaskGraphEvent = components['schemas']['TaskGraphEvent'];
+export type DeleteChatSessionResponse = components['schemas']['DeleteChatSessionResponse'];
+export type DeepResearchPlanUpdateRequest = components['schemas']['DeepResearchPlanUpdateRequest'];
+export type AssetContentResponse = components['schemas']['AssetContentResponse'];
+export type SaveStoryAssetRequest = components['schemas']['SaveStoryAssetRequest'];
+export type SavedStoryAssetResponse = components['schemas']['SavedStoryAssetResponse'];
 
-export interface AgentRunEvent {
-  event_id: string;
-  run_id: string;
-  sequence?: number | null;
-  event_type: string;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface AgentArtifact {
-  artifact_id: string;
-  run_id: string;
-  kind: string;
-  name: string;
-  storage_ref?: string | null;
-  checksum?: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface AgentApproval {
-  approval_id: string;
-  run_id: string;
-  capability_id: string;
-  state: string;
-  request_payload: Record<string, unknown>;
-  resolution_payload: Record<string, unknown>;
-  created_at: string;
-  resolved_at?: string | null;
-}
-
-export interface AgentTaskRevision {
-  revision_id: string;
-  run_id: string;
-  sequence: number;
-  previous_revision_id?: string | null;
-  source_command_id?: string | null;
-  user_instruction: string;
-  effective_objective: string;
-  evidence_decision: {
-    confidence: number;
-    reason: string;
-    classifier: string;
-    policy: Record<string, unknown>;
-  };
-  required_local_capabilities: string[];
-  required_external_capabilities: string[];
-  expected_artifacts: string[];
-  acceptance_checks: string[];
-  created_at: string;
-}
-
-export interface AgentEvidenceReceipt {
-  receipt_id: string;
-  run_id: string;
-  task_revision_id?: string | null;
-  capability_id: string;
-  source_class: string;
-  subject?: Record<string, unknown> | null;
-  provider?: string | null;
-  origin?: string | null;
-  source_manifest_id?: string | null;
-  source_count: number;
-  observed_at: string;
-  trust_level: string;
-}
-
-export interface AgentEvidenceSet {
-  run_id: string;
-  evaluated_at: string;
-  requirements: Array<{
-    requirement_id: string;
-    status: string;
-    matching_receipt_ids: string[];
-    rejected_receipt_ids: string[];
-    reason?: string | null;
-  }>;
-  missing_requirements: string[];
-  stale_receipts: string[];
-  wrong_subject_receipts: string[];
-  insufficient_trust_receipts: string[];
-  source_manifest_ids: string[];
-  attribution_refs: string[];
-  passed: boolean;
-}
-
+/** `/api/workflow-runs/{run_id}` returns an untyped object; the fields the UI reads. */
 export interface WorkflowRunSnapshot {
   run_id: string;
   workflow_id: string;
@@ -154,75 +60,6 @@ export interface WorkflowRunSnapshot {
   current_step_id?: string | null;
   input_payload: Record<string, unknown>;
   revision: number;
-}
-
-export interface TaskGraphRunSnapshot {
-  run_id: string;
-  status: string;
-  revision: number;
-  result?: unknown;
-  last_error?: string | null;
-  graph: {
-    graph_id?: string;
-    revision?: number;
-    nodes: Array<{
-      id: string;
-      kind: string;
-      profile_id?: string | null;
-      objective?: string;
-    }>;
-    output_contract?: Record<string, unknown>;
-    reference_context?: string;
-  };
-  node_states: Array<{
-    node_id: string;
-    status: string;
-    child_run_id?: string | null;
-    last_error?: string | null;
-    output?: Record<string, unknown>;
-  }>;
-}
-
-export interface TaskGraphEvent {
-  event_id: string;
-  run_id: string;
-  sequence?: number | null;
-  event_type: string;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface DeleteChatSessionResponse {
-  ok: boolean;
-  session_id: string;
-}
-
-export interface DeepResearchPlanUpdateRequest {
-  max_pages: number;
-}
-
-export interface AssetContentResponse {
-  asset: AssetListResponse['assets'][number];
-  content: string;
-  encoding: string;
-  size_bytes: number;
-  truncated: boolean;
-}
-
-export interface SaveStoryAssetRequest {
-  title: string;
-  content: string;
-  premise?: string;
-  provider_label?: string;
-  word_count?: number;
-  chapter_count?: number;
-  source_job_id?: string | null;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SavedStoryAssetResponse {
-  asset: AssetListResponse['assets'][number];
-  content: string;
 }
 
 export interface RpgPlayerOptions {
@@ -363,44 +200,6 @@ const ASSET_PAGE_SIZE = 200;
 // Stops a runaway loop; 200 pages hold 40,000 assets.
 const MAX_ASSET_PAGES = 200;
 
-export class ApiError extends Error {
-  readonly status: number;
-  readonly body: string;
-  /** The gateway's X-Request-ID for the failed call; its log lines carry it. */
-  readonly requestId: string | undefined;
-
-  constructor(status: number, body: string, requestId?: string) {
-    let detail = '';
-    try {
-      const parsed = JSON.parse(body) as { detail?: unknown; error?: unknown };
-      const candidate = parsed.detail ?? parsed.error;
-      detail = typeof candidate === 'string'
-        ? candidate
-        : candidate && typeof candidate === 'object'
-          ? JSON.stringify(candidate)
-          : '';
-    } catch {
-      detail = body.trim();
-    }
-    // The id lets a user's report be matched to the gateway's log lines.
-    super(`Omnix API request failed with status ${status}${detail ? `: ${detail}` : ''}${requestId ? ` (request id ${requestId})` : ''}`);
-    this.name = 'ApiError';
-    this.status = status;
-    this.body = body;
-    this.requestId = requestId;
-  }
-}
-
-export class ApiTimeoutError extends Error {
-  readonly timeoutMs: number;
-
-  constructor(timeoutMs: number, message?: string) {
-    super(message ?? `Omnix API request timed out after ${Math.round(timeoutMs / 1000)}s.`);
-    this.name = 'ApiTimeoutError';
-    this.timeoutMs = timeoutMs;
-  }
-}
-
 function nowMs(): number {
   if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
     return performance.now();
@@ -444,9 +243,28 @@ export class OmnixApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
 
+  private readonly api: GatewayClient;
+
   constructor(options: ApiClientOptions = {}) {
     this.baseUrl = options.baseUrl ?? '';
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.api = createGatewayClient({ baseUrl: options.baseUrl || undefined, fetchImpl: this.fetchImpl });
+  }
+
+  /** Sends one typed call, optionally with a timeout, and returns its body (WP-9.3). */
+  private async call<T>(
+    send: (signal?: AbortSignal) => Promise<{ data?: T; error?: unknown; response: Response }>,
+    options: ApiRequestOptions = {},
+  ): Promise<T> {
+    if (!options.timeoutMs) return unwrap(send());
+    const timeout = requestTimeout(options.timeoutMs, options.timeoutMessage);
+    try {
+      return await unwrap(send(timeout.signal));
+    } catch (error) {
+      throw timeout.timedOut(error);
+    } finally {
+      timeout.clear();
+    }
   }
 
   async get<T>(path: `/api/${string}`): Promise<T> {
@@ -468,86 +286,67 @@ export class OmnixApiClient {
   async listChatSessions(): Promise<ChatSessionListResponse> {
     const sessions: ChatSessionListResponse['sessions'] = [];
     const cursors = new Set<string>();
-    let path: `/api/${string}` = '/api/chat/sessions';
-    let nextCursor: string | null = null;
+    let cursor: string | null = null;
     do {
-      const page = await this.get<ChatSessionListResponse>(path);
+      const query: { limit?: number; cursor?: string } = cursor ? { limit: 100, cursor } : {};
+      const page: ChatSessionListResponse = await this.call(() => this.api.GET('/api/chat/sessions', { params: { query } }));
       sessions.push(...page.sessions);
-      nextCursor = page.next_cursor ?? null;
-      if (nextCursor && cursors.has(nextCursor)) {
+      cursor = page.next_cursor ?? null;
+      if (cursor && cursors.has(cursor)) {
         throw new Error('Chat session pagination did not advance');
       }
-      if (nextCursor) {
-        cursors.add(nextCursor);
-        path = `/api/chat/sessions?limit=100&cursor=${encodeURIComponent(nextCursor)}`;
-      }
-    } while (nextCursor);
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
     return { sessions, next_cursor: null };
   }
 
   async createChatSession(request: CreateChatSessionRequest): Promise<ChatSession> {
-    return this.post<CreateChatSessionRequest, ChatSession>('/api/chat/sessions', request);
+    return this.call(() => this.api.POST('/api/chat/sessions', { body: request }));
   }
 
   async getChatSession(sessionId: string, options?: { includeAttachments?: boolean }): Promise<ChatSession> {
-    const query = options?.includeAttachments === false ? '?include_attachments=false' : '';
-    return this.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(sessionId)}${query}`);
+    const query = options?.includeAttachments === false ? { include_attachments: false } : {};
+    return this.call(() => this.api.GET('/api/chat/sessions/{session_id}', { params: { path: { session_id: sessionId }, query } }));
   }
 
   async getChatSessionAttachments(sessionId: string): Promise<ChatSessionAttachments> {
-    return this.get<ChatSessionAttachments>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/attachments`);
+    return this.call(() => this.api.GET('/api/chat/sessions/{session_id}/attachments', { params: { path: { session_id: sessionId } } }));
   }
 
   async deleteChatSession(sessionId: string): Promise<DeleteChatSessionResponse> {
-    return this.request<DeleteChatSessionResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+    return this.call(() => this.api.DELETE('/api/chat/sessions/{session_id}', { params: { path: { session_id: sessionId } } }));
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
-    return this.post<SendChatMessageRequest, SendChatMessageResponse>(
-      `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
-      request,
-      {
-        timeoutMs: 15_000,
-        timeoutMessage: 'Chat request was not accepted by the gateway within 15s.',
-      },
+    return this.call(
+      (signal) => this.api.POST('/api/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
+      { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
     );
   }
 
   async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
-    return this.get<AgentRunSnapshot>(`/api/agent-runs/${encodeURIComponent(runId)}`);
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}', { params: { path: { run_id: runId } } }));
   }
 
   async listAgentRunEvents(runId: string, afterSequence = 0): Promise<AgentRunEvent[]> {
-    const query = afterSequence > 0
-      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
-      : '';
-    return this.get<AgentRunEvent[]>(
-      `/api/agent-runs/${encodeURIComponent(runId)}/events${query}`,
-    );
+    const query = afterSequence > 0 ? { after_sequence: afterSequence } : {};
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/events', { params: { path: { run_id: runId }, query } }));
   }
 
   async listAgentArtifacts(runId: string): Promise<AgentArtifact[]> {
-    return this.get<AgentArtifact[]>(
-      `/api/agent-runs/${encodeURIComponent(runId)}/artifacts`,
-    );
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/artifacts', { params: { path: { run_id: runId } } }));
   }
 
   async listAgentTaskRevisions(runId: string): Promise<AgentTaskRevision[]> {
-    return this.get<AgentTaskRevision[]>(
-      `/api/agent-runs/${encodeURIComponent(runId)}/task-revisions`,
-    );
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/task-revisions', { params: { path: { run_id: runId } } }));
   }
 
   async listAgentEvidenceReceipts(runId: string): Promise<AgentEvidenceReceipt[]> {
-    return this.get<AgentEvidenceReceipt[]>(
-      `/api/agent-runs/${encodeURIComponent(runId)}/evidence/receipts`,
-    );
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/evidence/receipts', { params: { path: { run_id: runId } } }));
   }
 
   async getAgentEvidenceSet(runId: string): Promise<AgentEvidenceSet> {
-    return this.get<AgentEvidenceSet>(
-      `/api/agent-runs/${encodeURIComponent(runId)}/evidence`,
-    );
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/evidence', { params: { path: { run_id: runId } } }));
   }
 
   async commandAgentRun(
@@ -555,30 +354,24 @@ export class OmnixApiClient {
     commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
     payload: Record<string, unknown> = {},
   ): Promise<AgentRunSnapshot> {
-    return this.post(
-      `/api/agent-runs/${encodeURIComponent(runId)}/commands`,
-      { command_type: commandType, payload },
-    );
+    return this.call(() => this.api.POST('/api/agent-runs/{run_id}/commands', {
+      params: { path: { run_id: runId } },
+      body: { command_type: commandType, payload },
+    }));
   }
 
   async listAgentApprovals(runId: string, state?: string): Promise<AgentApproval[]> {
-    const query = state ? `?state=${encodeURIComponent(state)}` : '';
-    return this.get<AgentApproval[]>(`/api/agent-runs/${encodeURIComponent(runId)}/approvals${query}`);
+    const query = state ? { state } : {};
+    return this.call(() => this.api.GET('/api/agent-runs/{run_id}/approvals', { params: { path: { run_id: runId }, query } }));
   }
 
   async getTaskGraphRun(runId: string): Promise<TaskGraphRunSnapshot> {
-    return this.get<TaskGraphRunSnapshot>(
-      `/api/task-graph-runs/${encodeURIComponent(runId)}`,
-    );
+    return this.call(() => this.api.GET('/api/task-graph-runs/{run_id}', { params: { path: { run_id: runId } } }));
   }
 
   async listTaskGraphEvents(runId: string, afterSequence = 0): Promise<TaskGraphEvent[]> {
-    const query = afterSequence > 0
-      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
-      : '';
-    return this.get<TaskGraphEvent[]>(
-      `/api/task-graph-runs/${encodeURIComponent(runId)}/events${query}`,
-    );
+    const query = afterSequence > 0 ? { after_sequence: afterSequence } : {};
+    return this.call(() => this.api.GET('/api/task-graph-runs/{run_id}/events', { params: { path: { run_id: runId }, query } }));
   }
 
   async commandTaskGraphRun(
@@ -587,18 +380,19 @@ export class OmnixApiClient {
     nodeId?: string,
     approvalId?: string,
   ): Promise<TaskGraphRunSnapshot> {
-    return this.post(
-      `/api/task-graph-runs/${encodeURIComponent(runId)}/commands`,
-      {
+    return this.call(() => this.api.POST('/api/task-graph-runs/{run_id}/commands', {
+      params: { path: { run_id: runId } },
+      body: {
         command,
         ...(nodeId ? { node_id: nodeId } : {}),
         ...(approvalId ? { approval_id: approvalId } : {}),
       },
-    );
+    }));
   }
 
   async getWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
-    return this.get<WorkflowRunSnapshot>(`/api/workflow-runs/${encodeURIComponent(runId)}`);
+    const run = await this.call(() => this.api.GET('/api/workflow-runs/{run_id}', { params: { path: { run_id: runId } } }));
+    return run as unknown as WorkflowRunSnapshot;
   }
 
   async commandWorkflowRun(
@@ -606,78 +400,69 @@ export class OmnixApiClient {
     command: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
     stepId?: string,
   ): Promise<WorkflowRunSnapshot> {
-    return this.post(
-      `/api/workflow-runs/${encodeURIComponent(runId)}/commands`,
-      { command, ...(stepId ? { step_id: stepId } : {}) },
-    );
+    const run = await this.call(() => this.api.POST('/api/workflow-runs/{run_id}/commands', {
+      params: { path: { run_id: runId } },
+      body: { command, ...(stepId ? { step_id: stepId } : {}) },
+    }));
+    return run as unknown as WorkflowRunSnapshot;
   }
 
   async updateDeepResearchPlan(jobId: string, request: DeepResearchPlanUpdateRequest): Promise<JobRecord> {
-    return this.request<JobRecord>(
-      `/api/assistant/context/research/jobs/${encodeURIComponent(jobId)}/plan`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      },
-    );
+    return this.call(() => this.api.PATCH('/api/assistant/context/research/jobs/{job_id}/plan', { params: { path: { job_id: jobId } }, body: request }));
   }
 
   async startDeepResearchPlan(jobId: string): Promise<JobRecord> {
-    return this.post<Record<string, never>, JobRecord>(
-      `/api/assistant/context/research/jobs/${encodeURIComponent(jobId)}/start`,
-      {},
-    );
+    return this.call(() => this.api.POST('/api/assistant/context/research/jobs/{job_id}/start', { params: { path: { job_id: jobId } } }));
   }
 
   async listProviders(): Promise<ProviderFacadePayload> {
-    return this.get<ProviderFacadePayload>('/api/providers');
+    return this.call(() => this.api.GET('/api/providers'));
   }
 
   async listModels(): Promise<ProviderFacadePayload> {
-    return this.get<ProviderFacadePayload>('/api/models');
+    return this.call(() => this.api.GET('/api/models'));
   }
 
   async getCodexAuthStatus(): Promise<CodexAuthStatus> {
-    return this.get<CodexAuthStatus>('/api/providers/chatgpt-codex/auth');
+    return this.call(() => this.api.GET('/api/providers/chatgpt-codex/auth'));
   }
 
   async startCodexLogin(): Promise<CodexAuthStatus> {
-    return this.post<Record<string, never>, CodexAuthStatus>('/api/providers/chatgpt-codex/login', {});
+    return this.call(() => this.api.POST('/api/providers/chatgpt-codex/login'));
   }
 
   async refreshProviders(request: ProviderModelRefreshRequest = { scope: 'all', priority: 0 }): Promise<JobRecord> {
-    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/providers/refresh', request);
+    return this.call(() => this.api.POST('/api/providers/refresh', { body: request }));
   }
 
   async refreshModels(request: ProviderModelRefreshRequest = { scope: 'models', priority: 0 }): Promise<JobRecord> {
-    return this.post<ProviderModelRefreshRequest, JobRecord>('/api/models/refresh', request);
+    return this.call(() => this.api.POST('/api/models/refresh', { body: request }));
   }
 
+  // openapi-fetch reads the policy's model pairs as string[][]; the schema says pairs.
   async getModelResidency(): Promise<ModelResidencyDiagnostics> {
-    return this.get<ModelResidencyDiagnostics>('/api/model-residency');
+    return this.call(() => this.api.GET('/api/model-residency')) as Promise<ModelResidencyDiagnostics>;
   }
 
   async reportModelResidency(request: ModelResidencyRecord): Promise<ModelResidencyDiagnostics> {
-    return this.post<ModelResidencyRecord, ModelResidencyDiagnostics>('/api/model-residency', request);
+    return this.call(() => this.api.POST('/api/model-residency', { body: request })) as Promise<ModelResidencyDiagnostics>;
   }
 
   async deleteModelResidency(modelId: string): Promise<ModelResidencyDiagnostics> {
-    return this.request<ModelResidencyDiagnostics>(`/api/model-residency/${encodeURIComponent(modelId)}`, { method: 'DELETE' });
+    return this.call(() => this.api.DELETE('/api/model-residency/{model_id}', { params: { path: { model_id: modelId } } })) as Promise<ModelResidencyDiagnostics>;
   }
 
   async listJobs(options: ListJobsOptions = {}): Promise<JobListResponse> {
-    const query = new URLSearchParams();
-    if (options.limit !== undefined) query.set('limit', String(options.limit));
-    if (options.full !== undefined) query.set('full', String(options.full));
-    if (options.cursor) query.set('cursor', options.cursor);
-    const suffix = query.size ? `?${query.toString()}` : '';
-    return this.get<JobListResponse>(`/api/jobs${suffix}`);
+    const query: { limit?: number; full?: boolean; cursor?: string } = {};
+    if (options.limit !== undefined) query.limit = options.limit;
+    if (options.full !== undefined) query.full = options.full;
+    if (options.cursor) query.cursor = options.cursor;
+    return this.call(() => this.api.GET('/api/jobs', { params: { query } }));
   }
 
   /** Voice Studio's bounded job history: recent voice and voice-cloning jobs only. */
   async listVoiceJobSummaries(limit = 40): Promise<JobListResponse> {
-    return this.get<JobListResponse>(`/api/jobs/voice-summaries?limit=${encodeURIComponent(String(limit))}`);
+    return this.call(() => this.api.GET('/api/jobs/voice-summaries', { params: { query: { limit } } }));
   }
 
   async createJob(request: CreateJobRequest, options: ApiRequestOptions = {}): Promise<JobRecord> {
@@ -685,22 +470,22 @@ export class OmnixApiClient {
     if (foregroundTurn) {
       return foregroundTurn;
     }
-    return this.post<CreateJobRequest, JobRecord>('/api/jobs', request, options);
+    return this.call((signal) => this.api.POST('/api/jobs', { body: request, signal }), options);
   }
 
   async getJob(jobId: string): Promise<JobRecord> {
-    return this.get<JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}`);
+    return this.call(() => this.api.GET('/api/jobs/{job_id}', { params: { path: { job_id: jobId } } }));
   }
 
   async cancelJob(jobId: string, reason: string): Promise<JobRecord> {
-    return this.post<CancelJobRequest, JobRecord>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { reason });
+    return this.call(() => this.api.POST('/api/jobs/{job_id}/cancel', { params: { path: { job_id: jobId } }, body: { reason } }));
   }
 
   /**
    * Every asset matching the filter, newest first. The gateway returns pages
    * of at most 200; this follows `next_cursor` until the last page.
    */
-  async listAssets(filter: { type?: string; module?: string } = {}): Promise<AssetListResponse> {
+  async listAssets(filter: Pick<ListAssetsOptions, 'type' | 'module'> = {}): Promise<AssetListResponse> {
     const assets: AssetListResponse['assets'] = [];
     let cursor: string | null | undefined;
     for (let page = 0; page < MAX_ASSET_PAGES; page += 1) {
@@ -716,35 +501,36 @@ export class OmnixApiClient {
 
   /** One page of assets, newest first; pass the previous page's `next_cursor` for the next one. */
   async listAssetPage(options: ListAssetsOptions = {}): Promise<AssetListResponse> {
-    const params = new URLSearchParams({ limit: String(options.limit ?? ASSET_PAGE_SIZE) });
-    if (options.type) params.set('type', options.type);
-    if (options.module) params.set('module', options.module);
-    if (options.cursor) params.set('cursor', options.cursor);
-    return this.get<AssetListResponse>(`/api/assets?${params.toString()}`);
+    const query: AssetListQuery = { limit: options.limit ?? ASSET_PAGE_SIZE };
+    if (options.type) query.type = options.type;
+    if (options.module) query.module = options.module;
+    if (options.cursor) query.cursor = options.cursor;
+    return this.call(() => this.api.GET('/api/assets', { params: { query } }));
   }
 
   async listVoiceLibrary(): Promise<AssetListResponse> {
-    return this.get<AssetListResponse>('/api/voice-library');
+    return this.call(() => this.api.GET('/api/voice-library'));
   }
 
   async getAssetContent(assetId: string): Promise<AssetContentResponse> {
-    return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
+    return this.call(() => this.api.GET('/api/assets/{asset_id}/content', { params: { path: { asset_id: assetId } } }));
   }
 
   async deleteVoiceAsset(assetId: string): Promise<{ ok: boolean; asset_id: string; deleted: boolean; file_deleted: boolean }> {
-    return this.request(`/api/voice-cloning/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
+    const result = await this.call(() => this.api.DELETE('/api/voice-cloning/assets/{asset_id}', { params: { path: { asset_id: assetId } } }));
+    return result as unknown as { ok: boolean; asset_id: string; deleted: boolean; file_deleted: boolean };
   }
 
   async saveStoryAsset(request: SaveStoryAssetRequest): Promise<SavedStoryAssetResponse> {
-    return this.post<SaveStoryAssetRequest, SavedStoryAssetResponse>('/api/assets/story', request);
+    return this.call(() => this.api.POST('/api/assets/story', { body: request }));
   }
 
   async previewLegacyNonImageAssetImport(): Promise<AssetLegacyImportDryRun> {
-    return this.request<AssetLegacyImportDryRun>('/api/assets/migrations/legacy-non-image/dry-run', { method: 'POST' });
+    return this.call(() => this.api.POST('/api/assets/migrations/legacy-non-image/dry-run'));
   }
 
   async listReports(): Promise<ReportListResponse> {
-    return this.get<ReportListResponse>('/api/reports');
+    return this.call(() => this.api.GET('/api/reports'));
   }
 
   async getReplayPersistenceInventory(): Promise<PersistenceInventory> {

@@ -16,6 +16,7 @@ import { DEFAULT_OUTPUT_SETTINGS } from './outputDefaults';
 import { firstResultAsset } from './resultList';
 import { parseScriptSegments, parseScriptSpeakers, type ScriptSegmentRow, type ScriptSpeakerRow } from './scriptLines';
 import './VoiceStudioWorkspace.css';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 interface VoiceFormValues {
   text: string;
@@ -604,8 +605,8 @@ function VoiceLibraryRow({ asset, deleting, onDelete, onPreview, onUse }: { asse
   return <div className="voice-library-row"><span><i>{voiceInitial(asset)}</i><b>{voiceAssetName(asset)}</b><small>{voiceProfileDescription(asset)}</small></span><span title={voiceProfileName(asset)}>{voiceProfileName(asset)}</span><span className="ready-chip">Ready</span><span className="voice-library-actions"><Button aria-label={`Preview ${voiceAssetName(asset)}`} size="xs" variant="subtle" onClick={onPreview}>Preview</Button><Button size="xs" variant="subtle" onClick={onUse}>Use</Button><Button aria-label={`Delete ${voiceAssetName(asset)}`} color="red" loading={deleting} size="xs" variant="outline" onClick={onDelete}>Delete</Button></span></div>;
 }
 
-function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current: number; total: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
-  const progress = progressPercent(job.progress);
+function QueueRow({ job, onSelect, selected }: { job: { id: string; type: string; status: string; module: string; progress?: { current?: number; total?: number }; stages?: Array<{ label?: string; status?: string }> }; onSelect?: () => void; selected?: boolean }) {
+  const progress = jobProgressPercent(job.progress);
   const stageSummary = job.stages?.length ? `${job.stages.length} stages · ${job.stages.slice(0, 2).map((stage) => stage.label || stage.status || 'stage').join(', ')}` : job.module;
   return <article className={selected ? 'queue-row-final selected' : 'queue-row-final'}><span className="job-icon">▥</span><div><b>{job.type}</b><small>{stageSummary}</small></div><div><OmnixStatusPill>{job.status}</OmnixStatusPill>{progress ? <div className="queue-progress"><span style={{ width: `${progress}%` }} /></div> : null}</div><small>{progress || job.status === 'completed' ? `${progress}%` : '—'}</small><button type="button" onClick={onSelect}>▶</button></article>;
 }
@@ -776,11 +777,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('Audio sample could not be read.'));
     reader.readAsDataURL(blob);
   });
-}
-
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) return 0;
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
 }
 
 function voiceStoragePath(asset: VoiceAsset | undefined): string {

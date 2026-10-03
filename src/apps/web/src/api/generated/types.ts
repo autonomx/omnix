@@ -9137,12 +9137,12 @@ export interface components {
              * Accept Live2D Runtime Terms
              * @default false
              */
-            accept_live2d_runtime_terms: boolean;
+            accept_live2d_runtime_terms?: boolean;
             /**
              * Accept Model Terms
              * @default false
              */
-            accept_model_terms: boolean;
+            accept_model_terms?: boolean;
             /** Model Id */
             model_id: string;
         };
@@ -9403,7 +9403,7 @@ export interface components {
              * Stream
              * @default false
              */
-            stream: boolean;
+            stream?: boolean;
             /** Temperature */
             temperature?: number | null;
             /** Tool Choice */
@@ -9462,7 +9462,7 @@ export interface components {
              * Content
              * @default
              */
-            content: unknown;
+            content?: unknown;
             /** Name */
             name?: string | null;
             /** Role */
@@ -9666,12 +9666,12 @@ export interface components {
              * Clear Api Key Id
              * @default false
              */
-            clear_api_key_id: boolean;
+            clear_api_key_id?: boolean;
             /**
              * Clear Secret Key
              * @default false
              */
-            clear_secret_key: boolean;
+            clear_secret_key?: boolean;
             /** Secret Key */
             secret_key?: string | null;
         };
@@ -9882,12 +9882,12 @@ export interface components {
              * @default allow_automatic
              * @enum {string}
              */
-            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            approval_policy?: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
             /**
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
         };
         /** AssistantCapabilityDashboard */
         AssistantCapabilityDashboard: {
@@ -9957,18 +9957,18 @@ export interface components {
              * Agent Mode
              * @default false
              */
-            agent_mode: boolean;
+            agent_mode?: boolean;
             /**
              * Allow Research Downgrade
              * @default false
              */
-            allow_research_downgrade: boolean;
+            allow_research_downgrade?: boolean;
             /**
              * Coding Approval Policy
              * @default ask_sensitive
              * @enum {string}
              */
-            coding_approval_policy: "always_ask" | "ask_sensitive" | "allow_automatic";
+            coding_approval_policy?: "always_ask" | "ask_sensitive" | "allow_automatic";
             /** Content */
             content: string;
             /** Deep Research Max Pages */
@@ -9978,7 +9978,7 @@ export interface components {
              * @default single
              * @enum {string}
              */
-            desktop_capture_mode: "single" | "temporal";
+            desktop_capture_mode?: "single" | "temporal";
             /** Desktop Combined Image Data Url */
             desktop_combined_image_data_url?: string | null;
             /** Desktop Current Image Data Url */
@@ -9995,7 +9995,7 @@ export interface components {
              * Dry Run
              * @default false
              */
-            dry_run: boolean;
+            dry_run?: boolean;
             /** Image Data Url */
             image_data_url?: string | null;
             /** Image Data Urls */
@@ -10030,12 +10030,12 @@ export interface components {
              * @default disabled
              * @enum {string}
              */
-            web_research_mode: "disabled" | "quick" | "deep";
+            web_research_mode?: "disabled" | "quick" | "deep";
             /**
              * Web Search Max Results
              * @default 5
              */
-            web_search_max_results: number;
+            web_search_max_results?: number;
             /** Workspace Root */
             workspace_root?: string | null;
         };
@@ -10244,12 +10244,12 @@ export interface components {
              * @default not_configured
              * @enum {string}
              */
-            connection_status: "not_configured" | "connected" | "error";
+            connection_status?: "not_configured" | "connected" | "error";
             /**
              * Enabled
              * @default false
              */
-            enabled: boolean;
+            enabled?: boolean;
             /** Tool Id */
             tool_id: string;
         };
@@ -10311,7 +10311,7 @@ export interface components {
              * Message
              * @default
              */
-            message: string;
+            message?: string;
         };
         /** AssistantToolLedgerEntry */
         AssistantToolLedgerEntry: {
@@ -10361,12 +10361,12 @@ export interface components {
              * Client Id
              * @default
              */
-            client_id: string;
+            client_id?: string;
             /**
              * Client Secret
              * @default
              */
-            client_secret: string;
+            client_secret?: string;
         };
         /** AssistantToolProposalDecisionRequest */
         AssistantToolProposalDecisionRequest: {
@@ -10577,27 +10577,27 @@ export interface components {
              * Appearance Template
              * @default Create an original fictional companion whose visual design matches the tone suggested by the voice name. Do not depict or imitate a real public person.
              */
-            appearance_template: string;
+            appearance_template?: string;
             /**
              * Include Reference Profiles
              * @default false
              */
-            include_reference_profiles: boolean;
+            include_reference_profiles?: boolean;
             /**
              * Provider Id
              * @default
              */
-            provider_id: string;
+            provider_id?: string;
             /**
              * Queue Avatar Generation
              * @default true
              */
-            queue_avatar_generation: boolean;
+            queue_avatar_generation?: boolean;
             /**
              * Style
              * @default illustrated character portrait
              */
-            style: string;
+            style?: string;
         };
         /** BackfillClonedVoiceCharactersResponse */
         BackfillClonedVoiceCharactersResponse: {
@@ -10639,33 +10639,33 @@ export interface components {
              * Allow Short
              * @default false
              */
-            allow_short: boolean;
+            allow_short?: boolean;
             /**
              * Commission Bps
              * @default 0
              */
-            commission_bps: number | string;
+            commission_bps?: number | string;
             /**
              * Fill Timing
              * @default next_bar_open
              * @constant
              */
-            fill_timing: "next_bar_open";
+            fill_timing?: "next_bar_open";
             /**
              * Position Size Fraction
              * @default 1
              */
-            position_size_fraction: number | string;
+            position_size_fraction?: number | string;
             /**
              * Slippage Bps
              * @default 0
              */
-            slippage_bps: number | string;
+            slippage_bps?: number | string;
             /**
              * Use Finalized Bars Only
              * @default true
              */
-            use_finalized_bars_only: boolean;
+            use_finalized_bars_only?: boolean;
         };
         /** BacktestListResponse */
         BacktestListResponse: {
@@ -10700,12 +10700,12 @@ export interface components {
              * Formula Version
              * @default omnix-indicators-v2
              */
-            formula_version: string;
+            formula_version?: string;
             /**
              * Initial Cash
              * @default 10000
              */
-            initial_cash: number | string;
+            initial_cash?: number | string;
             strategy?: components["schemas"]["MovingAverageCrossStrategy"];
         };
         /** BacktestRunRequest */
@@ -10868,17 +10868,17 @@ export interface components {
              * Catalyst Negative
              * @default 0
              */
-            catalyst_negative: number | string;
+            catalyst_negative?: number | string;
             /**
              * Catalyst Positive
              * @default 0
              */
-            catalyst_positive: number | string;
+            catalyst_positive?: number | string;
             /**
              * Dilution Flag
              * @default 0
              */
-            dilution_flag: number | string;
+            dilution_flag?: number | string;
             /** Float Shares Log10 */
             float_shares_log10?: number | string | null;
             /** Gap Pct */
@@ -11105,17 +11105,17 @@ export interface components {
              * Iterations
              * @default 800
              */
-            iterations: number;
+            iterations?: number;
             /**
              * L2 Penalty
              * @default 0.001
              */
-            l2_penalty: number | string;
+            l2_penalty?: number | string;
             /**
              * Learning Rate
              * @default 0.05
              */
-            learning_rate: number | string;
+            learning_rate?: number | string;
             /** Model Version */
             model_version: string;
             /** Trained At */
@@ -11132,12 +11132,12 @@ export interface components {
              * Minimum Examples
              * @default 100
              */
-            minimum_examples: number;
+            minimum_examples?: number;
             /**
              * Minimum Sessions
              * @default 20
              */
-            minimum_sessions: number;
+            minimum_sessions?: number;
             /** Model Version */
             model_version: string;
             /**
@@ -11340,7 +11340,7 @@ export interface components {
              * @default prospective-gap-calibration-v1
              * @constant
              */
-            calibrator_version: "prospective-gap-calibration-v1";
+            calibrator_version?: "prospective-gap-calibration-v1";
             /** Code Version */
             code_version: string;
             /**
@@ -11352,7 +11352,7 @@ export interface components {
              * Feature Schema Version
              * @default prospective-gap-features-v4
              */
-            feature_schema_version: string;
+            feature_schema_version?: string;
             /**
              * Method
              * @enum {string}
@@ -11372,7 +11372,7 @@ export interface components {
              * Target Label Version
              * @default close_above_open_v1
              */
-            target_label_version: string;
+            target_label_version?: string;
             /**
              * Training Cutoff At
              * Format: date-time
@@ -11418,7 +11418,7 @@ export interface components {
              * Pinned
              * @default false
              */
-            pinned: boolean;
+            pinned?: boolean;
             /** Session Id */
             session_id: string;
         };
@@ -11508,12 +11508,12 @@ export interface components {
              * Inference Version
              * @default catalyst-decomposition-v1
              */
-            inference_version: string;
+            inference_version?: string;
             /**
              * Source Evidence Ids
              * @default []
              */
-            source_evidence_ids: string[];
+            source_evidence_ids?: string[];
             /** Strength */
             strength: number | string;
             /** Surprise */
@@ -11723,7 +11723,7 @@ export interface components {
              * @default medium
              * @enum {string}
              */
-            confidence: "low" | "medium" | "high";
+            confidence?: "low" | "medium" | "high";
             /** Evidence Ids */
             evidence_ids?: string[];
             /** Hypothesis */
@@ -11733,12 +11733,12 @@ export interface components {
              * @default tentative
              * @enum {string}
              */
-            status: "confirmed" | "supported" | "tentative";
+            status?: "confirmed" | "supported" | "tentative";
             /**
              * Verification Method
              * @default
              */
-            verification_method: string;
+            verification_method?: string;
         };
         /** CharacterAvatarGenerationBatch */
         CharacterAvatarGenerationBatch: {
@@ -11849,24 +11849,24 @@ export interface components {
              * Archive Profile
              * @default false
              */
-            archive_profile: boolean;
+            archive_profile?: boolean;
             /** Confirm Character Id */
             confirm_character_id: string;
             /**
              * Delete Memories
              * @default false
              */
-            delete_memories: boolean;
+            delete_memories?: boolean;
             /**
              * Delete Transcripts
              * @default false
              */
-            delete_transcripts: boolean;
+            delete_transcripts?: boolean;
             /**
              * Unlink Voice
              * @default false
              */
-            unlink_voice: boolean;
+            unlink_voice?: boolean;
         };
         /** CharacterDataActionResponse */
         CharacterDataActionResponse: {
@@ -12407,7 +12407,7 @@ export interface components {
              * Objective
              * @default
              */
-            objective: string;
+            objective?: string;
             /** Profile Id */
             profile_id?: string | null;
             /** Provider Id */
@@ -12427,14 +12427,14 @@ export interface components {
              * Cpu Limit
              * @default 2
              */
-            cpu_limit: number;
+            cpu_limit?: number;
             /** Job Types */
             job_types?: string[];
             /**
              * Lease Seconds
              * @default 30
              */
-            lease_seconds: number;
+            lease_seconds?: number;
             /** Resource Classes */
             resource_classes?: components["schemas"]["ResourceClass"][];
             /** Worker Id */
@@ -12454,7 +12454,7 @@ export interface components {
              * Custom Rules
              * @default
              */
-            custom_rules: string;
+            custom_rules?: string;
         };
         /** ClientErrorAccepted */
         ClientErrorAccepted: {
@@ -12574,7 +12574,7 @@ export interface components {
              * Clear Api Key
              * @default false
              */
-            clear_api_key: boolean;
+            clear_api_key?: boolean;
         };
         /**
          * CompanionActivityState
@@ -12827,17 +12827,17 @@ export interface components {
              * Author
              * @default
              */
-            author: string;
+            author?: string;
             /**
              * Custom Rules
              * @default
              */
-            custom_rules: string;
+            custom_rules?: string;
             /**
              * Language
              * @default en
              */
-            language: string;
+            language?: string;
             /** Title */
             title: string;
         };
@@ -12847,81 +12847,81 @@ export interface components {
              * Appearance Prompt
              * @default
              */
-            appearance_prompt: string;
+            appearance_prompt?: string;
             /**
              * Background Prompt
              * @default
              */
-            background_prompt: string;
+            background_prompt?: string;
             /** Guidance Scale */
             guidance_scale?: number | null;
             /**
              * Height
              * @default 768
              */
-            height: number;
+            height?: number;
             /**
              * Include Background
              * @default true
              */
-            include_background: boolean;
+            include_background?: boolean;
             /**
              * Include Blink
              * @default true
              */
-            include_blink: boolean;
+            include_blink?: boolean;
             /**
              * Include Expressions
              * @default true
              */
-            include_expressions: boolean;
+            include_expressions?: boolean;
             /**
              * Include Outfit
              * @default true
              */
-            include_outfit: boolean;
+            include_outfit?: boolean;
             /**
              * Outfit Prompt
              * @default
              */
-            outfit_prompt: string;
+            outfit_prompt?: string;
             /**
              * Provider Id
              * @default image:flux_klein
              */
-            provider_id: string;
+            provider_id?: string;
             /** Seed */
             seed?: number | null;
             /**
              * Source Asset Id
              * @default
              */
-            source_asset_id: string;
+            source_asset_id?: string;
             /**
              * Source Image Consent Confirmed
              * @default false
              */
-            source_image_consent_confirmed: boolean;
+            source_image_consent_confirmed?: boolean;
             /**
              * Steps
              * @default 4
              */
-            steps: number;
+            steps?: number;
             /**
              * Style
              * @default illustrated character portrait
              */
-            style: string;
+            style?: string;
             /**
              * Unload After Generation
              * @default false
              */
-            unload_after_generation: boolean;
+            unload_after_generation?: boolean;
             /**
              * Width
              * @default 768
              */
-            width: number;
+            width?: number;
         };
         /**
          * CreateCharacterRequest
@@ -12932,21 +12932,21 @@ export interface components {
              * Default Greeting
              * @default
              */
-            default_greeting: string;
+            default_greeting?: string;
             /** Default Voice Asset Id */
             default_voice_asset_id?: string | null;
             /**
              * Description
              * @default
              */
-            description: string;
+            description?: string;
             /** Display Name */
             display_name: string;
             /**
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             /** Id */
             id?: string | null;
             /** Identity Policy */
@@ -12976,7 +12976,7 @@ export interface components {
              * @default system
              * @enum {string}
              */
-            interaction_mode: "system" | "character";
+            interaction_mode?: "system" | "character";
             /** Model Id */
             model_id?: string | null;
             /** Provider Id */
@@ -12985,7 +12985,7 @@ export interface components {
              * Read Memory
              * @default false
              */
-            read_memory: boolean;
+            read_memory?: boolean;
             /** Research Mode Override */
             research_mode_override?: ("disabled" | "quick" | "deep") | null;
             /**
@@ -12993,7 +12993,7 @@ export interface components {
              * @default none
              * @enum {string}
              */
-            shared_memory_access: "none" | "read_only";
+            shared_memory_access?: "none" | "read_only";
             /** System Prompt */
             system_prompt?: string | null;
             /** Title */
@@ -13003,14 +13003,14 @@ export interface components {
              * @default persistent
              * @enum {string}
              */
-            transcript_policy: "persistent" | "temporary" | "none";
+            transcript_policy?: "persistent" | "temporary" | "none";
             /** Voice Asset Id */
             voice_asset_id?: string | null;
             /**
              * Write Memory
              * @default false
              */
-            write_memory: boolean;
+            write_memory?: boolean;
         };
         /** CreateJobRequest */
         CreateJobRequest: {
@@ -13034,7 +13034,7 @@ export interface components {
              * Priority
              * @default 0
              */
-            priority: number;
+            priority?: number;
             resource_class: components["schemas"]["ResourceClass"];
             /** Stages */
             stages?: components["schemas"]["JobStage"][];
@@ -13054,7 +13054,7 @@ export interface components {
              * Pinned
              * @default false
              */
-            pinned: boolean;
+            pinned?: boolean;
             /**
              * Scope
              * @enum {string}
@@ -13065,7 +13065,7 @@ export interface components {
              * @default normal
              * @enum {string}
              */
-            sensitivity: "normal" | "sensitive" | "secret";
+            sensitivity?: "normal" | "sensitive" | "secret";
             /** Session Id */
             session_id: string;
         };
@@ -13250,17 +13250,17 @@ export interface components {
              * @default unknown
              * @enum {string}
              */
-            activity: "static" | "micro_change" | "translation_like" | "localized_change" | "continuous_motion" | "full_scene_change" | "unknown";
+            activity?: "static" | "micro_change" | "translation_like" | "localized_change" | "continuous_motion" | "full_scene_change" | "unknown";
             /**
              * Changed Ratio
              * @default 0
              */
-            changed_ratio: number;
+            changed_ratio?: number;
             /**
              * Confidence
              * @default 0
              */
-            confidence: number;
+            confidence?: number;
             /** Details */
             details?: {
                 [key: string]: unknown;
@@ -13269,23 +13269,23 @@ export interface components {
              * Focus
              * @default 0
              */
-            focus: number;
+            focus?: number;
             /**
              * Horizontal Shift
              * @default 0
              */
-            horizontal_shift: number;
+            horizontal_shift?: number;
             /**
              * Hypothesis
              * @default none
              * @enum {string}
              */
-            hypothesis: "none" | "likely_scroll" | "likely_typing" | "likely_navigation" | "likely_app_switch" | "likely_media";
+            hypothesis?: "none" | "likely_scroll" | "likely_typing" | "likely_navigation" | "likely_app_switch" | "likely_media";
             /**
              * Mean Difference
              * @default 0
              */
-            mean_difference: number;
+            mean_difference?: number;
             /** Source Height */
             source_height?: number | null;
             /** Source Width */
@@ -13294,7 +13294,7 @@ export interface components {
              * Vertical Shift
              * @default 0
              */
-            vertical_shift: number;
+            vertical_shift?: number;
         };
         /**
          * DesktopBehaviorState
@@ -13305,38 +13305,38 @@ export interface components {
              * Browsing Pace
              * @default 0
              */
-            browsing_pace: number;
+            browsing_pace?: number;
             /**
              * Current Pattern
              * @default starting
              * @enum {string}
              */
-            current_pattern: "starting" | "settled" | "browsing" | "rapid_switching" | "exploring" | "watching" | "typing" | "mixed";
+            current_pattern?: "starting" | "settled" | "browsing" | "rapid_switching" | "exploring" | "watching" | "typing" | "mixed";
             /**
              * Likely Media
              * @default false
              */
-            likely_media: boolean;
+            likely_media?: boolean;
             /**
              * Likely Typing
              * @default false
              */
-            likely_typing: boolean;
+            likely_typing?: boolean;
             /**
              * Rapid Browsing
              * @default false
              */
-            rapid_browsing: boolean;
+            rapid_browsing?: boolean;
             /**
              * Sample Count
              * @default 0
              */
-            sample_count: number;
+            sample_count?: number;
             /**
              * Settled Seconds
              * @default 0
              */
-            settled_seconds: number;
+            settled_seconds?: number;
             /** Transition */
             transition?: string | null;
         };
@@ -13426,22 +13426,22 @@ export interface components {
              * App Version
              * @default unknown
              */
-            app_version: string;
+            app_version?: string;
             /**
              * Attention Policy Version
              * @default 1
              */
-            attention_policy_version: number;
+            attention_policy_version?: number;
             /**
              * Browser Version
              * @default unknown
              */
-            browser_version: string;
+            browser_version?: string;
             /**
              * Character Id
              * @default system-assistant
              */
-            character_id: string;
+            character_id?: string;
             /** Counts */
             counts?: {
                 [key: string]: number;
@@ -13458,12 +13458,12 @@ export interface components {
              * Observation Schema Version
              * @default 1
              */
-            observation_schema_version: number;
+            observation_schema_version?: number;
             /**
              * Os Version
              * @default unknown
              */
-            os_version: string;
+            os_version?: string;
             /** Profile Version */
             profile_version?: number | null;
             /** Rates */
@@ -13474,13 +13474,13 @@ export interface components {
              * Remote Provider
              * @default false
              */
-            remote_provider: boolean;
+            remote_provider?: boolean;
             /**
              * Rollout Stage
              * @default shadow
              * @enum {string}
              */
-            rollout_stage: "disabled" | "shadow" | "text" | "speech";
+            rollout_stage?: "disabled" | "shadow" | "text" | "speech";
             /** Run Id */
             run_id: string;
             /** Scenario Labels */
@@ -13495,7 +13495,7 @@ export interface components {
              * Vision Provider
              * @default unknown
              */
-            vision_provider: string;
+            vision_provider?: string;
         };
         /** DesktopCompanionEvaluationExport */
         DesktopCompanionEvaluationExport: {
@@ -13625,7 +13625,7 @@ export interface components {
              * Assistant Busy
              * @default false
              */
-            assistant_busy: boolean;
+            assistant_busy?: boolean;
             behavior?: components["schemas"]["DesktopBehaviorState"];
             /** Capture Generation */
             capture_generation: string;
@@ -13634,7 +13634,7 @@ export interface components {
              * @default single
              * @enum {string}
              */
-            capture_mode: "single" | "temporal";
+            capture_mode?: "single" | "temporal";
             /**
              * Captured At
              * Format: date-time
@@ -13658,13 +13658,13 @@ export interface components {
              * Ignored Streak
              * @default 0
              */
-            ignored_streak: number;
+            ignored_streak?: number;
             policy?: components["schemas"]["DesktopCompanionPolicy"];
             /**
              * Request In Flight
              * @default false
              */
-            request_in_flight: boolean;
+            request_in_flight?: boolean;
             /** Seconds Since Comment */
             seconds_since_comment?: number | null;
             /** Session Id */
@@ -13675,14 +13675,14 @@ export interface components {
              * User Floor Active
              * @default false
              */
-            user_floor_active: boolean;
+            user_floor_active?: boolean;
             /** Vision Model Id */
             vision_model_id?: string | null;
             /**
              * Visual Reaction Streak
              * @default 0
              */
-            visual_reaction_streak: number;
+            visual_reaction_streak?: number;
         };
         /** DesktopCompanionObserveResponse */
         DesktopCompanionObserveResponse: {
@@ -13791,62 +13791,62 @@ export interface components {
              * Attention Policy Version
              * @default 1
              */
-            attention_policy_version: number;
+            attention_policy_version?: number;
             /**
              * Attention Seed
              * @default 0
              */
-            attention_seed: number;
+            attention_seed?: number;
             /**
              * Background Calls Per Minute
              * @default 6
              */
-            background_calls_per_minute: number;
+            background_calls_per_minute?: number;
             /**
              * Commentary Cooldown Ms
              * @default 25000
              */
-            commentary_cooldown_ms: number;
+            commentary_cooldown_ms?: number;
             /**
              * Enabled
              * @default false
              */
-            enabled: boolean;
+            enabled?: boolean;
             /**
              * Minimum Change Confidence
              * @default 0.55
              */
-            minimum_change_confidence: number;
+            minimum_change_confidence?: number;
             /**
              * Minimum Observation Interval Ms
              * @default 8000
              */
-            minimum_observation_interval_ms: number;
+            minimum_observation_interval_ms?: number;
             /**
              * Observation Timeout Ms
              * @default 10000
              */
-            observation_timeout_ms: number;
+            observation_timeout_ms?: number;
             /**
              * Observation Ttl Ms
              * @default 12000
              */
-            observation_ttl_ms: number;
+            observation_ttl_ms?: number;
             /**
              * Shadow Mode
              * @default true
              */
-            shadow_mode: boolean;
+            shadow_mode?: boolean;
             /**
              * Speech Enabled
              * @default false
              */
-            speech_enabled: boolean;
+            speech_enabled?: boolean;
             /**
              * Visible Comments
              * @default true
              */
-            visible_comments: boolean;
+            visible_comments?: boolean;
         };
         /** DesktopCompanionPreflightRequest */
         DesktopCompanionPreflightRequest: {
@@ -13854,7 +13854,7 @@ export interface components {
              * Remote Vision Allowed
              * @default false
              */
-            remote_vision_allowed: boolean;
+            remote_vision_allowed?: boolean;
             /** Vision Model Id */
             vision_model_id?: string | null;
         };
@@ -14549,7 +14549,7 @@ export interface components {
              * Code
              * @default job_failed
              */
-            code: string;
+            code?: string;
             /** Details */
             details?: {
                 [key: string]: unknown;
@@ -14562,7 +14562,7 @@ export interface components {
              * Retryable
              * @default false
              */
-            retryable: boolean;
+            retryable?: boolean;
             /** Worker Id */
             worker_id?: string | null;
         };
@@ -14585,7 +14585,7 @@ export interface components {
              * @default finviz_top_gainers
              * @constant
              */
-            discovery_source: "finviz_top_gainers";
+            discovery_source?: "finviz_top_gainers";
             /**
              * Frozen At
              * Format: date-time
@@ -14608,7 +14608,7 @@ export interface components {
              * Count
              * @default 30
              */
-            count: number;
+            count?: number;
             /**
              * Evaluation Time
              * Format: date-time
@@ -14618,17 +14618,17 @@ export interface components {
              * Maximum Price
              * @default 20
              */
-            maximum_price: number | string;
+            maximum_price?: number | string;
             /**
              * Minimum Gap Pct
              * @default 20
              */
-            minimum_gap_pct: number | string;
+            minimum_gap_pct?: number | string;
             /**
              * Minimum Price
              * @default 0.50
              */
-            minimum_price: number | string;
+            minimum_price?: number | string;
             /** Universe Id */
             universe_id: string;
         };
@@ -14691,19 +14691,19 @@ export interface components {
              * @default fail
              * @enum {string}
              */
-            gap_policy: "fail" | "skip";
+            gap_policy?: "fail" | "skip";
             /** Instrument Id */
             instrument_id: string;
             /**
              * Interval
              * @default 1d
              */
-            interval: string;
+            interval?: string;
             /**
              * Limit
              * @default 500
              */
-            limit: number;
+            limit?: number;
         };
         /** FrozenBar */
         FrozenBar: {
@@ -14819,7 +14819,7 @@ export interface components {
              * Predictor Version
              * @default prospective-gap-v3
              */
-            predictor_version: string;
+            predictor_version?: string;
             /** Return Q10 */
             return_q10?: number | string | null;
             /** Return Q50 */
@@ -14831,7 +14831,7 @@ export interface components {
              * @default high
              * @enum {string}
              */
-            uncertainty: "low" | "moderate" | "high";
+            uncertainty?: "low" | "moderate" | "high";
         };
         /** FrozenForecast */
         "FrozenForecast-Output": {
@@ -15028,7 +15028,7 @@ export interface components {
              * Assumed Spread Bps
              * @default 40
              */
-            assumed_spread_bps: number | string;
+            assumed_spread_bps?: number | string;
             /** Bars By Instrument */
             bars_by_instrument: {
                 [key: string]: components["schemas"]["MarketBar-Input"][];
@@ -15039,18 +15039,18 @@ export interface components {
              * Initial Cash
              * @default 100000
              */
-            initial_cash: number | string;
+            initial_cash?: number | string;
             /**
              * Max Concurrent Positions
              * @default 3
              */
-            max_concurrent_positions: number;
+            max_concurrent_positions?: number;
             /**
              * Max Hold Minutes
              * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
              * @default 390
              */
-            max_hold_minutes: number;
+            max_hold_minutes?: number;
             risk_profile?: components["schemas"]["StrategyRiskProfile-Input"];
             /**
              * Session Date
@@ -15255,276 +15255,276 @@ export interface components {
              * Allow Missing Tod Rvol
              * @default false
              */
-            allow_missing_tod_rvol: boolean;
+            allow_missing_tod_rvol?: boolean;
             /**
              * Auto Archive Daily Universe
              * @default true
              */
-            auto_archive_daily_universe: boolean;
+            auto_archive_daily_universe?: boolean;
             /**
              * Breakout Hold Bars
              * @default 1
              */
-            breakout_hold_bars: number;
+            breakout_hold_bars?: number;
             /**
              * Breakout Hold Tolerance Bps
              * @default 25
              */
-            breakout_hold_tolerance_bps: number | string;
+            breakout_hold_tolerance_bps?: number | string;
             /**
              * Breakout Volume Ratio
              * @default 1.25
              */
-            breakout_volume_ratio: number | string;
+            breakout_volume_ratio?: number | string;
             /**
              * Entry Start Et
              * Format: time
              * @default 09:35:00
              */
-            entry_start_et: string;
+            entry_start_et?: string;
             /**
              * Execution Interval
              * @default 1m
              * @enum {string}
              */
-            execution_interval: "1m" | "5m";
+            execution_interval?: "1m" | "5m";
             /**
              * Exit Rsi Period
              * @default 14
              */
-            exit_rsi_period: number;
+            exit_rsi_period?: number;
             /**
              * Exit Rsi Threshold
              * @default 50
              */
-            exit_rsi_threshold: number | string;
+            exit_rsi_threshold?: number | string;
             /**
              * Float Preference Mode
              * @default ignore
              * @enum {string}
              */
-            float_preference_mode: "ignore" | "score" | "require";
+            float_preference_mode?: "ignore" | "score" | "require";
             /**
              * Higher Low Buffer Bps
              * @default 20
              */
-            higher_low_buffer_bps: number | string;
+            higher_low_buffer_bps?: number | string;
             /**
              * Intraday Learning Enabled
              * @default false
              */
-            intraday_learning_enabled: boolean;
+            intraday_learning_enabled?: boolean;
             /**
              * Intraday Llm Enabled
              * @default false
              */
-            intraday_llm_enabled: boolean;
+            intraday_llm_enabled?: boolean;
             /**
              * Intraday Llm Interval Minutes
              * @default 10
              */
-            intraday_llm_interval_minutes: number;
+            intraday_llm_interval_minutes?: number;
             /**
              * Intraday Llm Top N
              * @default 5
              */
-            intraday_llm_top_n: number;
+            intraday_llm_top_n?: number;
             /**
              * Last Entry Et
              * Format: time
              * @default 11:30:00
              */
-            last_entry_et: string;
+            last_entry_et?: string;
             /**
              * Maximum Price
              * @default 20
              */
-            maximum_price: number | string;
+            maximum_price?: number | string;
             /**
              * Maximum Spread Bps
              * @default 150
              */
-            maximum_spread_bps: number | string;
+            maximum_spread_bps?: number | string;
             /**
              * Minimum Gap Pct
              * @default 20
              */
-            minimum_gap_pct: number | string;
+            minimum_gap_pct?: number | string;
             /**
              * Minimum Premarket Dollar Volume
              * @default 1000000
              */
-            minimum_premarket_dollar_volume: number | string;
+            minimum_premarket_dollar_volume?: number | string;
             /**
              * Minimum Price
              * @default 0.50
              */
-            minimum_price: number | string;
+            minimum_price?: number | string;
             /**
              * Minimum Quality Score
              * @default 0
              */
-            minimum_quality_score: number;
+            minimum_quality_score?: number;
             /**
              * Minimum Tod Rvol
              * @default 2
              */
-            minimum_tod_rvol: number | string;
+            minimum_tod_rvol?: number | string;
             /**
              * Opening Impulse Min Pct
              * @default 8
              */
-            opening_impulse_min_pct: number | string;
+            opening_impulse_min_pct?: number | string;
             /**
              * Pivot Left Bars
              * @default 2
              */
-            pivot_left_bars: number;
+            pivot_left_bars?: number;
             /**
              * Pivot Right Bars
              * @default 2
              */
-            pivot_right_bars: number;
+            pivot_right_bars?: number;
             /**
              * Preferred Float Max Shares
              * @default 30000000
              */
-            preferred_float_max_shares: number | string;
+            preferred_float_max_shares?: number | string;
             /**
              * Preferred Float Min Shares
              * @default 2000000
              */
-            preferred_float_min_shares: number | string;
+            preferred_float_min_shares?: number | string;
             /**
              * Pullback Max Pct
              * @default 35
              */
-            pullback_max_pct: number | string;
+            pullback_max_pct?: number | string;
             /**
              * Pullback Min Pct
              * @default 3
              */
-            pullback_min_pct: number | string;
+            pullback_min_pct?: number | string;
             /**
              * Pullback Volume Max Ratio
              * @default 5
              */
-            pullback_volume_max_ratio: number | string;
+            pullback_volume_max_ratio?: number | string;
             /**
              * Reject Dilution Flags
              * @default []
              */
-            reject_dilution_flags: string[];
+            reject_dilution_flags?: string[];
             /**
              * Require Breakout Hold
              * @default false
              */
-            require_breakout_hold: boolean;
+            require_breakout_hold?: boolean;
             /**
              * Require Catalyst Evidence
              * @default false
              */
-            require_catalyst_evidence: boolean;
+            require_catalyst_evidence?: boolean;
             /**
              * Reward Multiple
              * @default 2
              */
-            reward_multiple: number | string;
+            reward_multiple?: number | string;
             /**
              * Stoch Trend Capture Enabled
              * @default false
              */
-            stoch_trend_capture_enabled: boolean;
+            stoch_trend_capture_enabled?: boolean;
             /**
              * Stop Buffer Bps
              * @default 15
              */
-            stop_buffer_bps: number | string;
+            stop_buffer_bps?: number | string;
             /**
              * Strategy Id
              * @default gap_pullback_v1
              * @constant
              */
-            strategy_id: "gap_pullback_v1";
+            strategy_id?: "gap_pullback_v1";
             /**
              * Strategy Version
              * @default 1.0.0
              * @enum {string}
              */
-            strategy_version: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
+            strategy_version?: "1.0.0" | "1.1.0" | "1.2.0" | "2.0.0";
             /**
              * Structure Interval
              * @default 1m
              * @enum {string}
              */
-            structure_interval: "1m" | "5m";
+            structure_interval?: "1m" | "5m";
             /**
              * Universe Archive Grace Minutes
              * @default 10
              */
-            universe_archive_grace_minutes: number;
+            universe_archive_grace_minutes?: number;
             /**
              * Universe Discovery Count
              * @default 50
              */
-            universe_discovery_count: number;
+            universe_discovery_count?: number;
             /**
              * Universe Discovery Source
              * @default yahoo
              * @enum {string}
              */
-            universe_discovery_source: "yahoo" | "finviz";
+            universe_discovery_source?: "yahoo" | "finviz";
             /**
              * Universe Scan Time Et
              * Format: time
              * @default 09:20:00
              */
-            universe_scan_time_et: string;
+            universe_scan_time_et?: string;
             /**
              * V2 Max Hold Minutes
              * @default 60
              */
-            v2_max_hold_minutes: number;
+            v2_max_hold_minutes?: number;
             /**
              * V2 Maximum L2 To Signal Minutes
              * @default 8
              */
-            v2_maximum_l2_to_signal_minutes: number;
+            v2_maximum_l2_to_signal_minutes?: number;
             /**
              * V2 Minimum Breakout Volume Ratio
              * @default 0
              */
-            v2_minimum_breakout_volume_ratio: number | string;
+            v2_minimum_breakout_volume_ratio?: number | string;
             /**
              * V2 Minimum L1 To B1 Minutes
              * @default 4
              */
-            v2_minimum_l1_to_b1_minutes: number;
+            v2_minimum_l1_to_b1_minutes?: number;
             /**
              * V2 Profit Protection Trigger R
              * @default 0.75
              */
-            v2_profit_protection_trigger_r: number | string | null;
+            v2_profit_protection_trigger_r?: number | string | null;
             /**
              * V2 Protected Stop R
              * @default 0.25
              */
-            v2_protected_stop_r: number | string;
+            v2_protected_stop_r?: number | string;
             /**
              * V2 Recovery Min Pct
              * @default 5
              */
-            v2_recovery_min_pct: number | string;
+            v2_recovery_min_pct?: number | string;
             /**
              * V2 Second Pullback Min Pct
              * @default 2
              */
-            v2_second_pullback_min_pct: number | string;
+            v2_second_pullback_min_pct?: number | string;
             /**
              * Volume Lookback Bars
              * @default 10
              */
-            volume_lookback_bars: number;
+            volume_lookback_bars?: number;
         };
         /**
          * GapPullbackConfig
@@ -15941,22 +15941,22 @@ export interface components {
              * Catalyst Evidence Ids
              * @default []
              */
-            catalyst_evidence_ids: string[];
+            catalyst_evidence_ids?: string[];
             /**
              * Corporate Action Evidence Ids
              * @default []
              */
-            corporate_action_evidence_ids: string[];
+            corporate_action_evidence_ids?: string[];
             /**
              * Data Quality Flags
              * @default []
              */
-            data_quality_flags: string[];
+            data_quality_flags?: string[];
             /**
              * Dilution Flags
              * @default []
              */
-            dilution_flags: string[];
+            dilution_flags?: string[];
             /** Discovery Rank */
             discovery_rank?: number | null;
             /** Evidence Observed At */
@@ -15975,7 +15975,7 @@ export interface components {
              * Market Data Complete
              * @default true
              */
-            market_data_complete: boolean;
+            market_data_complete?: boolean;
             /** Market Evidence Policy Version */
             market_evidence_policy_version?: string | null;
             /** Observed At */
@@ -15986,7 +15986,7 @@ export interface components {
              * Premarket Dollar Volume
              * @default 0
              */
-            premarket_dollar_volume: number | string;
+            premarket_dollar_volume?: number | string;
             premarket_liquidity?: components["schemas"]["PremarketLiquidityEvidence-Input"] | null;
             /** Premarket Price */
             premarket_price: number | string;
@@ -15994,7 +15994,7 @@ export interface components {
              * Premarket Volume
              * @default 0
              */
-            premarket_volume: number | string;
+            premarket_volume?: number | string;
             /** Previous Close */
             previous_close: number | string;
             /** Raw Previous Close */
@@ -16003,12 +16003,12 @@ export interface components {
              * Research Quality Flags
              * @default []
              */
-            research_quality_flags: string[];
+            research_quality_flags?: string[];
             /**
              * Split Adjustment Factor
              * @default 1
              */
-            split_adjustment_factor: number | string;
+            split_adjustment_factor?: number | string;
             /** Spread Bps */
             spread_bps?: number | string | null;
             /** Tod Rvol */
@@ -16116,7 +16116,7 @@ export interface components {
              * @default import
              * @enum {string}
              */
-            discovery_source: "manual" | "import" | "scanner" | "provider" | "finviz";
+            discovery_source?: "manual" | "import" | "scanner" | "provider" | "finviz";
             /**
              * Evaluation Time
              * Format: date-time
@@ -16164,7 +16164,7 @@ export interface components {
              * Source Candidate Symbols
              * @default []
              */
-            source_candidate_symbols: string[];
+            source_candidate_symbols?: string[];
             /** Source Fingerprint */
             source_fingerprint: string;
             /** Source Locator */
@@ -16173,7 +16173,7 @@ export interface components {
              * Source Member Dispositions
              * @default []
              */
-            source_member_dispositions: components["schemas"]["SourceMemberDisposition"][];
+            source_member_dispositions?: components["schemas"]["SourceMemberDisposition"][];
             /** Universe Id */
             universe_id: string;
         };
@@ -16335,7 +16335,7 @@ export interface components {
              * Intent
              * @default preview
              */
-            intent: string;
+            intent?: string;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -16344,7 +16344,7 @@ export interface components {
              * Mode
              * @default
              */
-            mode: string;
+            mode?: string;
         };
         /** HermesAssistantToolExecutePayload */
         HermesAssistantToolExecutePayload: {
@@ -16373,7 +16373,7 @@ export interface components {
              * User Request
              * @default
              */
-            user_request: string;
+            user_request?: string;
         };
         /** HermesAssistantToolReviewPayload */
         HermesAssistantToolReviewPayload: {
@@ -16404,12 +16404,12 @@ export interface components {
              * Include Recent Turns
              * @default true
              */
-            include_recent_turns: boolean;
+            include_recent_turns?: boolean;
             /**
              * Session Id
              * @default
              */
-            session_id: string;
+            session_id?: string;
         };
         /** HermesRpgPlanRequest */
         HermesRpgPlanRequest: {
@@ -16425,7 +16425,7 @@ export interface components {
              * Session Id
              * @default
              */
-            session_id: string;
+            session_id?: string;
             /** Turn Id */
             turn_id?: number | string | null;
         };
@@ -16439,7 +16439,7 @@ export interface components {
              * Session Id
              * @default
              */
-            session_id: string;
+            session_id?: string;
         };
         /** HermesRpgTurnReadoutRequest */
         HermesRpgTurnReadoutRequest: {
@@ -16451,7 +16451,7 @@ export interface components {
              * Session Id
              * @default
              */
-            session_id: string;
+            session_id?: string;
             /** Turn */
             turn?: {
                 [key: string]: unknown;
@@ -16463,17 +16463,17 @@ export interface components {
              * Content
              * @default house status
              */
-            content: string;
+            content?: string;
             /**
              * Domain
              * @default chat
              */
-            domain: string;
+            domain?: string;
             /**
              * Dry Run
              * @default true
              */
-            dry_run: boolean;
+            dry_run?: boolean;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -16482,7 +16482,7 @@ export interface components {
              * Session Id
              * @default diagnostics
              */
-            session_id: string;
+            session_id?: string;
         };
         /** IbkrSettingsPayload */
         IbkrSettingsPayload: {
@@ -16567,7 +16567,7 @@ export interface components {
              * Provider
              * @default flux_klein
              */
-            provider: string;
+            provider?: string;
         };
         /** ImageModelDownloadProgress */
         ImageModelDownloadProgress: {
@@ -16590,7 +16590,7 @@ export interface components {
              * Provider
              * @default flux_klein
              */
-            provider: string;
+            provider?: string;
         };
         /** ImageModelEntry */
         ImageModelEntry: {
@@ -16754,7 +16754,7 @@ export interface components {
              * Retryable
              * @default false
              */
-            retryable: boolean;
+            retryable?: boolean;
         };
         /** JobLease */
         JobLease: {
@@ -16788,14 +16788,14 @@ export interface components {
              * Current
              * @default 0
              */
-            current: number;
+            current?: number;
             /** Message */
             message?: string | null;
             /**
              * Total
              * @default 1
              */
-            total: number;
+            total?: number;
         };
         /** JobRecord */
         JobRecord: {
@@ -16874,7 +16874,7 @@ export interface components {
             /** Started At */
             started_at?: string | null;
             /** @default queued */
-            status: components["schemas"]["JobStatus"];
+            status?: components["schemas"]["JobStatus"];
         };
         /**
          * JobStatus
@@ -16888,12 +16888,12 @@ export interface components {
              * Ai Response
              * @default
              */
-            ai_response: string;
+            ai_response?: string;
             /**
              * User Message
              * @default
              */
-            user_message: string;
+            user_message?: string;
         };
         /** LegacyGenerateTitleResponse */
         LegacyGenerateTitleResponse: {
@@ -17077,7 +17077,7 @@ export interface components {
              * Language
              * @default English
              */
-            language: string;
+            language?: string;
             /** Speaker */
             speaker?: string | null;
         };
@@ -17157,7 +17157,7 @@ export interface components {
              * Trace Id
              * @default live-chat-unscoped
              */
-            trace_id: string;
+            trace_id?: string;
             /** Value */
             value: number;
         };
@@ -17174,12 +17174,12 @@ export interface components {
              * Character Id
              * @default system-assistant
              */
-            character_id: string;
+            character_id?: string;
             /**
              * Configured Duplex Mode
              * @default automatic
              */
-            configured_duplex_mode: string;
+            configured_duplex_mode?: string;
             /** Exact Commit Sha */
             exact_commit_sha: string;
             /** Input Device Hash */
@@ -17192,17 +17192,17 @@ export interface components {
              * Presence Preset
              * @default natural
              */
-            presence_preset: string;
+            presence_preset?: string;
             /**
              * Profile Version
              * @default 1
              */
-            profile_version: number;
+            profile_version?: number;
             /**
              * Resolved Duplex Mode
              * @default half_duplex
              */
-            resolved_duplex_mode: string;
+            resolved_duplex_mode?: string;
         };
         /** LiveChatMetricPolicy */
         LiveChatMetricPolicy: {
@@ -17211,7 +17211,7 @@ export interface components {
              * @default maximum
              * @enum {string}
              */
-            comparison: "maximum" | "minimum";
+            comparison?: "maximum" | "minimum";
             /**
              * Kind
              * @enum {string}
@@ -17223,7 +17223,7 @@ export interface components {
              * Minimum Samples
              * @default 10
              */
-            minimum_samples: number;
+            minimum_samples?: number;
         };
         /** LiveChatMetricResult */
         LiveChatMetricResult: {
@@ -17297,12 +17297,12 @@ export interface components {
              * Require Runtime Identity
              * @default true
              */
-            require_runtime_identity: boolean;
+            require_runtime_identity?: boolean;
             /**
              * Require System And Character
              * @default true
              */
-            require_system_and_character: boolean;
+            require_system_and_character?: boolean;
             /**
              * Required Scenarios
              * @default [
@@ -17334,7 +17334,7 @@ export interface components {
              *       "sustained-20-minute-conversation"
              *     ]
              */
-            required_scenarios: string[];
+            required_scenarios?: string[];
         };
         /**
          * LiveConversationProfile
@@ -17492,7 +17492,7 @@ export interface components {
              * Confidence
              * @default 1
              */
-            confidence: number;
+            confidence?: number;
             /** Instruction */
             instruction: string;
             /**
@@ -17539,19 +17539,19 @@ export interface components {
              * End Sample
              * @default 0
              */
-            end_sample: number;
+            end_sample?: number;
             /**
              * Response Policy
              * @default none
              * @enum {string}
              */
-            response_policy: "none" | "observe" | "respond";
+            response_policy?: "none" | "observe" | "respond";
             /**
              * Retention
              * @default ephemeral_session
              * @enum {string}
              */
-            retention: "ephemeral_session" | "visible_transcript" | "durable_conversation";
+            retention?: "ephemeral_session" | "visible_transcript" | "durable_conversation";
             /** Segment Id */
             segment_id: string;
             /** Sequence */
@@ -17560,17 +17560,17 @@ export interface components {
              * Start Sample
              * @default 0
              */
-            start_sample: number;
+            start_sample?: number;
             /**
              * Task Contract Id
              * @default default
              */
-            task_contract_id: string;
+            task_contract_id?: string;
             /**
              * Task Contract Version
              * @default 1
              */
-            task_contract_version: number;
+            task_contract_version?: number;
             /** Text */
             text: string;
         };
@@ -17671,13 +17671,13 @@ export interface components {
              * Preferred Maximum Speech Ms
              * @default 2500
              */
-            preferred_maximum_speech_ms: number;
+            preferred_maximum_speech_ms?: number;
             /**
              * Priority
              * @default normal
              * @enum {string}
              */
-            priority: "critical" | "normal" | "deferred";
+            priority?: "critical" | "normal" | "deferred";
             /** Task Contract Id */
             task_contract_id: string;
             /** Task Contract Version */
@@ -17800,7 +17800,7 @@ export interface components {
              * Source
              * @default browser
              */
-            source: string;
+            source?: string;
         };
         /** LiveVoiceMetricResult */
         LiveVoiceMetricResult: {
@@ -17841,7 +17841,7 @@ export interface components {
              * Trace Id
              * @default live-call-unscoped
              */
-            trace_id: string;
+            trace_id?: string;
             /** Value Ms */
             value_ms?: number | null;
         } & {
@@ -17891,42 +17891,42 @@ export interface components {
              * Backchannel False Positive Rate
              * @default 0.05
              */
-            backchannel_false_positive_rate: number;
+            backchannel_false_positive_rate?: number;
             /**
              * False Interruption Rate
              * @default 0.05
              */
-            false_interruption_rate: number;
+            false_interruption_rate?: number;
             /**
              * Final To First Token P95 Ms
              * @default 5000
              */
-            final_to_first_token_p95_ms: number;
+            final_to_first_token_p95_ms?: number;
             /**
              * First Token To First Audio P95 Ms
              * @default 3500
              */
-            first_token_to_first_audio_p95_ms: number;
+            first_token_to_first_audio_p95_ms?: number;
             /**
              * Interruption To Silence P95 Ms
              * @default 500
              */
-            interruption_to_silence_p95_ms: number;
+            interruption_to_silence_p95_ms?: number;
             /**
              * Minimum Latency Samples
              * @default 5
              */
-            minimum_latency_samples: number;
+            minimum_latency_samples?: number;
             /**
              * Minimum Quality Trials
              * @default 10
              */
-            minimum_quality_trials: number;
+            minimum_quality_trials?: number;
             /**
              * Missed Interruption Rate
              * @default 0.1
              */
-            missed_interruption_rate: number;
+            missed_interruption_rate?: number;
             /**
              * Required Scenarios
              * @default [
@@ -17948,12 +17948,12 @@ export interface components {
              *       "rapid-interruption-soak"
              *     ]
              */
-            required_scenarios: string[];
+            required_scenarios?: string[];
             /**
              * Stt Finalize P95 Ms
              * @default 1500
              */
-            stt_finalize_p95_ms: number;
+            stt_finalize_p95_ms?: number;
         };
         /** LocalLoginRequest */
         LocalLoginRequest: {
@@ -17980,7 +17980,7 @@ export interface components {
              * Source
              * @default gameplay
              */
-            source: string;
+            source?: string;
             /** Status */
             status: string;
         };
@@ -17990,12 +17990,12 @@ export interface components {
              * Direction
              * @default
              */
-            direction: string;
+            direction?: string;
             /**
              * Document Id
              * @default
              */
-            document_id: string;
+            document_id?: string;
             /**
              * Kind
              * @enum {string}
@@ -18010,7 +18010,7 @@ export interface components {
              * Direction
              * @default
              */
-            direction: string;
+            direction?: string;
             /** Document Id */
             document_id: string;
         };
@@ -18054,7 +18054,7 @@ export interface components {
              * @default placeholder
              * @enum {string}
              */
-            presentation_readiness: "placeholder" | "assets_pending" | "ready" | "failed";
+            presentation_readiness?: "placeholder" | "assets_pending" | "ready" | "failed";
             /** Semantic Interface Hash */
             semantic_interface_hash: string;
             /**
@@ -18062,7 +18062,7 @@ export interface components {
              * @default certified
              * @enum {string}
              */
-            simulation_readiness: "stub" | "semantic" | "navigable" | "certified" | "failed";
+            simulation_readiness?: "stub" | "semantic" | "navigable" | "certified" | "failed";
         };
         /** MapEditorApplyResponse */
         MapEditorApplyResponse: {
@@ -18116,7 +18116,7 @@ export interface components {
         /** MarketBar */
         "MarketBar-Input": {
             /** @default raw */
-            adjustment_mode: components["schemas"]["AdjustmentMode"];
+            adjustment_mode?: components["schemas"]["AdjustmentMode"];
             /** Close */
             close: number | string;
             /**
@@ -18130,7 +18130,7 @@ export interface components {
              * Ingestion Revision
              * @default 1
              */
-            ingestion_revision: number;
+            ingestion_revision?: number;
             /** Instrument Id */
             instrument_id: string;
             /** Interval */
@@ -18139,7 +18139,7 @@ export interface components {
              * Is Final
              * @default true
              */
-            is_final: boolean;
+            is_final?: boolean;
             /** Low */
             low: number | string;
             /** Open */
@@ -18159,7 +18159,7 @@ export interface components {
              * Session
              * @default regular
              */
-            session: string;
+            session?: string;
             /**
              * Start Time
              * Format: date-time
@@ -18169,7 +18169,7 @@ export interface components {
              * Volume
              * @default 0
              */
-            volume: number | string;
+            volume?: number | string;
         };
         /** MarketBar */
         "MarketBar-Output": {
@@ -18294,7 +18294,7 @@ export interface components {
              * Bar Limit
              * @default 120
              */
-            bar_limit: number;
+            bar_limit?: number;
             /** Binding Id */
             binding_id?: string | null;
             /** Instrument Id */
@@ -18303,14 +18303,14 @@ export interface components {
              * Interval
              * @default 1d
              */
-            interval: string;
+            interval?: string;
             /** Model */
             model?: string | null;
             /**
              * Question
              * @default Summarize the current technical structure, notable levels, and principal risks.
              */
-            question: string;
+            question?: string;
             /** Selected Levels */
             selected_levels?: (number | string)[];
         };
@@ -18354,7 +18354,7 @@ export interface components {
              * @default true
              * @constant
              */
-            diagnostic_only: true;
+            diagnostic_only?: true;
             /** Fade Risk Score */
             fade_risk_score: number | string;
             /** Opening Exhaustion Score */
@@ -18635,14 +18635,14 @@ export interface components {
              * Model Name
              * @default
              */
-            model_name: string;
+            model_name?: string;
             /** Module */
             module: string;
             /** Provider Id */
             provider_id: string;
             resource_class: components["schemas"]["ResourceClass"];
             /** @default unloaded */
-            status: components["schemas"]["ModelResidencyStatus"];
+            status?: components["schemas"]["ModelResidencyStatus"];
             /** Worker Endpoint */
             worker_endpoint?: string | null;
             /** Worker Id */
@@ -18694,18 +18694,18 @@ export interface components {
              * Fast Period
              * @default 10
              */
-            fast_period: number;
+            fast_period?: number;
             /**
              * Slow Period
              * @default 30
              */
-            slow_period: number;
+            slow_period?: number;
             /**
              * Strategy Id
              * @default sma_cross
              * @constant
              */
-            strategy_id: "sma_cross";
+            strategy_id?: "sma_cross";
         };
         /** NarrativeDeliveryCancelRequest */
         NarrativeDeliveryCancelRequest: {
@@ -18713,7 +18713,7 @@ export interface components {
              * Reason
              * @default cancelled_before_publication
              */
-            reason: string;
+            reason?: string;
             /** Semantic Hash */
             semantic_hash: string;
         };
@@ -18723,22 +18723,22 @@ export interface components {
              * Acknowledgement
              * @default false
              */
-            acknowledgement: boolean;
+            acknowledgement?: boolean;
             /**
              * Amused Exhale
              * @default false
              */
-            amused_exhale: boolean;
+            amused_exhale?: boolean;
             /**
              * Breath
              * @default false
              */
-            breath: boolean;
+            breath?: boolean;
             /**
              * Sigh
              * @default false
              */
-            sigh: boolean;
+            sigh?: boolean;
         };
         /** NoveltyShadowAnnotation */
         NoveltyShadowAnnotation: {
@@ -18805,7 +18805,7 @@ export interface components {
              * Priority
              * @default 0
              */
-            priority: number;
+            priority?: number;
             /** Step Id */
             step_id: string;
             /** Target Cell */
@@ -18994,14 +18994,14 @@ export interface components {
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             /** Name */
             name: string;
             /**
              * Revision
              * @default 1
              */
-            revision: number;
+            revision?: number;
             /** Updated At */
             updated_at?: string | null;
         };
@@ -19038,17 +19038,17 @@ export interface components {
              * Base Currency
              * @default USD
              */
-            base_currency: string;
+            base_currency?: string;
             /**
              * Commission Bps
              * @default 0
              */
-            commission_bps: number | string;
+            commission_bps?: number | string;
             /**
              * Initial Cash
              * @default 100000
              */
-            initial_cash: number | string;
+            initial_cash?: number | string;
             /** Name */
             name: string;
         };
@@ -19215,7 +19215,7 @@ export interface components {
              * Reserved
              * @default 0
              */
-            reserved: number | string;
+            reserved?: number | string;
         };
         /** PaperBalance */
         "PaperBalance-Output": {
@@ -19292,43 +19292,43 @@ export interface components {
              * Latency Ms
              * @default 250
              */
-            latency_ms: number;
+            latency_ms?: number;
             /**
              * Max Observation Age Seconds
              * @default 5
              */
-            max_observation_age_seconds: number | string;
+            max_observation_age_seconds?: number | string;
             /**
              * Max Volume Participation Pct
              * @default 0.10
              */
-            max_volume_participation_pct: number | string;
+            max_volume_participation_pct?: number | string;
             /**
              * Policy Version
              * @default paper-execution-v2
              * @constant
              */
-            policy_version: "paper-execution-v2";
+            policy_version?: "paper-execution-v2";
             /**
              * Reject Halted
              * @default true
              */
-            reject_halted: boolean;
+            reject_halted?: boolean;
             /**
              * Require Execution Eligible
              * @default true
              */
-            require_execution_eligible: boolean;
+            require_execution_eligible?: boolean;
             /**
              * Slippage Bps
              * @default 10
              */
-            slippage_bps: number | string;
+            slippage_bps?: number | string;
             /**
              * Stop Slippage Bps
              * @default 25
              */
-            stop_slippage_bps: number | string;
+            stop_slippage_bps?: number | string;
         };
         /** PaperExecutionSummary */
         PaperExecutionSummary: {
@@ -19544,17 +19544,17 @@ export interface components {
              * Execution Eligible
              * @default true
              */
-            execution_eligible: boolean;
+            execution_eligible?: boolean;
             /**
              * Freshness Mode
              * @default unknown
              */
-            freshness_mode: string;
+            freshness_mode?: string;
             /**
              * Halted
              * @default false
              */
-            halted: boolean;
+            halted?: boolean;
             /** High */
             high?: number | string | null;
             /** Instrument Id */
@@ -19571,7 +19571,7 @@ export interface components {
              * Rejection Reasons
              * @default []
              */
-            rejection_reasons: string[];
+            rejection_reasons?: string[];
             /**
              * Source Time
              * Format: date-time
@@ -19601,7 +19601,7 @@ export interface components {
              * Filled Quantity
              * @default 0
              */
-            filled_quantity: number | string;
+            filled_quantity?: number | string;
             /** Idempotency Key */
             idempotency_key: string;
             /** Instrument Id */
@@ -19625,7 +19625,7 @@ export interface components {
              * Reserved Cash
              * @default 0
              */
-            reserved_cash: number | string;
+            reserved_cash?: number | string;
             /**
              * Side
              * @enum {string}
@@ -19636,7 +19636,7 @@ export interface components {
              * @default open
              * @enum {string}
              */
-            status: "open" | "filled" | "cancelled" | "rejected";
+            status?: "open" | "filled" | "cancelled" | "rejected";
             /** Stop Price */
             stop_price?: number | string | null;
             /** Updated At */
@@ -19786,12 +19786,12 @@ export interface components {
              * Reserved Quantity
              * @default 0
              */
-            reserved_quantity: number | string;
+            reserved_quantity?: number | string;
             /**
              * Unrealized Pnl
              * @default 0
              */
-            unrealized_pnl: number | string;
+            unrealized_pnl?: number | string;
         };
         /** PaperPosition */
         "PaperPosition-Output": {
@@ -19893,7 +19893,7 @@ export interface components {
              * Initial Cash
              * @default 100000
              */
-            initial_cash: number | string;
+            initial_cash?: number | string;
         };
         /**
          * PaperRiskOrderRequest
@@ -19906,7 +19906,7 @@ export interface components {
              * Desired Risk Pct
              * @default 0.35
              */
-            desired_risk_pct: number | string;
+            desired_risk_pct?: number | string;
             /** Idempotency Key */
             idempotency_key: string;
             /** Instrument Id */
@@ -19918,7 +19918,7 @@ export interface components {
              * @default market
              * @enum {string}
              */
-            order_type: "market" | "limit" | "stop";
+            order_type?: "market" | "limit" | "stop";
             /** Stop Loss */
             stop_loss: number | string;
             /** Take Profit */
@@ -20027,7 +20027,7 @@ export interface components {
              * Desired Risk Pct
              * @default 0.35
              */
-            desired_risk_pct: number | string;
+            desired_risk_pct?: number | string;
             /** Entry Price */
             entry_price: number | string;
             /** Instrument Id */
@@ -20244,7 +20244,7 @@ export interface components {
              * Reason
              * @default
              */
-            reason: string;
+            reason?: string;
             /** Waiver Proof Ids */
             waiver_proof_ids?: string[];
         };
@@ -20330,63 +20330,63 @@ export interface components {
              * Estimated Entry Impact Bps
              * @default 10
              */
-            estimated_entry_impact_bps: number | string;
+            estimated_entry_impact_bps?: number | string;
             /**
              * Estimated Entry Slippage Bps
              * @default 25
              */
-            estimated_entry_slippage_bps: number | string;
+            estimated_entry_slippage_bps?: number | string;
             /**
              * Estimated Exit Impact Bps
              * @default 10
              */
-            estimated_exit_impact_bps: number | string;
+            estimated_exit_impact_bps?: number | string;
             /**
              * Estimated Exit Slippage Bps
              * @default 25
              */
-            estimated_exit_slippage_bps: number | string;
+            estimated_exit_slippage_bps?: number | string;
             /**
              * Estimated Round Trip Commission Bps
              * @default 0
              */
-            estimated_round_trip_commission_bps: number | string;
+            estimated_round_trip_commission_bps?: number | string;
             /**
              * Max Position Fraction
              * @default 0.20
              */
-            max_position_fraction: number | string;
+            max_position_fraction?: number | string;
             /**
              * Max Positions
              * @default 3
              */
-            max_positions: number;
+            max_positions?: number;
             /**
              * Minimum Bullish Probability
              * @default 0.50
              */
-            minimum_bullish_probability: number | string;
+            minimum_bullish_probability?: number | string;
             /**
              * Minimum Net Expected Return
              * @default 0
              */
-            minimum_net_expected_return: number | string;
+            minimum_net_expected_return?: number | string;
             /**
              * Minimum Net Q10
              * @default -0.10
              */
-            minimum_net_q10: number | string;
+            minimum_net_q10?: number | string;
             /**
              * Starting Equity
              * @default 1000
              */
-            starting_equity: number | string;
+            starting_equity?: number | string;
             /**
              * Version
              * @default prospective-gap-portfolio-e-v1
              * @constant
              */
-            version: "prospective-gap-portfolio-e-v1";
+            version?: "prospective-gap-portfolio-e-v1";
         };
         /** PortfolioEPositionOutcome */
         PortfolioEPositionOutcome: {
@@ -20520,17 +20520,17 @@ export interface components {
              * Evidence
              * @default []
              */
-            evidence: components["schemas"]["PremarketEvidenceItem"][];
+            evidence?: components["schemas"]["PremarketEvidenceItem"][];
             /**
              * Evidence Schema Version
              * @default premarket-evidence-v1
              */
-            evidence_schema_version: string;
+            evidence_schema_version?: string;
             /**
              * Feature Schema Version
              * @default prospective-gap-features-v1
              */
-            feature_schema_version: string;
+            feature_schema_version?: string;
             /**
              * Frozen At
              * Format: date-time
@@ -20648,13 +20648,13 @@ export interface components {
              * Regime Tags
              * @default []
              */
-            regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
+            regime_tags?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
             /**
              * Uncertainty
              * @default high
              * @enum {string}
              */
-            uncertainty: "low" | "moderate" | "high";
+            uncertainty?: "low" | "moderate" | "high";
             v3_forecast: components["schemas"]["FrozenForecast-Input"];
         };
         /** PremarketInstrumentResult */
@@ -20682,7 +20682,7 @@ export interface components {
              * @default false
              * @constant
              */
-            consolidated_volume_authority: false;
+            consolidated_volume_authority?: false;
             /** Coverage Ratio */
             coverage_ratio?: number | string | null;
             /** Current Premarket Dollar Volume */
@@ -20702,7 +20702,7 @@ export interface components {
              * Policy Version
              * @default market-evidence-v3-finviz-membership
              */
-            policy_version: string;
+            policy_version?: string;
             /** Premarket Bar Count */
             premarket_bar_count: number;
             /** Provider */
@@ -20713,7 +20713,7 @@ export interface components {
              * Reason Codes
              * @default []
              */
-            reason_codes: string[];
+            reason_codes?: string[];
             /** Tod Rvol */
             tod_rvol?: number | string | null;
             /** Tod Rvol Denominator Mean */
@@ -20725,7 +20725,7 @@ export interface components {
              * @default provider_relative
              * @enum {string}
              */
-            volume_authority: "provider_relative" | "consolidated" | "unknown";
+            volume_authority?: "provider_relative" | "consolidated" | "unknown";
             /** Volume Basis */
             volume_basis?: string | null;
         };
@@ -20870,7 +20870,7 @@ export interface components {
              * @default completed
              * @enum {string}
              */
-            delivery_status: "completed" | "interrupted";
+            delivery_status?: "completed" | "interrupted";
             /** Grounding Ids */
             grounding_ids?: string[];
             /** Initiative Reason */
@@ -20884,7 +20884,7 @@ export interface components {
              * @default proactive_reengagement
              * @enum {string}
              */
-            purpose: "proactive_reengagement" | "desktop_companion" | "desktop_critical";
+            purpose?: "proactive_reengagement" | "desktop_companion" | "desktop_critical";
             /** Topic Id */
             topic_id?: string | null;
             /** Turn Id */
@@ -20933,7 +20933,7 @@ export interface components {
              * @default chat_messages
              * @enum {string}
              */
-            provider_payload_format: "chat_messages" | "completion_text" | "image_prompt" | "json_instruction";
+            provider_payload_format?: "chat_messages" | "completion_text" | "image_prompt" | "json_instruction";
             /** Safety Metadata */
             safety_metadata?: {
                 [key: string]: unknown;
@@ -20951,7 +20951,7 @@ export interface components {
              * Locale
              * @default en-US
              */
-            locale: string;
+            locale?: string;
             /** Phrase */
             phrase: string;
             /** Pronunciation */
@@ -21379,7 +21379,7 @@ export interface components {
              * Priority
              * @default 0
              */
-            priority: number;
+            priority?: number;
             /** Reason */
             reason?: string | null;
             /**
@@ -21387,7 +21387,7 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            scope: "providers" | "models" | "all";
+            scope?: "providers" | "models" | "all";
         };
         /** ProviderPolicy */
         ProviderPolicy: {
@@ -21569,7 +21569,7 @@ export interface components {
              * Token Budget
              * @default 4000
              */
-            token_budget: number;
+            token_budget?: number;
         };
         /** RenderedPrompt */
         RenderedPrompt: {
@@ -21647,7 +21647,7 @@ export interface components {
              * Volume
              * @default 0
              */
-            volume: number | string;
+            volume?: number | string;
         };
         /** ReplayOrderRequest */
         ReplayOrderRequest: {
@@ -21887,7 +21887,7 @@ export interface components {
              * Api Key
              * @default
              */
-            api_key: string;
+            api_key?: string;
             /**
              * Provider
              * @enum {string}
@@ -22069,7 +22069,7 @@ export interface components {
              * Delivery
              * @default
              */
-            delivery: string;
+            delivery?: string;
             /** Role */
             role: string;
             /** Speaker Id */
@@ -22151,17 +22151,17 @@ export interface components {
              * Attempts
              * @default 0
              */
-            attempts: number;
+            attempts?: number;
             /**
              * Max Attempts
              * @default 0
              */
-            max_attempts: number;
+            max_attempts?: number;
             /**
              * Policy
              * @default none
              */
-            policy: string;
+            policy?: string;
         };
         /** ReviewFinding */
         ReviewFinding: {
@@ -22263,7 +22263,7 @@ export interface components {
              * Policy Version
              * @default trading-research-1
              */
-            policy_version: string;
+            policy_version?: string;
             /** Review Note */
             review_note: string;
             /** Source Validation Id */
@@ -22275,7 +22275,7 @@ export interface components {
              * Delivery
              * @default
              */
-            delivery: string;
+            delivery?: string;
             /** Role */
             role: string;
             /** Speaker Id */
@@ -22299,12 +22299,12 @@ export interface components {
              * Active Map Instance Ids
              * @default []
              */
-            active_map_instance_ids: string[];
+            active_map_instance_ids?: string[];
             /**
              * Coarse Map Instance Ids
              * @default []
              */
-            coarse_map_instance_ids: string[];
+            coarse_map_instance_ids?: string[];
             /** Expected World Tick */
             expected_world_tick: number;
         } & {
@@ -22373,29 +22373,29 @@ export interface components {
              * Active Actor Budget
              * @default 16
              */
-            active_actor_budget: number;
+            active_actor_budget?: number;
             /**
              * Coarse Actor Budget
              * @default 4
              */
-            coarse_actor_budget: number;
+            coarse_actor_budget?: number;
             /**
              * Coarse Tick Interval
              * @default 5
              */
-            coarse_tick_interval: number;
+            coarse_tick_interval?: number;
             /** Expected World Tick */
             expected_world_tick: number;
             /**
              * Max Blocked Attempts
              * @default 3
              */
-            max_blocked_attempts: number;
+            max_blocked_attempts?: number;
             /**
              * Transition Actor Budget
              * @default 4
              */
-            transition_actor_budget: number;
+            transition_actor_budget?: number;
         } & {
             [key: string]: unknown;
         };
@@ -22406,12 +22406,12 @@ export interface components {
              * @default rpg_scenario_contract_v1
              * @constant
              */
-            contract_version: "rpg_scenario_contract_v1";
+            contract_version?: "rpg_scenario_contract_v1";
             /**
              * Description
              * @default
              */
-            description: string;
+            description?: string;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -22432,17 +22432,17 @@ export interface components {
              * @default rpg_world_contract_v1
              * @constant
              */
-            contract_version: "rpg_world_contract_v1";
+            contract_version?: "rpg_world_contract_v1";
             /**
              * Description
              * @default
              */
-            description: string;
+            description?: string;
             /**
              * Genre
              * @default classic_fantasy
              */
-            genre: string;
+            genre?: string;
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -22451,20 +22451,20 @@ export interface components {
              * Seed
              * @default 0
              */
-            seed: number;
+            seed?: number;
             /**
              * Source Mode
              * @default manual
              * @enum {string}
              */
-            source_mode: "manual" | "ai" | "hybrid" | "imported";
+            source_mode?: "manual" | "ai" | "hybrid" | "imported";
             /** Title */
             title: string;
             /**
              * Tone
              * @default heroic adventure
              */
-            tone: string;
+            tone?: string;
             /** World Id */
             world_id?: string | null;
         } & {
@@ -22478,7 +22478,7 @@ export interface components {
              * Event
              * @default client.event
              */
-            event: string | null;
+            event?: string | null;
             /** Session Id */
             session_id?: string | null;
             /** Trace Id */
@@ -22503,7 +22503,7 @@ export interface components {
              * All Candidates
              * @default false
              */
-            all_candidates: boolean | null;
+            all_candidates?: boolean | null;
             /** Candidates */
             candidates?: unknown;
             /** Directives */
@@ -22512,7 +22512,7 @@ export interface components {
              * Dry Run
              * @default true
              */
-            dry_run: boolean | null;
+            dry_run?: boolean | null;
             /** Limit */
             limit?: unknown;
         } & {
@@ -22524,37 +22524,37 @@ export interface components {
              * Autosave
              * @default true
              */
-            autosave: boolean;
+            autosave?: boolean;
             /**
              * Background Soft Audit
              * @default true
              */
-            background_soft_audit: boolean;
+            background_soft_audit?: boolean;
             /**
              * Image Generation
              * @default false
              */
-            image_generation: boolean;
+            image_generation?: boolean;
             /**
              * Llm Narration
              * @default true
              */
-            llm_narration: boolean;
+            llm_narration?: boolean;
             /**
              * Stt
              * @default false
              */
-            stt: boolean;
+            stt?: boolean;
             /**
              * Tts
              * @default false
              */
-            tts: boolean;
+            tts?: boolean;
             /**
              * Validator
              * @default true
              */
-            validator: boolean;
+            validator?: boolean;
         };
         /** RpgGridPerformanceProfileRequestBody */
         RpgGridPerformanceProfileRequestBody: {
@@ -22715,30 +22715,30 @@ export interface components {
              * Campaign Template
              * @default classic_fantasy
              */
-            campaign_template: string;
+            campaign_template?: string;
             /**
              * Combat Lethality
              * @default normal
              * @enum {string}
              */
-            combat_lethality: "safe" | "normal" | "deadly";
+            combat_lethality?: "safe" | "normal" | "deadly";
             /**
              * Companions Enabled
              * @default true
              */
-            companions_enabled: boolean;
+            companions_enabled?: boolean;
             /**
              * Difficulty
              * @default normal
              * @enum {string}
              */
-            difficulty: "story" | "normal" | "harsh";
+            difficulty?: "story" | "normal" | "harsh";
             /**
              * Economy Pressure
              * @default normal
              * @enum {string}
              */
-            economy_pressure: "relaxed" | "normal" | "strict";
+            economy_pressure?: "relaxed" | "normal" | "strict";
             features?: components["schemas"]["RpgFeatureOptions"];
             /** Generated Class Name */
             generated_class_name?: string | null;
@@ -22754,7 +22754,7 @@ export interface components {
              * Permadeath
              * @default false
              */
-            permadeath: boolean;
+            permadeath?: boolean;
             player?: components["schemas"]["RpgPlayerOptions"];
             /** Power Source */
             power_source?: string | null;
@@ -22768,18 +22768,18 @@ export interface components {
              * Starting Location
              * @default rusty_flagon_tavern
              */
-            starting_location: string;
+            starting_location?: string;
             /**
              * Tone
              * @default heroic adventure
              */
-            tone: string;
+            tone?: string;
             /**
              * World Activity
              * @default standard
              * @enum {string}
              */
-            world_activity: "quiet" | "standard" | "living_world";
+            world_activity?: "quiet" | "standard" | "living_world";
         } & {
             [key: string]: unknown;
         };
@@ -22802,25 +22802,25 @@ export interface components {
              * Background
              * @default Wanderer
              */
-            background: string;
+            background?: string;
             /**
              * Build
              * @default balanced_adventurer
              * @enum {string}
              */
-            build: "balanced_adventurer" | "warrior" | "ranger" | "silver_tongue";
+            build?: "balanced_adventurer" | "warrior" | "ranger" | "silver_tongue";
             /**
              * Name
              * @default Alyndra
              */
-            name: string;
+            name?: string;
             /** Portrait Seed */
             portrait_seed?: number | null;
             /**
              * Pronouns
              * @default she/her
              */
-            pronouns: string;
+            pronouns?: string;
         };
         /** RpgPreviewWorldEntityDossierRegenerationRequestBody */
         RpgPreviewWorldEntityDossierRegenerationRequestBody: {
@@ -22835,40 +22835,40 @@ export interface components {
              * Activated Conflict Ids
              * @default []
              */
-            activated_conflict_ids: string[];
+            activated_conflict_ids?: string[];
             /** Compatible Release */
             compatible_release?: number | null;
             /**
              * Content Hash
              * @default
              */
-            content_hash: string;
+            content_hash?: string;
             /**
              * Contract Version
              * @default rpg_scenario_contract_v1
              * @constant
              */
-            contract_version: "rpg_scenario_contract_v1";
+            contract_version?: "rpg_scenario_contract_v1";
             /**
              * Initial Npc Ids
              * @default []
              */
-            initial_npc_ids: string[];
+            initial_npc_ids?: string[];
             /**
              * Map Initialization
              * @default []
              */
-            map_initialization: components["schemas"]["MapInitializationOperation"][];
+            map_initialization?: components["schemas"]["MapInitializationOperation"][];
             /**
              * Opening Seed Ids
              * @default []
              */
-            opening_seed_ids: string[];
+            opening_seed_ids?: string[];
             /**
              * Protagonist Options
              * @default []
              */
-            protagonist_options: {
+            protagonist_options?: {
                 [key: string]: unknown;
             }[];
             /** Revision */
@@ -22877,12 +22877,12 @@ export interface components {
              * Runtime Seed Hash
              * @default
              */
-            runtime_seed_hash: string;
+            runtime_seed_hash?: string;
             /**
              * Starting Epoch
              * @default
              */
-            starting_epoch: string;
+            starting_epoch?: string;
             /** Starting Location Id */
             starting_location_id: string;
             /** Starting Resources */
@@ -22905,7 +22905,7 @@ export interface components {
              * @default canon_validated
              * @enum {string}
              */
-            artifact_stage: "canon_validated" | "runtime_seeded" | "materialized" | "playtested";
+            artifact_stage?: "canon_validated" | "runtime_seeded" | "materialized" | "playtested";
             /** Asset Bindings */
             asset_bindings?: {
                 [key: string]: unknown;
@@ -22926,7 +22926,7 @@ export interface components {
              * Map Bindings
              * @default []
              */
-            map_bindings: components["schemas"]["MapDefinitionBinding"][];
+            map_bindings?: components["schemas"]["MapDefinitionBinding"][];
             /** Materialization */
             materialization?: {
                 [key: string]: unknown;
@@ -22941,7 +22941,7 @@ export interface components {
              * Release Hash
              * @default
              */
-            release_hash: string;
+            release_hash?: string;
             /** Runtime Seed */
             runtime_seed?: {
                 [key: string]: unknown;
@@ -22957,14 +22957,14 @@ export interface components {
              * Adventure Seeds
              * @default []
              */
-            adventure_seeds: {
+            adventure_seeds?: {
                 [key: string]: unknown;
             }[];
             /**
              * Blueprint Requirements
              * @default []
              */
-            blueprint_requirements: {
+            blueprint_requirements?: {
                 [key: string]: unknown;
             }[];
             /** Canon */
@@ -22975,13 +22975,13 @@ export interface components {
              * Content Hash
              * @default
              */
-            content_hash: string;
+            content_hash?: string;
             /**
              * Contract Version
              * @default rpg_world_contract_v1
              * @constant
              */
-            contract_version: "rpg_world_contract_v1";
+            contract_version?: "rpg_world_contract_v1";
             /** Entity Manifest */
             entity_manifest?: {
                 [key: string]: unknown;
@@ -23030,7 +23030,7 @@ export interface components {
              * No Cache
              * @default true
              */
-            no_cache: boolean | null;
+            no_cache?: boolean | null;
             /** Prompt */
             prompt?: unknown;
             /** Provider Id */
@@ -23048,7 +23048,7 @@ export interface components {
              * Queue Regeneration
              * @default true
              */
-            queue_regeneration: boolean | null;
+            queue_regeneration?: boolean | null;
         } & {
             [key: string]: unknown;
         };
@@ -23079,12 +23079,12 @@ export interface components {
              * Blocked Attempts
              * @default 0
              */
-            blocked_attempts: number;
+            blocked_attempts?: number;
             /**
              * Expected Revision
              * @default 0
              */
-            expected_revision: number;
+            expected_revision?: number;
             /** Expires After Tick */
             expires_after_tick?: number | null;
             /** Goal Id */
@@ -23093,7 +23093,7 @@ export interface components {
              * Goal Revision
              * @default 1
              */
-            goal_revision: number;
+            goal_revision?: number;
             /**
              * Goal Type
              * @enum {string}
@@ -23103,7 +23103,7 @@ export interface components {
              * Issued Tick
              * @default 0
              */
-            issued_tick: number;
+            issued_tick?: number;
             /** Last Decision */
             last_decision?: {
                 [key: string]: unknown;
@@ -23118,14 +23118,14 @@ export interface components {
              * Not Before Tick
              * @default 0
              */
-            not_before_tick: number;
+            not_before_tick?: number;
             /** Portal Id */
             portal_id?: string | null;
             /**
              * Priority
              * @default 0
              */
-            priority: number;
+            priority?: number;
             /** Routine Id */
             routine_id?: string | null;
             /**
@@ -23133,7 +23133,7 @@ export interface components {
              * @default active
              * @enum {string}
              */
-            status: "active" | "completed" | "blocked" | "canceled" | "expired";
+            status?: "active" | "completed" | "blocked" | "canceled" | "expired";
             /** Target Cell */
             target_cell?: [
                 number,
@@ -23152,22 +23152,22 @@ export interface components {
              * Emission Count
              * @default 0
              */
-            emission_count: number;
+            emission_count?: number;
             /**
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             /**
              * Expected Revision
              * @default 0
              */
-            expected_revision: number;
+            expected_revision?: number;
             /**
              * Interval Ticks
              * @default 1
              */
-            interval_ticks: number;
+            interval_ticks?: number;
             /** Last Issued Tick */
             last_issued_tick?: number | null;
             /** Metadata */
@@ -23178,19 +23178,19 @@ export interface components {
              * Next Due Tick
              * @default 0
              */
-            next_due_tick: number;
+            next_due_tick?: number;
             /**
              * Next Step Index
              * @default 0
              */
-            next_step_index: number;
+            next_step_index?: number;
             /** Routine Id */
             routine_id: string;
             /**
              * Routine Revision
              * @default 1
              */
-            routine_revision: number;
+            routine_revision?: number;
             /** Steps */
             steps: components["schemas"]["NpcSpatialRoutineStep"][];
         } & {
@@ -23204,12 +23204,12 @@ export interface components {
              * Kick Worker
              * @default true
              */
-            kick_worker: boolean | null;
+            kick_worker?: boolean | null;
             /**
              * Minimum Score
              * @default 0.35
              */
-            minimum_score: number | null;
+            minimum_score?: number | null;
             /** Route Intent Location Id */
             route_intent_location_id?: unknown;
         } & {
@@ -23223,12 +23223,12 @@ export interface components {
              * Kick Worker
              * @default true
              */
-            kick_worker: boolean | null;
+            kick_worker?: boolean | null;
             /**
              * Minimum Score
              * @default 0.35
              */
-            minimum_score: number | null;
+            minimum_score?: number | null;
             /** Route Intent Location Id */
             route_intent_location_id?: unknown;
             /** Source World Revision */
@@ -23243,7 +23243,7 @@ export interface components {
              * @default melee_attack
              * @enum {string}
              */
-            action_type: "melee_attack" | "ranged_attack" | "unarmed_attack";
+            action_type?: "melee_attack" | "ranged_attack" | "unarmed_attack";
             /** Actor Id */
             actor_id: string;
             /** Command Id */
@@ -23344,14 +23344,14 @@ export interface components {
              * Approved
              * @default false
              */
-            approved: boolean | null;
+            approved?: boolean | null;
             /** Content */
             content?: unknown;
             /**
              * Generation Lock
              * @default true
              */
-            generation_lock: boolean | null;
+            generation_lock?: boolean | null;
         } & {
             [key: string]: unknown;
         };
@@ -23395,7 +23395,7 @@ export interface components {
              * No Cache
              * @default false
              */
-            no_cache: boolean | null;
+            no_cache?: boolean | null;
             /** Prompts */
             prompts?: unknown;
             /** Provider Id */
@@ -23463,7 +23463,7 @@ export interface components {
              * Background Expansion
              * @default true
              */
-            background_expansion: boolean | null;
+            background_expansion?: boolean | null;
             /** Depth */
             depth?: unknown;
             /** Directives */
@@ -23482,7 +23482,7 @@ export interface components {
              * Replace Locked
              * @default false
              */
-            replace_locked: boolean | null;
+            replace_locked?: boolean | null;
             /** Scope */
             scope?: unknown;
             /** Starting Location */
@@ -23566,19 +23566,19 @@ export interface components {
              * Max Steps
              * @default 200
              */
-            max_steps: number;
+            max_steps?: number;
             /** Max Tokens */
             max_tokens?: number | null;
             /**
              * Max Tool Calls
              * @default 500
              */
-            max_tool_calls: number;
+            max_tool_calls?: number;
             /**
              * Max Wall Time Seconds
              * @default 3600
              */
-            max_wall_time_seconds: number;
+            max_wall_time_seconds?: number;
         };
         /**
          * RuntimeDiagnostics
@@ -23692,7 +23692,7 @@ export interface components {
              * Chapter Count
              * @default 0
              */
-            chapter_count: number;
+            chapter_count?: number;
             /** Content */
             content: string;
             /** Metadata */
@@ -23703,24 +23703,24 @@ export interface components {
              * Premise
              * @default
              */
-            premise: string;
+            premise?: string;
             /**
              * Provider Label
              * @default
              */
-            provider_label: string;
+            provider_label?: string;
             /** Source Job Id */
             source_job_id?: string | null;
             /**
              * Title
              * @default Untitled story
              */
-            title: string;
+            title?: string;
             /**
              * Word Count
              * @default 0
              */
-            word_count: number;
+            word_count?: number;
         };
         /**
          * SavedStoryAssetResponse
@@ -23829,20 +23829,20 @@ export interface components {
              * Agent Mode
              * @default false
              */
-            agent_mode: boolean;
+            agent_mode?: boolean;
             /**
              * Coding Approval Policy
              * @default ask_sensitive
              * @enum {string}
              */
-            coding_approval_policy: "always_ask" | "ask_sensitive" | "allow_automatic";
+            coding_approval_policy?: "always_ask" | "ask_sensitive" | "allow_automatic";
             /** Content */
             content: string;
             /**
              * Dry Run
              * @default false
              */
-            dry_run: boolean;
+            dry_run?: boolean;
             /** Image Data Url */
             image_data_url?: string | null;
             /** Image Data Urls */
@@ -23923,7 +23923,7 @@ export interface components {
              * Action
              * @default DEFAULT
              */
-            action: string;
+            action?: string;
             /** Role Override */
             role_override?: string | null;
             /** Scope */
@@ -23946,7 +23946,7 @@ export interface components {
              * Continue Topic
              * @default false
              */
-            continue_topic: boolean;
+            continue_topic?: boolean;
             /**
              * Interaction Mode
              * @enum {string}
@@ -23956,26 +23956,26 @@ export interface components {
              * Read Memory
              * @default false
              */
-            read_memory: boolean;
+            read_memory?: boolean;
             /**
              * Shared Memory Access
              * @default none
              * @enum {string}
              */
-            shared_memory_access: "none" | "read_only";
+            shared_memory_access?: "none" | "read_only";
             /**
              * Transcript Policy
              * @default persistent
              * @enum {string}
              */
-            transcript_policy: "persistent" | "temporary" | "none";
+            transcript_policy?: "persistent" | "temporary" | "none";
             /** Voice Asset Id */
             voice_asset_id?: string | null;
             /**
              * Write Memory
              * @default false
              */
-            write_memory: boolean;
+            write_memory?: boolean;
         };
         /** SettingsPatch */
         SettingsPatch: {
@@ -24150,7 +24150,7 @@ export interface components {
              * Reason Codes
              * @default []
              */
-            reason_codes: string[];
+            reason_codes?: string[];
             /** Source Rank */
             source_rank: number;
             /**
@@ -24176,42 +24176,42 @@ export interface components {
              * Assistant Backchannel Mode
              * @default off
              */
-            assistant_backchannel_mode: string;
+            assistant_backchannel_mode?: string;
             /**
              * Conversation Pace
              * @default balanced
              */
-            conversation_pace: string;
+            conversation_pace?: string;
             /**
              * Emotional Attunement
              * @default subtle
              */
-            emotional_attunement: string;
+            emotional_attunement?: string;
             /**
              * Presence Preset
              * @default natural
              */
-            presence_preset: string;
+            presence_preset?: string;
             /**
              * Response Length
              * @default conversational
              */
-            response_length: string;
+            response_length?: string;
             /**
              * Response Onset Style
              * @default adaptive
              */
-            response_onset_style: string;
+            response_onset_style?: string;
             /**
              * Serious
              * @default false
              */
-            serious: boolean;
+            serious?: boolean;
             /**
              * Stance
              * @default automatic
              */
-            stance: string;
+            stance?: string;
             /** Text */
             text: string;
         };
@@ -24221,12 +24221,12 @@ export interface components {
              * Desired Perceived Onset Ms
              * @default 450
              */
-            desired_perceived_onset_ms: number;
+            desired_perceived_onset_ms?: number;
             /**
              * Maximum Additional Delay Ms
              * @default 350
              */
-            maximum_additional_delay_ms: number;
+            maximum_additional_delay_ms?: number;
         };
         /** SpeechPerformancePlan */
         SpeechPerformancePlan: {
@@ -24235,13 +24235,13 @@ export interface components {
              * @default moderate
              * @enum {string}
              */
-            certainty: "low" | "moderate" | "high";
+            certainty?: "low" | "moderate" | "high";
             /**
              * Clause Pause
              * @default medium
              * @enum {string}
              */
-            clause_pause: "short" | "medium" | "long";
+            clause_pause?: "short" | "medium" | "long";
             /** Emphasis */
             emphasis?: string[];
             /**
@@ -24249,7 +24249,7 @@ export interface components {
              * @default moderate
              * @enum {string}
              */
-            energy: "low" | "moderate" | "high";
+            energy?: "low" | "moderate" | "high";
             nonverbal_eligibility?: components["schemas"]["NonverbalEligibility"];
             onset_policy?: components["schemas"]["SpeechOnsetPolicy"];
             /**
@@ -24257,25 +24257,25 @@ export interface components {
              * @default natural
              * @enum {string}
              */
-            pace: "slightly_slow" | "natural" | "slightly_fast";
+            pace?: "slightly_slow" | "natural" | "slightly_fast";
             /**
              * Schema Version
              * @default 1
              * @constant
              */
-            schema_version: 1;
+            schema_version?: 1;
             /**
              * Speech Act
              * @default answer
              * @enum {string}
              */
-            speech_act: "acknowledgement" | "answer" | "question" | "reassurance" | "reflection" | "instruction";
+            speech_act?: "acknowledgement" | "answer" | "question" | "reassurance" | "reflection" | "instruction";
             /**
              * Warmth
              * @default moderate
              * @enum {string}
              */
-            warmth: "low" | "moderate" | "high";
+            warmth?: "low" | "moderate" | "high";
         };
         /** StartAgentRunRequest */
         StartAgentRunRequest: {
@@ -24286,12 +24286,12 @@ export interface components {
              * @default ask_sensitive
              * @enum {string}
              */
-            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            approval_policy?: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
             /**
              * Base Ref
              * @default main
              */
-            base_ref: string;
+            base_ref?: string;
             /** Capabilities */
             capabilities?: string[] | null;
             /** External Capabilities */
@@ -24302,7 +24302,7 @@ export interface components {
              * Isolation Policy
              * @default supervised_worktree
              */
-            isolation_policy: string;
+            isolation_policy?: string;
             limits?: components["schemas"]["RunLimits"] | null;
             /** Model Id */
             model_id: string;
@@ -24310,12 +24310,12 @@ export interface components {
              * Objective
              * @default
              */
-            objective: string;
+            objective?: string;
             /**
              * Profile
              * @default coding
              */
-            profile: string;
+            profile?: string;
             /** Provider Id */
             provider_id: string;
             /**
@@ -24323,12 +24323,12 @@ export interface components {
              * @default strict
              * @enum {string}
              */
-            quality_policy: "off" | "standard" | "strict" | "critical";
+            quality_policy?: "off" | "standard" | "strict" | "critical";
             /**
              * Quality Reserve Fraction
              * @default 0.25
              */
-            quality_reserve_fraction: number;
+            quality_reserve_fraction?: number;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /** Repository */
@@ -24348,7 +24348,7 @@ export interface components {
              * Format
              * @default m4b
              */
-            format: string;
+            format?: string;
         };
         /** StartPreview */
         StartPreview: {
@@ -24362,14 +24362,14 @@ export interface components {
              * Model Id
              * @default Qwen3-TTS
              */
-            model_id: string;
+            model_id?: string;
             /** Model Revision */
             model_revision: string;
             /**
              * Provider Id
              * @default faster-qwen3-tts
              */
-            provider_id: string;
+            provider_id?: string;
             /** Seed */
             seed?: number | null;
             /** Span Id */
@@ -24387,14 +24387,14 @@ export interface components {
              * Model Id
              * @default Qwen3-TTS
              */
-            model_id: string;
+            model_id?: string;
             /** Model Revision */
             model_revision: string;
             /**
              * Provider Id
              * @default faster-qwen3-tts
              */
-            provider_id: string;
+            provider_id?: string;
             /** Seed */
             seed?: number | null;
         };
@@ -24404,7 +24404,7 @@ export interface components {
              * Deadline Seconds
              * @default 45
              */
-            deadline_seconds: number;
+            deadline_seconds?: number;
             /** Decision Context At */
             decision_context_at?: string | null;
             /** Instrument Id */
@@ -24413,27 +24413,27 @@ export interface components {
              * Max Extracts
              * @default 8
              */
-            max_extracts: number;
+            max_extracts?: number;
             /**
              * Max Queries
              * @default 5
              */
-            max_queries: number;
+            max_queries?: number;
             /**
              * Max Sources
              * @default 20
              */
-            max_sources: number;
+            max_sources?: number;
             /**
              * Max Steps
              * @default 8
              */
-            max_steps: number;
+            max_steps?: number;
             /**
              * Run Shadow Ai
              * @default true
              */
-            run_shadow_ai: boolean;
+            run_shadow_ai?: boolean;
             /** Strategy Id */
             strategy_id?: string | null;
         };
@@ -24484,155 +24484,155 @@ export interface components {
              * Allow Missing Tod Rvol
              * @default true
              */
-            allow_missing_tod_rvol: boolean;
+            allow_missing_tod_rvol?: boolean;
             /**
              * Auto Archive Daily Universe
              * @default true
              */
-            auto_archive_daily_universe: boolean;
+            auto_archive_daily_universe?: boolean;
             /**
              * D Smoothing Period
              * @default 3
              */
-            d_smoothing_period: number;
+            d_smoothing_period?: number;
             /**
              * Entry Start Et
              * Format: time
              * @default 09:35:00
              */
-            entry_start_et: string;
+            entry_start_et?: string;
             /**
              * Float Preference Mode
              * @default ignore
              * @enum {string}
              */
-            float_preference_mode: "ignore" | "score" | "require";
+            float_preference_mode?: "ignore" | "score" | "require";
             /**
              * Force Flat Et
              * Format: time
              * @default 15:55:00
              */
-            force_flat_et: string;
+            force_flat_et?: string;
             /**
              * K Smoothing Period
              * @default 3
              */
-            k_smoothing_period: number;
+            k_smoothing_period?: number;
             /**
              * Last Entry Et
              * Format: time
              * @default 15:50:00
              */
-            last_entry_et: string;
+            last_entry_et?: string;
             /**
              * Maximum Price
              * @default 20
              */
-            maximum_price: number | string;
+            maximum_price?: number | string;
             /**
              * Maximum Spread Bps
              * @default 150
              */
-            maximum_spread_bps: number | string;
+            maximum_spread_bps?: number | string;
             /**
              * Minimum Gap Pct
              * @default 0
              */
-            minimum_gap_pct: number | string;
+            minimum_gap_pct?: number | string;
             /**
              * Minimum Premarket Dollar Volume
              * @default 0
              */
-            minimum_premarket_dollar_volume: number | string;
+            minimum_premarket_dollar_volume?: number | string;
             /**
              * Minimum Price
              * @default 0.50
              */
-            minimum_price: number | string;
+            minimum_price?: number | string;
             /**
              * Minimum Tod Rvol
              * @default 0
              */
-            minimum_tod_rvol: number | string;
+            minimum_tod_rvol?: number | string;
             /**
              * Overbought Threshold
              * @default 95
              */
-            overbought_threshold: number | string;
+            overbought_threshold?: number | string;
             /**
              * Oversold Threshold
              * @default 18
              */
-            oversold_threshold: number | string;
+            oversold_threshold?: number | string;
             /**
              * Preferred Float Max Shares
              * @default 1000000000
              */
-            preferred_float_max_shares: number | string;
+            preferred_float_max_shares?: number | string;
             /**
              * Preferred Float Min Shares
              * @default 1
              */
-            preferred_float_min_shares: number | string;
+            preferred_float_min_shares?: number | string;
             /**
              * Recovery Threshold
              * @default 20
              */
-            recovery_threshold: number | string;
+            recovery_threshold?: number | string;
             /**
              * Reject Dilution Flags
              * @default []
              */
-            reject_dilution_flags: string[];
+            reject_dilution_flags?: string[];
             /**
              * Require Catalyst Evidence
              * @default false
              */
-            require_catalyst_evidence: boolean;
+            require_catalyst_evidence?: boolean;
             /**
              * Rsi Period
              * @default 14
              */
-            rsi_period: number;
+            rsi_period?: number;
             /**
              * Stochastic Period
              * @default 14
              */
-            stochastic_period: number;
+            stochastic_period?: number;
             /**
              * Strategy Id
              * @default stoch_rsi_5m_v1
              * @constant
              */
-            strategy_id: "stoch_rsi_5m_v1";
+            strategy_id?: "stoch_rsi_5m_v1";
             /**
              * Strategy Version
              * @default 1.0.0
              * @constant
              */
-            strategy_version: "1.0.0";
+            strategy_version?: "1.0.0";
             /**
              * Universe Archive Grace Minutes
              * @default 10
              */
-            universe_archive_grace_minutes: number;
+            universe_archive_grace_minutes?: number;
             /**
              * Universe Discovery Count
              * @default 50
              */
-            universe_discovery_count: number;
+            universe_discovery_count?: number;
             /**
              * Universe Discovery Source
              * @default yahoo
              * @enum {string}
              */
-            universe_discovery_source: "yahoo" | "finviz";
+            universe_discovery_source?: "yahoo" | "finviz";
             /**
              * Universe Scan Time Et
              * Format: time
              * @default 09:20:00
              */
-            universe_scan_time_et: string;
+            universe_scan_time_et?: string;
         };
         /**
          * StochRsi5mConfig
@@ -24915,12 +24915,12 @@ export interface components {
              * Lookback Hours
              * @default 72
              */
-            lookback_hours: number;
+            lookback_hours?: number;
             /**
              * Max Items Per Candidate
              * @default 8
              */
-            max_items_per_candidate: number;
+            max_items_per_candidate?: number;
         };
         /** StrategyCatalystCaptureResponse */
         StrategyCatalystCaptureResponse: {
@@ -25210,7 +25210,7 @@ export interface components {
              * Assumed Spread Bps
              * @default 40
              */
-            assumed_spread_bps: number | string;
+            assumed_spread_bps?: number | string;
             /**
              * End Date
              * Format: date
@@ -25220,23 +25220,23 @@ export interface components {
              * Initial Cash
              * @default 100000
              */
-            initial_cash: number | string;
+            initial_cash?: number | string;
             /**
              * Max Hold Minutes
              * @description Legacy compatibility field; indicator-based exits do not use elapsed time.
              * @default 390
              */
-            max_hold_minutes: number;
+            max_hold_minutes?: number;
             /**
              * Max Sessions
              * @default 60
              */
-            max_sessions: number;
+            max_sessions?: number;
             /**
              * Reconstruction Max Age Days
              * @default 30
              */
-            reconstruction_max_age_days: number;
+            reconstruction_max_age_days?: number;
             /**
              * Start Date
              * Format: date
@@ -25249,7 +25249,7 @@ export interface components {
              * @default captured_or_reconstructed
              * @enum {string}
              */
-            universe_mode: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
+            universe_mode?: "captured_only" | "captured_or_reconstructed" | "reconstructed_only";
             /** Universe Scan Time Et */
             universe_scan_time_et?: string | null;
         };
@@ -25453,64 +25453,64 @@ export interface components {
              * Format: time
              * @default 09:35:00
              */
-            entry_start_et: string;
+            entry_start_et?: string;
             /**
              * Force Flat Et
              * Format: time
              * @default 15:55:00
              */
-            force_flat_et: string;
+            force_flat_et?: string;
             /**
              * Kill Switch
              * @default false
              */
-            kill_switch: boolean;
+            kill_switch?: boolean;
             /**
              * Last Entry Et
              * Format: time
              * @default 11:30:00
              */
-            last_entry_et: string;
+            last_entry_et?: string;
             /**
              * Max Daily Loss Pct
              * @default 1.5
              */
-            max_daily_loss_pct: number | string;
+            max_daily_loss_pct?: number | string;
             /**
              * Max Open Risk Pct
              * @default 1.0
              */
-            max_open_risk_pct: number | string;
+            max_open_risk_pct?: number | string;
             /**
              * Max Positions
              * @default 3
              */
-            max_positions: number;
+            max_positions?: number;
             /**
              * Max Spread Bps
              * @default 150
              */
-            max_spread_bps: number | string;
+            max_spread_bps?: number | string;
             /**
              * Max Trade Value
              * @default 25000
              */
-            max_trade_value: number | string;
+            max_trade_value?: number | string;
             /**
              * Max Trades Per Day
              * @default 5
              */
-            max_trades_per_day: number;
+            max_trades_per_day?: number;
             /**
              * One Trade Per Symbol Per Day
              * @default true
              */
-            one_trade_per_symbol_per_day: boolean;
+            one_trade_per_symbol_per_day?: boolean;
             /**
              * Risk Per Trade Pct
              * @default 0.35
              */
-            risk_per_trade_pct: number | string;
+            risk_per_trade_pct?: number | string;
         };
         /** StrategyRiskProfile */
         "StrategyRiskProfile-Output": {
@@ -25740,27 +25740,27 @@ export interface components {
              * Default Action Budget
              * @default 1
              */
-            default_action_budget: number;
+            default_action_budget?: number;
             /**
              * Default Movement Budget
              * @default 60
              */
-            default_movement_budget: number;
+            default_movement_budget?: number;
             /**
              * Full Cover Bonus
              * @default 5
              */
-            full_cover_bonus: number;
+            full_cover_bonus?: number;
             /**
              * Half Cover Bonus
              * @default 2
              */
-            half_cover_bonus: number;
+            half_cover_bonus?: number;
             /**
              * Max Reactions Per Move
              * @default 8
              */
-            max_reactions_per_move: number;
+            max_reactions_per_move?: number;
         };
         /** TaskConstraint */
         TaskConstraint: {
@@ -26130,7 +26130,7 @@ export interface components {
              * Cooldown Seconds
              * @default 0
              */
-            cooldown_seconds: number;
+            cooldown_seconds?: number;
             evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
             /** Expires At */
             expires_at?: string | null;
@@ -26159,12 +26159,12 @@ export interface components {
              * Interval
              * @default 1m
              */
-            interval: string;
+            interval?: string;
             /**
              * Is Final
              * @default true
              */
-            is_final: boolean;
+            is_final?: boolean;
             /**
              * Observed At
              * Format: date-time
@@ -26189,17 +26189,17 @@ export interface components {
              * Allow Partial Bars
              * @default false
              */
-            allow_partial_bars: boolean;
+            allow_partial_bars?: boolean;
             /**
              * Formula Version
              * @default omnix-indicators-v2
              */
-            formula_version: string;
+            formula_version?: string;
             /**
              * Interval
              * @default 1m
              */
-            interval: string;
+            interval?: string;
         };
         /** TradingAlertListResponse */
         TradingAlertListResponse: {
@@ -26212,47 +26212,47 @@ export interface components {
              * Anchor Bars Ago
              * @default 0
              */
-            anchor_bars_ago: number;
+            anchor_bars_ago?: number;
             /**
              * Component
              * @default value
              * @enum {string}
              */
-            component: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
+            component?: "value" | "line" | "signal" | "histogram" | "upper" | "middle" | "lower";
             /**
              * Fast Period
              * @default 12
              */
-            fast_period: number;
+            fast_period?: number;
             /** Indicator Id */
             indicator_id?: ("sma" | "ema" | "rsi" | "macd" | "bollinger" | "atr" | "vwap" | "stochastic-rsi") | null;
             /**
              * Lookback Bars
              * @default 1
              */
-            lookback_bars: number;
+            lookback_bars?: number;
             /**
              * Message
              * @default
              */
-            message: string;
+            message?: string;
             /** Notification Channels */
             notification_channels?: ("app" | "toast" | "sound")[];
             /**
              * Period
              * @default 14
              */
-            period: number;
+            period?: number;
             /**
              * Signal Period
              * @default 9
              */
-            signal_period: number;
+            signal_period?: number;
             /**
              * Slow Period
              * @default 26
              */
-            slow_period: number;
+            slow_period?: number;
             /** Trendline Mode */
             trendline_mode?: ("crossing" | "crossing_up" | "crossing_down" | "greater_than" | "less_than") | null;
             /** Trendline Points */
@@ -26262,7 +26262,7 @@ export interface components {
              * @default every_time
              * @enum {string}
              */
-            trigger_policy: "once" | "once_per_bar" | "every_time";
+            trigger_policy?: "once" | "once_per_bar" | "every_time";
         };
         /** TradingAlertParameters */
         "TradingAlertParameters-Output": {
@@ -26380,12 +26380,12 @@ export interface components {
              * Cooldown Seconds
              * @default 0
              */
-            cooldown_seconds: number;
+            cooldown_seconds?: number;
             /**
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             evaluation_policy?: components["schemas"]["TradingAlertEvaluationPolicy"];
             /** Expires At */
             expires_at?: string | null;
@@ -26847,48 +26847,48 @@ export interface components {
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             /**
              * Formula Version
              * @default omnix-indicators-v2
              */
-            formula_version: string;
+            formula_version?: string;
             /**
              * History Limit
              * @default 100
              */
-            history_limit: number;
+            history_limit?: number;
             /** Instrument Ids */
             instrument_ids: string[];
             /**
              * Interval
              * @default 1d
              */
-            interval: string;
+            interval?: string;
             /**
              * Max Concurrency
              * @default 4
              */
-            max_concurrency: number;
+            max_concurrency?: number;
             /** Name */
             name: string;
             /**
              * Request Timeout Seconds
              * @default 10
              */
-            request_timeout_seconds: number;
+            request_timeout_seconds?: number;
             /**
              * Revision
              * @default 1
              */
-            revision: number;
+            revision?: number;
             /** Rules */
             rules: components["schemas"]["TradingScannerRule-Input"][];
             /**
              * Run Timeout Seconds
              * @default 120
              */
-            run_timeout_seconds: number;
+            run_timeout_seconds?: number;
             /** Scanner Id */
             scanner_id: string;
             /** Updated At */
@@ -26991,7 +26991,7 @@ export interface components {
              * Lookback Bars
              * @default 1
              */
-            lookback_bars: number;
+            lookback_bars?: number;
             /**
              * Metric
              * @enum {string}
@@ -27006,7 +27006,7 @@ export interface components {
              * Period
              * @default 14
              */
-            period: number;
+            period?: number;
             /** Rule Id */
             rule_id: string;
             /** Threshold */
@@ -27103,20 +27103,20 @@ export interface components {
              * Enabled
              * @default true
              */
-            enabled: boolean;
+            enabled?: boolean;
             /**
              * Mode
              * @default off
              * @enum {string}
              */
-            mode: "off" | "shadow" | "auto_paper";
+            mode?: "off" | "shadow" | "auto_paper";
             /** Parent Strategy Id */
             parent_strategy_id?: string | null;
             /**
              * Revision
              * @default 1
              */
-            revision: number;
+            revision?: number;
             risk?: components["schemas"]["StrategyRiskProfile-Input"];
             /** Strategy Id */
             strategy_id: string;
@@ -27125,12 +27125,12 @@ export interface components {
              * @default gap_pullback_v1
              * @enum {string}
              */
-            strategy_kind: "gap_pullback_v1" | "stoch_rsi_5m_v1";
+            strategy_kind?: "gap_pullback_v1" | "stoch_rsi_5m_v1";
             /**
              * Strategy Version
              * @default 1.0.0
              */
-            strategy_version: string;
+            strategy_version?: string;
             /** Updated At */
             updated_at?: string | null;
         };
@@ -27221,12 +27221,12 @@ export interface components {
              * Append Silence
              * @default true
              */
-            append_silence: boolean;
+            append_silence?: boolean;
             /**
              * Chunk Size
              * @default 12
              */
-            chunk_size: number;
+            chunk_size?: number;
             delivery_plan?: components["schemas"]["SpeechPerformancePlan"] | null;
             /** Diagnostics Stream Id */
             diagnostics_stream_id?: string | null;
@@ -27234,12 +27234,12 @@ export interface components {
              * Generation Epoch
              * @default 0
              */
-            generation_epoch: number;
+            generation_epoch?: number;
             /**
              * Language
              * @default en
              */
-            language: string | null;
+            language?: string | null;
             /** Max New Tokens */
             max_new_tokens?: number | null;
             /** Non Streaming Mode */
@@ -27256,7 +27256,7 @@ export interface components {
              * Repetition Penalty
              * @default 1.05
              */
-            repetition_penalty: number;
+            repetition_penalty?: number;
             /** Request Id */
             request_id?: string | null;
             /** Segment Id */
@@ -27267,22 +27267,22 @@ export interface components {
              * Temperature
              * @default 0.9
              */
-            temperature: number;
+            temperature?: number;
             /**
              * Text
              * @default
              */
-            text: string;
+            text?: string;
             /**
              * Top K
              * @default 50
              */
-            top_k: number;
+            top_k?: number;
             /**
              * Top P
              * @default 1
              */
-            top_p: number;
+            top_p?: number;
         };
         /** UpdateAudiobookProject */
         UpdateAudiobookProject: {
@@ -27290,7 +27290,7 @@ export interface components {
              * Author
              * @default
              */
-            author: string;
+            author?: string;
             /** Title */
             title: string;
         };
@@ -27303,7 +27303,7 @@ export interface components {
              * Clear Default Voice
              * @default false
              */
-            clear_default_voice: boolean;
+            clear_default_voice?: boolean;
             /** Default Greeting */
             default_greeting?: string | null;
             /** Default Voice Asset Id */
@@ -27360,18 +27360,18 @@ export interface components {
              * Deletion Reason
              * @default
              */
-            deletion_reason: string;
+            deletion_reason?: string;
             /**
              * Deletion State
              * @default active
              * @enum {string}
              */
-            deletion_state: "active" | "pending_deletion" | "deleted";
+            deletion_state?: "active" | "pending_deletion" | "deleted";
             /**
              * Source Reference
              * @default
              */
-            source_reference: string;
+            source_reference?: string;
             /** Source Type */
             source_type: string;
             /** Subject Owner */
@@ -27419,13 +27419,13 @@ export interface components {
              * @default audio_envelope
              * @enum {string}
              */
-            render_mode: "audio_envelope" | "viseme" | "static";
+            render_mode?: "audio_envelope" | "viseme" | "static";
             /**
              * Renderer
              * @default sprite
              * @enum {string}
              */
-            renderer: "sprite" | "live2d" | "rive";
+            renderer?: "sprite" | "live2d" | "rive";
             /** Rig Asset Id */
             rig_asset_id?: string | null;
         };
@@ -27880,17 +27880,17 @@ export interface components {
              * Minimum Exact Sample
              * @default 50
              */
-            minimum_exact_sample: number;
+            minimum_exact_sample?: number;
             /**
              * Minimum Sample
              * @default 100
              */
-            minimum_sample: number;
+            minimum_sample?: number;
             /**
              * Policy Version
              * @default trading-research-1
              */
-            policy_version: string;
+            policy_version?: string;
             /** Strategy Id */
             strategy_id?: string | null;
         };
@@ -28063,12 +28063,12 @@ export interface components {
              * App Version
              * @default unknown
              */
-            app_version: string;
+            app_version?: string;
             /**
              * Browser Version
              * @default unknown
              */
-            browser_version: string;
+            browser_version?: string;
             /** Calibration Version */
             calibration_version?: string | null;
             /** Call Id */
@@ -28077,18 +28077,18 @@ export interface components {
              * Character Id
              * @default system-assistant
              */
-            character_id: string;
+            character_id?: string;
             /**
              * Configured Duplex Mode
              * @default automatic
              * @enum {string}
              */
-            configured_duplex_mode: "automatic" | "half_duplex" | "echo_aware";
+            configured_duplex_mode?: "automatic" | "half_duplex" | "echo_aware";
             /**
              * Conversation Stance
              * @default automatic
              */
-            conversation_stance: string;
+            conversation_stance?: string;
             /** Ended At */
             ended_at: string;
             /** Environment Hash */
@@ -28111,7 +28111,7 @@ export interface components {
              * Os Version
              * @default unknown
              */
-            os_version: string;
+            os_version?: string;
             /** Output Device Hash */
             output_device_hash?: string | null;
             /**
@@ -28119,7 +28119,7 @@ export interface components {
              * @default natural
              * @enum {string}
              */
-            presence_preset: "quiet" | "natural" | "engaged" | "listener";
+            presence_preset?: "quiet" | "natural" | "engaged" | "listener";
             /** Pressure Score */
             pressure_score?: number | null;
             /** Profile Version */
@@ -28133,13 +28133,13 @@ export interface components {
              * @default insufficient
              * @enum {string}
              */
-            release_gate_status: "pass" | "fail" | "insufficient";
+            release_gate_status?: "pass" | "fail" | "insufficient";
             /**
              * Resolved Duplex Mode
              * @default half_duplex
              * @enum {string}
              */
-            resolved_duplex_mode: "half_duplex" | "echo_aware";
+            resolved_duplex_mode?: "half_duplex" | "echo_aware";
             /** Scenario Labels */
             scenario_labels?: string[];
             /** Session Id */
@@ -28389,7 +28389,7 @@ export interface components {
              * Description
              * @default
              */
-            description: string;
+            description?: string;
             /** Id */
             id: string;
             /** Name */
@@ -28400,7 +28400,7 @@ export interface components {
              * Version
              * @default 1
              */
-            version: number;
+            version?: number;
         };
         /** WorkflowStartRequest */
         WorkflowStartRequest: {
@@ -28426,7 +28426,7 @@ export interface components {
              * @default capability
              * @enum {string}
              */
-            kind: "capability" | "condition" | "approval";
+            kind?: "capability" | "condition" | "approval";
             /** Next Step Id */
             next_step_id?: string | null;
             /** On False Step Id */
@@ -28437,12 +28437,12 @@ export interface components {
              * Requires Approval
              * @default false
              */
-            requires_approval: boolean;
+            requires_approval?: boolean;
             /**
              * Retry Limit
              * @default 0
              */
-            retry_limit: number;
+            retry_limit?: number;
             /** Timeout Seconds */
             timeout_seconds?: number | null;
         };
@@ -28475,7 +28475,7 @@ export interface components {
              * Count
              * @default 30
              */
-            count: number;
+            count?: number;
             /**
              * Evaluation Time
              * Format: date-time
@@ -28485,17 +28485,17 @@ export interface components {
              * Maximum Price
              * @default 20
              */
-            maximum_price: number | string;
+            maximum_price?: number | string;
             /**
              * Minimum Gap Pct
              * @default 20
              */
-            minimum_gap_pct: number | string;
+            minimum_gap_pct?: number | string;
             /**
              * Minimum Price
              * @default 0.50
              */
-            minimum_price: number | string;
+            minimum_price?: number | string;
             /** Universe Id */
             universe_id: string;
         };

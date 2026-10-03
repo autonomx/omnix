@@ -10,6 +10,7 @@ import { speechInputDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback } from '../shared/FeatureSubmitFeedback';
 import { buildSttInputPayload, buildSttStages, type SttJobFormValues } from './sttJobDefaults';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -148,7 +149,7 @@ export function SttWorkspace({ module }: { module: OmnixModuleDefinition }) {
                     <strong>{job.type}</strong>
                     <OmnixStatusPill>{job.status}</OmnixStatusPill>
                   </Group>
-                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
+                  <Progress value={jobProgressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
                 </article>
               ))}
@@ -183,10 +184,3 @@ function sttCapableProviders(payload: ProviderFacadePayload | undefined) {
   return payload?.providers.filter((provider) => provider.capabilities.includes('stt')) ?? [];
 }
 
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}

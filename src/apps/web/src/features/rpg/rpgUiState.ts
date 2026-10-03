@@ -1,4 +1,5 @@
 import type { AssetListResponse, JobListResponse, ReportListResponse } from '../../api/client';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 export interface RpgHeroSummaryPreview {
   avatar: string;
@@ -430,12 +431,7 @@ export function safeSessionId(session: Record<string, unknown>, index: number): 
   return String(candidate);
 }
 
-export function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}
+export const progressPercent = jobProgressPercent;
 
 function findSessionById(sessions: RpgSession[], id: string): RpgSession | undefined {
   return sessions.find((session, index) => safeSessionId(session, index) === id);

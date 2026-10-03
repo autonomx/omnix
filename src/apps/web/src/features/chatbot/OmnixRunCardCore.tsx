@@ -1,11 +1,27 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { omnixApiClient } from '../../api/client';
+import { omnixApiClient, type AgentRunSnapshot, type TaskGraphRunSnapshot } from '../../api/client';
 import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
 
 type Metadata = Record<string, unknown>;
+
+/**
+ * What the run cards render. A chat message's metadata gives a partial snapshot
+ * until the first fetch, so every field beyond the identity is optional.
+ */
+type AgentRunView = Partial<Omit<AgentRunSnapshot, 'run_id' | 'status' | 'spec'>> & {
+  run_id: string;
+  status: string;
+  spec: Partial<Omit<AgentRunSnapshot['spec'], 'profile' | 'task'>> & { profile: string; task: string };
+};
+type TaskGraphRunView = Partial<Omit<TaskGraphRunSnapshot, 'run_id' | 'status' | 'graph' | 'node_states'>> & {
+  run_id: string;
+  status: string;
+  graph: { graph_id?: string; revision?: number; nodes: Array<{ id: string; kind: string; profile_id?: string | null; objective?: string }>; output_contract?: Metadata; reference_context?: string };
+  node_states?: Array<{ node_id: string; status: string; child_run_id?: string | null; last_error?: string | null; output?: Metadata }>;
+};
 
 function asRecord(value: unknown): Metadata | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Metadata : null;
@@ -590,7 +606,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const queryClient = useQueryClient();
   const [steeringMessage, setSteeringMessage] = useState('');
   const [showAllActivity, setShowAllActivity] = useState(false);
-  const query = useQuery({
+  const query = useQuery<AgentRunView>({
     queryKey: ['agent-run', id],
     queryFn: () => omnixApiClient.getAgentRun(id),
     initialData: {
@@ -662,7 +678,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       { onSuccess: () => setSteeringMessage('') },
     );
   };
-  const runEvents = events.data ?? [];
+  const runEvents = (events.data ?? []).map((event) => ({ ...event, payload: event.payload ?? {} }));
   const stallWarning = unresolvedStallWarning(runEvents);
   const clarificationQuestion = status === 'waiting_for_input'
     ? [...runEvents].reverse().find((event) => (
@@ -689,7 +705,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const latestActivity = activitySummary(activity);
   const tests = testEvidence(runEvents);
   const diff = (artifacts.data ?? []).filter((artifact) => artifact.kind === 'diff').at(-1);
-  const diffPreview = stringField(diff?.metadata.preview);
+  const diffPreview = stringField(diff?.metadata?.preview);
   const changedFiles = diffFileStats(diff?.metadata ?? {}, diffPreview);
   const totalAdditions = changedFiles.reduce((total, file) => total + file.additions, 0);
   const totalDeletions = changedFiles.reduce((total, file) => total + file.deletions, 0);
@@ -809,11 +825,11 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
           <summary>Authority & evidence</summary>
           <div className="assistant-runtime-policy-grid">
             {requestMode ? <div><strong>Mode</strong><span>{stringField(requestMode.mode)} · {stringField(requestMode.source)}</span></div> : null}
-            {latestRevision ? <div><strong>Task revision</strong><span>#{latestRevision.sequence} · {latestRevision.evidence_decision.reason}</span></div> : null}
+            {latestRevision ? <div><strong>Task revision</strong><span>#{latestRevision.sequence} · {latestRevision.evidence_decision?.reason}</span></div> : null}
             <div><strong>Evidence</strong><span>{evidence.data?.passed ? 'satisfied' : evidenceRequirements.length ? 'required' : 'not required'}</span></div>
             {evidenceRequirements.map((requirement, index) => {
               const subject = asRecord(requirement.subject);
-              const evaluation = evidence.data?.requirements.find((row) => row.requirement_id === stringField(requirement.id));
+              const evaluation = evidence.data?.requirements?.find((row) => row.requirement_id === stringField(requirement.id));
               return (
                 <div key={stringField(requirement.id) || `requirement-${index}`}>
                   <strong>{stringField(requirement.source_class) || 'evidence'}</strong>
@@ -1046,9 +1062,9 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         <div className="assistant-runtime-approval" key={approval.approval_id}>
           <div>
             <span>Permission: {approval.capability_id}</span>
-            {typeof approval.request_payload.command === 'string'
+            {typeof approval.request_payload?.command === 'string'
               ? <code className="assistant-runtime-approval-command">{approval.request_payload.command}</code>
-              : typeof approval.request_payload.path === 'string'
+              : typeof approval.request_payload?.path === 'string'
                 ? <code className="assistant-runtime-approval-command">{approval.request_payload.path}</code>
               : null}
           </div>
@@ -1068,7 +1084,7 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
   const initialGraph = asRecord(initial.graph);
   const initialNodes = Array.isArray(initialGraph?.nodes) ? initialGraph.nodes : [];
   const initialStates = Array.isArray(initial.node_states) ? initial.node_states : [];
-  const query = useQuery({
+  const query = useQuery<TaskGraphRunView>({
     queryKey: ['task-graph-run', id],
     queryFn: () => omnixApiClient.getTaskGraphRun(id),
     initialData: {
@@ -1117,10 +1133,11 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
       void queryClient.invalidateQueries({ queryKey: ['task-graph-run', id] }),
   });
   const status = query.data.status;
-  const waiting = query.data.node_states.find(
+  const nodeStates = query.data.node_states ?? [];
+  const waiting = nodeStates.find(
     (state) => state.status === 'waiting_for_approval',
   );
-  const completed = query.data.node_states.filter(
+  const completed = nodeStates.filter(
     (state) => state.status === 'completed' || state.status === 'skipped',
   ).length;
   const result = query.data.result;
@@ -1139,7 +1156,7 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
         <span>Agent · Task graph</span>
         <strong data-run-status={status}>{status}</strong>
       </header>
-      <small>{completed}/{query.data.node_states.length} nodes complete · {id}</small>
+      <small>{completed}/{nodeStates.length} nodes complete · {id}</small>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
       {typeof result === 'string' && result.trim()
         ? <p data-task-graph-result="true">{result}</p>

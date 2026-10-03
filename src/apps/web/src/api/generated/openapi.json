@@ -56,6 +56,9 @@
             "type": "array"
           }
         },
+        "required": [
+          "require_diff"
+        ],
         "title": "AcceptancePlan",
         "type": "object"
       },
@@ -170,7 +173,8 @@
           "unprotected_exposure_count",
           "position_count",
           "open_order_count",
-          "active_protection_count"
+          "active_protection_count",
+          "reason_codes"
         ],
         "title": "AccountRiskHealth",
         "type": "object"
@@ -264,7 +268,9 @@
           "confidence",
           "stable_since",
           "updated_at",
-          "last_transition_reason"
+          "last_transition_reason",
+          "proposition_ids",
+          "revision"
         ],
         "title": "ActivityField",
         "type": "object"
@@ -315,7 +321,8 @@
           "kind",
           "description",
           "confidence",
-          "occurred_at"
+          "occurred_at",
+          "proposition_ids"
         ],
         "title": "ActivityMeaningfulEvent",
         "type": "object"
@@ -425,7 +432,12 @@
           "authority_source",
           "confidence",
           "opened_at",
-          "last_referenced_at"
+          "last_referenced_at",
+          "created_from",
+          "importance",
+          "blocking",
+          "status",
+          "resolution_evidence"
         ],
         "title": "ActivityOpenLoop",
         "type": "object"
@@ -469,7 +481,8 @@
           "marker_id",
           "description",
           "confidence",
-          "recorded_at"
+          "recorded_at",
+          "proposition_ids"
         ],
         "title": "ActivityProgressMarker",
         "type": "object"
@@ -512,7 +525,8 @@
         "required": [
           "change_id",
           "new_strategy",
-          "changed_at"
+          "changed_at",
+          "proposition_ids"
         ],
         "title": "ActivityStrategyChange",
         "type": "object"
@@ -580,7 +594,9 @@
           "authority_source",
           "confidence",
           "first_seen_at",
-          "last_seen_at"
+          "last_seen_at",
+          "proposition_ids",
+          "confirmation_count"
         ],
         "title": "ActivityTransitionCandidate",
         "type": "object"
@@ -650,7 +666,8 @@
         },
         "required": [
           "run_id",
-          "capability_id"
+          "capability_id",
+          "state"
         ],
         "title": "AgentApproval",
         "type": "object"
@@ -1161,7 +1178,11 @@
         },
         "required": [
           "run_id",
-          "spec"
+          "spec",
+          "status",
+          "desired_state",
+          "revision",
+          "quality_attempt"
         ],
         "title": "AgentRunSnapshot",
         "type": "object"
@@ -1359,7 +1380,15 @@
         },
         "required": [
           "task",
-          "model"
+          "model",
+          "objective",
+          "runtime",
+          "profile",
+          "approval_policy",
+          "quality_policy",
+          "quality_reserve_fraction",
+          "artifact_policy",
+          "persistence_policy"
         ],
         "title": "AgentRunSpec",
         "type": "object"
@@ -1390,6 +1419,12 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "input_tokens_reported",
+          "output_tokens_reported"
+        ],
         "title": "AgentRunUsage",
         "type": "object"
       },
@@ -1448,7 +1483,9 @@
           "secret_key_source",
           "api_key_editable",
           "secret_key_editable",
-          "storage"
+          "storage",
+          "provider",
+          "api_key_id_masked"
         ],
         "title": "AlpacaIexCredentialStatus",
         "type": "object"
@@ -1548,7 +1585,9 @@
           "close_event",
           "eligible_trade_count",
           "discarded_trade_count",
-          "reconciliation_fingerprint"
+          "reconciliation_fingerprint",
+          "price_contract_version",
+          "outcome_state"
         ],
         "title": "AnalysisSessionPrices",
         "type": "object"
@@ -1631,7 +1670,8 @@
           }
         },
         "required": [
-          "character"
+          "character",
+          "ok"
         ],
         "title": "ArchiveCharacterResponse",
         "type": "object"
@@ -1675,7 +1715,9 @@
         "required": [
           "asset",
           "content",
-          "size_bytes"
+          "size_bytes",
+          "encoding",
+          "truncated"
         ],
         "title": "AssetContentResponse",
         "type": "object"
@@ -1792,7 +1834,8 @@
           }
         },
         "required": [
-          "assets"
+          "assets",
+          "has_more"
         ],
         "title": "AssetListResponse",
         "type": "object"
@@ -1930,7 +1973,8 @@
           "module",
           "type",
           "mime_type",
-          "created_at"
+          "created_at",
+          "storage_path"
         ],
         "title": "AssetRecord",
         "type": "object"
@@ -2030,6 +2074,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "total_tools",
+          "enabled_tools",
+          "recent_execution_count",
+          "recent_error_count"
+        ],
         "title": "AssistantCapabilityDashboard",
         "type": "object"
       },
@@ -2076,7 +2126,13 @@
         },
         "required": [
           "tool_id",
-          "name"
+          "name",
+          "enabled",
+          "connection_status",
+          "action_count",
+          "enabled_action_count",
+          "recent_execution_count",
+          "recent_error_count"
         ],
         "title": "AssistantCapabilityStatus",
         "type": "object"
@@ -2463,6 +2519,24 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "curated_memory_enabled",
+          "suggestions_enabled",
+          "history_recall_enabled",
+          "compaction_enabled",
+          "hermes_sync_enabled",
+          "require_approval_for_inferred_memory",
+          "automatic_direct_assertion_memory",
+          "proactive_memory_enabled",
+          "paralinguistic_signals_enabled",
+          "transcript_retention_enabled",
+          "companion_master_enabled",
+          "companion_rollout_stage",
+          "memory_token_budget",
+          "history_token_budget",
+          "retention_days",
+          "show_memory_use_indicator"
+        ],
         "title": "AssistantMemoryRuntimeSettings",
         "type": "object"
       },
@@ -2496,7 +2570,9 @@
         },
         "required": [
           "settings",
-          "settings_source"
+          "settings_source",
+          "approval_policy_locked",
+          "diagnostics_policy"
         ],
         "title": "AssistantMemoryRuntimeStatus",
         "type": "object"
@@ -2777,7 +2853,13 @@
           "tool_id",
           "label",
           "description",
-          "category"
+          "category",
+          "risk_level",
+          "enabled",
+          "approval_policy",
+          "requires_connection",
+          "requires_confirmation",
+          "is_destructive"
         ],
         "title": "AssistantToolAction",
         "type": "object"
@@ -2918,7 +3000,9 @@
           }
         },
         "required": [
-          "tool_id"
+          "tool_id",
+          "configured",
+          "message"
         ],
         "title": "AssistantToolConnectionStartPayload",
         "type": "object"
@@ -2973,6 +3057,12 @@
             "title": "Tool Id"
           }
         },
+        "required": [
+          "detected",
+          "confidence",
+          "preview_title",
+          "preview_summary"
+        ],
         "title": "AssistantToolIntent",
         "type": "object"
       },
@@ -3061,7 +3151,11 @@
         },
         "required": [
           "tool_id",
-          "action_id"
+          "action_id",
+          "approval_source",
+          "input_summary",
+          "result_summary",
+          "state_changed"
         ],
         "title": "AssistantToolLedgerEntry",
         "type": "object"
@@ -3280,7 +3374,10 @@
         },
         "required": [
           "tool_id",
-          "action_id"
+          "action_id",
+          "risk_level",
+          "state_changed",
+          "result_summary"
         ],
         "title": "AssistantToolResult",
         "type": "object"
@@ -3314,7 +3411,9 @@
           }
         },
         "required": [
-          "message"
+          "message",
+          "state_changed",
+          "sensitive_summary"
         ],
         "title": "AssistantToolResultContext",
         "type": "object"
@@ -3390,7 +3489,13 @@
         },
         "required": [
           "tool_id",
-          "action_id"
+          "action_id",
+          "allowed",
+          "executable",
+          "approval_required",
+          "risk_level",
+          "state_changed",
+          "result_summary"
         ],
         "title": "AssistantToolReviewDecision",
         "type": "object"
@@ -3452,7 +3557,9 @@
           "id",
           "name",
           "description",
-          "category"
+          "category",
+          "enabled",
+          "connection_status"
         ],
         "title": "AssistantToolSpec",
         "type": "object"
@@ -3807,7 +3914,8 @@
         },
         "required": [
           "log_index",
-          "message"
+          "message",
+          "level"
         ],
         "title": "BacktestLogEntry",
         "type": "object"
@@ -4059,7 +4167,8 @@
           "finished_at",
           "trades",
           "equity_curve",
-          "logs"
+          "logs",
+          "mark_to_market_policy"
         ],
         "title": "BacktestRunResult",
         "type": "object"
@@ -4687,7 +4796,10 @@
           "vwap_slope_pct",
           "breakout_volume_ratio",
           "atr_pct",
-          "minutes_since_open"
+          "minutes_since_open",
+          "catalyst_positive",
+          "catalyst_negative",
+          "dilution_flag"
         ],
         "title": "BounceFeatureVector",
         "type": "object"
@@ -4832,7 +4944,11 @@
           "learning_rate",
           "l2_penalty",
           "training_log_loss",
-          "fingerprint"
+          "fingerprint",
+          "model_id",
+          "label_definition",
+          "feature_names",
+          "shadow_only"
         ],
         "title": "BounceModelArtifact",
         "type": "object"
@@ -4898,7 +5014,11 @@
           "observed_at",
           "probability",
           "features",
-          "fingerprint"
+          "fingerprint",
+          "model_id",
+          "model_version",
+          "label_definition",
+          "shadow_only"
         ],
         "title": "BounceModelScore",
         "type": "object"
@@ -5234,7 +5354,8 @@
           "calibration_bins",
           "minimum_examples_required",
           "minimum_sessions_required",
-          "evidence_volume_sufficient"
+          "evidence_volume_sufficient",
+          "shadow_only"
         ],
         "title": "BounceValidationMetrics",
         "type": "object"
@@ -5317,7 +5438,9 @@
           }
         },
         "required": [
-          "capability_id"
+          "capability_id",
+          "executed",
+          "approval_required"
         ],
         "title": "BrokerCapabilityResponse",
         "type": "object"
@@ -5392,6 +5515,10 @@
             "title": "Reason"
           }
         },
+        "required": [
+          "allowed",
+          "approval_required"
+        ],
         "title": "BrokerCommandAuthorizationResponse",
         "type": "object"
       },
@@ -5456,6 +5583,9 @@
             "type": "object"
           }
         },
+        "required": [
+          "allowed"
+        ],
         "title": "BrokerToolBudgetResponse",
         "type": "object"
       },
@@ -5710,6 +5840,9 @@
             "title": "Requested At"
           }
         },
+        "required": [
+          "requested"
+        ],
         "title": "CancelState",
         "type": "object"
       },
@@ -5858,7 +5991,12 @@
           "instrument_type",
           "venue",
           "venue_symbol",
-          "display_symbol"
+          "display_symbol",
+          "exchange_timezone",
+          "session_calendar",
+          "price_scale",
+          "minimum_tick",
+          "status"
         ],
         "title": "CanonicalInstrument",
         "type": "object"
@@ -5905,7 +6043,8 @@
           "max_positions",
           "max_position_fraction",
           "positions",
-          "cash"
+          "cash",
+          "rule_version"
         ],
         "title": "CashPreservingShadowPortfolio",
         "type": "object"
@@ -6133,7 +6272,8 @@
           "captured_at",
           "content",
           "text_hash",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "dilution_flags"
         ],
         "title": "CatalystEvidence",
         "type": "object"
@@ -6319,7 +6459,18 @@
           }
         },
         "required": [
-          "generated_at"
+          "generated_at",
+          "schema_version",
+          "extractor_version",
+          "primary_confirmed",
+          "same_day",
+          "source_count_primary",
+          "source_count_secondary",
+          "catalyst_type",
+          "official_filing_present",
+          "company_release_present",
+          "unresolved",
+          "source_evidence_ids"
         ],
         "title": "CatalystFactSet",
         "type": "object"
@@ -6413,7 +6564,14 @@
         "required": [
           "classifier_id",
           "classifier_version",
-          "evidence_ids"
+          "evidence_ids",
+          "catalyst_class",
+          "directional_bias",
+          "novelty",
+          "dilution_risk",
+          "confidence",
+          "rationale",
+          "shadow_only"
         ],
         "title": "CatalystShadowClassification",
         "type": "object"
@@ -6550,7 +6708,8 @@
           "request",
           "base_job_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "error"
         ],
         "title": "CharacterAvatarGenerationBatch",
         "type": "object"
@@ -6706,7 +6865,10 @@
         "required": [
           "character_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "version",
+          "render_mode",
+          "renderer"
         ],
         "title": "CharacterAvatarPack",
         "type": "object"
@@ -6796,7 +6958,10 @@
           "deleted_memory_records",
           "deleted_memory_candidates",
           "deleted_memory_snapshots",
-          "deleted_transcript_messages"
+          "deleted_transcript_messages",
+          "ok",
+          "voice_unlinked",
+          "profile_archived"
         ],
         "title": "CharacterDataActionResponse",
         "type": "object"
@@ -7052,7 +7217,11 @@
           "interaction_mode",
           "display_name",
           "speech_style",
-          "preload"
+          "preload",
+          "greeting",
+          "read_memory",
+          "write_memory",
+          "shared_memory_access"
         ],
         "title": "CharacterLiveCallRuntime",
         "type": "object"
@@ -7151,7 +7320,12 @@
           "display_name",
           "personality_prompt",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "description",
+          "default_greeting",
+          "active_version",
+          "enabled",
+          "status"
         ],
         "title": "CharacterProfile",
         "type": "object"
@@ -7231,7 +7405,9 @@
           "version",
           "display_name",
           "personality_prompt",
-          "created_at"
+          "created_at",
+          "description",
+          "default_greeting"
         ],
         "title": "CharacterProfileVersion",
         "type": "object"
@@ -7368,7 +7544,8 @@
           "character_id",
           "status",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "error"
         ],
         "title": "CharacterVisemeGenerationBatch",
         "type": "object"
@@ -7649,7 +7826,17 @@
           "id",
           "title",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "profile_id",
+          "workspace_id",
+          "memory_enabled",
+          "memory_record_count",
+          "interaction_mode",
+          "read_memory",
+          "write_memory",
+          "shared_memory_access",
+          "transcript_policy",
+          "message_count"
         ],
         "title": "ChatSession",
         "type": "object"
@@ -7912,7 +8099,17 @@
           "id",
           "title",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "profile_id",
+          "workspace_id",
+          "memory_enabled",
+          "memory_record_count",
+          "interaction_mode",
+          "read_memory",
+          "write_memory",
+          "shared_memory_access",
+          "transcript_policy",
+          "message_count"
         ],
         "title": "ChatSessionSummary",
         "type": "object"
@@ -8213,6 +8410,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "accepted"
+        ],
         "title": "ClientErrorAccepted",
         "type": "object"
       },
@@ -8350,7 +8550,8 @@
         "required": [
           "voice_asset_id",
           "display_name",
-          "result"
+          "result",
+          "reason"
         ],
         "title": "ClonedVoiceCharacterBackfillItem",
         "type": "object"
@@ -8422,6 +8623,12 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "installed",
+          "authenticated",
+          "detail",
+          "started"
+        ],
         "title": "CodexAuthStatus",
         "type": "object"
       },
@@ -8482,7 +8689,9 @@
           "configured",
           "api_key_source",
           "api_key_editable",
-          "storage"
+          "storage",
+          "provider",
+          "api_key_masked"
         ],
         "title": "CoinMarketCapCredentialStatus",
         "type": "object"
@@ -8632,7 +8841,14 @@
           "activity_id",
           "session_id",
           "started_at",
-          "last_meaningful_change_at"
+          "last_meaningful_change_at",
+          "revision",
+          "pending_transitions",
+          "progress_markers",
+          "recent_meaningful_events",
+          "strategy_changes",
+          "blockers",
+          "open_loops"
         ],
         "title": "CompanionActivityState",
         "type": "object"
@@ -8719,7 +8935,10 @@
           "reaction",
           "should_generate",
           "should_deliver",
-          "rationale"
+          "rationale",
+          "target_sentences",
+          "priority",
+          "policy_version"
         ],
         "title": "CompanionAttentionDecision",
         "type": "object"
@@ -8759,6 +8978,10 @@
             "type": "integer"
           }
         },
+        "required": [
+          "turns",
+          "diagnostics_policy"
+        ],
         "title": "CompanionMemoryMetrics",
         "type": "object"
       },
@@ -8806,6 +9029,14 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "ok",
+          "format_version",
+          "legacy_ui_status",
+          "existing_fastapi_app",
+          "domain_logic_policy",
+          "migration_note"
+        ],
         "title": "CompatibilityHandoffPayload",
         "type": "object"
       },
@@ -9674,7 +9905,8 @@
           "confirmation_receipt_count",
           "confirmed_long_count",
           "authorization_long_count",
-          "authorization_no_trade_count"
+          "authorization_no_trade_count",
+          "runtime_version"
         ],
         "title": "DailyProspectiveScorecard",
         "type": "object"
@@ -9770,7 +10002,10 @@
           "dataset_fingerprint",
           "freshness_mode",
           "as_of",
-          "received_at"
+          "received_at",
+          "delay_seconds",
+          "cached",
+          "history_complete"
         ],
         "title": "DatasetProvenance",
         "type": "object"
@@ -9803,7 +10038,8 @@
           }
         },
         "required": [
-          "character_id"
+          "character_id",
+          "ok"
         ],
         "title": "DeleteCharacterAvatarPackResponse",
         "type": "object"
@@ -9821,7 +10057,8 @@
           }
         },
         "required": [
-          "session_id"
+          "session_id",
+          "ok"
         ],
         "title": "DeleteChatSessionResponse",
         "type": "object"
@@ -9893,7 +10130,10 @@
           "session_id",
           "kind",
           "reason",
-          "created_at"
+          "created_at",
+          "grounding_proposition_ids",
+          "confidence",
+          "salience"
         ],
         "title": "DeliveryIntent",
         "type": "object"
@@ -10178,7 +10418,13 @@
           "capture_generation",
           "observation_id",
           "state",
-          "cognition"
+          "cognition",
+          "activity_summary",
+          "processed_proposition_ids",
+          "ignored_proposition_ids",
+          "prompt_injection_suppressed",
+          "recovered_from_checkpoint",
+          "checkpoint_status"
         ],
         "title": "DesktopCompanionActivitySnapshot",
         "type": "object"
@@ -10670,7 +10916,16 @@
           "exact_commit_sha",
           "evaluation_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "app_version",
+          "browser_version",
+          "os_version",
+          "character_id",
+          "observation_schema_version",
+          "attention_policy_version",
+          "rollout_stage",
+          "vision_provider",
+          "remote_provider"
         ],
         "title": "DesktopCompanionEvaluationRecord",
         "type": "object"
@@ -11030,7 +11285,12 @@
         },
         "required": [
           "status",
-          "reason"
+          "reason",
+          "scene_summary",
+          "activity_summary",
+          "activity_confidence",
+          "activity_salience",
+          "delivery_eligible"
         ],
         "title": "DesktopCompanionObserveResponse",
         "type": "object"
@@ -11108,7 +11368,14 @@
         "required": [
           "available",
           "kill_switch",
-          "reason"
+          "reason",
+          "supported_browsers",
+          "secure_context_required",
+          "supported_capture_sources",
+          "supported_provider_contracts",
+          "raw_frame_persistence",
+          "max_consecutive_provider_failures",
+          "circuit_backoff_seconds"
         ],
         "title": "DesktopCompanionOperationalStatus",
         "type": "object"
@@ -11270,7 +11537,8 @@
         },
         "required": [
           "ready",
-          "reason"
+          "reason",
+          "remote"
         ],
         "title": "DesktopCompanionPreflightResult",
         "type": "object"
@@ -11417,7 +11685,8 @@
           }
         },
         "required": [
-          "session_id"
+          "session_id",
+          "reset"
         ],
         "title": "DesktopCompanionResetResponse",
         "type": "object"
@@ -11630,7 +11899,10 @@
           "source_fingerprint",
           "client_sequence",
           "captured_at",
-          "expires_at"
+          "expires_at",
+          "schema_version",
+          "change_kind",
+          "importance"
         ],
         "title": "DesktopObservation",
         "type": "object"
@@ -11686,7 +11958,8 @@
           }
         },
         "required": [
-          "event"
+          "event",
+          "confidence"
         ],
         "title": "DesktopObservedChange",
         "type": "object"
@@ -11708,6 +11981,10 @@
             "type": "string"
           }
         },
+        "required": [
+          "value",
+          "confidence"
+        ],
         "title": "DesktopObservedValue",
         "type": "object"
       },
@@ -11798,6 +12075,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "readers",
+          "subscribers",
+          "queries",
+          "listeners_alive"
+        ],
         "title": "EventReaderDiagnostics",
         "type": "object"
       },
@@ -11932,6 +12215,11 @@
             "type": "string"
           }
         },
+        "required": [
+          "confidence",
+          "reason",
+          "classifier"
+        ],
         "title": "EvidenceDecision",
         "type": "object"
       },
@@ -11978,6 +12266,11 @@
             "type": "string"
           }
         },
+        "required": [
+          "requirement",
+          "external_access",
+          "user_visible_attribution"
+        ],
         "title": "EvidencePolicy",
         "type": "object"
       },
@@ -12119,7 +12412,9 @@
           "capability_id",
           "source_class",
           "request_digest",
-          "result_digest"
+          "result_digest",
+          "source_count",
+          "trust_level"
         ],
         "title": "EvidenceReceipt",
         "type": "object"
@@ -12233,7 +12528,12 @@
         },
         "required": [
           "id",
-          "source_class"
+          "source_class",
+          "purpose",
+          "freshness",
+          "trust_floor",
+          "minimum_matches",
+          "fallback_policy"
         ],
         "title": "EvidenceRequirement",
         "type": "object"
@@ -12359,7 +12659,8 @@
           }
         },
         "required": [
-          "run_id"
+          "run_id",
+          "passed"
         ],
         "title": "EvidenceSet",
         "type": "object"
@@ -12402,7 +12703,9 @@
           }
         },
         "required": [
-          "source_class"
+          "source_class",
+          "trust_floor",
+          "preference"
         ],
         "title": "EvidenceSourceOption",
         "type": "object"
@@ -12636,7 +12939,9 @@
           }
         },
         "required": [
-          "state"
+          "state",
+          "reason_codes",
+          "execution_eligible"
         ],
         "title": "ExecutionHealth",
         "type": "object"
@@ -12926,7 +13231,17 @@
           "binding_id",
           "provider",
           "last",
-          "source_time"
+          "source_time",
+          "binding_purpose",
+          "session",
+          "freshness_mode",
+          "market_data_type",
+          "market_data_eligible",
+          "paper_fill_eligible",
+          "broker_execution_authorized",
+          "execution_eligible",
+          "rejection_reasons",
+          "policy_version"
         ],
         "title": "ExecutionObservation",
         "type": "object"
@@ -12957,6 +13272,11 @@
             "type": "string"
           }
         },
+        "required": [
+          "command_policy",
+          "network_policy",
+          "environment_policy"
+        ],
         "title": "ExecutionPolicy",
         "type": "object"
       },
@@ -13190,7 +13510,8 @@
           }
         },
         "required": [
-          "candidate_id"
+          "candidate_id",
+          "ok"
         ],
         "title": "ForgetCandidateResponse",
         "type": "object"
@@ -13210,7 +13531,8 @@
           }
         },
         "required": [
-          "memory_id"
+          "memory_id",
+          "ok"
         ],
         "title": "ForgetMemoryResponse",
         "type": "object"
@@ -13445,7 +13767,8 @@
           "adjustment_mode",
           "session",
           "provider",
-          "received_at"
+          "received_at",
+          "ingestion_revision"
         ],
         "title": "FrozenBar",
         "type": "object"
@@ -13817,7 +14140,9 @@
           "feature_vector_fingerprint",
           "frozen_at",
           "p_close_above_open",
-          "p_persistent_uptrend"
+          "p_persistent_uptrend",
+          "predictor_version",
+          "uncertainty"
         ],
         "title": "FrozenForecast",
         "type": "object"
@@ -14077,7 +14402,12 @@
           "evidence_quality",
           "mechanism_scores",
           "calibrator_id",
-          "calibrator_fingerprint"
+          "calibrator_fingerprint",
+          "predictor_version",
+          "feature_schema_version",
+          "model_state",
+          "uncertainty",
+          "regime_tags"
         ],
         "title": "FrozenForecastV4",
         "type": "object"
@@ -14122,7 +14452,8 @@
           "rule_version",
           "starting_equity",
           "frozen_at",
-          "cash"
+          "cash",
+          "positions"
         ],
         "title": "FrozenPortfolio",
         "type": "object"
@@ -14270,7 +14601,9 @@
         "required": [
           "instrument_id",
           "decision_at",
-          "state"
+          "state",
+          "triggered",
+          "selected_trade"
         ],
         "title": "GapPullbackBacktestCandidateDecision",
         "type": "object"
@@ -14412,7 +14745,10 @@
           "risk_policy",
           "initial_cash",
           "trades",
-          "summary"
+          "summary",
+          "strategy_id",
+          "strategy_version",
+          "candidate_decisions"
         ],
         "title": "GapPullbackBacktestResult",
         "type": "object"
@@ -14618,7 +14954,8 @@
           "trades_per_day",
           "stop_count",
           "target_count",
-          "indicator_exit_count"
+          "indicator_exit_count",
+          "research_rejection_count"
         ],
         "title": "GapPullbackBacktestSummary",
         "type": "object"
@@ -14784,7 +15121,10 @@
           "mae_r",
           "hold_minutes",
           "trigger_bar_index",
-          "entry_bar_index"
+          "entry_bar_index",
+          "quality_score",
+          "structure_interval",
+          "execution_interval"
         ],
         "title": "GapPullbackBacktestTrade",
         "type": "object"
@@ -15693,6 +16033,61 @@
             "type": "integer"
           }
         },
+        "required": [
+          "strategy_id",
+          "strategy_version",
+          "structure_interval",
+          "execution_interval",
+          "universe_scan_time_et",
+          "universe_discovery_source",
+          "auto_archive_daily_universe",
+          "universe_archive_grace_minutes",
+          "universe_discovery_count",
+          "minimum_gap_pct",
+          "minimum_price",
+          "maximum_price",
+          "minimum_premarket_dollar_volume",
+          "minimum_tod_rvol",
+          "allow_missing_tod_rvol",
+          "maximum_spread_bps",
+          "preferred_float_min_shares",
+          "preferred_float_max_shares",
+          "float_preference_mode",
+          "require_catalyst_evidence",
+          "reject_dilution_flags",
+          "opening_impulse_min_pct",
+          "pullback_min_pct",
+          "pullback_max_pct",
+          "pullback_volume_max_ratio",
+          "higher_low_buffer_bps",
+          "breakout_volume_ratio",
+          "pivot_left_bars",
+          "pivot_right_bars",
+          "volume_lookback_bars",
+          "require_breakout_hold",
+          "breakout_hold_bars",
+          "breakout_hold_tolerance_bps",
+          "minimum_quality_score",
+          "v2_recovery_min_pct",
+          "v2_second_pullback_min_pct",
+          "v2_minimum_l1_to_b1_minutes",
+          "v2_maximum_l2_to_signal_minutes",
+          "v2_minimum_breakout_volume_ratio",
+          "v2_profit_protection_trigger_r",
+          "v2_protected_stop_r",
+          "v2_max_hold_minutes",
+          "stop_buffer_bps",
+          "reward_multiple",
+          "exit_rsi_period",
+          "exit_rsi_threshold",
+          "entry_start_et",
+          "last_entry_et",
+          "intraday_learning_enabled",
+          "stoch_trend_capture_enabled",
+          "intraday_llm_enabled",
+          "intraday_llm_top_n",
+          "intraday_llm_interval_minutes"
+        ],
         "title": "GapPullbackConfig",
         "type": "object"
       },
@@ -15985,7 +16380,15 @@
           }
         },
         "required": [
-          "gap_pct"
+          "gap_pct",
+          "catalyst_evidence_count",
+          "dilution_flags",
+          "catalyst_score",
+          "supply_score",
+          "opening_structure_score",
+          "pullback_quality_score",
+          "reclaim_break_score",
+          "quality_score"
         ],
         "title": "GapPullbackFeatures",
         "type": "object"
@@ -16608,7 +17011,16 @@
           "instrument_id",
           "previous_close",
           "premarket_price",
-          "gap_pct"
+          "gap_pct",
+          "split_adjustment_factor",
+          "corporate_action_evidence_ids",
+          "premarket_volume",
+          "premarket_dollar_volume",
+          "market_data_complete",
+          "data_quality_flags",
+          "research_quality_flags",
+          "catalyst_evidence_ids",
+          "dilution_flags"
         ],
         "title": "GapperCandidate",
         "type": "object"
@@ -16846,7 +17258,9 @@
           "evaluation_time",
           "discovery_source",
           "candidates",
-          "source_fingerprint"
+          "source_fingerprint",
+          "source_candidate_symbols",
+          "source_member_dispositions"
         ],
         "title": "GapperUniverseSnapshot",
         "type": "object"
@@ -16876,6 +17290,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "ok",
+          "status",
+          "service",
+          "format_version"
+        ],
         "title": "GatewayHealth",
         "type": "object"
       },
@@ -17064,6 +17484,10 @@
             "title": "Total Vram Mb"
           }
         },
+        "required": [
+          "allow_co_residency",
+          "allow_matching_compatibility_group"
+        ],
         "title": "GpuResidencyPolicy",
         "type": "object"
       },
@@ -17259,7 +17683,9 @@
           "selected_tool_id",
           "selected_action_id",
           "approval_decision",
-          "execution_result"
+          "execution_result",
+          "user_request",
+          "state_changed"
         ],
         "title": "HermesAssistantToolExecutePayload",
         "type": "object"
@@ -17305,7 +17731,8 @@
           "selected_tool_id",
           "selected_action_id",
           "tool_request",
-          "approval_decision"
+          "approval_decision",
+          "user_request"
         ],
         "title": "HermesAssistantToolReviewPayload",
         "type": "object"
@@ -17574,7 +18001,8 @@
           "settings_source",
           "connection_status",
           "official_ibapi_available",
-          "connected"
+          "connected",
+          "provider"
         ],
         "title": "IbkrSettingsStatus",
         "type": "object"
@@ -18211,7 +18639,8 @@
         "required": [
           "observed_at",
           "dynamic_discovery_monitor",
-          "interday_learning_monitor"
+          "interday_learning_monitor",
+          "execution_authority"
         ],
         "title": "InterdayMonitorOperationsStatus",
         "type": "object"
@@ -18314,7 +18743,8 @@
           "symbol",
           "source",
           "captured_at",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "confidence"
         ],
         "title": "IssuerIdentity",
         "type": "object"
@@ -18403,7 +18833,8 @@
           }
         },
         "required": [
-          "jobs"
+          "jobs",
+          "has_more"
         ],
         "title": "JobListResponse",
         "type": "object"
@@ -18605,7 +19036,8 @@
           "status",
           "resource_class",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "priority"
         ],
         "title": "JobRecord",
         "type": "object"
@@ -18741,7 +19173,8 @@
           }
         },
         "required": [
-          "title"
+          "title",
+          "success"
         ],
         "title": "LegacyGenerateTitleResponse",
         "type": "object"
@@ -18819,7 +19252,8 @@
           }
         },
         "required": [
-          "session_id"
+          "session_id",
+          "success"
         ],
         "title": "LegacySessionCreateResponse",
         "type": "object"
@@ -18842,7 +19276,9 @@
           }
         },
         "required": [
-          "id"
+          "id",
+          "title",
+          "updated_at"
         ],
         "title": "LegacySessionListItem",
         "type": "object"
@@ -18862,6 +19298,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "success"
+        ],
         "title": "LegacySessionListResponse",
         "type": "object"
       },
@@ -18879,7 +19318,8 @@
           }
         },
         "required": [
-          "session"
+          "session",
+          "success"
         ],
         "title": "LegacySessionResponse",
         "type": "object"
@@ -18920,6 +19360,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "success"
+        ],
         "title": "LegacySuccessResponse",
         "type": "object"
       },
@@ -18951,7 +19394,9 @@
           }
         },
         "required": [
-          "character_id"
+          "character_id",
+          "ok",
+          "downloaded"
         ],
         "title": "Live2DAvatarActionResponse",
         "type": "object"
@@ -19020,7 +19465,9 @@
           "source_url",
           "model_license_url",
           "runtime_license_url",
-          "license_summary"
+          "license_summary",
+          "installed",
+          "selected"
         ],
         "title": "Live2DModelCatalogItem",
         "type": "object"
@@ -19041,7 +19488,8 @@
           }
         },
         "required": [
-          "models"
+          "models",
+          "runtime_installed"
         ],
         "title": "Live2DModelCatalogResponse",
         "type": "object"
@@ -19098,7 +19546,9 @@
           "voice_resolved",
           "memory_snapshot_loaded",
           "preload_ms",
-          "resolved_at"
+          "resolved_at",
+          "avatar_pack_loaded",
+          "memory_record_count"
         ],
         "title": "LiveCallPreloadState",
         "type": "object"
@@ -19186,6 +19636,16 @@
             "type": "number"
           }
         },
+        "required": [
+          "speed",
+          "temperature",
+          "top_k",
+          "top_p",
+          "repetition_penalty",
+          "expressiveness",
+          "emotion",
+          "interruption_style"
+        ],
         "title": "LiveCallSpeechStyle",
         "type": "object"
       },
@@ -19824,6 +20284,25 @@
             "type": "string"
           }
         },
+        "required": [
+          "presence_preset",
+          "talkativeness",
+          "conversation_stance",
+          "conversation_pace",
+          "interruption_preference",
+          "assistant_backchannel_mode",
+          "initiative_mode",
+          "idle_threshold_ms",
+          "long_pause_behavior",
+          "response_length",
+          "response_onset_style",
+          "emotional_attunement",
+          "topic_continuity",
+          "max_idle_prompts",
+          "duplex_mode",
+          "pronunciation_save_policy",
+          "profile_version"
+        ],
         "title": "LiveConversationProfile",
         "type": "object"
       },
@@ -20411,6 +20890,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "instruction_authority",
+          "tool_eligibility",
+          "memory_write_eligibility",
+          "task_contract_mutation"
+        ],
         "title": "LiveMaterialSecurityPolicy",
         "type": "object"
       },
@@ -20838,7 +21323,8 @@
         },
         "required": [
           "voice_id",
-          "available"
+          "available",
+          "schema_version"
         ],
         "title": "LiveVoiceCueManifest",
         "type": "object"
@@ -21129,7 +21615,9 @@
         },
         "required": [
           "status",
-          "generated_at"
+          "generated_at",
+          "records_scanned",
+          "traces"
         ],
         "title": "LiveVoiceReleaseGateReport",
         "type": "object"
@@ -21270,6 +21758,9 @@
             "title": "Path"
           }
         },
+        "required": [
+          "cancelled"
+        ],
         "title": "LocalWorkspacePickResponse",
         "type": "object"
       },
@@ -21377,7 +21868,8 @@
         "required": [
           "severity",
           "code",
-          "path"
+          "path",
+          "detail"
         ],
         "title": "MapContentIssueResponse",
         "type": "object"
@@ -21581,7 +22073,8 @@
         },
         "required": [
           "session_date",
-          "markdown"
+          "markdown",
+          "authority"
         ],
         "title": "MarkdownProjectionResponse",
         "type": "object"
@@ -21842,7 +22335,12 @@
           "high",
           "low",
           "close",
-          "provider"
+          "provider",
+          "volume",
+          "is_final",
+          "adjustment_mode",
+          "session",
+          "ingestion_revision"
         ],
         "title": "MarketBar",
         "type": "object"
@@ -21927,7 +22425,8 @@
           "interval",
           "series",
           "received_at",
-          "freshness_mode"
+          "freshness_mode",
+          "history_complete"
         ],
         "title": "MarketMetricResponse",
         "type": "object"
@@ -21973,7 +22472,8 @@
         },
         "required": [
           "key",
-          "title"
+          "title",
+          "kind"
         ],
         "title": "MarketMetricSeries",
         "type": "object"
@@ -22118,7 +22618,9 @@
           "confidence",
           "provider",
           "model",
-          "source"
+          "source",
+          "read_only",
+          "disclaimer"
         ],
         "title": "MarketResearchResult",
         "type": "object"
@@ -22234,7 +22736,8 @@
           "continuation_score",
           "opening_exhaustion_score",
           "squeeze_tail_score",
-          "fade_risk_score"
+          "fade_risk_score",
+          "diagnostic_only"
         ],
         "title": "MechanismRiskScores",
         "type": "object"
@@ -22557,7 +23060,16 @@
           "normalized_content",
           "provenance_type",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "owner_type",
+          "owner_id",
+          "kind",
+          "confidence",
+          "pinned",
+          "trust_level",
+          "sensitivity",
+          "status",
+          "revision"
         ],
         "title": "MemoryRecord",
         "type": "object"
@@ -22600,7 +23112,8 @@
           "owner_id",
           "record_count",
           "candidate_count",
-          "snapshot_count"
+          "snapshot_count",
+          "ok"
         ],
         "title": "MemoryResetResponse",
         "type": "object"
@@ -22774,7 +23287,9 @@
         },
         "required": [
           "session_id",
-          "recorded_at"
+          "recorded_at",
+          "items",
+          "diagnostics_policy"
         ],
         "title": "MemoryUsageResponse",
         "type": "object"
@@ -23011,7 +23526,8 @@
           "id",
           "label",
           "provider_id",
-          "capabilities"
+          "capabilities",
+          "location"
         ],
         "title": "ModelSummary",
         "type": "object"
@@ -23198,7 +23714,10 @@
           "relevance",
           "catalyst_class",
           "confidence",
-          "evidence_ids"
+          "evidence_ids",
+          "conflict_summary",
+          "rationale",
+          "shadow_only"
         ],
         "title": "NoveltyShadowAnnotation",
         "type": "object"
@@ -23357,7 +23876,9 @@
         "required": [
           "lane",
           "confidence",
-          "reason"
+          "reason",
+          "explicit",
+          "hermes_recommended"
         ],
         "title": "OmnixRouteDecision",
         "type": "object"
@@ -23392,7 +23913,8 @@
         },
         "required": [
           "loop_id",
-          "status"
+          "status",
+          "proposition_ids"
         ],
         "title": "OpenLoopEffect",
         "type": "object"
@@ -23501,7 +24023,11 @@
           "source_mode",
           "raw_bar_count",
           "market_state",
-          "evidence_quality"
+          "evidence_quality",
+          "version",
+          "unresolved_gap_count",
+          "late_window_bar_count",
+          "warnings"
         ],
         "title": "OperationalPremarketState",
         "type": "object"
@@ -23634,7 +24160,10 @@
           "session_high",
           "session_low",
           "observed_bar_count",
-          "halt_or_gap_minutes"
+          "halt_or_gap_minutes",
+          "version",
+          "interpolated_halt_minutes",
+          "source_price_contract_version"
         ],
         "title": "OutcomeMeasurementsV1",
         "type": "object"
@@ -23719,7 +24248,8 @@
           "mean_delta_log_loss_v4_minus_v3",
           "mean_delta_abs_error_v4_minus_v3",
           "v3_brier",
-          "v4_brier"
+          "v4_brier",
+          "version"
         ],
         "title": "PairedForecastMetrics",
         "type": "object"
@@ -23854,7 +24384,9 @@
           "account_id",
           "name",
           "base_currency",
-          "commission_bps"
+          "commission_bps",
+          "enabled",
+          "revision"
         ],
         "title": "PaperAccount",
         "type": "object"
@@ -24217,7 +24749,10 @@
           }
         },
         "required": [
-          "account_id"
+          "account_id",
+          "mode",
+          "rolling_window",
+          "archived_strategy_count"
         ],
         "title": "PaperAnalyticsOverview",
         "type": "object"
@@ -24507,7 +25042,8 @@
         },
         "required": [
           "currency",
-          "available"
+          "available",
+          "reserved"
         ],
         "title": "PaperBalance",
         "type": "object"
@@ -24772,6 +25308,9 @@
             "type": "integer"
           }
         },
+        "required": [
+          "trade_count"
+        ],
         "title": "PaperExecutionSummary",
         "type": "object"
       },
@@ -25040,7 +25579,8 @@
         },
         "required": [
           "stage",
-          "count"
+          "count",
+          "dominant_drop_count"
         ],
         "title": "PaperFunnelStage",
         "type": "object"
@@ -25892,7 +26432,10 @@
           "side",
           "order_type",
           "quantity",
-          "idempotency_key"
+          "idempotency_key",
+          "status",
+          "filled_quantity",
+          "reserved_cash"
         ],
         "title": "PaperOrder",
         "type": "object"
@@ -26146,6 +26689,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "trade_count",
+          "wins",
+          "losses",
+          "total_r"
+        ],
         "title": "PaperPerformanceSummary",
         "type": "object"
       },
@@ -26294,7 +26843,9 @@
           "instrument_id",
           "quantity",
           "average_cost",
-          "realized_pnl"
+          "realized_pnl",
+          "reserved_quantity",
+          "unrealized_pnl"
         ],
         "title": "PaperPosition",
         "type": "object"
@@ -26435,7 +26986,9 @@
         "required": [
           "account_id",
           "instrument_id",
-          "status"
+          "status",
+          "binding_purpose",
+          "revision"
         ],
         "title": "PaperPositionProtection",
         "type": "object"
@@ -26871,7 +27424,21 @@
           "allowed",
           "policy_version",
           "reason_codes",
-          "desired_risk_pct"
+          "desired_risk_pct",
+          "recommended_quantity",
+          "account_equity",
+          "actual_risk_dollars",
+          "actual_risk_pct",
+          "estimated_notional",
+          "buying_power_before",
+          "buying_power_after",
+          "aggregate_open_risk_dollars",
+          "aggregate_open_risk_pct",
+          "daily_realized_pnl",
+          "daily_loss_remaining",
+          "freshness_mode",
+          "execution_eligible",
+          "unprotected_exposure_count"
         ],
         "title": "PaperRiskPreview",
         "type": "object"
@@ -27878,7 +28445,8 @@
           "ending_equity",
           "pnl",
           "return_pct",
-          "cash"
+          "cash",
+          "position_outcomes"
         ],
         "title": "PortfolioEPerformance",
         "type": "object"
@@ -28196,7 +28764,8 @@
           "ending_equity",
           "pnl",
           "return_pct",
-          "cash"
+          "cash",
+          "position_results"
         ],
         "title": "PortfolioScore",
         "type": "object"
@@ -28294,7 +28863,10 @@
         },
         "required": [
           "quality",
-          "critical_features"
+          "critical_features",
+          "missing_critical_features",
+          "degraded_features",
+          "reasons"
         ],
         "title": "PredictionEvidenceQuality",
         "type": "object"
@@ -28547,7 +29119,8 @@
           "source",
           "quality",
           "available",
-          "available_to_live_forecaster"
+          "available_to_live_forecaster",
+          "ingestion_time_basis"
         ],
         "title": "PremarketFeature",
         "type": "object"
@@ -29216,7 +29789,11 @@
           "baseline_session_count",
           "premarket_bar_count",
           "nonzero_volume_bar_count",
-          "ready"
+          "ready",
+          "policy_version",
+          "reason_codes",
+          "volume_authority",
+          "consolidated_volume_authority"
         ],
         "title": "PremarketLiquidityEvidence",
         "type": "object"
@@ -29271,7 +29848,8 @@
           "instrument_id",
           "prediction_cutoff_at",
           "frozen_at",
-          "features"
+          "features",
+          "version"
         ],
         "title": "PremarketMarketStateSnapshot",
         "type": "object"
@@ -29382,7 +29960,8 @@
           "values",
           "reason",
           "active",
-          "created_at"
+          "created_at",
+          "evidence_evaluation_ids"
         ],
         "title": "PresencePolicyVersion",
         "type": "object"
@@ -29529,7 +30108,9 @@
         },
         "required": [
           "session",
-          "message_id"
+          "message_id",
+          "duplicate",
+          "persisted"
         ],
         "title": "ProactiveDeliveryResponse",
         "type": "object"
@@ -29680,7 +30261,8 @@
           "phrase",
           "pronunciation",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "locale"
         ],
         "title": "PronunciationEntry",
         "type": "object"
@@ -29933,6 +30515,14 @@
             "title": "Win Rate"
           }
         },
+        "required": [
+          "signal_count",
+          "matched_signal_count",
+          "matched_outcome_count",
+          "distinct_sessions",
+          "distinct_symbols",
+          "win_count"
+        ],
         "title": "ProspectiveEconomicMetrics",
         "type": "object"
       },
@@ -30061,7 +30651,19 @@
           "profile_fingerprint",
           "metrics",
           "evidence_fingerprint",
-          "pipeline_evidence_fingerprint"
+          "pipeline_evidence_fingerprint",
+          "policy_version",
+          "sample_ready",
+          "quantitative_pass",
+          "evaluation_recorded",
+          "evaluation_passed",
+          "sealed_holdout_unlocked",
+          "holdout_reviewed",
+          "holdout_verdict",
+          "soak_passed",
+          "auto_paper_reviewed",
+          "auto_paper_research_authorized",
+          "reason_codes"
         ],
         "title": "ProspectiveEconomicStatus",
         "type": "object"
@@ -30152,6 +30754,23 @@
             "type": "integer"
           }
         },
+        "required": [
+          "prospective_start",
+          "horizon_minutes",
+          "minimum_matched_outcomes",
+          "minimum_distinct_sessions",
+          "minimum_distinct_symbols",
+          "minimum_execution_match_rate",
+          "minimum_win_rate",
+          "minimum_expectancy_r",
+          "one_sided_confidence_level",
+          "maximum_drawdown_r",
+          "holdout_start",
+          "holdout_end",
+          "soak_minimum_matched_outcomes",
+          "soak_minimum_distinct_sessions",
+          "soak_minimum_distinct_symbols"
+        ],
         "title": "ProspectiveEconomicThresholds",
         "type": "object"
       },
@@ -30239,7 +30858,8 @@
           "kind",
           "observed_at",
           "payload",
-          "payload_fingerprint"
+          "payload_fingerprint",
+          "ledger_version"
         ],
         "title": "ProspectiveGapRecord",
         "type": "object"
@@ -30267,7 +30887,8 @@
         },
         "required": [
           "session_date",
-          "session_id"
+          "session_id",
+          "records"
         ],
         "title": "ProspectiveGapSessionLedger",
         "type": "object"
@@ -30346,7 +30967,13 @@
           "instrument_id",
           "provider",
           "provider_symbol",
-          "feed_type"
+          "feed_type",
+          "realtime_scope",
+          "delay_seconds",
+          "adjustment_capabilities",
+          "supported_intervals",
+          "usage_scope",
+          "is_official_api"
         ],
         "title": "ProviderBinding",
         "type": "object"
@@ -30496,7 +31123,8 @@
           "id",
           "provider_id",
           "status",
-          "source"
+          "source",
+          "model_id"
         ],
         "title": "ProviderModelCacheEntry",
         "type": "object"
@@ -30628,7 +31256,17 @@
           }
         },
         "required": [
-          "usage_scope"
+          "usage_scope",
+          "redistribution_allowed",
+          "authentication_required",
+          "is_official_api",
+          "realtime_scope",
+          "delay_seconds",
+          "terms_reference",
+          "supported_asset_classes",
+          "supported_intervals",
+          "history_depth",
+          "rate_limit_policy"
         ],
         "title": "ProviderPolicy",
         "type": "object"
@@ -30726,6 +31364,17 @@
             "type": "integer"
           }
         },
+        "required": [
+          "request_count",
+          "success_count",
+          "failure_count",
+          "consecutive_failures",
+          "rate_limit_count",
+          "in_flight",
+          "max_concurrency",
+          "circuit_open_count",
+          "circuit_suppression_count"
+        ],
         "title": "ProviderRuntimeStatus",
         "type": "object"
       },
@@ -30745,7 +31394,8 @@
           }
         },
         "required": [
-          "providers"
+          "providers",
+          "ok"
         ],
         "title": "ProviderStatusResponse",
         "type": "object"
@@ -30804,7 +31454,8 @@
           "label",
           "family",
           "capabilities",
-          "source"
+          "source",
+          "status"
         ],
         "title": "ProviderSummary",
         "type": "object"
@@ -31475,7 +32126,9 @@
           "operation",
           "status",
           "requested_at",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "reason",
+          "evidence_ids"
         ],
         "title": "ResearchActionRecord",
         "type": "object"
@@ -31549,7 +32202,9 @@
           }
         },
         "required": [
-          "aliases_enabled"
+          "aliases_enabled",
+          "total_legacy_requests",
+          "canonical_field"
         ],
         "title": "ResearchCompatibilityStatus",
         "type": "object"
@@ -31646,6 +32301,16 @@
             "type": "string"
           }
         },
+        "required": [
+          "sec",
+          "company_ir",
+          "recent_news",
+          "prior_news_novelty",
+          "atm",
+          "warrants",
+          "resale_registration",
+          "convertibles"
+        ],
         "title": "ResearchCoverage",
         "type": "object"
       },
@@ -31701,7 +32366,8 @@
           "allowed",
           "authoritative",
           "reason_code",
-          "policy_version"
+          "policy_version",
+          "score_adjustment"
         ],
         "title": "ResearchPolicyDecision",
         "type": "object"
@@ -31806,7 +32472,8 @@
         "required": [
           "quick",
           "deep",
-          "hermes_planner"
+          "hermes_planner",
+          "disabled"
         ],
         "title": "ResearchReleaseAvailability",
         "type": "object"
@@ -32009,7 +32676,8 @@
           "dataset_fingerprint",
           "as_of",
           "freshness_mode",
-          "bar_count"
+          "bar_count",
+          "formula_version"
         ],
         "title": "ResearchSource",
         "type": "object"
@@ -32072,7 +32740,10 @@
           "generated_at",
           "sample_size",
           "exact_sample_size",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "feature_results",
+          "promotion_allowed",
+          "notes"
         ],
         "title": "ResearchValidationReport",
         "type": "object"
@@ -32254,6 +32925,13 @@
             "type": "string"
           }
         },
+        "required": [
+          "strategy",
+          "max_queries",
+          "max_sources",
+          "max_extracts",
+          "max_wall_time_seconds"
+        ],
         "title": "RetrievalPolicy",
         "type": "object"
       },
@@ -32366,7 +33044,11 @@
           }
         },
         "required": [
-          "problem"
+          "problem",
+          "severity",
+          "category",
+          "attribution",
+          "blocking"
         ],
         "title": "ReviewFinding",
         "type": "object"
@@ -32396,7 +33078,8 @@
         },
         "required": [
           "requirement_id",
-          "status"
+          "status",
+          "evidence"
         ],
         "title": "ReviewRequirementResult",
         "type": "object"
@@ -35227,6 +35910,9 @@
             ]
           }
         },
+        "required": [
+          "schema_version"
+        ],
         "title": "RuntimeDiagnostics",
         "type": "object"
       },
@@ -35263,6 +35949,11 @@
             "$ref": "#/components/schemas/WorkerHealthPayload"
           }
         },
+        "required": [
+          "ok",
+          "status",
+          "format_version"
+        ],
         "title": "RuntimeStatusPayload",
         "type": "object"
       },
@@ -35612,7 +36303,8 @@
           "event_timestamp",
           "received_timestamp",
           "sip_feed",
-          "eligibility_policy_version"
+          "eligibility_policy_version",
+          "trade_condition_codes"
         ],
         "title": "SelectedPriceEvent",
         "type": "object"
@@ -35856,7 +36548,8 @@
         "required": [
           "session",
           "user_message",
-          "job"
+          "job",
+          "generation_status"
         ],
         "title": "SendChatMessageResponse",
         "type": "object"
@@ -35945,7 +36638,12 @@
         },
         "required": [
           "session_id",
-          "memory_enabled"
+          "memory_enabled",
+          "read_memory",
+          "write_memory",
+          "owner_type",
+          "owner_id",
+          "memory_record_count"
         ],
         "title": "SessionMemoryState",
         "type": "object"
@@ -36179,7 +36877,8 @@
           "audio_provider_tts",
           "audio_provider_stt",
           "image_enabled",
-          "rpg_visual_enabled"
+          "rpg_visual_enabled",
+          "success"
         ],
         "title": "SettingsPayload",
         "type": "object"
@@ -36192,6 +36891,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "success"
+        ],
         "title": "SettingsSaveResponse",
         "type": "object"
       },
@@ -36266,7 +36968,9 @@
         "required": [
           "status",
           "running",
-          "configured_enabled"
+          "configured_enabled",
+          "strategy_id",
+          "execution_authority"
         ],
         "title": "SolanaAIMonitorControlResponse",
         "type": "object"
@@ -36369,7 +37073,19 @@
         },
         "required": [
           "configured_enabled",
-          "running"
+          "running",
+          "strategy_id",
+          "strategy_version",
+          "strategy_kind",
+          "display_name",
+          "instrument_id",
+          "binding_id",
+          "chart_interval",
+          "mode",
+          "decision_count",
+          "signal_count",
+          "research_only",
+          "execution_authority"
         ],
         "title": "SolanaAIStrategyRecord",
         "type": "object"
@@ -37010,6 +37726,11 @@
             "type": "array"
           }
         },
+        "required": [
+          "activity_change_fields",
+          "memory_candidates",
+          "open_loop_updates"
+        ],
         "title": "StateEffects",
         "type": "object"
       },
@@ -37526,6 +38247,37 @@
             "type": "string"
           }
         },
+        "required": [
+          "strategy_id",
+          "strategy_version",
+          "universe_scan_time_et",
+          "universe_discovery_source",
+          "auto_archive_daily_universe",
+          "universe_archive_grace_minutes",
+          "universe_discovery_count",
+          "minimum_gap_pct",
+          "minimum_price",
+          "maximum_price",
+          "minimum_premarket_dollar_volume",
+          "minimum_tod_rvol",
+          "allow_missing_tod_rvol",
+          "maximum_spread_bps",
+          "preferred_float_min_shares",
+          "preferred_float_max_shares",
+          "float_preference_mode",
+          "require_catalyst_evidence",
+          "reject_dilution_flags",
+          "oversold_threshold",
+          "recovery_threshold",
+          "overbought_threshold",
+          "rsi_period",
+          "stochastic_period",
+          "k_smoothing_period",
+          "d_smoothing_period",
+          "entry_start_et",
+          "last_entry_et",
+          "force_flat_et"
+        ],
         "title": "StochRsi5mConfig",
         "type": "object"
       },
@@ -37812,7 +38564,11 @@
         },
         "required": [
           "state",
-          "reason_code"
+          "reason_code",
+          "policy_version",
+          "five_minute_bar_count",
+          "trades",
+          "execution_authority"
         ],
         "title": "StochRsi5mSnapshot",
         "type": "object"
@@ -38241,7 +38997,12 @@
           "solana_ai_monitor",
           "universe_archive_monitor",
           "v2_qualification_monitor",
-          "alpaca_status_monitor"
+          "alpaca_status_monitor",
+          "execution_observation_monitor",
+          "ai_shadow_v3_monitor",
+          "session_reconciliation_monitor",
+          "prospective_gap_monitor",
+          "execution_authority"
         ],
         "title": "StrategyOperationsStatus",
         "type": "object"
@@ -38405,7 +39166,9 @@
           "entry_order_id",
           "stop_price",
           "target_price",
-          "quantity"
+          "quantity",
+          "status",
+          "revision"
         ],
         "title": "StrategyProtection",
         "type": "object"
@@ -38445,7 +39208,8 @@
         },
         "required": [
           "run_id",
-          "total_sessions"
+          "total_sessions",
+          "status"
         ],
         "title": "StrategyRangeBacktestAcceptedResponse",
         "type": "object"
@@ -38591,7 +39355,13 @@
           "session_date",
           "status",
           "starting_cash",
-          "ending_cash"
+          "ending_cash",
+          "fidelity_warnings",
+          "strategy_fidelity_adjustments",
+          "candidate_count",
+          "pnl",
+          "trigger_count",
+          "trade_count"
         ],
         "title": "StrategyRangeBacktestDay",
         "type": "object"
@@ -38979,7 +39749,9 @@
           "loss_count",
           "expectancy_r",
           "result_quality",
-          "days"
+          "days",
+          "point_in_time_universes_required",
+          "reconstruction_is_approximate"
         ],
         "title": "StrategyRangeBacktestResult",
         "type": "object"
@@ -39116,7 +39888,16 @@
           "instrument_id",
           "fact_set_id",
           "decision_at",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "projection_version",
+          "research_policy_version",
+          "primary_catalyst_confirmed",
+          "catalyst_same_day",
+          "catalyst_fresh",
+          "supply_resolution_status",
+          "research_status",
+          "unresolved_supply",
+          "source_authority_sufficient"
         ],
         "title": "StrategyResearchFeatures",
         "type": "object"
@@ -39212,7 +39993,8 @@
         "required": [
           "strategy_id",
           "universe_id",
-          "reviews"
+          "reviews",
+          "shadow_only"
         ],
         "title": "StrategyResearchReviewResponse",
         "type": "object"
@@ -39416,6 +40198,20 @@
             "type": "string"
           }
         },
+        "required": [
+          "risk_per_trade_pct",
+          "max_daily_loss_pct",
+          "max_open_risk_pct",
+          "max_positions",
+          "max_trades_per_day",
+          "max_trade_value",
+          "one_trade_per_symbol_per_day",
+          "max_spread_bps",
+          "entry_start_et",
+          "last_entry_et",
+          "force_flat_et",
+          "kill_switch"
+        ],
         "title": "StrategyRiskProfile",
         "type": "object"
       },
@@ -39554,7 +40350,8 @@
           "stop_price",
           "target_price",
           "risk_per_share",
-          "reason_code"
+          "reason_code",
+          "quality_score"
         ],
         "title": "StrategySignal",
         "type": "object"
@@ -39613,7 +40410,8 @@
         },
         "required": [
           "id",
-          "description"
+          "description",
+          "required"
         ],
         "title": "SuccessCriterion",
         "type": "object"
@@ -39801,7 +40599,12 @@
           "supply_type",
           "source_evidence_ids",
           "generated_at",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "schema_version",
+          "extractor_version",
+          "status",
+          "resolution_status",
+          "confidence"
         ],
         "title": "SupplyFact",
         "type": "object"
@@ -39879,6 +40682,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "supply_resolution_status"
+        ],
         "title": "SupplyMetrics",
         "type": "object"
       },
@@ -39953,7 +40759,8 @@
         },
         "required": [
           "id",
-          "description"
+          "description",
+          "source"
         ],
         "title": "TaskConstraint",
         "type": "object"
@@ -40014,7 +40821,8 @@
         },
         "required": [
           "source",
-          "target"
+          "target",
+          "kind"
         ],
         "title": "TaskEdge",
         "type": "object"
@@ -40076,7 +40884,10 @@
         },
         "required": [
           "user_request_digest",
-          "nodes"
+          "nodes",
+          "revision",
+          "reference_context",
+          "max_parallel_nodes"
         ],
         "title": "TaskGraph",
         "type": "object"
@@ -40300,7 +41111,9 @@
         },
         "required": [
           "run_id",
-          "graph"
+          "graph",
+          "status",
+          "revision"
         ],
         "title": "TaskGraphRunSnapshot",
         "type": "object"
@@ -40485,7 +41298,13 @@
           }
         },
         "required": [
-          "id"
+          "id",
+          "kind",
+          "objective",
+          "approval_policy",
+          "optional",
+          "estimated_cost",
+          "cacheable"
         ],
         "title": "TaskNode",
         "type": "object"
@@ -40576,7 +41395,9 @@
         },
         "required": [
           "node_id",
-          "fingerprint"
+          "fingerprint",
+          "status",
+          "attempts"
         ],
         "title": "TaskNodeRunState",
         "type": "object"
@@ -40622,7 +41443,9 @@
         },
         "required": [
           "id",
-          "description"
+          "description",
+          "source",
+          "required"
         ],
         "title": "TaskRequirement",
         "type": "object"
@@ -40907,7 +41730,10 @@
           "instrument_id",
           "condition_type",
           "threshold",
-          "alert_id"
+          "alert_id",
+          "cooldown_seconds",
+          "enabled",
+          "revision"
         ],
         "title": "TradingAlert",
         "type": "object"
@@ -41463,6 +42289,17 @@
             "type": "string"
           }
         },
+        "required": [
+          "lookback_bars",
+          "period",
+          "fast_period",
+          "slow_period",
+          "signal_period",
+          "component",
+          "anchor_bars_ago",
+          "message",
+          "trigger_policy"
+        ],
         "title": "TradingAlertParameters",
         "type": "object"
       },
@@ -41697,7 +42534,8 @@
           }
         },
         "required": [
-          "diagnostics"
+          "diagnostics",
+          "ok"
         ],
         "title": "TradingDiagnosticsResponse",
         "type": "object"
@@ -41779,7 +42617,8 @@
           "record_id",
           "record_type",
           "revision",
-          "payload"
+          "payload",
+          "status"
         ],
         "title": "TradingDocumentResponse",
         "type": "object"
@@ -41930,7 +42769,8 @@
           "captured_at",
           "content",
           "content_hash",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "extraction_status"
         ],
         "title": "TradingEvidence",
         "type": "object"
@@ -42038,7 +42878,12 @@
           "instrument_id",
           "generated_at",
           "catalyst",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "schema_version",
+          "extractor_version",
+          "supply",
+          "unresolved_facts",
+          "evidence_ids"
         ],
         "title": "TradingFactSet",
         "type": "object"
@@ -42137,7 +42982,10 @@
           "provider",
           "model",
           "headline",
-          "summary"
+          "summary",
+          "confidence",
+          "read_only",
+          "disclaimer"
         ],
         "title": "TradingMarketBrief",
         "type": "object"
@@ -42221,7 +43069,11 @@
           "observed_at",
           "state",
           "risk",
-          "execution"
+          "execution",
+          "reason_codes",
+          "paper_only",
+          "live_broker_enabled",
+          "ai_order_placement_enabled"
         ],
         "title": "TradingOperationalHealth",
         "type": "object"
@@ -42315,7 +43167,10 @@
         },
         "required": [
           "instrument_id",
-          "as_of"
+          "as_of",
+          "report_timeline",
+          "evidence",
+          "hermes_actions"
         ],
         "title": "TradingResearchAuditView",
         "type": "object"
@@ -42379,7 +43234,8 @@
           "fact_set",
           "features",
           "trace_id",
-          "planner_backend"
+          "planner_backend",
+          "warnings"
         ],
         "title": "TradingResearchCoordinatorResult",
         "type": "object"
@@ -42539,7 +43395,14 @@
           "instrument_id",
           "research_started_at",
           "evidence_cutoff_at",
-          "immutable_fingerprint"
+          "immutable_fingerprint",
+          "contract_version",
+          "catalyst_status",
+          "supply_status",
+          "research_status",
+          "unresolved_facts",
+          "source_evidence_ids",
+          "planner_backend"
         ],
         "title": "TradingResearchReport",
         "type": "object"
@@ -42689,7 +43552,16 @@
           "requested_at",
           "decision_context_at",
           "evidence_cutoff_at",
-          "deadline_at"
+          "deadline_at",
+          "contract_version",
+          "known_headlines",
+          "known_filings",
+          "objectives",
+          "allowed_operations",
+          "max_steps",
+          "max_queries",
+          "max_sources",
+          "max_extracts"
         ],
         "title": "TradingResearchRequest",
         "type": "object"
@@ -42939,7 +43811,15 @@
           "scanner_id",
           "name",
           "instrument_ids",
-          "rules"
+          "rules",
+          "interval",
+          "history_limit",
+          "max_concurrency",
+          "request_timeout_seconds",
+          "run_timeout_seconds",
+          "formula_version",
+          "enabled",
+          "revision"
         ],
         "title": "TradingScannerDefinition",
         "type": "object"
@@ -43153,7 +44033,9 @@
           "rule_id",
           "metric",
           "operator",
-          "threshold"
+          "threshold",
+          "period",
+          "lookback_bars"
         ],
         "title": "TradingScannerRule",
         "type": "object"
@@ -43270,7 +44152,11 @@
           "run_id",
           "scanner_id",
           "status",
-          "definition_snapshot"
+          "definition_snapshot",
+          "cancellation_requested",
+          "universe_count",
+          "completed_count",
+          "matched_count"
         ],
         "title": "TradingScannerRun",
         "type": "object"
@@ -43556,7 +44442,12 @@
         },
         "required": [
           "strategy_id",
-          "account_id"
+          "account_id",
+          "strategy_kind",
+          "strategy_version",
+          "mode",
+          "enabled",
+          "revision"
         ],
         "title": "TradingStrategyConfigDocument",
         "type": "object"
@@ -44393,7 +45284,15 @@
           "matched_eligible_trade_count",
           "distinct_sessions",
           "distinct_symbols",
-          "evidence_fingerprint"
+          "evidence_fingerprint",
+          "qualification_version",
+          "prospective_start",
+          "market_evidence_policy_version",
+          "prospective_economic_reviewed",
+          "qualified",
+          "reviewed",
+          "auto_paper_authorized",
+          "reason_codes"
         ],
         "title": "V2ProspectiveQualification",
         "type": "object"
@@ -44467,6 +45366,17 @@
             "type": "string"
           }
         },
+        "required": [
+          "prospective_start",
+          "minimum_matched_trades",
+          "minimum_distinct_sessions",
+          "minimum_distinct_symbols",
+          "minimum_execution_match_rate",
+          "minimum_expectancy_r",
+          "one_sided_confidence_level",
+          "maximum_drawdown_r",
+          "live_match_window_minutes"
+        ],
         "title": "V2QualificationThresholds",
         "type": "object"
       },
@@ -44600,7 +45510,9 @@
           "mechanisms",
           "interactions",
           "return_distribution",
-          "uncertainty"
+          "uncertainty",
+          "predictor_version",
+          "feature_schema_version"
         ],
         "title": "V42Forecast",
         "type": "object"
@@ -45256,7 +46168,9 @@
           "premarket_repricing_complete_score",
           "extension_overlay",
           "cohort_regime",
-          "uncertainty"
+          "uncertainty",
+          "predictor_version",
+          "feature_schema_version"
         ],
         "title": "V43Forecast",
         "type": "object"
@@ -45420,7 +46334,9 @@
         "required": [
           "feature",
           "sample_size",
-          "exact_sample_size"
+          "exact_sample_size",
+          "recommendation",
+          "reason"
         ],
         "title": "ValidationFeatureResult",
         "type": "object"
@@ -45577,7 +46493,8 @@
           "workspace_state_id",
           "command",
           "success",
-          "output_digest"
+          "output_digest",
+          "outcome"
         ],
         "title": "ValidationResult",
         "type": "object"
@@ -45638,7 +46555,8 @@
         "required": [
           "id",
           "kind",
-          "description"
+          "description",
+          "required"
         ],
         "title": "ValidationSpec",
         "type": "object"
@@ -45714,7 +46632,11 @@
         "required": [
           "close_above_open",
           "persistent_uptrend",
-          "session_regime"
+          "session_regime",
+          "close_above_open_version",
+          "persistent_uptrend_version",
+          "session_regime_version",
+          "session_regime_evaluation_role"
         ],
         "title": "VersionedOutcomeLabels",
         "type": "object"
@@ -45842,7 +46764,14 @@
         },
         "required": [
           "asset_id",
-          "updated_at"
+          "updated_at",
+          "subject_owner",
+          "source_type",
+          "source_reference",
+          "creator_id",
+          "consent_status",
+          "deletion_state",
+          "deletion_reason"
         ],
         "title": "VoiceProfileGovernance",
         "type": "object"
@@ -46370,7 +47299,16 @@
           "exact_commit_sha",
           "evaluation_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "app_version",
+          "browser_version",
+          "os_version",
+          "character_id",
+          "presence_preset",
+          "conversation_stance",
+          "configured_duplex_mode",
+          "resolved_duplex_mode",
+          "release_gate_status"
         ],
         "title": "VoiceSessionEvaluationRecord",
         "type": "object"
@@ -46431,7 +47369,10 @@
         "required": [
           "id",
           "ok",
-          "status"
+          "status",
+          "url",
+          "source_env",
+          "mocked"
         ],
         "title": "WorkerHealth",
         "type": "object"
@@ -46477,6 +47418,12 @@
             "type": "array"
           }
         },
+        "required": [
+          "ok",
+          "status",
+          "format_version",
+          "contract_version"
+        ],
         "title": "WorkerHealthPayload",
         "type": "object"
       },
@@ -46503,6 +47450,12 @@
             "type": "integer"
           }
         },
+        "required": [
+          "configured",
+          "reachable",
+          "unreachable",
+          "mocked"
+        ],
         "title": "WorkerHealthSummary",
         "type": "object"
       },
@@ -46556,6 +47509,16 @@
             "type": "string"
           }
         },
+        "required": [
+          "ok",
+          "format_version",
+          "contract_version",
+          "small_json_payloads",
+          "generated_artifacts",
+          "base64_media_payloads",
+          "browser_worker_access",
+          "gateway_worker_access"
+        ],
         "title": "WorkerPayloadPolicy",
         "type": "object"
       },
@@ -46802,7 +47765,9 @@
           }
         },
         "required": [
-          "root"
+          "root",
+          "base_ref",
+          "isolation_policy"
         ],
         "title": "WorkspaceSpec",
         "type": "object"
@@ -47149,7 +48114,15 @@
           "proposed_scope_id",
           "proposed_category",
           "proposed_content",
-          "created_at"
+          "created_at",
+          "owner_type",
+          "owner_id",
+          "proposed_kind",
+          "confidence",
+          "source",
+          "trust_level",
+          "sensitivity",
+          "status"
         ],
         "title": "MemoryCandidate",
         "type": "object"

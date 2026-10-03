@@ -56,7 +56,7 @@ export function formatAlertThreshold(value: number | string): string {
 
 export function cooldownForTriggerPolicy(
   policy: TradingAlertTriggerPolicy,
-  interval: string,
+  interval: string | undefined,
 ): number {
   if (policy === 'once') return 31_536_000;
   if (policy === 'every_time') return 0;
@@ -77,7 +77,7 @@ export function cooldownForTriggerPolicy(
     '1w': 604_800,
     '1mo': 2_592_000,
   };
-  return intervalSeconds[interval] ?? 60;
+  return (interval && intervalSeconds[interval]) || 60;
 }
 
 export function chartAlertCreateInput(input: {

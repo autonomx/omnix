@@ -20,7 +20,7 @@
     "typecheck": "tsc -b",
     "typecheck:trading": "tsc -p tsconfig.trading.json",
     "api:schema": "python ../../../scripts/export_gateway_openapi.py src/apps/web/src/api/generated/openapi.json",
-    "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts",
+    "api:types": "openapi-typescript src/api/generated/openapi.json -o src/api/generated/types.ts --default-non-nullable false",
     "api:generate": "npm run api:schema && npm run api:types",
     "api:check": "npm run api:generate && git diff --exit-code -- src/api/generated/openapi.json src/api/generated/types.ts"
   },
@@ -31,6 +31,7 @@
     "@tanstack/react-router": "^1.170.15",
     "@tanstack/react-virtual": "^3.14.13",
     "lightweight-charts": "^5.1.0",
+    "openapi-fetch": "^0.17.0",
     "pixi.js": "^8.13.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

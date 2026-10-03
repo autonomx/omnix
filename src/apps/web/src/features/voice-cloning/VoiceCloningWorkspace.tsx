@@ -10,6 +10,7 @@ import { voiceStudioDefaults } from '../settings/moduleDefaults';
 import { loadSettingsProfile } from '../settings/settingsApi';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { buildProfileInput, cloneFormDefaults, type CloneFormValues } from './cloneFormDefaults';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
@@ -176,7 +177,7 @@ export function VoiceCloningWorkspace({ module }: { module: OmnixModuleDefinitio
                     <strong>{job.type}</strong>
                     <OmnixStatusPill>{job.status}</OmnixStatusPill>
                   </Group>
-                  <Progress value={progressPercent(job.progress)} aria-label={`${job.type} progress`} />
+                  <Progress value={jobProgressPercent(job.progress)} aria-label={`${job.type} progress`} />
                   <Text size="sm">{job.resource_class}</Text>
                 </article>
               ))}
@@ -211,10 +212,3 @@ function voiceCloneCapableProviders(payload: ProviderFacadePayload | undefined) 
   return payload?.providers.filter((provider) => provider.capabilities.includes('voice_cloning') || provider.capabilities.includes('tts')) ?? [];
 }
 
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  if (!progress || progress.total <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((progress.current / progress.total) * 100));
-}

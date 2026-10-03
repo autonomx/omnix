@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { omnixApiClient, type AssetListResponse, type JobRecord } from '../../api/client';
 import { assignmentRowsFromSegments, mapStoryToAudioSegments, speakerRowsFromSegments, type StoryAudioScriptSegment } from './storyAudioMapper';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 export type StoryAudioVoiceOption = { id: string; label: string };
 export type StoryAudioSegment = StoryAudioScriptSegment & { title?: string };
@@ -261,8 +262,8 @@ export function StoryAudioPanel() {
 
   function applyJobProgress(job: JobRecord): void {
     setJobId(job.id);
-    if (job.progress && job.progress.total > 0) {
-      setProgress(Math.min(100, Math.round((job.progress.current / job.progress.total) * 100)));
+    if ((job.progress?.total ?? 0) > 0) {
+      setProgress(jobProgressPercent(job.progress));
     } else if (job.status === 'completed') {
       setProgress(100);
     } else if (job.status === 'running' || job.status === 'leased') {

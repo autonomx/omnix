@@ -9,6 +9,7 @@ import { OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { FeatureSubmitFeedback, FeatureValidationMessage } from '../shared/FeatureSubmitFeedback';
 import { StoryExtraPanels } from './StoryExtraPanels';
 import { StorytellerToolbox } from './StorytellerToolbox';
+import { jobProgressPercent } from '../../api/jobProgress';
 
 interface StorytellerFormValues {
   providerId: string;
@@ -891,7 +892,7 @@ function StoryControls({
         {latestJob ? (
           <article className="storyteller-output-card">
             <div><strong>{latestJob.type}</strong><OmnixStatusPill>{latestJob.status}</OmnixStatusPill></div>
-            <Progress value={progressPercent(latestJob.progress)} aria-label={`${latestJob.type} progress`} />
+            <Progress value={jobProgressPercent(latestJob.progress)} aria-label={`${latestJob.type} progress`} />
             <small>{latestJob.resource_class}</small>
             {fullJobOutputText(latestJob) ? <p>{truncate(fullJobOutputText(latestJob) ?? '', 180)}</p> : null}
           </article>
@@ -1162,10 +1163,6 @@ function librarySectionLabel(section: StoryLibrarySection): string {
 
 function llmCapableProviders(payload: ProviderFacadePayload | undefined) {
   return payload?.providers.filter((provider) => provider.capabilities.includes('chat') || provider.capabilities.includes('completion')) ?? [];
-}
-
-function progressPercent(progress: { current: number; total: number } | undefined): number {
-  return progress && progress.total > 0 ? Math.min(100, Math.round((progress.current / progress.total) * 100)) : 0;
 }
 
 function fullJobOutputText(job: { output_refs?: Array<{ content?: unknown }>; logs?: Array<{ content?: unknown }> }): string | null {
