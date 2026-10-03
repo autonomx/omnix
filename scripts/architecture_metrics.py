@@ -858,6 +858,8 @@ def _web_graph(sources: dict[str, str]) -> dict[str, set[str]]:
     for path in graph:
         code = mask_js(sources[path])
         imports = re.findall(r"(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)[\"']([^\"']+)[\"']", code)
+        # Workers and worklets load by URL: new Worker(new URL('./x.worker.ts', import.meta.url)).
+        imports += re.findall(r"\bnew\s+URL\(\s*[\"'](\.[^\"']+)[\"']\s*,\s*import\.meta\.url\s*\)", code)
         for specifier in imports:
             if specifier.startswith("@/"):
                 base = PurePosixPath("src/apps/web/src") / specifier[2:]

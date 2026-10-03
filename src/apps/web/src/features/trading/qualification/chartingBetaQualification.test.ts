@@ -1,10 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { generateSpikeBars } from '../experimental/tradingSpikeCore';
 import { indicatorPoints, type CoreIndicatorInstance } from '../indicators/coreIndicators';
 import type { MarketBar } from '../tradingTypes';
 
+// Deterministic synthetic bars: a drifting wave with stable wicks and volume.
+function syntheticBars(count: number, startTime: number, intervalSeconds: number) {
+  const bars = [];
+  let close = 40_000;
+  for (let index = 0; index < count; index += 1) {
+    const open = close;
+    close = 40_000 + index * 0.65 + Math.sin(index / 37) * 42 + Math.cos(index / 11) * 18;
+    bars.push({
+      time: startTime + index * intervalSeconds,
+      open,
+      high: Math.max(open, close) + 14 + (index % 7),
+      low: Math.min(open, close) - 13 - (index % 5),
+      close,
+      volume: 100 + ((index * 17) % 240),
+      isFinal: true,
+      ingestionRevision: 1,
+    });
+  }
+  return bars;
+}
+
 function marketBars(count: number, intervalSeconds: number): MarketBar[] {
-  return generateSpikeBars(count, 1_700_000_000, intervalSeconds).map((bar) => ({
+  return syntheticBars(count, 1_700_000_000, intervalSeconds).map((bar) => ({
     instrument_id: 'crypto:BINANCE:spot:BTC-USDT',
     interval: `${intervalSeconds}s`,
     start_time: new Date(bar.time * 1_000).toISOString(),

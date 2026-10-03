@@ -113,7 +113,6 @@ const mutationObserverAllowList = [
   'src/features/assistant-workspace/live-avatar-presence.ts',
   'src/features/assistant-workspace/live-voice-controller.ts',
   'src/features/assistant-workspace/live-voice-transcript-autoscroll.ts',
-  'src/features/assistant-workspace/live-voice-websocket-enhancer.ts',
   'src/features/assistant-workspace/live-chat-submission-gateway.ts',
   'src/features/chatbot/chat-response-metrics-controller.ts',
   'src/features/chatbot/chat-sidebar-manager.ts',
@@ -270,6 +269,8 @@ export default [
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      // Tool caches (Python test runs can leave one here).
+      '.pytest_cache/**',
     ],
   },
   ...tseslint.configs.recommended,

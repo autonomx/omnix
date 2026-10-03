@@ -74,7 +74,7 @@ function renderPlatform(moduleId: OmnixModuleId) {
 }
 
 function mockGateway(payloads: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+  const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => {
     const path = typeof input === 'string' ? new URL(input, 'http://localhost').pathname : new URL(input.toString()).pathname;
     const payload = payloads[path];
 

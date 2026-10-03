@@ -471,6 +471,16 @@ def test_web_glob_reachability_resolves_parent_segments():
     assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 1
 
 
+def test_web_workers_loaded_by_url_are_reachable():
+    sources = {
+        WEB + "main.tsx": "import './scheduler';",
+        WEB + "scheduler.ts": "new Worker(new URL('./indicator.worker.ts', import.meta.url), { type: 'module' });",
+        WEB + "indicator.worker.ts": "",
+        WEB + "dead.ts": "",
+    }
+    assert observed(sources)["metrics"]["web_unreachable_modules"]["value"] == 1
+
+
 def test_process_state_inventory_approval_requires_category_and_reason():
     sources = {APP + "chat/a.py": "import threading\nlock = threading.Lock()\nother = threading.Lock()",
                "resources/architecture/process-local-state.json": json.dumps({"entries": [

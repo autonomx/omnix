@@ -7,7 +7,6 @@ import {
   createObservationAnchor,
   type LiveObservation,
 } from './live-observation-coordinator';
-import { LiveSegmentStateObserver } from './live-segment-submit-interceptor';
 import {
   LIVE_OBSERVATION_CANDIDATE_EVENT,
   LIVE_VOICE_INTERRUPT_EVENT,
@@ -174,15 +173,5 @@ describe('Live observation admission', () => {
     expect(queue.admitCandidate(second, context).admitted).toBe(true);
     const anchorId = second.anchors[0].anchorId;
     expect(queue.markAnchorState(anchorId, 'self_corrected')).toContain('o3');
-  });
-});
-
-describe('LiveSegmentStateObserver', () => {
-  it('observes protocol state without owning submission behavior', () => {
-    const observer = new LiveSegmentStateObserver();
-    observer.observePerformanceEvent({ stage: 'stt_segment_state', protocol: 'segmented-v1' });
-    expect(observer.protocol).toBe('segmented-v1');
-    observer.reset();
-    expect(observer.protocol).toBe('legacy');
   });
 });
