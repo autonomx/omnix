@@ -47,7 +47,7 @@ import { LiveAgentToolProposalCard, liveAgentToolProposals } from './LiveAgentTo
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
 import { LiveChatPanel } from './LiveChatPanel';
 import { VoiceSessionEvaluationPanel } from './VoiceSessionEvaluationPanel';
-import { LiveVoiceOrb } from './LiveVoiceOrb';
+import { LiveCallVisual } from './LiveCallVisual';
 import { ChatSidebarSessions } from './ChatSidebarSessions';
 import { ChatResponseMetricsRow } from './chat-response-metrics-controller';
 import { AssistantContextControls, DesktopShareButton, DesktopShareStatusRow } from '../assistant-workspace/assistant-context-controls';
@@ -2110,16 +2110,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d'
                 ? <Live2DMotionControl rigAssetId={liveCallRuntime.avatar_pack.rig_asset_id} />
                 : <div className="assistant-live-state" role="status" aria-label="Live voice state"><span>{liveVoiceState}</span><span aria-hidden="true">v</span></div>}
-              <div
-                key={liveCallRuntime?.avatar_pack?.renderer === 'live2d'
-                  ? `${liveCallRuntime.avatar_pack.character_id}:${liveCallRuntime.avatar_pack.version}:${liveCallRuntime.avatar_pack.rig_asset_id}`
-                  : 'voice-orb'}
-                className="assistant-live-visual-stage"
-                role="img"
-                aria-label="Live character visual"
-              >
-                <LiveVoiceOrb voiceMode={liveVoiceVisualMode} />
-              </div>
+              <LiveCallVisual voiceMode={liveVoiceVisualMode} thinking={sendMutation.isPending || chatJobInProgress} />
               {liveCallRuntime?.avatar_pack?.renderer === 'live2d' ? <Live2DZoomControl /> : null}
               <div className="assistant-voice-input-indicator" aria-live="polite">
                 <span>Mic input</span>
@@ -2127,10 +2118,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <i aria-hidden="true"><b /></i>
               </div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
-              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={toggleLiveCallFromControls}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <div className="assistant-voice-controls" role="group" aria-label="Live voice controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveCallButtonActive ? 'danger' : undefined} disabled={livePresentation.captureOwned && livePresentation.captureStatus === 'connecting'} onClick={toggleLiveCallFromControls}>{liveCallButtonActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <div className="assistant-voice-transcript" ref={voiceTranscriptRef} role="region" aria-label="Live voice transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
-              <div className="assistant-voice-transcript" ref={voiceTranscriptRef}><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
               <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div><DesktopShareStatusRow /><DesktopCompanionControls /><DesktopCompanionTextSurface /></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>

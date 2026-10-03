@@ -1,10 +1,33 @@
 /* eslint-disable no-restricted-imports -- baseline WP-9.x */
 /* eslint-disable no-restricted-syntax -- baseline WP-9.x */
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { liveConversationStore } from '../assistant-workspace/live-conversation-store';
 import { LiveChatFullscreenShell, type LiveChatMessage } from './LiveChatFullscreenShell';
+import type { CharacterLiveCallRuntime } from './characterClient';
+import { publishCharacterAvatarRuntime } from './liveCharacterAvatarBridge';
+import { fixture } from '../../test/fixture';
+
+const mayaRuntime: CharacterLiveCallRuntime = fixture({
+  session_id: 'chat:maya',
+  interaction_mode: 'character',
+  display_name: 'Maya',
+  character_id: 'maya',
+  avatar_pack: {
+    character_id: 'maya',
+    version: 1,
+    render_mode: 'audio_envelope',
+    renderer: 'sprite',
+    rig_asset_id: null,
+    base_asset_id: 'image:maya-base',
+    mouth_frames: { closed: 'image:maya-closed' },
+    blink_frames: {},
+    expression_frames: {},
+    outfit_frames: {},
+    background_asset_ids: {},
+  },
+});
 import {
   enterLiveChatFullscreen,
   exitLiveChatFullscreen,
@@ -27,9 +50,6 @@ describe('LiveChatFullscreenShell', () => {
   let dispose: () => void;
 
   beforeEach(() => {
-    document.body.innerHTML = `
-      <figure class="assistant-live-character-avatar" data-mouth-frame="medium" data-voice-mode="speaking"><img src="/maya.png" alt="Maya live avatar" /></figure>
-    `;
     sourceCallClick.mockClear();
     sourceSubmit.mockClear();
     Object.defineProperty(document.documentElement, 'requestFullscreen', { configurable: true, value: undefined });
@@ -50,6 +70,7 @@ describe('LiveChatFullscreenShell', () => {
   });
 
   afterEach(async () => {
+    publishCharacterAvatarRuntime(null);
     await exitLiveChatFullscreen();
     dispose();
     cleanup();
@@ -61,6 +82,7 @@ describe('LiveChatFullscreenShell', () => {
   it('renders a character-first stage and the conversation it is given', () => {
     enterLiveChatFullscreen('header');
     renderShell();
+    act(() => publishCharacterAvatarRuntime(mayaRuntime));
 
     const dialog = screen.getByRole('dialog', { name: 'Immersive Live Chat with Maya' });
     const fullscreen = within(dialog);

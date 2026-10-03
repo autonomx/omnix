@@ -129,7 +129,8 @@ describe('view runtime lifecycle', () => {
       if (cycle === 0) {
         const active = counts();
         expect(active.listeners).toBeGreaterThan(40);
-        expect(active.observers).toBeGreaterThan(0);
+        // Chat renders its UI with React; its runtime watches no DOM (WP-9.4).
+        expect(active.observers).toBe(0);
       }
       chat.dispose();
       if (cycle > 0) afterChatDisposed = counts();

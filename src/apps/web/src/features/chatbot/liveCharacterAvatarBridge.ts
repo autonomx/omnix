@@ -1,6 +1,7 @@
  
+import { useSyncExternalStore } from 'react';
 import type { CharacterAvatarPack, CharacterLiveCallRuntime } from './characterClient';
-import { isActiveView } from '../../app/viewApiScope';
+import { liveCallPresentationStore } from '../assistant-workspace';
 import './liveCharacterAvatarBridge.css';
 
 export type AvatarMouthFrame = 'closed' | 'small' | 'medium' | 'wide';
@@ -10,9 +11,6 @@ const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 export const CHARACTER_AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
 const AVATAR_PCM_EVENT = 'omnix:character-avatar-pcm';
 const LIVE_CALL_DIAGNOSTIC_EVENT = 'omnix:live-call-diagnostic';
-const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
-const AVATAR_HOST_CLASS = 'assistant-live-character-avatar';
-const LIVE_VISUAL_STAGE_CLASS = 'assistant-live-visual-stage';
 let bridgeInstalled = false;
 const AUDIO_ELEMENT_FRAME_MS = 50;
 const AUDIO_ELEMENT_FFT_SIZE = 1_024;
@@ -51,16 +49,44 @@ let blinkClosed = false;
 let blinkTimer: ReturnType<typeof setTimeout> | null = null;
 const audioElementStops = new WeakMap<HTMLAudioElement, () => void>();
 
+/** The live avatar's runtime and current mouth and blink frames (WP-9.4: components render them). */
+export type LiveAvatarState = {
+  runtime: CharacterLiveCallRuntime | null;
+  mouthFrame: AvatarMouthFrame;
+  blinkClosed: boolean;
+};
+
+let avatarState: LiveAvatarState = { runtime: null, mouthFrame: 'closed', blinkClosed: false };
+const avatarListeners = new Set<() => void>();
+
+function publishAvatarState(): void {
+  if (avatarState.runtime === currentRuntime && avatarState.mouthFrame === currentMouthFrame && avatarState.blinkClosed === blinkClosed) return;
+  avatarState = { runtime: currentRuntime, mouthFrame: currentMouthFrame, blinkClosed };
+  avatarListeners.forEach((listener) => listener());
+}
+
+export const liveAvatarStore = {
+  getState: (): LiveAvatarState => avatarState,
+  subscribe(listener: () => void): () => void {
+    avatarListeners.add(listener);
+    return () => avatarListeners.delete(listener);
+  },
+};
+
+export function useLiveAvatar(): LiveAvatarState {
+  return useSyncExternalStore(liveAvatarStore.subscribe, liveAvatarStore.getState, liveAvatarStore.getState);
+}
+
 export function publishCharacterAvatarRuntime(runtime: CharacterLiveCallRuntime | null): void {
   currentRuntime = runtime;
   currentMouthFrame = 'closed';
   nextAudioFrameAt = 0;
   blinkClosed = false;
   scheduleBlink();
+  publishAvatarState();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(CHARACTER_AVATAR_RUNTIME_EVENT, { detail: runtime }));
   }
-  renderAvatarHost();
 }
 
 /** Apply a newly selected pack to the runtime currently driving the live host. */
@@ -146,16 +172,49 @@ export function avatarMouthAssetForFrame(
   return pack.base_asset_id || '';
 }
 
-export function presentationStateFromDom(
+/** The avatar's state: an open mouth is speech, then the call orb's mode, with a reply in progress as thinking. */
+export function avatarPresentationState(
+  mouthFrame: AvatarMouthFrame,
   voiceMode: string | undefined,
-  inlineStatus: string,
+  thinking: boolean,
 ): AvatarPresentationState {
-  if (voiceMode === 'speaking') return 'speaking';
+  if (mouthFrame !== 'closed' || voiceMode === 'speaking') return 'speaking';
   if (voiceMode === 'error') return 'error';
-  const normalized = inlineStatus.toLowerCase();
-  if (/contacting|sending|streaming|synthesizing|generating|response ready/.test(normalized)) return 'thinking';
+  if (thinking) return 'thinking';
   if (voiceMode === 'listening') return 'listening';
   return 'idle';
+}
+
+/** The sprite frame to show: blink, open mouth, the state's expression, the outfit, then the closed mouth. */
+export function avatarFrameAsset(
+  pack: CharacterAvatarPack | null | undefined,
+  avatar: Pick<LiveAvatarState, 'mouthFrame' | 'blinkClosed'>,
+  state: AvatarPresentationState,
+): string {
+  if (!pack || pack.renderer !== 'sprite') return '';
+  if (avatar.blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
+  if (avatar.mouthFrame !== 'closed') return avatarMouthAssetForFrame(pack, avatar.mouthFrame);
+  if (pack.expression_frames[state]) return pack.expression_frames[state];
+  if (pack.active_outfit && pack.outfit_frames[pack.active_outfit]) return pack.outfit_frames[pack.active_outfit];
+  return avatarMouthAssetForFrame(pack, 'closed');
+}
+
+/** The scene behind a sprite avatar, as a CSS background. */
+export function avatarBackgroundImage(pack: CharacterAvatarPack | null | undefined): string {
+  const backgroundId = pack?.active_background ? pack.background_asset_ids[pack.active_background] : '';
+  return backgroundId
+    ? `linear-gradient(rgba(6, 10, 22, 0.12), rgba(6, 10, 22, 0.42)), url("${characterAvatarAssetUrl(backgroundId)}")`
+    : '';
+}
+
+export function avatarCaption(displayName: string, state: AvatarPresentationState): string {
+  return state === 'speaking'
+    ? `${displayName} is speaking`
+    : state === 'listening'
+      ? `${displayName} is listening`
+      : state === 'thinking'
+        ? `${displayName} is thinking`
+        : displayName;
 }
 
 /** Lip sync and avatar rendering for Chat; returns a function that removes it. */
@@ -164,28 +223,12 @@ export function installLiveCharacterAvatarBridge(): () => void {
   if (bridgeInstalled) return () => undefined;
   bridgeInstalled = true;
 
-  const observer = new MutationObserver(() => renderAvatarHost());
-  const observe = () => {
-    if (!document.body) return;
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ['data-voice-mode'],
-    });
-    renderAvatarHost();
-  };
-  if (document.body) observe();
-  else window.addEventListener('DOMContentLoaded', observe, { once: true });
-
   const handleFrame = (event: Event) => {
     const detail = (event as CustomEvent<{ frame?: AvatarMouthFrame }>).detail;
     if (!detail?.frame) return;
     currentMouthFrame = detail.frame;
-    updateAvatarImage();
+    publishAvatarState();
   };
-  const handleRuntime = () => renderAvatarHost();
   const handleDiagnostic = (event: Event) => {
     if (currentRuntime?.avatar_pack?.renderer !== 'live2d') return;
     const detail = (event as CustomEvent<LiveCallDiagnosticDetail>).detail;
@@ -222,16 +265,12 @@ export function installLiveCharacterAvatarBridge(): () => void {
     );
   };
   window.addEventListener(AVATAR_FRAME_EVENT, handleFrame);
-  window.addEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
   window.addEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
   window.addEventListener(AVATAR_PCM_EVENT, handlePcm);
 
   const cleanups = [installAudioElementMonitor(), installAudioBufferSourceMonitor()];
   return () => {
-    observer.disconnect();
-    window.removeEventListener('DOMContentLoaded', observe);
     window.removeEventListener(AVATAR_FRAME_EVENT, handleFrame);
-    window.removeEventListener(CHARACTER_AVATAR_RUNTIME_EVENT, handleRuntime);
     window.removeEventListener(LIVE_CALL_DIAGNOSTIC_EVENT, handleDiagnostic);
     window.removeEventListener(AVATAR_PCM_EVENT, handlePcm);
     cleanups.reverse().forEach((cleanup) => cleanup());
@@ -408,157 +447,17 @@ function scheduleBlink(): void {
   const pack = currentRuntime?.avatar_pack;
   if (!pack?.blink_frames.closed) return;
   blinkTimer = window.setTimeout(() => {
-    if (currentMouthFrame !== 'closed' || currentPresentationState() === 'speaking') {
+    if (currentMouthFrame !== 'closed' || liveCallPresentationStore.getState().speaking) {
       scheduleBlink();
       return;
     }
     blinkClosed = true;
-    updateAvatarImage();
+    publishAvatarState();
     window.setTimeout(() => {
       blinkClosed = false;
-      updateAvatarImage();
+      publishAvatarState();
       scheduleBlink();
     }, 120);
   }, 3_800 + Math.round(Math.random() * 2_400));
 }
 
-function normalizeLiveVoiceLayout(): {
-  card: HTMLElement;
-  stage: HTMLElement;
-  orb: HTMLElement;
-} | null {
-  if (typeof document === 'undefined') return null;
-  const card = document.querySelector<HTMLElement>('.assistant-live-card');
-  const orb = card?.querySelector<HTMLElement>('.assistant-voice-orb') ?? null;
-  if (!card || !orb) return null;
-
-  let stage = card.querySelector<HTMLElement>(`.${LIVE_VISUAL_STAGE_CLASS}`);
-  if (!stage) {
-    stage = document.createElement('div');
-    stage.className = LIVE_VISUAL_STAGE_CLASS;
-    stage.setAttribute('role', 'img');
-    stage.setAttribute('aria-label', 'Live character visual');
-    orb.insertAdjacentElement('beforebegin', stage);
-  }
-  if (orb.parentElement !== stage) stage.append(orb);
-
-  const controls = card.querySelector<HTMLElement>('.assistant-voice-controls');
-  const transcript = card.querySelector<HTMLElement>('.assistant-voice-transcript');
-  if (controls && transcript) {
-    controls.setAttribute('role', 'group');
-    controls.setAttribute('aria-label', 'Live voice controls');
-    transcript.setAttribute('role', 'region');
-    transcript.setAttribute('aria-label', 'Live voice transcript');
-    if (controls.nextElementSibling !== transcript) controls.insertAdjacentElement('afterend', transcript);
-  }
-
-  return { card, stage, orb };
-}
-
-function renderAvatarHost(): void {
-  if (!isActiveView('chatbot')) {
-    document.querySelectorAll<HTMLElement>(`.${AVATAR_HOST_CLASS}`).forEach((host) => host.remove());
-    return;
-  }
-  const layout = normalizeLiveVoiceLayout();
-  const fullscreenHost = typeof document === 'undefined'
-    ? null
-    : document.querySelector<HTMLElement>(`[data-live-chat-fullscreen-shell] .${AVATAR_HOST_CLASS}`);
-  const existing = fullscreenHost
-    ?? (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`));
-  const runtime = currentRuntime;
-  const pack = runtime?.avatar_pack;
-  const live2d = pack?.renderer === 'live2d' && Boolean(pack.rig_asset_id);
-  const assetId = live2d ? '' : resolveFrameAsset(pack, currentMouthFrame, currentPresentationState());
-  if (!layout || !runtime || (!live2d && !assetId)) {
-    if (layout) {
-      delete layout.stage.dataset.hasCharacterAvatar;
-      layout.orb.hidden = false;
-    }
-    if (existing?.closest('.assistant-live-card')) existing.remove();
-    return;
-  }
-
-  layout.stage.dataset.hasCharacterAvatar = 'true';
-  layout.orb.hidden = true;
-  const host = existing ?? document.createElement('figure');
-  host.className = AVATAR_HOST_CLASS;
-  host.dataset.mouthFrame = currentMouthFrame;
-  host.dataset.renderer = live2d ? 'live2d' : 'sprite';
-  if (!fullscreenHost && host.parentElement !== layout.stage) layout.stage.append(host);
-
-  if (live2d) {
-    const presentationState = currentPresentationState();
-    if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
-    window.dispatchEvent(new CustomEvent(LIVE2D_RENDER_EVENT, { detail: { runtime, host } }));
-    return;
-  }
-
-  if (!host.querySelector('img') || existing?.dataset.renderer === 'live2d') {
-    const image = document.createElement('img');
-    image.alt = `${runtime.display_name} live avatar`;
-    const caption = document.createElement('figcaption');
-    host.replaceChildren(image, caption);
-  }
-  updateAvatarImage();
-}
-
-function currentPresentationState(): AvatarPresentationState {
-  if (currentMouthFrame !== 'closed') return 'speaking';
-  const orb = document.querySelector<HTMLElement>('.assistant-live-card .assistant-voice-orb');
-  const statusText = document.querySelector<HTMLElement>('.assistant-inline-status')?.textContent ?? '';
-  return presentationStateFromDom(orb?.dataset.voiceMode, statusText);
-}
-
-function updateAvatarImage(): void {
-  const host = document.querySelector<HTMLElement>(`.${AVATAR_HOST_CLASS}`);
-  const pack = currentRuntime?.avatar_pack;
-  const presentationState = currentPresentationState();
-  if (host && currentRuntime && pack?.renderer === 'live2d') {
-    if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
-    const caption = host.querySelector<HTMLElement>('figcaption');
-    if (caption) caption.textContent = captionForState(currentRuntime.display_name, presentationState);
-    return;
-  }
-
-  const image = host?.querySelector<HTMLImageElement>('img');
-  const caption = host?.querySelector<HTMLElement>('figcaption');
-  const assetId = resolveFrameAsset(pack, currentMouthFrame, presentationState);
-  if (!host || !image || !caption || !assetId || !currentRuntime) return;
-  if (host.dataset.mouthFrame !== currentMouthFrame) host.dataset.mouthFrame = currentMouthFrame;
-  if (host.dataset.voiceMode !== presentationState) host.dataset.voiceMode = presentationState;
-  const imageUrl = characterAvatarAssetUrl(assetId);
-  if (image.getAttribute('src') !== imageUrl) image.src = imageUrl;
-  const imageAlt = `${currentRuntime.display_name} live avatar`;
-  if (image.alt !== imageAlt) image.alt = imageAlt;
-  const backgroundId = pack?.active_background ? pack.background_asset_ids[pack.active_background] : '';
-  const backgroundImage = backgroundId
-    ? `linear-gradient(rgba(6, 10, 22, 0.12), rgba(6, 10, 22, 0.42)), url("${characterAvatarAssetUrl(backgroundId)}")`
-    : '';
-  if (host.style.backgroundImage !== backgroundImage) host.style.backgroundImage = backgroundImage;
-  const captionText = captionForState(currentRuntime.display_name, presentationState);
-  if (caption.textContent !== captionText) caption.textContent = captionText;
-}
-
-function captionForState(displayName: string, state: AvatarPresentationState): string {
-  return state === 'speaking'
-    ? `${displayName} is speaking`
-    : state === 'listening'
-      ? `${displayName} is listening`
-      : state === 'thinking'
-        ? `${displayName} is thinking`
-        : displayName;
-}
-
-function resolveFrameAsset(
-  pack: CharacterAvatarPack | null | undefined,
-  frame: AvatarMouthFrame,
-  state: AvatarPresentationState,
-): string {
-  if (!pack || pack.renderer !== 'sprite') return '';
-  if (blinkClosed && pack.blink_frames.closed) return pack.blink_frames.closed;
-  if (frame !== 'closed') return avatarMouthAssetForFrame(pack, frame);
-  if (pack.expression_frames[state]) return pack.expression_frames[state];
-  if (pack.active_outfit && pack.outfit_frames[pack.active_outfit]) return pack.outfit_frames[pack.active_outfit];
-  return avatarMouthAssetForFrame(pack, 'closed');
-}

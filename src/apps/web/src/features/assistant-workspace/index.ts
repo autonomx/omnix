@@ -348,3 +348,4 @@ export type {
 
 export { useAvatarPresence } from './live-avatar-presence';
 export type { AvatarPresence, AvatarPresenceCue } from './live-avatar-presence';
+export { liveCallPresentationStore, useLiveCallPresentation } from './live-call-presentation-store';

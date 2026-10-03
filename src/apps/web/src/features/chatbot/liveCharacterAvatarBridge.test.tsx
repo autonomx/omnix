@@ -1,4 +1,4 @@
-/* eslint-disable no-restricted-syntax -- baseline WP-9.x */
+import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CharacterLiveCallRuntime } from './characterClient';
 import { installLiveCharacterVisemeBridge } from './liveCharacterVisemeBridge';
@@ -9,10 +9,11 @@ import {
   floatPcmMouthFrame,
   mouthFrameForRms,
   pcmMouthTimeline,
-  presentationStateFromDom,
+  avatarPresentationState,
   publishCharacterAvatarRuntime,
 } from './liveCharacterAvatarBridge';
 import { fixture } from '../../test/fixture';
+import { LiveCallVisual } from './LiveCallVisual';
 
 const runtime: CharacterLiveCallRuntime = fixture({
   session_id: 'chat:maya',
@@ -98,10 +99,23 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   publishCharacterAvatarRuntime(null);
-  document.body.innerHTML = '';
 });
+
+function renderVisual(voiceMode = 'idle', thinking = false) {
+  return render(<LiveCallVisual voiceMode={voiceMode} thinking={thinking} />);
+}
+
+function speakPcm(): void {
+  const samples = new Int16Array(2_400);
+  samples.fill(16_000);
+  act(() => {
+    window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', { detail: { samples, sampleRate: 24_000 } }));
+    vi.advanceTimersByTime(30);
+  });
+}
 
 describe('live character avatar audio envelope', () => {
   it('maps RMS levels to four stable mouth states', () => {
@@ -132,66 +146,38 @@ describe('live character avatar audio envelope', () => {
   });
 
   it('derives listening, thinking, speaking, and error presentation states', () => {
-    expect(presentationStateFromDom('listening', '')).toBe('listening');
-    expect(presentationStateFromDom('listening', 'Assistant response streaming.')).toBe('thinking');
-    expect(presentationStateFromDom('speaking', 'Synthesizing response voice…')).toBe('speaking');
-    expect(presentationStateFromDom('error', '')).toBe('error');
-    expect(presentationStateFromDom('idle', '')).toBe('idle');
+    expect(avatarPresentationState('closed', 'listening', false)).toBe('listening');
+    expect(avatarPresentationState('closed', 'listening', true)).toBe('thinking');
+    expect(avatarPresentationState('closed', 'speaking', true)).toBe('speaking');
+    expect(avatarPresentationState('wide', 'idle', false)).toBe('speaking');
+    expect(avatarPresentationState('closed', 'error', false)).toBe('error');
+    expect(avatarPresentationState('closed', 'idle', false)).toBe('idle');
   });
 
-  it('uses the microphone position for the avatar and moves the transcript below call controls', () => {
-    document.body.innerHTML = `
-      <section class="assistant-live-card">
-        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
-        <div class="assistant-voice-controls"></div>
-        <label class="assistant-voice-toggle"></label>
-        <div class="assistant-live-draft"></div>
-        <div class="assistant-voice-transcript"></div>
-      </section>
-    `;
+  it('shows the avatar in place of the orb while a character runtime is published', () => {
+    const { container } = renderVisual();
+    const stage = container.querySelector<HTMLElement>('.assistant-live-visual-stage');
+    expect(stage?.querySelector('.assistant-voice-orb')).not.toBeNull();
 
-    publishCharacterAvatarRuntime(runtime);
-
-    const stage = document.querySelector<HTMLElement>('.assistant-live-visual-stage');
-    const orb = document.querySelector<HTMLElement>('.assistant-voice-orb');
-    const controls = document.querySelector<HTMLElement>('.assistant-voice-controls');
-    const transcript = document.querySelector<HTMLElement>('.assistant-voice-transcript');
-    const avatar = stage?.querySelector<HTMLElement>('.assistant-live-character-avatar');
+    act(() => publishCharacterAvatarRuntime(runtime));
 
     expect(stage?.getAttribute('aria-label')).toBe('Live character visual');
-    expect(orb?.parentElement).toBe(stage);
-    expect(avatar?.parentElement).toBe(stage);
-    expect(orb?.hidden).toBe(true);
+    expect(stage?.querySelector('.assistant-live-character-avatar')).not.toBeNull();
+    expect(stage?.querySelector('.assistant-voice-orb')).toBeNull();
     expect(stage?.dataset.hasCharacterAvatar).toBe('true');
-    expect(controls?.nextElementSibling).toBe(transcript);
-    expect(controls?.getAttribute('aria-label')).toBe('Live voice controls');
-    expect(transcript?.getAttribute('aria-label')).toBe('Live voice transcript');
 
-    publishCharacterAvatarRuntime(null);
+    act(() => publishCharacterAvatarRuntime(null));
 
     expect(stage?.querySelector('.assistant-live-character-avatar')).toBeNull();
-    expect(orb?.hidden).toBe(false);
+    expect(stage?.querySelector('.assistant-voice-orb')).not.toBeNull();
     expect(stage?.dataset.hasCharacterAvatar).toBeUndefined();
   });
 
-  it('animates mouth frames from live PCM even when the DOM voice mode is stale', () => {
+  it('animates mouth frames from live PCM even when the call is idle', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = `
-      <section class="assistant-live-card">
-        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
-        <div class="assistant-voice-controls"></div>
-        <div class="assistant-voice-transcript"></div>
-      </section>
-      <div class="assistant-inline-status"></div>
-    `;
-    publishCharacterAvatarRuntime(runtime);
-
-    const samples = new Int16Array(2_400);
-    samples.fill(16_000);
-    window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', {
-      detail: { samples, sampleRate: 24_000 },
-    }));
-    vi.advanceTimersByTime(30);
+    renderVisual();
+    act(() => publishCharacterAvatarRuntime(runtime));
+    speakPcm();
 
     const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
     const image = avatar?.querySelector<HTMLImageElement>('img');
@@ -204,22 +190,9 @@ describe('live character avatar audio envelope', () => {
 
   it('keeps precise viseme packs isolated from PCM envelope updates', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = `
-      <section class="assistant-live-card">
-        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
-        <div class="assistant-voice-controls"></div>
-        <div class="assistant-voice-transcript"></div>
-      </section>
-      <div class="assistant-inline-status"></div>
-    `;
-    publishCharacterAvatarRuntime(visemeRuntime);
-
-    const samples = new Int16Array(2_400);
-    samples.fill(16_000);
-    window.dispatchEvent(new CustomEvent('omnix:character-avatar-pcm', {
-      detail: { samples, sampleRate: 24_000 },
-    }));
-    vi.advanceTimersByTime(30);
+    renderVisual();
+    act(() => publishCharacterAvatarRuntime(visemeRuntime));
+    speakPcm();
 
     const avatar = document.querySelector<HTMLElement>('.assistant-live-character-avatar');
     const image = avatar?.querySelector<HTMLImageElement>('img');
@@ -229,15 +202,8 @@ describe('live character avatar audio envelope', () => {
 
   it('uses worklet playback frames for Live2D and ignores arrival-time PCM', () => {
     vi.useFakeTimers();
-    document.body.innerHTML = `
-      <section class="assistant-live-card">
-        <div class="assistant-voice-orb" data-voice-mode="idle"></div>
-        <div class="assistant-voice-controls"></div>
-        <div class="assistant-voice-transcript"></div>
-      </section>
-      <div class="assistant-inline-status"></div>
-    `;
-    publishCharacterAvatarRuntime(live2dRuntime);
+    renderVisual();
+    act(() => publishCharacterAvatarRuntime(live2dRuntime));
 
     const observed: string[] = [];
     const onFrame = (event: Event): void => {

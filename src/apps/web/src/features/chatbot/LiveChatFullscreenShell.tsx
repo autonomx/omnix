@@ -13,14 +13,12 @@ import {
 import { Live2DZoomControl } from './Live2DZoomControl';
 import { Live2DMotionControl } from './Live2DMotionControl';
 import { readLatestTrustedCharacterRuntime, type CharacterLiveCallRuntime } from './characterClient';
-import { readLiveChatMirroredAvatar, type LiveChatMirroredAvatar } from './live-chat-runtime-adapters';
+import { avatarBackgroundImage, avatarFrameAsset, avatarPresentationState, characterAvatarAssetUrl, useLiveAvatar } from './liveCharacterAvatarBridge';
 import { useLiveCallPresentation } from '../assistant-workspace/live-call-presentation-store';
 import './LiveChatFullscreenShell.css';
 
 const AVATAR_RUNTIME_EVENT = 'omnix:character-avatar-runtime';
-const AVATAR_FRAME_EVENT = 'omnix:character-avatar-frame';
 const LIVE2D_RENDER_EVENT = 'omnix:character-live2d-render';
-const PRESENTATION_UPDATE_DELAY_MS = 24;
 
 /** A message of the conversation shown in immersive Live Chat. */
 export type LiveChatMessage = {
@@ -44,7 +42,6 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
   const runtime = useLiveConversationState();
   const presentation = useLiveCallPresentation();
   const snapshot = selectLiveChatSnapshot(runtime);
-  const [avatar, setAvatar] = useState<LiveChatMirroredAvatar>(() => readLiveChatMirroredAvatar());
   const [characterRuntime, setCharacterRuntime] = useState<CharacterLiveCallRuntime | null>(() => readLatestTrustedCharacterRuntime());
   const [composerText, setComposerText] = useState('');
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -53,30 +50,13 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 
   useEffect(() => {
     if (!fullscreen.immersive) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const refresh = () => {
-      if (timer !== null) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = null;
-        const nextAvatar = readLiveChatMirroredAvatar();
-        if (nextAvatar.imageUrl || nextAvatar.backgroundImage) setAvatar(nextAvatar);
-        setCharacterRuntime(readLatestTrustedCharacterRuntime());
-      }, PRESENTATION_UPDATE_DELAY_MS);
-    };
     const handleRuntime = (event: Event) => {
       setCharacterRuntime((event as CustomEvent<CharacterLiveCallRuntime | null>).detail ?? null);
-      refresh();
     };
-    // The avatar bridge reports runtime and frame changes; the call's voice mode comes from presentation.
     window.addEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
-    window.addEventListener(AVATAR_FRAME_EVENT, refresh);
-    refresh();
-    return () => {
-      window.removeEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
-      window.removeEventListener(AVATAR_FRAME_EVENT, refresh);
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [fullscreen.immersive, presentation.speaking, presentation.captureStatus]);
+    setCharacterRuntime(readLatestTrustedCharacterRuntime());
+    return () => window.removeEventListener(AVATAR_RUNTIME_EVENT, handleRuntime);
+  }, [fullscreen.immersive]);
 
   useEffect(() => {
     if (!fullscreen.immersive) return;
@@ -156,7 +136,7 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 
       <main className="live-chat-fullscreen-layout">
         <LiveCharacterStage
-          avatar={avatar}
+          speaking={presentation.speaking}
           identity={displayIdentity}
           status={snapshot.state}
           stageMode={stageMode}
@@ -224,18 +204,30 @@ export function LiveChatFullscreenShell({ messages, onSendMessage, onToggleCall 
 }
 
 function LiveCharacterStage({
-  avatar,
+  speaking,
   identity,
   status,
   stageMode,
   characterRuntime,
 }: {
-  avatar: LiveChatMirroredAvatar;
+  speaking: boolean;
   identity: string;
   status: string;
   stageMode: string;
   characterRuntime: CharacterLiveCallRuntime | null;
 }) {
+  const live = useLiveAvatar();
+  const pack = characterRuntime?.avatar_pack;
+  const voiceMode = speaking ? 'speaking' : stageMode === 'listening' ? 'listening' : 'idle';
+  const presentationState = avatarPresentationState(live.mouthFrame, voiceMode, stageMode === 'thinking');
+  const assetId = avatarFrameAsset(pack, live, presentationState);
+  const avatar = {
+    imageUrl: assetId ? characterAvatarAssetUrl(assetId) : null,
+    alt: `${identity} live avatar`,
+    backgroundImage: avatarBackgroundImage(pack),
+    mouthFrame: live.mouthFrame,
+    voiceMode: presentationState,
+  };
   const initial = identity.trim().charAt(0).toLocaleUpperCase() || 'O';
   const stageStyle = avatar.backgroundImage ? { backgroundImage: avatar.backgroundImage } : undefined;
   const live2dHostRef = useRef<HTMLElement | null>(null);
