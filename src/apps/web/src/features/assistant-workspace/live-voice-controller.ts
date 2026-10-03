@@ -48,6 +48,7 @@ import LIVE_VOICE_CAPTURE_WORKLET_URL from './worklets/live-voice-capture.workle
 import { LIVE_VOICE_CAPTURE_WORKLET_NAME } from './worklets/names';
 import type { SpeechLocation } from './stt-url';
 import { pipelineFetch } from '../../api/fetchPipeline';
+import { liveVoiceTranscriptStore, type LiveVoiceSpeaker } from './live-voice-transcript-store';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
   AudioContext?: typeof AudioContext;
@@ -1483,32 +1484,8 @@ function resetVoiceVisualizer(card: HTMLElement): void {
   }
 }
 
-function renderTranscript(card: HTMLElement, speaker: 'You' | 'Omnix', text: string, mode: 'draft' | 'final'): void {
-  const transcript = text.trim();
-  if (!transcript) return;
-  const container = card.querySelector<HTMLElement>('.assistant-voice-transcript');
-  if (!container) return;
-  let row = container.querySelector<HTMLParagraphElement>('p[data-live-voice-id="live-voice-draft"]');
-  if (!row || (mode === 'draft' && row.classList.contains('assistant'))) {
-    row = document.createElement('p');
-    row.className = speaker === 'Omnix' ? 'assistant' : 'user';
-    row.dataset.liveVoiceId = mode === 'draft' ? 'live-voice-draft' : `live-voice-${Date.now()}`;
-    const header = document.createElement('span');
-    const name = document.createElement('strong');
-    name.textContent = speaker;
-    const time = document.createElement('time');
-    const now = new Date();
-    time.dateTime = now.toISOString();
-    time.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    header.append(name, time);
-    row.append(header, document.createTextNode(transcript));
-    container.append(row);
-  } else {
-    const textNode = Array.from(row.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
-    if (textNode) textNode.textContent = transcript;
-    else row.append(document.createTextNode(transcript));
-  }
-  if (mode === 'final') row.dataset.liveVoiceId = `live-voice-${Date.now()}`;
+function renderTranscript(_card: HTMLElement, speaker: LiveVoiceSpeaker, text: string, mode: 'draft' | 'final'): void {
+  liveVoiceTranscriptStore.write(speaker, text, mode);
 }
 
 function showLiveVoiceError(card: HTMLElement, message: string): void {

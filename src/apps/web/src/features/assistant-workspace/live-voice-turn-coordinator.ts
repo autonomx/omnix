@@ -1,5 +1,6 @@
 import { liveSttUsesAuthoritativeEou } from './live-stt-capability-state';
 import { LIVE_COORDINATION_TERMINAL_EVENT } from './live-session-coordinator';
+import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 export const LIVE_VOICE_TURN_TIMELINE_EVENT = 'omnix:live-voice-turn-timeline';
@@ -118,12 +119,8 @@ export function endpointFusionAction(input: EndpointFusionInput): EndpointFusion
   return 'continue';
 }
 
-export function removeTransientFinalUserRows(root: ParentNode = document): number {
-  const rows = root.querySelectorAll<HTMLElement>(
-    '.assistant-voice-transcript p.user[data-live-voice-id]:not([data-live-voice-id="live-voice-draft"])',
-  );
-  rows.forEach((row) => row.remove());
-  return rows.length;
+export function removeTransientFinalUserRows(): number {
+  return liveVoiceTranscriptStore.removeFinalUserRows();
 }
 
 export class LiveVoiceTurnCoordinator {
@@ -252,7 +249,7 @@ export function initializeLiveVoiceTranscriptReconciliation(): () => void {
     if (detail.outcome !== 'conversation_submitted') return;
     // The dedicated controller owns only the transient draft. Once the final is
     // durably submitted, React's session message is the canonical user row.
-    removeTransientFinalUserRows(document);
+    removeTransientFinalUserRows();
   };
   window.addEventListener(LIVE_COORDINATION_TERMINAL_EVENT, handleTerminal);
   disposeTranscriptReconciliation = () => {

@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/exhaustive-deps -- baseline WP-9.x */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClipboardEvent as ReactClipboardEvent, CSSProperties, KeyboardEvent, UIEvent } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   ApiError,
@@ -59,6 +59,7 @@ import type { components } from '../../api/generated/types';
 import { chatStreamEventSchema, isFallbackOutputRef, jobOutputRefs, parseSseData } from '../../api/schemas/streams';
 import { noteChatMessageSent, noteChatSession } from './researchProgressController';
 import { visibleChatSessions } from './sessionTools';
+import { liveVoiceTranscriptStore, useLiveVoiceTranscript } from '../assistant-workspace/live-voice-transcript-store';
 
 interface ChatbotFormValues {
   content: string;
@@ -779,6 +780,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     : activeSession?.messages ?? [];
   const displayedSessionId = activeSession?.id ?? selectedSessionId ?? 'pending-session';
   const visibleVoiceTranscriptMessages = recentMessages.filter((message) => !clearedVoiceTranscriptMessageIds[message.id]);
+  const liveVoiceTranscript = useLiveVoiceTranscript();
+  const voiceTranscriptRef = useRef<HTMLDivElement | null>(null);
+  const lastVoiceTranscriptMessageId = visibleVoiceTranscriptMessages.at(-1)?.id;
+  // The newest words stay in view as the transcript grows.
+  useLayoutEffect(() => {
+    const transcript = voiceTranscriptRef.current;
+    if (transcript) transcript.scrollTop = transcript.scrollHeight;
+  }, [lastVoiceTranscriptMessageId, liveVoiceTranscript]);
   const latestAssistantMessage = getLatestAssistantMessage(activeSession?.messages ?? []);
   const toolExecutionRows = useMemo(() => createToolExecutionRows(activityEvents), [activityEvents]);
   const enabledToolCount = runtimeConfig.features.toolExecution ? Math.max(toolExecutionRows.length, 3) : 0;
@@ -1276,7 +1285,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       return next;
     });
     setValue('content', '', { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-    document.querySelectorAll('.assistant-voice-transcript p[data-live-voice-id]').forEach((row) => row.remove());
+    liveVoiceTranscriptStore.clear();
     setAudioStatus('Voice transcript cleared.');
   }
 
@@ -2063,7 +2072,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
-              <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.length ? visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>
+              <div className="assistant-voice-transcript" ref={voiceTranscriptRef}><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>)}{liveVoiceTranscript.rows.map((row) => <p key={row.id} className={row.speaker === 'Omnix' ? 'assistant' : 'user'} data-live-voice-id={row.draft ? 'live-voice-draft' : row.id}><span><strong>{row.speaker}</strong><time dateTime={row.at}>{formatClockTime(row.at)}</time></span>{row.text}</p>)}{liveVoiceTranscript.delivery ? <p className="assistant" data-omnix-live-delivery="true">{`Assistant: ${liveVoiceTranscript.delivery.text}${liveVoiceTranscript.delivery.partial ? ' [partial]' : ''}`}</p> : null}{!visibleVoiceTranscriptMessages.length && !liveVoiceTranscript.rows.length && !liveVoiceTranscript.delivery ? <p className="muted">Voice transcript will appear here during live calls.</p> : null}</div>
               <div className="assistant-audio-devices"><header><h3>Audio Services</h3><button type="button" onClick={() => void startVoiceInput()}>Test input</button></header><div><span>Input</span><strong>{speechInputLabel}</strong><i aria-hidden="true" /></div><div><span>Output</span><strong>{ttsOutputLabel}</strong><i aria-hidden="true" /></div></div>
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
@@ -2111,6 +2120,7 @@ function selectedProviderLabel(payload: ProviderFacadePayload | undefined, provi
 function selectedModelLabel(payload: ProviderFacadePayload | undefined, modelId: string) { if (!modelId) return 'Default model'; return payload?.models.find((model) => model.id === modelId)?.label ?? modelId; }
 function chatbotSubmitErrorMessage(error: unknown): string { if (error instanceof ApiError) return error.message; if (error instanceof Error) return error.message; return 'Chat request failed'; }
 function formatMessageTime(value: string): string { if (value.includes('T')) return value.slice(11, 16); return value; }
+function formatClockTime(value: string): string { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 function formatCallDuration(valueMs: number): string { const totalSeconds = Math.max(0, Math.floor(valueMs / 1000)); const hours = Math.floor(totalSeconds / 3600); const minutes = Math.floor((totalSeconds % 3600) / 60); const seconds = totalSeconds % 60; return [hours, minutes, seconds].map((value) => value.toString().padStart(2, '0')).join(':'); }
 function createChatbotWorkspaceEventStore(config: AssistantWorkspaceRuntimeConfig): AssistantWorkspaceEventStore { const storage = getAssistantWorkspaceEventStorage(); if (config.features.persistedEvents && storage) return createStoredAssistantWorkspaceEventStore(storage, config.eventStorageKey); return createInMemoryAssistantWorkspaceEventStore(); }
 function appendWorkspaceEventIfMissing(eventStore: AssistantWorkspaceEventStore, event: AssistantWorkspaceEvent, filter: AssistantWorkspaceEventStoreFilter): void { const currentEventIds = new Set(eventStore.list(filter).map((currentEvent) => currentEvent.id)); if (!currentEventIds.has(event.id)) eventStore.append(event); }

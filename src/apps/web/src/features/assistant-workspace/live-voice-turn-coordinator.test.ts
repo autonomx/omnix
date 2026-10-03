@@ -16,6 +16,7 @@ import {
   resetLiveVoiceTurnCoordinatorForTests,
   type LiveVoiceTurnTimelineDetail,
 } from './live-voice-turn-coordinator';
+import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 
 afterEach(() => {
   resetLiveVoiceTurnCoordinatorForTests();
@@ -286,32 +287,27 @@ describe('live voice turn coordinator', () => {
   });
 
   it('removes the controller-created final user row after durable conversation submission', () => {
-    document.body.innerHTML = `
-      <div class="assistant-voice-transcript">
-        <p class="user" data-live-voice-id="live-voice-123">I'm the one that found you.</p>
-        <p class="user">I'm the one that found you.</p>
-      </div>
-    `;
+    liveVoiceTranscriptStore.resetForTests();
+    liveVoiceTranscriptStore.write('You', "I'm the one that found you.", 'final');
     const dispose = initializeLiveVoiceTranscriptReconciliation();
 
     window.dispatchEvent(new CustomEvent(LIVE_COORDINATION_TERMINAL_EVENT, {
       detail: { outcome: 'conversation_submitted' },
     }));
 
-    expect(document.querySelectorAll('.assistant-voice-transcript p.user')).toHaveLength(1);
-    expect(document.querySelector('.assistant-voice-transcript p.user[data-live-voice-id]')).toBeNull();
+    expect(liveVoiceTranscriptStore.getState().rows).toEqual([]);
     dispose();
   });
 
   it('keeps draft and non-conversation transcript rows intact', () => {
-    document.body.innerHTML = `
-      <div class="assistant-voice-transcript">
-        <p class="user" data-live-voice-id="live-voice-123">submitted final</p>
-        <p class="user" data-live-voice-id="live-voice-draft">still speaking</p>
-      </div>
-    `;
-    expect(removeTransientFinalUserRows(document)).toBe(1);
-    expect(document.querySelector('[data-live-voice-id="live-voice-draft"]')).not.toBeNull();
+    liveVoiceTranscriptStore.resetForTests();
+    liveVoiceTranscriptStore.write('You', 'submitted final', 'final');
+    liveVoiceTranscriptStore.write('Omnix', 'Live voice paused.', 'final');
+    liveVoiceTranscriptStore.write('You', 'still speaking', 'draft');
+
+    expect(removeTransientFinalUserRows()).toBe(1);
+    expect(liveVoiceTranscriptStore.getState().rows.map((row) => row.text)).toEqual(['Live voice paused.', 'still speaking']);
+    expect(liveVoiceTranscriptStore.draftText()).toBe('still speaking');
   });
 
   it('emits timeline events using the supplied monotonic timestamp', () => {

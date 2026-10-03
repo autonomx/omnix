@@ -82,7 +82,6 @@ async function activateChatRuntime({ queryClient }: ModuleRuntimeContext, store:
 
   add((await import('../features/assistant-workspace/live-conversation-store-bridge')).initializeLiveConversationStoreBridge());
   add((await import('../features/assistant-workspace/live-session-coordinator')).initializeLiveSessionCoordinator());
-  add((await import('../features/assistant-workspace/live-voice-transcript-autoscroll')).initializeLiveVoiceTranscriptAutoscroll());
   add((await import('../features/assistant-workspace/live-stt-authority-controller')).initializeLiveSttAuthorityController());
   const voiceTurns = await import('../features/assistant-workspace/live-voice-turn-coordinator');
   add(voiceTurns.initializeLiveVoiceTranscriptReconciliation());

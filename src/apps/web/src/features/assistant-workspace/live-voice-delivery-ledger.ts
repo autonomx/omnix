@@ -1,7 +1,7 @@
 import type { LiveCallDiagnosticsReporter } from './live-call-diagnostics-client';
+import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 
 const DEFAULT_PLAYBACK_SAMPLE_RATE = 24_000;
-const DELIVERY_ROW_ATTRIBUTE = 'data-omnix-live-delivery';
 
 export type LiveVoiceDeliveryPhrase = {
   phraseIndex: number;
@@ -131,21 +131,12 @@ export function renderDeliveryLedger(
   ledger: LiveVoiceDeliveryLedger,
   partial = false,
 ): void {
-  const host = document.querySelector<HTMLElement>('.assistant-voice-transcript');
-  if (!host || ledger.visualDeliveredTextEnd <= 0) return;
-  let row = host.querySelector<HTMLElement>(`[${DELIVERY_ROW_ATTRIBUTE}]`);
-  if (!row) {
-    row = document.createElement('p');
-    row.setAttribute(DELIVERY_ROW_ATTRIBUTE, 'true');
-    row.className = 'assistant';
-    host.appendChild(row);
-  }
-  const visible = ledger.generatedText.slice(0, ledger.visualDeliveredTextEnd).trim();
-  row.textContent = partial ? `Assistant: ${visible} [partial]` : `Assistant: ${visible}`;
+  if (ledger.visualDeliveredTextEnd <= 0) return;
+  liveVoiceTranscriptStore.setDelivery({ text: ledger.generatedText.slice(0, ledger.visualDeliveredTextEnd).trim(), partial });
 }
 
 export function removeDeliveryLedgerRow(): void {
-  document.querySelector(`[${DELIVERY_ROW_ATTRIBUTE}]`)?.remove();
+  liveVoiceTranscriptStore.setDelivery(null);
 }
 
 export function instrumentDeliveryReporter(

@@ -5,6 +5,7 @@ import {
   planConversationRepair,
   type LiveConversationRepairContext,
 } from './live-conversation-repair';
+import { liveVoiceTranscriptStore } from './live-voice-transcript-store';
 
 const PERF_EVENT = 'omnix:assistant-voice-perf';
 const STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -93,9 +94,5 @@ export function injectRepairIntoRequest(
 export function currentLiveTranscript(root: ParentNode = document): string {
   const draft = root.querySelector<HTMLElement>('.assistant-live-draft p')?.textContent?.trim();
   if (draft && !draft.startsWith('Start Live Voice')) return draft;
-  const row = root.querySelector<HTMLElement>('.assistant-voice-transcript [data-live-voice-id="live-voice-draft"]');
-  if (!row) return '';
-  const clone = row.cloneNode(true) as HTMLElement;
-  clone.querySelector('span')?.remove();
-  return clone.textContent?.trim() ?? '';
+  return liveVoiceTranscriptStore.draftText();
 }
