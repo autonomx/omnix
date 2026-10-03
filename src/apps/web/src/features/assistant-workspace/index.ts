@@ -363,3 +363,6 @@ export { DesktopCompanionControls } from './desktop-companion-controls';
 export { DesktopCompanionTextSurface } from './desktop-companion-text-surface';
 export type { ChatbotActivitySession } from './chatbot-activity';
 export type { LiveVoiceTranscriptState } from './live-voice-transcript-store';
+export { sendChatWithAssistantContext } from './assistant-context-chat';
+export type { AssistantChatRoute } from './assistant-context-chat';
+export { adoptActiveSession, applySessionResearchMode } from './assistant-context-store';

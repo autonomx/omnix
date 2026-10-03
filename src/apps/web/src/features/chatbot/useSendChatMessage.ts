@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { UseFormReset } from 'react-hook-form';
-import { ApiError, omnixApiClient } from '../../api/client';
-import { assistantContextStore, createChatbotFailureEvent, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceRuntimeConfig } from '../assistant-workspace';
+import { ApiError, omnixApiClient, type AssistantContextChatRequest, type SendChatMessageRequest } from '../../api/client';
+import { assistantContextStore, createChatbotFailureEvent, type AssistantWorkspaceEvent, type AssistantWorkspaceEventStoreFilter, type AssistantWorkspaceRuntimeConfig, sendChatWithAssistantContext } from '../assistant-workspace';
 import { noteChatMessageSent } from './researchProgressController';
 import {
   attachmentDefaultMessage,
@@ -79,7 +79,7 @@ export function useSendChatMessage({
         sessionId = created.id;
         setSelectedSessionId(sessionId);
       }
-      return noteChatMessageSent(sessionId, await omnixApiClient.sendChatMessage(sessionId, {
+      const message: SendChatMessageRequest = {
         content,
         user_turn_id: values.userTurnId,
         provider_id: providerId,
@@ -89,7 +89,13 @@ export function useSendChatMessage({
         text_attachment: pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
           : undefined,
-      }));
+      };
+      const chatSessionId = sessionId;
+      return noteChatMessageSent(sessionId, await sendChatWithAssistantContext(chatSessionId, message, (route, body) => (
+        route === 'context'
+          ? omnixApiClient.sendAssistantContextChatMessage(chatSessionId, body as AssistantContextChatRequest)
+          : omnixApiClient.sendChatMessage(chatSessionId, body as SendChatMessageRequest)
+      )));
     },
     onMutate: (values) => {
       markVoiceTurnPerformance('chatSubmitStartedAt');

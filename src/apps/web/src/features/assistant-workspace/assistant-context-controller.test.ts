@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopStatusLabel,
-  enhancedAssistantMessageUrl,
-  isAssistantMessageRequest,
   localWorkspaceSummary,
   normalizeDeepResearchPageLimit,
   normalizeLocalWorkspaceSelection,
@@ -53,12 +51,5 @@ describe('assistant context helpers', () => {
     expect(webResearchModeLabel('disabled')).toBe('Disabled');
     expect(webResearchModeLabel('quick')).toBe('Quick search');
     expect(webResearchModeLabel('deep')).toBe('Deep research');
-  });
-
-  it('routes streamed chat messages through the assistant context endpoint', () => {
-    expect(isAssistantMessageRequest('/api/chat/sessions/s1/messages/stream', 'POST')).toBe(true);
-    expect(enhancedAssistantMessageUrl('/api/chat/sessions/s1/messages/stream')).toBe(
-      'http://localhost:3000/api/assistant/context/chat/sessions/s1/messages/stream',
-    );
   });
 });

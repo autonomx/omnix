@@ -9,6 +9,7 @@ import {
   type AssistantView,
   type SessionListEntry,
 } from './chatbotWorkspaceModel';
+import { adoptActiveSession, applySessionResearchMode } from '../assistant-workspace';
 
 type ChatSessionsOptions = {
   setActiveView: (view: AssistantView) => void;
@@ -28,7 +29,11 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
   const selectedSessionSummary = sessionsQuery.data?.sessions.find((session) => session.id === selectedSessionId);
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
-    queryFn: async () => noteChatSession(await omnixApiClient.getChatSession(selectedSessionId ?? '')),
+    queryFn: async () => {
+      const session = noteChatSession(await omnixApiClient.getChatSession(selectedSessionId ?? ''));
+      applySessionResearchMode(session.id, session.research_mode_override);
+      return session;
+    },
     enabled: Boolean(selectedSessionId),
   });
 
@@ -69,6 +74,7 @@ export function useChatSessions({ setActiveView, setAudioStatus }: ChatSessionsO
   useEffect(() => {
     const session = sessionQuery.data
       ?? sessionsQuery.data?.sessions.find((candidate) => candidate.id === selectedSessionId);
+    adoptActiveSession(selectedSessionId);
     window.dispatchEvent(new CustomEvent('omnix:chat-session-selected', {
       detail: {
         sessionId: selectedSessionId,

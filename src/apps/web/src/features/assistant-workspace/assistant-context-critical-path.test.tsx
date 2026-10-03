@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { pipelineFetch, resetFetchPipelineForTests } from '../../api/fetchPipeline';
+import { resetFetchPipelineForTests } from '../../api/fetchPipeline';
+import { openStream } from '../../api/transport';
 import { AssistantContextControls } from './assistant-context-controls';
+import { sendChatWithAssistantContext } from './assistant-context-chat';
 import { initializeAssistantContextController } from './assistant-context-controller';
 import { assistantContextStore } from './assistant-context-store';
 
@@ -18,6 +20,16 @@ afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
 });
+
+/** Opens Chat's message stream the way Chat's voice turns do. */
+function openChatStream(sessionId: string, body: Record<string, unknown>): Promise<Response> {
+  return sendChatWithAssistantContext(sessionId, body, (route, payload) => openStream(
+    route === 'context'
+      ? `/api/assistant/context/chat/sessions/${sessionId}/messages/stream`
+      : `/api/chat/sessions/${sessionId}/messages/stream`,
+    { body: payload },
+  ));
+}
 
 function profileResponse(researchDefaultMode = 'disabled'): Response {
   return Response.json({ settings: { settings_control_center: { assistant: { researchDefaultMode } } } });
@@ -104,11 +116,7 @@ describe('assistant context live-chat critical path', () => {
     expect(screen.getByRole('menuitemcheckbox', { name: /Agent mode/, hidden: true })).toHaveAttribute('aria-checked', 'true');
     expect(document.querySelector('.assistant-context-tool-summary')).toHaveTextContent('Agent mode');
 
-    await pipelineFetch('/api/chat/sessions/s1/messages/stream', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ content: 'fix the layout' }),
-    });
+    await openChatStream('s1', { content: 'fix the layout' });
 
     expect(requests).toContainEqual({
       path: '/api/assistant/context/chat/sessions/s1/messages/stream',
@@ -136,11 +144,7 @@ describe('assistant context live-chat critical path', () => {
     await Promise.resolve();
 
     const response = await Promise.race([
-      pipelineFetch('/api/chat/sessions/s1/messages/stream', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content: 'hello' }),
-      }),
+      openChatStream('s1', { content: 'hello' }),
       new Promise<never>((_, reject) => {
         window.setTimeout(() => reject(new Error('chat response was blocked by persistence')), 100);
       }),

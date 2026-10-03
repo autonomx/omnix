@@ -7,6 +7,7 @@ import { liveChatSubmissionGateway } from '../assistant-workspace';
 import { LIVE_CALL_DIAGNOSTIC_EVENT, LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS, createPersonalityPrompt, mergeTranscript, parseChatStreamEvent, shouldFlushStreamedSpeechBuffer, unifiedLiveVoiceAudioInstalled, type AssistantSettings, type ChatMessage, type ChatbotFormValues } from './chatbotWorkspaceModel';
 import type { useResponseAudio } from './useResponseAudio';
 import type { VoiceTurnDiagnostics } from './useVoiceTurnDiagnostics';
+import { sendChatWithAssistantContext } from '../assistant-workspace';
 
 type StreamedVoiceTurnsOptions = Pick<ReturnType<typeof useResponseAudio>, 'playAssistantResponseAudio'>
   & Pick<VoiceTurnDiagnostics, 'voiceTurnPerformanceRef' | 'markVoiceTurnPerformance' | 'recordVoiceTurnDiagnostic'>
@@ -151,15 +152,19 @@ export function useStreamedVoiceTurns({
     let responseText = '';
     let speechBuffer = '';
     try {
-      const response = await openStream(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages/stream`, {
-        body: {
-          content,
-          provider_id: providerId,
-          model_id: modelId,
-          coding_approval_policy: assistantSettings.codingApprovalPolicy,
-          live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
-        },
-      }).catch(statusError('Chat stream'));
+      const streamSessionId = encodeURIComponent(sessionId);
+      const response = await sendChatWithAssistantContext(sessionId, {
+        content,
+        provider_id: providerId,
+        model_id: modelId,
+        coding_approval_policy: assistantSettings.codingApprovalPolicy,
+        live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
+      }, (route, body) => openStream(
+        route === 'context'
+          ? `/api/assistant/context/chat/sessions/${streamSessionId}/messages/stream`
+          : `/api/chat/sessions/${streamSessionId}/messages/stream`,
+        { body },
+      )).catch(statusError('Chat stream'));
       if (!response.body) throw new Error(`Chat stream failed with status ${response.status}.`);
       markVoiceTurnPerformance('chatResponseReceivedAt');
       recordVoiceTurnDiagnostic('chat_response_opened', { status: response.status });

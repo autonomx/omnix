@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react';
 import { createGatewayClient } from '../../api/http';
-import type { FetchNext } from '../../api/fetchPipeline';
 import { DesktopTemporalCapture } from './desktop-temporal-capture';
 import type { components } from '../../api/generated/types';
 
@@ -71,7 +70,6 @@ const listeners = new Set<() => void>();
 const knownResearchModes = new Map<string, ResearchMode>();
 const researchModePersistenceQueues = new Map<string, Promise<void>>();
 // The store's own gateway calls; set to the context middleware's lower chain when it installs.
-let ownFetch: FetchNext | null = null;
 
 function update(change: Partial<AssistantContextState>): void {
   state = { ...state, ...change };
@@ -79,7 +77,7 @@ function update(change: Partial<AssistantContextState>): void {
 }
 
 function client() {
-  return createGatewayClient(ownFetch ? { fetchImpl: ownFetch as typeof fetch } : {});
+  return createGatewayClient();
 }
 
 export const assistantContextStore = {
@@ -91,14 +89,9 @@ export const assistantContextStore = {
     return () => listeners.delete(listener);
   },
   update,
-  /** The fetch for the store's own requests (below the context middleware). */
-  useFetch(fetchImpl: FetchNext | null): void {
-    ownFetch = fetchImpl;
-  },
   resetForTests(): void {
     knownResearchModes.clear();
     researchModePersistenceQueues.clear();
-    ownFetch = null;
     state = initialState();
     listeners.forEach((listener) => listener());
   },
@@ -216,7 +209,7 @@ export async function loadProfileResearchDefault(): Promise<void> {
 }
 
 /** Persists the turn's research mode to its session after the request settles. */
-export function deferResearchModePersistence(responsePromise: Promise<Response>, sessionId: string | null, mode: ResearchMode): void {
+export function deferResearchModePersistence(responsePromise: Promise<unknown>, sessionId: string | null, mode: ResearchMode): void {
   if (!sessionId || knownResearchModes.get(sessionId) === mode) return;
   const persist = () => scheduleConversationResearchModePersistence(sessionId, mode);
   void responsePromise.then(persist, persist);

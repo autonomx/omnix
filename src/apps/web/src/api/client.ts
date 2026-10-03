@@ -34,6 +34,7 @@ export type ReportListResponse = components['schemas']['ReportListResponse'];
 export type SendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
 export type CodingApprovalPolicy = NonNullable<SendChatMessageRequest['coding_approval_policy']>;
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
+export type AssistantContextChatRequest = components['schemas']['AssistantContextChatRequest'];
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
 
@@ -321,6 +322,14 @@ export class OmnixApiClient {
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
     return this.call(
       (signal) => this.api.POST('/api/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
+      { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
+    );
+  }
+
+  /** Sends a chat message with the context tools' fields (research, agent mode, desktop, local folder). */
+  async sendAssistantContextChatMessage(sessionId: string, request: AssistantContextChatRequest): Promise<SendChatMessageResponse> {
+    return this.call(
+      (signal) => this.api.POST('/api/assistant/context/chat/sessions/{session_id}/messages', { params: { path: { session_id: sessionId } }, body: request, signal }),
       { timeoutMs: 15_000, timeoutMessage: 'Chat request was not accepted by the gateway within 15s.' },
     );
   }
