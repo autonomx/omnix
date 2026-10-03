@@ -52,6 +52,10 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
   shows 60 images at a time; Pixi and Live2D load only when an avatar is shown.
 - Web: form fields, controls and labels are named for screen readers, and
   primary buttons are darker to meet contrast requirements.
+- Web: Chat's live voice, Live Chat, session sidebar, composer tools, research
+  progress and avatar are React components; Live Chat is a view in Chat's
+  navigation. Storyteller tool panels update when the story changes instead
+  of polling the page.
 - Web: gateway calls use a client generated from the OpenAPI contract, and
   chat, job, trading and voice stream messages are checked when they arrive;
   a malformed message is dropped or reported instead of breaking the view.
@@ -62,6 +66,11 @@ The enterprise architecture refactor (`refactor-audit`), roadmap phases 0–10.
 - Replaying an assistant response during a live voice call plays it instead of
   failing.
 - Settings shows the Hermes sidecar as Ready when it is reachable.
+- The stream-audio button on chat replies streams the reply instead of
+  reporting that no response is ready.
+- Immersive Live Chat shows the chat's messages, and opens one dialog.
+- A live voice error no longer replaces what you were saying in the
+  transcript.
 
 ### Removed
 
