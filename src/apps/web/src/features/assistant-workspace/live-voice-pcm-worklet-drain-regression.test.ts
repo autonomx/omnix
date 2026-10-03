@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
+import { loadWorkletProcessor } from '../../test/audioWorklet';
 
 type WorkletMessage = Record<string, unknown> & { type?: string };
 type WorkletPort = {
@@ -22,20 +22,15 @@ class FakeAudioWorkletProcessor {
 
 let Processor: ProcessorConstructor;
 
-beforeEach(() => {
-  let registered: ProcessorConstructor | null = null;
-  const registerProcessor = (_name: string, constructor: ProcessorConstructor): void => {
-    registered = constructor;
-  };
-  const evaluate = new Function(
-    'AudioWorkletProcessor',
-    'registerProcessor',
-    'sampleRate',
-    liveVoicePcmWorkletSource(),
+beforeEach(async () => {
+  Processor = await loadWorkletProcessor<ProcessorConstructor>(
+    () => import('./worklets/live-voice-pcm-stream.worklet'),
+    FakeAudioWorkletProcessor,
   );
-  evaluate(FakeAudioWorkletProcessor, registerProcessor, 24_000);
-  if (!registered) throw new Error('Live voice worklet processor did not register.');
-  Processor = registered;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 function send(processor: ProcessorInstance, data: WorkletMessage): void {

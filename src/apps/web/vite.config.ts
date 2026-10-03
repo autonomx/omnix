@@ -38,6 +38,7 @@ const LIVE_VOICE_CRITICAL_PATHS = [
   'src/apps/web/src/features/assistant-workspace/live-voice-unified-audio-controller.ts',
   'src/apps/web/src/features/assistant-workspace/live-voice-pcm-session.ts',
   'src/apps/web/src/features/assistant-workspace/live-voice-pcm-worklet.ts',
+  'src/apps/web/src/features/assistant-workspace/worklets/live-voice-pcm-stream.worklet.ts',
   'src/apps/web/src/features/assistant-workspace/live-voice-natural-timing.ts',
   'src/apps/web/src/features/assistant-workspace/live-voice-performance-behavior.ts',
   'src/apps/web/src/features/assistant-workspace/live-speech-delivery-plan.ts',

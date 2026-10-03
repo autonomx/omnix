@@ -10,7 +10,7 @@ import {
   type PlaybackStartPolicyMs,
   type SilenceReason,
 } from './live-voice-playback-contract';
-import { LIVE_VOICE_PCM_WORKLET_NAME, liveVoicePcmWorkletSource } from './live-voice-pcm-worklet';
+import { LIVE_VOICE_PCM_WORKLET_NAME, LIVE_VOICE_PCM_WORKLET_URL } from './live-voice-pcm-worklet';
 
 const REQUESTED_SAMPLE_RATE = 24_000;
 const START_BUFFER_SECONDS = 0.4;
@@ -202,12 +202,7 @@ export async function createLiveVoicePcmSession(
   const startedAtMs = performance.now();
   const audioContext = new AudioContextCtor({ latencyHint: 'interactive', sampleRate: REQUESTED_SAMPLE_RATE });
   if (audioContext.state !== 'running') await audioContext.resume();
-  const moduleUrl = createWorkletModuleUrl();
-  try {
-    await audioContext.audioWorklet.addModule(moduleUrl.url);
-  } finally {
-    moduleUrl.revoke();
-  }
+  await audioContext.audioWorklet.addModule(LIVE_VOICE_PCM_WORKLET_URL);
 
   let closed = false;
   const affinityCookieValue = setCallAffinityCookie(options.affinityKey);
@@ -1025,11 +1020,6 @@ function clearCallAffinityCookie(affinityKey: string | undefined, value: string 
   if (stored !== value) return;
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = `omnix_call_affinity=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
-}
-
-function createWorkletModuleUrl(): { url: string; revoke: () => void } {
-  const url = URL.createObjectURL(new Blob([liveVoicePcmWorkletSource()], { type: 'text/javascript' }));
-  return { url, revoke: () => URL.revokeObjectURL(url) };
 }
 
 function createPhraseStreamId(

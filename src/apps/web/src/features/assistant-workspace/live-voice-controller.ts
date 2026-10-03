@@ -44,6 +44,8 @@ import {
 import { liveVoiceVisualScales, smoothLiveVoiceLevel } from './live-voice-level';
 import { endpointFusionAction } from './live-voice-turn-coordinator';
 import { createAssistantWorkspaceRuntimeConfig } from './runtime-config';
+import LIVE_VOICE_CAPTURE_WORKLET_URL from './worklets/live-voice-capture.worklet?worker&url';
+import { LIVE_VOICE_CAPTURE_WORKLET_NAME } from './worklets/names';
 import type { SpeechLocation } from './stt-url';
 
 type LiveVoiceWindow = Window & typeof globalThis & {
@@ -138,7 +140,6 @@ let activeSession: LiveVoiceSession | null = null;
 let pendingStart: PendingStart | null = null;
 let startToken = 0;
 let initialized = false;
-let liveVoiceWorkletModuleUrl: string | null = null;
 const liveVoiceWorkletContexts = new WeakSet<AudioContext>();
 
 export class LiveSttSegmentTelemetryGate {
@@ -602,7 +603,7 @@ async function createLiveVoiceAudioPipeline(
   if ('audioWorklet' in audioContext && typeof AudioWorkletNode !== 'undefined') {
     try {
       await ensureLiveVoiceWorklet(audioContext);
-      const node = new AudioWorkletNode(audioContext, 'omnix-live-voice-processor');
+      const node = new AudioWorkletNode(audioContext, LIVE_VOICE_CAPTURE_WORKLET_NAME);
       const silentOutput = audioContext.createGain();
       silentOutput.gain.value = 0;
       node.port.onmessage = (event: MessageEvent<Float32Array>) => onAudioFrame(new Float32Array(event.data));
@@ -638,21 +639,7 @@ async function createLiveVoiceAudioPipeline(
 
 async function ensureLiveVoiceWorklet(audioContext: AudioContext): Promise<void> {
   if (liveVoiceWorkletContexts.has(audioContext)) return;
-  liveVoiceWorkletModuleUrl ??= URL.createObjectURL(new Blob([`
-class OmnixLiveVoiceProcessor extends AudioWorkletProcessor {
-  process(inputs) {
-    const channel = inputs[0] && inputs[0][0];
-    if (channel && channel.length) {
-      const audio = new Float32Array(channel);
-      this.port.postMessage(audio, [audio.buffer]);
-    }
-    return true;
-  }
-  
-}
-registerProcessor('omnix-live-voice-processor', OmnixLiveVoiceProcessor);
-`], { type: 'text/javascript' }));
-  await audioContext.audioWorklet.addModule(liveVoiceWorkletModuleUrl);
+  await audioContext.audioWorklet.addModule(LIVE_VOICE_CAPTURE_WORKLET_URL);
   liveVoiceWorkletContexts.add(audioContext);
 }
 

@@ -34,6 +34,8 @@ def test_ingress_hardening():
     csp = module.SPA_CONTENT_SECURITY_POLICY
     assert "'unsafe-eval'" not in csp and 'http' not in csp.replace("'self'", '')
     assert "frame-ancestors 'none'" in csp and "object-src 'none'" in csp
+    # Audio worklets are bundled module files, so scripts load from the app's origin only.
+    assert "script-src 'self';" in csp
     assert plain.count('add_header Content-Security-Policy') == 2  # assets and the SPA fallback
     # HSTS only where the listener is HTTPS, which redirects plain HTTP.
     assert 'Strict-Transport-Security' not in plain

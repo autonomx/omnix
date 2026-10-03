@@ -10,8 +10,9 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 
 # The built web app loads only its own bundle; styles are injected at run time
-# (Mantine), media and avatars come from blob: URLs and audio worklets. Pixi runs
-# without eval (pixi.js/unsafe-eval is imported), so scripts stay 'self' only.
+# (Mantine) and media and avatars come from blob: URLs. Audio worklets are bundled
+# module files and Pixi runs without eval (pixi.js/unsafe-eval is imported), so
+# scripts stay 'self' only; Pixi decodes images in blob: workers (worker-src).
 SPA_CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; "
