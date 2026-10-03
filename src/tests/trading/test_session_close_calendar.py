@@ -21,6 +21,17 @@ def test_an_early_close_day_ends_at_13_00() -> None:
     assert not after_regular_close(datetime(2026, 11, 25, 13, 30, tzinfo=EASTERN))
 
 
+def test_an_ordinary_date_does_not_compute_the_holidays(monkeypatch) -> None:
+    # Bar loops ask for the close of every bar; only the three possible
+    # early-close dates may pay for the holiday calendar.
+    def refuse(_year: int) -> set[date]:
+        raise AssertionError("regular_holidays computed for an ordinary date")
+
+    monkeypatch.setattr("app.trading.us_equity_calendar.regular_holidays", refuse)
+    assert regular_close_time(date(2026, 11, 10)) == time(16, 0)
+    assert regular_close_time(date(2026, 6, 15)) == time(16, 0)
+
+
 def test_bars_after_an_early_close_are_extended_hours() -> None:
     _start, end = equity_session_bounds(DAY_AFTER_THANKSGIVING, "America/New_York")
     assert end.astimezone(EASTERN).time() == time(13, 0)

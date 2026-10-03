@@ -1,0 +1,51 @@
+{
+  "work_package": "WP-7.5",
+  "date": "2026-10-03",
+  "command": "python scripts/benchmark_strategy_cycle.py --symbols 50 200 --cycles 5 --regular-minutes 60 390",
+  "machine": "Windows 11, AMD64 Family 25 Model 97 (16 logical CPUs), Python 3.11.12",
+  "scope": "CPU work of one strategy-monitor cycle: per symbol, resampling and the gap-pullback v1/v2, 5m Stoch RSI and Stoch trend-capture evaluators on a synthetic gapper session (04:00 pre-market plus the regular session up to the measured minute). Database reads, provider calls and event writes are not included.",
+  "monitor_interval_seconds": 30,
+  "measurements": [
+    {
+      "symbols": 50,
+      "regular_minutes": 60,
+      "bars_per_symbol": 390,
+      "cycles": 5,
+      "wall_p50_seconds": 0.06,
+      "wall_p95_seconds": 0.062,
+      "cpu_mean_seconds": 0.059
+    },
+    {
+      "symbols": 200,
+      "regular_minutes": 60,
+      "bars_per_symbol": 390,
+      "cycles": 5,
+      "wall_p50_seconds": 0.228,
+      "wall_p95_seconds": 0.234,
+      "cpu_mean_seconds": 0.225
+    },
+    {
+      "symbols": 50,
+      "regular_minutes": 390,
+      "bars_per_symbol": 720,
+      "cycles": 5,
+      "wall_p50_seconds": 0.378,
+      "wall_p95_seconds": 0.384,
+      "cpu_mean_seconds": 0.378
+    },
+    {
+      "symbols": 200,
+      "regular_minutes": 390,
+      "bars_per_symbol": 720,
+      "cycles": 5,
+      "wall_p50_seconds": 1.441,
+      "wall_p95_seconds": 1.46,
+      "cpu_mean_seconds": 1.428
+    }
+  ],
+  "findings": [
+    "200 symbols at the close: p95 1.46 s, about 5% of the 30 s monitor interval.",
+    "Cost grows with session length because each cycle re-evaluates the whole session (0.23 s after the first hour, 1.44 s at the close, for 200 symbols).",
+    "The first run after the session-close change measured 5.4 s at 200 symbols: regular_close_time recomputed the year's holidays for every bar. early_close_time now answers immediately for dates that cannot be early closes; the result matches the pre-change baseline (1.37 s) within 7%."
+  ]
+}

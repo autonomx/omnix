@@ -73,6 +73,12 @@ def regular_holidays(year: int) -> set[date]:
 
 def early_close_time(session_date: date) -> time | None:
     """Return the standard 13:00 ET early close when rule-based and scheduled."""
+    month, day = session_date.month, session_date.day
+    # Early closes fall only on July 3, the Friday after Thanksgiving (23-29
+    # November) and December 24. Bar loops ask about every bar, so other dates
+    # answer before the year's holidays are computed.
+    if not ((month == 7 and day <= 3) or (month == 11 and day >= 23) or (month == 12 and day == 24)):
+        return None
     if session_date.weekday() >= 5 or session_date in regular_holidays(session_date.year):
         return None
     thanksgiving = _nth_weekday(session_date.year, 11, 3, 4)
